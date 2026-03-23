@@ -1,23 +1,20 @@
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import {
-  ARCHESTRA_MCP_SERVER_NAME,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
+  type ArchestraToolFullName,
+  type ArchestraToolShortName,
+  getArchestraToolFullName,
 } from "@shared";
 import { ZodError, type ZodType, z } from "zod";
 import logger from "@/logging";
-import { AgentModel, AgentToolModel, ToolModel } from "@/models";
-import { assignToolToAgent } from "@/routes/agent-tool";
+import {
+  AgentModel,
+  AgentToolModel,
+  InternalMcpCatalogModel,
+  McpServerModel,
+  ToolModel,
+} from "@/models";
+import { assignToolToAgent } from "@/services/agent-tool-assignment";
 import type { ArchestraContext } from "./types";
-
-/**
- * Convert a name to a URL-safe slug for tool naming
- */
-export function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-}
 
 export function isAbortLikeError(error: unknown): boolean {
   if (!(error instanceof Error)) {
@@ -33,19 +30,32 @@ export function isAbortLikeError(error: unknown): boolean {
   return /\baborted?\b/i.test(error.message);
 }
 
-export type McpServerResult = {
-  id: string;
-  status: string;
-  toolCount?: number;
-  error?: string;
-};
 export type SubAgentResult = { id: string; status: string };
-export type ToolAssignmentInput = {
+export interface ToolAssignmentInput {
+  /** Exact tool ID to assign to the target agent. */
   toolId: string;
-  credentialSourceMcpServerId?: string | null;
-  executionSourceMcpServerId?: string | null;
+  /**
+   * Preferred late-bound mode for builder flows.
+   * When true, credentials and execution target are resolved at tool call time.
+   */
+  resolveAtCallTime?: boolean;
+  /**
+   * Compatibility alias for `resolveAtCallTime`.
+   * Keep using `resolveAtCallTime` in new code; this alias exists so older
+   * callers do not break.
+   */
   useDynamicTeamCredential?: boolean;
-};
+  /**
+   * Explicit remote MCP installation to use as the credential source.
+   * This pins the tool to credentials from one installed MCP server.
+   */
+  credentialSourceMcpServerId?: string | null;
+  /**
+   * Explicit local MCP installation to use as the execution target.
+   * This pins the tool to run on one installed MCP server.
+   */
+  executionSourceMcpServerId?: string | null;
+}
 export type ToolAssignmentResult = {
   toolId: string;
   status: string;
@@ -58,7 +68,7 @@ export type ArchestraToolHandler<TSchema extends ZodType = ZodType> = (params: {
 }) => Promise<CallToolResult>;
 
 export type ArchestraToolDefinition<
-  ShortName extends string = string,
+  ShortName extends ArchestraToolShortName = ArchestraToolShortName,
   TSchema extends ZodType = ZodType,
 > = {
   shortName: ShortName;
@@ -81,83 +91,35 @@ export type ArchestraRuntimeToolEntry = {
 };
 
 type ArchestraToolDefinitionInput<
-  ShortName extends string = string,
+  ShortName extends ArchestraToolShortName = ArchestraToolShortName,
   TSchema extends ZodType = ZodType,
 > = Omit<ArchestraToolDefinition<ShortName, TSchema>, "invoke">;
 
 export const EmptyToolArgsSchema = z.strictObject({});
-
-export async function assignMcpServerTools(
-  agentId: string,
-  mcpServerIds: string[],
-): Promise<McpServerResult[]> {
-  const results: McpServerResult[] = [];
-  for (const mcpServerId of mcpServerIds) {
-    try {
-      const tools = await ToolModel.findByCatalogId(mcpServerId);
-      if (tools.length === 0) {
-        results.push({ id: mcpServerId, status: "no_tools" });
-        continue;
-      }
-
-      const assignmentResults = await Promise.all(
-        tools.map((tool) =>
-          assignToolToAgent(agentId, tool.id, undefined, undefined),
-        ),
-      );
-      const failed = assignmentResults.filter(
-        (result) =>
-          result !== null && result !== "duplicate" && result !== "updated",
-      );
-
-      if (failed.length > 0) {
-        const errors = [
-          ...new Set(failed.map((result) => result.error.message)),
-        ];
-        results.push({
-          id: mcpServerId,
-          status:
-            failed.length === assignmentResults.length
-              ? "validation_failed"
-              : "partial_success",
-          toolCount: assignmentResults.length - failed.length,
-          error: errors.join("; "),
-        });
-        continue;
-      }
-
-      results.push({
-        id: mcpServerId,
-        status: "success",
-        toolCount: tools.length,
-      });
-    } catch (error) {
-      logger.error(
-        { err: error, mcpServerId },
-        "Error assigning MCP server tools",
-      );
-      results.push({ id: mcpServerId, status: "error" });
-    }
-  }
-  return results;
-}
 
 export async function assignToolAssignments(
   agentId: string,
   assignments: ToolAssignmentInput[],
 ): Promise<ToolAssignmentResult[]> {
   const results: ToolAssignmentResult[] = [];
+  const preFetchedData = await buildAgentToolAssignmentPrefetch({
+    agentId,
+    assignments,
+  });
 
   for (const assignment of assignments) {
     try {
-      const result = await assignToolToAgent(
+      const result = await assignToolToAgent({
         agentId,
-        assignment.toolId,
-        assignment.credentialSourceMcpServerId,
-        assignment.executionSourceMcpServerId,
-        undefined,
-        assignment.useDynamicTeamCredential,
-      );
+        toolId: assignment.toolId,
+        resolveAtCallTime: assignment.resolveAtCallTime,
+        credentialSourceMcpServerId: assignment.credentialSourceMcpServerId,
+        executionSourceMcpServerId: assignment.executionSourceMcpServerId,
+        // This compatibility field is only still relevant for older REST/API
+        // callers. The Archestra MCP tool schemas now expose resolveAtCallTime.
+        useDynamicTeamCredential: assignment.useDynamicTeamCredential,
+        preFetchedData,
+      });
 
       if (result === null || result === "updated") {
         results.push({ toolId: assignment.toolId, status: "success" });
@@ -225,20 +187,9 @@ export async function assignSubAgentDelegations(
 
 export function formatAssignmentSummary(
   lines: string[],
-  mcpServerResults: McpServerResult[],
   subAgentResults: SubAgentResult[],
   toolAssignmentResults: ToolAssignmentResult[] = [],
 ): void {
-  if (mcpServerResults.length > 0) {
-    lines.push(
-      "",
-      "MCP Server Tool Assignments:",
-      ...mcpServerResults.map(
-        (r) =>
-          `  - ${r.id}: ${r.status}${r.toolCount ? ` (${r.toolCount} tools)` : ""}${r.error ? ` - ${r.error}` : ""}`,
-      ),
-    );
-  }
   if (subAgentResults.length > 0) {
     lines.push(
       "",
@@ -307,12 +258,8 @@ export function createToolDefinition(params: {
   };
 }
 
-export function getArchestraToolFullName(shortName: string): string {
-  return `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${shortName}`;
-}
-
 export function defineArchestraTool<
-  const ShortName extends string,
+  const ShortName extends ArchestraToolShortName,
   const TSchema extends ZodType,
   const TOutputSchema extends ZodType | undefined = undefined,
 >(definition: {
@@ -335,8 +282,8 @@ export function defineArchestraTools<
   const Definitions extends readonly ArchestraToolDefinitionInput[],
 >(definitions: Definitions) {
   type ShortName = Definitions[number]["shortName"];
-  type FullName<Name extends string> =
-    `${typeof ARCHESTRA_MCP_SERVER_NAME}${typeof MCP_SERVER_TOOL_NAME_SEPARATOR}${Name}`;
+  type FullName<Name extends ArchestraToolShortName> =
+    ArchestraToolFullName<Name>;
 
   const toolShortNames = definitions.map(
     (definition) => definition.shortName,
@@ -351,8 +298,9 @@ export function defineArchestraTools<
 
   for (const definition of definitions) {
     const shortName = definition.shortName as ShortName;
-    const fullName =
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${definition.shortName}` as FullName<ShortName>;
+    const fullName = getArchestraToolFullName(
+      definition.shortName,
+    ) as FullName<ShortName>;
 
     toolFullNames[shortName] = fullName;
     toolArgsSchemas[fullName] = definition.schema;
@@ -432,6 +380,55 @@ export function catchError(error: unknown, action: string): CallToolResult {
 }
 
 // === Internal helpers ===
+
+async function buildAgentToolAssignmentPrefetch(params: {
+  agentId: string;
+  assignments: ToolAssignmentInput[];
+}) {
+  const { agentId, assignments } = params;
+  const uniqueToolIds = [
+    ...new Set(assignments.map((assignment) => assignment.toolId)),
+  ];
+  const tools = await ToolModel.getByIds(uniqueToolIds);
+  const toolsMap = new Map(tools.map((tool) => [tool.id, tool]));
+
+  const uniqueCatalogIds = [
+    ...new Set(
+      tools
+        .map((tool) => tool.catalogId)
+        .filter((catalogId): catalogId is string => catalogId != null),
+    ),
+  ];
+  const catalogItemsMap =
+    uniqueCatalogIds.length > 0
+      ? await InternalMcpCatalogModel.getByIds(uniqueCatalogIds)
+      : new Map();
+
+  const uniqueMcpServerIds = [
+    ...new Set(
+      assignments
+        .flatMap((assignment) => [
+          assignment.credentialSourceMcpServerId,
+          assignment.executionSourceMcpServerId,
+        ])
+        .filter((id): id is string => id != null),
+    ),
+  ];
+  const mcpServersBasicMap = new Map();
+  if (uniqueMcpServerIds.length > 0) {
+    const servers = await McpServerModel.findByIdsBasic(uniqueMcpServerIds);
+    for (const server of servers) {
+      mcpServersBasicMap.set(server.id, server);
+    }
+  }
+
+  return {
+    existingAgentIds: new Set([agentId]),
+    toolsMap,
+    catalogItemsMap,
+    mcpServersBasicMap,
+  };
+}
 
 export function formatZodError(error: ZodError): string {
   return error.issues.map(formatZodIssue).join("; ");

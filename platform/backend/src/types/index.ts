@@ -7,6 +7,7 @@ export * from "./agent-tool";
 export * from "./api";
 export * from "./api-key";
 export * from "./autonomy-policies";
+export * from "./chat";
 export * from "./chat-api-key";
 export * from "./chatops";
 // chatops-channel-binding uses @/database (drizzle-zod) — import directly to avoid circular deps

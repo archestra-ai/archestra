@@ -1,4 +1,7 @@
-const DOCS_BASE_URL = "https://archestra.ai/docs";
+import { WEBSITE_URL } from "./consts";
+
+const DOCS_BASE_URL = `${WEBSITE_URL}/docs`;
+export const COMMUNITY_DOCS_URL = getDocsUrl("platform-quickstart");
 
 /**
  * All valid documentation page slugs.
@@ -13,6 +16,7 @@ export const DocsPage = {
   PlatformAddingLlmProviders: "platform-adding-llm-providers",
   PlatformAgentTriggersEmail: "platform-agent-triggers-email",
   PlatformAgents: "platform-agents",
+  PlatformArchestraMcpServer: "platform-archestra-mcp-server",
   PlatformApiReference: "platform-api-reference",
   PlatformBuiltInAgentsPolicyConfig: "platform-built-in-agents-policy-config",
   PlatformChat: "platform-chat",

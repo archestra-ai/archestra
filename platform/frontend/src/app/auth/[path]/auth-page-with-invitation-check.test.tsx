@@ -21,11 +21,15 @@ vi.mock("@/lib/backend-connectivity", () => ({
   useBackendConnectivity: vi.fn(),
 }));
 
+vi.mock("@/lib/use-app-name", () => ({
+  useAppName: () => "Sparky",
+}));
+
 // Mock config
-const mockConfig = {
+const mockConfig = vi.hoisted(() => ({
   disableBasicAuth: false,
   enterpriseFeatures: { core: false },
-};
+}));
 
 vi.mock("@/lib/config", () => ({
   default: new Proxy(

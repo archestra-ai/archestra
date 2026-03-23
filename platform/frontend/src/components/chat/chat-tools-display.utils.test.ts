@@ -1,4 +1,3 @@
-import { TOOL_TODO_WRITE_FULL_NAME } from "@shared";
 import { describe, expect, it } from "vitest";
 import {
   getCompactToolState,
@@ -215,12 +214,14 @@ describe("tool display helpers", () => {
     ).toBe(false);
   });
 
-  it("keeps todo-write tools out of compact groups", () => {
+  it("keeps branded built-in todo-write tools out of compact groups", () => {
     expect(
       isCompactEligible({
-        toolName: TOOL_TODO_WRITE_FULL_NAME,
+        toolName: "sparky__todo_write",
+        getToolShortName: (toolName: string) =>
+          toolName === "sparky__todo_write" ? "todo_write" : null,
         part: {
-          type: `tool-${TOOL_TODO_WRITE_FULL_NAME}`,
+          type: "tool-sparky__todo_write",
           state: "output-available",
         } as never,
         toolResultPart: null,

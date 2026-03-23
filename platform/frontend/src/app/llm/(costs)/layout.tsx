@@ -1,10 +1,10 @@
 "use client";
 
-import { DocsPage, getDocsUrl } from "@shared";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createContext, useContext, useMemo, useState } from "react";
 import { PageLayout } from "@/components/page-layout";
+import { getFrontendDocsUrl } from "@/lib/docs";
 
 const TABS = [
   { label: "Costs", href: "/llm/costs" },
@@ -28,16 +28,7 @@ const PAGE_CONFIG: Record<
         >
           Model Settings
         </Link>
-        . Check{" "}
-        <a
-          href={getDocsUrl(DocsPage.PlatformObservability)}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-primary hover:underline"
-        >
-          Prometheus metrics capabilities
-        </a>{" "}
-        to get cost-related insights at scale.
+        .
       </>
     ),
   },
@@ -72,6 +63,10 @@ export default function CostsLayout({
 }) {
   const pathname = usePathname();
   const [actionButton, setActionButton] = useState<React.ReactNode>(null);
+  const prometheusDocsUrl = getFrontendDocsUrl(
+    "platform-deployment",
+    "prometheus-metrics",
+  );
 
   const config = PAGE_CONFIG[pathname] ?? {
     title: "Costs & Limits",
@@ -84,7 +79,22 @@ export default function CostsLayout({
     <CostsLayoutContext.Provider value={contextValue}>
       <PageLayout
         title={config.title}
-        description={config.description}
+        description={
+          pathname === "/llm/costs" && prometheusDocsUrl ? (
+            <>
+              {config.description} Check{" "}
+              <Link
+                href={prometheusDocsUrl}
+                className="text-primary hover:underline"
+              >
+                Prometheus metrics capabilities
+              </Link>{" "}
+              to get cost-related insights at scale.
+            </>
+          ) : (
+            config.description
+          )
+        }
         tabs={TABS}
         actionButton={actionButton}
       >

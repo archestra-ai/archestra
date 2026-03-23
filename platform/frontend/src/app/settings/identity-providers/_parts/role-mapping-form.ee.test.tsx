@@ -34,6 +34,14 @@ vi.mock("@/lib/role.query", () => ({
   }),
 }));
 
+vi.mock("@/lib/organization.query", () => ({
+  useAppearanceSettings: () => ({
+    data: {
+      appName: "Spark",
+    },
+  }),
+}));
+
 function TestWrapper({
   defaultRules = [],
   onSubmit,
@@ -128,6 +136,26 @@ describe("RoleMappingForm", () => {
       E2eTestId.IdpRoleMappingRuleTemplate,
     );
     expect(templateInputs).toHaveLength(2);
+  });
+
+  it("lays out each rule with the template, role select, and delete button in one row", async () => {
+    render(
+      <TestWrapper
+        defaultRules={[{ expression: "rule-one", role: "admin" }]}
+      />,
+    );
+    await openAccordion();
+
+    const row = screen.getByTestId("role-mapping-rule-0");
+    const templateInput = screen.getByTestId(
+      E2eTestId.IdpRoleMappingRuleTemplate,
+    );
+    const roleTrigger = screen.getByTestId(E2eTestId.IdpRoleMappingRuleRole);
+    const deleteButton = getDeleteButtons()[0];
+
+    expect(row).toContainElement(templateInput);
+    expect(row).toContainElement(roleTrigger);
+    expect(row).toContainElement(deleteButton);
   });
 
   it("removes a rule without causing validation errors on remaining rules", async () => {

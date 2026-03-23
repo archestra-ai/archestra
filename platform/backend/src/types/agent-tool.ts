@@ -33,9 +33,10 @@ export const InsertAgentToolSchema = createInsertSchema(schema.agentToolsTable);
 export const UpdateAgentToolSchema = createUpdateSchema(schema.agentToolsTable);
 export const AgentToolAssignmentInputSchema = z.object({
   toolId: UuidIdSchema,
+  resolveAtCallTime: z.boolean().optional(),
+  useDynamicTeamCredential: z.boolean().optional(),
   credentialSourceMcpServerId: UuidIdSchema.nullable().optional(),
   executionSourceMcpServerId: UuidIdSchema.nullable().optional(),
-  useDynamicTeamCredential: z.boolean().optional(),
 });
 
 export const AgentToolAssignmentBodySchema =

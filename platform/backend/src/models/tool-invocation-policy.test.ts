@@ -1,3 +1,8 @@
+import {
+  getArchestraToolFullName,
+  TOOL_GET_AGENT_SHORT_NAME,
+  TOOL_WHOAMI_SHORT_NAME,
+} from "@shared";
 import { describe, expect, test } from "@/test";
 import type { PolicyEvaluationContext } from "./tool-invocation-policy";
 import ToolInvocationPolicyModel from "./tool-invocation-policy";
@@ -79,18 +84,29 @@ describe("ToolInvocationPolicyModel", () => {
       expect(result.reason).toContain("Tool 1 blocked");
     });
 
-    test("returns success when only Archestra tools are in the batch", async ({
+    test("returns success when only white-labeled built-in tools are in the batch", async ({
       makeAgent,
       seedAndAssignArchestraTools,
     }) => {
       const agent = await makeAgent();
       await seedAndAssignArchestraTools(agent.id);
+      const brandedWhoami = getArchestraToolFullName(TOOL_WHOAMI_SHORT_NAME, {
+        appName: "Acme Copilot",
+        fullWhiteLabeling: true,
+      });
+      const brandedGetAgent = getArchestraToolFullName(
+        TOOL_GET_AGENT_SHORT_NAME,
+        {
+          appName: "Acme Copilot",
+          fullWhiteLabeling: true,
+        },
+      );
 
       const result = await ToolInvocationPolicyModel.evaluateBatch(
         agent.id,
         [
-          { toolCallName: "archestra__whoami", toolInput: {} },
-          { toolCallName: "archestra__get_agent", toolInput: { id: "123" } },
+          { toolCallName: brandedWhoami, toolInput: {} },
+          { toolCallName: brandedGetAgent, toolInput: { id: "123" } },
         ],
         mockContext,
         false, // untrusted context

@@ -1,3 +1,4 @@
+import { TOOL_WHOAMI_SHORT_NAME } from "@shared";
 import { z } from "zod";
 import logger from "@/logging";
 import {
@@ -14,7 +15,7 @@ const WhoAmIOutputSchema = z.object({
 
 const registry = defineArchestraTools([
   defineArchestraTool({
-    shortName: "whoami",
+    shortName: TOOL_WHOAMI_SHORT_NAME,
     title: "Who Am I",
     description: "Returns the name and ID of the current agent.",
     schema: EmptyToolArgsSchema,

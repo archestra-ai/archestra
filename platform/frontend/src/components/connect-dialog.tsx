@@ -1,13 +1,13 @@
 "use client";
 
 import type { AgentType, DocsPage } from "@shared";
-import { getDocsUrl } from "@shared";
 import type { LucideIcon } from "lucide-react";
 import { ArrowRight, Bot, ExternalLink, Network, Route } from "lucide-react";
 import type { ReactNode } from "react";
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
+import { getFrontendDocsUrl } from "@/lib/docs";
 import { cn } from "@/lib/utils";
 
 const AGENT_TYPE_CONFIG: Record<
@@ -38,6 +38,7 @@ export function ConnectDialog({
   docsPage,
   children,
 }: ConnectDialogProps) {
+  const docsUrl = getFrontendDocsUrl(docsPage);
   const config = AGENT_TYPE_CONFIG[agent.agentType] ?? AGENT_TYPE_CONFIG.agent;
   const Icon = config.icon;
 
@@ -62,18 +63,22 @@ export function ConnectDialog({
 
       <DialogStickyFooter className="mt-0 sm:justify-between sm:[&>*:first-child]:mr-auto">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-          <span>
-            Need help? Check our{" "}
-            <a
-              href={getDocsUrl(docsPage)}
-              target="_blank"
-              className="text-primary hover:underline font-medium"
-              rel="noopener"
-            >
-              documentation
-            </a>
-          </span>
+          {docsUrl && (
+            <>
+              <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+              <span>
+                Need help? Check our{" "}
+                <a
+                  href={docsUrl}
+                  target="_blank"
+                  className="text-primary hover:underline font-medium"
+                  rel="noopener"
+                >
+                  documentation
+                </a>
+              </span>
+            </>
+          )}
         </div>
         <Button
           type="button"

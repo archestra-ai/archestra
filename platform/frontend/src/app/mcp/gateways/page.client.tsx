@@ -4,9 +4,7 @@ import {
   type AgentType,
   archestraApiSdk,
   type archestraApiTypes,
-  DocsPage,
   E2eTestId,
-  getDocsUrl,
 } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
@@ -56,6 +54,7 @@ import {
 import { useDeleteProfile, useProfilesPaginated } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import { getFrontendDocsUrl } from "@/lib/docs";
 import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/lib/utils";
 import { McpGatewayActions } from "./mcp-gateway-actions";
@@ -191,6 +190,7 @@ function McpGateways({
 }: {
   initialData?: McpGatewaysInitialData;
 }) {
+  const docsUrl = getFrontendDocsUrl("platform-mcp-gateway");
   const {
     searchParams,
     pageIndex,
@@ -486,15 +486,20 @@ function McpGateways({
         description={
           <p className="text-sm text-muted-foreground">
             MCP Gateways provide a unified MCP endpoint for your AI agents to
-            access tools and subagents.{" "}
-            <a
-              href={getDocsUrl(DocsPage.PlatformMcpGateway)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline hover:text-foreground"
-            >
-              Read more in the docs
-            </a>
+            access tools and subagents.
+            {docsUrl && (
+              <>
+                {" "}
+                <a
+                  href={docsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-foreground"
+                >
+                  Read more in the docs
+                </a>
+              </>
+            )}
           </p>
         }
         actionButton={

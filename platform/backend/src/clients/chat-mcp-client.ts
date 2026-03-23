@@ -3,7 +3,6 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import {
   isAgentTool,
-  isArchestraMcpServerTool,
   isBrowserMcpTool,
   parseFullToolName,
   TimeInMs,
@@ -11,6 +10,7 @@ import {
 import { type JSONSchema7, jsonSchema, type Tool } from "ai";
 import {
   type ArchestraContext,
+  archestraMcpBranding,
   executeArchestraTool,
   getAgentTools,
 } from "@/archestra-mcp-server";
@@ -72,6 +72,11 @@ const clientCache = new LRUCacheManager<Client>({
  * Tool cache TTL - 30 seconds to avoid hammering MCP Gateway
  */
 const TOOL_CACHE_TTL_MS = 30 * TimeInMs.Second;
+const CLIENT_PING_TIMEOUT_MS = 5 * TimeInMs.Second;
+
+function getChatExternalAgentId(): string {
+  return `${archestraMcpBranding.catalogName} Chat`;
+}
 
 /**
  * Maximum tool cache size to prevent unbounded memory growth.
@@ -144,6 +149,7 @@ export const __test = {
   normalizeJsonSchema,
   executeMcpTool,
   filterToolsByEnabledIds,
+  pingClientWithTimeout,
 };
 
 /**
@@ -401,7 +407,7 @@ export async function getChatMcpClient(
   if (cachedClient) {
     // Health check: ping the client to verify connection is still alive
     try {
-      await cachedClient.ping();
+      await pingClientWithTimeout(cachedClient);
       logger.info(
         { agentId, userId },
         "✅ Returning cached MCP client for agent/user (ping succeeded, session will be reused)",
@@ -516,6 +522,21 @@ export async function getChatMcpClient(
     );
     return null;
   }
+}
+
+async function pingClientWithTimeout(
+  client: Pick<Client, "ping">,
+  timeoutMs = CLIENT_PING_TIMEOUT_MS,
+): Promise<void> {
+  await Promise.race([
+    client.ping(),
+    new Promise<never>((_, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error(`Ping timeout after ${timeoutMs}ms`));
+      }, timeoutMs);
+      timeout.unref?.();
+    }),
+  ]);
 }
 
 /**
@@ -741,7 +762,7 @@ export async function getChatMcpTools({
                     isRecord(args) ? args : {},
                     {
                       teamIds: [],
-                      externalAgentId: "Archestra Chat",
+                      externalAgentId: getChatExternalAgentId(),
                     },
                     globalToolPolicy,
                   );
@@ -770,7 +791,7 @@ export async function getChatMcpTools({
                 try {
                   throwIfAborted(abortSignal);
                   // Check if this is an Archestra tool - handle directly without DB lookup
-                  if (isArchestraMcpServerTool(mcpTool.name)) {
+                  if (archestraMcpBranding.isToolName(mcpTool.name)) {
                     const archestraResponse = await executeArchestraTool(
                       mcpTool.name,
                       toolArguments,
@@ -931,7 +952,7 @@ export async function getChatMcpTools({
                       isRecord(args) ? args : {},
                       {
                         teamIds: [],
-                        externalAgentId: "Archestra Chat",
+                        externalAgentId: getChatExternalAgentId(),
                       },
                       globalToolPolicy,
                     );
@@ -1299,7 +1320,10 @@ async function filterToolsByEnabledIds(
   const filteredTools: Record<string, Tool> = {};
   const excludedTools: string[] = [];
   for (const [name, tool] of Object.entries(tools)) {
-    if (isArchestraMcpServerTool(name) || enabledToolNames.includes(name)) {
+    if (
+      archestraMcpBranding.isToolName(name) ||
+      enabledToolNames.includes(name)
+    ) {
       filteredTools[name] = tool;
     } else {
       excludedTools.push(name);

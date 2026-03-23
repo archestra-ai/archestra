@@ -161,6 +161,11 @@ export type InternalMcpCatalogServerType = z.infer<
   typeof InternalMcpCatalogServerTypeSchema
 >;
 
+export type AuthField = z.infer<typeof AuthFieldSchema>;
+export type UserConfigField = z.infer<typeof UserConfigFieldSchema>;
+export type UserConfig = Record<string, UserConfigField>;
+export type OAuthConfig = z.infer<typeof OAuthConfigSchema>;
+
 // Export LocalConfig type for reuse in database schema
 export type LocalConfig = z.infer<typeof LocalConfigSelectSchema>;
 

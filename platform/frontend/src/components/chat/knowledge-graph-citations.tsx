@@ -1,5 +1,9 @@
 "use client";
 
+import {
+  type ChatMessagePart,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+} from "@shared";
 import { ChevronDown, ChevronUp, ExternalLink, FileText } from "lucide-react";
 import { useState } from "react";
 import {
@@ -8,23 +12,21 @@ import {
 } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { Button } from "@/components/ui/button";
 
-const KNOWLEDGE_BASE_TOOL_SUFFIX = "query_knowledge_sources";
-
-export function hasKnowledgeBaseToolCall(
-  parts: Array<{ type: string; toolName?: string }>,
-): boolean {
+export function hasKnowledgeBaseToolCall(parts: ChatMessagePart[]): boolean {
   return parts.some((part) => {
     // dynamic-tool parts have toolName directly
     if (
+      "toolName" in part &&
       typeof part.toolName === "string" &&
-      part.toolName.endsWith(KNOWLEDGE_BASE_TOOL_SUFFIX)
+      part.toolName.endsWith(TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME)
     ) {
       return true;
     }
-    // Legacy tool parts have type like "tool-archestra__query_knowledge_sources"
+    // Older persisted tool parts encode the tool name in the `type` field
+    // (for example "tool-archestra__query_knowledge_sources").
     if (
       typeof part.type === "string" &&
-      part.type.endsWith(KNOWLEDGE_BASE_TOOL_SUFFIX)
+      part.type.endsWith(TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME)
     ) {
       return true;
     }
@@ -48,9 +50,8 @@ export function extractCitations(
   for (const part of parts) {
     const isKbTool =
       (typeof part.toolName === "string" &&
-        part.toolName.endsWith(KNOWLEDGE_BASE_TOOL_SUFFIX)) ||
-      (typeof part.type === "string" &&
-        part.type.endsWith(KNOWLEDGE_BASE_TOOL_SUFFIX));
+        part.toolName.endsWith(TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME)) ||
+      part.type.endsWith(TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME);
 
     if (!isKbTool || part.state !== "output-available") continue;
 
@@ -113,12 +114,7 @@ function SourceIcon({ connectorType }: { connectorType: string | null }) {
 }
 
 export interface KnowledgeGraphCitationsProps {
-  parts: Array<{
-    type: string;
-    toolName?: string;
-    state?: string;
-    output?: unknown;
-  }>;
+  parts: ChatMessagePart[];
 }
 
 const VISIBLE_COUNT = 3;

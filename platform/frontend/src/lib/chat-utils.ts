@@ -1,6 +1,18 @@
 const DEFAULT_SESSION_NAME = "New Chat Session";
 
 /**
+ * Builds the external agent ID header value for chat requests.
+ * Strips non-ISO-8859-1 characters since HTTP headers reject them.
+ */
+export function getChatExternalAgentId(appName: string): string {
+  const id = `${appName} Chat`;
+  return id
+    .replace(/[^\x20-\xff]/g, "")
+    .replace(/ {2,}/g, " ")
+    .trim();
+}
+
+/**
  * Preserves newlines in user message text for markdown rendering.
  *
  * Markdown treats single newlines as soft breaks (collapsed into spaces).

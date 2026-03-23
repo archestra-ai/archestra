@@ -14,6 +14,7 @@
 
 import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import logger from "@/logging";
+import type { ChatMessage, ChatMessagePart } from "@/types";
 import {
   estimateToolResultContentLength,
   previewToolResultContent,
@@ -41,23 +42,6 @@ const BROWSER_TOOLS_TO_STRIP = [
 
 // Size threshold - results larger than this will be stripped
 const BROWSER_RESULT_SIZE_THRESHOLD = 2000;
-
-export type UiMessagePart = {
-  type: string;
-  output?: unknown;
-  result?: unknown;
-  toolName?: string;
-  text?: string;
-  toolCallId?: string;
-  source?: unknown;
-  [key: string]: unknown;
-};
-
-export type UiMessage = {
-  id?: string;
-  role: "system" | "user" | "assistant" | "tool";
-  parts?: UiMessagePart[];
-};
 
 /**
  * Check if a tool name is a browser tool that should have large results stripped
@@ -213,9 +197,9 @@ function convertImageBlocksToText(content: unknown): unknown {
  * - Any deeply nested base64 data in results
  */
 function stripImagesFromParts(
-  parts: UiMessagePart[],
+  parts: ChatMessagePart[],
   preserveDirectImages = false,
-): UiMessagePart[] {
+): ChatMessagePart[] {
   return parts.map((part) => {
     const partType = part.type;
 
@@ -290,7 +274,9 @@ function stripImagesFromParts(
  * @param messages - Array of UIMessage objects from AI SDK
  * @returns Messages with base64 image data replaced by placeholders
  */
-export function stripImagesFromMessages(messages: UiMessage[]): UiMessage[] {
+export function stripImagesFromMessages(
+  messages: ChatMessage[],
+): ChatMessage[] {
   logger.info(
     { messageCount: messages.length },
     "[stripImagesFromMessages] Processing messages",

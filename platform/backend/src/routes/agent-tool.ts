@@ -18,15 +18,20 @@ import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import logger from "@/logging";
 import {
   AgentModel,
-  AgentTeamModel,
   AgentToolModel,
   InternalMcpCatalogModel,
   McpServerModel,
   TeamModel,
   ToolModel,
-  UserModel,
 } from "@/models";
-import type { InternalMcpCatalog, Tool } from "@/types";
+import {
+  assignToolToAgent,
+  type PrefetchedMcpServer,
+  validateAssignment,
+  validateCredentialSource,
+  validateExecutionSource,
+} from "@/services/agent-tool-assignment";
+import type { InternalMcpCatalog } from "@/types";
 import {
   AgentToolAssignmentBodySchema,
   AgentToolFilterSchema,
@@ -151,17 +156,19 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: request.user.id,
       });
 
-      const result = await assignToolToAgent(
+      const result = await assignToolToAgent({
         agentId,
         toolId,
         credentialSourceMcpServerId,
         executionSourceMcpServerId,
-        undefined,
         useDynamicTeamCredential,
-      );
+      });
 
       if (result && result !== "duplicate" && result !== "updated") {
-        throw new ApiError(result.status, result.error.message);
+        throw new ApiError(
+          mapAgentToolAssignmentErrorCodeToHttpStatus(result.code),
+          result.error.message,
+        );
       }
 
       // Clear chat MCP client cache to ensure fresh tools are fetched
@@ -269,10 +276,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ].filter((id): id is string => id != null),
         ),
       ];
-      const mcpServersBasicMap = new Map<
-        string,
-        Awaited<ReturnType<typeof McpServerModel.findByIdsBasic>>[number]
-      >();
+      const mcpServersBasicMap = new Map<string, PrefetchedMcpServer>();
       if (uniqueMcpServerIds.length > 0) {
         const servers = await McpServerModel.findByIdsBasic(uniqueMcpServerIds);
         for (const s of servers) {
@@ -293,14 +297,14 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const failed: { agentId: string; toolId: string; error: string }[] = [];
 
       for (const assignment of assignments) {
-        const validationError = await validateAssignment(
-          assignment.agentId,
-          assignment.toolId,
-          assignment.credentialSourceMcpServerId,
-          assignment.executionSourceMcpServerId,
+        const validationError = await validateAssignment({
+          agentId: assignment.agentId,
+          toolId: assignment.toolId,
+          credentialSourceMcpServerId: assignment.credentialSourceMcpServerId,
+          executionSourceMcpServerId: assignment.executionSourceMcpServerId,
           preFetchedData,
-          assignment.useDynamicTeamCredential,
-        );
+          useDynamicTeamCredential: assignment.useDynamicTeamCredential,
+        });
         if (validationError) {
           failed.push({
             agentId: assignment.agentId,
@@ -577,14 +581,14 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // If credentialSourceMcpServerId is being updated, validate it
       if (credentialSourceMcpServerId && agentToolForValidation) {
-        const validationError = await validateCredentialSource(
-          agentToolForValidation.agent.id,
+        const validationError = await validateCredentialSource({
+          agentId: agentToolForValidation.agent.id,
           credentialSourceMcpServerId,
-        );
+        });
 
         if (validationError) {
           throw new ApiError(
-            validationError.status,
+            mapAgentToolAssignmentErrorCodeToHttpStatus(validationError.code),
             validationError.error.message,
           );
         }
@@ -592,14 +596,14 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // If executionSourceMcpServerId is being updated, validate it
       if (executionSourceMcpServerId && agentToolForValidation) {
-        const validationError = await validateExecutionSource(
-          agentToolForValidation.tool.id,
+        const validationError = await validateExecutionSource({
+          toolId: agentToolForValidation.tool.id,
           executionSourceMcpServerId,
-        );
+        });
 
         if (validationError) {
           throw new ApiError(
-            validationError.status,
+            mapAgentToolAssignmentErrorCodeToHttpStatus(validationError.code),
             validationError.error.message,
           );
         }
@@ -965,383 +969,10 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 };
 
-/**
- * Assigns a single tool to a single agent with validation.
- * Returns null on success/update, "duplicate" if already exists with same credentials, or an error object if validation fails.
- *
- * @param preFetchedData - Optional pre-fetched data to avoid N+1 queries in bulk operations
- */
-export async function assignToolToAgent(
-  agentId: string,
-  toolId: string,
-  credentialSourceMcpServerId: string | null | undefined,
-  executionSourceMcpServerId: string | null | undefined,
-  preFetchedData?: {
-    existingAgentIds?: Set<string>;
-    toolsMap?: Map<string, Tool>;
-    catalogItemsMap?: Map<string, InternalMcpCatalog>;
-    mcpServersBasicMap?: Map<
-      string,
-      { id: string; ownerId: string | null; catalogId: string | null }
-    >;
-  },
-  useDynamicTeamCredential?: boolean,
-): Promise<
-  | {
-      status: 400 | 404;
-      error: { message: string; type: string };
-    }
-  | "duplicate"
-  | "updated"
-  | null
-> {
-  // Validate that agent exists (using pre-fetched data or lightweight exists() to avoid N+1 queries)
-  let agentExists: boolean;
-  if (preFetchedData?.existingAgentIds) {
-    agentExists = preFetchedData.existingAgentIds.has(agentId);
-  } else {
-    agentExists = await AgentModel.exists(agentId);
-  }
-
-  if (!agentExists) {
-    return {
-      status: 404,
-      error: {
-        message: `Agent with ID ${agentId} not found`,
-        type: "not_found",
-      },
-    };
-  }
-
-  // Validate that tool exists (using pre-fetched data to avoid N+1 queries)
-  let tool: Tool | null;
-  if (preFetchedData?.toolsMap) {
-    tool = preFetchedData.toolsMap.get(toolId) || null;
-  } else {
-    tool = await ToolModel.findById(toolId);
-  }
-
-  if (!tool) {
-    return {
-      status: 404,
-      error: {
-        message: `Tool with ID ${toolId} not found`,
-        type: "not_found",
-      },
-    };
-  }
-
-  // Check if tool is from local server (requires executionSourceMcpServerId)
-  if (tool.catalogId) {
-    let catalogItem: InternalMcpCatalog | null;
-    if (preFetchedData?.catalogItemsMap) {
-      catalogItem = preFetchedData.catalogItemsMap.get(tool.catalogId) || null;
-    } else {
-      // Only need serverType for validation, no secrets needed
-      catalogItem = await InternalMcpCatalogModel.findById(tool.catalogId, {
-        expandSecrets: false,
-      });
-    }
-
-    if (catalogItem?.serverType === "local") {
-      if (!executionSourceMcpServerId && !useDynamicTeamCredential) {
-        return {
-          status: 400,
-          error: {
-            message:
-              "Execution source installation or dynamic team credential is required for local MCP server tools",
-            type: "validation_error",
-          },
-        };
-      }
-    }
-    // Check if tool is from remote server (requires credentialSourceMcpServerId OR useDynamicTeamCredential)
-    if (catalogItem?.serverType === "remote") {
-      if (!credentialSourceMcpServerId && !useDynamicTeamCredential) {
-        return {
-          status: 400,
-          error: {
-            message:
-              "Credential source or dynamic team credential is required for remote MCP server tools",
-            type: "validation_error",
-          },
-        };
-      }
-    }
-  }
-
-  // If a credential source is specified, validate it
-  if (credentialSourceMcpServerId) {
-    const preFetchedServer = preFetchedData?.mcpServersBasicMap?.get(
-      credentialSourceMcpServerId,
-    );
-    const validationError = await validateCredentialSource(
-      agentId,
-      credentialSourceMcpServerId,
-      preFetchedServer,
-    );
-
-    if (validationError) {
-      return validationError;
-    }
-  }
-
-  // If an execution source is specified, validate it
-  if (executionSourceMcpServerId) {
-    const preFetchedServer = preFetchedData?.mcpServersBasicMap?.get(
-      executionSourceMcpServerId,
-    );
-    const validationError = await validateExecutionSource(
-      toolId,
-      executionSourceMcpServerId,
-      preFetchedServer,
-    );
-
-    if (validationError) {
-      return validationError;
-    }
-  }
-
-  // Create or update the assignment with credentials
-  const result = await AgentToolModel.createOrUpdateCredentials(
-    agentId,
-    toolId,
-    credentialSourceMcpServerId,
-    executionSourceMcpServerId,
-    useDynamicTeamCredential,
-  );
-
-  // Return appropriate status
-  if (result.status === "unchanged") {
-    return "duplicate";
-  }
-
-  if (result.status === "updated") {
-    return "updated";
-  }
-
-  return null; // created
-}
-
-/**
- * Validates a single tool-to-agent assignment without performing any DB writes.
- * Returns an error object if validation fails, or null if valid.
- * Used by the bulk-assign route to validate all assignments before batch writing.
- */
-export async function validateAssignment(
-  agentId: string,
-  toolId: string,
-  credentialSourceMcpServerId: string | null | undefined,
-  executionSourceMcpServerId: string | null | undefined,
-  preFetchedData: {
-    existingAgentIds: Set<string>;
-    toolsMap: Map<string, Tool>;
-    catalogItemsMap: Map<string, InternalMcpCatalog>;
-    mcpServersBasicMap: Map<
-      string,
-      { id: string; ownerId: string | null; catalogId: string | null }
-    >;
-  },
-  useDynamicTeamCredential?: boolean,
-): Promise<{
-  status: 400 | 404;
-  error: { message: string; type: string };
-} | null> {
-  if (!preFetchedData.existingAgentIds.has(agentId)) {
-    return {
-      status: 404,
-      error: {
-        message: `Agent with ID ${agentId} not found`,
-        type: "not_found",
-      },
-    };
-  }
-
-  const tool = preFetchedData.toolsMap.get(toolId) || null;
-  if (!tool) {
-    return {
-      status: 404,
-      error: {
-        message: `Tool with ID ${toolId} not found`,
-        type: "not_found",
-      },
-    };
-  }
-
-  if (tool.catalogId) {
-    const catalogItem =
-      preFetchedData.catalogItemsMap.get(tool.catalogId) || null;
-
-    if (catalogItem?.serverType === "local") {
-      if (!executionSourceMcpServerId && !useDynamicTeamCredential) {
-        return {
-          status: 400,
-          error: {
-            message:
-              "Execution source installation or dynamic team credential is required for local MCP server tools",
-            type: "validation_error",
-          },
-        };
-      }
-    }
-    if (catalogItem?.serverType === "remote") {
-      if (!credentialSourceMcpServerId && !useDynamicTeamCredential) {
-        return {
-          status: 400,
-          error: {
-            message:
-              "Credential source or dynamic team credential is required for remote MCP server tools",
-            type: "validation_error",
-          },
-        };
-      }
-    }
-  }
-
-  if (credentialSourceMcpServerId) {
-    const preFetchedServer = preFetchedData.mcpServersBasicMap.get(
-      credentialSourceMcpServerId,
-    );
-    const validationError = await validateCredentialSource(
-      agentId,
-      credentialSourceMcpServerId,
-      preFetchedServer,
-    );
-    if (validationError) return validationError;
-  }
-
-  if (executionSourceMcpServerId) {
-    const preFetchedServer = preFetchedData.mcpServersBasicMap.get(
-      executionSourceMcpServerId,
-    );
-    const validationError = await validateExecutionSource(
-      toolId,
-      executionSourceMcpServerId,
-      preFetchedServer,
-    );
-    if (validationError) return validationError;
-  }
-
-  return null;
-}
-
-/**
- * Validates that a credentialSourceMcpServerId is valid for the given agent.
- * Returns an error object if validation fails, or null if valid.
- *
- * Validation rules:
- * - (Admin): Admins can use their personal tokens with any agent
- * - Team token: Agent and MCP server must share at least one team
- * - Personal token (Member): Token owner must belong to a team that the agent is assigned to
- */
-async function validateCredentialSource(
-  agentId: string,
-  credentialSourceMcpServerId: string,
-  preFetchedServer?: { id: string; ownerId: string | null } | null,
-): Promise<{
-  status: 400 | 404;
-  error: { message: string; type: string };
-} | null> {
-  // Check that the MCP server exists (use pre-fetched data if available)
-  const mcpServer =
-    preFetchedServer !== undefined
-      ? preFetchedServer
-      : await McpServerModel.findById(credentialSourceMcpServerId);
-
-  if (!mcpServer) {
-    return {
-      status: 404,
-      error: {
-        message: `MCP server with ID ${credentialSourceMcpServerId} not found`,
-        type: "not_found",
-      },
-    };
-  }
-
-  // Get the token owner's details
-  const owner = mcpServer.ownerId
-    ? await UserModel.getById(mcpServer.ownerId)
-    : null;
-  if (!owner) {
-    return {
-      status: 400,
-      error: {
-        message: "Personal token owner not found",
-        type: "validation_error",
-      },
-    };
-  }
-
-  // Check if the owner has access to the agent (either directly or through teams)
-  const hasAccess = await AgentTeamModel.userHasAgentAccess(
-    owner.id,
-    agentId,
-    true,
-  );
-
-  if (!hasAccess) {
-    return {
-      status: 400,
-      error: {
-        message:
-          "The credential owner must be a member of a team that this agent is assigned to",
-        type: "validation_error",
-      },
-    };
-  }
-
-  return null;
-}
-
-/**
- * Validates that an executionSourceMcpServerId is valid for the given tool.
- * Returns an error object if validation fails, or null if valid.
- *
- * Validation rules:
- * - MCP server must exist
- * - Tool must exist
- * - Execution source must be from the same catalog as the tool (catalog compatibility)
- */
-async function validateExecutionSource(
-  toolId: string,
-  executionSourceMcpServerId: string,
-  preFetchedServer?: { id: string; catalogId: string | null } | null,
-): Promise<{
-  status: 400 | 404;
-  error: { message: string; type: string };
-} | null> {
-  // 1. Check MCP server exists (use pre-fetched data if available)
-  const mcpServer =
-    preFetchedServer !== undefined
-      ? preFetchedServer
-      : await McpServerModel.findById(executionSourceMcpServerId);
-  if (!mcpServer) {
-    return {
-      status: 404,
-      error: { message: "MCP server not found", type: "not_found" },
-    };
-  }
-
-  // 2. Get tool and verify catalog compatibility
-  const tool = await ToolModel.findById(toolId);
-  if (!tool) {
-    return {
-      status: 404,
-      error: { message: "Tool not found", type: "not_found" },
-    };
-  }
-
-  if (tool.catalogId !== mcpServer.catalogId) {
-    return {
-      status: 400,
-      error: {
-        message: "Execution source must be from the same catalog as the tool",
-        type: "validation_error",
-      },
-    };
-  }
-
-  return null;
+function mapAgentToolAssignmentErrorCodeToHttpStatus(
+  code: "not_found" | "validation_error",
+): 400 | 404 {
+  return code === "not_found" ? 404 : 400;
 }
 
 export default agentToolRoutes;

@@ -1,6 +1,6 @@
+import { validateAssignment } from "@/services/agent-tool-assignment";
 import { describe, expect, test } from "@/test";
 import type { InternalMcpCatalog, Tool } from "@/types";
-import { validateAssignment } from "./agent-tool";
 
 /**
  * Build a minimal Tool object for test maps.
@@ -60,7 +60,13 @@ describe("validateAssignment", () => {
       toolsMap: new Map([[tool.id, tool]]),
     };
 
-    const result = await validateAssignment(agentId, tool.id, null, null, data);
+    const result = await validateAssignment({
+      agentId,
+      toolId: tool.id,
+      credentialSourceMcpServerId: null,
+      executionSourceMcpServerId: null,
+      preFetchedData: data,
+    });
     expect(result).toBeNull();
   });
 
@@ -72,15 +78,15 @@ describe("validateAssignment", () => {
       toolsMap: new Map([[tool.id, tool]]),
     };
 
-    const result = await validateAssignment(
-      "missing-agent",
-      tool.id,
-      null,
-      null,
-      data,
-    );
+    const result = await validateAssignment({
+      agentId: "missing-agent",
+      toolId: tool.id,
+      credentialSourceMcpServerId: null,
+      executionSourceMcpServerId: null,
+      preFetchedData: data,
+    });
     expect(result).not.toBeNull();
-    expect(result?.status).toBe(404);
+    expect(result?.code).toBe("not_found");
     expect(result?.error.type).toBe("not_found");
     expect(result?.error.message).toContain("missing-agent");
   });
@@ -91,15 +97,15 @@ describe("validateAssignment", () => {
       existingAgentIds: new Set(["agent-1"]),
     };
 
-    const result = await validateAssignment(
-      "agent-1",
-      "missing-tool",
-      null,
-      null,
-      data,
-    );
+    const result = await validateAssignment({
+      agentId: "agent-1",
+      toolId: "missing-tool",
+      credentialSourceMcpServerId: null,
+      executionSourceMcpServerId: null,
+      preFetchedData: data,
+    });
     expect(result).not.toBeNull();
-    expect(result?.status).toBe(404);
+    expect(result?.code).toBe("not_found");
     expect(result?.error.type).toBe("not_found");
     expect(result?.error.message).toContain("missing-tool");
   });
@@ -116,15 +122,15 @@ describe("validateAssignment", () => {
       catalogItemsMap: new Map([[catalogId, catalog]]),
     };
 
-    const result = await validateAssignment(
-      "agent-1",
-      tool.id,
-      null,
-      null,
-      data,
-    );
+    const result = await validateAssignment({
+      agentId: "agent-1",
+      toolId: tool.id,
+      credentialSourceMcpServerId: null,
+      executionSourceMcpServerId: null,
+      preFetchedData: data,
+    });
     expect(result).not.toBeNull();
-    expect(result?.status).toBe(400);
+    expect(result?.code).toBe("validation_error");
     expect(result?.error.message).toContain("Execution source");
   });
 
@@ -153,13 +159,13 @@ describe("validateAssignment", () => {
       ]),
     };
 
-    const result = await validateAssignment(
-      agent.id,
-      tool.id,
-      null,
-      server.id,
-      data,
-    );
+    const result = await validateAssignment({
+      agentId: agent.id,
+      toolId: tool.id,
+      credentialSourceMcpServerId: null,
+      executionSourceMcpServerId: server.id,
+      preFetchedData: data,
+    });
     expect(result).toBeNull();
   });
 
@@ -175,14 +181,14 @@ describe("validateAssignment", () => {
       catalogItemsMap: new Map([[catalogId, catalog]]),
     };
 
-    const result = await validateAssignment(
-      "agent-1",
-      tool.id,
-      null,
-      null,
-      data,
-      true, // useDynamicTeamCredential
-    );
+    const result = await validateAssignment({
+      agentId: "agent-1",
+      toolId: tool.id,
+      credentialSourceMcpServerId: null,
+      executionSourceMcpServerId: null,
+      preFetchedData: data,
+      useDynamicTeamCredential: true,
+    });
     expect(result).toBeNull();
   });
 
@@ -198,15 +204,15 @@ describe("validateAssignment", () => {
       catalogItemsMap: new Map([[catalogId, catalog]]),
     };
 
-    const result = await validateAssignment(
-      "agent-1",
-      tool.id,
-      null,
-      null,
-      data,
-    );
+    const result = await validateAssignment({
+      agentId: "agent-1",
+      toolId: tool.id,
+      credentialSourceMcpServerId: null,
+      executionSourceMcpServerId: null,
+      preFetchedData: data,
+    });
     expect(result).not.toBeNull();
-    expect(result?.status).toBe(400);
+    expect(result?.code).toBe("validation_error");
     expect(result?.error.message).toContain("Credential source");
   });
 
@@ -222,14 +228,14 @@ describe("validateAssignment", () => {
       catalogItemsMap: new Map([[catalogId, catalog]]),
     };
 
-    const result = await validateAssignment(
-      "agent-1",
-      tool.id,
-      null,
-      null,
-      data,
-      true, // useDynamicTeamCredential
-    );
+    const result = await validateAssignment({
+      agentId: "agent-1",
+      toolId: tool.id,
+      credentialSourceMcpServerId: null,
+      executionSourceMcpServerId: null,
+      preFetchedData: data,
+      useDynamicTeamCredential: true,
+    });
     expect(result).toBeNull();
   });
 
@@ -242,13 +248,13 @@ describe("validateAssignment", () => {
       toolsMap: new Map([[tool.id, tool]]),
     };
 
-    const result = await validateAssignment(
-      "agent-1",
-      tool.id,
-      null,
-      null,
-      data,
-    );
+    const result = await validateAssignment({
+      agentId: "agent-1",
+      toolId: tool.id,
+      credentialSourceMcpServerId: null,
+      executionSourceMcpServerId: null,
+      preFetchedData: data,
+    });
     expect(result).toBeNull();
   });
 
@@ -262,13 +268,13 @@ describe("validateAssignment", () => {
       toolsMap: new Map([[tool.id, tool]]),
     };
 
-    const result = await validateAssignment(
-      "agent-1",
-      tool.id,
-      null,
-      null,
-      data,
-    );
+    const result = await validateAssignment({
+      agentId: "agent-1",
+      toolId: tool.id,
+      credentialSourceMcpServerId: null,
+      executionSourceMcpServerId: null,
+      preFetchedData: data,
+    });
     expect(result).toBeNull();
   });
 });

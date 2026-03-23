@@ -1,6 +1,12 @@
 "use client";
 import { SignedIn, UserButton } from "@daveyplate/better-auth-ui";
-import { E2eTestId } from "@shared";
+import {
+  COMMUNITY_DOCS_URL,
+  COMMUNITY_SLACK_URL,
+  E2eTestId,
+  GITHUB_REPO_NEW_ISSUE_URL,
+  GITHUB_REPO_URL,
+} from "@shared";
 import { requiredPagePermissionsMap } from "@shared/access-control";
 import {
   BookOpen,
@@ -23,12 +29,6 @@ import { usePathname, useSearchParams } from "next/navigation";
 import React from "react";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
 import { AppLogo } from "@/components/app-logo";
-import {
-  COMMUNITY_BUG_REPORT_URL,
-  COMMUNITY_DOCS_URL,
-  COMMUNITY_GITHUB_URL,
-  COMMUNITY_SLACK_URL,
-} from "@/components/community-links";
 import { SidebarWarningsAccordion } from "@/components/sidebar-warnings-accordion";
 import {
   Sidebar,
@@ -52,7 +52,7 @@ import { useHasPermissions, usePermissionMap } from "@/lib/auth.query";
 import config from "@/lib/config";
 import { useEnterpriseFeature } from "@/lib/config.query";
 import { useGithubStars } from "@/lib/github.query";
-import { useOrganization } from "@/lib/organization.query";
+import { useAppIconLogo } from "@/lib/use-app-name";
 import { cn } from "@/lib/utils";
 
 interface NavSubItem {
@@ -332,7 +332,7 @@ const NavSecondary = ({
               <SidebarMenuItem>
                 <SidebarMenuButton asChild tooltip="Star us on GitHub">
                   <a
-                    href={COMMUNITY_GITHUB_URL}
+                    href={GITHUB_REPO_URL}
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -374,7 +374,7 @@ const NavSecondary = ({
               <SidebarMenuItem>
                 <SidebarMenuButton asChild tooltip="Report a bug">
                   <a
-                    href={COMMUNITY_BUG_REPORT_URL}
+                    href={GITHUB_REPO_NEW_ISSUE_URL}
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -398,7 +398,7 @@ export function AppSidebar() {
   const { data: starCount } = useGithubStars();
   const formattedStarCount = starCount ?? "";
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
-  const { data: organization } = useOrganization();
+  const appIconLogo = useAppIconLogo();
   const knowledgeBaseEnabled = useEnterpriseFeature("knowledgeBase");
   // Connect page requires at least one of these (OR logic)
   const { data: canReadAgent } = useHasPermissions({ agent: ["read"] });
@@ -459,11 +459,7 @@ export function AppSidebar() {
           href="/chat"
           className="hidden group-data-[collapsible=icon]:flex"
         >
-          <img
-            src={organization?.iconLogo || "/logo.png"}
-            alt="Logo"
-            className="size-7"
-          />
+          <img src={appIconLogo} alt="Logo" className="size-7" />
         </Link>
         <SidebarTrigger className="hidden group-data-[collapsible=icon]:flex size-8 cursor-pointer" />
       </SidebarHeader>

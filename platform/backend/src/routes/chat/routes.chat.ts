@@ -4,8 +4,6 @@ import {
   RouteId,
   type SupportedProvider,
   TimeInMs,
-  TOOL_SWAP_AGENT_FULL_NAME,
-  TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
   type TokenUsage,
 } from "@shared";
 import {
@@ -20,6 +18,7 @@ import {
 } from "ai";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import { getChatMcpTools } from "@/clients/chat-mcp-client";
@@ -51,6 +50,7 @@ import {
 } from "@/templating";
 import {
   ApiError,
+  type ChatMessage,
   constructResponseSchema,
   DeleteObjectResponseSchema,
   ErrorResponsesSchema,
@@ -75,10 +75,7 @@ import {
   mapProviderError,
   ProviderError,
 } from "./errors";
-import {
-  stripImagesFromMessages,
-  type UiMessage,
-} from "./strip-images-from-messages";
+import { normalizeChatMessages } from "./normalization/normalize-chat-messages";
 
 const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
@@ -276,17 +273,18 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             agentLlmApiKeyId: agent.llmApiKeyId,
           });
 
-          // Strip images and large browser tool results from messages before sending to LLM
-          // This prevents context limit issues from accumulated screenshots and page snapshots
-          const strippedMessagesForLLM = stripImagesFromMessages(
-            messages as UiMessage[],
+          // Normalize chat history before replaying it to the model.
+          // This dedupes repeated tool parts, drops dangling interrupted tool calls,
+          // and strips heavy image/browser payloads that would otherwise bloat context.
+          const normalizedMessagesForLLM = normalizeChatMessages(
+            messages as ChatMessage[],
           );
 
           // Stream with AI SDK
           // Build streamText config conditionally
-          // Cast to UIMessage[] - UiMessage is structurally compatible at runtime
+          // Cast to UIMessage[] - ChatMessage is structurally compatible at runtime
           const modelMessages = await convertToModelMessages(
-            strippedMessagesForLLM as unknown as Omit<UIMessage, "id">[],
+            normalizedMessagesForLLM as unknown as Omit<UIMessage, "id">[],
           );
 
           // Perplexity does NOT support tool calling - it has built-in web search instead
@@ -297,11 +295,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             model,
             messages: modelMessages,
             ...(supportsToolCalling && { tools: mcpTools }),
-            stopWhen: [
-              stepCountIs(500),
-              hasToolCall(TOOL_SWAP_AGENT_FULL_NAME),
-              hasToolCall(TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME),
-            ],
+            stopWhen: buildChatStopConditions(),
             abortSignal: chatAbortController.signal,
             onFinish: async ({ usage, finishReason }) => {
               removeAbortListeners();
@@ -368,6 +362,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "Content-Encoding": "none",
             },
             stream: createUIMessageStream({
+              // Preserve incoming message IDs so the client updates existing
+              // assistant messages instead of rendering duplicate ones.
+              originalMessages: messages as UIMessage[],
               onError: (error) => {
                 // Persist messages on stream-level errors (e.g. errors thrown
                 // in execute before writer.merge() is reached). Without this,
@@ -1412,6 +1409,23 @@ export function extractFirstMessages(messages: unknown[]): ExtractedMessages {
   return { firstUserMessage, firstAssistantMessage };
 }
 
+export function buildChatStopConditions() {
+  return [
+    stepCountIs(500),
+    hasToolCall(getChatStopToolNames().swapAgentToolName),
+    hasToolCall(getChatStopToolNames().swapToDefaultAgentToolName),
+  ];
+}
+
+export function getChatStopToolNames() {
+  return {
+    swapAgentToolName: archestraMcpBranding.getToolName("swap_agent"),
+    swapToDefaultAgentToolName: archestraMcpBranding.getToolName(
+      "swap_to_default_agent",
+    ),
+  };
+}
+
 /**
  * Builds the prompt for title generation based on extracted messages.
  */
@@ -1524,7 +1538,7 @@ async function persistNewMessages(
     const existingCount = existingMessages.length;
 
     // Use input messages to find new messages
-    const uiMessages = messages as UiMessage[];
+    const uiMessages = messages as ChatMessage[];
     const newMessages = uiMessages.slice(existingCount);
 
     if (newMessages.length === 0) {
@@ -1541,13 +1555,13 @@ async function persistNewMessages(
       return 0;
     }
 
-    let messagesToStore: UiMessage[];
+    let messagesToStore: ChatMessage[];
 
     // Strip base64 images and large browser tool results before storing
     if (context === "onFinish") {
       // Log size reduction only for onFinish (where we have complete messages)
       const beforeSize = estimateMessagesSize(messagesToSave);
-      messagesToStore = stripImagesFromMessages(messagesToSave);
+      messagesToStore = normalizeChatMessages(messagesToSave);
       const afterSize = estimateMessagesSize(messagesToStore);
 
       logger.info(
@@ -1563,7 +1577,7 @@ async function persistNewMessages(
       );
     } else {
       // For onError, just strip without detailed logging
-      messagesToStore = stripImagesFromMessages(messagesToSave);
+      messagesToStore = normalizeChatMessages(messagesToSave);
     }
 
     // Append only new messages with timestamps

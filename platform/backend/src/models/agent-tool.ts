@@ -1,7 +1,8 @@
 import {
+  ARCHESTRA_MCP_CATALOG_ID,
   BUILT_IN_AGENT_IDS,
   type PaginationQuery,
-  TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@shared";
 import {
   and,
@@ -12,12 +13,14 @@ import {
   getTableColumns,
   inArray,
   isNotNull,
+  isNull,
   ne,
   or,
   type SQL,
   sql,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
+import { archestraMcpBranding } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
 import {
   createPaginatedResult,
@@ -1022,17 +1025,25 @@ class AgentToolModel {
     }
 
     // Exclude Archestra built-in tools for test isolation
-    // Note: Use escape character to treat underscores literally (not as wildcards)
-    // Double backslash needed: JS consumes one level, SQL gets the other
     if (filters?.excludeArchestraTools) {
-      whereConditions.push(
-        sql`${schema.toolsTable.name} NOT LIKE 'archestra\\_\\_%' ESCAPE '\\'`,
+      const excludeBuiltInToolsCondition = or(
+        isNull(schema.toolsTable.catalogId),
+        ne(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
       );
+
+      if (excludeBuiltInToolsCondition) {
+        whereConditions.push(excludeBuiltInToolsCondition);
+      }
     }
 
     // Always exclude the knowledge sources tool (auto-injected, not user-assignable)
     whereConditions.push(
-      ne(schema.toolsTable.name, TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME),
+      ne(
+        schema.toolsTable.name,
+        archestraMcpBranding.getToolName(
+          TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+        ),
+      ),
     );
 
     const whereClause =

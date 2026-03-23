@@ -26,7 +26,7 @@ export function CollapsibleSetupSection({
   allStepsCompleted: boolean;
   isLoading: boolean;
   providerLabel: string;
-  docsUrl: string;
+  docsUrl: string | null;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -38,15 +38,17 @@ export function CollapsibleSetupSection({
         <div>
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Setup</h2>
-            <Link
-              href={docsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-            >
-              Learn more
-              <ExternalLink className="h-3 w-3" />
-            </Link>
+            {docsUrl && (
+              <Link
+                href={docsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+              >
+                Learn more
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+            )}
           </div>
           {!isLoading && (
             <p className="text-xs text-muted-foreground mt-1">
@@ -77,15 +79,17 @@ export function CollapsibleSetupSection({
               </Badge>
             </div>
             <div className="flex items-center gap-1">
-              <Link
-                href={docsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-              >
-                Learn more
-                <ExternalLink className="h-3 w-3" />
-              </Link>
+              {docsUrl && (
+                <Link
+                  href={docsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                >
+                  Learn more
+                  <ExternalLink className="h-3 w-3" />
+                </Link>
+              )}
               <CollapsibleTrigger asChild>
                 <Button
                   variant="ghost"

@@ -1,5 +1,6 @@
 "use client";
 
+import { DEFAULT_APP_NAME } from "@shared";
 import { Search } from "lucide-react";
 import {
   useCallback,
@@ -23,7 +24,7 @@ interface ServiceIcon {
 
 /** Slugs to feature at the top when there's no search query */
 const FEATURED_SLUGS = new Set([
-  "archestra",
+  DEFAULT_APP_NAME.toLowerCase(),
   "windmill",
   "github",
   "gitlab",
@@ -73,8 +74,8 @@ const FEATURED_SLUGS = new Set([
 /** Custom multi-color logos not available in simple-icons */
 const CUSTOM_ICONS: ServiceIcon[] = [
   {
-    title: "Archestra",
-    slug: "archestra",
+    title: DEFAULT_APP_NAME,
+    slug: DEFAULT_APP_NAME.toLowerCase(),
     hex: "000000",
     path: "",
     svgMarkup: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 26 26"><rect x="1" y="1" width="24" height="23" rx="5" fill="black"/><path fill-rule="evenodd" clip-rule="evenodd" d="M10.4384 17.0524C11.3272 17.0524 12.1228 16.5011 12.4349 15.6689L14.6487 9.76536C15.1714 8.37143 14.141 6.8845 12.6522 6.8845C11.7634 6.8845 10.9679 7.43583 10.6558 8.26803L8.44198 14.1716C7.91926 15.5655 8.94971 17.0524 10.4384 17.0524Z" fill="white"/><ellipse cx="2.11831" cy="1.95944" rx="2.11831" ry="1.95944" transform="matrix(-1 0 0 1 18.5356 12.9747)" fill="white"/></svg>`,

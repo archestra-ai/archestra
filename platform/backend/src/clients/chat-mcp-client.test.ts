@@ -1,7 +1,13 @@
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME } from "@shared";
+import {
+  getArchestraToolFullName,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  TOOL_WHOAMI_SHORT_NAME,
+} from "@shared";
 import { jsonSchema, type Tool } from "ai";
 import { vi } from "vitest";
+import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { TeamTokenModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import * as chatClient from "./chat-mcp-client";
@@ -292,6 +298,61 @@ describe("chat-mcp-client health check", () => {
     chatClient.clearChatMcpClient(agent.id);
     await chatClient.__test.clearToolCache(cacheKey);
   });
+
+  test("discards cached client when ping hangs past timeout", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    vi.useFakeTimers();
+    try {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id);
+      const agent = await makeAgent({ teams: [team.id] });
+      await makeTeamMember(team.id, user.id);
+      await TeamTokenModel.createTeamToken(team.id, team.name);
+
+      const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
+      chatClient.clearChatMcpClient(agent.id);
+      await chatClient.__test.clearToolCache(cacheKey);
+
+      const hangingClient = {
+        ping: vi.fn(() => new Promise(() => {})),
+        listTools: vi.fn(),
+        callTool: vi.fn(),
+        close: vi.fn(),
+      };
+
+      chatClient.__test.setCachedClient(
+        cacheKey,
+        hangingClient as unknown as Client,
+      );
+
+      const toolsPromise = chatClient.getChatMcpTools({
+        agentName: agent.name,
+        agentId: agent.id,
+        userId: user.id,
+        organizationId: org.id,
+        userIsAgentAdmin: false,
+      });
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      const tools = await toolsPromise;
+
+      expect(hangingClient.ping).toHaveBeenCalledTimes(1);
+      expect(hangingClient.close).toHaveBeenCalledTimes(1);
+      expect(hangingClient.listTools).not.toHaveBeenCalled();
+      expect(tools).toEqual({});
+
+      chatClient.clearChatMcpClient(agent.id);
+      await chatClient.__test.clearToolCache(cacheKey);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("executeMcpTool error handling", () => {
@@ -480,26 +541,39 @@ describe("filterToolsByEnabledIds", () => {
     expect(Object.keys(result)).toHaveLength(0);
   });
 
-  test("archestra tools bypass custom selection filtering", async ({
+  test("white-labeled built-in tools bypass custom selection filtering", async ({
     makeTool,
   }) => {
     // Create a real tool in the DB so getNamesByIds can find it
     const githubTool = await makeTool({ name: "github__list_repos" });
+    archestraMcpBranding.syncFromOrganization({
+      appName: "Acme Copilot",
+      iconLogo: null,
+    });
+    const brandedWhoami = getArchestraToolFullName(TOOL_WHOAMI_SHORT_NAME, {
+      appName: "Acme Copilot",
+      fullWhiteLabeling: true,
+    });
+    const brandedKnowledgeTool = getArchestraToolFullName(
+      TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+      {
+        appName: "Acme Copilot",
+        fullWhiteLabeling: true,
+      },
+    );
 
     const tools = {
       github__list_repos: makeMockTool(),
-      [TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME]: makeMockTool("Query knowledge"),
-      archestra__whoami: makeMockTool("Who am I"),
+      [brandedKnowledgeTool]: makeMockTool("Query knowledge"),
+      [brandedWhoami]: makeMockTool("Who am I"),
     };
 
     // Only enable the github tool — archestra tools should still pass through
     const result = await filterToolsByEnabledIds(tools, [githubTool.id]);
 
     expect(Object.keys(result)).toContain("github__list_repos");
-    expect(Object.keys(result)).toContain(
-      TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
-    );
-    expect(Object.keys(result)).toContain("archestra__whoami");
+    expect(Object.keys(result)).toContain(brandedKnowledgeTool);
+    expect(Object.keys(result)).toContain(brandedWhoami);
     expect(Object.keys(result)).toHaveLength(3);
   });
 

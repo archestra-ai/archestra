@@ -20,6 +20,7 @@ export interface AssignmentComboboxItem {
   name: string;
   description?: string;
   badge?: string;
+  sortRank?: number;
   disabled?: boolean;
   disabledReason?: string;
   icon?: React.ReactNode;
@@ -56,14 +57,11 @@ export function AssignmentCombobox({
   const filteredItems = React.useMemo(() => {
     const query = search.toLowerCase();
     const filtered = query
-      ? items.filter(
-          (item) =>
-            item.name.toLowerCase().includes(query) ||
-            (item.description?.toLowerCase().includes(query) ?? false),
-        )
+      ? items.filter((item) => getSearchMatchScore(item, query) > 0)
       : items;
 
-    // Sort: selected first, then enabled, then disabled, then alphabetically
+    // Sort: selected first, then enabled, then disabled, then best search hit,
+    // then alphabetically.
     return [...filtered].sort((a, b) => {
       const aSelected = selectedSet.has(a.id) ? 0 : 1;
       const bSelected = selectedSet.has(b.id) ? 0 : 1;
@@ -71,6 +69,12 @@ export function AssignmentCombobox({
       const aDisabled = a.disabled ? 1 : 0;
       const bDisabled = b.disabled ? 1 : 0;
       if (aDisabled !== bDisabled) return aDisabled - bDisabled;
+      const aScore = query ? getSearchMatchScore(a, query) : 0;
+      const bScore = query ? getSearchMatchScore(b, query) : 0;
+      if (aScore !== bScore) return bScore - aScore;
+      const aRank = a.sortRank ?? 0;
+      const bRank = b.sortRank ?? 0;
+      if (aRank !== bRank) return bRank - aRank;
       return a.name.localeCompare(b.name);
     });
   }, [items, search, selectedSet]);
@@ -118,9 +122,9 @@ export function AssignmentCombobox({
                     <DropdownMenuItem
                       key={item.id}
                       disabled
-                      className="opacity-50"
+                      className="cursor-pointer opacity-50"
                     >
-                      <div className="flex items-center gap-2 min-w-0 pl-6">
+                      <div className="flex items-center gap-3 min-w-0 pl-6">
                         {item.icon}
                         <div className="min-w-0">
                           <span className="truncate">{item.name}</span>
@@ -138,6 +142,7 @@ export function AssignmentCombobox({
                   <DropdownMenuCheckboxItem
                     key={item.id}
                     checked={isSelected}
+                    className="cursor-pointer"
                     onCheckedChange={() => {
                       onToggle(item.id);
                       if (!isSelected) onItemAdded?.(item.id);
@@ -148,7 +153,7 @@ export function AssignmentCombobox({
                     }}
                   >
                     <div className="flex items-center justify-between gap-2 w-full">
-                      <div className="flex items-center gap-2 min-w-0">
+                      <div className="flex items-center gap-3 min-w-0">
                         {item.icon}
                         <div className="min-w-0">
                           <span className="truncate">{item.name}</span>
@@ -188,6 +193,18 @@ export function AssignmentCombobox({
       </DropdownMenuContent>
     </DropdownMenu>
   );
+}
+
+function getSearchMatchScore(item: AssignmentComboboxItem, query: string) {
+  const name = item.name.toLowerCase();
+  const description = item.description?.toLowerCase() ?? "";
+
+  if (name === query) return 5;
+  if (name.startsWith(query)) return 4;
+  if (name.includes(query)) return 3;
+  if (description.startsWith(query)) return 2;
+  if (description.includes(query)) return 1;
+  return 0;
 }
 
 function ItemDescription({ description }: { description: string }) {

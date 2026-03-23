@@ -1,6 +1,4 @@
 "use client";
-
-import { DocsPage, getDocsUrl } from "@shared";
 import {
   AlertCircle,
   CheckCircle2,
@@ -17,14 +15,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useConfig } from "@/lib/config.query";
+import { getFrontendDocsUrl } from "@/lib/docs";
 import {
   useDeleteIncomingEmailSubscription,
   useIncomingEmailStatus,
   useRenewIncomingEmailSubscription,
   useSetupIncomingEmailWebhook,
 } from "@/lib/incoming-email.query";
+import { useAppName } from "@/lib/use-app-name";
 
 export default function EmailPage() {
+  const appName = useAppName();
   const { data: configData, isLoading: featuresLoading } = useConfig();
   const { data: status, isLoading: statusLoading } = useIncomingEmailStatus();
   const setupMutation = useSetupIncomingEmailWebhook();
@@ -32,6 +33,7 @@ export default function EmailPage() {
   const deleteMutation = useDeleteIncomingEmailSubscription();
 
   const [webhookUrl, setWebhookUrl] = useState("");
+  const docsUrl = getFrontendDocsUrl("platform-agent-triggers-email");
 
   const isLoading = featuresLoading || statusLoading;
 
@@ -51,17 +53,23 @@ export default function EmailPage() {
           <div>
             <p className="text-sm font-medium">Email is not configured</p>
             <p className="text-sm text-muted-foreground">
-              See the{" "}
-              <Link
-                href={getDocsUrl(DocsPage.PlatformAgentTriggersEmail)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-primary hover:underline"
-              >
-                setup guide
-                <ExternalLink className="h-3 w-3" />
-              </Link>{" "}
-              for supported email providers and configuration.
+              {docsUrl ? (
+                <>
+                  See the{" "}
+                  <Link
+                    href={docsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-primary hover:underline"
+                  >
+                    setup guide
+                    <ExternalLink className="h-3 w-3" />
+                  </Link>{" "}
+                  for supported email providers and configuration.
+                </>
+              ) : (
+                "Supported email providers and configuration are managed by your administrator."
+              )}
             </p>
           </div>
         </CardContent>
@@ -131,15 +139,17 @@ export default function EmailPage() {
             to automatically create a subscription on server startup.
           </p>
           <p className="mt-2">
-            <Link
-              href={getDocsUrl(DocsPage.PlatformAgentTriggersEmail)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-primary hover:underline"
-            >
-              Learn more in our documentation
-              <ExternalLink className="h-3 w-3" />
-            </Link>
+            {docsUrl && (
+              <Link
+                href={docsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-primary hover:underline"
+              >
+                Learn more in our documentation
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+            )}
           </p>
         </CardContent>
       </Card>
@@ -275,7 +285,7 @@ export default function EmailPage() {
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Enter the publicly accessible URL for this Archestra
+                  Enter the publicly accessible URL for this {appName}
                   instance&apos;s webhook endpoint. For local development, use a
                   tunnel service like ngrok (e.g.,{" "}
                   <code className="bg-muted px-1 py-0.5 rounded">

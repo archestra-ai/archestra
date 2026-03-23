@@ -7,6 +7,10 @@ vi.mock("@/lib/backend-connectivity", () => ({
   useBackendConnectivity: vi.fn(),
 }));
 
+vi.mock("@/lib/use-app-name", () => ({
+  useAppName: () => "Sparky",
+}));
+
 vi.mock("next/navigation", () => ({
   useSearchParams: vi.fn(() => new URLSearchParams()),
 }));

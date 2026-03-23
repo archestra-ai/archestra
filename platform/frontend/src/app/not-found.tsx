@@ -1,3 +1,4 @@
+import { GITHUB_REPO_NEW_ISSUE_URL } from "@shared";
 import { Home } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -22,7 +23,7 @@ function NotFound() {
           <p className="text-muted-foreground text-sm max-w-md">
             Sorry! If that's unexpected, please{" "}
             <Link
-              href="https://github.com/archestra-ai/archestra/issues/new"
+              href={GITHUB_REPO_NEW_ISSUE_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="underline hover:text-foreground"

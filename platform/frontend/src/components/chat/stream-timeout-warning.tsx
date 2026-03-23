@@ -1,9 +1,9 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import { DocsPage, getDocsUrl } from "@shared";
 import { AlertTriangle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { getFrontendDocsUrl } from "@/lib/docs";
 
 interface StreamTimeoutWarningProps {
   status: "ready" | "submitted" | "streaming" | "error";
@@ -18,6 +18,10 @@ export function StreamTimeoutWarning({
   thresholdSeconds = 40,
   checkIntervalSeconds = 3,
 }: StreamTimeoutWarningProps) {
+  const docsUrl = getFrontendDocsUrl(
+    "platform-deployment",
+    "cloud-provider-configuration-streaming-timeout-settings",
+  );
   const [showWarning, setShowWarning] = useState(false);
   const lastMessageTimestamp = useRef<number>(Date.now());
   const checkIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -77,17 +81,16 @@ export function StreamTimeoutWarning({
             This may indicate that the timeout configured for your cloud
             provider's load balancer is too low. We recommend increasing the
             timeout to at least 5 minutes.{" "}
-            <a
-              href={getDocsUrl(
-                DocsPage.PlatformDeployment,
-                "cloud-provider-configuration-streaming-timeout-settings",
-              )}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-medium underline hover:no-underline"
-            >
-              Learn more in our documentation
-            </a>
+            {docsUrl && (
+              <a
+                href={docsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium underline hover:no-underline"
+              >
+                Learn more in our documentation
+              </a>
+            )}
           </p>
         </div>
       </div>

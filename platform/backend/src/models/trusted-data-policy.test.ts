@@ -1,3 +1,9 @@
+import {
+  getArchestraToolFullName,
+  TOOL_CREATE_AGENT_SHORT_NAME,
+  TOOL_WHOAMI_SHORT_NAME,
+} from "@shared";
+import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { AgentToolModel, ToolModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import TrustedDataPolicyModel from "./trusted-data-policy";
@@ -151,28 +157,45 @@ describe("TrustedDataPolicyModel", () => {
       expect(safeEmailResult?.isTrusted).toBe(false); // Still untrusted but not blocked
     });
 
-    test("handles Archestra tools in bulk", async ({ makeAgent }) => {
+    test("trusts white-labeled built-in MCP tools in bulk", async ({
+      makeAgent,
+    }) => {
       const agent = await makeAgent();
+      archestraMcpBranding.syncFromOrganization({
+        appName: "Acme Copilot",
+        iconLogo: null,
+      });
+      const brandedWhoami = getArchestraToolFullName(TOOL_WHOAMI_SHORT_NAME, {
+        appName: "Acme Copilot",
+        fullWhiteLabeling: true,
+      });
+      const brandedCreateAgent = getArchestraToolFullName(
+        TOOL_CREATE_AGENT_SHORT_NAME,
+        {
+          appName: "Acme Copilot",
+          fullWhiteLabeling: true,
+        },
+      );
 
       const results = await TrustedDataPolicyModel.evaluateBulk(
         agent.id,
         [
-          { toolName: "archestra__whoami", toolOutput: { user: "test" } },
+          { toolName: brandedWhoami, toolOutput: { user: "test" } },
           { toolName: "regular-tool", toolOutput: { data: "test" } },
-          { toolName: "archestra__create_agent", toolOutput: { id: "123" } },
+          { toolName: brandedCreateAgent, toolOutput: { id: "123" } },
         ],
         "restrictive",
         { teamIds: [] },
       );
 
-      // Archestra tools should be trusted (indices 0 and 2)
+      // Built-in tools should be trusted (indices 0 and 2)
       const whoamiResult = results.get("0");
       expect(whoamiResult?.isTrusted).toBe(true);
-      expect(whoamiResult?.reason).toBe("Archestra MCP server tool");
+      expect(whoamiResult?.reason).toBe("Built-in MCP server tool");
 
       const createProfileResult = results.get("2");
       expect(createProfileResult?.isTrusted).toBe(true);
-      expect(createProfileResult?.reason).toBe("Archestra MCP server tool");
+      expect(createProfileResult?.reason).toBe("Built-in MCP server tool");
 
       // Regular tool should be untrusted (not found in database) - index 1
       const regularResult = results.get("1");
@@ -1637,7 +1660,7 @@ describe("TrustedDataPolicyModel", () => {
       expect(result.isTrusted).toBe(true);
       expect(result.isBlocked).toBe(false);
       expect(result.shouldSanitizeWithDualLlm).toBe(false);
-      expect(result.reason).toBe("Archestra MCP server tool");
+      expect(result.reason).toBe("Built-in MCP server tool");
     });
 
     test("trusts Archestra MCP server tools with different tool names", async () => {
@@ -1662,7 +1685,7 @@ describe("TrustedDataPolicyModel", () => {
         expect(result.isTrusted).toBe(true);
         expect(result.isBlocked).toBe(false);
         expect(result.shouldSanitizeWithDualLlm).toBe(false);
-        expect(result.reason).toBe("Archestra MCP server tool");
+        expect(result.reason).toBe("Built-in MCP server tool");
       }
     });
 
@@ -1689,7 +1712,7 @@ describe("TrustedDataPolicyModel", () => {
       expect(result.isTrusted).toBe(true);
       expect(result.isBlocked).toBe(false);
       expect(result.shouldSanitizeWithDualLlm).toBe(false);
-      expect(result.reason).toBe("Archestra MCP server tool");
+      expect(result.reason).toBe("Built-in MCP server tool");
     });
 
     test("trusts Archestra tools regardless of __ in tool name", async () => {
@@ -1705,7 +1728,7 @@ describe("TrustedDataPolicyModel", () => {
 
       expect(result.isTrusted).toBe(true);
       expect(result.isBlocked).toBe(false);
-      expect(result.reason).toBe("Archestra MCP server tool");
+      expect(result.reason).toBe("Built-in MCP server tool");
     });
 
     test("does not affect evaluation of non-Archestra tools", async ({

@@ -1,12 +1,9 @@
 "use client";
 
-import {
-  DocsPage,
-  getDocsUrl,
-  SYSTEM_PROMPT_TEMPLATE_EXPRESSIONS,
-} from "@shared";
+import { DocsPage, SYSTEM_PROMPT_TEMPLATE_EXPRESSIONS } from "@shared";
 
 import { Editor } from "@/components/editor";
+import { getFrontendDocsUrl } from "@/lib/docs";
 import {
   computeHandlebarsReplaceOffsets,
   shouldShowHandlebarsCompletions,
@@ -26,6 +23,11 @@ export function SystemPromptEditor({
   /** "section" uses bold h3 (matching section headings), "default" uses lighter text */
   variant?: "default" | "section";
 }) {
+  const docsUrl = getFrontendDocsUrl(
+    DocsPage.PlatformAgents,
+    "system-prompt-templating",
+  );
+
   return (
     <div className="space-y-2">
       <div>
@@ -44,19 +46,24 @@ export function SystemPromptEditor({
           >
             Handlebars
           </a>{" "}
-          templating — see{" "}
-          <a
-            href={getDocsUrl(
-              DocsPage.PlatformAgents,
-              "system-prompt-templating",
-            )}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-foreground"
-          >
-            docs
-          </a>{" "}
-          for available variables.
+          templating
+          {docsUrl ? (
+            <>
+              {" "}
+              — see{" "}
+              <a
+                href={docsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-foreground"
+              >
+                docs
+              </a>{" "}
+              for available variables.
+            </>
+          ) : (
+            "."
+          )}
         </p>
       </div>
       <div className="border rounded-md overflow-hidden">
@@ -78,6 +85,8 @@ export function SystemPromptEditor({
             automaticLayout: true,
             readOnly,
             placeholder: "Enter instruction for the LLM",
+            quickSuggestions: false,
+            wordBasedSuggestions: "off",
             // Disable EditContext API — it doesn't work inside Radix Dialog portals
             editContext: false,
           }}

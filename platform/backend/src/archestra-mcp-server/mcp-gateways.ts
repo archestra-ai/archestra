@@ -1,3 +1,8 @@
+import {
+  TOOL_CREATE_MCP_GATEWAY_SHORT_NAME,
+  TOOL_EDIT_MCP_GATEWAY_SHORT_NAME,
+  TOOL_GET_MCP_GATEWAY_SHORT_NAME,
+} from "@shared";
 import { z } from "zod";
 import { AgentScopeSchema, UpdateAgentSchemaBase, UuidIdSchema } from "@/types";
 import {
@@ -69,7 +74,7 @@ const EditMcpGatewayToolArgsSchema = z
 
 const registry = defineArchestraTools([
   defineArchestraTool({
-    shortName: "create_mcp_gateway",
+    shortName: TOOL_CREATE_MCP_GATEWAY_SHORT_NAME,
     title: "Create MCP Gateway",
     description:
       "Create a new MCP gateway with the specified name, optional labels, and optional assigned knowledge bases or knowledge connectors.",
@@ -83,7 +88,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "get_mcp_gateway",
+    shortName: TOOL_GET_MCP_GATEWAY_SHORT_NAME,
     title: "Get MCP Gateway",
     description:
       "Get a specific MCP gateway by ID or name. When searching by name, only your personal gateways are matched.",
@@ -99,7 +104,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "edit_mcp_gateway",
+    shortName: TOOL_EDIT_MCP_GATEWAY_SHORT_NAME,
     title: "Edit MCP Gateway",
     description:
       "Edit an existing MCP gateway. All fields are optional except id. Only provided fields are updated, and the tool respects the calling user's access level, including knowledge source assignments.",

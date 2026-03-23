@@ -101,6 +101,8 @@ interface ArchestraPromptInputProps {
   isPlaywrightSetupVisible: boolean;
   /** Current agent ID for agent selector */
   selectorAgentId?: string | null;
+  /** Fallback display name when the selected agent is not yet present in the cached agent list */
+  selectorAgentName?: string;
   /** Callback when agent changes */
   onAgentChange?: (agentId: string) => void;
   /** Callback when model selector opens/closes */
@@ -134,6 +136,7 @@ const PromptInputContent = ({
   submitDisabled = false,
   isPlaywrightSetupVisible = false,
   selectorAgentId,
+  selectorAgentName,
   onAgentChange,
   onModelSelectorOpenChange,
   modelSource,
@@ -491,6 +494,7 @@ const PromptInputContent = ({
                 onAgentChange && (
                   <InitialAgentSelector
                     currentAgentId={selectorAgentId}
+                    currentAgentName={selectorAgentName}
                     onAgentChange={onAgentChange}
                   />
                 )}
@@ -626,6 +630,7 @@ const ArchestraPromptInput = ({
   submitDisabled,
   isPlaywrightSetupVisible,
   selectorAgentId,
+  selectorAgentName,
   onAgentChange,
   onModelSelectorOpenChange,
   modelSource,
@@ -656,6 +661,7 @@ const ArchestraPromptInput = ({
           submitDisabled={submitDisabled}
           isPlaywrightSetupVisible={isPlaywrightSetupVisible}
           selectorAgentId={selectorAgentId}
+          selectorAgentName={selectorAgentName}
           onAgentChange={onAgentChange}
           onModelSelectorOpenChange={onModelSelectorOpenChange}
           modelSource={modelSource}

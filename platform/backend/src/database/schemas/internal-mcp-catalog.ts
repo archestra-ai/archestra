@@ -8,7 +8,13 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { InternalMcpCatalogServerType, LocalConfig } from "@/types";
+import type {
+  AuthField,
+  InternalMcpCatalogServerType,
+  LocalConfig,
+  OAuthConfig,
+  UserConfig,
+} from "@/types";
 import secretTable from "./secret";
 import usersTable from "./user";
 
@@ -30,17 +36,7 @@ const internalMcpCatalogTable = pgTable(
     installationCommand: text("installation_command"),
     requiresAuth: boolean("requires_auth").notNull().default(false),
     authDescription: text("auth_description"),
-    authFields: jsonb("auth_fields")
-      .$type<
-        Array<{
-          name: string;
-          label: string;
-          type: string;
-          required: boolean;
-          description?: string;
-        }>
-      >()
-      .default([]),
+    authFields: jsonb("auth_fields").$type<Array<AuthField>>().default([]),
     // Server type and remote configuration
     serverType: text("server_type")
       .$type<InternalMcpCatalogServerType>()
@@ -60,46 +56,9 @@ const internalMcpCatalogTable = pgTable(
     localConfig: jsonb("local_config").$type<LocalConfig>(),
     // Custom Kubernetes deployment spec YAML (if null, generated from localConfig)
     deploymentSpecYaml: text("deployment_spec_yaml"),
-    userConfig: jsonb("user_config")
-      .$type<
-        Record<
-          string,
-          {
-            type: "string" | "number" | "boolean" | "directory" | "file";
-            title: string;
-            description: string;
-            required?: boolean;
-            default?: string | number | boolean | Array<string>;
-            multiple?: boolean;
-            sensitive?: boolean;
-            min?: number;
-            max?: number;
-          }
-        >
-      >()
-      .default({}),
+    userConfig: jsonb("user_config").$type<UserConfig>().default({}),
     // OAuth configuration for remote servers
-    oauthConfig: jsonb("oauth_config").$type<{
-      name: string;
-      server_url: string;
-      auth_server_url?: string;
-      resource_metadata_url?: string;
-      client_id: string;
-      redirect_uris: Array<string>;
-      scopes: Array<string>;
-      description?: string;
-      well_known_url?: string;
-      default_scopes: Array<string>;
-      supports_resource_metadata: boolean;
-      generic_oauth?: boolean;
-      token_endpoint?: string;
-      access_token_env_var?: string;
-      requires_proxy?: boolean;
-      provider_name?: string;
-      browser_auth?: boolean;
-      streamable_http_url?: string;
-      streamable_http_port?: number;
-    }>(),
+    oauthConfig: jsonb("oauth_config").$type<OAuthConfig>(),
     /** Catalog item icon: emoji character or base64-encoded image data URL */
     icon: text("icon"),
     organizationId: text("organization_id"),

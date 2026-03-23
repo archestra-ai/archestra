@@ -16,10 +16,12 @@ import {
   getOtlpAuthHeaders,
   getTrustedOrigins,
   parseBodyLimit,
+  parseCommaSeparatedList,
   parseConnectorSyncMaxDuration,
   parseContentMaxLength,
   parseProcessType,
   parseSampleRate,
+  parseTrustProxy,
   parseVirtualKeyDefaultExpiration,
 } from "./config";
 
@@ -1077,5 +1079,90 @@ describe("parseSampleRate", () => {
 
   test("should return default for non-numeric value", () => {
     expect(parseSampleRate("abc", 0.1)).toBe(0.1);
+  });
+});
+
+describe("parseCommaSeparatedList", () => {
+  test("should parse comma-separated values", () => {
+    expect(parseCommaSeparatedList("anthropic,amazon")).toEqual([
+      "anthropic",
+      "amazon",
+    ]);
+  });
+
+  test("should trim whitespace from values", () => {
+    expect(parseCommaSeparatedList(" anthropic , amazon ")).toEqual([
+      "anthropic",
+      "amazon",
+    ]);
+  });
+
+  test("should return empty array for empty string", () => {
+    expect(parseCommaSeparatedList("")).toEqual([]);
+  });
+
+  test("should filter out empty entries from extra commas", () => {
+    expect(parseCommaSeparatedList("anthropic,,amazon,")).toEqual([
+      "anthropic",
+      "amazon",
+    ]);
+  });
+
+  test("should handle single value", () => {
+    expect(parseCommaSeparatedList("anthropic")).toEqual(["anthropic"]);
+  });
+});
+
+describe("parseTrustProxy", () => {
+  test("should return false when undefined", () => {
+    expect(parseTrustProxy(undefined)).toBe(false);
+  });
+
+  test("should return false when empty string", () => {
+    expect(parseTrustProxy("")).toBe(false);
+  });
+
+  test("should return false when whitespace-only", () => {
+    expect(parseTrustProxy("   ")).toBe(false);
+  });
+
+  test('should return false for "false"', () => {
+    expect(parseTrustProxy("false")).toBe(false);
+  });
+
+  test('should return true for "true"', () => {
+    expect(parseTrustProxy("true")).toBe(true);
+  });
+
+  test("should trim whitespace and return true", () => {
+    expect(parseTrustProxy("  true  ")).toBe(true);
+  });
+
+  test("should return string for a single IP", () => {
+    expect(parseTrustProxy("127.0.0.1")).toBe("127.0.0.1");
+  });
+
+  test("should return string for a single CIDR", () => {
+    expect(parseTrustProxy("192.168.1.0/24")).toBe("192.168.1.0/24");
+  });
+
+  test("should return normalised string for comma-separated IPs", () => {
+    expect(parseTrustProxy("127.0.0.1,10.0.0.1")).toBe("127.0.0.1,10.0.0.1");
+  });
+
+  test("should return normalised string for comma-separated CIDRs", () => {
+    expect(parseTrustProxy("10.0.0.0/8,172.16.0.0/12,192.168.0.0/16")).toBe(
+      "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16",
+    );
+  });
+
+  test("should trim whitespace around each IP in a comma-separated list", () => {
+    expect(parseTrustProxy("  127.0.0.1 , 10.0.0.1  ")).toBe(
+      "127.0.0.1,10.0.0.1",
+    );
+  });
+
+  test("should filter empty entries from extra commas", () => {
+    expect(parseTrustProxy("127.0.0.1,,10.0.0.1")).toBe("127.0.0.1,10.0.0.1");
   });
 });

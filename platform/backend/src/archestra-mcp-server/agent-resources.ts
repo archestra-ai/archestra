@@ -22,7 +22,6 @@ import {
   UuidIdSchema,
 } from "@/types";
 import {
-  assignMcpServerTools,
   assignSubAgentDelegations,
   assignToolAssignments,
   catchError,
@@ -56,23 +55,27 @@ export const SuggestedPromptToolInputSchema = SuggestedPromptInputSchema.extend(
 ).strict();
 
 export const ToolAssignmentToolInputSchema =
-  AgentToolAssignmentInputSchema.extend({
-    toolId: AgentToolAssignmentInputSchema.shape.toolId.describe(
-      "The ID of the tool to assign to the agent.",
-    ),
-    credentialSourceMcpServerId:
-      AgentToolAssignmentInputSchema.shape.credentialSourceMcpServerId.describe(
-        "For remote MCP tools, the deployed MCP server ID that should supply credentials.",
+  AgentToolAssignmentInputSchema.omit({
+    useDynamicTeamCredential: true,
+  })
+    .extend({
+      toolId: AgentToolAssignmentInputSchema.shape.toolId.describe(
+        "The ID of the tool to assign to the agent.",
       ),
-    executionSourceMcpServerId:
-      AgentToolAssignmentInputSchema.shape.executionSourceMcpServerId.describe(
-        "For local MCP tools, the deployed MCP server ID that should execute the tool.",
-      ),
-    useDynamicTeamCredential:
-      AgentToolAssignmentInputSchema.shape.useDynamicTeamCredential.describe(
-        "When true, resolve credentials dynamically from the invoking team instead of pinning a deployment.",
-      ),
-  }).strict();
+      resolveAtCallTime:
+        AgentToolAssignmentInputSchema.shape.resolveAtCallTime.describe(
+          "When true, resolve credentials and execution target at tool call time. Prefer this for builder flows.",
+        ),
+      credentialSourceMcpServerId:
+        AgentToolAssignmentInputSchema.shape.credentialSourceMcpServerId.describe(
+          "Optional explicit remote MCP installation to use as the credential source. Use this only when you want credentials to come from one specific installed MCP server instead of resolving them at call time.",
+        ),
+      executionSourceMcpServerId:
+        AgentToolAssignmentInputSchema.shape.executionSourceMcpServerId.describe(
+          "Optional explicit local MCP installation to run the tool on. Use this only when you want a local MCP tool to execute on one specific installed MCP server instead of resolving the execution target at call time.",
+        ),
+    })
+    .strict();
 
 export const KnowledgeBaseIdsToolInputSchema =
   InsertAgentSchemaBase.shape.knowledgeBaseIds.describe(
@@ -189,7 +192,6 @@ export async function handleCreateResource<
     connectorIds?: string[];
     systemPrompt?: string | null;
     suggestedPrompts?: Array<{ summaryTitle: string; prompt: string }>;
-    mcpServerIds?: string[];
     subAgentIds?: string[];
     toolAssignments?: ToolAssignmentInput[];
   },
@@ -302,10 +304,6 @@ export async function handleCreateResource<
       scope === "personal" ? context.userId : undefined,
     );
 
-    const mcpServerResults =
-      targetAgentType === "agent" && (args.mcpServerIds?.length ?? 0) > 0
-        ? await assignMcpServerTools(created.id, args.mcpServerIds ?? [])
-        : [];
     const toolAssignmentResults =
       targetAgentType === "agent" && (args.toolAssignments?.length ?? 0) > 0
         ? await assignToolAssignments(created.id, args.toolAssignments ?? [])
@@ -326,12 +324,7 @@ export async function handleCreateResource<
       `Teams: ${created.teams.length > 0 ? created.teams.map((team) => team.name).join(", ") : "None"}`,
       `Labels: ${created.labels.length > 0 ? created.labels.map((label) => `${label.key}: ${label.value}`).join(", ") : "None"}`,
     ];
-    formatAssignmentSummary(
-      lines,
-      mcpServerResults,
-      subAgentResults,
-      toolAssignmentResults,
-    );
+    formatAssignmentSummary(lines, subAgentResults, toolAssignmentResults);
 
     return successResult(lines.join("\n"));
   } catch (error) {
@@ -440,7 +433,6 @@ export async function handleEditResource<
     connectorIds?: string[];
     systemPrompt?: string | null;
     suggestedPrompts?: Array<{ summaryTitle: string; prompt: string }>;
-    mcpServerIds?: string[];
     subAgentIds?: string[];
     toolAssignments?: ToolAssignmentInput[];
   },
@@ -536,10 +528,6 @@ export async function handleEditResource<
       return errorResult(`failed to update ${toolLabel}.`);
     }
 
-    const mcpServerResults =
-      expectedType === "agent" && (args.mcpServerIds?.length ?? 0) > 0
-        ? await assignMcpServerTools(args.id, args.mcpServerIds ?? [])
-        : [];
     const toolAssignmentResults =
       expectedType === "agent" && (args.toolAssignments?.length ?? 0) > 0
         ? await assignToolAssignments(args.id, args.toolAssignments ?? [])
@@ -560,12 +548,7 @@ export async function handleEditResource<
       `Teams: ${updated.teams.length > 0 ? updated.teams.map((team) => team.name).join(", ") : "None"}`,
       `Labels: ${updated.labels.length > 0 ? updated.labels.map((label) => `${label.key}: ${label.value}`).join(", ") : "None"}`,
     ];
-    formatAssignmentSummary(
-      lines,
-      mcpServerResults,
-      subAgentResults,
-      toolAssignmentResults,
-    );
+    formatAssignmentSummary(lines, subAgentResults, toolAssignmentResults);
 
     return successResult(lines.join("\n"));
   } catch (error) {

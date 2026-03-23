@@ -28,6 +28,7 @@ import {
   useSetTeamVaultFolder,
   useTeamVaultFolder,
 } from "@/lib/team-vault-folder.query.ee";
+import { useAppName } from "@/lib/use-app-name";
 
 interface Team {
   id: string;
@@ -46,6 +47,7 @@ export default function TeamVaultFolderDialog({
   onOpenChange,
   team,
 }: TeamVaultFolderDialogProps) {
+  const appName = useAppName();
   const [vaultPath, setVaultPath] = useState("");
   const [connectivityResult, setConnectivityResult] = useState<{
     connected: boolean;
@@ -177,7 +179,7 @@ export default function TeamVaultFolderDialog({
                 />
                 <div className="space-y-1 text-xs text-muted-foreground">
                   <p>
-                    Archestra is configured to use{" "}
+                    {appName} is configured to use{" "}
                     <strong>
                       {vaultKvVersion === "1"
                         ? "Key-Value Secrets Engine V1"
@@ -336,7 +338,7 @@ export default function TeamVaultFolderDialog({
                     </li>
                   </ul>
                   <p className="text-muted-foreground">
-                    Ensure Archestra has read access to the specified Vault
+                    Ensure {appName} has read access to the specified Vault
                     path.
                   </p>
                 </AlertDescription>

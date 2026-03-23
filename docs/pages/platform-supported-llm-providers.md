@@ -488,7 +488,7 @@ Bedrock supports two authentication methods:
 
 To use IAM authentication on EKS with [IRSA](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html):
 
-1. Create an IAM role with `AmazonBedrockFullAccess` (or a scoped policy)
+1. Create an IAM role with `AmazonBedrockFullAccess` or a scoped policy (see below)
 2. Create an [OIDC provider](https://docs.aws.amazon.com/eks/latest/userguide/enable-iam-roles-for-service-accounts.html) for your EKS cluster
 3. Configure the IAM role's trust policy to allow the Archestra service account:
    ```json
@@ -512,14 +512,42 @@ To use IAM authentication on EKS with [IRSA](https://docs.aws.amazon.com/eks/lat
    ```
 5. Set the environment variables below and restart the deployment
 
+#### Minimum IAM Policy
+
+Archestra uses the Bedrock **Converse API** (not InvokeModel). The IAM role needs these actions:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["bedrock:Converse", "bedrock:ConverseStream"],
+      "Resource": [
+        "arn:aws:bedrock:*:<ACCOUNT_ID>:inference-profile/us.anthropic.*",
+        "arn:aws:bedrock:*::foundation-model/anthropic.*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["bedrock:ListInferenceProfiles"],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+Use `*` for the region in resource ARNs — cross-region inference profiles (`us.` prefix) can route requests to any US region.
+
 ### Environment Variables
 
 #### Common (both auth methods)
 
-| Variable                                     | Required | Description                                                                          |
-| -------------------------------------------- | -------- | ------------------------------------------------------------------------------------ |
-| `ARCHESTRA_BEDROCK_BASE_URL`                 | Yes      | Bedrock runtime endpoint URL (e.g., `https://bedrock-runtime.us-east-1.amazonaws.com`) |
-| `ARCHESTRA_BEDROCK_INFERENCE_PROFILE_PREFIX` | No       | Region prefix for cross-region inference (e.g., `us` or `eu`). Required for Claude models |
+| Variable                                 | Required | Description                                                                          |
+| ---------------------------------------- | -------- | ------------------------------------------------------------------------------------ |
+| `ARCHESTRA_BEDROCK_BASE_URL`             | Yes      | Bedrock runtime endpoint URL (e.g., `https://bedrock-runtime.us-east-1.amazonaws.com`) |
+| `ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS`    | No       | Comma-separated list of provider prefixes to include. When empty (default), all profiles are returned. |
+| `ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS` | No | Comma-separated list of inference region prefixes (e.g., `us,global`). When empty (default), all regions are returned. |
 
 #### API Key auth
 
@@ -544,6 +572,47 @@ When IAM auth is enabled, Archestra uses the [AWS credential chain](https://docs
 https://bedrock-runtime.{region}.amazonaws.com
 ```
 
-#### `ARCHESTRA_BEDROCK_INFERENCE_PROFILE_PREFIX`
+#### Model Discovery
 
-Claude and other models on Bedrock require [cross-region inference profiles](https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html). Set this to `us` or `eu` to enable them. Without it, only on-demand models are available.
+Archestra uses the Bedrock [ListInferenceProfiles](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_ListInferenceProfiles.html) API to discover available models. This means only models that have inference profiles configured in your AWS account will appear — ensuring the model picker only shows models you can actually use.
+
+#### Filtering Models by Provider
+
+By default, Archestra returns all active inference profiles from your AWS account. Use `ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS` to limit which providers appear in the model picker.
+
+The filter matches the provider segment of the inference profile ID (the part after the region prefix). For example, the profile `us.anthropic.claude-sonnet-4-6` has provider `anthropic`.
+
+```bash
+# Only Anthropic and Amazon models
+ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS=anthropic,amazon
+
+# Only Anthropic models
+ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS=anthropic
+
+# All providers (default)
+ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS=
+```
+
+Common provider prefixes: `anthropic`, `amazon`, `meta`, `mistral`, `deepseek`, `cohere`, `writer`, `stability`, `twelvelabs`.
+
+#### Filtering Models by Inference Region
+
+Use `ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS` to limit which inference
+regions appear in the model picker.
+
+The filter matches the region prefix of the inference profile ID (the first
+segment before the provider). For example, the profile
+`us.anthropic.claude-sonnet-4-6` has region prefix `us`.
+
+```bash
+# Only US and global profiles
+ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS=us,global
+
+# Only EU profiles
+ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS=eu
+
+# All regions (default)
+ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS=
+```
+
+Known region prefixes: `us`, `eu`, `ap`, `global`.

@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  archestraApiSdk,
-  type archestraApiTypes,
-  DocsPage,
-  getDocsUrl,
-} from "@shared";
+import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -24,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { getFrontendDocsUrl } from "@/lib/docs";
 import {
   useOrganization,
   useUpdateLlmSettings,
@@ -68,6 +64,10 @@ export default function LlmSettingsPage() {
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
   const [cleanupInterval, setCleanupInterval] =
     useState<LimitCleanupInterval>("1h");
+  const toonDocsUrl = getFrontendDocsUrl(
+    "platform-costs-and-limits",
+    "toon-compression",
+  );
 
   const updateLlmSettingsMutation = useUpdateLlmSettings(
     "LLM settings updated",
@@ -208,19 +208,21 @@ export default function LlmSettingsPage() {
         description={
           <>
             Reduce LLM token usage up to 60% by using TOON (Token-Oriented
-            Object Notation) compression for tool results.{" "}
-            <a
-              href={getDocsUrl(
-                DocsPage.PlatformCostsAndLimits,
-                "toon-compression",
-              )}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline underline-offset-4"
-            >
-              Learn how TOON compression works
-            </a>
-            .
+            Object Notation) compression for tool results.
+            {toonDocsUrl && (
+              <>
+                {" "}
+                <a
+                  href={toonDocsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline underline-offset-4"
+                >
+                  Learn how TOON compression works
+                </a>
+                .
+              </>
+            )}
           </>
         }
         control={

@@ -3,7 +3,7 @@ title: Adding LLM Providers
 category: Development
 order: 2
 description: Developer guide for implementing new LLM provider support in Archestra Platform
-lastUpdated: 2026-02-18
+lastUpdated: 2026-03-23
 ---
 
 <!--
@@ -223,10 +223,14 @@ Environment variables for API keys and base URLs.
 
 Each provider has a different API for listing available models.
 
-| File                                       | Description                                                            |
-| ------------------------------------------ | ---------------------------------------------------------------------- |
-| `backend/src/routes/chat/routes.models.ts` | Add `fetch{Provider}Models()` function and register in `modelFetchers` |
-| `backend/src/routes/chat/routes.models.ts` | Add case to `getProviderApiKey()` switch                               |
+| File                                                   | Description                                                                                          |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `backend/src/routes/chat/model-fetchers/{provider}.ts` | Implement `fetch{Provider}Models()` for the provider's model listing API                             |
+| `backend/src/routes/chat/model-fetchers/index.ts`      | Register the fetcher in the shared `modelFetchers` record                                            |
+| `backend/src/routes/chat/model-fetchers/registry.ts`   | Update `fetchModelsForProvider()` only if the provider needs special auth or non-standard fetch flow |
+| `backend/src/routes/chat/routes.api-keys.ts`           | Add provider-specific API key validation rules if needed                                             |
+
+If the provider is keyless or uses cloud credentials instead of an API key, also update `backend/src/services/system-key-manager.ts`.
 
 ### LLM Client
 

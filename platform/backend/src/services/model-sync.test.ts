@@ -2,6 +2,7 @@ import type { SupportedProvider } from "@shared";
 import { vi } from "vitest";
 import ApiKeyModelModel from "@/models/api-key-model";
 import ModelModel from "@/models/model";
+import { modelFetchers } from "@/routes/chat/model-fetchers";
 import { describe, expect, test } from "@/test";
 import { modelSyncService } from "./model-sync";
 
@@ -26,7 +27,7 @@ describe("ModelSyncService", () => {
 
     // Register a fetcher that returns models with various detected providers
     // (simulating an OpenAI-compatible proxy returning models from multiple providers)
-    modelSyncService.registerFetcher("openai", async () => [
+    modelFetchers.openai = async () => [
       {
         id: "gpt-4o",
         displayName: "GPT-4o",
@@ -44,7 +45,7 @@ describe("ModelSyncService", () => {
         displayName: "Gemini 2.5 Pro",
         provider: "gemini" as SupportedProvider,
       },
-    ]);
+    ];
 
     await modelSyncService.syncModelsForApiKey({
       apiKeyId: apiKey.id,
@@ -103,13 +104,13 @@ describe("ModelSyncService", () => {
       provider: "openai",
     });
 
-    modelSyncService.registerFetcher("openai", async () => [
+    modelFetchers.openai = async () => [
       {
         id: "gpt-4o",
         displayName: "GPT-4o",
         provider: "openai" as SupportedProvider,
       },
-    ]);
+    ];
 
     // Initial sync creates the model
     await modelSyncService.syncModelsForApiKey({
@@ -190,7 +191,7 @@ describe("ModelSyncService", () => {
       lastSyncedAt: new Date(),
     });
 
-    modelSyncService.registerFetcher("gemini", async () => [
+    modelFetchers.gemini = async () => [
       {
         id: "gemini-2.5-flash",
         displayName: "Gemini 2.5 Flash",
@@ -211,7 +212,7 @@ describe("ModelSyncService", () => {
         displayName: "Gemini 2.5 Flash Image Preview",
         provider: "gemini" as SupportedProvider,
       },
-    ]);
+    ];
 
     await modelSyncService.syncModelsForApiKey({
       apiKeyId: apiKey.id,

@@ -5,24 +5,13 @@ import {
 } from "@/clients/models-dev-client";
 import logger from "@/logging";
 import { ApiKeyModelModel, ModelModel } from "@/models";
+import { modelFetchers } from "@/routes/chat/model-fetchers";
 import type {
   CreateModel,
   ModelInputModality,
   ModelOutputModality,
 } from "@/types";
 import { ModelInputModalitySchema, ModelOutputModalitySchema } from "@/types";
-
-interface ModelFromProvider {
-  id: string;
-  displayName: string;
-  provider: SupportedProvider;
-  createdAt?: string;
-}
-
-type ModelFetcher = (
-  apiKey: string,
-  baseUrl?: string | null,
-) => Promise<ModelFromProvider[]>;
 
 /**
  * Service for syncing models from provider APIs to the database.
@@ -33,16 +22,6 @@ type ModelFetcher = (
  * 3. Links the models to the API key via the `api_key_models` join table
  */
 class ModelSyncService {
-  private modelFetchers: Map<SupportedProvider, ModelFetcher> = new Map();
-
-  /**
-   * Register a model fetcher function for a provider.
-   * This allows the routes.models.ts to register its fetch functions.
-   */
-  registerFetcher(provider: SupportedProvider, fetcher: ModelFetcher): void {
-    this.modelFetchers.set(provider, fetcher);
-  }
-
   /**
    * Sync models for a specific API key.
    * Fetches models from the provider and links them to the API key.
@@ -60,7 +39,7 @@ class ModelSyncService {
     forceRefresh?: boolean;
   }): Promise<number> {
     const { apiKeyId, provider, apiKeyValue, baseUrl, forceRefresh } = params;
-    const fetcher = this.modelFetchers.get(provider);
+    const fetcher = modelFetchers[provider];
 
     if (!fetcher) {
       logger.warn(
@@ -178,13 +157,6 @@ class ModelSyncService {
     }
 
     return results;
-  }
-
-  /**
-   * Check if a fetcher is registered for a provider.
-   */
-  hasFetcher(provider: SupportedProvider): boolean {
-    return this.modelFetchers.has(provider);
   }
 }
 

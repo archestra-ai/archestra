@@ -302,6 +302,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - Use TanStack Query for data fetching (prefer `useQuery` over `useSuspenseQuery` with explicit loading states)
 - Use shadcn/ui components only
 - **Use components from `frontend/src/components/ui` over plain HTML elements**: Never use raw `<button>`, `<input>`, `<select>`, etc. when a component exists in `frontend/src/components/ui` (Button over button, Input over input, etc.)
+- **Do not hardcode `Archestra` in frontend UI copy**: Use `const appName = useAppName();` and interpolate the app name so white-labeled deployments render correctly
 - **Handle toasts in .query.ts files, not in components**: Toast notifications for mutations (success/error) should be defined in the mutation's `onSuccess`/`onError` callbacks within `.query.ts` files, not in components
 - **Never throw on HTTP errors**: In query/mutation functions, never throw errors on HTTP failures. Use `handleApiError(error)` for user notification and return appropriate default values (`null`, `[]`, `{}`). Components should not have try/catch for API calls - all error handling belongs in `.query.ts` files.
 - Small focused components with extracted business logic

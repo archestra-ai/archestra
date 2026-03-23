@@ -4,6 +4,8 @@ import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import logger from "@/logging";
 import { ApiKeyModelModel, ChatApiKeyModel, ModelModel } from "@/models";
+import { fetchBedrockModelsViaIam } from "@/routes/chat/model-fetchers/bedrock";
+import { fetchGeminiModelsViaVertexAi } from "@/routes/chat/model-fetchers/gemini";
 import { buildModelsToUpsert } from "@/services/model-sync";
 import type { CreateModel } from "@/types";
 
@@ -37,9 +39,6 @@ class SystemKeyManager {
       name: "Vertex AI",
       isEnabled: () => isVertexAiEnabled(),
       customFetch: async () => {
-        const { fetchGeminiModelsViaVertexAi } = await import(
-          "@/routes/chat/routes.models"
-        );
         const models = await fetchGeminiModelsViaVertexAi();
         return models.map((m) => ({ id: m.id, displayName: m.displayName }));
       },
@@ -49,9 +48,6 @@ class SystemKeyManager {
       name: "AWS IAM",
       isEnabled: () => isBedrockIamAuthEnabled(),
       customFetch: async () => {
-        const { fetchBedrockModelsViaIam } = await import(
-          "@/routes/chat/routes.models"
-        );
         const models = await fetchBedrockModelsViaIam();
         return models.map((m) => ({ id: m.id, displayName: m.displayName }));
       },

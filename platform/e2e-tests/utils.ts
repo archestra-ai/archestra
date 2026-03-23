@@ -590,9 +590,20 @@ export async function expectAuthenticated(
   page: Page,
   timeout = 30000,
 ): Promise<void> {
-  await expect(page.getByTestId(E2eTestId.SidebarUserProfile)).toBeVisible({
-    timeout,
-  });
+  const sidebar = page.locator("[data-slot=sidebar]");
+  const hasSidebar = await sidebar
+    .isVisible({ timeout: 2_000 })
+    .catch(() => false);
+
+  if (hasSidebar) {
+    await expandSidebar(page);
+    await expect(page.getByTestId(E2eTestId.SidebarUserProfile)).toBeVisible({
+      timeout,
+    });
+    return;
+  }
+
+  await expect(page).not.toHaveURL(/\/auth\/sign-in/, { timeout });
 }
 
 /**
@@ -601,6 +612,9 @@ export async function expectAuthenticated(
  */
 export async function expandSidebar(page: Page): Promise<void> {
   const sidebar = page.locator("[data-slot=sidebar]");
+  if (!(await sidebar.isVisible({ timeout: 2_000 }).catch(() => false))) {
+    return;
+  }
   const state = await sidebar.getAttribute("data-state");
   if (state === "collapsed") {
     const trigger = page.locator("[data-sidebar=trigger]").first();

@@ -491,6 +491,102 @@ describe("chat-models", () => {
         },
       ]);
     });
+
+    test("probes fallback models when list only returns live audio Gemini", async () => {
+      const mockModels = [
+        {
+          name: "publishers/google/models/text-multilingual-embedding-002",
+          version: "default",
+          tunedModelInfo: {},
+        },
+        {
+          name: "publishers/google/models/text-embedding-005",
+          version: "default",
+          tunedModelInfo: {},
+        },
+        {
+          name: "publishers/google/models/imagen-4.0-generate-001",
+          version: "default",
+          tunedModelInfo: {},
+        },
+        {
+          name: "publishers/google/models/gemini-live-2.5-flash-native-audio",
+          version: "default",
+          tunedModelInfo: {},
+        },
+      ];
+
+      const mockPager = {
+        [Symbol.asyncIterator]: async function* () {
+          for (const model of mockModels) {
+            yield model;
+          }
+        },
+      };
+
+      const mockGet = vi.fn(async ({ model }: { model: string }) => {
+        if (
+          model === "gemini-2.5-pro" ||
+          model === "gemini-2.5-flash" ||
+          model === "gemini-2.5-flash-lite" ||
+          model === "gemini-2.0-flash-001" ||
+          model === "gemini-2.0-flash-lite-001"
+        ) {
+          return {
+            name: `publishers/google/models/${model}`,
+            displayName: null,
+          };
+        }
+
+        throw new Error("Not found");
+      });
+
+      const mockClient = {
+        models: {
+          list: vi.fn().mockResolvedValue(mockPager),
+          get: mockGet,
+        },
+      } as unknown as GoogleGenAI;
+
+      mockCreateGoogleGenAIClient.mockReturnValue(mockClient);
+
+      const models = await fetchGeminiModelsViaVertexAi();
+
+      expect(models).toEqual([
+        {
+          id: "gemini-live-2.5-flash-native-audio",
+          displayName: "Gemini Live 2.5 Flash Native Audio",
+          provider: "gemini",
+        },
+        {
+          id: "gemini-2.5-pro",
+          displayName: "Gemini 2.5 Pro",
+          provider: "gemini",
+        },
+        {
+          id: "gemini-2.5-flash",
+          displayName: "Gemini 2.5 Flash",
+          provider: "gemini",
+        },
+        {
+          id: "gemini-2.5-flash-lite",
+          displayName: "Gemini 2.5 Flash Lite",
+          provider: "gemini",
+        },
+        {
+          id: "gemini-2.0-flash-001",
+          displayName: "Gemini 2.0 Flash 001",
+          provider: "gemini",
+        },
+        {
+          id: "gemini-2.0-flash-lite-001",
+          displayName: "Gemini 2.0 Flash Lite 001",
+          provider: "gemini",
+        },
+      ]);
+      expect(mockGet).toHaveBeenCalledWith({ model: "gemini-2.5-pro" });
+      expect(mockGet).toHaveBeenCalledWith({ model: "gemini-2.5-flash" });
+    });
   });
 
   describe("isVertexAiEnabled", () => {

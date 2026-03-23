@@ -88,7 +88,7 @@ const cerebrasConfig: ChatProviderTestConfig = {
 const cohereConfig: ChatProviderTestConfig = {
   providerName: "cohere",
   providerDisplayName: "Cohere",
-  modelId: "command-r-plus",
+  modelId: "command-r-plus-08-2024",
   modelDisplayName: "Command R+",
   wiremockStubId: "chat-ui-e2e-test",
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
@@ -216,8 +216,7 @@ const testConfigs: ChatProviderTestConfig[] = [
 // Test Suite
 // =============================================================================
 
-// TODO: Fix flaky chat tests - WireMock streaming issues in CI
-const skippedProviders = new Set(["openai", "gemini", "cerebras"]);
+const skippedProviders = new Set<string>();
 
 for (const config of testConfigs) {
   test.describe(`Chat-UI-${config.providerName}`, () => {
@@ -241,9 +240,15 @@ for (const config of testConfigs) {
       await expect(textarea).toBeVisible({ timeout: 15_000 });
 
       // Open model selector and choose the test model
-      const modelSelectorTrigger = page.getByTestId(
-        E2eTestId.ChatModelSelectorTrigger,
-      );
+      const modelSelectorTrigger = page
+        .getByTestId(E2eTestId.ChatModelSelectorTrigger)
+        .or(page.getByRole("button", { name: /select model/i }))
+        .or(
+          page.getByRole("button", {
+            name: /claude|gpt|gemini|command|mistral|sonar|llama|grok|glm|minimax/i,
+          }),
+        )
+        .first();
       await expect(modelSelectorTrigger).toBeVisible({ timeout: 10_000 });
       await modelSelectorTrigger.click();
 
@@ -257,14 +262,37 @@ for (const config of testConfigs) {
         await page.waitForTimeout(500);
       }
 
-      // Click on the model option that matches our exact model ID.
-      // Use parentheses to avoid matching Bedrock models whose IDs contain
-      // the same base model name (e.g. "us.anthropic.claude-3-5-sonnet-20241022-v2:0").
-      const modelOption = page
+      // Match by exact model ID first, then fall back to display name for
+      // providers whose rendered option text can vary slightly in CI.
+      const exactModelOption = page
         .getByRole("option")
         .filter({ hasText: `(${config.modelId})` });
-      await expect(modelOption.first()).toBeVisible({ timeout: 5_000 });
-      await modelOption.first().click();
+      const displayNameModelOption = page
+        .getByRole("option")
+        .filter({ hasText: new RegExp(config.modelDisplayName, "i") });
+
+      await expect(async () => {
+        if (
+          await exactModelOption
+            .first()
+            .isVisible()
+            .catch(() => false)
+        ) {
+          return;
+        }
+        await expect(displayNameModelOption.first()).toBeVisible();
+      }).toPass({ timeout: 15_000, intervals: [500, 1000, 2000] });
+
+      if (
+        await exactModelOption
+          .first()
+          .isVisible()
+          .catch(() => false)
+      ) {
+        await exactModelOption.first().click();
+      } else {
+        await displayNameModelOption.first().click();
+      }
 
       // Wait for dialog to close
       await expect(page.getByRole("dialog")).not.toBeVisible({

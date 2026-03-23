@@ -489,6 +489,41 @@ describe("validateMCPGatewayToken", () => {
       expect(result?.tokenId).toBe(`${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`);
       expect(result?.userId).toBe(user.id);
     });
+
+    test("validateOAuthToken uses the target agent organization for multi-org users", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeOAuthClient,
+      makeOAuthAccessToken,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const firstOrg = await makeOrganization();
+      const targetOrg = await makeOrganization();
+
+      await makeMember(user.id, firstOrg.id, { role: "member" });
+      await makeMember(user.id, targetOrg.id, { role: "admin" });
+
+      const client = await makeOAuthClient({ userId: user.id });
+
+      const rawToken = `test-multi-org-token-${crypto.randomUUID()}`;
+      const tokenHash = createHash("sha256")
+        .update(rawToken)
+        .digest("base64url");
+
+      const accessToken = await makeOAuthAccessToken(client.clientId, user.id, {
+        token: tokenHash,
+      });
+
+      const agent = await makeAgent({ organizationId: targetOrg.id });
+      const result = await validateOAuthToken(agent.id, rawToken);
+
+      expect(result).not.toBeNull();
+      expect(result?.tokenId).toBe(`${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`);
+      expect(result?.organizationId).toBe(targetOrg.id);
+      expect(result?.userId).toBe(user.id);
+    });
   });
 });
 

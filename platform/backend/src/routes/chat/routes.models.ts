@@ -1470,7 +1470,7 @@ function formatVertexGeminiDisplayName(modelId: string): string {
 }
 
 function isPrimaryVertexGeminiModel(modelId: string): boolean {
-  return modelId.includes("flash") || modelId.includes("pro");
+  return VERTEX_GEMINI_FALLBACK_MODEL_IDS.includes(modelId);
 }
 
 // ============================================================================

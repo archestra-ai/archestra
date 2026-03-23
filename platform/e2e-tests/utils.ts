@@ -590,6 +590,7 @@ export async function expectAuthenticated(
   page: Page,
   timeout = 30000,
 ): Promise<void> {
+  await expandSidebar(page);
   await expect(page.getByTestId(E2eTestId.SidebarUserProfile)).toBeVisible({
     timeout,
   });

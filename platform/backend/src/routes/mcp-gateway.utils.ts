@@ -83,6 +83,16 @@ type AgentInfo = {
   labels?: Array<{ key: string; value: string }>;
 };
 
+type CachedTokenAuthEntry = {
+  expiresAt: number;
+  result: TokenAuthResult | null;
+};
+
+const TOKEN_AUTH_CACHE_TTL_MS = 30_000;
+const TOKEN_AUTH_CACHE_NULL_TTL_MS = 5_000;
+const TOKEN_AUTH_CACHE_MAX_ENTRIES = 1_000;
+const tokenAuthCache = new Map<string, CachedTokenAuthEntry>();
+
 export async function createAgentServer(
   agentId: string,
   tokenAuth?: TokenAuthContext,
@@ -578,6 +588,11 @@ export async function validateOAuthToken(
   tokenValue: string,
 ): Promise<TokenAuthResult | null> {
   try {
+    const agent = await AgentModel.findAccessContextById(profileId);
+    if (!agent) {
+      return null;
+    }
+
     // Hash the token the same way better-auth stores it (SHA-256, base64url)
     const tokenHash = createHash("sha256")
       .update(tokenValue)
@@ -609,18 +624,7 @@ export async function validateOAuthToken(
     if (!userId) {
       return null;
     }
-
-    // Look up the user's organization membership
-    const membership = await MemberModel.getFirstMembershipForUser(userId);
-    if (!membership) {
-      logger.warn(
-        { profileId, userId },
-        "validateOAuthToken: user has no organization membership",
-      );
-      return null;
-    }
-
-    const organizationId = membership.organizationId;
+    const organizationId = agent.organizationId;
 
     // Check if user has MCP gateway admin permission (can access all gateways)
     const isGatewayAdmin = await userHasPermission(
@@ -679,6 +683,11 @@ export async function validateMCPGatewayToken(
   profileId: string,
   tokenValue: string,
 ): Promise<TokenAuthResult | null> {
+  const cachedResult = getCachedTokenAuthResult(profileId, tokenValue);
+  if (cachedResult !== undefined) {
+    return cachedResult;
+  }
+
   // Try external IdP JWKS validation first (if profile has an IdP configured)
   if (!tokenValue.startsWith(ARCHESTRA_TOKEN_PREFIX)) {
     const externalIdpResult = await validateExternalIdpToken(
@@ -686,6 +695,7 @@ export async function validateMCPGatewayToken(
       tokenValue,
     );
     if (externalIdpResult) {
+      cacheTokenAuthResult(profileId, tokenValue, externalIdpResult);
       return externalIdpResult;
     }
   }
@@ -693,12 +703,14 @@ export async function validateMCPGatewayToken(
   // Try team/org token validation
   const teamTokenResult = await validateTeamToken(profileId, tokenValue);
   if (teamTokenResult) {
+    cacheTokenAuthResult(profileId, tokenValue, teamTokenResult);
     return teamTokenResult;
   }
 
   // Then try user token validation
   const userTokenResult = await validateUserToken(profileId, tokenValue);
   if (userTokenResult) {
+    cacheTokenAuthResult(profileId, tokenValue, userTokenResult);
     return userTokenResult;
   }
 
@@ -706,6 +718,7 @@ export async function validateMCPGatewayToken(
   if (!tokenValue.startsWith(ARCHESTRA_TOKEN_PREFIX)) {
     const oauthResult = await validateOAuthToken(profileId, tokenValue);
     if (oauthResult) {
+      cacheTokenAuthResult(profileId, tokenValue, oauthResult);
       return oauthResult;
     }
   }
@@ -714,6 +727,7 @@ export async function validateMCPGatewayToken(
     { profileId, tokenPrefix: tokenValue.substring(0, 14) },
     "validateMCPGatewayToken: token validation failed - not found in any token table or access denied",
   );
+  cacheTokenAuthResult(profileId, tokenValue, null);
   return null;
 }
 
@@ -1002,6 +1016,62 @@ const kbDescriptionCache = new Map<
   { description: string | null; expiresAt: number }
 >();
 const KB_DESCRIPTION_CACHE_TTL_MS = 30_000;
+
+function getCachedTokenAuthResult(
+  profileId: string,
+  tokenValue: string,
+): TokenAuthResult | null | undefined {
+  pruneExpiredTokenAuthCacheEntries();
+
+  const cacheKey = buildTokenAuthCacheKey(profileId, tokenValue);
+  const cached = tokenAuthCache.get(cacheKey);
+  if (!cached) {
+    return undefined;
+  }
+
+  if (cached.expiresAt <= Date.now()) {
+    tokenAuthCache.delete(cacheKey);
+    return undefined;
+  }
+
+  return cached.result;
+}
+
+function cacheTokenAuthResult(
+  profileId: string,
+  tokenValue: string,
+  result: TokenAuthResult | null,
+): void {
+  pruneExpiredTokenAuthCacheEntries();
+
+  if (tokenAuthCache.size >= TOKEN_AUTH_CACHE_MAX_ENTRIES) {
+    const oldestKey = tokenAuthCache.keys().next().value;
+    if (oldestKey) {
+      tokenAuthCache.delete(oldestKey);
+    }
+  }
+
+  tokenAuthCache.set(buildTokenAuthCacheKey(profileId, tokenValue), {
+    expiresAt:
+      Date.now() +
+      (result ? TOKEN_AUTH_CACHE_TTL_MS : TOKEN_AUTH_CACHE_NULL_TTL_MS),
+    result,
+  });
+}
+
+function buildTokenAuthCacheKey(profileId: string, tokenValue: string): string {
+  const tokenHash = createHash("sha256").update(tokenValue).digest("hex");
+  return `${profileId}:${tokenHash}`;
+}
+
+function pruneExpiredTokenAuthCacheEntries(): void {
+  const now = Date.now();
+  for (const [cacheKey, entry] of tokenAuthCache.entries()) {
+    if (entry.expiresAt <= now) {
+      tokenAuthCache.delete(cacheKey);
+    }
+  }
+}
 
 /**
  * Build a dynamic description for the query_knowledge_sources tool that includes

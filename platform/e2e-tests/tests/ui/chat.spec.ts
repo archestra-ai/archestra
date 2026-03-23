@@ -88,7 +88,7 @@ const cerebrasConfig: ChatProviderTestConfig = {
 const cohereConfig: ChatProviderTestConfig = {
   providerName: "cohere",
   providerDisplayName: "Cohere",
-  modelId: "command-r-plus",
+  modelId: "command-r-plus-08-2024",
   modelDisplayName: "Command R+",
   wiremockStubId: "chat-ui-e2e-test",
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
@@ -216,8 +216,7 @@ const testConfigs: ChatProviderTestConfig[] = [
 // Test Suite
 // =============================================================================
 
-// TODO: Fix flaky chat tests - WireMock streaming issues in CI
-const skippedProviders = new Set(["openai", "gemini", "cerebras"]);
+const skippedProviders = new Set<string>();
 
 for (const config of testConfigs) {
   test.describe(`Chat-UI-${config.providerName}`, () => {
@@ -241,9 +240,15 @@ for (const config of testConfigs) {
       await expect(textarea).toBeVisible({ timeout: 15_000 });
 
       // Open model selector and choose the test model
-      const modelSelectorTrigger = page.getByTestId(
-        E2eTestId.ChatModelSelectorTrigger,
-      );
+      const modelSelectorTrigger = page
+        .getByTestId(E2eTestId.ChatModelSelectorTrigger)
+        .or(page.getByRole("button", { name: /select model/i }))
+        .or(
+          page.getByRole("button", {
+            name: /claude|gpt|gemini|command|mistral|sonar|llama|grok|glm|minimax/i,
+          }),
+        )
+        .first();
       await expect(modelSelectorTrigger).toBeVisible({ timeout: 10_000 });
       await modelSelectorTrigger.click();
 

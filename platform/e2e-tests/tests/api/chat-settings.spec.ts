@@ -99,19 +99,17 @@ test.describe("LLM Provider API Keys CRUD", () => {
     // Clean up any leftover key from previous runs to avoid unique constraint violations
     await cleanupKeyByName(makeApiRequest, request, "Org Wide Test Key");
 
-    // Use bedrock provider for this test. Note: bedrock IS seeded in CI via
-    // ARCHESTRA_CHAT_BEDROCK_API_KEY, but we can create a second non-primary
-    // org_wide key without conflict (unique constraint only applies to isPrimary=true).
-    // Do NOT delete the seeded org_wide bedrock key here — other parallel tests
-    // (e.g. token-cost-limits) depend on it being in configuredProviders.
+    // Use Anthropic for CRUD coverage here. Bedrock creation performs extra
+    // provider-side validation in CI, which makes this test exercise external
+    // connectivity instead of the local API key CRUD behavior.
     const response = await makeApiRequest({
       request,
       method: "post",
       urlSuffix: "/api/chat-api-keys",
       data: {
         name: "Org Wide Test Key",
-        provider: "bedrock",
-        apiKey: "bedrock-org-wide-test-key",
+        provider: "anthropic",
+        apiKey: "sk-ant-org-wide-test-key",
         scope: "org_wide",
       },
     });
@@ -553,16 +551,16 @@ test.describe("LLM Provider API Keys Scope Update", () => {
     // Clean up any leftover key from previous runs to avoid unique constraint violations
     await cleanupKeyByName(makeApiRequest, request, "Scope Update Test Key");
 
-    // Create a personal key first
-    // Use bedrock provider - the only one without env var in CI (all others are seeded with org_wide keys)
+    // Create a personal key first. Use Anthropic so this test stays focused on
+    // scope mutation instead of Bedrock provider validation.
     const createResponse = await makeApiRequest({
       request,
       method: "post",
       urlSuffix: "/api/chat-api-keys",
       data: {
         name: "Scope Update Test Key",
-        provider: "bedrock",
-        apiKey: "bedrock-scope-update-test",
+        provider: "anthropic",
+        apiKey: "sk-ant-scope-update-test",
         scope: "personal",
       },
     });

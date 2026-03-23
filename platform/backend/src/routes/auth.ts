@@ -227,7 +227,10 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const url = new URL(request.url, `http://${request.headers.host}`);
       const headers = new Headers();
       Object.entries(request.headers).forEach(([key, value]) => {
-        if (value) headers.append(key, value.toString());
+        if (!value || shouldSkipForwardedAuthHeader(key)) {
+          return;
+        }
+        headers.append(key, value.toString());
       });
 
       const req = new Request(url.toString(), {
@@ -526,3 +529,13 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default authRoutes;
+
+function shouldSkipForwardedAuthHeader(headerName: string): boolean {
+  const normalizedHeaderName = headerName.toLowerCase();
+  return (
+    normalizedHeaderName === "content-length" ||
+    normalizedHeaderName === "host" ||
+    normalizedHeaderName === "connection" ||
+    normalizedHeaderName === "transfer-encoding"
+  );
+}

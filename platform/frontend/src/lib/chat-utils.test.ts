@@ -123,11 +123,11 @@ describe("getChatExternalAgentId", () => {
   });
 
   it("strips emoji characters (non-ISO-8859-1)", () => {
-    expect(getChatExternalAgentId("My App 🚀")).toBe("My App  Chat");
+    expect(getChatExternalAgentId("My App 🚀")).toBe("My App Chat");
   });
 
   it("strips CJK characters", () => {
-    expect(getChatExternalAgentId("应用")).toBe(" Chat");
+    expect(getChatExternalAgentId("应用")).toBe("Chat");
   });
 
   it("preserves ISO-8859-1 accented characters", () => {
@@ -135,11 +135,11 @@ describe("getChatExternalAgentId", () => {
   });
 
   it("handles empty appName", () => {
-    expect(getChatExternalAgentId("")).toBe(" Chat");
+    expect(getChatExternalAgentId("")).toBe("Chat");
   });
 
   it("handles mixed ASCII and non-ISO-8859-1 characters", () => {
-    expect(getChatExternalAgentId("Hello 世界 App")).toBe("Hello  App Chat");
+    expect(getChatExternalAgentId("Hello 世界 App")).toBe("Hello App Chat");
   });
 });
 

@@ -6,7 +6,7 @@ const DEFAULT_SESSION_NAME = "New Chat Session";
  */
 export function getChatExternalAgentId(appName: string): string {
   const id = `${appName} Chat`;
-  return id.replace(/[^\x00-\xff]/g, "");
+  return id.replace(/[^\x00-\xff]/g, "").replace(/  +/g, " ").trim();
 }
 
 /**

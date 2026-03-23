@@ -65,7 +65,7 @@ const apiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       try {
         const apiKey = await betterAuth.api.createApiKey({
           headers: new Headers(request.headers as HeadersInit),
-          body: request.body,
+          body: normalizeCreateApiKeyBody(request.body),
         });
 
         return reply.send(normalizeCreatedApiKeyResponse(apiKey));
@@ -173,15 +173,24 @@ function getApiKeyErrorMessage(
 
 function normalizeCreatedApiKeyResponse(apiKey: {
   id: string;
+  configId: string;
   name: string | null;
   start: string | null;
   prefix: string | null;
-  userId: string;
-  enabled: boolean | null;
+  referenceId: string;
+  enabled: boolean;
   lastRequest: string | Date | null;
   expiresAt: string | Date | null;
   createdAt: string | Date;
   updatedAt: string | Date;
+  refillInterval: number | null;
+  refillAmount: number | null;
+  lastRefillAt: string | Date | null;
+  rateLimitEnabled: boolean;
+  rateLimitTimeWindow: number | null;
+  rateLimitMax: number | null;
+  requestCount: number;
+  remaining: number | null;
   metadata?: Record<string, unknown> | null;
   permissions?: Record<string, string[]> | null;
   key: string;
@@ -191,7 +200,7 @@ function normalizeCreatedApiKeyResponse(apiKey: {
     name: apiKey.name,
     start: apiKey.start,
     prefix: apiKey.prefix,
-    userId: apiKey.userId,
+    userId: apiKey.referenceId,
     enabled: apiKey.enabled,
     lastRequest: toDateOrNull(apiKey.lastRequest),
     expiresAt: toDateOrNull(apiKey.expiresAt),
@@ -200,6 +209,18 @@ function normalizeCreatedApiKeyResponse(apiKey: {
     metadata: apiKey.metadata ?? null,
     permissions: apiKey.permissions ?? null,
     key: apiKey.key,
+  };
+}
+
+function normalizeCreateApiKeyBody(body: {
+  expiresIn?: number | null;
+  name?: string | null;
+}) {
+  const { name, ...rest } = body;
+
+  return {
+    ...rest,
+    ...(name === null ? {} : { name }),
   };
 }
 

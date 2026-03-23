@@ -13,6 +13,7 @@ import {
   UserModel,
   UserTokenModel,
 } from "@/models";
+import { ApiError, constructResponseSchema } from "@/types";
 
 const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.route({
@@ -339,9 +340,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         scope: z.string(),
         oauth_query: z.string(),
       }),
-      response: {
-        200: z.object({ redirectTo: z.string() }),
-      },
+      response: constructResponseSchema(z.object({ redirectTo: z.string() })),
     },
     async handler(request, reply) {
       const url = new URL(request.url, `http://${request.headers.host}`);
@@ -384,8 +383,19 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      reply.status(response.status);
-      reply.send(response.body ? await response.text() : undefined);
+      if (!response.ok) {
+        throw new ApiError(
+          response.status,
+          response.body
+            ? await response.text()
+            : "OAuth consent request failed",
+        );
+      }
+
+      throw new ApiError(
+        500,
+        "OAuth consent response did not include a redirect",
+      );
     },
   });
 

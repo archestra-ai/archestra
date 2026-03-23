@@ -47,6 +47,7 @@
     "@aws-sdk/client-bedrock-runtime": "^3.1003.0",
     "@aws-sdk/credential-providers": "^3.1003.0",
     "@azure/identity": "^4.13.0",
+    "@better-auth/api-key": "^1.5.5",
     "@better-auth/core": "1.5.5",
     "@better-auth/oauth-provider": "1.5.5",
     "@better-auth/sso": "1.5.5",

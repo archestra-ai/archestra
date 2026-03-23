@@ -1456,6 +1456,8 @@ export type {
   StreamChatError,
   StreamChatErrors,
   SubmitOAuthConsentData,
+  SubmitOAuthConsentError,
+  SubmitOAuthConsentErrors,
   SubmitOAuthConsentResponse,
   SubmitOAuthConsentResponses,
   SyncAgentDelegationsData,

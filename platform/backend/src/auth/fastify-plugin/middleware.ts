@@ -291,13 +291,13 @@ export class Authnz {
             body: { key: authHeader },
           });
 
-          if (apiKeyResult?.valid && apiKeyResult.key?.userId) {
+          if (apiKeyResult?.valid && apiKeyResult.key?.referenceId) {
             logger.trace(
               "[Authnz] populateUserInfo: valid API key, fetching user data",
             );
-            // Get the full user object from database using the userId from the API key
+            // User-owned API keys expose the owning user through `referenceId`.
             const { organizationId, ...user } = await UserModel.getById(
-              apiKeyResult.key.userId,
+              apiKeyResult.key.referenceId,
             );
 
             // Populate the request decorators

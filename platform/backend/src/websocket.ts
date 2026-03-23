@@ -854,9 +854,9 @@ class WebSocketService {
           body: { key: authHeader },
         });
 
-        if (apiKeyResult?.valid && apiKeyResult.key?.userId) {
+        if (apiKeyResult?.valid && apiKeyResult.key?.referenceId) {
           const { organizationId, ...user } = await UserModel.getById(
-            apiKeyResult.key.userId,
+            apiKeyResult.key.referenceId,
           );
           const userIsAgentAdmin = await hasAnyAgentTypeAdminPermission({
             userId: user.id,

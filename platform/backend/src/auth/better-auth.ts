@@ -1,3 +1,4 @@
+import { apiKey } from "@better-auth/api-key";
 import type { HookEndpointContext } from "@better-auth/core";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { sso } from "@better-auth/sso";
@@ -17,13 +18,7 @@ import {
 import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
-import {
-  admin,
-  apiKey,
-  jwt,
-  organization,
-  twoFactor,
-} from "better-auth/plugins";
+import { admin, jwt, organization, twoFactor } from "better-auth/plugins";
 import { createAccessControl } from "better-auth/plugins/access";
 import { and, eq, ne } from "drizzle-orm";
 import { z } from "zod";
@@ -64,8 +59,7 @@ const adminRole = ac.newRole(allAvailableActions);
 const editorRole = ac.newRole(editorPermissions);
 const memberRole = ac.newRole(memberPermissions);
 
-// biome-ignore lint/suspicious/noExplicitAny: better-auth bs https://github.com/better-auth/better-auth/issues/5666
-export const auth: any = betterAuth({
+export const auth = betterAuth({
   appName: APP_NAME,
   baseURL: frontendBaseUrl,
   secret,

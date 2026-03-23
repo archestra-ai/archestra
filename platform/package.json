@@ -41,30 +41,31 @@
   },
   "pnpm": {
     "overrides": {
-      "better-auth": "1.4.19",
-      "@better-auth/core": "1.4.19",
-      "@better-auth/oauth-provider": "1.4.19",
-      "@better-auth/sso": "1.4.19",
       "@fastify/reply-from": "12.5.0",
+      "@hono/node-server": "1.19.11",
       "body-parser": "2.2.1",
+      "dompurify": "3.3.3",
       "glob": "11.1.0",
       "esbuild": "0.27.0",
       "node-forge": "1.3.2",
       "mdast-util-to-hast": "13.2.1",
       "express": "5.2.0",
+      "express-rate-limit": "8.3.1",
       "jws": "4.0.1",
       "qs": "6.14.2",
       "d3-path": "3.1.0",
-      "hono": "4.11.10",
+      "hono": "4.12.9",
+      "kysely": "0.28.14",
       "lodash": "4.17.23",
       "lodash-es": "4.17.23",
-      "fast-xml-parser": "5.3.6",
+      "fast-xml-parser": "5.5.7",
       "@isaacs/brace-expansion": "5.0.1",
       "ajv": "8.18.0",
       "axios": ">=1.13.5",
       "minimatch": ">=10.2.3",
       "rollup": ">=4.59.0",
-      "serialize-javascript": ">=7.0.3"
+      "serialize-javascript": ">=7.0.3",
+      "undici": "7.24.5"
     },
     "patchedDependencies": {
       "ai@6.0.90": "patches/ai@6.0.90.patch"

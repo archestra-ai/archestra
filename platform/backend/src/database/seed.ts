@@ -491,6 +491,52 @@ async function seedBuiltInAgents(): Promise<void> {
 }
 
 /**
+ * Seeds n8n and Excalidraw MCP servers with UI metadata
+ */
+async function seedMcpApps(): Promise<void> {
+  const org = await OrganizationModel.getOrCreateDefaultOrganization();
+
+  // n8n MCP
+  const n8nExisting = await InternalMcpCatalogModel.findByName("n8n");
+  if (!n8nExisting) {
+    await db.insert(schema.internalMcpCatalogTable).values({
+      name: "n8n",
+      description: "Workflow automation with embedded UI",
+      serverType: "local",
+      requiresAuth: true,
+      organizationId: org.id,
+      localConfig: {
+        dockerImage: "n8n-mcp:latest",
+        transportType: "stdio",
+      },
+      uiMetadata: {
+        url: "https://n8n.io/mcp-ui",
+      },
+    } as any);
+  }
+
+  // Excalidraw MCP
+  const excalidrawExisting = await InternalMcpCatalogModel.findByName("excalidraw");
+  if (!excalidrawExisting) {
+    await db.insert(schema.internalMcpCatalogTable).values({
+      name: "excalidraw",
+      description: "Interactive whiteboard for visual thinking",
+      serverType: "local",
+      requiresAuth: false,
+      organizationId: org.id,
+      localConfig: {
+        dockerImage: "excalidraw-mcp:latest",
+        transportType: "stdio",
+      },
+      uiMetadata: {
+        url: "https://excalidraw.com/mcp-ui",
+      },
+    } as any);
+  }
+  logger.info("Seeded n8n and Excalidraw MCP Apps");
+}
+
+/**
  * Ensures all existing members have a personal default chat agent.
  * Runs on startup to backfill members created before this feature.
  */

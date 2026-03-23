@@ -83,6 +83,7 @@ import { PolicyDeniedTool } from "./policy-denied-tool";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
 import { ToolStatusRow } from "./tool-status-row";
+import { MCPUIWrapper } from "../mcp/MCPUIWrapper";
 
 interface ChatMessagesProps {
   conversationId: string | undefined;
@@ -1037,6 +1038,31 @@ function MessageTool({
   // Also check tool output for auth-related patterns (tool errors returned as
   // successful results to avoid crashing the AI SDK stream still need the UI)
   const rawOutput = toolResultPart?.output ?? part.output;
+
+  // VIP Resource Detection: Detect MCP-UI resources
+  if (rawOutput && typeof rawOutput === 'object' && '_meta' in rawOutput) {
+    const meta = (rawOutput as any)._meta;
+    if (meta && (meta['mcpui.dev/ui-url'] || meta['mcpui.dev/ui-metadata'])) {
+      const url = meta['mcpui.dev/ui-url'] || (meta['mcpui.dev/ui-metadata']?.url);
+      if (url) {
+        return (
+          <div className="my-4">
+            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2 px-4">
+              MCP App: {toolName}
+            </div>
+            <MCPUIWrapper 
+              url={url} 
+              onAction={(action) => {
+                // Route UI actions back to Archestra
+                console.log('MCP-UI Action:', action);
+              }} 
+            />
+          </div>
+        );
+      }
+    }
+  }
+
   if (typeof rawOutput === "string") {
     const expiredAuth = parseExpiredAuth(rawOutput);
     if (expiredAuth) {

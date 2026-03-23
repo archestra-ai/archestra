@@ -59,6 +59,8 @@ const internalMcpCatalogTable = pgTable(
     userConfig: jsonb("user_config").$type<UserConfig>().default({}),
     // OAuth configuration for remote servers
     oauthConfig: jsonb("oauth_config").$type<OAuthConfig>(),
+    /** UI Metadata for MCP Apps (e.g. mcpui.dev/ui-url) */
+    uiMetadata: jsonb("ui_metadata").$type<{ url?: string; type?: string }>(),
     /** Catalog item icon: emoji character or base64-encoded image data URL */
     icon: text("icon"),
     organizationId: text("organization_id"),

@@ -8,7 +8,7 @@ import {
 import { vi } from "vitest";
 import { policyConfigurationService } from "@/agents/subagents/policy-configuration";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
-import { describe, expect, test } from "@/test";
+import { beforeEach, describe, expect, test } from "@/test";
 import AgentModel from "./agent";
 import AgentToolModel from "./agent-tool";
 
@@ -1151,6 +1151,10 @@ describe("AgentToolModel.findAll", () => {
   });
 
   describe("Knowledge sources tool filtering", () => {
+    beforeEach(() => {
+      archestraMcpBranding.syncFromOrganization(null);
+    });
+
     test("findAll excludes query_knowledge_sources tool", async ({
       makeAgent,
       makeTool,

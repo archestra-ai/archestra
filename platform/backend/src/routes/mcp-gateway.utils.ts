@@ -643,7 +643,7 @@ async function validateOAuthTokenByHash(params: {
     // Check if associated refresh token has been revoked
     if (accessToken.refreshTokenRevoked) {
       logger.debug(
-        { profileId },
+        { profileId: params.profileId },
         "validateOAuthToken: associated refresh token is revoked",
       );
       return null;
@@ -651,7 +651,10 @@ async function validateOAuthTokenByHash(params: {
 
     // Check token expiry
     if (accessToken.expiresAt < new Date()) {
-      logger.debug({ profileId }, "validateOAuthToken: token expired");
+      logger.debug(
+        { profileId: params.profileId },
+        "validateOAuthToken: token expired",
+      );
       return null;
     }
 

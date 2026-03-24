@@ -10,6 +10,7 @@ import {
   HEALTH_PATH,
   INCOMING_EMAIL_WEBHOOK_PREFIX,
   ORGANIZATION_APPEARANCE_SETTINGS_PATH,
+  PUBLIC_AUTH_CONFIG_PATH,
   READY_PATH,
   WELL_KNOWN_ACME_PREFIX,
   WELL_KNOWN_OAUTH_PREFIX,
@@ -121,7 +122,7 @@ export class Authnz {
       // Allow fetching public SSO providers list for login page (minimal info, no secrets)
       (method === "GET" && url === "/api/identity-providers/public") ||
       // Allow fetching public auth config for login and invitation UI
-      (method === "GET" && url === "/api/config/public-auth") ||
+      (method === "GET" && url === PUBLIC_AUTH_CONFIG_PATH) ||
       // Allow fetching public appearance settings for login page (theme, logo, font)
       (method === "GET" && url === ORGANIZATION_APPEARANCE_SETTINGS_PATH) ||
       // Incoming email webhooks - Microsoft Graph calls these directly

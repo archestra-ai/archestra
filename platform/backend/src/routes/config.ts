@@ -10,10 +10,11 @@ import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import { OrganizationModel } from "@/models";
 import { getByosVaultKvVersion, isByosEnabled } from "@/secrets-manager";
 import { EmailProviderTypeSchema, type GlobalToolPolicy } from "@/types";
+import { PUBLIC_AUTH_CONFIG_PATH } from "./route-paths";
 
 const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
-    "/api/config/public-auth",
+    PUBLIC_AUTH_CONFIG_PATH,
     {
       schema: {
         operationId: RouteId.GetPublicAuthConfig,

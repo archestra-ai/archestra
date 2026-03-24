@@ -42,6 +42,9 @@ archestra:
 
   diagnostics:
     enabled: true
+    storageClassName: "archestra-diagnostics-rwx"
+    accessModes:
+      - ReadWriteMany
     heapSnapshotsNearHeapLimit: 1
 
   # Orchestrator configuration with Workload Identity for Vertex AI

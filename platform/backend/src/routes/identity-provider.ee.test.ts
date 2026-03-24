@@ -108,6 +108,52 @@ describe("getIdpLogoutUrl", () => {
     );
   });
 
+  test("omits post_logout_redirect_uri when provider disables it", async ({
+    makeUser,
+    makeAccount,
+    makeOrganization,
+    makeIdentityProvider,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+
+    await makeIdentityProvider(org.id, {
+      providerId: "oidc-provider-no-redirect",
+      oidcConfig: {
+        clientId: "test-client",
+        clientSecret: "test-secret",
+        issuer: "https://idp.example.com",
+        pkce: false,
+        disablePostLogoutRedirectUri: true,
+        discoveryEndpoint:
+          "https://idp.example.com/.well-known/openid-configuration",
+      },
+    });
+
+    const testIdToken = "eyJhbGciOiJSUzI1NiJ9.test-id-token";
+    await makeAccount(user.id, {
+      providerId: "oidc-provider-no-redirect",
+      idToken: testIdToken,
+    });
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        issuer: "https://idp.example.com",
+        end_session_endpoint:
+          "https://idp.example.com/protocol/openid-connect/logout",
+      }),
+    });
+
+    const url = await getIdpLogoutUrl(user.id);
+
+    expect(url).not.toBeNull();
+    const parsed = new URL(url as string);
+    expect(parsed.searchParams.get("id_token_hint")).toBe(testIdToken);
+    expect(parsed.searchParams.get("client_id")).toBe("test-client");
+    expect(parsed.searchParams.has("post_logout_redirect_uri")).toBe(false);
+  });
+
   test("returns null when discovery fetch fails (graceful degradation)", async ({
     makeUser,
     makeAccount,

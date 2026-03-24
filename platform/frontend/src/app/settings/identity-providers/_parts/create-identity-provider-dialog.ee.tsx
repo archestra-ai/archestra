@@ -68,6 +68,7 @@ export function CreateIdentityProviderDialog({
               oidcConfig: {
                 issuer: "",
                 pkce: true,
+                disablePostLogoutRedirectUri: false,
                 clientId: "",
                 clientSecret: "",
                 discoveryEndpoint: "",
@@ -77,6 +78,7 @@ export function CreateIdentityProviderDialog({
                   email: "email",
                   name: "name",
                 },
+                overrideUserInfo: true,
               },
             }),
       }),

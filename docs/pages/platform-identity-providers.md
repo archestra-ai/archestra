@@ -199,6 +199,7 @@ Optional configuration:
 - **JWKS Endpoint**: For token validation
 - **Scopes**: Additional OAuth scopes (default: `openid`, `email`, `profile`)
 - **PKCE**: Enable if your provider requires it
+- **Omit logout redirect URI**: Skips the `post_logout_redirect_uri` parameter during sign-out for providers that reject logout redirect URIs
 
 ### Generic SAML
 

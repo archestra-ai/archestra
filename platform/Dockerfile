@@ -234,8 +234,10 @@ RUN MINIMATCH_SHA256="89d2c40b4596326c5061d95a63a13c5b757f3e03bcad229ab496a66735
 
 # Copy built backend
 COPY --from=builder /app/backend/dist ./backend/dist
+COPY --from=builder /app/backend/scripts ./backend/scripts
 COPY --from=builder /app/backend/drizzle.config.ts ./backend/
 COPY --from=builder /app/backend/src/database/migrations ./backend/src/database/migrations
+RUN chmod +x /app/backend/scripts/start-production.sh
 
 # Copy built frontend
 COPY --from=builder /app/frontend/public ./frontend/public

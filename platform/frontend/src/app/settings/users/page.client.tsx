@@ -144,9 +144,8 @@ function InviteUserButton({ organizationId }: { organizationId: string }) {
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const { data: canInvite } = useHasPermissions({ invitation: ["create"] });
   const disableInvitations = useDisableInvitations();
-  const invitationsEnabled = disableInvitations === undefined
-    ? false
-    : !disableInvitations;
+  const invitationsEnabled =
+    disableInvitations === undefined ? false : !disableInvitations;
 
   if (!invitationsEnabled || !canInvite) return null;
 

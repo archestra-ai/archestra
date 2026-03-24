@@ -123056,7 +123056,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Get organization appearance settings\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Get organization appearance settings\n\nAuthentication:\n\nNot required.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -140207,7 +140207,7 @@
         "tags": [
           "Identity Providers"
         ],
-        "description": "Get public identity provider list for login page (no secrets exposed)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Get public identity provider list for login page (no secrets exposed)\n\nAuthentication:\n\nNot required.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",

@@ -160,11 +160,11 @@ function appendDescriptionSection(
 function createAuthenticationSection(operationId: string): string {
   if (
     PUBLIC_UNAUTHENTICATED_ROUTE_IDS.has(
-      operationId as (typeof PUBLIC_UNAUTHENTICATED_ROUTE_IDS extends Set<
+      operationId as typeof PUBLIC_UNAUTHENTICATED_ROUTE_IDS extends Set<
         infer T
       >
         ? T
-        : never),
+        : never,
     )
   ) {
     return ["Authentication:", "", "Not required."].join("\n");

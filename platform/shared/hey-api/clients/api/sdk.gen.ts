@@ -3129,7 +3129,7 @@ export const getOrganization = <ThrowOnError extends boolean = false>(options?: 
  *
  * Authentication:
  *
- * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ * Not required.
  *
  * Authorization:
  *
@@ -3952,7 +3952,7 @@ export const zhipuaiChatCompletionsWithAgent = <ThrowOnError extends boolean = f
  *
  * Authentication:
  *
- * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ * Not required.
  *
  * Authorization:
  *

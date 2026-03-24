@@ -1,6 +1,7 @@
 import {
   HEALTH_PATH,
   METRICS_PATH,
+  MCP_GATEWAY_PREFIX,
   READY_PATH,
   WELL_KNOWN_OAUTH_PREFIX,
 } from "@/routes/route-paths";
@@ -15,5 +16,14 @@ export function isNoiseRoute(url: string): boolean {
     url.startsWith(READY_PATH) ||
     url.startsWith(METRICS_PATH) ||
     url.startsWith(WELL_KNOWN_OAUTH_PREFIX)
+  );
+}
+
+export function isNoisyMcpGatewayGetRoute(params: {
+  method: string;
+  url: string;
+}): boolean {
+  return (
+    params.method === "GET" && params.url.startsWith(`${MCP_GATEWAY_PREFIX}/`)
   );
 }

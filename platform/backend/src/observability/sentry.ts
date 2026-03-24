@@ -7,9 +7,8 @@ import type {
 import * as Sentry from "@sentry/node";
 import config from "@/config";
 import logger from "@/logging";
-import { MCP_GATEWAY_PREFIX } from "@/routes/route-paths";
 import { ApiError } from "@/types";
-import { isNoiseRoute } from "./utils";
+import { isNoiseRoute, isNoisyMcpGatewayGetRoute } from "./utils";
 
 const {
   api: { version },
@@ -137,14 +136,20 @@ const initSentry = async (): Promise<void> => {
     // https://docs.sentry.io/platforms/javascript/configuration/options/#tracesSampler
     tracesSampler: ({ normalizedRequest }: TracesSamplerSamplingContext) => {
       const url = normalizedRequest?.url;
+      const method = normalizedRequest?.method;
       if (!url) return tracesSampleRate;
 
       if (isNoiseRoute(url)) {
         return 0;
       }
 
-      // Sample heavily: MCP Gateway is ~84% of all spans
-      if (url.startsWith(MCP_GATEWAY_PREFIX)) {
+      // MCP gateway GET discovery/polling traffic dominates span volume and has low debugging value.
+      if (method && isNoisyMcpGatewayGetRoute({ method, url })) {
+        return 0;
+      }
+
+      // Sample remaining MCP gateway traffic much more conservatively than normal app routes.
+      if (url.startsWith("/v1/mcp")) {
         return mcpGatewayTracesSampleRate;
       }
 

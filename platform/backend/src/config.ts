@@ -763,7 +763,7 @@ const config = {
       ),
       mcpGatewayTracesSampleRate: parseSampleRate(
         process.env.ARCHESTRA_SENTRY_MCP_GATEWAY_TRACES_SAMPLE_RATE,
-        0.05,
+        0.01,
       ),
       profilesSampleRate: parseSampleRate(
         process.env.ARCHESTRA_SENTRY_PROFILES_SAMPLE_RATE,

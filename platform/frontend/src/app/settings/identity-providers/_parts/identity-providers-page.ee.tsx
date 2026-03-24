@@ -43,6 +43,7 @@ interface IdpConfig {
     tokenEndpoint?: string;
     userInfoEndpoint?: string;
     jwksEndpoint?: string;
+    enableRpInitiatedLogout?: boolean;
     scopes: string[];
     mapping: {
       id: string;
@@ -404,6 +405,9 @@ export function IdentityProvidersSettingsContent() {
                     discoveryEndpoint:
                       createConfig.config.defaultOidcConfig
                         ?.discoveryEndpoint || "",
+                    enableRpInitiatedLogout:
+                      createConfig.config.defaultOidcConfig
+                        ?.enableRpInitiatedLogout ?? true,
                     scopes: createConfig.config.defaultOidcConfig?.scopes || [
                       "openid",
                       "email",

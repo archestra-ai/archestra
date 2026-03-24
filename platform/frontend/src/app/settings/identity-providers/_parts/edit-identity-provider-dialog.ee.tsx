@@ -53,7 +53,7 @@ export function EditIdentityProviderDialog({
       oidcConfig: {
         issuer: "",
         pkce: true,
-        disablePostLogoutRedirectUri: false,
+        disablePostLogoutRedirectUri: true,
         clientId: "",
         clientSecret: "",
         discoveryEndpoint: "",
@@ -108,10 +108,10 @@ export function EditIdentityProviderDialog({
               },
             }
           : {
-              oidcConfig: provider.oidcConfig || {
+              oidcConfig: {
                 issuer: "",
                 pkce: true,
-                disablePostLogoutRedirectUri: false,
+                disablePostLogoutRedirectUri: true,
                 clientId: "",
                 clientSecret: "",
                 discoveryEndpoint: "",
@@ -122,6 +122,7 @@ export function EditIdentityProviderDialog({
                   name: "name",
                 },
                 overrideUserInfo: true,
+                ...provider.oidcConfig,
               },
             }),
       });

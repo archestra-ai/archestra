@@ -41,7 +41,7 @@ function TestWrapper({
       oidcConfig: {
         issuer: "https://example.com",
         pkce: true,
-        disablePostLogoutRedirectUri: false,
+        disablePostLogoutRedirectUri: true,
         clientId: "test",
         clientSecret: "secret",
         discoveryEndpoint:
@@ -63,19 +63,27 @@ function TestWrapper({
 }
 
 describe("OidcConfigForm", () => {
-  it("submits the logout redirect toggle when enabled", async () => {
+  it("defaults RP-Initiated Logout to disabled", async () => {
+    render(<TestWrapper />);
+
+    expect(
+      screen.getByLabelText("Disable RP-Initiated Logout"),
+    ).toBeChecked();
+  });
+
+  it("submits the RP-Initiated Logout toggle when disabled", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();
 
     render(<TestWrapper onSubmit={onSubmit} />);
 
-    await user.click(screen.getByLabelText("Omit logout redirect URI"));
+    await user.click(screen.getByLabelText("Disable RP-Initiated Logout"));
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({
         oidcConfig: expect.objectContaining({
-          disablePostLogoutRedirectUri: true,
+          disablePostLogoutRedirectUri: false,
         }),
       }),
     );

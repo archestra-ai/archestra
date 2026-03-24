@@ -73,6 +73,7 @@ describe("getIdpLogoutUrl", () => {
         clientSecret: "test-secret",
         issuer: "https://idp.example.com",
         pkce: false,
+        disablePostLogoutRedirectUri: false,
         discoveryEndpoint:
           "https://idp.example.com/.well-known/openid-configuration",
       },
@@ -108,7 +109,7 @@ describe("getIdpLogoutUrl", () => {
     );
   });
 
-  test("omits post_logout_redirect_uri when provider disables it", async ({
+  test("omits post_logout_redirect_uri when provider disables RP-Initiated Logout", async ({
     makeUser,
     makeAccount,
     makeOrganization,
@@ -151,6 +152,48 @@ describe("getIdpLogoutUrl", () => {
     const parsed = new URL(url as string);
     expect(parsed.searchParams.get("id_token_hint")).toBe(testIdToken);
     expect(parsed.searchParams.get("client_id")).toBe("test-client");
+    expect(parsed.searchParams.has("post_logout_redirect_uri")).toBe(false);
+  });
+
+  test("omits post_logout_redirect_uri by default when the provider does not set the toggle", async ({
+    makeUser,
+    makeAccount,
+    makeOrganization,
+    makeIdentityProvider,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+
+    await makeIdentityProvider(org.id, {
+      providerId: "oidc-provider-default-no-redirect",
+      oidcConfig: {
+        clientId: "test-client",
+        clientSecret: "test-secret",
+        issuer: "https://idp.example.com",
+        pkce: false,
+        discoveryEndpoint:
+          "https://idp.example.com/.well-known/openid-configuration",
+      },
+    });
+
+    await makeAccount(user.id, {
+      providerId: "oidc-provider-default-no-redirect",
+      idToken: "eyJhbGciOiJSUzI1NiJ9.test-id-token",
+    });
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        issuer: "https://idp.example.com",
+        end_session_endpoint:
+          "https://idp.example.com/protocol/openid-connect/logout",
+      }),
+    });
+
+    const url = await getIdpLogoutUrl(user.id);
+
+    expect(url).not.toBeNull();
+    const parsed = new URL(url as string);
     expect(parsed.searchParams.has("post_logout_redirect_uri")).toBe(false);
   });
 

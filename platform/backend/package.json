@@ -8,7 +8,7 @@
   "type": "module",
   "scripts": {
     "build": "tsdown && pnpm run sentry:sourcemaps",
-    "start": "NODE_ENV=production node --enable-source-maps dist/server.mjs",
+    "start": "NODE_ENV=production node --enable-source-maps --report-on-fatalerror dist/server.mjs",
     "dev": "tsdown --watch",
     "dev:debug": "DEBUG=1 tsdown --watch",
     "test": "vitest",

@@ -60,3 +60,13 @@ tests:
       - equal:
           path: spec.template.metadata.annotations["prometheus.io/path"]
           value: "/metrics"
+
+  - it: worker starts node with fatal error reports enabled
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value:
+            - node
+            - --enable-source-maps
+            - --report-on-fatalerror
+            - dist/server.mjs

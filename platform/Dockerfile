@@ -272,7 +272,7 @@ pidfile=/var/run/supervisord.pid
 
 [program:backend]
 directory=/app/backend
-command=/bin/sh -c "sleep 5 && pnpm db:migrate && node dist/server.mjs"
+command=/bin/sh -c "sleep 5 && pnpm db:migrate && node --report-on-fatalerror dist/server.mjs"
 autostart=true
 autorestart=true
 stdout_logfile=/dev/stdout

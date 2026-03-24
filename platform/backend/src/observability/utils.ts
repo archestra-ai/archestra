@@ -1,7 +1,7 @@
 import {
   HEALTH_PATH,
-  METRICS_PATH,
   MCP_GATEWAY_PREFIX,
+  METRICS_PATH,
   READY_PATH,
   WELL_KNOWN_OAUTH_PREFIX,
 } from "@/routes/route-paths";

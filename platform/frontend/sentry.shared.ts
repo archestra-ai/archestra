@@ -9,7 +9,6 @@ export function getFrontendBrowserSentryOptions(
   return {
     dsn: params.dsn,
     environment: params.environment,
-    integrations: [],
     tracesSampleRate: FRONTEND_BROWSER_TRACES_SAMPLE_RATE,
     enableLogs: true,
     replaysSessionSampleRate: 0.1,

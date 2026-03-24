@@ -12,9 +12,15 @@ const {
 
 // Only initialize Sentry if DSN is configured
 if (dsn) {
+  const browserOptions = getFrontendBrowserSentryOptions({ dsn, environment });
+
   Sentry.init({
-    ...getFrontendBrowserSentryOptions({ dsn, environment }),
-    integrations: [Sentry.replayIntegration()],
+    ...browserOptions,
+    // Preserve the default browser integrations and add Replay on top.
+    integrations: [
+      ...Sentry.getDefaultIntegrations(browserOptions),
+      Sentry.replayIntegration(),
+    ],
   });
 }
 

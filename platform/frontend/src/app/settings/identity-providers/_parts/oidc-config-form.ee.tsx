@@ -329,7 +329,7 @@ export function OidcConfigForm({
 
         <FormField
           control={form.control}
-          name="oidcConfig.disablePostLogoutRedirectUri"
+          name="oidcConfig.enableRpInitiatedLogout"
           render={({ field }) => (
             <FormItem className="flex flex-row items-start space-x-3 space-y-0">
               <FormControl>
@@ -339,10 +339,10 @@ export function OidcConfigForm({
                 />
               </FormControl>
               <div className="space-y-1 leading-none">
-                <FormLabel>Disable RP-Initiated Logout</FormLabel>
+                <FormLabel>Enable RP-Initiated Logout</FormLabel>
                 <FormDescription>
-                  Do not send the <code>post_logout_redirect_uri</code>{" "}
-                  parameter during sign-out.{" "}
+                  Send the <code>post_logout_redirect_uri</code> parameter
+                  during sign-out.{" "}
                   <Link
                     href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html"
                     target="_blank"

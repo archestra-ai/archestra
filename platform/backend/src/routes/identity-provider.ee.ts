@@ -249,7 +249,7 @@ export async function getIdpLogoutUrl(userId: string): Promise<string | null> {
   if (idpProvider.oidcConfig.clientId) {
     logoutUrl.searchParams.set("client_id", idpProvider.oidcConfig.clientId);
   }
-  if (idpProvider.oidcConfig.disablePostLogoutRedirectUri === false) {
+  if (idpProvider.oidcConfig.enableRpInitiatedLogout !== false) {
     logoutUrl.searchParams.set(
       "post_logout_redirect_uri",
       `${config.frontendBaseUrl}/auth/sign-in`,

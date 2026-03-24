@@ -53,7 +53,7 @@ export function EditIdentityProviderDialog({
       oidcConfig: {
         issuer: "",
         pkce: true,
-        disablePostLogoutRedirectUri: true,
+        enableRpInitiatedLogout: true,
         clientId: "",
         clientSecret: "",
         discoveryEndpoint: "",
@@ -111,7 +111,7 @@ export function EditIdentityProviderDialog({
               oidcConfig: {
                 issuer: "",
                 pkce: true,
-                disablePostLogoutRedirectUri: true,
+                enableRpInitiatedLogout: true,
                 clientId: "",
                 clientSecret: "",
                 discoveryEndpoint: "",

@@ -68,7 +68,7 @@ export function CreateIdentityProviderDialog({
               oidcConfig: {
                 issuer: "",
                 pkce: true,
-                disablePostLogoutRedirectUri: true,
+                enableRpInitiatedLogout: true,
                 clientId: "",
                 clientSecret: "",
                 discoveryEndpoint: "",

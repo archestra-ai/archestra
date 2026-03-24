@@ -73,7 +73,7 @@ describe("getIdpLogoutUrl", () => {
         clientSecret: "test-secret",
         issuer: "https://idp.example.com",
         pkce: false,
-        disablePostLogoutRedirectUri: false,
+        enableRpInitiatedLogout: true,
         discoveryEndpoint:
           "https://idp.example.com/.well-known/openid-configuration",
       },
@@ -125,7 +125,7 @@ describe("getIdpLogoutUrl", () => {
         clientSecret: "test-secret",
         issuer: "https://idp.example.com",
         pkce: false,
-        disablePostLogoutRedirectUri: true,
+        enableRpInitiatedLogout: false,
         discoveryEndpoint:
           "https://idp.example.com/.well-known/openid-configuration",
       },
@@ -155,7 +155,7 @@ describe("getIdpLogoutUrl", () => {
     expect(parsed.searchParams.has("post_logout_redirect_uri")).toBe(false);
   });
 
-  test("omits post_logout_redirect_uri by default when the provider does not set the toggle", async ({
+  test("includes post_logout_redirect_uri by default when the provider does not set the toggle", async ({
     makeUser,
     makeAccount,
     makeOrganization,
@@ -194,7 +194,9 @@ describe("getIdpLogoutUrl", () => {
 
     expect(url).not.toBeNull();
     const parsed = new URL(url as string);
-    expect(parsed.searchParams.has("post_logout_redirect_uri")).toBe(false);
+    expect(parsed.searchParams.get("post_logout_redirect_uri")).toContain(
+      "/auth/sign-in",
+    );
   });
 
   test("returns null when discovery fetch fails (graceful degradation)", async ({

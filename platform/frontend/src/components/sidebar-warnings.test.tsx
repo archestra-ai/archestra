@@ -6,6 +6,7 @@ const mockUseSession = vi.fn();
 const mockUseDefaultCredentialsEnabled = vi.fn();
 const mockUseHasPermissions = vi.fn();
 const mockUseFeature = vi.fn();
+const mockUseDisableBasicAuth = vi.fn();
 
 vi.mock("@/lib/clients/auth/auth-client", () => ({
   authClient: {
@@ -21,22 +22,7 @@ vi.mock("@/lib/auth/auth.query", () => ({
 
 vi.mock("@/lib/config/config.query", () => ({
   useFeature: (...args: unknown[]) => mockUseFeature(...args),
-}));
-
-const mockConfig = {
-  disableBasicAuth: false,
-};
-
-vi.mock("@/lib/config/config", () => ({
-  default: new Proxy(
-    {},
-    {
-      get: (_target, prop) =>
-        prop in mockConfig
-          ? mockConfig[prop as keyof typeof mockConfig]
-          : undefined,
-    },
-  ),
+  useDisableBasicAuth: (...args: unknown[]) => mockUseDisableBasicAuth(...args),
 }));
 
 vi.mock("@shared", () => ({
@@ -58,7 +44,6 @@ import { SidebarWarnings } from "./sidebar-warnings";
 describe("SidebarWarnings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockConfig.disableBasicAuth = false;
 
     // Default: no session, no warnings, has org update permission
     mockUseSession.mockReturnValue({ data: null });
@@ -67,6 +52,7 @@ describe("SidebarWarnings", () => {
       isLoading: false,
     });
     mockUseFeature.mockReturnValue("strict");
+    mockUseDisableBasicAuth.mockReturnValue(false);
     mockUseHasPermissions.mockReturnValue({ data: true });
   });
 
@@ -159,7 +145,7 @@ describe("SidebarWarnings", () => {
     });
 
     it("does not show when basic auth is disabled", () => {
-      mockConfig.disableBasicAuth = true;
+      mockUseDisableBasicAuth.mockReturnValue(true);
       mockUseSession.mockReturnValue({
         data: { user: { email: "admin@example.com" } },
       });

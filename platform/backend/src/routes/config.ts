@@ -10,8 +10,32 @@ import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import { OrganizationModel } from "@/models";
 import { getByosVaultKvVersion, isByosEnabled } from "@/secrets-manager";
 import { EmailProviderTypeSchema, type GlobalToolPolicy } from "@/types";
+import { PUBLIC_CONFIG_PATH } from "./route-paths";
 
 const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  fastify.get(
+    PUBLIC_CONFIG_PATH,
+    {
+      schema: {
+        operationId: RouteId.GetPublicConfig,
+        description: "Get public config",
+        tags: ["Config"],
+        response: {
+          200: z.strictObject({
+            disableBasicAuth: z.boolean(),
+            disableInvitations: z.boolean(),
+          }),
+        },
+      },
+    },
+    async (_request, reply) => {
+      return reply.send({
+        disableBasicAuth: config.auth.disableBasicAuth,
+        disableInvitations: config.auth.disableInvitations,
+      });
+    },
+  );
+
   fastify.get(
     "/api/config",
     {

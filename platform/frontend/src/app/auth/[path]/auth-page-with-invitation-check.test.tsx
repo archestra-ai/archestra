@@ -3,6 +3,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useInvitationCheck } from "@/lib/auth/invitation.query";
 import { useBackendConnectivity } from "@/lib/config/backend-connectivity";
+import { usePublicConfig } from "@/lib/config/config.query";
 import { AuthPageWithInvitationCheck } from "./auth-page-with-invitation-check";
 
 // Mock Next.js navigation
@@ -21,26 +22,12 @@ vi.mock("@/lib/config/backend-connectivity", () => ({
   useBackendConnectivity: vi.fn(),
 }));
 
+vi.mock("@/lib/config/config.query", () => ({
+  usePublicConfig: vi.fn(),
+}));
+
 vi.mock("@/lib/hooks/use-app-name", () => ({
   useAppName: () => "Sparky",
-}));
-
-// Mock config
-const mockConfig = vi.hoisted(() => ({
-  disableBasicAuth: false,
-  enterpriseFeatures: { core: false },
-}));
-
-vi.mock("@/lib/config/config", () => ({
-  default: new Proxy(
-    {},
-    {
-      get: (_target, prop) =>
-        prop in mockConfig
-          ? mockConfig[prop as keyof typeof mockConfig]
-          : undefined,
-    },
-  ),
 }));
 
 // Mock AuthViewWithErrorHandling
@@ -82,11 +69,16 @@ const mockRetry = vi.fn();
 describe("AuthPageWithInvitationCheck", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockConfig.disableBasicAuth = false;
-    mockConfig.enterpriseFeatures.core = false;
     vi.mocked(useRouter).mockReturnValue({
       push: mockRouterPush,
     } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(usePublicConfig).mockReturnValue({
+      data: {
+        disableBasicAuth: false,
+        disableInvitations: false,
+      },
+      isLoading: false,
+    } as ReturnType<typeof usePublicConfig>);
     // Default to connected state so existing tests work
     vi.mocked(useBackendConnectivity).mockReturnValue({
       status: "connected",
@@ -145,7 +137,13 @@ describe("AuthPageWithInvitationCheck", () => {
     });
 
     it("should not show default credentials warning when basic auth is disabled", () => {
-      mockConfig.disableBasicAuth = true;
+      vi.mocked(usePublicConfig).mockReturnValue({
+        data: {
+          disableBasicAuth: true,
+          disableInvitations: false,
+        },
+        isLoading: false,
+      } as ReturnType<typeof usePublicConfig>);
       vi.mocked(useSearchParams).mockReturnValue({
         get: vi.fn().mockReturnValue(null),
       } as unknown as ReturnType<typeof useSearchParams>);

@@ -13,5 +13,6 @@ export const MCP_GATEWAY_PREFIX = "/v1/mcp";
 
 export const ORGANIZATION_APPEARANCE_SETTINGS_PATH =
   "/api/organization/appearance-settings";
+export const PUBLIC_CONFIG_PATH = "/api/config/public";
 
 export const INCOMING_EMAIL_WEBHOOK_PREFIX = "/api/webhooks/incoming-email";

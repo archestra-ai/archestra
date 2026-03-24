@@ -112,6 +112,41 @@ describe("enrichOpenApiWithRbac", () => {
     expect(getOperation.description).toContain("\n\nAuthorization:\n\n");
   });
 
+  it("documents public api routes as not requiring authentication", () => {
+    const spec = {
+      paths: {
+        "/api/config/public": {
+          get: {
+            operationId: RouteId.GetPublicConfig,
+            description: "Get public config",
+          },
+        },
+      },
+    };
+
+    const enriched = enrichOpenApiWithRbac(spec);
+    const getOperation = enriched.paths["/api/config/public"].get as {
+      description?: string;
+      "x-required-permissions"?: {
+        kind: "dynamic" | "none" | "static";
+        note?: string;
+        permissions: string[];
+      };
+    };
+
+    expect(getOperation["x-required-permissions"]).toEqual({
+      kind: "none",
+      note: "None (no additional RBAC permission required)",
+      permissions: [],
+    });
+    expect(getOperation.description).toContain("Authentication:\n\n");
+    expect(getOperation.description).toContain("Not required.");
+    expect(getOperation.description).toContain("\n\nAuthorization:\n\n");
+    expect(getOperation.description).toContain(
+      "None (no additional RBAC permission required)",
+    );
+  });
+
   it("leaves non-api routes alone", () => {
     const spec = {
       paths: {

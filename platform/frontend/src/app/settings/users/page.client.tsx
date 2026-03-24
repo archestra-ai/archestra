@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/select";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import config from "@/lib/config/config";
+import { useDisableInvitations } from "@/lib/config/config.query";
 import {
   type Invitation,
   type Member,
@@ -143,7 +143,9 @@ function TabButtons({
 function InviteUserButton({ organizationId }: { organizationId: string }) {
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const { data: canInvite } = useHasPermissions({ invitation: ["create"] });
-  const invitationsEnabled = !config.disableInvitations;
+  const disableInvitations = useDisableInvitations();
+  const invitationsEnabled =
+    disableInvitations === undefined ? false : !disableInvitations;
 
   if (!invitationsEnabled || !canInvite) return null;
 

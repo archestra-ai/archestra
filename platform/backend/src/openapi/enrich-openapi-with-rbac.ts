@@ -35,7 +35,7 @@ export function enrichOpenApiWithRbac<T extends OpenApiDocument>(spec: T): T {
 
       operation.description = appendDescriptionSection(
         operation.description,
-        createAuthenticationSection(),
+        createAuthenticationSection(operation.operationId),
       );
       operation.description = appendDescriptionSection(
         operation.description,
@@ -157,7 +157,19 @@ function appendDescriptionSection(
   return `${description}\n\n${section}`;
 }
 
-function createAuthenticationSection(): string {
+function createAuthenticationSection(operationId: string): string {
+  if (
+    PUBLIC_UNAUTHENTICATED_ROUTE_IDS.has(
+      operationId as typeof PUBLIC_UNAUTHENTICATED_ROUTE_IDS extends Set<
+        infer T
+      >
+        ? T
+        : never,
+    )
+  ) {
+    return ["Authentication:", "", "Not required."].join("\n");
+  }
+
   return [
     "Authentication:",
     "",
@@ -219,3 +231,9 @@ const DYNAMIC_ROUTE_PERMISSION_NOTES = {
   [RouteId.DeleteAgent]:
     "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:delete`; `mcp_gateway` requires `mcpGateway:delete`; `llm_proxy` requires `llmProxy:delete`. Additional scope checks may apply.",
 } satisfies Partial<Record<RouteId, string>>;
+
+const PUBLIC_UNAUTHENTICATED_ROUTE_IDS = new Set<RouteId>([
+  RouteId.GetPublicConfig,
+  RouteId.GetPublicIdentityProviders,
+  RouteId.GetAppearanceSettings,
+]);

@@ -7,6 +7,8 @@ const { getConfig } = archestraApiSdk;
 
 export type ConfigResponse = archestraApiTypes.GetConfigResponses["200"];
 export type FeaturesResponse = ConfigResponse["features"];
+export type PublicConfigResponse =
+  archestraApiTypes.GetPublicConfigResponses["200"];
 
 export function useConfig() {
   const isAuthenticated = useIsAuthenticated();
@@ -16,6 +18,26 @@ export function useConfig() {
     staleTime: 5 * 60 * 1000,
     enabled: isAuthenticated,
   });
+}
+
+export function usePublicConfig() {
+  return useQuery({
+    queryKey: ["public-config"],
+    queryFn: async () => (await archestraApiSdk.getPublicConfig()).data ?? null,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useDisableBasicAuth(): boolean | undefined {
+  const { data, isLoading } = usePublicConfig();
+  if (isLoading || !data) return undefined;
+  return data.disableBasicAuth;
+}
+
+export function useDisableInvitations(): boolean | undefined {
+  const { data, isLoading } = usePublicConfig();
+  if (isLoading || !data) return undefined;
+  return data.disableInvitations;
 }
 
 export function useProviderBaseUrls() {

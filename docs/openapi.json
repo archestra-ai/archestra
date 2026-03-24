@@ -72598,6 +72598,45 @@
         }
       }
     },
+    "/api/config/public-auth": {
+      "get": {
+        "operationId": "getPublicAuthConfig",
+        "tags": [
+          "Config"
+        ],
+        "description": "Get public auth configuration flags\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "disableBasicAuth": {
+                      "type": "boolean"
+                    },
+                    "disableInvitations": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "disableBasicAuth",
+                    "disableInvitations"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      }
+    },
     "/api/config": {
       "get": {
         "operationId": "getConfig",

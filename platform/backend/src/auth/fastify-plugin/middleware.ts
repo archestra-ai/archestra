@@ -120,6 +120,8 @@ export class Authnz {
       url.startsWith(WELL_KNOWN_ACME_PREFIX) ||
       // Allow fetching public SSO providers list for login page (minimal info, no secrets)
       (method === "GET" && url === "/api/identity-providers/public") ||
+      // Allow fetching public auth config for login and invitation UI
+      (method === "GET" && url === "/api/config/public-auth") ||
       // Allow fetching public appearance settings for login page (theme, logo, font)
       (method === "GET" && url === ORGANIZATION_APPEARANCE_SETTINGS_PATH) ||
       // Incoming email webhooks - Microsoft Graph calls these directly

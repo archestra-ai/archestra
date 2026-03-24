@@ -13,6 +13,29 @@ import { EmailProviderTypeSchema, type GlobalToolPolicy } from "@/types";
 
 const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
+    "/api/config/public-auth",
+    {
+      schema: {
+        operationId: RouteId.GetPublicAuthConfig,
+        description: "Get public auth configuration flags",
+        tags: ["Config"],
+        response: {
+          200: z.strictObject({
+            disableBasicAuth: z.boolean(),
+            disableInvitations: z.boolean(),
+          }),
+        },
+      },
+    },
+    async (_request, reply) => {
+      return reply.send({
+        disableBasicAuth: config.auth.disableBasicAuth,
+        disableInvitations: config.auth.disableInvitations,
+      });
+    },
+  );
+
+  fastify.get(
     "/api/config",
     {
       schema: {

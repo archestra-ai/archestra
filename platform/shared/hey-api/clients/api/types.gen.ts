@@ -20248,6 +20248,25 @@ export type CohereChatWithAgentResponses = {
 
 export type CohereChatWithAgentResponse = CohereChatWithAgentResponses[keyof CohereChatWithAgentResponses];
 
+export type GetPublicAuthConfigData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/config/public-auth';
+};
+
+export type GetPublicAuthConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        disableBasicAuth: boolean;
+        disableInvitations: boolean;
+    };
+};
+
+export type GetPublicAuthConfigResponse = GetPublicAuthConfigResponses[keyof GetPublicAuthConfigResponses];
+
 export type GetConfigData = {
     body?: never;
     path?: never;

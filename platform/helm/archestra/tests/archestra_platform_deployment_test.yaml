@@ -564,6 +564,54 @@ tests:
             mountPath: /var/run/gcp
             readOnly: true
 
+  - it: should mount diagnostics volume and env var when diagnostics are enabled
+    documentIndex: 1
+    set:
+      archestra.diagnostics.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_NODE_DIAGNOSTIC_DIR
+            value: /var/diagnostics
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: diagnostics
+            persistentVolumeClaim:
+              claimName: RELEASE-NAME-archestra-platform-diagnostics
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: diagnostics
+            mountPath: /var/diagnostics
+            readOnly: false
+
+  - it: should use an existing diagnostics claim when configured
+    documentIndex: 1
+    set:
+      archestra.diagnostics.enabled: true
+      archestra.diagnostics.existingClaimName: customer-diagnostics
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: diagnostics
+            persistentVolumeClaim:
+              claimName: customer-diagnostics
+
+  - it: should set heap snapshot env var when diagnostics heap snapshots are enabled
+    documentIndex: 1
+    set:
+      archestra.diagnostics.enabled: true
+      archestra.diagnostics.heapSnapshotsNearHeapLimit: 1
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_NODE_HEAPSNAPSHOT_NEAR_HEAP_LIMIT
+            value: "1"
+
   - it: should set ARCHESTRA_ORCHESTRATOR_KUBECONFIG env var when kubeconfig volume is mounted
     documentIndex: 1
     set:

@@ -176,6 +176,22 @@ archestra:
   #       readOnly: true
   extraVolumeMounts: []
 
+  # Persistent storage for Node diagnostic reports written to /var/diagnostics.
+  diagnostics:
+    enabled: false
+    # Use an existing PVC instead of creating one via this chart.
+    existingClaimName: ""
+    # StorageClass for the chart-managed PVC. Leave empty to use the cluster default.
+    storageClassName: ""
+    # Storage request for the diagnostics PVC.
+    size: 10Gi
+    # Access modes for the diagnostics PVC.
+    accessModes:
+      - ReadWriteOnce
+    # Optionally tell Node to write heap snapshots as it approaches the heap limit.
+    # Set to a positive integer such as 1 to enable during targeted investigations.
+    heapSnapshotsNearHeapLimit: 0
+
   # Init containers configuration
   initContainers:
     # Wait for PostgreSQL to be ready before starting the application

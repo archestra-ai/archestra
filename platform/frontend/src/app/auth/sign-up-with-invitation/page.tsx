@@ -8,7 +8,7 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AppLogo } from "@/components/app-logo";
 import { CommunityLinks } from "@/components/community-links";
 import { LoadingSpinner } from "@/components/loading";
-import { useInvitationCheck } from "@/lib/invitation.query";
+import { useInvitationCheck } from "@/lib/auth/invitation.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 
 function SignUpWithInvitationContent() {

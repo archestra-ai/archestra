@@ -43,23 +43,23 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
-import { useArchestraMcpIdentity } from "@/lib/archestra-mcp-server";
-import { useHasPermissions, useSession } from "@/lib/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useProfileToolsWithIds } from "@/lib/chat/chat.query";
 import { useUpdateChatMessage } from "@/lib/chat/chat-message.query";
-import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
+import { hasThinkingTags, parseThinkingTags } from "@/lib/chat/parse-thinking";
+import type { ModelSource } from "@/lib/chat/use-chat-preferences";
+import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import {
   extractCatalogIdFromInstallUrl,
   extractIdsFromReauthUrl,
   parseAuthRequired,
   parseExpiredAuth,
   parsePolicyDenied,
-} from "@/lib/llmProviders/common";
-import { useMcpInstallOrchestrator } from "@/lib/mcp-install-orchestrator.hook";
+} from "@/lib/interactions/llmProviders/common";
+import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
+import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpInstallOrchestrator } from "@/lib/mcp/mcp-install-orchestrator.hook";
 import { useOrganization } from "@/lib/organization.query";
-import { hasThinkingTags, parseThinkingTags } from "@/lib/parse-thinking";
-import { useAppIconLogo } from "@/lib/hooks/use-app-name";
-import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { cn } from "@/lib/utils";
 import { AuthRequiredTool } from "./auth-required-tool";
 import {

@@ -182,8 +182,8 @@ Interaction handlers parse stored request/response data for display in the LLM P
 
 | File                                          | Description                                                                                |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `frontend/src/lib/llmProviders/{provider}.ts` | Implement `InteractionUtils` interface for parsing provider-specific request/response JSON |
-| `frontend/src/lib/interaction.utils.ts`       | Add case to `getInteractionClass()` switch to route discriminator to handler               |
+| `frontend/src/lib/interactions/llmProviders/{provider}.ts` | Implement `InteractionUtils` interface for parsing provider-specific request/response JSON |
+| `frontend/src/lib/interactions/interaction.utils.ts`       | Add case to `getInteractionClass()` switch to route discriminator to handler               |
 
 ### E2E Tests
 

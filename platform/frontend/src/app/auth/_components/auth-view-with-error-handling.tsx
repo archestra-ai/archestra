@@ -33,7 +33,7 @@ const { IdentityProviderSelector } = config.enterpriseFeatures.core
 
 const { usePublicIdentityProviders } = config.enterpriseFeatures.core
   ? // biome-ignore lint/style/noRestrictedImports: Conditional EE query import
-    await import("@/lib/identity-provider.query.ee")
+    await import("@/lib/auth/identity-provider.query.ee")
   : {
       usePublicIdentityProviders: () => ({
         data: [],

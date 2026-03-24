@@ -14,14 +14,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useConfig } from "@/lib/config.query";
-import { getFrontendDocsUrl } from "@/lib/docs";
 import {
   useDeleteIncomingEmailSubscription,
   useIncomingEmailStatus,
   useRenewIncomingEmailSubscription,
   useSetupIncomingEmailWebhook,
-} from "@/lib/incoming-email.query";
+} from "@/lib/chatops/incoming-email.query";
+import { useConfig } from "@/lib/config.query";
+import { getFrontendDocsUrl } from "@/lib/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 
 export default function EmailPage() {

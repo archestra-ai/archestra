@@ -50,7 +50,7 @@ Element.prototype.releasePointerCapture = vi.fn();
 
 const mockMutateAsync = vi.fn();
 
-vi.mock("@/lib/connector.query", () => ({
+vi.mock("@/lib/knowledge/connector.query", () => ({
   useCreateConnector: () => ({
     mutateAsync: mockMutateAsync,
     isPending: false,

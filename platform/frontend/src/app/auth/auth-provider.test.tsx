@@ -27,7 +27,7 @@ vi.mock("@shared", async () => {
   };
 });
 
-vi.mock("@/lib/auth.utils", () => ({
+vi.mock("@/lib/auth/auth.utils", () => ({
   hasPermission: vi.fn(),
 }));
 

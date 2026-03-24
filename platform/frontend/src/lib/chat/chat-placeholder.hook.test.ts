@@ -6,7 +6,7 @@ const { mockUseTypingAnimation } = vi.hoisted(() => ({
   mockUseTypingAnimation: vi.fn(),
 }));
 
-vi.mock("./typing-animation.hook", () => ({
+vi.mock("@/lib/hooks/use-typing-animation.hook", () => ({
   useTypingAnimation: (...args: unknown[]) => mockUseTypingAnimation(...args),
 }));
 

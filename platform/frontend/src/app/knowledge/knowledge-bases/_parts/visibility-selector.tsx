@@ -8,7 +8,7 @@ import {
   VisibilitySelector as SharedVisibilitySelector,
   type VisibilityOption,
 } from "@/components/visibility-selector";
-import { useTeams } from "@/lib/team.query";
+import { useTeams } from "@/lib/teams/team.query";
 
 export type KnowledgeBaseVisibility = NonNullable<
   archestraApiTypes.CreateKnowledgeBaseData["body"]["visibility"]

@@ -1,6 +1,6 @@
 "use client";
 
-import { useConversationSearch } from "@/lib/conversation-search.hook";
+import { useConversationSearch } from "@/lib/chat/conversation-search.hook";
 import { ConversationSearchPalette } from "./conversation-search-palette";
 
 export function ConversationSearchProvider() {

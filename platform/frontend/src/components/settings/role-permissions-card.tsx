@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useAllPermissions } from "@/lib/auth.query";
+import { useAllPermissions } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import {
   useActiveMemberRole,

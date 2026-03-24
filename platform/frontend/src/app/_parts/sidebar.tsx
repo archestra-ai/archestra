@@ -47,11 +47,11 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { useIsAuthenticated } from "@/lib/auth.hook";
-import { useHasPermissions, usePermissionMap } from "@/lib/auth.query";
+import { useIsAuthenticated } from "@/lib/auth/auth.hook";
+import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
 import config from "@/lib/config";
 import { useEnterpriseFeature } from "@/lib/config.query";
-import { useGithubStars } from "@/lib/github.query";
+import { useGithubStars } from "@/lib/github/github.query";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { cn } from "@/lib/utils";
 

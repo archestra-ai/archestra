@@ -21,11 +21,11 @@ vi.mock("@uidotdev/usehooks", () => ({
   useDebounce: (value: string) => value,
 }));
 
-vi.mock("@/lib/platform.hook", () => ({
+vi.mock("@/lib/hooks/use-platform.hook", () => ({
   usePlatform: () => ({ modKey: "⌘", altKey: "⌥", isMac: true }),
 }));
 
-vi.mock("@/lib/auth.hook", () => ({
+vi.mock("@/lib/auth/auth.hook", () => ({
   useIsAuthenticated: () => true,
 }));
 

@@ -30,7 +30,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { useFeature } from "@/lib/config.query";
-import { useTeamsWithVaultFolders } from "@/lib/team.query";
+import { useTeamsWithVaultFolders } from "@/lib/teams/team.query";
 import { SelectMcpServerCredentialTypeAndTeams } from "./select-mcp-server-credential-type-and-teams";
 import { ServiceAccountField } from "./service-account-field";
 

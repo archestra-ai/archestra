@@ -19,7 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   type McpServerInstallationRequest,
   useMcpServerInstallationRequests,
-} from "@/lib/mcp-server-installation-request.query";
+} from "@/lib/mcp/mcp-server-installation-request.query";
 import { installationRequestStatusConfig } from "./status-config";
 
 type RequestStatus = NonNullable<

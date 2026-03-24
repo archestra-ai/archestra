@@ -16,7 +16,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useProfiles } from "@/lib/agent.query";
-import { formatAuthMethod, useMcpToolCall } from "@/lib/mcp-tool-call.query";
+import {
+  formatAuthMethod,
+  useMcpToolCall,
+} from "@/lib/mcp/mcp-tool-call.query";
 import { formatDate } from "@/lib/utils";
 
 export function McpToolCallDetailPage({

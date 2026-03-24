@@ -1,5 +1,10 @@
 import { DocsPage, getDocsUrl } from "@shared";
 
+export const DEFAULT_TABLE_LIMIT = 10;
+export const DEFAULT_SORT_BY = "createdAt" as const;
+export const DEFAULT_SORT_DIRECTION = "desc" as const;
+export const DEFAULT_FILTER_ALL = "all" as const;
+
 export const LOCAL_MCP_DISABLED_MESSAGE = (
   <>
     Unable to connect to Kubernetes cluster. Ensure K8s is running and the

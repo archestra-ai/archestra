@@ -7,7 +7,7 @@ import { OnboardingDialogWrapper } from "@/components/onboarding-dialog-wrapper"
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
 import { Version } from "@/components/version";
-import { useHasPermissions } from "@/lib/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { AppSidebar } from "./sidebar";
 
 const SIDEBAR_COLLAPSED_PERMISSION: Permissions = {

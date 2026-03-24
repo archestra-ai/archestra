@@ -24,14 +24,14 @@ vi.mock("@/lib/organization.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/team.query", () => ({
+vi.mock("@/lib/teams/team.query", () => ({
   useTeams: () => ({
     data: mockTeams,
     isPending: false,
   }),
 }));
 
-vi.mock("@/lib/auth.query", () => ({
+vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => ({ data: true, isPending: false }),
   useMissingPermissions: () => [],
 }));

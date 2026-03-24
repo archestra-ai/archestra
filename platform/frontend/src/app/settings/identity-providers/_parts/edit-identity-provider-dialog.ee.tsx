@@ -22,7 +22,7 @@ import {
   useDeleteIdentityProvider,
   useIdentityProvider,
   useUpdateIdentityProvider,
-} from "@/lib/identity-provider.query.ee";
+} from "@/lib/auth/identity-provider.query.ee";
 import { OidcConfigForm } from "./oidc-config-form.ee";
 import { SamlConfigForm } from "./saml-config-form.ee";
 

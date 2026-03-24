@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { useCreateConnector } from "@/lib/connector.query";
+import { useCreateConnector } from "@/lib/knowledge/connector.query";
 import { ConfluenceConfigFields } from "./confluence-config-fields";
 import { ConnectorTypeIcon } from "./connector-icons";
 import { GithubConfigFields } from "./github-config-fields";

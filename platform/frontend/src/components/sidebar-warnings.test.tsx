@@ -13,7 +13,7 @@ vi.mock("@/lib/clients/auth/auth-client", () => ({
   },
 }));
 
-vi.mock("@/lib/auth.query", () => ({
+vi.mock("@/lib/auth/auth.query", () => ({
   useDefaultCredentialsEnabled: (...args: unknown[]) =>
     mockUseDefaultCredentialsEnabled(...args),
   useHasPermissions: (...args: unknown[]) => mockUseHasPermissions(...args),

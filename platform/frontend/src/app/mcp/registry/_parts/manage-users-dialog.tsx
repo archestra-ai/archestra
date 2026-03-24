@@ -53,17 +53,17 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useHasPermissions } from "@/lib/auth.query";
-import { authClient } from "@/lib/clients/auth/auth-client";
-import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
-import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp-server.query";
-import { useInitiateOAuth } from "@/lib/oauth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useInitiateOAuth } from "@/lib/auth/oauth.query";
 import {
   setOAuthCatalogId,
   setOAuthMcpServerId,
   setOAuthState,
-} from "@/lib/oauth-session";
-import { useTeams } from "@/lib/team.query";
+} from "@/lib/auth/oauth-session";
+import { authClient } from "@/lib/clients/auth/auth-client";
+import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp/mcp-server.query";
+import { useTeams } from "@/lib/teams/team.query";
 import { type DeploymentState, DeploymentStatusDot } from "./deployment-status";
 
 interface ManageUsersDialogProps {

@@ -21,9 +21,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useLabelKeys, useLabelValues } from "@/lib/agent.query";
-import { useHasPermissions, useSession } from "@/lib/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useOrganizationMembers } from "@/lib/organization.query";
-import { useTeams } from "@/lib/team.query";
+import { useTeams } from "@/lib/teams/team.query";
 
 type ScopeValue =
   | "personal"

@@ -27,7 +27,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useUniqueExternalAgentIds } from "@/lib/interaction.query";
+import { useUniqueExternalAgentIds } from "@/lib/interactions/interaction.query";
 import {
   useResultPolicyMutation,
   useToolResultPolicies,
@@ -40,7 +40,7 @@ import {
   RESULT_POLICY_ACTION_OPTIONS_LONG,
   type ResultPolicyAction,
 } from "@/lib/policy.utils";
-import { useTeams } from "@/lib/team.query";
+import { useTeams } from "@/lib/teams/team.query";
 import { PolicyCard } from "./policy-card";
 import type { PolicyCondition } from "./tool-call-policy-condition";
 import { ToolResultPolicyCondition } from "./tool-result-policy-condition";

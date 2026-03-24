@@ -170,7 +170,7 @@ const mockUseHasPermissions = vi.fn().mockReturnValue({
   isLoading: false,
 });
 
-vi.mock("@/lib/auth.query", () => ({
+vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => mockUseHasPermissions(),
 }));
 

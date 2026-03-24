@@ -24,7 +24,7 @@ import {
   useOrganization,
   useUpdateLlmSettings,
 } from "@/lib/organization.query";
-import { useTeams } from "@/lib/team.query";
+import { useTeams } from "@/lib/teams/team.query";
 
 type LimitCleanupInterval = NonNullable<
   NonNullable<

@@ -110,7 +110,7 @@ vi.mock("@/lib/config.query", () => ({
   useFeature: () => false,
 }));
 
-vi.mock("@/lib/auth.query", () => ({
+vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => ({ data: true, isPending: false }),
   useMissingPermissions: () => [],
 }));

@@ -18,13 +18,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useFeature } from "@/lib/config.query";
-import { useTeamsWithVaultFolders } from "@/lib/team.query";
+import { useTeamsWithVaultFolders } from "@/lib/teams/team.query";
 import {
   useTeamVaultFolder,
   useTeamVaultFolderSecrets,
   useTeamVaultSecretKeys,
   type VaultSecretListItem,
-} from "@/lib/team-vault-folder.query.ee";
+} from "@/lib/teams/team-vault-folder.query.ee";
 import { CurrentVaultSecret } from "./current-vault-secret.ee";
 
 interface ExternalSecretSelectorProps {

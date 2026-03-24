@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatCronSchedule } from "@/lib/format-cron";
+import { formatCronSchedule } from "@/lib/utils/format-cron";
 
 const PRESET_SCHEDULES = [
   { label: "Every 30 minutes", value: "*/30 * * * *" },

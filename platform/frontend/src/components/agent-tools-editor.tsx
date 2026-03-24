@@ -37,13 +37,13 @@ import {
   useProfileToolPatchMutation,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
-import { useArchestraMcpIdentity } from "@/lib/archestra-mcp-server";
+import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import {
   fetchCatalogTools,
   useCatalogTools,
   useInternalMcpCatalog,
-} from "@/lib/internal-mcp-catalog.query";
-import { useMcpServersGroupedByCatalog } from "@/lib/mcp-server.query";
+} from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpServersGroupedByCatalog } from "@/lib/mcp/mcp-server.query";
 import { cn } from "@/lib/utils";
 import {
   getDefaultArchestraToolIds,

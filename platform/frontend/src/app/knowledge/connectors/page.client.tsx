@@ -29,12 +29,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import {
   useConnectorsPaginated,
   useDeleteConnector,
-} from "@/lib/connector.query";
-import { formatCronSchedule } from "@/lib/format-cron";
-import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
+} from "@/lib/knowledge/connector.query";
+import { formatDate } from "@/lib/utils";
+import { formatCronSchedule } from "@/lib/utils/format-cron";
 
 type ConnectorItem =
   archestraApiTypes.GetConnectorsResponses["200"]["data"][number];

@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import config from "@/lib/config";
-import { useLatestGitHubRelease } from "@/lib/github-release.query";
+import { useLatestGitHubRelease } from "@/lib/github/github-release.query";
 import { useHealth } from "@/lib/health.query";
 import {
   useAppearanceSettings,
   useOrganization,
 } from "@/lib/organization.query";
-import { hasNewerVersion } from "@/lib/version-utils";
+import { hasNewerVersion } from "@/lib/utils/version";
 
 interface VersionProps {
   inline?: boolean;

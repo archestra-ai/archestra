@@ -34,8 +34,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { TypingText } from "@/components/ui/typing-text";
-import { useIsAuthenticated } from "@/lib/auth.hook";
-import { useHasPermissions } from "@/lib/auth.query";
+import { useIsAuthenticated } from "@/lib/auth/auth.hook";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useRecentlyGeneratedTitles } from "@/lib/chat/chat.hook";
 import {
   useConversations,

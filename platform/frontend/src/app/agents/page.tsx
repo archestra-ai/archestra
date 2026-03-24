@@ -5,13 +5,13 @@ import {
 } from "@shared";
 
 import { ServerErrorFallback } from "@/components/error-fallback";
-import { getServerApiHeaders } from "@/lib/server-utils";
 import {
   DEFAULT_SORT_BY,
   DEFAULT_SORT_DIRECTION,
   DEFAULT_TABLE_LIMIT,
-  handleApiError,
-} from "@/lib/utils";
+} from "@/consts";
+import { handleApiError } from "@/lib/utils";
+import { getServerApiHeaders } from "@/lib/utils/server";
 import AgentsPage from "./page.client";
 
 export const dynamic = "force-dynamic";

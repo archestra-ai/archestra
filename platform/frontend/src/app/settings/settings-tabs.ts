@@ -1,5 +1,5 @@
 import { requiredPagePermissionsMap } from "@shared/access-control";
-import { usePermissionMap } from "@/lib/auth.query";
+import { usePermissionMap } from "@/lib/auth/auth.query";
 import config from "@/lib/config";
 import { useEnterpriseFeature } from "@/lib/config.query";
 import { useSecretsType } from "@/lib/secrets.query";

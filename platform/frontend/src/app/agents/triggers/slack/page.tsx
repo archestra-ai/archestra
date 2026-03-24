@@ -18,8 +18,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { useChatOpsStatus } from "@/lib/chatops.query";
-import { useUpdateSlackChatOpsConfig } from "@/lib/chatops-config.query";
+import { useChatOpsStatus } from "@/lib/chatops/chatops.query";
+import { useUpdateSlackChatOpsConfig } from "@/lib/chatops/chatops-config.query";
 import config from "@/lib/config";
 import { useConfig, usePublicBaseUrl } from "@/lib/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs";

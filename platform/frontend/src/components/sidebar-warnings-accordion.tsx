@@ -13,7 +13,7 @@ import {
 import {
   useDefaultCredentialsEnabled,
   useHasPermissions,
-} from "@/lib/auth.query";
+} from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useFeature } from "@/lib/config.query";
 

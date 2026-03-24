@@ -15,7 +15,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { useUpdateKnowledgeBase } from "@/lib/knowledge-base.query";
+import { useUpdateKnowledgeBase } from "@/lib/knowledge/knowledge-base.query";
 import {
   type KnowledgeBaseVisibility,
   VisibilitySelector,

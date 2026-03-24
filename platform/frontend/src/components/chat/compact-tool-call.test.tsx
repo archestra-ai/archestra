@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockIsToolName = vi.fn();
 
-vi.mock("@/lib/archestra-mcp-server", () => ({
+vi.mock("@/lib/mcp/archestra-mcp-server", () => ({
   useArchestraMcpIdentity: () => ({
     isToolName: mockIsToolName,
   }),

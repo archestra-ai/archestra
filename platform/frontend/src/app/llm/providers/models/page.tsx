@@ -46,7 +46,10 @@ import {
   useModelsWithApiKeys,
   useUpdateModel,
 } from "@/lib/chat/chat-models.query";
-import { useChatApiKeys, useSyncChatModels } from "@/lib/chat/chat-settings.query";
+import {
+  useChatApiKeys,
+  useSyncChatModels,
+} from "@/lib/chat/chat-settings.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useSetProviderAction } from "../layout";
 

@@ -1,8 +1,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useInvitationCheck } from "@/lib/auth/invitation.query";
 import { useBackendConnectivity } from "@/lib/backend-connectivity";
-import { useInvitationCheck } from "@/lib/invitation.query";
 import { AuthPageWithInvitationCheck } from "./auth-page-with-invitation-check";
 
 // Mock Next.js navigation
@@ -12,7 +12,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 // Mock invitation query
-vi.mock("@/lib/invitation.query", () => ({
+vi.mock("@/lib/auth/invitation.query", () => ({
   useInvitationCheck: vi.fn(),
 }));
 

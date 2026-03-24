@@ -45,7 +45,7 @@ vi.mock("@/lib/health.query", () => ({
   useHealth: () => mockUseHealth(),
 }));
 
-vi.mock("@/lib/github-release.query", () => ({
+vi.mock("@/lib/github/github-release.query", () => ({
   useLatestGitHubRelease: () => mockUseLatestGitHubRelease(),
 }));
 

@@ -16,9 +16,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useUniqueExternalAgentIds } from "@/lib/interaction.query";
+import { useUniqueExternalAgentIds } from "@/lib/interactions/interaction.query";
 import { useOperators } from "@/lib/policy.query";
-import { useTeams } from "@/lib/team.query";
+import { useTeams } from "@/lib/teams/team.query";
 
 export type PolicyCondition = {
   key: string;

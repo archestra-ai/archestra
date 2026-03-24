@@ -21,12 +21,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useHasPermissions } from "@/lib/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   useMcpRegistryServersInfinite,
   useMcpServerCategories,
-} from "@/lib/external-mcp-catalog.query";
-import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
+} from "@/lib/mcp/external-mcp-catalog.query";
+import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import type { SelectedCategory } from "./CatalogFilters";
 import { DetailsDialog } from "./details-dialog";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";

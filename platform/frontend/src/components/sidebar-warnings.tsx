@@ -7,7 +7,7 @@ import { DefaultCredentialsWarning } from "@/components/default-credentials-warn
 import {
   useDefaultCredentialsEnabled,
   useHasPermissions,
-} from "@/lib/auth.query";
+} from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import config from "@/lib/config";
 import { useFeature } from "@/lib/config.query";

@@ -6,7 +6,7 @@ import {
   DialogFooter,
   DialogStickyFooter,
 } from "@/components/ui/dialog";
-import { useUpdateInternalMcpCatalogItem } from "@/lib/internal-mcp-catalog.query";
+import { useUpdateInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
 import { McpCatalogForm } from "./mcp-catalog-form";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import { transformFormToApiData } from "./mcp-catalog-form.utils";

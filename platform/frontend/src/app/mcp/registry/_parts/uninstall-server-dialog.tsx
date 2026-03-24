@@ -1,7 +1,7 @@
 "use client";
 
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { useDeleteMcpServer } from "@/lib/mcp-server.query";
+import { useDeleteMcpServer } from "@/lib/mcp/mcp-server.query";
 
 interface UninstallServerDialogProps {
   server: { id: string; name: string } | null;

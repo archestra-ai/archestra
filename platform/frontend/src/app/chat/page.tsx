@@ -72,7 +72,7 @@ import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { TypingText } from "@/components/ui/typing-text";
 import { Version } from "@/components/version";
 import { useDefaultAgentId, useInternalAgents } from "@/lib/agent.query";
-import { useHasPermissions } from "@/lib/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useRecentlyGeneratedTitles } from "@/lib/chat/chat.hook";
 import {
   fetchConversationEnabledTools,
@@ -84,7 +84,10 @@ import {
   useUpdateConversationEnabledTools,
 } from "@/lib/chat/chat.query";
 import { useChatAgentState } from "@/lib/chat/chat-agent-state.hook";
-import { useChatModels, useModelsByProvider } from "@/lib/chat/chat-models.query";
+import {
+  useChatModels,
+  useModelsByProvider,
+} from "@/lib/chat/chat-models.query";
 import {
   type SupportedProvider,
   useChatApiKeys,
@@ -94,16 +97,12 @@ import {
   conversationStorageKeys,
   getConversationDisplayTitle,
 } from "@/lib/chat/chat-utils";
-import { useConfig } from "@/lib/config.query";
-import { useDialogs } from "@/lib/dialog.hook";
-import { useChatSession } from "@/lib/global-chat.context";
-import { useOrganization } from "@/lib/organization.query";
+import { useChatSession } from "@/lib/chat/global-chat.context";
 import {
   applyPendingActions,
   clearPendingActions,
   getPendingActions,
-} from "@/lib/pending-tool-state";
-import { useTeams } from "@/lib/team.query";
+} from "@/lib/chat/pending-tool-state";
 import {
   clearModelOverride,
   getSavedAgent,
@@ -114,7 +113,11 @@ import {
   saveAgent,
   saveModelOverride,
 } from "@/lib/chat/use-chat-preferences";
+import { useConfig } from "@/lib/config.query";
+import { useDialogs } from "@/lib/dialog.hook";
 import { useIsMobile } from "@/lib/hooks/use-mobile.hook";
+import { useOrganization } from "@/lib/organization.query";
+import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import ArchestraPromptInput from "./prompt-input";
 

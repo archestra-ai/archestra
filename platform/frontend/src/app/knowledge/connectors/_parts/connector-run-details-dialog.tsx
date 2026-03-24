@@ -7,7 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useConnectorRun } from "@/lib/connector.query";
+import { useConnectorRun } from "@/lib/knowledge/connector.query";
 import { formatDate } from "@/lib/utils";
 
 interface ConnectorRunDetailsDialogProps {

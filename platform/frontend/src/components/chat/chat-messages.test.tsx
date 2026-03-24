@@ -98,7 +98,7 @@ vi.mock("@/components/chat/knowledge-graph-citations", () => ({
   hasKnowledgeBaseToolCall: () => false,
 }));
 
-vi.mock("@/lib/auth.query", () => ({
+vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => ({ data: true }),
   useSession: () => ({ data: { user: { name: "Joey" } } }),
 }));
@@ -113,11 +113,11 @@ vi.mock("@/lib/chat/chat-message.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/internal-mcp-catalog.query", () => ({
+vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
   useInternalMcpCatalog: () => ({ data: [] }),
 }));
 
-vi.mock("@/lib/mcp-install-orchestrator.hook", () => ({
+vi.mock("@/lib/mcp/mcp-install-orchestrator.hook", () => ({
   useMcpInstallOrchestrator: () => ({
     triggerInstallByCatalogId: vi.fn(),
     triggerReauthByCatalogIdAndServerId: vi.fn(),
@@ -132,7 +132,7 @@ vi.mock("@/lib/hooks/use-app-name", () => ({
   useAppIconLogo: () => "/custom-logo.png",
 }));
 
-vi.mock("@/lib/archestra-mcp-server", () => ({
+vi.mock("@/lib/mcp/archestra-mcp-server", () => ({
   useArchestraMcpIdentity: () => ({
     getToolName: (shortName: string) => `sparky__${shortName}`,
     getToolShortName: (toolName: string) =>

@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import { invalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import { conversationStorageKeys } from "@/lib/chat/chat-utils";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { useMcpServers } from "@/lib/mcp-server.query";
+import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { handleApiError } from "@/lib/utils";
 
 const {

@@ -7,7 +7,7 @@ import { getFrontendDocsUrl } from "@/lib/docs";
 import {
   computeHandlebarsReplaceOffsets,
   shouldShowHandlebarsCompletions,
-} from "@/lib/handlebars-completion";
+} from "@/lib/utils/handlebars-completion";
 
 export function SystemPromptEditor({
   value,

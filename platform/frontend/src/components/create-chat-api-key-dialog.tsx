@@ -16,7 +16,10 @@ import {
   DialogForm,
   DialogStickyFooter,
 } from "@/components/ui/dialog";
-import { useChatApiKeys, useCreateChatApiKey } from "@/lib/chat/chat-settings.query";
+import {
+  useChatApiKeys,
+  useCreateChatApiKey,
+} from "@/lib/chat/chat-settings.query";
 import { useFeature } from "@/lib/config.query";
 
 export type CreateChatApiKeyDialogProps = {

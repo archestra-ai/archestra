@@ -30,13 +30,14 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command";
-import { useIsAuthenticated } from "@/lib/auth.hook";
+import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import {
   useConversations,
   useDeleteConversation,
   usePinConversation,
 } from "@/lib/chat/chat.query";
 import { getConversationDisplayTitle } from "@/lib/chat/chat-utils";
+import { usePlatform } from "@/lib/hooks/use-platform.hook";
 import {
   SHORTCUT_DELETE,
   SHORTCUT_NEW_CHAT,
@@ -44,7 +45,6 @@ import {
   SHORTCUT_SEARCH,
   SHORTCUT_SIDEBAR,
 } from "@/lib/keyboard-shortcuts";
-import { usePlatform } from "@/lib/platform.hook";
 
 /**
  * Extracts all text content from messages for preview purposes.

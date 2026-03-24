@@ -9,7 +9,7 @@ import {
 import { AlertTriangle } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { useDefaultCredentialsEnabled } from "@/lib/auth.query";
+import { useDefaultCredentialsEnabled } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 
 export function DefaultCredentialsWarning({

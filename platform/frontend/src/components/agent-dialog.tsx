@@ -116,15 +116,15 @@ import {
   useAgentDelegations,
   useSyncAgentDelegations,
 } from "@/lib/agent-tools.query";
-import { useHasPermissions } from "@/lib/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useChatProfileMcpTools } from "@/lib/chat/chat.query";
 import { useModelsByProvider } from "@/lib/chat/chat-models.query";
 import { useAvailableChatApiKeys } from "@/lib/chat/chat-settings.query";
 import config from "@/lib/config";
 import { useFeature } from "@/lib/config.query";
-import { useConnectors } from "@/lib/connector.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { useKnowledgeBases } from "@/lib/knowledge-base.query";
+import { useConnectors } from "@/lib/knowledge/connector.query";
+import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
 import { cn } from "@/lib/utils";
 import {
   getDescriptionPlaceholder,
@@ -134,7 +134,7 @@ import {
 
 const { useIdentityProviders } = config.enterpriseFeatures.core
   ? // biome-ignore lint/style/noRestrictedImports: conditional EE query import for IdP selector
-    await import("@/lib/identity-provider.query.ee")
+    await import("@/lib/auth/identity-provider.query.ee")
   : {
       useIdentityProviders: (_params?: { enabled?: boolean }) => ({
         data: [] as Array<{ id: string; providerId: string; issuer: string }>,

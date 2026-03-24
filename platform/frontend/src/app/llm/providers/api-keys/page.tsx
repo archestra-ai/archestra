@@ -57,8 +57,8 @@ import {
 } from "@/lib/chat/chat-settings.query";
 import { useFeature } from "@/lib/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs";
-import { useOrganization } from "@/lib/organization.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { useOrganization } from "@/lib/organization.query";
 import { useSetProviderAction } from "../layout";
 
 const SCOPE_ICONS: Record<ChatApiKeyScope, React.ReactNode> = {

@@ -5,12 +5,12 @@ let mockIsKnowledgeBaseConfigured = false;
 
 let mockConfigStatus = { embedding: false, reranker: false };
 
-vi.mock("@/lib/knowledge-base.query", () => ({
+vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
   useIsKnowledgeBaseConfigured: () => mockIsKnowledgeBaseConfigured,
   useKnowledgeBaseConfigStatus: () => mockConfigStatus,
 }));
 
-vi.mock("@/lib/auth.query", () => ({
+vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => ({ data: true, isPending: false }),
   useMissingPermissions: () => [],
 }));

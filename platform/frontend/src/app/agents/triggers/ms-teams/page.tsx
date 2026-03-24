@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useChatOpsStatus } from "@/lib/chatops.query";
+import { useChatOpsStatus } from "@/lib/chatops/chatops.query";
 import config from "@/lib/config";
 import { useConfig, usePublicBaseUrl } from "@/lib/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs";

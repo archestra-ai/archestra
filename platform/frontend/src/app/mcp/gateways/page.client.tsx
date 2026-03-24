@@ -51,12 +51,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import { useDeleteProfile, useProfilesPaginated } from "@/lib/agent.query";
-import { useHasPermissions } from "@/lib/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { getFrontendDocsUrl } from "@/lib/docs";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
-import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/lib/utils";
 import { McpGatewayActions } from "./mcp-gateway-actions";
 
 type McpGatewaysInitialData = {

@@ -18,11 +18,11 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 
-vi.mock("@/lib/auth.hook", () => ({
+vi.mock("@/lib/auth/auth.hook", () => ({
   useIsAuthenticated: () => true,
 }));
 
-vi.mock("@/lib/auth.query", () => ({
+vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => ({ data: true }),
 }));
 

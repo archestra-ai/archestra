@@ -40,6 +40,10 @@ archestra:
     ARCHESTRA_CHAT_DEFAULT_PROVIDER: "anthropic"
     ARCHESTRA_CHAT_DEFAULT_MODEL: "claude-opus-4-5-20251101"
 
+  diagnostics:
+    enabled: true
+    heapSnapshotsNearHeapLimit: 1
+
   # Orchestrator configuration with Workload Identity for Vertex AI
   orchestrator:
     kubernetes:

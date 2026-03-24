@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.39](https://github.com/archestra-ai/archestra/compare/platform-v1.1.38...platform-v1.1.39) (2026-03-24)
+
+
+### Bug Fixes
+
+* use rwx diagnostics storage in staging and package worker startup ([#3523](https://github.com/archestra-ai/archestra/issues/3523)) ([3460611](https://github.com/archestra-ai/archestra/commit/34606110bab406f3da18845c0eca99da0181948e))
+
+
+### Miscellaneous Chores
+
+* **deps:** reduce docker image CVEs ([#3525](https://github.com/archestra-ai/archestra/issues/3525)) ([ad08212](https://github.com/archestra-ai/archestra/commit/ad08212f061a58d56d1b28586ad990f5f6b577a2))
+
 ## [1.1.38](https://github.com/archestra-ai/archestra/compare/platform-v1.1.37...platform-v1.1.38) (2026-03-24)
 
 

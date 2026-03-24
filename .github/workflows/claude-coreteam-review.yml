@@ -50,18 +50,19 @@ jobs:
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.ILDAR_CLAUDE_CODE_OAUTH_TOKEN }}
 
-  joey-pr-review:
-    needs: determine-token
-    if: needs.determine-token.outputs.should_run == 'true' && needs.determine-token.outputs.pr_author == 'joeyorlando'
-    permissions:
-      contents: read
-      pull-requests: write
-      id-token: write
-    uses: ./.github/workflows/claude-coreteam-review-shared.yml
-    with:
-      pr_number: ${{ github.event.pull_request.number }}
-    secrets:
-      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.JOEY_CLAUDE_CODE_OAUTH_TOKEN }}
+  # NOTE: disabling for now as joey no longer using Claude Code
+  # joey-pr-review:
+  #   needs: determine-token
+  #   if: needs.determine-token.outputs.should_run == 'true' && needs.determine-token.outputs.pr_author == 'joeyorlando'
+  #   permissions:
+  #     contents: read
+  #     pull-requests: write
+  #     id-token: write
+  #   uses: ./.github/workflows/claude-coreteam-review-shared.yml
+  #   with:
+  #     pr_number: ${{ github.event.pull_request.number }}
+  #   secrets:
+  #     CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.JOEY_CLAUDE_CODE_OAUTH_TOKEN }}
 
   dominik-pr-review:
     needs: determine-token

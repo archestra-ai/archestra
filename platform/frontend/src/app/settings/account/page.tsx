@@ -14,7 +14,7 @@ import { LoadingSpinner } from "@/components/loading";
 import { PersonalTokenCard } from "@/components/settings/personal-token-card";
 import { RolePermissionsCard } from "@/components/settings/role-permissions-card";
 import { SettingsSectionStack } from "@/components/settings/settings-block";
-import { usePublicAuthConfig } from "@/lib/config/config.query";
+import { usePublicConfig } from "@/lib/config/config.query";
 import { useOrganization } from "@/lib/organization.query";
 import { useOrgTheme } from "@/lib/theme.hook";
 import { cn } from "@/lib/utils";
@@ -27,9 +27,9 @@ function AccountSettingsContent() {
   const orgTheme = useOrgTheme();
   const currentUITheme = orgTheme?.currentUITheme;
   const { data: organization } = useOrganization();
-  const { data: publicAuthConfig, isLoading: isLoadingPublicAuthConfig } =
-    usePublicAuthConfig();
-  const isBasicAuthDisabled = publicAuthConfig?.disableBasicAuth ?? false;
+  const { data: publicConfig, isLoading: isLoadingPublicConfig } =
+    usePublicConfig();
+  const isBasicAuthDisabled = publicConfig?.disableBasicAuth ?? false;
 
   useEffect(() => {
     if (highlight === "change-password" && changePasswordRef.current) {
@@ -48,7 +48,7 @@ function AccountSettingsContent() {
       <RolePermissionsCard />
       <UpdateNameCard classNames={{ base: "w-full" }} />
       <PersonalTokenCard />
-      {!isLoadingPublicAuthConfig && !isBasicAuthDisabled && (
+      {!isLoadingPublicConfig && !isBasicAuthDisabled && (
         <div
           ref={changePasswordRef}
           className={cn(

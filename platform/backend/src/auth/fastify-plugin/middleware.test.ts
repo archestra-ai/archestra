@@ -165,7 +165,7 @@ describe("Authnz", () => {
       expect(mockReply.send).not.toHaveBeenCalled();
     });
 
-    test("should skip auth for GET requests to public auth config endpoint", async () => {
+    test("should skip auth for GET requests to public config endpoint", async () => {
       const mockRequest = {
         url: "/api/config/public",
         method: "GET",

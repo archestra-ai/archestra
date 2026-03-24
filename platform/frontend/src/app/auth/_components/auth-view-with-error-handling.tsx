@@ -21,7 +21,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import config from "@/lib/config/config";
-import { usePublicAuthConfig } from "@/lib/config/config.query";
+import { usePublicConfig } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { SignOutWithIdpLogout } from "./sign-out-with-idp-logout";
 
@@ -137,12 +137,12 @@ export function AuthViewWithErrorHandling({
     title: string;
     message: string;
   } | null>(null);
-  const { data: publicAuthConfig, isLoading: isLoadingPublicAuthConfig } =
-    usePublicAuthConfig();
+  const { data: publicConfig, isLoading: isLoadingPublicConfig } =
+    usePublicConfig();
   const { data: identityProvidersData, isLoading: isLoadingIdentityProviders } =
     usePublicIdentityProviders();
 
-  const isBasicAuthDisabled = publicAuthConfig?.disableBasicAuth ?? false;
+  const isBasicAuthDisabled = publicConfig?.disableBasicAuth ?? false;
   // Extract providers array - data can be null or an array of providers
   const identityProviders = Array.isArray(identityProvidersData)
     ? identityProvidersData
@@ -254,7 +254,7 @@ export function AuthViewWithErrorHandling({
   // (callback, error, etc. are handled by better-auth-ui)
   const alwaysShowAuthView = !isSignInPage && path !== "sign-up";
 
-  if (isLoadingPublicAuthConfig && isSignInPage) {
+  if (isLoadingPublicConfig && isSignInPage) {
     return null;
   }
 

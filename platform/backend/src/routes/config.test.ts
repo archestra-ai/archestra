@@ -17,7 +17,7 @@ describe("config routes", () => {
     await app.close();
   });
 
-  test("returns public auth config without authentication", async () => {
+  test("returns public config without authentication", async () => {
     const response = await app.inject({
       method: "GET",
       url: "/api/config/public",

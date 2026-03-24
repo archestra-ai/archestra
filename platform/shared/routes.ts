@@ -30,7 +30,7 @@ export const RouteId = {
 
   // Config Routes
   GetConfig: "getConfig",
-  GetPublicAuthConfig: "getPublicAuthConfig",
+  GetPublicConfig: "getPublicConfig",
 
   // Auth Routes
   GetDefaultCredentialsStatus: "getDefaultCredentialsStatus",

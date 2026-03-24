@@ -787,11 +787,11 @@ export const requiredEndpointPermissionsMap: Partial<
    */
   [RouteId.GetPublicIdentityProviders]: {},
   /**
-   * Get public auth config flags for login and invitation UI
+   * Get public config for login and invitation UI
    * Available to unauthenticated users
    * Note: Auth is skipped in middleware for this route
    */
-  [RouteId.GetPublicAuthConfig]: {},
+  [RouteId.GetPublicConfig]: {},
   /**
    * Get public appearance settings (theme, logo, font) for login page
    * Available to unauthenticated users

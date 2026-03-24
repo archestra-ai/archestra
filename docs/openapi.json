@@ -72600,11 +72600,11 @@
     },
     "/api/config/public": {
       "get": {
-        "operationId": "getPublicAuthConfig",
+        "operationId": "getPublicConfig",
         "tags": [
           "Config"
         ],
-        "description": "Get public auth configuration flags\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Get public config\n\nAuthentication:\n\nNot required.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",

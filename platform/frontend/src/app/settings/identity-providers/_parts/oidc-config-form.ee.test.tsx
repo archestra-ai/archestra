@@ -44,7 +44,8 @@ function TestWrapper({
         disablePostLogoutRedirectUri: false,
         clientId: "test",
         clientSecret: "secret",
-        discoveryEndpoint: "https://example.com/.well-known/openid-configuration",
+        discoveryEndpoint:
+          "https://example.com/.well-known/openid-configuration",
         scopes: ["openid"],
         mapping: { id: "sub", email: "email", name: "name" },
       },

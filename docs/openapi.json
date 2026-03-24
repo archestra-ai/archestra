@@ -140446,6 +140446,9 @@
                           "pkce": {
                             "type": "boolean"
                           },
+                          "disablePostLogoutRedirectUri": {
+                            "type": "boolean"
+                          },
                           "clientId": {
                             "type": "string"
                           },
@@ -141014,6 +141017,9 @@
                       "pkce": {
                         "type": "boolean"
                       },
+                      "disablePostLogoutRedirectUri": {
+                        "type": "boolean"
+                      },
                       "clientId": {
                         "type": "string"
                       },
@@ -141340,6 +141346,9 @@
                           "type": "string"
                         },
                         "pkce": {
+                          "type": "boolean"
+                        },
+                        "disablePostLogoutRedirectUri": {
                           "type": "boolean"
                         },
                         "clientId": {
@@ -142171,6 +142180,9 @@
                         "pkce": {
                           "type": "boolean"
                         },
+                        "disablePostLogoutRedirectUri": {
+                          "type": "boolean"
+                        },
                         "clientId": {
                           "type": "string"
                         },
@@ -142738,6 +142750,9 @@
                       "pkce": {
                         "type": "boolean"
                       },
+                      "disablePostLogoutRedirectUri": {
+                        "type": "boolean"
+                      },
                       "clientId": {
                         "type": "string"
                       },
@@ -143065,6 +143080,9 @@
                           "type": "string"
                         },
                         "pkce": {
+                          "type": "boolean"
+                        },
+                        "disablePostLogoutRedirectUri": {
                           "type": "boolean"
                         },
                         "clientId": {

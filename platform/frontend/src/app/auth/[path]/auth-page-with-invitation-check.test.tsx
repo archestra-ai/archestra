@@ -21,7 +21,7 @@ vi.mock("@/lib/backend-connectivity", () => ({
   useBackendConnectivity: vi.fn(),
 }));
 
-vi.mock("@/lib/use-app-name", () => ({
+vi.mock("@/lib/hooks/use-app-name", () => ({
   useAppName: () => "Sparky",
 }));
 

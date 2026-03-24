@@ -11,7 +11,7 @@ import {
 } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { toast } from "sonner";
-import { handleApiError } from "./utils";
+import { handleApiError } from "@/lib/utils";
 
 const { getChatModels, getModelsWithApiKeys, updateModel } = archestraApiSdk;
 type ChatModelsQuery = NonNullable<

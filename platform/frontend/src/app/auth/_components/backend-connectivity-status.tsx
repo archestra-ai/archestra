@@ -21,7 +21,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useBackendConnectivity } from "@/lib/backend-connectivity";
-import { useAppName } from "@/lib/use-app-name";
+import { useAppName } from "@/lib/hooks/use-app-name";
 
 interface BackendConnectivityStatusProps {
   /**

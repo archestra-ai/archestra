@@ -103,11 +103,11 @@ vi.mock("@/lib/auth.query", () => ({
   useSession: () => ({ data: { user: { name: "Joey" } } }),
 }));
 
-vi.mock("@/lib/chat.query", () => ({
+vi.mock("@/lib/chat/chat.query", () => ({
   useProfileToolsWithIds: () => ({ data: [] }),
 }));
 
-vi.mock("@/lib/chat-message.query", () => ({
+vi.mock("@/lib/chat/chat-message.query", () => ({
   useUpdateChatMessage: () => ({
     mutateAsync: vi.fn(),
   }),
@@ -128,7 +128,7 @@ vi.mock("@/lib/organization.query", () => ({
   useOrganization: () => ({ data: null }),
 }));
 
-vi.mock("@/lib/use-app-name", () => ({
+vi.mock("@/lib/hooks/use-app-name", () => ({
   useAppIconLogo: () => "/custom-logo.png",
 }));
 

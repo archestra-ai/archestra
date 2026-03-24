@@ -14,7 +14,7 @@ import { useUpdateSlackChatOpsConfig } from "@/lib/chatops-config.query";
 import { usePublicBaseUrl } from "@/lib/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs";
 import { useOrganization } from "@/lib/organization.query";
-import { useAppName } from "@/lib/use-app-name";
+import { useAppName } from "@/lib/hooks/use-app-name";
 
 type ConnectionMode = NonNullable<
   NonNullable<

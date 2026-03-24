@@ -20,7 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useCompleteOnboarding } from "@/lib/organization.query";
-import { useAppName } from "@/lib/use-app-name";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { cn } from "@/lib/utils";
 
 interface AlternativeOnboardingDialogProps {

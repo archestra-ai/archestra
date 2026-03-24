@@ -35,8 +35,8 @@ import {
   useUniqueUserIds,
 } from "@/lib/interaction.query";
 import { DynamicInteraction } from "@/lib/interaction.utils";
-import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
-import { useDateTimeRangePicker } from "@/lib/use-date-time-range-picker";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import { formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../../_parts/error-boundary";
 

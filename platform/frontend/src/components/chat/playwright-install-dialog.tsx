@@ -19,7 +19,7 @@ import {
   useHasPlaywrightMcpTools,
   useProfileToolsWithIds,
   useUpdateConversationEnabledTools,
-} from "@/lib/chat.query";
+} from "@/lib/chat/chat.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useMcpServers } from "@/lib/mcp-server.query";
 import {

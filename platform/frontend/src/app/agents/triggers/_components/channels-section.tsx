@@ -53,7 +53,7 @@ import {
   useRefreshChatOpsChannelDiscovery,
   useUpdateChatOpsBinding,
 } from "@/lib/chatops.query";
-import { useAppName } from "@/lib/use-app-name";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { cn, DEFAULT_TABLE_LIMIT } from "@/lib/utils";
 import { ChannelsEmptyState } from "./channels-empty-state";
 import type { ProviderConfig } from "./types";

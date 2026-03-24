@@ -39,13 +39,13 @@ import {
   useChatApiKeys,
   useCreateVirtualApiKey,
   useDeleteVirtualApiKey,
-} from "@/lib/chat-settings.query";
+} from "@/lib/chat/chat-settings.query";
 import { useFeature } from "@/lib/config.query";
 import {
   formatRelativeTime,
   formatRelativeTimeFromNow,
 } from "@/lib/format-relative-time";
-import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useSetProviderAction } from "../layout";
 
 type VirtualKeyWithParent =

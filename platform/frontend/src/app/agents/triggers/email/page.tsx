@@ -22,7 +22,7 @@ import {
   useRenewIncomingEmailSubscription,
   useSetupIncomingEmailWebhook,
 } from "@/lib/incoming-email.query";
-import { useAppName } from "@/lib/use-app-name";
+import { useAppName } from "@/lib/hooks/use-app-name";
 
 export default function EmailPage() {
   const appName = useAppName();

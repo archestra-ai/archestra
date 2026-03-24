@@ -21,7 +21,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import config from "@/lib/config";
-import { useAppName } from "@/lib/use-app-name";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { SignOutWithIdpLogout } from "./sign-out-with-idp-logout";
 
 const { IdentityProviderSelector } = config.enterpriseFeatures.core

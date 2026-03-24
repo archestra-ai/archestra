@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useModelsWithApiKeys } from "@/lib/chat-models.query";
+import { useModelsWithApiKeys } from "@/lib/chat/chat-models.query";
 import type { OptimizationRule } from "@/lib/optimization-rule.query";
 import {
   useCreateOptimizationRule,
@@ -38,7 +38,7 @@ import {
 } from "@/lib/optimization-rule.query";
 import { useOrganization } from "@/lib/organization.query";
 import { useTeams } from "@/lib/team.query";
-import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 
 const DEFAULT_RULE = {
   entityType: "organization",

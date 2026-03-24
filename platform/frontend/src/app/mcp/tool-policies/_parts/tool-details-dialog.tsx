@@ -32,8 +32,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
-import type { ToolWithAssignmentsData } from "@/lib/tool.query";
-import { isMcpToolByProperties } from "@/lib/tool.utils";
+import type { ToolWithAssignmentsData } from "@/lib/tools/tool.query";
+import { isMcpToolByProperties } from "@/lib/tools/tool.utils";
 import { formatDate } from "@/lib/utils";
 import { ToolCallPolicies } from "./tool-call-policies";
 import { ToolReadonlyDetails } from "./tool-readonly-details";

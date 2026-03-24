@@ -5,7 +5,7 @@ import {
 } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { handleApiError, toApiError } from "./utils";
+import { handleApiError, toApiError } from "@/lib/utils";
 
 export type { SupportedProvider };
 

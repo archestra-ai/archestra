@@ -45,9 +45,9 @@ import {
   type ModelWithApiKeys,
   useModelsWithApiKeys,
   useUpdateModel,
-} from "@/lib/chat-models.query";
-import { useChatApiKeys, useSyncChatModels } from "@/lib/chat-settings.query";
-import { useAppName } from "@/lib/use-app-name";
+} from "@/lib/chat/chat-models.query";
+import { useChatApiKeys, useSyncChatModels } from "@/lib/chat/chat-settings.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { useSetProviderAction } from "../layout";
 
 export default function ModelsPage() {

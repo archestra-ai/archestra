@@ -28,7 +28,7 @@ import {
   useSetTeamVaultFolder,
   useTeamVaultFolder,
 } from "@/lib/team-vault-folder.query.ee";
-import { useAppName } from "@/lib/use-app-name";
+import { useAppName } from "@/lib/hooks/use-app-name";
 
 interface Team {
   id: string;

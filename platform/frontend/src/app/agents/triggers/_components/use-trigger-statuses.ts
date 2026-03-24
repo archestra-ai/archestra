@@ -1,4 +1,4 @@
-import { useChatApiKeys } from "@/lib/chat-settings.query";
+import { useChatApiKeys } from "@/lib/chat/chat-settings.query";
 import { useChatOpsStatus } from "@/lib/chatops.query";
 import config from "@/lib/config";
 import { useConfig } from "@/lib/config.query";

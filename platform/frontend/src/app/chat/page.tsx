@@ -73,7 +73,7 @@ import { TypingText } from "@/components/ui/typing-text";
 import { Version } from "@/components/version";
 import { useDefaultAgentId, useInternalAgents } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
-import { useRecentlyGeneratedTitles } from "@/lib/chat.hook";
+import { useRecentlyGeneratedTitles } from "@/lib/chat/chat.hook";
 import {
   fetchConversationEnabledTools,
   useConversation,
@@ -82,18 +82,18 @@ import {
   useStopChatStream,
   useUpdateConversation,
   useUpdateConversationEnabledTools,
-} from "@/lib/chat.query";
-import { useChatAgentState } from "@/lib/chat-agent-state.hook";
-import { useChatModels, useModelsByProvider } from "@/lib/chat-models.query";
+} from "@/lib/chat/chat.query";
+import { useChatAgentState } from "@/lib/chat/chat-agent-state.hook";
+import { useChatModels, useModelsByProvider } from "@/lib/chat/chat-models.query";
 import {
   type SupportedProvider,
   useChatApiKeys,
-} from "@/lib/chat-settings.query";
-import { useConversationShare } from "@/lib/chat-share.query";
+} from "@/lib/chat/chat-settings.query";
+import { useConversationShare } from "@/lib/chat/chat-share.query";
 import {
   conversationStorageKeys,
   getConversationDisplayTitle,
-} from "@/lib/chat-utils";
+} from "@/lib/chat/chat-utils";
 import { useConfig } from "@/lib/config.query";
 import { useDialogs } from "@/lib/dialog.hook";
 import { useChatSession } from "@/lib/global-chat.context";
@@ -113,8 +113,8 @@ import {
   resolveModelForAgent,
   saveAgent,
   saveModelOverride,
-} from "@/lib/use-chat-preferences";
-import { useIsMobile } from "@/lib/use-mobile.hook";
+} from "@/lib/chat/use-chat-preferences";
+import { useIsMobile } from "@/lib/hooks/use-mobile.hook";
 import { cn } from "@/lib/utils";
 import ArchestraPromptInput from "./prompt-input";
 

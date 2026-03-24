@@ -35,8 +35,8 @@ import {
   useConversations,
   useDeleteConversation,
   usePinConversation,
-} from "@/lib/chat.query";
-import { getConversationDisplayTitle } from "@/lib/chat-utils";
+} from "@/lib/chat/chat.query";
+import { getConversationDisplayTitle } from "@/lib/chat/chat-utils";
 import {
   SHORTCUT_DELETE,
   SHORTCUT_NEW_CHAT,

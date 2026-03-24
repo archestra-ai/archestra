@@ -36,16 +36,16 @@ import {
 import { TypingText } from "@/components/ui/typing-text";
 import { useIsAuthenticated } from "@/lib/auth.hook";
 import { useHasPermissions } from "@/lib/auth.query";
-import { useRecentlyGeneratedTitles } from "@/lib/chat.hook";
+import { useRecentlyGeneratedTitles } from "@/lib/chat/chat.hook";
 import {
   useConversations,
   useDeleteConversation,
   useGenerateConversationTitle,
   usePinConversation,
   useUpdateConversation,
-} from "@/lib/chat.query";
-import { getConversationDisplayTitle } from "@/lib/chat-utils";
-import { useStableConversations } from "@/lib/use-stable-conversations";
+} from "@/lib/chat/chat.query";
+import { getConversationDisplayTitle } from "@/lib/chat/chat-utils";
+import { useStableConversations } from "@/lib/hooks/use-stable-conversations";
 import { cn } from "@/lib/utils";
 
 const CONVERSATION_QUERY_PARAM = "conversation";

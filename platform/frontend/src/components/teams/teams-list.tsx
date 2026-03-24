@@ -24,7 +24,7 @@ import config from "@/lib/config";
 import { useFeature } from "@/lib/config.query";
 import { formatRelativeTimeFromNow } from "@/lib/format-relative-time";
 import { type TeamToken, useTokens } from "@/lib/team-token.query";
-import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { TeamMembersDialog } from "./team-members-dialog";
 import { TokenManagerDialog } from "./token-manager-dialog";
 

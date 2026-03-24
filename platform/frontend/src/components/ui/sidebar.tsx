@@ -23,7 +23,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { SHORTCUT_SIDEBAR } from "@/lib/keyboard-shortcuts";
-import { useIsMobile } from "@/lib/use-mobile.hook";
+import { useIsMobile } from "@/lib/hooks/use-mobile.hook";
 import { cn } from "@/lib/utils";
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state";

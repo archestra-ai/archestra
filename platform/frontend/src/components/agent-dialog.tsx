@@ -117,14 +117,14 @@ import {
   useSyncAgentDelegations,
 } from "@/lib/agent-tools.query";
 import { useHasPermissions } from "@/lib/auth.query";
-import { useChatProfileMcpTools } from "@/lib/chat.query";
-import { useModelsByProvider } from "@/lib/chat-models.query";
-import { useAvailableChatApiKeys } from "@/lib/chat-settings.query";
+import { useChatProfileMcpTools } from "@/lib/chat/chat.query";
+import { useModelsByProvider } from "@/lib/chat/chat-models.query";
+import { useAvailableChatApiKeys } from "@/lib/chat/chat-settings.query";
 import config from "@/lib/config";
 import { useFeature } from "@/lib/config.query";
 import { useConnectors } from "@/lib/connector.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { useKnowledgeBases } from "@/lib/knowledge-base.query";
-import { useAppName } from "@/lib/use-app-name";
 import { cn } from "@/lib/utils";
 import {
   getDescriptionPlaceholder,

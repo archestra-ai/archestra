@@ -9,7 +9,7 @@ import {
 } from "@shared";
 import { useMemo } from "react";
 import appConfig from "@/lib/config";
-import { useAppName } from "@/lib/use-app-name";
+import { useAppName } from "@/lib/hooks/use-app-name";
 
 export function useArchestraMcpIdentity() {
   const appName = useAppName();

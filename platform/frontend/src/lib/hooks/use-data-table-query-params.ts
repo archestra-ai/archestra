@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback } from "react";
-import { DEFAULT_TABLE_LIMIT } from "./utils";
+import { DEFAULT_TABLE_LIMIT } from "@/lib/utils";
 
 type QueryParamUpdates = Record<string, string | null | undefined>;
 

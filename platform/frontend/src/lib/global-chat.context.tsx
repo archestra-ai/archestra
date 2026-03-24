@@ -31,10 +31,10 @@ import {
   useState,
 } from "react";
 import { filterOptimisticToolCalls } from "@/components/chat/chat-messages.utils";
-import { useGenerateConversationTitle } from "@/lib/chat.query";
-import { getChatExternalAgentId } from "@/lib/chat-utils";
+import { useGenerateConversationTitle } from "@/lib/chat/chat.query";
+import { getChatExternalAgentId } from "@/lib/chat/chat-utils";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import appConfig from "./config";
-import { useAppName } from "./use-app-name";
 
 const SESSION_CLEANUP_TIMEOUT = 10 * 60 * 1000; // 10 min
 const MAX_AUTO_RETRIES = 2;

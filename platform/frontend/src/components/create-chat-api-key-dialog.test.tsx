@@ -21,7 +21,7 @@ vi.mock("@/components/chat-api-key-form", () => ({
   ),
 }));
 
-vi.mock("@/lib/chat-settings.query", () => ({
+vi.mock("@/lib/chat/chat-settings.query", () => ({
   useChatApiKeys: () => ({ data: [] }),
   useCreateChatApiKey: () => ({
     mutateAsync,

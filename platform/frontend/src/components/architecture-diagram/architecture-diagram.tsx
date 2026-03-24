@@ -19,7 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useAppIconLogo, useAppName } from "@/lib/use-app-name";
+import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
 import {
   ArchitectureGroupNode,
   type ArchitectureGroupNodeData,

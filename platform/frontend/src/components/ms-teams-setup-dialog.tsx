@@ -15,7 +15,7 @@ import { useChatOpsStatus } from "@/lib/chatops.query";
 import { useUpdateChatOpsConfigInQuickstart } from "@/lib/chatops-config.query";
 import { usePublicBaseUrl } from "@/lib/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs";
-import { useAppName } from "@/lib/use-app-name";
+import { useAppName } from "@/lib/hooks/use-app-name";
 
 interface MsTeamsSetupDialogProps {
   open: boolean;

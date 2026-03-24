@@ -37,7 +37,7 @@ import {
   useRolesPaginated,
   useUpdateRole,
 } from "@/lib/role.query";
-import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { RolePermissionBuilder } from "./role-permission-builder.ee";
 
 type Role = archestraApiTypes.GetRoleResponses["200"];

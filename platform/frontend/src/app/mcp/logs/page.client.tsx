@@ -22,7 +22,7 @@ import {
 import { useProfiles } from "@/lib/agent.query";
 import { useMcpServers } from "@/lib/mcp-server.query";
 import { formatAuthMethod, useMcpToolCalls } from "@/lib/mcp-tool-call.query";
-import { useDateTimeRangePicker } from "@/lib/use-date-time-range-picker";
+import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../../_parts/error-boundary";
 

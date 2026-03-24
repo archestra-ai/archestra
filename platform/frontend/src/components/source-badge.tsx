@@ -3,7 +3,7 @@ import { Database, Globe, Mail } from "lucide-react";
 import Image from "next/image";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
-import { useAppIconLogo } from "@/lib/use-app-name";
+import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { cn } from "@/lib/utils";
 
 export function SourceIcon({

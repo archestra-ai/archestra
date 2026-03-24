@@ -81,7 +81,7 @@ let mockApiKeys: Array<{
   scope: string;
 }> = [];
 
-vi.mock("@/lib/chat-settings.query", () => ({
+vi.mock("@/lib/chat/chat-settings.query", () => ({
   useAvailableChatApiKeys: () => ({
     data: mockApiKeys,
     isPending: false,
@@ -92,7 +92,7 @@ vi.mock("@/lib/chat-settings.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/chat-models.query", () => ({
+vi.mock("@/lib/chat/chat-models.query", () => ({
   useChatModels: () => ({
     data: [
       { id: "gpt-4o", provider: "openai", displayName: "GPT-4o" },

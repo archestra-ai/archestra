@@ -45,8 +45,8 @@ import {
 } from "@/components/ai-elements/tool";
 import { useArchestraMcpIdentity } from "@/lib/archestra-mcp-server";
 import { useHasPermissions, useSession } from "@/lib/auth.query";
-import { useProfileToolsWithIds } from "@/lib/chat.query";
-import { useUpdateChatMessage } from "@/lib/chat-message.query";
+import { useProfileToolsWithIds } from "@/lib/chat/chat.query";
+import { useUpdateChatMessage } from "@/lib/chat/chat-message.query";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import {
   extractCatalogIdFromInstallUrl,
@@ -58,8 +58,8 @@ import {
 import { useMcpInstallOrchestrator } from "@/lib/mcp-install-orchestrator.hook";
 import { useOrganization } from "@/lib/organization.query";
 import { hasThinkingTags, parseThinkingTags } from "@/lib/parse-thinking";
-import { useAppIconLogo } from "@/lib/use-app-name";
-import type { ModelSource } from "@/lib/use-chat-preferences";
+import { useAppIconLogo } from "@/lib/hooks/use-app-name";
+import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { cn } from "@/lib/utils";
 import { AuthRequiredTool } from "./auth-required-tool";
 import {

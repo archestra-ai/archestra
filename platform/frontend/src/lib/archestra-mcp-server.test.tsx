@@ -8,7 +8,7 @@ const mockConfig = {
   },
 };
 
-vi.mock("@/lib/use-app-name", () => ({
+vi.mock("@/lib/hooks/use-app-name", () => ({
   useAppName: () => mockUseAppName(),
 }));
 

@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useTheme } from "next-themes";
 import config from "@/lib/config";
 import { useOrgTheme } from "@/lib/theme.hook";
-import { DEFAULT_APP_LOGO } from "@/lib/use-app-name";
+import { DEFAULT_APP_LOGO } from "@/lib/hooks/use-app-name";
 
 interface AppLogoProps {
   /**

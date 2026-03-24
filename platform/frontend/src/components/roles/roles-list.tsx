@@ -26,7 +26,7 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { DialogStickyFooter } from "@/components/ui/dialog";
 import { useRolesPaginated } from "@/lib/role.query";
-import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 
 type Role = archestraApiTypes.GetRoleResponses["200"];
 

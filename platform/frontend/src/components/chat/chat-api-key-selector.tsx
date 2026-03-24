@@ -18,12 +18,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { useUpdateConversation } from "@/lib/chat.query";
+import { useUpdateConversation } from "@/lib/chat/chat.query";
 import {
   type ChatApiKey,
   type ChatApiKeyScope,
   useAvailableChatApiKeys,
-} from "@/lib/chat-settings.query";
+} from "@/lib/chat/chat-settings.query";
 
 interface ChatApiKeySelectorProps {
   /** Conversation ID for persisting selection (optional for initial chat) */

@@ -47,8 +47,8 @@ import {
 } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { useAppName } from "@/lib/use-app-name";
-import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
+import { useAppName } from "@/lib/hooks/use-app-name";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/lib/utils";
 import { AgentActions } from "./agent-actions";
 

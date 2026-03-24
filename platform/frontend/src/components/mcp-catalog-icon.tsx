@@ -3,7 +3,7 @@
 import { ARCHESTRA_MCP_CATALOG_ID, DEFAULT_APP_NAME } from "@shared";
 import { Server } from "lucide-react";
 import Image from "next/image";
-import { useAppIconLogo } from "@/lib/use-app-name";
+import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { cn } from "@/lib/utils";
 
 interface McpCatalogIconProps {

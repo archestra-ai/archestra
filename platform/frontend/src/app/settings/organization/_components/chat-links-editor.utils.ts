@@ -1,4 +1,4 @@
-import { isValidChatLinkUrl } from "@/lib/chat-links";
+import { isValidChatLinkUrl } from "@/lib/chat/chat-links";
 
 export interface ChatLinkEditorValue {
   label: string;

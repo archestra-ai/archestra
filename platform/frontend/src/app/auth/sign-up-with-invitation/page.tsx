@@ -9,7 +9,7 @@ import { AppLogo } from "@/components/app-logo";
 import { CommunityLinks } from "@/components/community-links";
 import { LoadingSpinner } from "@/components/loading";
 import { useInvitationCheck } from "@/lib/invitation.query";
-import { useAppName } from "@/lib/use-app-name";
+import { useAppName } from "@/lib/hooks/use-app-name";
 
 function SignUpWithInvitationContent() {
   const appName = useAppName();

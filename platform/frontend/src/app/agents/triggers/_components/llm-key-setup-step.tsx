@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { ChatApiKeyFormValues } from "@/components/chat-api-key-form";
 import { CreateChatApiKeyDialog } from "@/components/create-chat-api-key-dialog";
-import { useChatApiKeys } from "@/lib/chat-settings.query";
+import { useChatApiKeys } from "@/lib/chat/chat-settings.query";
 import { SetupStep } from "./setup-step";
 
 const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {

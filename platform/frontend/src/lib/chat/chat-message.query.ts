@@ -1,6 +1,6 @@
 import { archestraApiSdk } from "@shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { handleApiError } from "./utils";
+import { handleApiError } from "@/lib/utils";
 
 const { updateChatMessage } = archestraApiSdk;
 

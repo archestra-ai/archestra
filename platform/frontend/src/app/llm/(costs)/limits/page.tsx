@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useModelsWithApiKeys } from "@/lib/chat-models.query";
+import { useModelsWithApiKeys } from "@/lib/chat/chat-models.query";
 import {
   useCreateLimit,
   useDeleteLimit,
@@ -38,7 +38,7 @@ import {
 } from "@/lib/limits.query";
 import { useOrganization } from "@/lib/organization.query";
 import { useTeams } from "@/lib/team.query";
-import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 
 type LimitData = archestraApiTypes.GetLimitsResponses["200"][number];
 type LimitEntityType = archestraApiTypes.CreateLimitData["body"]["entityType"];

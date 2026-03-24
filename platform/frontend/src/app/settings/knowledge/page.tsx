@@ -53,11 +53,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useChatModels } from "@/lib/chat-models.query";
+import { useChatModels } from "@/lib/chat/chat-models.query";
 import {
   useAvailableChatApiKeys,
   useCreateChatApiKey,
-} from "@/lib/chat-settings.query";
+} from "@/lib/chat/chat-settings.query";
 import { useFeature } from "@/lib/config.query";
 import {
   useDropEmbeddingConfig,

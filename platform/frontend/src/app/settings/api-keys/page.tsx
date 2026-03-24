@@ -30,7 +30,7 @@ import {
   formatRelativeTime,
   formatRelativeTimeFromNow,
 } from "@/lib/format-relative-time";
-import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { formatDate } from "@/lib/utils";
 import { useSetSettingsAction } from "../layout";
 import { shouldSkipCreateApiKeySubmit } from "./page.utils";

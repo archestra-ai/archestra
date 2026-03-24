@@ -131,11 +131,11 @@ RUN apk --no-cache upgrade && \
     rm -rf /tmp/*
 
 # Install KinD (Kubernetes in Docker) and docker-cli for embedded K8s cluster support
-# Both binaries are built from source in go-builder with Go 1.25.7 to fix CVE-2025-68121
+# Both binaries are built from source in go-builder with Go 1.25.8 to fix CVE-2025-68121
 COPY --from=go-builder /docker-binary /usr/local/bin/docker
 COPY --from=go-builder /kind-binary /usr/local/bin/kind
 RUN chmod +x /usr/local/bin/kind /usr/local/bin/docker
-# TODO: Once KinD releases a version compiled with Go >= 1.25.7, remove the kind-builder stage
+# TODO: Once KinD releases a version compiled with Go >= 1.25.8, remove the kind-builder stage
 # at the top of this file and restore the pre-built binary download below for faster builds.
 # Track releases at: https://github.com/kubernetes-sigs/kind/releases
 # RUN ARCH=$(uname -m) && \

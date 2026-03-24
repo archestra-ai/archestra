@@ -72598,7 +72598,7 @@
         }
       }
     },
-    "/api/config/public-auth": {
+    "/api/config/public": {
       "get": {
         "operationId": "getPublicAuthConfig",
         "tags": [

@@ -20252,7 +20252,7 @@ export type GetPublicAuthConfigData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/config/public-auth';
+    url: '/api/config/public';
 };
 
 export type GetPublicAuthConfigResponses = {

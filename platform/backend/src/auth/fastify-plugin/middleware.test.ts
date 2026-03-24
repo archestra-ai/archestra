@@ -167,7 +167,7 @@ describe("Authnz", () => {
 
     test("should skip auth for GET requests to public auth config endpoint", async () => {
       const mockRequest = {
-        url: "/api/config/public-auth",
+        url: "/api/config/public",
         method: "GET",
         headers: {},
       } as FastifyRequest;

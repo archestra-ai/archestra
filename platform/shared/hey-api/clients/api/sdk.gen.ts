@@ -1560,7 +1560,7 @@ export const cohereChatWithAgent = <ThrowOnError extends boolean = false>(option
  *
  * None (no additional RBAC permission required)
  */
-export const getPublicAuthConfig = <ThrowOnError extends boolean = false>(options?: Options<GetPublicAuthConfigData, ThrowOnError>) => (options?.client ?? client).get<GetPublicAuthConfigResponses, unknown, ThrowOnError>({ url: '/api/config/public-auth', ...options });
+export const getPublicAuthConfig = <ThrowOnError extends boolean = false>(options?: Options<GetPublicAuthConfigData, ThrowOnError>) => (options?.client ?? client).get<GetPublicAuthConfigResponses, unknown, ThrowOnError>({ url: '/api/config/public', ...options });
 
 /**
  * Get platform configuration and feature flags

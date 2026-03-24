@@ -20,7 +20,7 @@ describe("config routes", () => {
   test("returns public auth config without authentication", async () => {
     const response = await app.inject({
       method: "GET",
-      url: "/api/config/public-auth",
+      url: "/api/config/public",
     });
 
     expect(response.statusCode).toBe(200);

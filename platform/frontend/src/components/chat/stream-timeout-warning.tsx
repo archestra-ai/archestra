@@ -3,7 +3,7 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { AlertTriangle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { getFrontendDocsUrl } from "@/lib/docs";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
 
 interface StreamTimeoutWarningProps {
   status: "ready" | "submitted" | "streaming" | "error";

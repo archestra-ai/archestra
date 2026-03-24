@@ -43,7 +43,7 @@ import {
   setOAuthTeamId,
 } from "@/lib/auth/oauth-session";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { useDialogs } from "@/lib/dialog.hook";
+import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useMcpRegistryServer } from "@/lib/mcp/external-mcp-catalog.query";
 import {
   useInternalMcpCatalog,

@@ -12,7 +12,7 @@ vi.mock("@/lib/hooks/use-app-name", () => ({
   useAppName: () => mockUseAppName(),
 }));
 
-vi.mock("@/lib/config", () => ({
+vi.mock("@/lib/config/config", () => ({
   default: new Proxy(
     {},
     {

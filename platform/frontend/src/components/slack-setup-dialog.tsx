@@ -11,8 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useChatOpsStatus } from "@/lib/chatops/chatops.query";
 import { useUpdateSlackChatOpsConfig } from "@/lib/chatops/chatops-config.query";
-import { usePublicBaseUrl } from "@/lib/config.query";
-import { getFrontendDocsUrl } from "@/lib/docs";
+import { usePublicBaseUrl } from "@/lib/config/config.query";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useOrganization } from "@/lib/organization.query";
 

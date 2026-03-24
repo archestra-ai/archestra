@@ -57,7 +57,7 @@ import { useChatPlaceholder } from "@/lib/chat/chat-placeholder.hook";
 import { conversationStorageKeys } from "@/lib/chat/chat-utils";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useModelSelectorDisplay } from "@/lib/chat/use-model-selector-display.hook";
-import { useIsMobile } from "@/lib/hooks/use-mobile.hook";
+import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { useOrganization } from "@/lib/organization.query";
 
 interface ArchestraPromptInputProps {

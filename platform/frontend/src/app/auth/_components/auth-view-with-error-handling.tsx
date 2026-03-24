@@ -20,7 +20,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import config from "@/lib/config";
+import config from "@/lib/config/config";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { SignOutWithIdpLogout } from "./sign-out-with-idp-logout";
 

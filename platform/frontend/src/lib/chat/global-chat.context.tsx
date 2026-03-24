@@ -33,7 +33,7 @@ import {
 import { filterOptimisticToolCalls } from "@/components/chat/chat-messages.utils";
 import { useGenerateConversationTitle } from "@/lib/chat/chat.query";
 import { getChatExternalAgentId } from "@/lib/chat/chat-utils";
-import appConfig from "@/lib/config";
+import appConfig from "@/lib/config/config";
 import { useAppName } from "@/lib/hooks/use-app-name";
 
 const SESSION_CLEANUP_TIMEOUT = 10 * 60 * 1000; // 10 min

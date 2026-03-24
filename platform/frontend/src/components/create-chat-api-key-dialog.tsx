@@ -20,7 +20,7 @@ import {
   useChatApiKeys,
   useCreateChatApiKey,
 } from "@/lib/chat/chat-settings.query";
-import { useFeature } from "@/lib/config.query";
+import { useFeature } from "@/lib/config/config.query";
 
 export type CreateChatApiKeyDialogProps = {
   open: boolean;

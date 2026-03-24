@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useInvitationCheck } from "@/lib/auth/invitation.query";
-import { useBackendConnectivity } from "@/lib/backend-connectivity";
+import { useBackendConnectivity } from "@/lib/config/backend-connectivity";
 import { AuthPageWithInvitationCheck } from "./auth-page-with-invitation-check";
 
 // Mock Next.js navigation
@@ -17,7 +17,7 @@ vi.mock("@/lib/auth/invitation.query", () => ({
 }));
 
 // Mock backend connectivity
-vi.mock("@/lib/backend-connectivity", () => ({
+vi.mock("@/lib/config/backend-connectivity", () => ({
   useBackendConnectivity: vi.fn(),
 }));
 
@@ -31,7 +31,7 @@ const mockConfig = vi.hoisted(() => ({
   enterpriseFeatures: { core: false },
 }));
 
-vi.mock("@/lib/config", () => ({
+vi.mock("@/lib/config/config", () => ({
   default: new Proxy(
     {},
     {

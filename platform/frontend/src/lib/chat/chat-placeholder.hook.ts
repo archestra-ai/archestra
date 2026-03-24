@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useTypingAnimation } from "@/lib/hooks/use-typing-animation.hook";
+import { useTypingAnimation } from "@/lib/hooks/use-typing-animation";
 
 interface UseChatPlaceholderParams {
   animate: boolean;

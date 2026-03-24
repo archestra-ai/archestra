@@ -113,9 +113,9 @@ import {
   saveAgent,
   saveModelOverride,
 } from "@/lib/chat/use-chat-preferences";
-import { useConfig } from "@/lib/config.query";
-import { useDialogs } from "@/lib/dialog.hook";
-import { useIsMobile } from "@/lib/hooks/use-mobile.hook";
+import { useConfig } from "@/lib/config/config.query";
+import { useDialogs } from "@/lib/hooks/use-dialog";
+import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { useOrganization } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";

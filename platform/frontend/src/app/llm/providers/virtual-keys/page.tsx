@@ -40,7 +40,7 @@ import {
   useCreateVirtualApiKey,
   useDeleteVirtualApiKey,
 } from "@/lib/chat/chat-settings.query";
-import { useFeature } from "@/lib/config.query";
+import { useFeature } from "@/lib/config/config.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
   formatRelativeTime,

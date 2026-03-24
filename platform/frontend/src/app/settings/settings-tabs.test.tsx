@@ -40,7 +40,7 @@ vi.mock("@/lib/secrets.query", () => ({
 
 let mockEnterpriseFeatures = false;
 
-vi.mock("@/lib/config", () => ({
+vi.mock("@/lib/config/config", () => ({
   default: {
     get enterpriseFeatures() {
       return { core: mockEnterpriseFeatures };

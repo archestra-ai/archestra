@@ -42,7 +42,7 @@ import { useCreateProfile } from "@/lib/agent.query";
 import { useBulkAssignTools } from "@/lib/agent-tools.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { useFeature } from "@/lib/config.query";
+import { useFeature } from "@/lib/config/config.query";
 import { useCatalogTools } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers, useMcpServerTools } from "@/lib/mcp/mcp-server.query";
 import { useTeams } from "@/lib/teams/team.query";

@@ -29,7 +29,7 @@ vi.mock("@/lib/chat/chat-settings.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/config.query", () => ({
+vi.mock("@/lib/config/config.query", () => ({
   useFeature: () => false,
 }));
 

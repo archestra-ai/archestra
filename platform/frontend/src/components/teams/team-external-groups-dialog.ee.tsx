@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { DialogStickyFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import config from "@/lib/config";
+import config from "@/lib/config/config";
 import { EnterpriseLicenseRequired } from "../enterprise-license-required";
 
 interface Team {

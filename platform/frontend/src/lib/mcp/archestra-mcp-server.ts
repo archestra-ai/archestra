@@ -8,7 +8,7 @@ import {
   getArchestraToolShortName,
 } from "@shared";
 import { useMemo } from "react";
-import appConfig from "@/lib/config";
+import appConfig from "@/lib/config/config";
 import { useAppName } from "@/lib/hooks/use-app-name";
 
 export function useArchestraMcpIdentity() {

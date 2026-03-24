@@ -23,8 +23,8 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAgentEmailAddress } from "@/lib/chatops/incoming-email.query";
-import config from "@/lib/config";
-import { useFeature } from "@/lib/config.query";
+import config from "@/lib/config/config";
+import { useFeature } from "@/lib/config/config.query";
 import {
   useFetchTeamTokenValue,
   useTokens,

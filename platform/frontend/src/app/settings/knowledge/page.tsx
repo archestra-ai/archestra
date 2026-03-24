@@ -58,7 +58,7 @@ import {
   useAvailableChatApiKeys,
   useCreateChatApiKey,
 } from "@/lib/chat/chat-settings.query";
-import { useFeature } from "@/lib/config.query";
+import { useFeature } from "@/lib/config/config.query";
 import {
   useDropEmbeddingConfig,
   useOrganization,

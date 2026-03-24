@@ -2,8 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { usePlatform } from "@/lib/hooks/use-platform.hook";
-import { SHORTCUT_NEW_CHAT, SHORTCUT_SEARCH } from "@/lib/keyboard-shortcuts";
+import { SHORTCUT_NEW_CHAT, SHORTCUT_SEARCH } from "@/consts";
+import { usePlatform } from "@/lib/hooks/use-platform";
 
 export function useConversationSearch() {
   const router = useRouter();

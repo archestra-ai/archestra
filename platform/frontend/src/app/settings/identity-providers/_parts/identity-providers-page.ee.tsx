@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useIdentityProviders } from "@/lib/auth/identity-provider.query.ee";
-import config from "@/lib/config";
+import config from "@/lib/config/config";
 import { CreateIdentityProviderDialog } from "./create-identity-provider-dialog.ee";
 import { EditIdentityProviderDialog } from "./edit-identity-provider-dialog.ee";
 

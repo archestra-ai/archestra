@@ -20,7 +20,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { useBackendConnectivity } from "@/lib/backend-connectivity";
+import { useBackendConnectivity } from "@/lib/config/backend-connectivity";
 import { useAppName } from "@/lib/hooks/use-app-name";
 
 interface BackendConnectivityStatusProps {

@@ -27,7 +27,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
-import { useAnimatedDots } from "@/lib/animated-dots.hook";
+import { useAnimatedDots } from "@/lib/hooks/use-animated-dots";
 import websocketService from "@/lib/websocket/websocket";
 import {
   type DeploymentState,

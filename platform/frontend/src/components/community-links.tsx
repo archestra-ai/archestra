@@ -2,7 +2,7 @@
 
 import { COMMUNITY_SLACK_URL, GITHUB_REPO_URL } from "@shared";
 import { Github, Slack } from "lucide-react";
-import config from "@/lib/config";
+import config from "@/lib/config/config";
 
 /**
  * Compact community links (GitHub + Slack) for use outside the sidebar,

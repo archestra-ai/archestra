@@ -22,8 +22,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useIsMobile } from "@/lib/hooks/use-mobile.hook";
-import { SHORTCUT_SIDEBAR } from "@/lib/keyboard-shortcuts";
+import { SHORTCUT_SIDEBAR } from "@/consts";
+import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state";

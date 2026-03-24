@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { usePublicIdentityProviders } from "@/lib/auth/identity-provider.query.ee";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import config from "@/lib/config";
+import config from "@/lib/config/config";
 import { IdentityProviderSelector } from "./identity-provider-selector.ee";
 
 // Mock next/navigation
@@ -27,7 +27,7 @@ vi.mock("@/lib/auth/identity-provider.query.ee", () => ({
 }));
 
 // Mock config
-vi.mock("@/lib/config", () => ({
+vi.mock("@/lib/config/config", () => ({
   default: {
     enterpriseFeatures: { core: true },
   },

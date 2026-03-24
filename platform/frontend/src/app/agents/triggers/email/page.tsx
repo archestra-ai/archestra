@@ -20,8 +20,8 @@ import {
   useRenewIncomingEmailSubscription,
   useSetupIncomingEmailWebhook,
 } from "@/lib/chatops/incoming-email.query";
-import { useConfig } from "@/lib/config.query";
-import { getFrontendDocsUrl } from "@/lib/docs";
+import { useConfig } from "@/lib/config/config.query";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 
 export default function EmailPage() {

@@ -15,7 +15,7 @@ import {
   useHasPermissions,
 } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { useFeature } from "@/lib/config.query";
+import { useFeature } from "@/lib/config/config.query";
 
 export function SidebarWarningsAccordion() {
   const { data: session } = authClient.useSession();

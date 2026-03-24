@@ -14,7 +14,7 @@ import { LoadingSpinner } from "@/components/loading";
 import { PersonalTokenCard } from "@/components/settings/personal-token-card";
 import { RolePermissionsCard } from "@/components/settings/role-permissions-card";
 import { SettingsSectionStack } from "@/components/settings/settings-block";
-import config from "@/lib/config";
+import config from "@/lib/config/config";
 import { useOrganization } from "@/lib/organization.query";
 import { useOrgTheme } from "@/lib/theme.hook";
 import { cn } from "@/lib/utils";

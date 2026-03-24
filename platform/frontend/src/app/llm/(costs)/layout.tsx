@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createContext, useContext, useMemo, useState } from "react";
 import { PageLayout } from "@/components/page-layout";
-import { getFrontendDocsUrl } from "@/lib/docs";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
 
 const TABS = [
   { label: "Costs", href: "/llm/costs" },

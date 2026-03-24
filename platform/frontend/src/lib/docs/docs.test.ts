@@ -7,7 +7,7 @@ const mockConfig = {
   },
 };
 
-vi.mock("@/lib/config", () => ({
+vi.mock("@/lib/config/config", () => ({
   default: new Proxy(
     {},
     {

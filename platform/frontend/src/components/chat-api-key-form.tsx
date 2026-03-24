@@ -20,8 +20,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { useFeature, useProviderBaseUrls } from "@/lib/config.query";
-import { getFrontendDocsUrl } from "@/lib/docs";
+import { useFeature, useProviderBaseUrls } from "@/lib/config/config.query";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useTeams } from "@/lib/teams/team.query";
 import { LlmProviderSelectItems } from "./llm-provider-options";
 import { WithPermissions } from "./roles/with-permissions";

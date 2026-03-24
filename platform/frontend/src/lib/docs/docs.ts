@@ -1,5 +1,5 @@
 import { type DocsPage, getDocsUrl, WEBSITE_URL } from "@shared";
-import appConfig from "@/lib/config";
+import appConfig from "@/lib/config/config";
 
 /**
  * Returns an Archestra docs URL unless full white-labeling is enabled, in

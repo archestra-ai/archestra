@@ -4,7 +4,7 @@ import { ShieldOff } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config.query";
+import { useFeature } from "@/lib/config/config.query";
 
 interface PermissivePolicyOverlayProps {
   children: ReactNode;

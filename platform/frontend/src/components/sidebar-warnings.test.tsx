@@ -19,7 +19,7 @@ vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: (...args: unknown[]) => mockUseHasPermissions(...args),
 }));
 
-vi.mock("@/lib/config.query", () => ({
+vi.mock("@/lib/config/config.query", () => ({
   useFeature: (...args: unknown[]) => mockUseFeature(...args),
 }));
 
@@ -27,7 +27,7 @@ const mockConfig = {
   disableBasicAuth: false,
 };
 
-vi.mock("@/lib/config", () => ({
+vi.mock("@/lib/config/config", () => ({
   default: new Proxy(
     {},
     {

@@ -1,5 +1,5 @@
 import type { ClientWebSocketMessage, ServerWebSocketMessage } from "@shared";
-import config from "@/lib/config";
+import config from "@/lib/config/config";
 
 // Combined message type for handlers that receive both directions
 type WebSocketMessage = ClientWebSocketMessage | ServerWebSocketMessage;

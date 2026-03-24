@@ -46,8 +46,8 @@ import {
 } from "@/lib/agent-tools.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useChatProfileMcpTools } from "@/lib/chat/chat.query";
-import config from "@/lib/config";
-import { getFrontendDocsUrl } from "@/lib/docs";
+import config from "@/lib/config/config";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import {

@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
-import { getFrontendDocsUrl } from "@/lib/docs";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { cn } from "@/lib/utils";
 
 const AGENT_TYPE_CONFIG: Record<

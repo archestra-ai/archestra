@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/select";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import config from "@/lib/config";
+import config from "@/lib/config/config";
 import {
   type Invitation,
   type Member,

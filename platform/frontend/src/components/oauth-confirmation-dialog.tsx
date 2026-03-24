@@ -7,7 +7,7 @@ import { StandardFormDialog } from "@/components/standard-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useFeature } from "@/lib/config.query";
+import { useFeature } from "@/lib/config/config.query";
 
 export interface OAuthInstallResult {
   /** Team ID to assign the MCP server to (null for personal) */

@@ -7,7 +7,7 @@ import { IdentityProviderIcon } from "@/components/identity-provider-icons.ee";
 import { Button } from "@/components/ui/button";
 import { usePublicIdentityProviders } from "@/lib/auth/identity-provider.query.ee";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import config from "@/lib/config";
+import config from "@/lib/config/config";
 import { getValidatedCallbackURLWithDefault } from "@/lib/utils/redirect-validation";
 
 interface IdentityProviderSelectorProps {

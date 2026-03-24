@@ -19,7 +19,7 @@ import {
   setOAuthState,
   setOAuthTeamId,
 } from "@/lib/auth/oauth-session";
-import { useDialogs } from "@/lib/dialog.hook";
+import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
   useInstallMcpServer,

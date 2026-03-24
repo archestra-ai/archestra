@@ -1,7 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import config from "@/lib/config";
+import config from "@/lib/config/config";
 import { handleApiError } from "@/lib/utils";
 
 /**

@@ -63,8 +63,8 @@ import {
 } from "@/components/visibility-selector";
 import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config.query";
-import { getVisibleDocsUrl } from "@/lib/docs";
+import { useFeature } from "@/lib/config/config.query";
+import { getVisibleDocsUrl } from "@/lib/docs/docs";
 import { useK8sImagePullSecrets } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useGetSecret } from "@/lib/secrets.query";
 import { useTeams } from "@/lib/teams/team.query";

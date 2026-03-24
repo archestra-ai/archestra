@@ -17,7 +17,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useFeature } from "@/lib/config.query";
+import { useFeature } from "@/lib/config/config.query";
 import { useTeamsWithVaultFolders } from "@/lib/teams/team.query";
 import {
   useTeamVaultFolder,

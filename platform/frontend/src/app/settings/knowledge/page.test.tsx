@@ -106,7 +106,7 @@ vi.mock("@/lib/chat/chat-models.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/config.query", () => ({
+vi.mock("@/lib/config/config.query", () => ({
   useFeature: () => false,
 }));
 

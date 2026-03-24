@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { invalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { useFeature } from "@/lib/config.query";
+import { useFeature } from "@/lib/config/config.query";
 import { handleApiError } from "@/lib/utils";
 import websocketService from "@/lib/websocket/websocket";
 

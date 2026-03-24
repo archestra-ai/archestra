@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import config from "@/lib/config";
+import config from "@/lib/config/config";
+import { useHealth } from "@/lib/config/health.query";
 import { useLatestGitHubRelease } from "@/lib/github/github-release.query";
-import { useHealth } from "@/lib/health.query";
 import {
   useAppearanceSettings,
   useOrganization,

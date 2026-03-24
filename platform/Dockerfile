@@ -1,8 +1,7 @@
-# Build KinD and Docker CLI from source with Go 1.25.7 to fix CVE-2025-61726, CVE-2025-68121
-# Alpine 3.23 only has Go 1.25.6, so we use the official golang image for 1.25.7+
-# KinD v0.31.0 pre-built binaries use Go 1.25.5 which has the vulnerability
-# Alpine 3.23's docker-cli (29.1.3) is compiled with Go 1.25.6 (vulnerable to CVE-2025-68121)
-FROM golang:1.25.7-alpine AS go-builder
+# Build KinD and Docker CLI from source with a patched Go toolchain.
+# The Alpine packages/binaries have historically lagged on Go patch releases, so
+# we compile these tools ourselves to pick up upstream fixes without local vendoring hacks.
+FROM golang:1.25.8-alpine AS go-builder
 ARG TARGETARCH
 RUN if [ "$TARGETARCH" != "amd64" ] && [ "$TARGETARCH" != "arm64" ]; then \
         echo "ERROR: Unsupported architecture: $TARGETARCH. KinD is only available for amd64 and arm64."; \
@@ -12,16 +11,11 @@ RUN apk add --no-cache git
 RUN git clone --depth 1 --branch v0.31.0 https://github.com/kubernetes-sigs/kind.git /kind && \
     cd /kind && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /kind-binary .
-# Patch CVE-2026-24051: docker/cli v29.1.3 vendors go.opentelemetry.io/otel/sdk v1.38.0
-# which has a PATH hijacking vulnerability (fixed in v1.40.0). No upstream release has
-# bumped this yet, so we patch the vendored dependency at build time.
-RUN git clone --depth 1 --branch v29.1.3 https://github.com/docker/cli.git /docker-cli && \
+RUN git clone --depth 1 --branch v29.3.0 https://github.com/docker/cli.git /docker-cli && \
     cd /docker-cli && \
     cp vendor.mod go.mod && cp vendor.sum go.sum && \
-    go get go.opentelemetry.io/otel/sdk@v1.40.0 && \
-    go mod vendor && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=vendor \
-    -ldflags '-X github.com/docker/cli/cli/version.Version=29.1.3' \
+    -ldflags '-X github.com/docker/cli/cli/version.Version=29.3.0' \
     -o /docker-binary ./cmd/docker
 
 FROM node:24-alpine3.23 AS base
@@ -31,27 +25,7 @@ ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
 
-# Patch CVE-2026-23745: tar <=7.5.2 has path traversal vulnerability
-# Patch CVE-2026-23950: tar <=7.5.3 has Improper Handling of Unicode Encoding
-# Patch CVE-2026-24842: tar <=7.5.6 has path traversal vulnerability
-# Patch CVE-2026-26960: tar <=7.5.7 has path traversal vulnerability
-# tar is bundled in pnpm's corepack distribution and needs to be patched
-# Patch ALL pnpm versions in corepack cache to ensure comprehensive fix
-RUN corepack prepare pnpm@10.29.3 --activate && \
-    TAR_SHA256="5fc7136bf937d640436d13639447d06d44cb6b464188bf7b57fb6ac3ec1be0a2" && \
-    PNPM_TAR_PATHS=$(find /root/.cache/node/corepack -path "*/pnpm/*/dist/node_modules/tar" -type d 2>/dev/null) && \
-    [ -n "$PNPM_TAR_PATHS" ] || { echo "WARNING: No tar directories found to patch"; exit 0; } && \
-    for PNPM_TAR_PATH in $PNPM_TAR_PATHS; do \
-        echo "Patching tar in $PNPM_TAR_PATH" && \
-        TMP_DIR=$(mktemp -d) && \
-        wget -qO "$TMP_DIR/tar.tgz" https://registry.npmjs.org/tar/-/tar-7.5.8.tgz && \
-        echo "$TAR_SHA256  $TMP_DIR/tar.tgz" | sha256sum -c - || { echo "ERROR: checksum mismatch"; rm -rf "$TMP_DIR"; exit 1; } && \
-        tar -tzf "$TMP_DIR/tar.tgz" >/dev/null 2>&1 || { echo "ERROR: Downloaded tarball is corrupt"; rm -rf "$TMP_DIR"; exit 1; } && \
-        rm -rf "$PNPM_TAR_PATH"/* && \
-        tar -xzf "$TMP_DIR/tar.tgz" -C "$PNPM_TAR_PATH" --strip-components=1 && \
-        rm -rf "$TMP_DIR"; \
-    done && \
-    echo "Patched tar to 7.5.8 in all pnpm corepack caches"
+RUN corepack prepare pnpm@10.33.0 --activate
 
 # Dependencies stage
 FROM base AS deps
@@ -179,16 +153,7 @@ RUN chmod +x /usr/local/bin/kind /usr/local/bin/docker
 #     echo "${KIND_SHA256}  /usr/local/bin/kind" | sha256sum -c - && \
 #     chmod +x /usr/local/bin/kind
 
-# Install supervisor from edge repository to address CVE-2023-27482
-# https://nvd.nist.gov/vuln/detail/cve-2023-27482
-RUN apk add --no-cache supervisor=4.3.0-r0 --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main && \
-    # CVE-2026-24049: Path Traversal vulnerability in wheel <= 0.46.1
-    # Supervisor brings in Python/wheel as dependencies, upgrade wheel to fix CVE
-    # Install py3-pip (required for pip command) and upgrade wheel
-    apk add --no-cache py3-pip && \
-    pip install --upgrade "wheel>=0.46.2" --break-system-packages && \
-    # Also remove vendored vulnerable wheel from setuptools (py3-setuptools bundles wheel 0.45.1)
-    rm -rf /usr/lib/python3.12/site-packages/setuptools/_vendor/wheel /usr/lib/python3.12/site-packages/setuptools/_vendor/wheel-*.dist-info
+RUN apk add --no-cache supervisor
 
 # Create postgres directories (user already exists from postgresql package)
 RUN mkdir -p /var/lib/postgresql/data /run/postgresql && \
@@ -206,31 +171,6 @@ COPY docker-banner.sh ./
 
 # Install production dependencies for both workspaces
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod --filter=@backend --filter=@frontend
-
-# Patch CVE-2026-26996, CVE-2026-27903, CVE-2026-27904: minimatch vulnerabilities in pnpm's bundled node_modules
-# Done AFTER pnpm install because minimatch 10.2.x changes its dependency from
-# brace-expansion@^2 to brace-expansion@^5, which breaks pnpm's module resolution
-RUN MINIMATCH_SHA256="89d2c40b4596326c5061d95a63a13c5b757f3e03bcad229ab496a66735925529" && \
-    BRACE_EXP_SHA256="b600ebf035952912c2a2f342a15e44764b111251c83598d970ccf3b28e427725" && \
-    PNPM_MINIMATCH_PATHS=$(find /root/.cache/node/corepack -path "*/pnpm/*/dist/node_modules/minimatch" -type d 2>/dev/null) && \
-    [ -n "$PNPM_MINIMATCH_PATHS" ] || { echo "WARNING: No minimatch directories found to patch"; exit 0; } && \
-    for PNPM_MINIMATCH_PATH in $PNPM_MINIMATCH_PATHS; do \
-        echo "Patching minimatch in $PNPM_MINIMATCH_PATH" && \
-        TMP_DIR=$(mktemp -d) && \
-        wget -qO "$TMP_DIR/minimatch.tgz" https://registry.npmjs.org/minimatch/-/minimatch-10.2.4.tgz && \
-        echo "$MINIMATCH_SHA256  $TMP_DIR/minimatch.tgz" | sha256sum -c - || { echo "ERROR: checksum mismatch"; rm -rf "$TMP_DIR"; exit 1; } && \
-        rm -rf "$PNPM_MINIMATCH_PATH"/* && \
-        tar -xzf "$TMP_DIR/minimatch.tgz" -C "$PNPM_MINIMATCH_PATH" --strip-components=1 && \
-        rm -rf "$TMP_DIR" && \
-        BRACE_EXP_PATH="$(dirname "$PNPM_MINIMATCH_PATH")/brace-expansion" && \
-        TMP_DIR=$(mktemp -d) && \
-        wget -qO "$TMP_DIR/brace-expansion.tgz" https://registry.npmjs.org/brace-expansion/-/brace-expansion-5.0.4.tgz && \
-        echo "$BRACE_EXP_SHA256  $TMP_DIR/brace-expansion.tgz" | sha256sum -c - || { echo "ERROR: checksum mismatch"; rm -rf "$TMP_DIR"; exit 1; } && \
-        rm -rf "$BRACE_EXP_PATH"/* && \
-        tar -xzf "$TMP_DIR/brace-expansion.tgz" -C "$BRACE_EXP_PATH" --strip-components=1 && \
-        rm -rf "$TMP_DIR"; \
-    done && \
-    echo "Patched minimatch to 10.2.4 in all pnpm corepack caches"
 
 # Copy built backend
 COPY --from=builder /app/backend/dist ./backend/dist

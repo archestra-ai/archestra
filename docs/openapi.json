@@ -140446,7 +140446,7 @@
                           "pkce": {
                             "type": "boolean"
                           },
-                          "disablePostLogoutRedirectUri": {
+                          "enableRpInitiatedLogout": {
                             "type": "boolean"
                           },
                           "clientId": {
@@ -141017,7 +141017,7 @@
                       "pkce": {
                         "type": "boolean"
                       },
-                      "disablePostLogoutRedirectUri": {
+                      "enableRpInitiatedLogout": {
                         "type": "boolean"
                       },
                       "clientId": {
@@ -141348,7 +141348,7 @@
                         "pkce": {
                           "type": "boolean"
                         },
-                        "disablePostLogoutRedirectUri": {
+                        "enableRpInitiatedLogout": {
                           "type": "boolean"
                         },
                         "clientId": {
@@ -142180,7 +142180,7 @@
                         "pkce": {
                           "type": "boolean"
                         },
-                        "disablePostLogoutRedirectUri": {
+                        "enableRpInitiatedLogout": {
                           "type": "boolean"
                         },
                         "clientId": {
@@ -142750,7 +142750,7 @@
                       "pkce": {
                         "type": "boolean"
                       },
-                      "disablePostLogoutRedirectUri": {
+                      "enableRpInitiatedLogout": {
                         "type": "boolean"
                       },
                       "clientId": {
@@ -143082,7 +143082,7 @@
                         "pkce": {
                           "type": "boolean"
                         },
-                        "disablePostLogoutRedirectUri": {
+                        "enableRpInitiatedLogout": {
                           "type": "boolean"
                         },
                         "clientId": {

@@ -88,7 +88,7 @@ jobs:
 
       - name: Build Docker image
         id: build
-        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
+        uses: ./.github/actions/blacksmith-build-push
         with:
           context: ./platform/mcp_server_docker_image
           file: ./platform/mcp_server_docker_image/Dockerfile

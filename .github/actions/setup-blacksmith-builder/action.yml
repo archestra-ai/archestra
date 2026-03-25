@@ -4,4 +4,4 @@ runs:
   using: composite
   steps:
     - name: Setup Blacksmith Builder
-      uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
+      uses: useblacksmith/setup-docker-builder@9966babda6c5fc0d38613b5c5212bb7ea386ecb1 # v1.4.0

@@ -212,7 +212,7 @@ jobs:
 
       - name: Build MCP server base image
         if: ${{ !matrix.use-build-action }}
-        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
+        uses: ./.github/actions/blacksmith-build-push
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
@@ -799,7 +799,7 @@ jobs:
       - name: Build image for scanning
         id: build-image
         if: ${{ github.event_name == 'merge_group' && matrix.image-source == 'build' }}
-        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
+        uses: ./.github/actions/blacksmith-build-push
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}

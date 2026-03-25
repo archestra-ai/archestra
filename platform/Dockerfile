@@ -208,16 +208,6 @@ COPY --from=builder /app/frontend/.next/static ./frontend/.next/static
 # CI will extract from this path for the NEXT deployment
 COPY --from=builder /app/frontend/.next/static /static-assets-source/
 
-# Important notes about supervisord environment variable handling:
-# - Subprocesses automatically inherit ALL environment variables from the shell that starts supervisord
-#   See: https://supervisord.org/subprocess.html#subprocess-environment
-# - You ONLY need to explicitly set environment variables in the config when:
-#   1. Using placeholder substitution (e.g., DATABASE_URL="placeholder" that gets replaced via sed)
-#   2. Mapping ENV variables to different names (e.g., ARCHESTRA_* -> NEXT_PUBLIC_*)
-#   3. Setting hardcoded values not in ENV (e.g., HOSTNAME="0.0.0.0")
-# - All ENV variables declared in the Dockerfile are automatically available to all programs
-#   See: https://supervisord.org/configuration.html#supervisord-section-values
-
 RUN chmod +x /docker-entrypoint.sh
 RUN chmod +x /app/docker-banner.sh
 

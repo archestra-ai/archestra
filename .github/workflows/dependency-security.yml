@@ -15,6 +15,21 @@ permissions:
   contents: read
 
 jobs:
+  supply-chain-policy:
+    name: Supply Chain Policy
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Enforce image pinning and download verification policy
+        run: python3 .github/scripts/check-supply-chain-policy.py
+
   dependency-review:
     name: Dependency Review
     runs-on: blacksmith-2vcpu-ubuntu-2404

@@ -68,7 +68,7 @@ jobs:
       - name: Extract previous version static assets
         run: |
           mkdir -p "${INPUT_IMAGE_DIRECTORY}/prev-static-assets"
-          PREV_IMAGE="docker.io/archestra/${INPUT_IMAGE_NAME}:latest"
+          PREV_IMAGE="docker.io/archestra/${INPUT_IMAGE_NAME}:latest" # supply-chain-policy: allow-latest internal release channel
           echo "Pulling previous image: $PREV_IMAGE"
           docker pull "$PREV_IMAGE" || { echo "Warning: Failed to pull previous image"; true; }
           CID=$(docker create "$PREV_IMAGE" 2>/dev/null) || true
@@ -157,6 +157,7 @@ jobs:
               $(printf "docker.io/archestra/${IMAGE_NAME}@sha256:%s " *)
           else
             # For non-dev versions, tag with both version and latest
+            # supply-chain-policy: allow-latest internal release channel
             docker buildx imagetools create \
               -t "docker.io/archestra/${IMAGE_NAME}:${VERSION}" \
               -t "docker.io/archestra/${IMAGE_NAME}:latest" \

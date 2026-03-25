@@ -149,6 +149,7 @@ jobs:
       - name: Create manifest list and push
         working-directory: /tmp/digests
         run: |
+          # supply-chain-policy: allow-latest internal release channel
           docker buildx imagetools create \
             -t "${IMAGE_REGISTRY}/${IMAGE_NAME}:${VERSION}" \
             -t "${IMAGE_REGISTRY}/${IMAGE_NAME}:latest" \

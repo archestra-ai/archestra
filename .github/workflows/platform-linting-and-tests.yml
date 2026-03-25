@@ -523,6 +523,7 @@ jobs:
             -p 9000:9000 \
             -p 3000:3000 \
             -e ARCHESTRA_QUICKSTART=true \
+            # supply-chain-policy: allow-latest quickstart needs a published public fallback
             -e ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:latest \
             -e ARCHESTRA_OPENAI_BASE_URL=http://archestra-wiremock:8080/v1 \
             -e ARCHESTRA_ANTHROPIC_BASE_URL=http://archestra-wiremock:8080 \
@@ -753,7 +754,12 @@ jobs:
   # Merge all Playwright reports into a single HTML report
   platform-e2e-merge-reports:
     name: Merge E2E Test Reports
-    needs: [platform-e2e-tests, platform-quickstart-e2e-tests, platform-vault-k8s-e2e-tests]
+    needs:
+      [
+        platform-e2e-tests,
+        platform-quickstart-e2e-tests,
+        platform-vault-k8s-e2e-tests,
+      ]
     if: ${{ always() && !cancelled() && inputs.should-skip-running-and-always-succeed != true }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
@@ -802,7 +808,7 @@ jobs:
 
       - name: Write test summary
         if: always()
-        uses: daun/playwright-report-summary@be9e270edd5ad86038604d3caa84a819a6ff6fed # v3.10.0
+        uses: daun/playwright-report-summary@1229105480a2a4bdd91598d8a146fbab41343fce # v3.11.0
         with:
           report-file: platform/e2e-tests/results.json
           job-summary: true
@@ -912,7 +918,16 @@ jobs:
       - name: Tests
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: |
-          helm plugin install https://github.com/helm-unittest/helm-unittest --version v1.0.3
+          HELM_UNITTEST_VERSION="1.0.3"
+          HELM_UNITTEST_ARCHIVE="helm-unittest-linux-amd64-${HELM_UNITTEST_VERSION}.tgz"
+          HELM_UNITTEST_BASE_URL="https://github.com/helm-unittest/helm-unittest/releases/download/v${HELM_UNITTEST_VERSION}"
+          curl -fsSL -o /tmp/helm-unittest-checksum.sha "${HELM_UNITTEST_BASE_URL}/helm-unittest-checksum.sha"
+          curl -fsSL -o "/tmp/${HELM_UNITTEST_ARCHIVE}" "${HELM_UNITTEST_BASE_URL}/${HELM_UNITTEST_ARCHIVE}"
+          (
+            cd /tmp
+            grep " ${HELM_UNITTEST_ARCHIVE}$" helm-unittest-checksum.sha | sha256sum -c -
+          )
+          helm plugin install "/tmp/${HELM_UNITTEST_ARCHIVE}"
           helm unittest .
 
       - name: helm package

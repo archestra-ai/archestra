@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - 'release/*'
+      - "release/*"
   workflow_dispatch:
 
 permissions:
@@ -37,7 +37,7 @@ jobs:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
 
-      - uses: googleapis/release-please-action@c2a5a2bd6a758a0937f1ddb1e8950609867ed15c # v4.3.0
+      - uses: googleapis/release-please-action@16a9c90856f42705d54a6fda1823352bdc62cf38 # v4.4.0
         id: release-please
         with:
           token: ${{ steps.generate-token.outputs.token }}

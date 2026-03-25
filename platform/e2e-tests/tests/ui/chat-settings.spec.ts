@@ -1,29 +1,17 @@
-import type { Page } from "@playwright/test";
 import { E2eTestId, getVirtualKeyRowTestId } from "@shared";
-import { expect, goToPage, test } from "../../fixtures";
-import { clickButton, expandTablePagination } from "../../utils";
+import { expect, test } from "../../fixtures";
+import { clickButton } from "../../utils";
+import {
+  createChatApiKey,
+  createVirtualKey,
+  deleteChatApiKey,
+  goToChatApiKeysPage,
+  goToVirtualKeysPage,
+} from "../../utils/chat-settings";
 
 const TEST_API_KEY = "sk-ant-test-key-12345";
 
 test.describe.configure({ mode: "serial" });
-
-/**
- * Navigate to the Provider Settings page (API Keys tab) and expand pagination.
- */
-async function goToApiKeysPage(page: Page) {
-  await goToPage(page, "/llm/providers/api-keys");
-  await expandTablePagination(page, E2eTestId.ChatApiKeysTable);
-}
-
-/**
- * Navigate to the Provider Settings page (Virtual API Keys tab).
- */
-async function goToVirtualKeysPage(page: Page) {
-  await goToPage(page, "/llm/providers/virtual-keys");
-  await expect(page.getByTestId(E2eTestId.VirtualKeysPage)).toBeVisible({
-    timeout: 15_000,
-  });
-}
 
 test.describe("Provider Settings - API Keys", () => {
   test.describe.configure({ mode: "serial" });
@@ -35,22 +23,10 @@ test.describe("Provider Settings - API Keys", () => {
     const keyName = makeRandomString(8, "Test Key");
     const updatedName = makeRandomString(8, "Updated Test Key");
 
-    await goToApiKeysPage(page);
+    await goToChatApiKeysPage(page);
 
     // Create
-    await page.getByTestId(E2eTestId.AddChatApiKeyButton).click();
-    await expect(
-      page.getByRole("heading", { name: /Add API Key/i }),
-    ).toBeVisible();
-    await page.getByLabel(/Name/i).fill(keyName);
-    await expect(
-      page.getByRole("combobox", { name: "Provider" }),
-    ).toContainText("Anthropic");
-    await page.getByRole("textbox", { name: /API Key/i }).fill(TEST_API_KEY);
-    await clickButton({ page, options: { name: "Test & Create" } });
-    await expect(
-      page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${keyName}`),
-    ).toBeVisible({ timeout: 30_000 });
+    await createChatApiKey(page, { name: keyName, apiKey: TEST_API_KEY });
 
     // Update
     await page
@@ -80,25 +56,13 @@ test.describe("Provider Settings - API Keys", () => {
     const keyName1 = makeRandomString(8, "Multi Key A");
     const keyName2 = makeRandomString(8, "Multi Key B");
 
-    await goToApiKeysPage(page);
+    await goToChatApiKeysPage(page);
 
     // Create first key
-    await page.getByTestId(E2eTestId.AddChatApiKeyButton).click();
-    await page.getByLabel(/Name/i).fill(keyName1);
-    await page.getByRole("textbox", { name: /API Key/i }).fill(TEST_API_KEY);
-    await clickButton({ page, options: { name: "Test & Create" } });
-    await expect(
-      page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${keyName1}`),
-    ).toBeVisible();
+    await createChatApiKey(page, { name: keyName1, apiKey: TEST_API_KEY });
 
     // Create second key for same provider+scope — should succeed
-    await page.getByTestId(E2eTestId.AddChatApiKeyButton).click();
-    await page.getByLabel(/Name/i).fill(keyName2);
-    await page.getByRole("textbox", { name: /API Key/i }).fill(TEST_API_KEY);
-    await clickButton({ page, options: { name: "Test & Create" } });
-    await expect(
-      page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${keyName2}`),
-    ).toBeVisible();
+    await createChatApiKey(page, { name: keyName2, apiKey: TEST_API_KEY });
 
     // Both keys visible
     await expect(
@@ -110,10 +74,7 @@ test.describe("Provider Settings - API Keys", () => {
 
     // Cleanup
     for (const name of [keyName1, keyName2]) {
-      await page
-        .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${name}`)
-        .click();
-      await clickButton({ page, options: { name: "Delete" } });
+      await deleteChatApiKey(page, name);
     }
   });
 
@@ -124,11 +85,10 @@ test.describe("Provider Settings - API Keys", () => {
     const keyName1 = makeRandomString(8, "Primary Key");
     const keyName2 = makeRandomString(8, "Secondary Key");
 
-    await goToApiKeysPage(page);
+    await goToChatApiKeysPage(page);
 
     // Create first key — isPrimary should be ON by default
     await page.getByTestId(E2eTestId.AddChatApiKeyButton).click();
-    // Select a provider that is very unlikely to have existing keys
     await page.getByRole("combobox", { name: "Provider" }).click();
     await page.getByRole("option", { name: "Zhipu AI Zhipu AI" }).click();
     await page.getByLabel(/Name/i).fill(keyName1);
@@ -164,10 +124,7 @@ test.describe("Provider Settings - API Keys", () => {
     await clickButton({ page, options: { name: "Cancel" } });
 
     // Cleanup
-    await page
-      .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${keyName1}`)
-      .click();
-    await clickButton({ page, options: { name: "Delete" } });
+    await deleteChatApiKey(page, keyName1);
   });
 });
 
@@ -184,40 +141,19 @@ test.describe("Provider Settings - Virtual API Keys", () => {
     const virtualKeyName = makeRandomString(8, "VK Test");
 
     // First create a parent API key
-    await goToApiKeysPage(page);
-    await page.getByTestId(E2eTestId.AddChatApiKeyButton).click();
-    await page.getByRole("combobox", { name: "Provider" }).click();
-    await page.getByRole("option", { name: "Zhipu AI Zhipu AI" }).click();
-    await page.getByLabel(/Name/i).fill(parentKeyName);
-    await page.getByRole("textbox", { name: /API Key/i }).fill(TEST_API_KEY);
-    await clickButton({ page, options: { name: "Test & Create" } });
-    await expect(
-      page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${parentKeyName}`),
-    ).toBeVisible({ timeout: 15_000 });
+    await goToChatApiKeysPage(page);
+    await createChatApiKey(page, {
+      name: parentKeyName,
+      apiKey: TEST_API_KEY,
+      providerOptionName: "Zhipu AI Zhipu AI",
+    });
 
     // Navigate to Virtual API Keys tab
     await goToVirtualKeysPage(page);
 
-    // Click Create Virtual Key (waits for button to be enabled, i.e. parentable keys loaded)
-    await page.getByTestId(E2eTestId.AddVirtualKeyButton).click();
-    await expect(
-      page.getByTestId(E2eTestId.VirtualKeyCreateDialog),
-    ).toBeVisible();
-
-    // Select the correct parent key from the dropdown
-    const _dialog = page.getByTestId(E2eTestId.VirtualKeyCreateDialog);
-    await page.getByTestId(E2eTestId.VirtualKeyParentKeySelect).click();
-    await page.getByRole("option", { name: new RegExp(parentKeyName) }).click();
-
-    // Fill name and create
-    await page.getByLabel(/Name/i).fill(virtualKeyName);
-    await clickButton({ page, options: { name: "Create" } });
-
-    // Should show the created key value (dialog title, not the toast)
-    await expect(
-      page.getByRole("heading", { name: "Virtual API Key Created" }),
-    ).toBeVisible({
-      timeout: 10_000,
+    await createVirtualKey(page, {
+      name: virtualKeyName,
+      parentKeyOptionName: new RegExp(parentKeyName),
     });
 
     // The token value should be visible inside the dialog (starts with archestra_)
@@ -254,11 +190,8 @@ test.describe("Provider Settings - Virtual API Keys", () => {
 
     // Cleanup: delete the parent API key
     if (parentKeyName) {
-      await goToApiKeysPage(page);
-      await page
-        .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${parentKeyName}`)
-        .click();
-      await clickButton({ page, options: { name: "Delete" } });
+      await goToChatApiKeysPage(page);
+      await deleteChatApiKey(page, parentKeyName);
     }
   });
 });
@@ -277,26 +210,11 @@ test.describe("Provider Settings - Virtual Keys for Keyless Provider", () => {
     // Navigate to Virtual API Keys tab
     await goToVirtualKeysPage(page);
 
-    // Create Virtual Key — the keyless parent should appear in the dropdown
-    await page.getByTestId(E2eTestId.AddVirtualKeyButton).click();
-    await expect(
-      page.getByTestId(E2eTestId.VirtualKeyCreateDialog),
-    ).toBeVisible();
-
-    // Select the keyless parent key
-    const _dialog = page.getByTestId(E2eTestId.VirtualKeyCreateDialog);
-    await page.getByTestId(E2eTestId.VirtualKeyParentKeySelect).click();
     _keylessParentName = "Vertex AI";
-    await page.getByRole("option", { name: /Vertex AI/i }).click();
-
-    // Fill name and create
-    await page.getByLabel(/Name/i).fill(virtualKeyName);
-    await clickButton({ page, options: { name: "Create" } });
-
-    // Should show the created key value
-    await expect(
-      page.getByRole("heading", { name: "Virtual API Key Created" }),
-    ).toBeVisible({ timeout: 10_000 });
+    await createVirtualKey(page, {
+      name: virtualKeyName,
+      parentKeyOptionName: /Vertex AI/i,
+    });
 
     await expect(
       page

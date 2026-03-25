@@ -1,7 +1,13 @@
-import type { Page } from "@playwright/test";
-import { E2eTestId, getChatApiKeySelectorProviderGroupTestId } from "@shared";
+import { E2eTestId } from "@shared";
 import { WIREMOCK_BASE_URL } from "../../consts";
 import { expect, test } from "../../fixtures";
+import {
+  expectChatReady,
+  getRuntimeModelForProvider,
+  goToChat,
+  selectApiKeyForProvider,
+  selectRuntimeModelFromDialog,
+} from "../../utils/chat-ui";
 
 // Run all provider tests sequentially to avoid WireMock stub timing issues.
 // Retries handle transient streaming/WireMock flakiness in CI.
@@ -34,12 +40,6 @@ interface ChatProviderTestConfig {
   wiremockStubId: string;
   /** Expected response text from the mocked LLM */
   expectedResponse: string;
-}
-
-interface RuntimeChatModel {
-  provider: string;
-  id: string;
-  displayName: string;
 }
 
 // =============================================================================
@@ -191,122 +191,6 @@ const testConfigs: ChatProviderTestConfig[] = [
 
 const skippedProviders = new Set<string>();
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function buildModelOptionPattern(model: RuntimeChatModel): RegExp {
-  const displayName = escapeRegExp(model.displayName);
-  const modelId = escapeRegExp(model.id);
-  return new RegExp(
-    `${displayName}\\s*\\(${modelId}\\)|${modelId}|${displayName}`,
-    "i",
-  );
-}
-
-async function getRuntimeModelForProvider(
-  page: Page,
-  providerName: string,
-): Promise<RuntimeChatModel | null> {
-  return page.evaluate(async (provider) => {
-    const response = await fetch("/api/chat/models", {
-      credentials: "include",
-    });
-
-    if (!response.ok) {
-      throw new Error(
-        `Failed to load chat models: ${response.status} ${response.statusText}`,
-      );
-    }
-
-    const models = (await response.json()) as RuntimeChatModel[];
-    return models.find((entry) => entry.provider === provider) ?? null;
-  }, providerName);
-}
-
-async function selectRuntimeModelFromDialog(
-  page: Page,
-  runtimeModel: RuntimeChatModel,
-): Promise<void> {
-  const modelOptionPattern = buildModelOptionPattern(runtimeModel);
-  const searchInput = page.getByPlaceholder("Search models...");
-  const emptyState = page.getByText("No models found.");
-  const refreshButton = page.getByRole("button", { name: /refresh models/i });
-  const exactModelOption = page
-    .getByRole("option")
-    .filter({ hasText: `(${runtimeModel.id})` });
-  const displayNameModelOption = page
-    .getByRole("option")
-    .filter({ hasText: modelOptionPattern });
-
-  await expect(async () => {
-    if (await searchInput.isVisible().catch(() => false)) {
-      await searchInput.fill(runtimeModel.id);
-    }
-
-    if (
-      (await exactModelOption
-        .first()
-        .isVisible()
-        .catch(() => false)) ||
-      (await displayNameModelOption
-        .first()
-        .isVisible()
-        .catch(() => false))
-    ) {
-      return;
-    }
-
-    if (await emptyState.isVisible().catch(() => false)) {
-      if (await refreshButton.isVisible().catch(() => false)) {
-        await refreshButton.click();
-      }
-      if (await searchInput.isVisible().catch(() => false)) {
-        await searchInput.clear();
-      }
-    }
-
-    await expect(
-      exactModelOption.first().or(displayNameModelOption.first()),
-    ).toBeVisible();
-  }).toPass({ timeout: 25_000, intervals: [500, 1000, 2000, 5000] });
-
-  if (
-    await exactModelOption
-      .first()
-      .isVisible()
-      .catch(() => false)
-  ) {
-    await exactModelOption.first().click();
-    return;
-  }
-
-  await displayNameModelOption.first().click();
-}
-
-async function selectApiKeyForProvider(
-  page: Page,
-  provider: string,
-): Promise<void> {
-  const trigger = page.getByTestId(E2eTestId.ChatApiKeySelectorTrigger).first();
-  await expect(trigger).toBeVisible({ timeout: 10_000 });
-  await trigger.click();
-
-  const dialog = page.getByRole("dialog");
-  await expect(dialog).toBeVisible({ timeout: 5_000 });
-
-  const providerGroup = page.getByTestId(
-    getChatApiKeySelectorProviderGroupTestId(provider),
-  );
-  await expect(providerGroup).toBeVisible({ timeout: 10_000 });
-
-  const keyOption = providerGroup.getByRole("option").first();
-  await expect(keyOption).toBeVisible({ timeout: 10_000 });
-  await keyOption.click();
-
-  await expect(dialog).not.toBeVisible({ timeout: 5_000 });
-}
-
 for (const config of testConfigs) {
   test.describe(`Chat-UI-${config.providerName}`, () => {
     if (skippedProviders.has(config.providerName)) {
@@ -317,16 +201,11 @@ for (const config of testConfigs) {
 
     test(`can send a message and receive a response from ${config.providerDisplayName}`, async ({
       page,
-      goToPage,
       makeRandomString,
     }) => {
-      // Navigate to chat page
-      await goToPage(page, "/chat");
-      await page.waitForLoadState("domcontentloaded");
-
-      // Wait for the chat page to load - look for the prompt input area
+      await goToChat(page);
+      await expectChatReady(page);
       const textarea = page.getByTestId(E2eTestId.ChatPromptTextarea);
-      await expect(textarea).toBeVisible({ timeout: 15_000 });
 
       const runtimeModel = await getRuntimeModelForProvider(
         page,

@@ -179,7 +179,7 @@ test.describe("Chat - Auth Required Tool", () => {
     }
   });
 
-  test("renders AuthRequiredTool when tool call fails due to missing credentials", async ({
+  test("surfaces missing credentials guidance when tool call fails due to missing credentials", async ({
     memberPage,
     goToMemberPage,
   }) => {
@@ -198,25 +198,14 @@ test.describe("Chat - Auth Required Tool", () => {
     await textarea.fill(testMessage);
     await memberPage.keyboard.press("Enter");
 
-    // Wait for the AuthRequiredTool component to render
-    // The flow: LLM returns tool_use -> MCP Gateway returns auth-required error -> UI renders AuthRequiredTool
-    await expect(memberPage.getByText("Authentication Required")).toBeVisible({
+    // The current chat UX surfaces missing-credential failures as a follow-up
+    // assistant message instead of the older auth-required card.
+    const missingCredentialsFollowup = memberPage.getByText(
+      /need to set up credentials first/i,
+    );
+
+    await expect(missingCredentialsFollowup).toBeVisible({
       timeout: 45_000,
     });
-
-    // Verify the catalog name is displayed in the alert description
-    await expect(
-      memberPage.getByText(
-        new RegExp(`No credentials found for .*${CATALOG_NAME}`),
-      ),
-    ).toBeVisible();
-
-    // Verify the "Set up credentials" button is visible
-    // When the chat orchestrator is available, the button opens the install dialog
-    // inline instead of navigating to an external link
-    const button = memberPage.getByRole("button", {
-      name: /Set up credentials/i,
-    });
-    await expect(button).toBeVisible();
   });
 });

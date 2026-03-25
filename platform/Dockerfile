@@ -1,7 +1,10 @@
 # Build KinD and Docker CLI from source with a patched Go toolchain.
 # The Alpine packages/binaries have historically lagged on Go patch releases, so
 # we compile these tools ourselves to pick up upstream fixes without local vendoring hacks.
-FROM golang:1.25.8-alpine AS go-builder
+ARG GOLANG_IMAGE=golang:1.25.8-alpine@sha256:8e02eb337d9e0ea459e041f1ee5eece41cbb61f1d83e7d883a3e2fb4862063fa
+ARG NODE_IMAGE=node:24-alpine3.23@sha256:7fddd9ddeae8196abf4a3ef2de34e11f7b1a722119f91f28ddf1e99dcafdf114
+
+FROM ${GOLANG_IMAGE} AS go-builder
 ARG TARGETARCH
 RUN if [ "$TARGETARCH" != "amd64" ] && [ "$TARGETARCH" != "arm64" ]; then \
         echo "ERROR: Unsupported architecture: $TARGETARCH. KinD is only available for amd64 and arm64."; \
@@ -18,7 +21,7 @@ RUN git clone --depth 1 --branch v29.3.0 https://github.com/docker/cli.git /dock
     -ldflags '-X github.com/docker/cli/cli/version.Version=29.3.0' \
     -o /docker-binary ./cmd/docker
 
-FROM node:24-alpine3.23 AS base
+FROM ${NODE_IMAGE} AS base
 
 # Enable pnpm
 ENV PNPM_HOME="/pnpm"

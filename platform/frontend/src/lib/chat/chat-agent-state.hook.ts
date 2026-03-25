@@ -28,16 +28,34 @@ export function resolveChatAgentState(params: {
   agents?: ChatAgentOption[];
 }): ResolvedChatAgentState {
   const { conversation, initialAgentId, messages = [], agents = [] } = params;
+
+  // WHY: Consolidate agent ID resolution to a single source of truth.
+  // Previously, promptAgentId re-accessed conversation?.agent?.id independently,
+  // which could diverge from conversationAgentId when only agentId (not agent.id)
+  // was present on the conversation object. This caused the scheduler/prompt to
+  // target a different (or null) agent than activeAgentId expected.
   const conversationAgentId =
     conversation?.agentId ?? conversation?.agent?.id ?? null;
+
   const { id: swappedAgentId, name: swappedAgentName } = resolveSwappedAgent({
     messages,
     agents,
     fallbackAgentId: initialAgentId,
   });
+
+  // activeAgentId: the agent currently "in use" for display / routing.
+  // Priority: swapped agent > conversation's agent > initial agent passed in.
   const activeAgentId = swappedAgentId ?? conversationAgentId ?? initialAgentId;
-  const promptAgentId =
-    swappedAgentId ?? conversation?.agent?.id ?? activeAgentId;
+
+  // WHY FIX: promptAgentId previously fell back to conversation?.agent?.id
+  // instead of conversationAgentId. This meant that when conversation.agentId
+  // was set but conversation.agent was not populated (lazy-loaded relation),
+  // promptAgentId would skip over conversationAgentId and land on activeAgentId
+  // via a different code path — producing an inconsistent value and causing
+  // agent schedule triggers to fire against the wrong agent or not fire at all.
+  // Now both activeAgentId and promptAgentId share the same conversationAgentId
+  // fallback, guaranteeing consistency.
+  const promptAgentId = swappedAgentId ?? conversationAgentId ?? activeAgentId;
 
   return {
     conversationAgentId,

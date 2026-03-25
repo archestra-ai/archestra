@@ -45,12 +45,7 @@ const APP_NAME = DEFAULT_APP_NAME;
 const {
   api: { apiKeyAuthorizationHeaderName },
   frontendBaseUrl,
-  auth: {
-    secret,
-    cookieDomain,
-    trustedOrigins,
-    additionalTrustedSsoProviderIds,
-  },
+  auth: { secret, cookieDomain, trustedOrigins },
 } = config;
 
 const ac = createAccessControl(allAvailableActions);
@@ -58,6 +53,37 @@ const ac = createAccessControl(allAvailableActions);
 const adminRole = ac.newRole(allAvailableActions);
 const editorRole = ac.newRole(editorPermissions);
 const memberRole = ac.newRole(memberPermissions);
+
+export async function getTrustedAccountLinkingProviderIds(): Promise<string[]> {
+  let configuredProviderIds: Array<{ providerId: string }> = [];
+
+  try {
+    configuredProviderIds = await db
+      .selectDistinct({
+        providerId: schema.identityProvidersTable.providerId,
+      })
+      .from(schema.identityProvidersTable);
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message.includes("Database not initialized")
+    ) {
+      return [...SSO_TRUSTED_PROVIDER_IDS];
+    }
+
+    throw error;
+  }
+
+  return [
+    ...new Set([
+      ...SSO_TRUSTED_PROVIDER_IDS,
+      ...configuredProviderIds
+        .map(({ providerId }) => providerId)
+        .filter((providerId) => providerId.length > 0)
+        .sort((a, b) => a.localeCompare(b)),
+    ]),
+  ];
+}
 
 export const auth = betterAuth({
   appName: APP_NAME,
@@ -241,16 +267,11 @@ export const auth = betterAuth({
     accountLinking: {
       enabled: true,
       /**
-       * Trust SSO providers for automatic account linking
-       * This allows existing users to sign in with SSO without manual linking
-       *
-       * Combines default trusted providers from @shared with additional ones
-       * configured via ARCHESTRA_AUTH_TRUSTED_SSO_PROVIDER_IDS env var
+       * Trust built-in SSO providers plus any identity providers configured by users.
+       * This allows existing users to sign in with built-in providers and custom
+       * generic OIDC/SAML providers without an env var override.
        */
-      trustedProviders: [
-        ...SSO_TRUSTED_PROVIDER_IDS,
-        ...additionalTrustedSsoProviderIds,
-      ],
+      trustedProviders: getTrustedAccountLinkingProviderIds,
       /**
        * Don't allow linking accounts with different emails. From the better-auth typescript
        * annotations they mention for this attribute:

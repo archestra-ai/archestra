@@ -3,22 +3,32 @@
 # we compile these tools ourselves to pick up upstream fixes without local vendoring hacks.
 ARG GOLANG_IMAGE=golang:1.25.8-alpine@sha256:8e02eb337d9e0ea459e041f1ee5eece41cbb61f1d83e7d883a3e2fb4862063fa
 ARG NODE_IMAGE=node:24-alpine3.23@sha256:7fddd9ddeae8196abf4a3ef2de34e11f7b1a722119f91f28ddf1e99dcafdf114
+ARG KIND_VERSION=v0.31.0
+ARG KIND_COMMIT=a323333ff9efd8099f95a8a6b5c86c75a210d00f
+ARG DOCKER_CLI_VERSION=v29.3.0
+ARG DOCKER_CLI_COMMIT=5927d80c76b3ce5cf782be818922966e8a0d87a3
 
 FROM ${GOLANG_IMAGE} AS go-builder
 ARG TARGETARCH
+ARG KIND_VERSION
+ARG KIND_COMMIT
+ARG DOCKER_CLI_VERSION
+ARG DOCKER_CLI_COMMIT
 RUN if [ "$TARGETARCH" != "amd64" ] && [ "$TARGETARCH" != "arm64" ]; then \
         echo "ERROR: Unsupported architecture: $TARGETARCH. KinD is only available for amd64 and arm64."; \
         exit 1; \
     fi
 RUN apk add --no-cache git
-RUN git clone --depth 1 --branch v0.31.0 https://github.com/kubernetes-sigs/kind.git /kind && \
+RUN git clone --depth 1 --branch "${KIND_VERSION}" https://github.com/kubernetes-sigs/kind.git /kind && \
+    test "$(git -C /kind rev-parse HEAD)" = "${KIND_COMMIT}" && \
     cd /kind && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /kind-binary .
-RUN git clone --depth 1 --branch v29.3.0 https://github.com/docker/cli.git /docker-cli && \
+RUN git clone --depth 1 --branch "${DOCKER_CLI_VERSION}" https://github.com/docker/cli.git /docker-cli && \
+    test "$(git -C /docker-cli rev-parse HEAD)" = "${DOCKER_CLI_COMMIT}" && \
     cd /docker-cli && \
     cp vendor.mod go.mod && cp vendor.sum go.sum && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=vendor \
-    -ldflags '-X github.com/docker/cli/cli/version.Version=29.3.0' \
+    -ldflags "-X github.com/docker/cli/cli/version.Version=${DOCKER_CLI_VERSION#v}" \
     -o /docker-binary ./cmd/docker
 
 FROM ${NODE_IMAGE} AS base

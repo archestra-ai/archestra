@@ -42,4 +42,3 @@ printf "   ${BLUE}Slack Community:${NC} https://archestra.ai/join-slack\n"
 printf "   ${BLUE}Give us a star on GitHub:${NC} https://github.com/archestra-ai/archestra\n"
 echo ""
 echo ""
-

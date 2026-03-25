@@ -935,6 +935,11 @@ export const requiredEndpointPermissionsMap: Partial<
 
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},
+
+  // MCP Gateway Routes - available to all authenticated users
+  [RouteId.McpGatewayGet]: {}, // Server discovery endpoint
+  [RouteId.McpGatewayPost]: {}, // JSON-RPC endpoint for resources/read and tools/call
+  [RouteId.McpProxyPost]: {}, // Frontend proxy to MCP Gateway with session auth
 };
 
 /**

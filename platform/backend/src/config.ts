@@ -208,28 +208,6 @@ export const getTrustedOrigins = (): string[] => {
 };
 
 /**
- * Parse additional trusted SSO provider IDs from environment variable.
- * These will be appended to the default SSO_TRUSTED_PROVIDER_IDS from @shared.
- *
- * Format: Comma-separated list of provider IDs (e.g., "okta,auth0,custom-provider")
- * Whitespace around each provider ID is trimmed.
- *
- * @returns Array of additional trusted SSO provider IDs
- */
-export const getAdditionalTrustedSsoProviderIds = (): string[] => {
-  const envValue = process.env.ARCHESTRA_AUTH_TRUSTED_SSO_PROVIDER_IDS?.trim();
-
-  if (!envValue) {
-    return [];
-  }
-
-  return envValue
-    .split(",")
-    .map((id) => id.trim())
-    .filter((id) => id.length > 0);
-};
-
-/**
  * Parse incoming email provider from environment variable
  */
 const parseIncomingEmailProvider = (): EmailProviderType | undefined => {
@@ -531,7 +509,6 @@ const config = {
     disableBasicAuth: process.env.ARCHESTRA_AUTH_DISABLE_BASIC_AUTH === "true",
     disableInvitations:
       process.env.ARCHESTRA_AUTH_DISABLE_INVITATIONS === "true",
-    additionalTrustedSsoProviderIds: getAdditionalTrustedSsoProviderIds(),
   },
   database: {
     url: getDatabaseUrl(),
@@ -731,6 +708,25 @@ const config = {
   },
   vault: {
     token: process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN || DEFAULT_VAULT_TOKEN,
+  },
+  mcpSandbox: {
+    /**
+     * Optional wildcard domain for per-server sandbox origins.
+     * When set (e.g. "mcp.example.com"), each MCP server gets a hash-based
+     * subdomain (e.g. "a1b2c3d4e5f6.mcp.example.com") with a real origin,
+     * enabling localStorage, CORS, and OAuth for MCP Apps.
+     * Requires wildcard DNS + TLS for *.{domain}.
+     * When null (default), sandbox uses opaque origin (single-port, zero config).
+     */
+    domain: process.env.ARCHESTRA_MCP_SANDBOX_DOMAIN || null,
+    /** Path to the sandbox proxy HTML file (co-located in backend static dir). */
+    filePath: path.resolve(__dirname, "static/mcp-sandbox-proxy.html"),
+    /**
+     * Explicitly configured origins that are allowed to embed the sandbox iframe.
+     * Empty array means no restriction (open / dev deployment).
+     * Mirrors the CORS/trusted-origin configuration so all three stay in sync.
+     */
+    allowedOrigins: addLoopbackEquivalents(getConfiguredOrigins()),
   },
   observability: {
     otel: {

@@ -1747,5 +1747,117 @@ describe("McpClient", () => {
         });
       });
     });
+
+    describe("Tool name suffix fallback", () => {
+      test("resolves unprefixed tool name by suffix when no exact match", async () => {
+        // Create a tool with the full prefixed name
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__refresh-stats",
+          description: "Refresh stats",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
+        });
+
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "refreshed" }],
+          isError: false,
+        });
+
+        // Call with unprefixed name (no "__") — triggers suffix fallback
+        const toolCall = {
+          id: "call_suffix_1",
+          name: "refresh-stats",
+          arguments: {},
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
+
+        expect(result.isError).toBe(false);
+        // The tool name should be rewritten to the full prefixed name
+        expect(result.name).toBe("github-mcp-server__refresh-stats");
+      });
+
+      test("does not use suffix fallback when name contains separator", async () => {
+        // Tool call with "__" in the name should NOT trigger suffix fallback
+        const toolCall = {
+          id: "call_suffix_2",
+          name: "wrong-server__nonexistent-tool",
+          arguments: {},
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
+
+        expect(result.isError).toBe(true);
+        expect(result.error).toContain("Tool not found");
+      });
+    });
+
+    describe("_meta and structuredContent passthrough", () => {
+      test("passes _meta from callTool result into CommonToolResult", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__meta_tool",
+          description: "Tool with meta",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
+        });
+
+        const toolMeta = { ui: { resourceUri: "mcp://widget/stats" } };
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "result" }],
+          isError: false,
+          _meta: toolMeta,
+        });
+
+        const toolCall = {
+          id: "call_meta_1",
+          name: "github-mcp-server__meta_tool",
+          arguments: {},
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
+
+        expect(result.isError).toBe(false);
+        expect(result._meta).toEqual(toolMeta);
+      });
+
+      test("passes structuredContent from callTool result into CommonToolResult", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__structured_tool",
+          description: "Tool with structured content",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
+        });
+
+        const structured = { dashboard: { widgets: ["chart", "table"] } };
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "ok" }],
+          isError: false,
+          structuredContent: structured,
+        });
+
+        const toolCall = {
+          id: "call_structured_1",
+          name: "github-mcp-server__structured_tool",
+          arguments: {},
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
+
+        expect(result.isError).toBe(false);
+        expect(result.structuredContent).toEqual(structured);
+      });
+    });
   });
 });

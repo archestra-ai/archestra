@@ -1736,4 +1736,143 @@ describe("ToolInvocationPolicyModel", () => {
       expect(result).toBe(true);
     });
   });
+
+  describe("hasBlockingPolicy", () => {
+    test("returns false for tool with allow_when_context_is_untrusted policy (trusted)", async ({
+      makeTool,
+      makeToolPolicy,
+    }) => {
+      const tool = await makeTool({ name: "always-allowed-tool" });
+      await makeToolPolicy(tool.id, {
+        conditions: [],
+        action: "allow_when_context_is_untrusted",
+      });
+
+      const result = await ToolInvocationPolicyModel.hasBlockingPolicy(
+        "always-allowed-tool",
+        true,
+      );
+      expect(result).toBe(false);
+    });
+
+    test("returns false for tool with allow_when_context_is_untrusted policy (untrusted)", async ({
+      makeTool,
+      makeToolPolicy,
+    }) => {
+      const tool = await makeTool({ name: "always-allowed-untrusted" });
+      await makeToolPolicy(tool.id, {
+        conditions: [],
+        action: "allow_when_context_is_untrusted",
+      });
+
+      const result = await ToolInvocationPolicyModel.hasBlockingPolicy(
+        "always-allowed-untrusted",
+        false,
+      );
+      expect(result).toBe(false);
+    });
+
+    test("returns true for tool with block_always policy", async ({
+      makeTool,
+      makeToolPolicy,
+    }) => {
+      const tool = await makeTool({ name: "blocked-tool" });
+      await makeToolPolicy(tool.id, {
+        conditions: [],
+        action: "block_always",
+      });
+
+      const result = await ToolInvocationPolicyModel.hasBlockingPolicy(
+        "blocked-tool",
+        true,
+      );
+      expect(result).toBe(true);
+    });
+
+    test("returns true for tool with require_approval policy", async ({
+      makeTool,
+      makeToolPolicy,
+    }) => {
+      const tool = await makeTool({ name: "approval-tool" });
+      await makeToolPolicy(tool.id, {
+        conditions: [],
+        action: "require_approval",
+      });
+
+      const result = await ToolInvocationPolicyModel.hasBlockingPolicy(
+        "approval-tool",
+        true,
+      );
+      expect(result).toBe(true);
+    });
+
+    test("returns true for tool with block_when_context_is_untrusted when untrusted", async ({
+      makeTool,
+      makeToolPolicy,
+    }) => {
+      const tool = await makeTool({ name: "untrusted-block-tool" });
+      await makeToolPolicy(tool.id, {
+        conditions: [],
+        action: "block_when_context_is_untrusted",
+      });
+
+      const result = await ToolInvocationPolicyModel.hasBlockingPolicy(
+        "untrusted-block-tool",
+        false,
+      );
+      expect(result).toBe(true);
+    });
+
+    test("returns false for tool with block_when_context_is_untrusted when trusted", async ({
+      makeTool,
+      makeToolPolicy,
+    }) => {
+      const tool = await makeTool({ name: "trusted-context-tool" });
+      await makeToolPolicy(tool.id, {
+        conditions: [],
+        action: "block_when_context_is_untrusted",
+      });
+
+      const result = await ToolInvocationPolicyModel.hasBlockingPolicy(
+        "trusted-context-tool",
+        true,
+      );
+      expect(result).toBe(false);
+    });
+
+    test("returns true for tool with custom conditions (any action)", async ({
+      makeTool,
+      makeToolPolicy,
+    }) => {
+      const tool = await makeTool({ name: "conditional-tool" });
+      await makeToolPolicy(tool.id, {
+        conditions: [{ key: "path", operator: "startsWith", value: "/etc/" }],
+        action: "allow_when_context_is_untrusted",
+      });
+
+      const result = await ToolInvocationPolicyModel.hasBlockingPolicy(
+        "conditional-tool",
+        true,
+      );
+      expect(result).toBe(true);
+    });
+
+    test("returns false for tool with no policies", async ({ makeTool }) => {
+      await makeTool({ name: "no-policy-tool" });
+
+      const result = await ToolInvocationPolicyModel.hasBlockingPolicy(
+        "no-policy-tool",
+        true,
+      );
+      expect(result).toBe(false);
+    });
+
+    test("returns false for non-existent tool", async () => {
+      const result = await ToolInvocationPolicyModel.hasBlockingPolicy(
+        "non-existent-tool",
+        true,
+      );
+      expect(result).toBe(false);
+    });
+  });
 });

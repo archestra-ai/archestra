@@ -6,11 +6,13 @@ import {
   TOOL_WHOAMI_SHORT_NAME,
 } from "@shared";
 import { jsonSchema, type Tool } from "ai";
-import { vi } from "vitest";
+import { beforeEach, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { TeamTokenModel } from "@/models";
+import ToolModel from "@/models/tool";
 import { describe, expect, test } from "@/test";
 import * as chatClient from "./chat-mcp-client";
+import { mcpToolToModelOutput } from "./chat-mcp-client";
 import mcpClient from "./mcp-client";
 
 const mockConnect = vi.fn().mockRejectedValue(new Error("Connection closed"));
@@ -383,7 +385,7 @@ describe("executeMcpTool error handling", () => {
     );
 
     const result = await chatClient.__test.executeMcpTool(baseCtx);
-    expect(result).toBe("Auth required: install the server");
+    expect(result.content).toBe("Auth required: install the server");
   });
 
   test("joins multiple text content items with newline", async () => {
@@ -397,7 +399,7 @@ describe("executeMcpTool error handling", () => {
     );
 
     const result = await chatClient.__test.executeMcpTool(baseCtx);
-    expect(result).toBe("Error line 1\nError line 2");
+    expect(result.content).toBe("Error line 1\nError line 2");
   });
 
   test("falls back to JSON.stringify for non-text content items", async () => {
@@ -408,7 +410,9 @@ describe("executeMcpTool error handling", () => {
     );
 
     const result = await chatClient.__test.executeMcpTool(baseCtx);
-    expect(result).toBe(JSON.stringify({ type: "image", data: "base64..." }));
+    expect(result.content).toBe(
+      JSON.stringify({ type: "image", data: "base64..." }),
+    );
   });
 
   test("returns error string when content is not an array", async () => {
@@ -417,7 +421,7 @@ describe("executeMcpTool error handling", () => {
     );
 
     const result = await chatClient.__test.executeMcpTool(baseCtx);
-    expect(result).toBe("Something failed");
+    expect(result.content).toBe("Something failed");
   });
 
   test("returns fallback message when no content and no error", async () => {
@@ -426,7 +430,7 @@ describe("executeMcpTool error handling", () => {
     );
 
     const result = await chatClient.__test.executeMcpTool(baseCtx);
-    expect(result).toBe("Tool execution failed");
+    expect(result.content).toBe("Tool execution failed");
   });
 });
 
@@ -592,5 +596,424 @@ describe("filterToolsByEnabledIds", () => {
 
     expect(Object.keys(result)).toContain("github__list_repos");
     expect(Object.keys(result)).not.toContain("slack__send_message");
+  });
+});
+
+describe("clearChatMcpClient", () => {
+  test("closes and removes all cached clients for an agent", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ teams: [team.id] });
+    await makeTeamMember(team.id, user.id);
+
+    const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
+
+    const mockClient = {
+      ping: vi.fn().mockResolvedValue({}),
+      listTools: vi.fn(),
+      close: vi.fn(),
+    };
+
+    chatClient.__test.setCachedClient(
+      cacheKey,
+      mockClient as unknown as Client,
+    );
+
+    chatClient.clearChatMcpClient(agent.id);
+
+    expect(mockClient.close).toHaveBeenCalledTimes(1);
+  });
+
+  test("does not affect clients cached for other agents", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent1 = await makeAgent({ teams: [team.id] });
+    const agent2 = await makeAgent({ teams: [team.id] });
+    await makeTeamMember(team.id, user.id);
+
+    const cacheKey1 = chatClient.__test.getCacheKey(agent1.id, user.id);
+    const cacheKey2 = chatClient.__test.getCacheKey(agent2.id, user.id);
+
+    const mockClient1 = { ping: vi.fn(), listTools: vi.fn(), close: vi.fn() };
+    const mockClient2 = { ping: vi.fn(), listTools: vi.fn(), close: vi.fn() };
+
+    chatClient.__test.setCachedClient(
+      cacheKey1,
+      mockClient1 as unknown as Client,
+    );
+    chatClient.__test.setCachedClient(
+      cacheKey2,
+      mockClient2 as unknown as Client,
+    );
+
+    // Clear only agent1
+    chatClient.clearChatMcpClient(agent1.id);
+
+    expect(mockClient1.close).toHaveBeenCalledTimes(1);
+    // agent2's client should not have been closed
+    expect(mockClient2.close).not.toHaveBeenCalled();
+
+    // Cleanup
+    chatClient.clearChatMcpClient(agent2.id);
+  });
+});
+
+describe("closeChatMcpClient", () => {
+  test("closes the client for a specific conversation and clears its tool cache", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ teams: [team.id] });
+    await makeTeamMember(team.id, user.id);
+    const conversationId = crypto.randomUUID();
+
+    const cacheKey = chatClient.__test.getCacheKey(
+      agent.id,
+      user.id,
+      conversationId,
+    );
+    const mockClient = { ping: vi.fn(), listTools: vi.fn(), close: vi.fn() };
+    chatClient.__test.setCachedClient(
+      cacheKey,
+      mockClient as unknown as Client,
+    );
+
+    chatClient.closeChatMcpClient(agent.id, user.id, conversationId);
+
+    expect(mockClient.close).toHaveBeenCalledTimes(1);
+  });
+
+  test("does not close clients for other conversations", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ teams: [team.id] });
+    await makeTeamMember(team.id, user.id);
+    const conv1 = crypto.randomUUID();
+    const conv2 = crypto.randomUUID();
+
+    const cacheKey1 = chatClient.__test.getCacheKey(agent.id, user.id, conv1);
+    const cacheKey2 = chatClient.__test.getCacheKey(agent.id, user.id, conv2);
+
+    const mockClient1 = { ping: vi.fn(), listTools: vi.fn(), close: vi.fn() };
+    const mockClient2 = { ping: vi.fn(), listTools: vi.fn(), close: vi.fn() };
+
+    chatClient.__test.setCachedClient(
+      cacheKey1,
+      mockClient1 as unknown as Client,
+    );
+    chatClient.__test.setCachedClient(
+      cacheKey2,
+      mockClient2 as unknown as Client,
+    );
+
+    chatClient.closeChatMcpClient(agent.id, user.id, conv1);
+
+    expect(mockClient1.close).toHaveBeenCalledTimes(1);
+    expect(mockClient2.close).not.toHaveBeenCalled();
+
+    // Cleanup
+    chatClient.clearChatMcpClient(agent.id);
+  });
+});
+
+describe("getChatMcpToolUiResourceUris", () => {
+  test("returns empty record when agent has no tools", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const result = await chatClient.getChatMcpToolUiResourceUris(agent.id);
+    expect(result).toEqual({});
+  });
+
+  test("returns only tools that have a UI resource URI in meta", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+
+    const mockTools = [
+      {
+        id: "tool-1",
+        name: "server__get-stats",
+        description: "Get stats",
+        parameters: {},
+        meta: { _meta: { ui: { resourceUri: "resource://server/stats-ui" } } },
+      },
+      {
+        id: "tool-2",
+        name: "server__get-info",
+        description: "Get info",
+        parameters: {},
+        meta: null, // no UI
+      },
+      {
+        id: "tool-3",
+        name: "server__show-chart",
+        description: "Show chart",
+        parameters: {},
+        meta: { _meta: { ui: { resourceUri: "resource://server/chart-ui" } } },
+      },
+    ];
+
+    const spy = vi
+      .spyOn(ToolModel, "getMcpToolsByAgent")
+      // biome-ignore lint/suspicious/noExplicitAny: test mock data
+      .mockResolvedValueOnce(mockTools as any);
+
+    const result = await chatClient.getChatMcpToolUiResourceUris(agent.id);
+
+    expect(result).toEqual({
+      "server__get-stats": "resource://server/stats-ui",
+      "server__show-chart": "resource://server/chart-ui",
+    });
+    expect(result).not.toHaveProperty("server__get-info");
+
+    spy.mockRestore();
+  });
+
+  test("returns empty record when no tools have a UI resource URI", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+
+    const mockTools = [
+      {
+        id: "tool-1",
+        name: "server__query",
+        description: "Query",
+        parameters: {},
+        meta: { annotations: { audience: ["assistant"] } }, // no _meta.ui
+      },
+    ];
+
+    const spy = vi
+      .spyOn(ToolModel, "getMcpToolsByAgent")
+      // biome-ignore lint/suspicious/noExplicitAny: test mock data
+      .mockResolvedValueOnce(mockTools as any);
+
+    const result = await chatClient.getChatMcpToolUiResourceUris(agent.id);
+
+    expect(result).toEqual({});
+
+    spy.mockRestore();
+  });
+});
+
+describe("fetchToolUiResource", () => {
+  beforeEach(() => {
+    chatClient.clearUiResourceCache();
+  });
+
+  // Use real UUIDs — the client is injected directly into the cache, so no DB
+  // access is needed and these IDs are never written to the database.
+  const AGENT_ID = "00000000-0000-0000-0000-000000000001";
+  const USER_ID = "00000000-0000-0000-0000-000000000002";
+  const ORG_ID = "00000000-0000-0000-0000-000000000003";
+  const TOOL_NAME = "server__my-tool";
+  const URI = "resource://server/my-tool-ui";
+
+  function buildMockClient(readResourceImpl: () => unknown) {
+    return {
+      connect: vi.fn(),
+      close: vi.fn(),
+      // ping must resolve (not throw) so getChatMcpClient returns the cached client
+      ping: vi.fn().mockResolvedValue(undefined),
+      listTools: vi.fn(),
+      callTool: vi.fn(),
+      readResource: vi.fn().mockImplementation(readResourceImpl),
+    };
+  }
+
+  function injectClient(client: ReturnType<typeof buildMockClient>) {
+    const cacheKey = chatClient.__test.getCacheKey(AGENT_ID, USER_ID);
+    // biome-ignore lint/suspicious/noExplicitAny: test helper injects mock
+    chatClient.__test.setCachedClient(cacheKey, client as any);
+  }
+
+  test("returns parsed ToolUiResourceData for text content", async () => {
+    const mockClient = buildMockClient(() => ({
+      contents: [
+        {
+          text: "<html>hello</html>",
+          _meta: {
+            ui: {
+              csp: { connectDomains: ["https://api.example.com"] },
+              permissions: { camera: true },
+            },
+          },
+        },
+      ],
+    }));
+    injectClient(mockClient);
+
+    const result = await chatClient.fetchToolUiResource({
+      agentId: AGENT_ID,
+      userId: USER_ID,
+      organizationId: ORG_ID,
+      userIsAgentAdmin: false,
+      toolName: TOOL_NAME,
+      uri: URI,
+    });
+
+    expect(result).toEqual({
+      html: "<html>hello</html>",
+      csp: { connectDomains: ["https://api.example.com"] },
+      permissions: { camera: true },
+    });
+    expect(mockClient.readResource).toHaveBeenCalledWith({ uri: URI });
+  });
+
+  test("returns parsed ToolUiResourceData for base64 blob content", async () => {
+    const html = "<html>blob</html>";
+    const mockClient = buildMockClient(() => ({
+      contents: [{ blob: Buffer.from(html).toString("base64") }],
+    }));
+    injectClient(mockClient);
+
+    const result = await chatClient.fetchToolUiResource({
+      agentId: AGENT_ID,
+      userId: USER_ID,
+      organizationId: ORG_ID,
+      userIsAgentAdmin: false,
+      toolName: TOOL_NAME,
+      uri: URI,
+    });
+
+    expect(result?.html).toBe(html);
+  });
+
+  test("returns null when readResource throws", async () => {
+    const mockClient = buildMockClient(() => {
+      throw new Error("MCP server unreachable");
+    });
+    injectClient(mockClient);
+
+    const result = await chatClient.fetchToolUiResource({
+      agentId: AGENT_ID,
+      userId: USER_ID,
+      organizationId: ORG_ID,
+      userIsAgentAdmin: false,
+      toolName: TOOL_NAME,
+      uri: URI,
+    });
+
+    expect(result).toBeNull();
+  });
+
+  test("returns null when contents are empty", async () => {
+    const mockClient = buildMockClient(() => ({ contents: [] }));
+    injectClient(mockClient);
+
+    const result = await chatClient.fetchToolUiResource({
+      agentId: AGENT_ID,
+      userId: USER_ID,
+      organizationId: ORG_ID,
+      userIsAgentAdmin: false,
+      toolName: TOOL_NAME,
+      uri: URI,
+    });
+
+    expect(result).toBeNull();
+  });
+});
+
+describe("mcpToolToModelOutput", () => {
+  test("returns plain string output when input is a string", () => {
+    const result = mcpToolToModelOutput({ output: "Hello World" });
+
+    expect(result).toEqual({ type: "text", value: "Hello World" });
+  });
+
+  test("extracts content string from rich MCP tool output", () => {
+    const result = mcpToolToModelOutput({
+      output: {
+        content: "Tool executed successfully",
+        _meta: { ui: { resourceUri: "resource://server/ui" } },
+        structuredContent: { data: [1, 2, 3] },
+        rawContent: [{ type: "text", text: "Tool executed successfully" }],
+      },
+    });
+
+    expect(result).toEqual({
+      type: "text",
+      value: "Tool executed successfully",
+    });
+  });
+
+  test("strips _meta, structuredContent, and rawContent from output", () => {
+    const richOutput = {
+      content: "OK",
+      _meta: { ui: { resourceUri: "resource://server/stats-ui" } },
+      structuredContent: { stats: { cpu: 80, memory: 60 } },
+      rawContent: [
+        { type: "text", text: "OK" },
+        {
+          type: "resource",
+          resource: {
+            uri: "resource://inline",
+            mimeType: "text/html",
+            text: "<div>chart</div>",
+          },
+        },
+      ],
+    };
+
+    const result = mcpToolToModelOutput({ output: richOutput });
+
+    // Only the plain text content should come through
+    expect(result.type).toBe("text");
+    expect(result.value).toBe("OK");
+    // Verify the result has no UI metadata
+    expect(result).not.toHaveProperty("_meta");
+    expect(result).not.toHaveProperty("structuredContent");
+    expect(result).not.toHaveProperty("rawContent");
+  });
+
+  test("handles empty string output", () => {
+    const result = mcpToolToModelOutput({ output: "" });
+
+    expect(result).toEqual({ type: "text", value: "" });
+  });
+
+  test("handles rich output with empty content string", () => {
+    const result = mcpToolToModelOutput({
+      output: { content: "" },
+    });
+
+    expect(result).toEqual({ type: "text", value: "" });
+  });
+
+  test("handles rich output with only content field (no metadata)", () => {
+    const result = mcpToolToModelOutput({
+      output: { content: "Just text, no metadata" },
+    });
+
+    expect(result).toEqual({ type: "text", value: "Just text, no metadata" });
   });
 });

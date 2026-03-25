@@ -1366,6 +1366,13 @@
       "when": 1774297576960,
       "tag": "0194_orange_doctor_faustus",
       "breakpoints": true
+    },
+    {
+      "idx": 195,
+      "version": "7",
+      "when": 1774442794704,
+      "tag": "0195_opposite_shocker",
+      "breakpoints": true
     }
   ]
 }

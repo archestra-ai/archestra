@@ -1,9 +1,13 @@
 import { createHash } from "node:crypto";
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   CallToolRequestSchema,
+  ListPromptsRequestSchema,
+  ListResourcesRequestSchema,
+  ListResourceTemplatesRequestSchema,
   ListToolsRequestSchema,
+  ReadResourceRequestSchema,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import {
@@ -73,11 +77,7 @@ export interface TokenAuthResult {
   rawToken?: string;
 }
 
-/**
- * Create a fresh MCP server for a request
- * In stateless mode, we need to create new server instances per request
- */
-type AgentInfo = {
+export type AgentInfo = {
   name: string;
   id: string;
   agentType?: AgentType;
@@ -97,27 +97,42 @@ const tokenAuthCache = new LRUCacheManager<TokenAuthResult | null>({
   defaultTtl: TOKEN_AUTH_CACHE_TTL_MS,
 });
 
+/**
+ * Creates an MCP server for the given agent.
+ * Pass `preloadedAgent` (e.g. from the proxy's access cache) to skip the
+ * redundant DB lookup that would otherwise happen inside this function.
+ */
 export async function createAgentServer(
   agentId: string,
   tokenAuth?: TokenAuthContext,
-): Promise<{ server: Server; agent: AgentInfo }> {
-  const server = new Server(
+  preloadedAgent?: AgentInfo,
+): Promise<{ server: McpServer; agent: AgentInfo }> {
+  const mcpServer = new McpServer(
     {
       name: `archestra-agent-${agentId}`,
       version: config.api.version,
     },
     {
       capabilities: {
+        resources: {
+          subscribe: true,
+          listChanged: true,
+        },
+        prompts: {},
         tools: { listChanged: false },
       },
     },
   );
+  const { server } = mcpServer;
 
-  const fetchedAgent = await AgentModel.findById(agentId);
-  if (!fetchedAgent) {
-    throw new Error(`Agent not found: ${agentId}`);
+  let agent: AgentInfo;
+  if (preloadedAgent) {
+    agent = preloadedAgent;
+  } else {
+    const fetched = await AgentModel.findById(agentId);
+    if (!fetched) throw new Error(`Agent not found: ${agentId}`);
+    agent = fetched;
   }
-  const agent = fetchedAgent;
 
   // Create a map of Archestra tool names to their titles
   // This is needed because the database schema doesn't include a title field
@@ -145,7 +160,7 @@ export async function createAgentServer(
     const kbToolDescription = await buildKnowledgeSourcesDescription(agentId);
 
     const toolsList = permittedTools.map(
-      ({ name, description, parameters }) => ({
+      ({ name, description, parameters, meta }) => ({
         name,
         title: archestraToolTitles.get(name) || name,
         description:
@@ -156,8 +171,8 @@ export async function createAgentServer(
             ? kbToolDescription
             : description,
         inputSchema: parameters,
-        annotations: {},
-        _meta: {},
+        annotations: meta?.annotations || {},
+        _meta: meta?._meta || {},
       }),
     );
 
@@ -182,6 +197,53 @@ export async function createAgentServer(
     }
 
     return { tools: toolsList };
+  });
+
+  server.setRequestHandler(
+    ReadResourceRequestSchema,
+    async ({ params: { uri } }) => {
+      try {
+        logger.info(
+          { agentId, uri },
+          "MCP gateway read resource request received",
+        );
+        const result = await mcpClient.readResource(uri, agentId, tokenAuth);
+        logger.info(
+          { agentId, uri, resultType: typeof result },
+          "Resource read successful",
+        );
+        return result;
+      } catch (error) {
+        logger.error(
+          {
+            agentId,
+            uri,
+            error: error instanceof Error ? error.message : "Unknown error",
+            stack: error instanceof Error ? error.stack : undefined,
+          },
+          "Resource read failed",
+        );
+        throw {
+          code: -32603,
+          message: "Resource read failed",
+          data: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    },
+  );
+
+  // SEP-1865: resources/list, resources/templates/list, prompts/list
+  // Proxy to all upstream MCP servers connected to this agent and aggregate results.
+  server.setRequestHandler(ListResourcesRequestSchema, async () => {
+    return mcpClient.listResources(agentId);
+  });
+
+  server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
+    return mcpClient.listResourceTemplates(agentId);
+  });
+
+  server.setRequestHandler(ListPromptsRequestSchema, async () => {
+    return mcpClient.listPrompts(agentId);
   });
 
   server.setRequestHandler(
@@ -254,7 +316,7 @@ export async function createAgentServer(
           metrics.mcp.reportMcpToolCall({
             agentId: agent.id,
             agentName: agent.name,
-            agentType: agent.agentType,
+            agentType: agent.agentType ?? null,
             mcpServerName,
             toolName: name,
             durationSeconds,
@@ -345,7 +407,7 @@ export async function createAgentServer(
         metrics.mcp.reportMcpToolCall({
           agentId: agent.id,
           agentName: agent.name,
-          agentType: agent.agentType,
+          agentType: agent.agentType ?? null,
           mcpServerName,
           toolName: name,
           durationSeconds,
@@ -379,13 +441,15 @@ export async function createAgentServer(
             ? result.content
             : [{ type: "text", text: JSON.stringify(result.content) }],
           isError: result.isError,
+          _meta: result._meta,
+          structuredContent: result.structuredContent,
         };
       } catch (error) {
         const durationSeconds = (Date.now() - startTime) / 1000;
         metrics.mcp.reportMcpToolCall({
           agentId: agent.id,
           agentName: agent.name,
-          agentType: agent.agentType,
+          agentType: agent.agentType ?? null,
           mcpServerName,
           toolName: name,
           durationSeconds,
@@ -408,7 +472,7 @@ export async function createAgentServer(
   );
 
   logger.info({ agentId }, "MCP server instance created");
-  return { server, agent };
+  return { server: mcpServer, agent };
 }
 
 /**

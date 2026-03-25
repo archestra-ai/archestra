@@ -23,7 +23,12 @@ export async function createChatApiKey(
     providerOptionName?: string | RegExp;
   },
 ): Promise<void> {
-  await page.getByTestId(E2eTestId.AddChatApiKeyButton).click();
+  const addApiKeyButton = page
+    .getByTestId(E2eTestId.AddChatApiKeyButton)
+    .or(page.getByRole("button", { name: /^Add API Key$/i }))
+    .first();
+  await expect(addApiKeyButton).toBeVisible({ timeout: 15_000 });
+  await addApiKeyButton.click();
   await expect(
     page.getByRole("heading", { name: /Add API Key/i }),
   ).toBeVisible();
@@ -57,7 +62,8 @@ export async function createVirtualKey(
   page: Page,
   params: {
     name: string;
-    parentKeyOptionName: string | RegExp;
+    parentKeyOptionName?: string | RegExp;
+    parentProvider?: string;
   },
 ): Promise<void> {
   await page.getByTestId(E2eTestId.AddVirtualKeyButton).click();
@@ -65,10 +71,16 @@ export async function createVirtualKey(
     page.getByTestId(E2eTestId.VirtualKeyCreateDialog),
   ).toBeVisible();
 
-  await page.getByTestId(E2eTestId.VirtualKeyParentKeySelect).click();
-  await page
-    .getByRole("option", { name: params.parentKeyOptionName })
-    .click();
+  const parentKeyOptionName =
+    params.parentKeyOptionName ??
+    (params.parentProvider
+      ? await getParentKeyOptionNameForProvider(page, params.parentProvider)
+      : null);
+
+  if (parentKeyOptionName) {
+    await page.getByTestId(E2eTestId.VirtualKeyParentKeySelect).click();
+    await page.getByRole("option", { name: parentKeyOptionName }).click();
+  }
   await page.getByLabel(/Name/i).fill(params.name);
   await clickButton({ page, options: { name: "Create" } });
 
@@ -77,4 +89,33 @@ export async function createVirtualKey(
   ).toBeVisible({
     timeout: 10_000,
   });
+}
+
+async function getParentKeyOptionNameForProvider(
+  page: Page,
+  provider: string,
+): Promise<string> {
+  return page.evaluate(async (targetProvider) => {
+    const response = await fetch(
+      `/api/chat-api-keys?provider=${encodeURIComponent(targetProvider)}`,
+      {
+        credentials: "include",
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to load chat API keys for ${targetProvider}: ${response.status} ${response.statusText}`,
+      );
+    }
+
+    const apiKeys = (await response.json()) as Array<{ name: string }>;
+    const matchingKey = apiKeys[0];
+
+    if (!matchingKey?.name) {
+      throw new Error(`No chat API keys found for provider ${targetProvider}`);
+    }
+
+    return matchingKey.name;
+  }, provider);
 }

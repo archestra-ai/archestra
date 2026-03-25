@@ -288,16 +288,18 @@ async function expectActiveSession(page: Page): Promise<void> {
   await expect
     .poll(
       async () => {
-        const response = await page.request.get(
-          `${UI_BASE_URL}/api/auth/get-session`,
-        );
+        return page.evaluate(async () => {
+          const response = await fetch("/api/auth/get-session", {
+            credentials: "include",
+          });
 
-        if (!response.ok()) {
-          return null;
-        }
+          if (!response.ok) {
+            return null;
+          }
 
-        const session = await response.json();
-        return session?.user?.email ?? null;
+          const session = await response.json();
+          return session?.user?.email ?? null;
+        });
       },
       {
         timeout: 20_000,

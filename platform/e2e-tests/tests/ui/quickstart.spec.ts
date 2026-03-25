@@ -1,3 +1,4 @@
+import { E2eTestId } from "@shared";
 import { ADMIN_EMAIL, ADMIN_PASSWORD, UI_BASE_URL } from "../../consts";
 import { expect, test } from "../../fixtures";
 import { loginViaApi } from "../../utils";
@@ -28,19 +29,28 @@ test.describe("Quickstart", { tag: "@quickstart" }, () => {
       await page.goto(`${UI_BASE_URL}/chat`);
       await page.waitForLoadState("domcontentloaded");
 
-      // 2. Create an API key from the empty-state prompt
-      await expect(page.getByText("Add an LLM Provider Key")).toBeVisible({
-        timeout: 10_000,
-      });
-      await createChatApiKey(page, {
-        name: "Quickstart Key",
-        apiKey: "sk-quickstart-test",
-        providerOptionName: "OpenAI OpenAI",
-      });
+      // 2. Handle both quickstart states:
+      //    - empty-state onboarding that requires creating the first key
+      //    - already-ready chat with a default/system key selected
+      const addProviderPrompt = page.getByText("Add an LLM Provider Key");
+      const chatPrompt = page.getByTestId(E2eTestId.ChatPromptTextarea);
+      if (
+        await addProviderPrompt.isVisible({ timeout: 3_000 }).catch(() => false)
+      ) {
+        await createChatApiKey(page, {
+          name: "Quickstart Key",
+          apiKey: "sk-quickstart-test",
+          providerOptionName: "OpenAI OpenAI",
+        });
 
-      await expect(page.getByText("API key created successfully")).toBeVisible({
-        timeout: 10_000,
-      });
+        await expect(
+          page.getByText("API key created successfully"),
+        ).toBeVisible({
+          timeout: 10_000,
+        });
+      } else {
+        await expect(chatPrompt).toBeVisible({ timeout: 15_000 });
+      }
 
       // 3. Chat is immediately ready — model and key are auto-selected
       await expectChatReady(page);

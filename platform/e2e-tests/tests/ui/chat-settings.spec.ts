@@ -213,7 +213,7 @@ test.describe("Provider Settings - Virtual Keys for Keyless Provider", () => {
     _keylessParentName = "Vertex AI";
     await createVirtualKey(page, {
       name: virtualKeyName,
-      parentKeyOptionName: /Vertex AI/i,
+      parentProvider: "gemini",
     });
 
     await expect(

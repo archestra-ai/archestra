@@ -39,7 +39,6 @@ jobs:
     name: Socket Security
     if: ${{ secrets.SOCKET_SECURITY_API_KEY != '' && github.event.pull_request.head.repo.fork != true }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
-    environment: dependency-security
     permissions:
       contents: read
       issues: write

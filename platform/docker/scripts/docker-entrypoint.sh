@@ -376,21 +376,6 @@ DETECT_CONF
     fi
 fi
 
-# Add startup banner to supervisord (sleeps 12s to ensure it prints after Next.js logs)
-cat >> /etc/supervisord.conf <<CONF
-
-[program:startup-banner]
-command=/bin/sh -c "sleep 12 && /app/docker-banner.sh"
-autostart=true
-autorestart=false
-startsecs=0
-priority=999
-stdout_logfile=/dev/stdout
-stdout_logfile_maxbytes=0
-stderr_logfile=/dev/stderr
-stderr_logfile_maxbytes=0
-CONF
-
 # Set up signal handlers now that all initialization is complete
 trap cleanup SIGTERM SIGINT
 

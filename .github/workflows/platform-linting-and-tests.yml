@@ -925,7 +925,11 @@ jobs:
           curl -fsSL -o "/tmp/${HELM_UNITTEST_ARCHIVE}" "${HELM_UNITTEST_BASE_URL}/${HELM_UNITTEST_ARCHIVE}"
           (
             cd /tmp
-            grep " ${HELM_UNITTEST_ARCHIVE}$" helm-unittest-checksum.sha | sha256sum -c -
+            awk -v archive="${HELM_UNITTEST_ARCHIVE}" '
+              $2 ~ ("/" archive "$") {
+                print $1 " *" archive
+              }
+            ' helm-unittest-checksum.sha | sha256sum -c -
           )
           helm plugin install "/tmp/${HELM_UNITTEST_ARCHIVE}"
           helm unittest .

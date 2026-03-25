@@ -47,5 +47,7 @@ runs:
     - name: Resolve platform image tag
       id: resolve-tag
       shell: bash
+      env:
+        PLATFORM_IMAGE_TAG: ${{ inputs.image-tag }}
       run: |
-        echo "tag=${{ inputs.image-tag }}" >> "$GITHUB_OUTPUT"
+        echo "tag=${PLATFORM_IMAGE_TAG}" >> "$GITHUB_OUTPUT"

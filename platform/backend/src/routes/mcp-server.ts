@@ -87,7 +87,17 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.InstallMcpServer,
         description: "Install an MCP server (from catalog or custom)",
         tags: ["MCP Server"],
-        body: InsertMcpServerSchema.omit({ serverType: true }).extend({
+        body: InsertMcpServerSchema.omit({ serverType: true, catalogId: true }).extend({
+          catalogId: UuidIdSchema.optional(),
+          // Custom App configuration for direct installation without catalog
+          appConfig: z.object({
+            name: z.string().min(1),
+            description: z.string().optional(),
+            transportType: z.enum(["sse", "stdio"]),
+            url: z.string().url().optional(),
+            command: z.string().optional(),
+            args: z.array(z.string()).optional(),
+          }).optional(),
           agentIds: z.array(UuidIdSchema).optional(),
           secretId: UuidIdSchema.optional(),
           // For PAT tokens (like GitHub), send the token directly
@@ -103,6 +113,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ body, user, headers }, reply) => {
       let {
+        catalogId,
+        appConfig,
         agentIds,
         secretId,
         accessToken,
@@ -112,10 +124,39 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         serviceAccount,
         ...restDataFromRequestBody
       } = body;
+
+      // Handle custom App configuration by creating a private catalog item
+      if (!catalogId && appConfig) {
+        fastify.log.info({ appConfig }, "Creating private catalog item for custom MCP app");
+        const isRemote = appConfig.transportType === "sse";
+        const newCatalogItem = await InternalMcpCatalogModel.create({
+          name: appConfig.name,
+          description: appConfig.description || `Custom ${appConfig.transportType} app`,
+          serverType: isRemote ? "remote" : "local",
+          serverUrl: isRemote ? appConfig.url : undefined,
+          localConfig: !isRemote ? {
+            command: appConfig.command,
+            arguments: appConfig.args,
+            transportType: "stdio",
+          } : undefined,
+          scope: "personal",
+        }, {
+          organizationId: user.organizationId,
+          authorId: user.id,
+        });
+        catalogId = newCatalogItem.id;
+      }
+
+      if (!catalogId) {
+        throw new ApiError(400, "catalogId or appConfig is required");
+      }
+
       const serverData: typeof restDataFromRequestBody & {
         serverType: InternalMcpCatalogServerType;
+        catalogId: string;
       } = {
         ...restDataFromRequestBody,
+        catalogId,
         serverType: "local",
       };
 

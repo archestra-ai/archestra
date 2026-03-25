@@ -26,6 +26,16 @@ docker run gcr.io/archestra-ai/mcp-server-base:v0.0.1 <command> <args>
 docker build -t mcp-server-base .
 ```
 
+## Updating Python dependencies
+
+Python dependencies are declared in `pyproject.toml` and compiled into
+`requirements.lock` with `uv`. Regenerate the lockfile after changing Python
+dependencies with:
+
+```bash
+make -C mcp_server_docker_image update-python-lockfile
+```
+
 ## Dependencies Included
 
 ### Python

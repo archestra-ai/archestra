@@ -1,3 +1,7 @@
+ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.9.26@sha256:9a23023be68b2ed09750ae636228e903a54a05ea56ed03a934d00fe9fbeded4b
+
+FROM ${UV_IMAGE} AS uv-bin
+
 # Multi-stage build for minimal final image
 FROM python:3.12-alpine AS python-builder
 
@@ -9,23 +13,23 @@ RUN apk add --no-cache \
    openssl-dev \
    python3-dev
 
-# Copy uv from the official image
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+# Copy uv from a pinned upstream image to avoid floating build dependencies
+COPY --from=uv-bin /uv /usr/local/bin/uv
 RUN chmod +x /usr/local/bin/uv
 
-# Create virtual environment and install Python MCP dependencies
+# Create virtual environment and install Python MCP dependencies from a locked manifest
 RUN uv venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
+COPY pyproject.toml requirements.lock /tmp/python-deps/
 # CVE-2026-24049: Path Traversal vulnerability in wheel <= 0.46.1
 # CVE-2025-8869: Link Following vulnerability in pip <= 25.2
 RUN uv pip install --upgrade wheel>=0.46.2 pip>=25.3
-RUN uv pip install --no-cache-dir \
-   mcp[cli]>=1.2.0 \
-   httpx \
-   fastapi \
-   uvicorn \
-   requests>=2.31.0 \
-   python-dotenv>=1.0.0
+RUN uv pip sync \
+   --no-cache \
+   --require-hashes \
+   --python-version 3.12 \
+   --python-platform x86_64-unknown-linux-musl \
+   /tmp/python-deps/requirements.lock
 
 # Node.js stage
 FROM node:20-alpine AS node-builder
@@ -115,9 +119,9 @@ ENV PATH=$GOPATH/bin:/usr/local/go/bin:$PATH
 RUN update-ca-certificates && \
     git config --global http.sslCAInfo /etc/ssl/certs/ca-certificates.crt
 
-# Install uv using the official installation method
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uvx /usr/local/bin/uvx
+# Install uv from the same pinned upstream image in the runtime stage
+COPY --from=uv-bin /uv /usr/local/bin/uv
+COPY --from=uv-bin /uvx /usr/local/bin/uvx
 
 # Make sure uv and uvx are executable
 RUN chmod +x /usr/local/bin/uv /usr/local/bin/uvx

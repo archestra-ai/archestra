@@ -16,9 +16,11 @@ if (isMainModule) {
   await import("./observability/tracing/sdk");
 }
 
+import { readFileSync } from "node:fs";
 import fastifyCors from "@fastify/cors";
 import fastifyFormbody from "@fastify/formbody";
 import fastifySwagger from "@fastify/swagger";
+import type { McpUiResourceCsp } from "@modelcontextprotocol/ext-apps";
 import * as Sentry from "@sentry/node";
 import Fastify from "fastify";
 import metricsPlugin from "fastify-metrics";
@@ -467,6 +469,128 @@ const startMetricsServer = async () => {
   );
 };
 
+// ============ MCP Sandbox Server ============
+
+/**
+ * Allowlist-validate CSP domain entries.
+ * Only permits valid hostnames and wildcard-subdomain patterns (e.g. *.example.com).
+ * Blocks dangerous CSP sources like *, data:, blob:, https: that a denylist would miss.
+ */
+// Matches bare domains (esm.sh), wildcard subdomains (*.esm.sh),
+// scheme-prefixed domains (https://esm.sh, wss://esm.sh), and optional port (:8443).
+const VALID_CSP_DOMAIN =
+  /^(wss?:\/\/|https?:\/\/)?(\*\.)?[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+(:\d{1,5})?$/;
+
+export function sanitizeCspDomains(domains?: string[]): string[] {
+  if (!domains) return [];
+  return domains.filter(
+    (d) => typeof d === "string" && VALID_CSP_DOMAIN.test(d),
+  );
+}
+
+export function buildCspHeader(csp?: McpUiResourceCsp): string {
+  const resourceDomains = sanitizeCspDomains(csp?.resourceDomains).join(" ");
+  const connectDomains = sanitizeCspDomains(csp?.connectDomains).join(" ");
+  const frameDomains = sanitizeCspDomains(csp?.frameDomains).join(" ") || null;
+  const baseUriDomains =
+    sanitizeCspDomains(csp?.baseUriDomains).join(" ") || null;
+
+  const directives = [
+    "default-src 'none'",
+    `script-src 'self' 'unsafe-inline' blob: data: ${resourceDomains}`.trim(),
+    `style-src 'self' 'unsafe-inline' blob: data: ${resourceDomains}`.trim(),
+    `img-src 'self' data: blob: ${resourceDomains}`.trim(),
+    `font-src 'self' data: blob: ${resourceDomains}`.trim(),
+    `connect-src 'self' ${connectDomains}`.trim(),
+    `worker-src 'self' blob: ${resourceDomains}`.trim(),
+    frameDomains ? `frame-src ${frameDomains}` : "frame-src 'none'",
+    "object-src 'none'",
+    baseUriDomains ? `base-uri ${baseUriDomains}` : "base-uri 'none'",
+  ];
+
+  return directives.join("; ");
+}
+
+/**
+ * Read and prepare the sandbox proxy HTML at startup.
+ * Returns null if the file is not found (non-fatal — sandbox route won't be registered).
+ */
+const loadSandboxHtml = (): string | null => {
+  const { filePath } = config.mcpSandbox;
+  try {
+    const rawHtml = readFileSync(filePath, "utf-8");
+    // Inject allowed origins at startup (comes from env config, doesn't change at runtime).
+    // The placeholder is replaced with a JSON array; empty array = allow any origin (dev/open mode).
+    // Escape < and > to prevent </script> breakout when embedded in HTML.
+    const safeJson = JSON.stringify(config.mcpSandbox.allowedOrigins)
+      .replace(/</g, "\\u003c")
+      .replace(/>/g, "\\u003e");
+    return rawHtml.replace("__ARCHESTRA_ALLOWED_ORIGINS__", safeJson);
+  } catch (err) {
+    logger.warn(
+      { err, filePath },
+      "MCP sandbox proxy HTML not found — /_sandbox/ route will not be registered",
+    );
+    return null;
+  }
+};
+
+const sandboxHtml = loadSandboxHtml();
+
+/**
+ * Register the sandbox proxy route on the main Fastify instance.
+ *
+ * Serves the sandbox proxy HTML under /_sandbox/ with frame-ancestors header.
+ * CSP for guest content is handled entirely by the proxy HTML (meta tag injection).
+ * Isolation comes from cross-origin (localhost swap or domain) or opaque origin fallback.
+ */
+const registerSandboxRoute = (
+  fastify: ReturnType<typeof createFastifyInstance>,
+) => {
+  if (!sandboxHtml) return;
+
+  if (process.env.ARCHESTRA_MCP_SANDBOX_PORT) {
+    logger.warn(
+      "ARCHESTRA_MCP_SANDBOX_PORT is deprecated and no longer used. " +
+        "The sandbox is now served from the main backend on /_sandbox/. " +
+        "Remove this env var from your configuration.",
+    );
+  }
+
+  fastify.get("/_sandbox/mcp-sandbox-proxy.html", async (request, reply) => {
+    // When a sandbox domain is configured, validate the Host header matches
+    // *.{domain} to prevent the sandbox route from being abused on the main origin.
+    if (config.mcpSandbox.domain) {
+      const host = request.hostname;
+      if (!host.endsWith(`.${config.mcpSandbox.domain}`)) {
+        return reply.status(403).send("Invalid sandbox host");
+      }
+    }
+
+    // frame-ancestors restricts which origins can embed this sandbox iframe.
+    // This is the only CSP directive set via HTTP header — it cannot be set via meta tag.
+    // Guest content CSP is handled by the proxy HTML (meta tag injection from sandbox-resource-ready message).
+    const frameAncestorsList = [...config.mcpSandbox.allowedOrigins];
+    if (config.mcpSandbox.domain) {
+      frameAncestorsList.push(`*.${config.mcpSandbox.domain}`);
+    }
+    const frameAncestors =
+      frameAncestorsList.length > 0 ? frameAncestorsList.join(" ") : "*";
+    void reply.header(
+      "Content-Security-Policy",
+      `frame-ancestors ${frameAncestors}`,
+    );
+
+    // Prevent caching to ensure fresh CSP on each load
+    void reply.header("Cache-Control", "no-cache, no-store, must-revalidate");
+    void reply.header("Pragma", "no-cache");
+    void reply.header("Expires", "0");
+
+    void reply.type("text/html");
+    return reply.send(sandboxHtml);
+  });
+};
+
 const startMcpServerRuntime = async (
   fastify: ReturnType<typeof createFastifyInstance>,
 ) => {
@@ -607,6 +731,10 @@ const startWebServer = async () => {
 
     // Start metrics server
     await startMetricsServer();
+
+    // Register sandbox proxy route on the main server (single-port setup).
+    // Iframe isolation comes from the sandbox attribute (no allow-same-origin → opaque origin).
+    registerSandboxRoute(fastify);
 
     logger.info(
       `Observability initialized with ${labelKeys.length} agent label keys`,

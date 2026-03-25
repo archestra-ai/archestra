@@ -1100,7 +1100,7 @@ describe("createAgentServer tools/list", () => {
 
     const { server } = await createAgentServer(agent.id);
     const listToolsHandler = (
-      server as unknown as {
+      server.server as unknown as {
         _requestHandlers: Map<
           string,
           (request: unknown) => Promise<{

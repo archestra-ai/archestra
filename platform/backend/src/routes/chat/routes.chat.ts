@@ -21,7 +21,12 @@ import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import { CacheKey, cacheManager } from "@/cache-manager";
-import { getChatMcpTools } from "@/clients/chat-mcp-client";
+import {
+  fetchToolUiResource,
+  getChatMcpTools,
+  getChatMcpToolUiResourceUris,
+  type ToolUiResourceData,
+} from "@/clients/chat-mcp-client";
 import {
   createDirectLLMModel,
   createLLMModelForAgent,
@@ -180,21 +185,24 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Fetch MCP tools with enabled tool filtering
       // Pass undefined if no custom selection (use all tools)
       // Pass the actual array (even if empty) if there is custom selection
-      const mcpTools = await getChatMcpTools({
-        agentName: agent.name,
-        agentId,
-        userId: user.id,
-        userIsAgentAdmin,
-        enabledToolIds: hasCustomSelection ? enabledToolIds : undefined,
-        conversationId: conversation.id,
-        organizationId,
-        // Pass conversationId as sessionId to group all chat requests (including delegated agents) together
-        sessionId: conversation.id,
-        // Pass agentId as initial delegation chain (will be extended by delegated agents)
-        delegationChain: agentId,
-        abortSignal: chatAbortController.signal,
-        user: { id: user.id, email: user.email, name: user.name },
-      });
+      const [mcpTools, toolUiResourceUris] = await Promise.all([
+        getChatMcpTools({
+          agentName: agent.name,
+          agentId,
+          userId: user.id,
+          userIsAgentAdmin,
+          enabledToolIds: hasCustomSelection ? enabledToolIds : undefined,
+          conversationId: conversation.id,
+          organizationId,
+          // Pass conversationId as sessionId to group all chat requests (including delegated agents) together
+          sessionId: conversation.id,
+          // Pass agentId as initial delegation chain (will be extended by delegated agents)
+          delegationChain: agentId,
+          abortSignal: chatAbortController.signal,
+          user: { id: user.id, email: user.email, name: user.name },
+        }),
+        getChatMcpToolUiResourceUris(conversation.agentId),
+      ]);
 
       // Build system prompt from agent's systemPrompt field
       let systemPrompt: string | undefined;
@@ -217,12 +225,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         promptContext,
       );
 
+      let toolResultInstructions: string = "";
+      // Add MCP UI instruction when tools are available
+      if (Object.keys(mcpTools).length > 0) {
+        toolResultInstructions =
+          "When a tool result includes a UI resource, it means an interactive UI was rendered for the user. Respond with at most one brief sentence. Never describe, list, or explain what the UI shows.";
+      }
+
       const toolDenialInstruction =
         "When a tool execution is not approved by the user, do not retry it. Explain what happened and ask the user what they'd like to do instead.";
 
       systemPrompt =
-        [renderedPrompt, toolDenialInstruction].filter(Boolean).join("\n\n") ||
-        undefined;
+        [renderedPrompt, toolDenialInstruction, toolResultInstructions]
+          .filter(Boolean)
+          .join("\n\n") || undefined;
 
       // Use stored provider if available, otherwise detect from model name for backward compatibility
       // At the moment of migration, all supported providers (anthropic, openai, gemini) serve different models,
@@ -409,6 +425,82 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 }
               },
               execute: async ({ writer }) => {
+                // Prefetch all UI resources eagerly before streaming starts
+                // so onChunk can write data-tool-ui-start synchronously.
+                // Even with LRU caching, .then() on a resolved promise runs
+                // as a microtask — the stream processes more chunks before
+                // the microtask fires, causing data-tool-ui-start to arrive
+                // after all tool deltas instead of right after tool-input-start.
+                const MAX_SSE_HTML_BYTES = 1024 * 1024;
+                const prefetchedUiResources = new Map<
+                  string,
+                  ToolUiResourceData
+                >();
+                const agentIdForUi = conversation.agentId;
+                if (
+                  agentIdForUi &&
+                  Object.keys(toolUiResourceUris).length > 0
+                ) {
+                  await Promise.all(
+                    Object.entries(toolUiResourceUris).map(
+                      async ([toolName, uri]) => {
+                        try {
+                          const resource = await fetchToolUiResource({
+                            agentId: agentIdForUi,
+                            userId: user.id,
+                            organizationId,
+                            userIsAgentAdmin,
+                            conversationId: conversation.id,
+                            toolName,
+                            uri,
+                          });
+                          if (resource) {
+                            const html =
+                              resource.html &&
+                              Buffer.byteLength(resource.html) <=
+                                MAX_SSE_HTML_BYTES
+                                ? resource.html
+                                : undefined;
+                            if (html)
+                              prefetchedUiResources.set(toolName, {
+                                ...resource,
+                                html,
+                              });
+                          }
+                        } catch (err) {
+                          logger.debug(
+                            { err, toolName },
+                            "Failed to prefetch UI resource",
+                          );
+                        }
+                      },
+                    ),
+                  );
+                }
+
+                // Emit data-tool-ui-start synchronously in onChunk so it
+                // arrives right after tool-input-start, before any deltas.
+                streamTextConfig.onChunk = ({ chunk }) => {
+                  if (chunk.type === "tool-input-start" && chunk.toolName) {
+                    const prefetched = prefetchedUiResources.get(
+                      chunk.toolName,
+                    );
+                    if (prefetched) {
+                      writer.write({
+                        type: "data-tool-ui-start",
+                        data: {
+                          toolCallId: chunk.id,
+                          toolName: chunk.toolName,
+                          uiResourceUri: toolUiResourceUris[chunk.toolName],
+                          html: prefetched.html,
+                          csp: prefetched.csp,
+                          permissions: prefetched.permissions,
+                        },
+                      });
+                    }
+                  }
+                };
+
                 // ⚠️ TEMPORARY: Error injection for testing retries. Remove after testing.
                 const lastMsg = (
                   messages as { parts?: { type: string; text?: string }[] }[]
@@ -490,7 +582,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   }
                 }
 
-                // Merge the stream text result into the UI message stream
                 writer.merge(
                   result.toUIMessageStream({
                     originalMessages: messages as UIMessage[],

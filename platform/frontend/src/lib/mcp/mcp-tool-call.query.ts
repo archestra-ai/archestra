@@ -20,6 +20,8 @@ export function formatAuthMethod(authMethod: MCPGatewayAuthMethod): string {
       return "Team Token";
     case "external_idp":
       return "External IdP";
+    case "session":
+      return "Session";
   }
 }
 

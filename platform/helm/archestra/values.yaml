@@ -84,6 +84,10 @@ archestra:
   #     CUSTOM_VAR: "custom-value"
   #     # Reference another env var (defined via envWithValueFrom below)
   #     ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT: "http://$(NODE_IP):4317"
+  #     # MCP App sandbox domain for full browser API access (localStorage, CORS, OAuth)
+  #     # Requires wildcard DNS (*.mcp.example.com) and wildcard TLS certificate
+  #     # Not needed for local dev — automatic localhost swap provides isolation
+  #     ARCHESTRA_MCP_SANDBOX_DOMAIN: "mcp.example.com"
   env: {}
 
   # Authentication secret source configuration.
@@ -465,6 +469,23 @@ archestra:
     annotations: {}
 
     # Complete ingress specification
+    # When using ARCHESTRA_MCP_SANDBOX_DOMAIN, add a wildcard rule for sandbox subdomains:
+    #   spec:
+    #     tls:
+    #       - hosts:
+    #           - "*.mcp.example.com"
+    #         secretName: mcp-sandbox-wildcard-tls
+    #     rules:
+    #       - host: "*.mcp.example.com"
+    #         http:
+    #           paths:
+    #             - path: /_sandbox/
+    #               pathType: Prefix
+    #               backend:
+    #                 service:
+    #                   name: archestra-platform
+    #                   port:
+    #                     number: 9000
     spec: {}
 
   # HorizontalPodAutoscaler configuration

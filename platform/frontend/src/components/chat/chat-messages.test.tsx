@@ -86,6 +86,11 @@ vi.mock("@/components/chat/todo-write-tool", () => ({
   TodoWriteTool: () => <div>todo-write-tool</div>,
 }));
 
+vi.mock("@/components/chat/mcp-app-container", () => ({
+  McpAppSection: () => null,
+  McpToolOutput: null,
+}));
+
 vi.mock("@/components/chat/tool-error-logs-button", () => ({
   ToolErrorLogsButton: () => null,
 }));
@@ -130,6 +135,12 @@ vi.mock("@/lib/organization.query", () => ({
 
 vi.mock("@/lib/hooks/use-app-name", () => ({
   useAppIconLogo: () => "/custom-logo.png",
+}));
+
+vi.mock("@/lib/chat/global-chat.context", () => ({
+  useGlobalChat: () => ({
+    getSession: () => null,
+  }),
 }));
 
 vi.mock("@/lib/mcp/archestra-mcp-server", () => ({

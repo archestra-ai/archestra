@@ -1,6 +1,5 @@
+import { OAUTH_TOKEN_ID_PREFIX } from "@shared";
 import type { MCPGatewayAuthMethod } from "@/types";
-
-const OAUTH_TOKEN_ID_PREFIX = "oauth:";
 
 /**
  * Minimal token auth shape needed for auth method derivation.
@@ -11,6 +10,7 @@ interface TokenAuthLike {
   isOrganizationToken: boolean;
   isExternalIdp?: boolean;
   isUserToken?: boolean;
+  isSessionAuth?: boolean;
 }
 
 /**
@@ -21,6 +21,7 @@ export function deriveAuthMethod(
   tokenAuth: TokenAuthLike | undefined,
 ): MCPGatewayAuthMethod | undefined {
   if (!tokenAuth) return undefined;
+  if (tokenAuth.isSessionAuth) return "session";
   if (tokenAuth.isExternalIdp) return "external_idp";
   if (tokenAuth.tokenId.startsWith(OAUTH_TOKEN_ID_PREFIX)) return "oauth";
   if (tokenAuth.isUserToken) return "user_token";

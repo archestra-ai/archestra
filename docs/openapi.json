@@ -36871,6 +36871,39 @@
                                   "nullable": true,
                                   "type": "string"
                                 },
+                                "meta": {
+                                  "nullable": true,
+                                  "anyOf": [
+                                    {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "number"
+                                        },
+                                        {
+                                          "type": "boolean"
+                                        },
+                                        {
+                                          "type": "string",
+                                          "nullable": true,
+                                          "enum": [
+                                            null
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "type": "object",
+                                      "additionalProperties": {}
+                                    },
+                                    {
+                                      "type": "array",
+                                      "items": {}
+                                    }
+                                  ]
+                                },
                                 "policiesAutoConfiguredAt": {
                                   "nullable": true,
                                   "type": "string",
@@ -36905,6 +36938,7 @@
                                 "delegateToAgentId",
                                 "name",
                                 "description",
+                                "meta",
                                 "policiesAutoConfiguredAt",
                                 "policiesAutoConfiguringStartedAt",
                                 "policiesAutoConfiguredReasoning",
@@ -37732,6 +37766,39 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "meta": {
+                            "nullable": true,
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      null
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": {}
+                              },
+                              {
+                                "type": "array",
+                                "items": {}
+                              }
+                            ]
+                          },
                           "policiesAutoConfiguredAt": {
                             "nullable": true,
                             "type": "string",
@@ -37766,6 +37833,7 @@
                           "delegateToAgentId",
                           "name",
                           "description",
+                          "meta",
                           "policiesAutoConfiguredAt",
                           "policiesAutoConfiguringStartedAt",
                           "policiesAutoConfiguredReasoning",
@@ -38391,6 +38459,39 @@
                               "nullable": true,
                               "type": "string"
                             },
+                            "meta": {
+                              "nullable": true,
+                              "anyOf": [
+                                {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "boolean"
+                                    },
+                                    {
+                                      "type": "string",
+                                      "nullable": true,
+                                      "enum": [
+                                        null
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "additionalProperties": {}
+                                },
+                                {
+                                  "type": "array",
+                                  "items": {}
+                                }
+                              ]
+                            },
                             "policiesAutoConfiguredAt": {
                               "nullable": true,
                               "type": "string",
@@ -38425,6 +38526,7 @@
                             "delegateToAgentId",
                             "name",
                             "description",
+                            "meta",
                             "policiesAutoConfiguredAt",
                             "policiesAutoConfiguringStartedAt",
                             "policiesAutoConfiguredReasoning",
@@ -38990,6 +39092,39 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "meta": {
+                            "nullable": true,
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      null
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": {}
+                              },
+                              {
+                                "type": "array",
+                                "items": {}
+                              }
+                            ]
+                          },
                           "policiesAutoConfiguredAt": {
                             "nullable": true,
                             "type": "string",
@@ -39024,6 +39159,7 @@
                           "delegateToAgentId",
                           "name",
                           "description",
+                          "meta",
                           "policiesAutoConfiguredAt",
                           "policiesAutoConfiguringStartedAt",
                           "policiesAutoConfiguredReasoning",
@@ -39589,6 +39725,39 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "meta": {
+                            "nullable": true,
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      null
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": {}
+                              },
+                              {
+                                "type": "array",
+                                "items": {}
+                              }
+                            ]
+                          },
                           "policiesAutoConfiguredAt": {
                             "nullable": true,
                             "type": "string",
@@ -39623,6 +39792,7 @@
                           "delegateToAgentId",
                           "name",
                           "description",
+                          "meta",
                           "policiesAutoConfiguredAt",
                           "policiesAutoConfiguringStartedAt",
                           "policiesAutoConfiguredReasoning",
@@ -40200,6 +40370,39 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "meta": {
+                            "nullable": true,
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      null
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": {}
+                              },
+                              {
+                                "type": "array",
+                                "items": {}
+                              }
+                            ]
+                          },
                           "policiesAutoConfiguredAt": {
                             "nullable": true,
                             "type": "string",
@@ -40234,6 +40437,7 @@
                           "delegateToAgentId",
                           "name",
                           "description",
+                          "meta",
                           "policiesAutoConfiguredAt",
                           "policiesAutoConfiguringStartedAt",
                           "policiesAutoConfiguredReasoning",
@@ -41018,6 +41222,39 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "meta": {
+                            "nullable": true,
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      null
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": {}
+                              },
+                              {
+                                "type": "array",
+                                "items": {}
+                              }
+                            ]
+                          },
                           "policiesAutoConfiguredAt": {
                             "nullable": true,
                             "type": "string",
@@ -41052,6 +41289,7 @@
                           "delegateToAgentId",
                           "name",
                           "description",
+                          "meta",
                           "policiesAutoConfiguredAt",
                           "policiesAutoConfiguringStartedAt",
                           "policiesAutoConfiguredReasoning",
@@ -44211,6 +44449,39 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "meta": {
+                        "nullable": true,
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "boolean"
+                              },
+                              {
+                                "type": "string",
+                                "nullable": true,
+                                "enum": [
+                                  null
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "array",
+                            "items": {}
+                          }
+                        ]
+                      },
                       "policiesAutoConfiguredAt": {
                         "nullable": true,
                         "type": "string",
@@ -44245,6 +44516,7 @@
                       "delegateToAgentId",
                       "name",
                       "description",
+                      "meta",
                       "policiesAutoConfiguredAt",
                       "policiesAutoConfiguringStartedAt",
                       "policiesAutoConfiguredReasoning",
@@ -72740,6 +73012,10 @@
                         },
                         "virtualKeyDefaultExpirationSeconds": {
                           "type": "number"
+                        },
+                        "mcpSandboxDomain": {
+                          "nullable": true,
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -72754,7 +73030,8 @@
                         "orchestratorK8sNamespace",
                         "isQuickstart",
                         "ngrokDomain",
-                        "virtualKeyDefaultExpirationSeconds"
+                        "virtualKeyDefaultExpirationSeconds",
+                        "mcpSandboxDomain"
                       ],
                       "additionalProperties": false
                     },
@@ -105038,6 +105315,7 @@
     },
     "/v1/mcp/{profileId}": {
       "get": {
+        "operationId": "mcpGatewayGet",
         "tags": [
           "MCP Gateway"
         ],
@@ -105151,6 +105429,7 @@
         }
       },
       "post": {
+        "operationId": "mcpGatewayPost",
         "tags": [
           "MCP Gateway"
         ],
@@ -105181,6 +105460,48 @@
           "200": {
             "description": "Default Response"
           }
+        }
+      }
+    },
+    "/api/mcp/{agentId}": {
+      "post": {
+        "operationId": "mcpProxyPost",
+        "tags": [
+          "mcp-proxy"
+        ],
+        "description": "Proxy MCP Gateway requests with session auth\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": {}
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "agentId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -114495,7 +114816,8 @@
                               "user_token",
                               "org_token",
                               "team_token",
-                              "external_idp"
+                              "external_idp",
+                              "session"
                             ]
                           },
                           "createdAt": {
@@ -114875,7 +115197,8 @@
                         "user_token",
                         "org_token",
                         "team_token",
-                        "external_idp"
+                        "external_idp",
+                        "session"
                       ]
                     },
                     "createdAt": {
@@ -135220,6 +135543,39 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "meta": {
+                        "nullable": true,
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "boolean"
+                              },
+                              {
+                                "type": "string",
+                                "nullable": true,
+                                "enum": [
+                                  null
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "array",
+                            "items": {}
+                          }
+                        ]
+                      },
                       "policiesAutoConfiguredAt": {
                         "nullable": true,
                         "type": "string",
@@ -135287,6 +135643,7 @@
                       "delegateToAgentId",
                       "name",
                       "description",
+                      "meta",
                       "policiesAutoConfiguredAt",
                       "policiesAutoConfiguringStartedAt",
                       "policiesAutoConfiguredReasoning",

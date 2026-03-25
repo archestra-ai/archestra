@@ -68,6 +68,7 @@
     "@microsoft/msgraph-sdk-chats": "1.0.0-preview.80",
     "@microsoft/msgraph-sdk-teams": "1.0.0-preview.80",
     "@microsoft/msgraph-sdk-users": "1.0.0-preview.80",
+    "@modelcontextprotocol/ext-apps": "^1.1.1",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@octokit/rest": "^22.0.1",
     "@opentelemetry/api": "^1.9.0",

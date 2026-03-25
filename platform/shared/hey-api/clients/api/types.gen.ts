@@ -10585,6 +10585,9 @@ export type GetAgentsResponses = {
                     [key: string]: unknown;
                 };
                 description: string | null;
+                meta: string | number | boolean | null | {
+                    [key: string]: unknown;
+                } | Array<unknown> | null;
                 policiesAutoConfiguredAt: string | null;
                 policiesAutoConfiguringStartedAt: string | null;
                 policiesAutoConfiguredReasoning: string | null;
@@ -10783,6 +10786,9 @@ export type CreateAgentResponses = {
                 [key: string]: unknown;
             };
             description: string | null;
+            meta: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -10951,6 +10957,9 @@ export type GetAllAgentsResponses = {
                 [key: string]: unknown;
             };
             description: string | null;
+            meta: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -11102,6 +11111,9 @@ export type GetDefaultMcpGatewayResponses = {
                 [key: string]: unknown;
             };
             description: string | null;
+            meta: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -11253,6 +11265,9 @@ export type GetDefaultLlmProxyResponses = {
                 [key: string]: unknown;
             };
             description: string | null;
+            meta: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -11485,6 +11500,9 @@ export type GetAgentResponses = {
                 [key: string]: unknown;
             };
             description: string | null;
+            meta: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -11676,6 +11694,9 @@ export type UpdateAgentResponses = {
                 [key: string]: unknown;
             };
             description: string | null;
+            meta: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -12522,6 +12543,9 @@ export type GetAgentToolsResponses = {
             [key: string]: unknown;
         };
         description: string | null;
+        meta: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
         policiesAutoConfiguredAt: string | null;
         policiesAutoConfiguringStartedAt: string | null;
         policiesAutoConfiguredReasoning: string | null;
@@ -20302,6 +20326,7 @@ export type GetConfigResponses = {
             isQuickstart: boolean;
             ngrokDomain: string;
             virtualKeyDefaultExpirationSeconds: number;
+            mcpSandboxDomain: string | null;
         };
         providerBaseUrls: {
             [key: string]: string | null;
@@ -28138,7 +28163,7 @@ export type UpdateLimitResponses = {
 
 export type UpdateLimitResponse = UpdateLimitResponses[keyof UpdateLimitResponses];
 
-export type GetV1McpByProfileIdData = {
+export type McpGatewayGetData = {
     body?: never;
     path: {
         profileId: string;
@@ -28147,7 +28172,7 @@ export type GetV1McpByProfileIdData = {
     url: '/v1/mcp/{profileId}';
 };
 
-export type GetV1McpByProfileIdErrors = {
+export type McpGatewayGetErrors = {
     /**
      * Default Response
      */
@@ -28157,9 +28182,9 @@ export type GetV1McpByProfileIdErrors = {
     };
 };
 
-export type GetV1McpByProfileIdError = GetV1McpByProfileIdErrors[keyof GetV1McpByProfileIdErrors];
+export type McpGatewayGetError = McpGatewayGetErrors[keyof McpGatewayGetErrors];
 
-export type GetV1McpByProfileIdResponses = {
+export type McpGatewayGetResponses = {
     /**
      * Default Response
      */
@@ -28181,9 +28206,9 @@ export type GetV1McpByProfileIdResponses = {
     };
 };
 
-export type GetV1McpByProfileIdResponse = GetV1McpByProfileIdResponses[keyof GetV1McpByProfileIdResponses];
+export type McpGatewayGetResponse = McpGatewayGetResponses[keyof McpGatewayGetResponses];
 
-export type PostV1McpByProfileIdData = {
+export type McpGatewayPostData = {
     body: {
         [key: string]: unknown;
     };
@@ -28194,7 +28219,25 @@ export type PostV1McpByProfileIdData = {
     url: '/v1/mcp/{profileId}';
 };
 
-export type PostV1McpByProfileIdResponses = {
+export type McpGatewayPostResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type McpProxyPostData = {
+    body: {
+        [key: string]: unknown;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/api/mcp/{agentId}';
+};
+
+export type McpProxyPostResponses = {
     /**
      * Default Response
      */
@@ -30652,7 +30695,7 @@ export type GetMcpToolCallsResponses = {
             } | null;
             toolResult: unknown;
             userId: string | null;
-            authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp';
+            authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp' | 'session';
             createdAt: string;
             userName: string | null;
         }>;
@@ -30758,7 +30801,7 @@ export type GetMcpToolCallResponses = {
         } | null;
         toolResult: unknown;
         userId: string | null;
-        authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp';
+        authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp' | 'session';
         createdAt: string;
         userName: string | null;
     };
@@ -36482,6 +36525,9 @@ export type GetToolsResponses = {
             [key: string]: unknown;
         };
         description: string | null;
+        meta: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
         policiesAutoConfiguredAt: string | null;
         policiesAutoConfiguringStartedAt: string | null;
         policiesAutoConfiguredReasoning: string | null;

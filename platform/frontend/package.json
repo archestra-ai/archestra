@@ -109,7 +109,7 @@
     "@types/react-syntax-highlighter": "^15.5.13",
     "@types/semver": "^7.7.1",
     "highlight.js": "^11.11.1",
-    "jsdom": "^28.1.0",
+    "jsdom": "^29.0.0",
     "knip": "^5.85.0",
     "semver": "^7.7.4",
     "tailwindcss": "^4",

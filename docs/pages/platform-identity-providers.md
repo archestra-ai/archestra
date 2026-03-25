@@ -499,7 +499,7 @@ Subsequent logins automatically link to the existing account based on email addr
 If a user already has an account (created via email/password), SSO authentication will automatically link to that account when:
 
 - The email addresses match
-- The SSO provider is in the trusted providers list (Okta, Google, GitHub, GitLab, Entra ID, and all SAML providers are trusted by default)
+- The SSO provider is trusted for account linking. Archestra trusts the built-in providers (Okta, Google, GitHub, GitLab, Entra ID) plus any custom generic OIDC or generic SAML provider configured in Identity Providers
 
 ## Troubleshooting
 
@@ -516,7 +516,7 @@ The identity provider didn't return required user information. For GitHub, ensur
 
 ### "account not linked" Error
 
-The SSO provider is not in the trusted providers list. Contact your administrator to add the provider to the trusted list.
+The SSO provider is not trusted for automatic account linking, or the provider returned an email that does not match the existing account. Verify the provider is configured in Identity Providers and that the user is signing in with the same email address as their existing account.
 
 ### "invalid_dpop_proof" Error (Okta)
 

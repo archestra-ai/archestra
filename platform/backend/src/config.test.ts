@@ -8,7 +8,6 @@ import {
   test,
 } from "@/test";
 import {
-  getAdditionalTrustedSsoProviderIds,
   getCorsOrigins,
   getDatabaseUrl,
   getOtelExporterOtlpEndpoint,
@@ -368,103 +367,6 @@ describe("getTrustedOrigins", () => {
 
       expect(getTrustedOrigins()).toEqual(["https://auth.example.com"]);
     });
-  });
-});
-
-describe("getAdditionalTrustedSsoProviderIds", () => {
-  const originalEnv = process.env;
-
-  beforeEach(() => {
-    process.env = { ...originalEnv };
-    vi.clearAllMocks();
-  });
-
-  afterEach(() => {
-    process.env = originalEnv;
-  });
-
-  test("should return empty array when env var is not set", () => {
-    delete process.env.ARCHESTRA_AUTH_TRUSTED_SSO_PROVIDER_IDS;
-
-    const result = getAdditionalTrustedSsoProviderIds();
-
-    expect(result).toEqual([]);
-  });
-
-  test("should return empty array when env var is empty string", () => {
-    process.env.ARCHESTRA_AUTH_TRUSTED_SSO_PROVIDER_IDS = "";
-
-    const result = getAdditionalTrustedSsoProviderIds();
-
-    expect(result).toEqual([]);
-  });
-
-  test("should return empty array when env var is only whitespace", () => {
-    process.env.ARCHESTRA_AUTH_TRUSTED_SSO_PROVIDER_IDS = "   ";
-
-    const result = getAdditionalTrustedSsoProviderIds();
-
-    expect(result).toEqual([]);
-  });
-
-  test("should parse single provider ID", () => {
-    process.env.ARCHESTRA_AUTH_TRUSTED_SSO_PROVIDER_IDS = "okta";
-
-    const result = getAdditionalTrustedSsoProviderIds();
-
-    expect(result).toEqual(["okta"]);
-  });
-
-  test("should parse multiple comma-separated provider IDs", () => {
-    process.env.ARCHESTRA_AUTH_TRUSTED_SSO_PROVIDER_IDS = "okta,auth0,azure-ad";
-
-    const result = getAdditionalTrustedSsoProviderIds();
-
-    expect(result).toEqual(["okta", "auth0", "azure-ad"]);
-  });
-
-  test("should trim whitespace from provider IDs", () => {
-    process.env.ARCHESTRA_AUTH_TRUSTED_SSO_PROVIDER_IDS =
-      "  okta  ,  auth0  ,  azure-ad  ";
-
-    const result = getAdditionalTrustedSsoProviderIds();
-
-    expect(result).toEqual(["okta", "auth0", "azure-ad"]);
-  });
-
-  test("should trim leading and trailing whitespace from entire string", () => {
-    process.env.ARCHESTRA_AUTH_TRUSTED_SSO_PROVIDER_IDS =
-      "  okta,auth0,azure-ad  ";
-
-    const result = getAdditionalTrustedSsoProviderIds();
-
-    expect(result).toEqual(["okta", "auth0", "azure-ad"]);
-  });
-
-  test("should filter out empty entries from extra commas", () => {
-    process.env.ARCHESTRA_AUTH_TRUSTED_SSO_PROVIDER_IDS =
-      "okta,,auth0,,,azure-ad";
-
-    const result = getAdditionalTrustedSsoProviderIds();
-
-    expect(result).toEqual(["okta", "auth0", "azure-ad"]);
-  });
-
-  test("should filter out whitespace-only entries", () => {
-    process.env.ARCHESTRA_AUTH_TRUSTED_SSO_PROVIDER_IDS = "okta,   ,auth0";
-
-    const result = getAdditionalTrustedSsoProviderIds();
-
-    expect(result).toEqual(["okta", "auth0"]);
-  });
-
-  test("should handle provider IDs with hyphens and underscores", () => {
-    process.env.ARCHESTRA_AUTH_TRUSTED_SSO_PROVIDER_IDS =
-      "my-provider,another_provider,provider123";
-
-    const result = getAdditionalTrustedSsoProviderIds();
-
-    expect(result).toEqual(["my-provider", "another_provider", "provider123"]);
   });
 });
 

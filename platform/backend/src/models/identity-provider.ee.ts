@@ -1,6 +1,6 @@
 import type { SSOOptions } from "@better-auth/sso";
 import type { IdpRoleMappingConfig } from "@shared";
-import { MEMBER_ROLE_NAME } from "@shared";
+import { MEMBER_ROLE_NAME, SSO_TRUSTED_PROVIDER_IDS } from "@shared";
 import { APIError } from "better-auth";
 import { and, eq } from "drizzle-orm";
 import { jwtDecode } from "jwt-decode";
@@ -429,6 +429,37 @@ class IdentityProviderModel {
       .from(schema.identityProvidersTable);
 
     return idpProviders;
+  }
+
+  static async getTrustedAccountLinkingProviderIds(): Promise<string[]> {
+    let configuredProviderIds: Array<{ providerId: string }> = [];
+
+    try {
+      configuredProviderIds = await db
+        .selectDistinct({
+          providerId: schema.identityProvidersTable.providerId,
+        })
+        .from(schema.identityProvidersTable);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes("Database not initialized")
+      ) {
+        return [...SSO_TRUSTED_PROVIDER_IDS];
+      }
+
+      throw error;
+    }
+
+    return [
+      ...new Set([
+        ...SSO_TRUSTED_PROVIDER_IDS,
+        ...configuredProviderIds
+          .map(({ providerId }) => providerId)
+          .filter((providerId) => providerId.length > 0)
+          .sort((a, b) => a.localeCompare(b)),
+      ]),
+    ];
   }
 
   /**

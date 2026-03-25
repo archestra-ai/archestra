@@ -1,6 +1,7 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
+import { E2eTestId } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -1996,7 +1997,10 @@ function NoApiKeySetup() {
             Connect an LLM provider to start chatting
           </p>
         </div>
-        <Button onClick={() => setIsDialogOpen(true)}>
+        <Button
+          data-testid={E2eTestId.QuickstartAddApiKeyButton}
+          onClick={() => setIsDialogOpen(true)}
+        >
           <Plus className="h-4 w-4 mr-2" />
           Add API Key
         </Button>

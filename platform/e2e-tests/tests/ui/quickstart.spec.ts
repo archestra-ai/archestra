@@ -32,11 +32,11 @@ test.describe("Quickstart", { tag: "@quickstart" }, () => {
       // 2. Handle both quickstart states:
       //    - empty-state onboarding that requires creating the first key
       //    - already-ready chat with a default/system key selected
-      const addProviderPrompt = page.getByText("Add an LLM Provider Key");
+      const addApiKeyButton = page.getByTestId(
+        E2eTestId.QuickstartAddApiKeyButton,
+      );
       const chatPrompt = page.getByTestId(E2eTestId.ChatPromptTextarea);
-      if (
-        await addProviderPrompt.isVisible({ timeout: 3_000 }).catch(() => false)
-      ) {
+      if (await addApiKeyButton.isVisible({ timeout: 3_000 }).catch(() => false)) {
         await createChatApiKey(page, {
           name: "Quickstart Key",
           apiKey: "sk-quickstart-test",

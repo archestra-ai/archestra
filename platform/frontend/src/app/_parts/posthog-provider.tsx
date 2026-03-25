@@ -14,6 +14,10 @@ export function PostHogProviderWrapper({
   const { data: session, isPending: isSessionPending } =
     authClient.useSession();
   const hasIdentifiedUserRef = useRef(false);
+  const lastIdentifiedUserIdRef = useRef<string | null>(null);
+  const userId = session?.user?.id;
+  const userEmail = session?.user?.email;
+  const userName = session?.user?.name;
 
   useEffect(() => {
     const {
@@ -37,21 +41,24 @@ export function PostHogProviderWrapper({
       return;
     }
 
-    const user = session?.user;
-    if (user) {
-      posthog.identify(user.id, {
-        email: user.email,
-        name: user.name || user.email,
+    if (userId && userId !== lastIdentifiedUserIdRef.current && userEmail) {
+      posthog.identify(userId, {
+        email: userEmail,
+        name: userName || userEmail,
       });
       hasIdentifiedUserRef.current = true;
+      lastIdentifiedUserIdRef.current = userId;
+      return;
+    } else if (userId) {
       return;
     }
 
     if (hasIdentifiedUserRef.current) {
       posthog.reset();
       hasIdentifiedUserRef.current = false;
+      lastIdentifiedUserIdRef.current = null;
     }
-  }, [isSessionPending, session?.user]);
+  }, [isSessionPending, userEmail, userId, userName]);
 
   return <PostHogProvider client={posthog}>{children}</PostHogProvider>;
 }

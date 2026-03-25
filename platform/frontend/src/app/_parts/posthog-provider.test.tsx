@@ -1,6 +1,7 @@
 import { render, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import config from "@/lib/config/config";
 import { PostHogProviderWrapper } from "./posthog-provider";
 
 const { mockIdentify, mockInit, mockReset } = vi.hoisted(() => ({
@@ -82,6 +83,50 @@ describe("PostHogProviderWrapper", () => {
     expect(mockReset).not.toHaveBeenCalled();
   });
 
+  it("does not identify the same user again when session data refreshes", async () => {
+    let sessionData: unknown = {
+      user: {
+        id: "user-123",
+        email: "user@example.com",
+        name: "Example User",
+      },
+      session: { id: "session-123" },
+    };
+
+    vi.mocked(authClient.useSession).mockImplementation(() =>
+      makeSessionResult({ data: sessionData }),
+    );
+
+    const { rerender } = render(
+      <PostHogProviderWrapper>
+        <div>child</div>
+      </PostHogProviderWrapper>,
+    );
+
+    await waitFor(() => {
+      expect(mockIdentify).toHaveBeenCalledTimes(1);
+    });
+
+    sessionData = {
+      user: {
+        id: "user-123",
+        email: "user@example.com",
+        name: "Example User",
+      },
+      session: { id: "session-123" },
+    };
+
+    rerender(
+      <PostHogProviderWrapper>
+        <div>child</div>
+      </PostHogProviderWrapper>,
+    );
+
+    await waitFor(() => {
+      expect(mockIdentify).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it("uses the email as the fallback name when the user has no display name", async () => {
     vi.mocked(authClient.useSession).mockReturnValue(
       makeSessionResult({
@@ -111,20 +156,18 @@ describe("PostHogProviderWrapper", () => {
   });
 
   it("resets PostHog after an identified user logs out", async () => {
-    vi.mocked(authClient.useSession)
-      .mockReturnValueOnce(
-        makeSessionResult({
-          data: {
-            user: {
-              id: "user-123",
-              email: "user@example.com",
-              name: "Example User",
-            },
-            session: { id: "session-123" },
-          },
-        }),
-      )
-      .mockReturnValueOnce(makeSessionResult({ data: null }));
+    let sessionData: unknown = {
+      user: {
+        id: "user-123",
+        email: "user@example.com",
+        name: "Example User",
+      },
+      session: { id: "session-123" },
+    };
+
+    vi.mocked(authClient.useSession).mockImplementation(() =>
+      makeSessionResult({ data: sessionData }),
+    );
 
     const { rerender } = render(
       <PostHogProviderWrapper>
@@ -136,6 +179,8 @@ describe("PostHogProviderWrapper", () => {
       expect(mockIdentify).toHaveBeenCalledTimes(1);
     });
 
+    sessionData = null;
+
     rerender(
       <PostHogProviderWrapper>
         <div>child</div>
@@ -145,6 +190,47 @@ describe("PostHogProviderWrapper", () => {
     await waitFor(() => {
       expect(mockReset).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it("does nothing when analytics is disabled", async () => {
+    const enabledDescriptor = Object.getOwnPropertyDescriptor(
+      config.posthog,
+      "enabled",
+    );
+
+    Object.defineProperty(config.posthog, "enabled", {
+      configurable: true,
+      value: false,
+    });
+
+    vi.mocked(authClient.useSession).mockReturnValue(
+      makeSessionResult({
+        data: {
+          user: {
+            id: "user-123",
+            email: "user@example.com",
+            name: "Example User",
+          },
+          session: { id: "session-123" },
+        },
+      }),
+    );
+
+    render(
+      <PostHogProviderWrapper>
+        <div>child</div>
+      </PostHogProviderWrapper>,
+    );
+
+    await waitFor(() => {
+      expect(mockInit).not.toHaveBeenCalled();
+    });
+    expect(mockIdentify).not.toHaveBeenCalled();
+    expect(mockReset).not.toHaveBeenCalled();
+
+    if (enabledDescriptor) {
+      Object.defineProperty(config.posthog, "enabled", enabledDescriptor);
+    }
   });
 
   it("does not reset PostHog while the auth session is still loading", async () => {

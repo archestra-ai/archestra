@@ -149,6 +149,19 @@ const PromptInputContent = ({
   const controller = usePromptInputController();
   const attachments = usePromptInputAttachments();
 
+  // Track if user explicitly opened model selector (for determining user vs API selection)
+  const modelSelectorUserOpenedRef = useRef(false);
+
+  // Wrap onModelChange to include user selection flag
+  const handleModelChangeWithUserFlag = useCallback(
+    (model: string) => {
+      const isUserSelected = modelSelectorUserOpenedRef.current;
+      modelSelectorUserOpenedRef.current = false;
+      onModelChange(model, isUserSelected);
+    },
+    [onModelChange],
+  );
+
   // Collapsed/expanded state for the model selector (defaults to collapsed = provider icon only)
   const { isCollapsed: showDefaultLogo, expand: expandModelSelector } =
     useModelSelectorDisplay({ conversationId });
@@ -401,7 +414,7 @@ const PromptInputContent = ({
                           </p>
                           <ModelSelector
                             selectedModel={selectedModel}
-                            onModelChange={onModelChange}
+                            onModelChange={handleModelChangeWithUserFlag}
                             onOpenChange={onModelSelectorOpenChange}
                             apiKeyId={
                               conversationId
@@ -539,8 +552,11 @@ const PromptInputContent = ({
                   )}
                   <ModelSelector
                     selectedModel={selectedModel}
-                    onModelChange={onModelChange}
+                    onModelChange={handleModelChangeWithUserFlag}
                     onOpenChange={(open) => {
+                      if (open) {
+                        modelSelectorUserOpenedRef.current = true;
+                      }
                       onModelSelectorOpenChange?.(open);
                       if (!open) {
                         setTimeout(() => {

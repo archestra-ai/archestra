@@ -351,17 +351,20 @@ export default function ChatPage() {
   // This prevents ModelSelector's auto-select (triggered by apiKeyId changes)
   // from overwriting the agent default or org default.
   const modelSelectorWasOpenRef = useRef(false);
-  const handleInitialModelChange = useCallback((modelId: string) => {
-    if (modelInitializedRef.current && !modelSelectorWasOpenRef.current) {
-      return;
-    }
-    setInitialModel(modelId);
-    if (modelSelectorWasOpenRef.current) {
-      setInitialModelSource("user");
-      saveModelOverride(modelId);
-    }
-    modelSelectorWasOpenRef.current = false;
-  }, []);
+  const handleInitialModelChange = useCallback(
+    (modelId: string, _isUserSelected?: boolean) => {
+      if (modelInitializedRef.current && !modelSelectorWasOpenRef.current) {
+        return;
+      }
+      setInitialModel(modelId);
+      if (modelSelectorWasOpenRef.current) {
+        setInitialModelSource("user");
+        saveModelOverride(modelId);
+      }
+      modelSelectorWasOpenRef.current = false;
+    },
+    [],
+  );
   const handleInitialModelSelectorOpenChange = useCallback((open: boolean) => {
     if (open) {
       modelSelectorWasOpenRef.current = true;
@@ -586,6 +589,9 @@ export default function ChatPage() {
   const updateConversationMutateRef = useRef(updateConversationMutation.mutate);
   updateConversationMutateRef.current = updateConversationMutation.mutate;
 
+  // Track if user explicitly opened model selector (for existing conversations)
+  const conversationModelSelectorOpenRef = useRef(false);
+
   // Handle model change — use refs for chatModels and conversation to keep
   // callback reference stable. A new callback reference would re-trigger
   // ModelSelector's auto-select effect on every chatModels refetch.
@@ -593,19 +599,37 @@ export default function ChatPage() {
   chatModelsRef.current = chatModels;
   const conversationRef = useRef(conversation);
   conversationRef.current = conversation;
-  const handleModelChange = useCallback((model: string) => {
-    if (!conversationRef.current) return;
+  const handleModelChange = useCallback(
+    (model: string, isUserSelected: boolean = false) => {
+      if (!conversationRef.current) return;
 
-    // Find the provider for this model
-    const modelInfo = chatModelsRef.current.find((m) => m.id === model);
-    const provider = modelInfo?.provider;
+      // If user explicitly selected the model (opened selector first), save to localStorage
+      if (isUserSelected) {
+        saveModelOverride(model);
+      }
 
-    updateConversationMutateRef.current({
-      id: conversationRef.current.id,
-      selectedModel: model,
-      selectedProvider: provider,
-    });
-  }, []);
+      // Find the provider for this model
+      const modelInfo = chatModelsRef.current.find((m) => m.id === model);
+      const provider = modelInfo?.provider;
+
+      updateConversationMutateRef.current({
+        id: conversationRef.current.id,
+        selectedModel: model,
+        selectedProvider: provider,
+      });
+    },
+    [],
+  );
+
+  // Handle model selector open state for existing conversations
+  const handleConversationModelSelectorOpenChange = useCallback(
+    (open: boolean) => {
+      if (open) {
+        conversationModelSelectorOpenRef.current = true;
+      }
+    },
+    [],
+  );
 
   // Handle API key change - preselect best model for the new key's provider.
   // Combines chatApiKeyId + model selection in a single mutation to avoid
@@ -1767,6 +1791,9 @@ export default function ChatPage() {
                         status={status}
                         selectedModel={conversation?.selectedModel ?? ""}
                         onModelChange={handleModelChange}
+                        onModelSelectorOpenChange={
+                          handleConversationModelSelectorOpenChange
+                        }
                         agentId={promptAgentId ?? activeAgentId}
                         conversationId={conversationId}
                         currentConversationChatApiKeyId={

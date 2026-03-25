@@ -25,6 +25,22 @@ export function invalidateToolAssignmentQueries(
     queryClient.invalidateQueries({
       queryKey: ["chat", "agents", agentId, "mcp-tools"],
     });
+    // WHY: Agent delegation queries are per-agent and were previously not
+    // invalidated on tool assignment changes. When a tool is assigned/unassigned
+    // to an agent, the agent's delegation list may change (tools can carry
+    // sub-agent delegation config). Without this invalidation the scheduler
+    // reads stale delegation data and may trigger against the wrong agent or
+    // not trigger at all — matching the reported "agent schedule triggers" bug.
+    queryClient.invalidateQueries({
+      queryKey: ["agents", agentId, "delegations"],
+    });
+    // WHY: Also invalidate the specific agent detail query so any component
+    // that reads agent config (including schedule config) sees fresh data
+    // immediately after a tool assignment batch completes.
+    queryClient.invalidateQueries({
+      queryKey: ["agents", agentId],
+      exact: true,
+    });
   }
 
   // Invalidate global queries

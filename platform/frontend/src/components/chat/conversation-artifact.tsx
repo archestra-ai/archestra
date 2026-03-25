@@ -2,6 +2,7 @@
 
 import DOMPurify from "dompurify";
 import { Copy, Download, FileText, GripVertical, X } from "lucide-react";
+import { CopyButton } from "@/components/copy-button";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
@@ -233,6 +234,27 @@ export function ConversationArtifactPanel({
         <code className={className} {...props}>
           {children}
         </code>
+      );
+    },
+    pre({ children, ...props }) {
+      // Extract the text content from the code element inside <pre>
+      const extractText = (node: React.ReactNode): string => {
+        if (typeof node === "string") return node;
+        if (Array.isArray(node)) return node.map(extractText).join("");
+        if (node && typeof node === "object" && "props" in node) {
+          return extractText((node as React.ReactElement<{ children?: React.ReactNode }>).props.children);
+        }
+        return "";
+      };
+      const codeText = extractText(children).replace(/\n$/, "");
+
+      return (
+        <div className="relative group">
+          <pre {...props}>{children}</pre>
+          <div className="absolute top-2 right-2">
+            <CopyButton text={codeText} size={14} />
+          </div>
+        </div>
       );
     },
   };

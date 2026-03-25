@@ -107,7 +107,7 @@ jobs:
 
       - name: Upload digest
         if: inputs.push_to_gcr
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        uses: ./.github/actions/github-upload-artifact
         with:
           name: mcp-base-digests-${{ strategy.job-index }}
           path: /tmp/digests/*
@@ -131,7 +131,7 @@ jobs:
           fetch-depth: 1
 
       - name: Download digests
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        uses: ./.github/actions/github-download-artifact
         with:
           path: /tmp/digests
           pattern: mcp-base-digests-*

@@ -5,14 +5,22 @@ on:
 
 permissions:
   actions: write
+  contents: read
 
 jobs:
   clear-cache:
     runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
-      - name: Clear cache
-        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Clear cache
+        uses: ./.github/actions/github-script
+        with:
+          github-token: ${{ github.token }}
           script: |
             console.log("About to clear")
             const caches = await github.rest.actions.getActionsCacheList({

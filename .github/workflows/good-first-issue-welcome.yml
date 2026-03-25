@@ -5,6 +5,7 @@ on:
     types: [labeled]
 
 permissions:
+  contents: read
   issues: write
 
 jobs:
@@ -13,10 +14,16 @@ jobs:
     if: github.event.label.name == 'good first issue'
     
     steps:
-      - name: Post welcome comment
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Post welcome comment
+        uses: ./.github/actions/github-script
+        with:
+          github-token: ${{ github.token }}
           script: |
             await github.rest.issues.createComment({
               owner: context.repo.owner,

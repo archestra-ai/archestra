@@ -11,11 +11,19 @@ jobs:
       !contains(fromJson('["iskhakov", "Konstantinov-Innokentii", "joeyorlando", "brojd"]'), github.event.pull_request.user.login)
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
+      contents: read
       pull-requests: write
     steps:
-      - name: Randomly assign reviewer from core team
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Randomly assign reviewer from core team
+        uses: ./.github/actions/github-script
+        with:
+          github-token: ${{ github.token }}
           script: |
             const coreTeam = ['iskhakov', 'Konstantinov-Innokentii', 'joeyorlando', 'brojd'];
             const prAuthor = context.payload.pull_request.user.login;

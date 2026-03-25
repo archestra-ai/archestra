@@ -56,7 +56,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install Socket CLI
-        run: pip install socketsecurity==2.2.79
+        run: pip install --require-hashes -r .github/requirements/socketsecurity.txt
 
       - name: Run Socket scan
         env:

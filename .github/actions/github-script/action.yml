@@ -1,0 +1,24 @@
+name: GitHub Script
+description: Wrapper around actions/github-script pinned to a vetted version.
+inputs:
+  github-token:
+    description: GitHub token to use for API calls.
+    required: false
+    default: ""
+  script:
+    description: JavaScript source to execute.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Run GitHub Script
+      if: ${{ inputs.github-token != '' }}
+      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: ${{ inputs.script }}
+    - name: Run GitHub Script
+      if: ${{ inputs.github-token == '' }}
+      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+      with:
+        script: ${{ inputs.script }}

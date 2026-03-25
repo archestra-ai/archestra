@@ -20,7 +20,7 @@ runs:
   steps:
     - name: Cache Kind node image
       id: cache-kind-node
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      uses: ./.github/actions/github-cache
       with:
         path: /tmp/kindest-node.tar
         key: kindest-node-v1.34.3-${{ runner.arch }}

@@ -16,7 +16,7 @@ runs:
   steps:
     - name: Generate a token
       id: generate-token
-      uses: actions/create-github-app-token@df432ceedc7162793a195dd1713ff69aefc7379e # v2.0.6
+      uses: ./.github/actions/github-app-token
       with:
         app-id: ${{ inputs.app-id }}
         private-key: ${{ inputs.private-key }}

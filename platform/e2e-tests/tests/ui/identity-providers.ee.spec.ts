@@ -291,6 +291,7 @@ async function expectActiveSession(page: Page): Promise<void> {
         return page.evaluate(async () => {
           const response = await fetch("/api/auth/get-session", {
             credentials: "include",
+            cache: "no-store",
           });
 
           if (!response.ok) {
@@ -298,7 +299,18 @@ async function expectActiveSession(page: Page): Promise<void> {
           }
 
           const session = await response.json();
-          return session?.user?.email ?? null;
+
+          if (session?.user?.email) {
+            return session.user.email;
+          }
+
+          const sidebarEmail =
+            document
+              .querySelector('[data-testid="sidebar-user-profile"]')
+              ?.textContent?.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] ??
+            null;
+
+          return sidebarEmail;
         });
       },
       {

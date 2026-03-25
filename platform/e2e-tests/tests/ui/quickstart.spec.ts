@@ -36,7 +36,34 @@ test.describe("Quickstart", { tag: "@quickstart" }, () => {
         E2eTestId.QuickstartAddApiKeyButton,
       );
       const chatPrompt = page.getByTestId(E2eTestId.ChatPromptTextarea);
-      if (await addApiKeyButton.isVisible({ timeout: 3_000 }).catch(() => false)) {
+      const quickstartState = await expect
+        .poll(
+          async () => {
+            if (await addApiKeyButton.isVisible().catch(() => false)) {
+              return "onboarding";
+            }
+
+            if (await chatPrompt.isVisible().catch(() => false)) {
+              return "chat-ready";
+            }
+
+            return null;
+          },
+          {
+            timeout: 20_000,
+            intervals: [500, 1000, 2000, 5000],
+          },
+        )
+        .toBeTruthy()
+        .then(async () => {
+          if (await addApiKeyButton.isVisible().catch(() => false)) {
+            return "onboarding" as const;
+          }
+
+          return "chat-ready" as const;
+        });
+
+      if (quickstartState === "onboarding") {
         await createChatApiKey(page, {
           name: "Quickstart Key",
           apiKey: "sk-quickstart-test",

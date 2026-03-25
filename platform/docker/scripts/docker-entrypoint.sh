@@ -1,6 +1,15 @@
 #!/bin/sh
 set -e
 
+# Runtime initialization for the unified platform image.
+# This script:
+# - bootstraps a persistent auth secret when one is not provided
+# - optionally provisions and wires up an embedded KinD cluster for quickstart mode
+# - initializes or upgrades the bundled PostgreSQL data directory when using the internal DB
+# - injects the resolved DATABASE_URL and optional ngrok programs into supervisord config
+# - starts supervisord in the background so container signals can trigger graceful cleanup
+# - tears down the embedded KinD cluster on shutdown when this container created it
+
 # Track if we created a KinD cluster for cleanup
 KIND_CLUSTER=""
 # Track supervisord PID for cleanup

@@ -224,6 +224,66 @@ async function getRuntimeModelForProvider(
   }, providerName);
 }
 
+async function selectRuntimeModelFromDialog(
+  page: Page,
+  runtimeModel: RuntimeChatModel,
+): Promise<void> {
+  const modelOptionPattern = buildModelOptionPattern(runtimeModel);
+  const searchInput = page.getByPlaceholder("Search models...");
+  const emptyState = page.getByText("No models found.");
+  const refreshButton = page.getByRole("button", { name: /refresh models/i });
+  const exactModelOption = page
+    .getByRole("option")
+    .filter({ hasText: `(${runtimeModel.id})` });
+  const displayNameModelOption = page
+    .getByRole("option")
+    .filter({ hasText: modelOptionPattern });
+
+  await expect(async () => {
+    if (await searchInput.isVisible().catch(() => false)) {
+      await searchInput.fill(runtimeModel.id);
+    }
+
+    if (
+      (await exactModelOption
+        .first()
+        .isVisible()
+        .catch(() => false)) ||
+      (await displayNameModelOption
+        .first()
+        .isVisible()
+        .catch(() => false))
+    ) {
+      return;
+    }
+
+    if (await emptyState.isVisible().catch(() => false)) {
+      if (await refreshButton.isVisible().catch(() => false)) {
+        await refreshButton.click();
+      }
+      if (await searchInput.isVisible().catch(() => false)) {
+        await searchInput.clear();
+      }
+    }
+
+    await expect(
+      exactModelOption.first().or(displayNameModelOption.first()),
+    ).toBeVisible();
+  }).toPass({ timeout: 25_000, intervals: [500, 1000, 2000, 5000] });
+
+  if (
+    await exactModelOption
+      .first()
+      .isVisible()
+      .catch(() => false)
+  ) {
+    await exactModelOption.first().click();
+    return;
+  }
+
+  await displayNameModelOption.first().click();
+}
+
 for (const config of testConfigs) {
   test.describe(`Chat-UI-${config.providerName}`, () => {
     if (skippedProviders.has(config.providerName)) {
@@ -273,45 +333,7 @@ for (const config of testConfigs) {
       // Wait for the model selector dialog to open
       await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5_000 });
 
-      const modelOptionPattern = buildModelOptionPattern(runtimeModel);
-
-      // Search for the model if search input is available
-      const searchInput = page.getByPlaceholder("Search models...");
-      if (await searchInput.isVisible({ timeout: 1_000 }).catch(() => false)) {
-        await searchInput.fill(runtimeModel.displayName);
-      }
-
-      // Match by exact model ID first, then fall back to display name for
-      // providers whose rendered option text can vary slightly in CI.
-      const exactModelOption = page
-        .getByRole("option")
-        .filter({ hasText: `(${runtimeModel.id})` });
-      const displayNameModelOption = page
-        .getByRole("option")
-        .filter({ hasText: modelOptionPattern });
-
-      await expect(async () => {
-        if (
-          await exactModelOption
-            .first()
-            .isVisible()
-            .catch(() => false)
-        ) {
-          return;
-        }
-        await expect(displayNameModelOption.first()).toBeVisible();
-      }).toPass({ timeout: 15_000, intervals: [500, 1000, 2000] });
-
-      if (
-        await exactModelOption
-          .first()
-          .isVisible()
-          .catch(() => false)
-      ) {
-        await exactModelOption.first().click();
-      } else {
-        await displayNameModelOption.first().click();
-      }
+      await selectRuntimeModelFromDialog(page, runtimeModel);
 
       // Wait for dialog to close
       await expect(page.getByRole("dialog")).not.toBeVisible({

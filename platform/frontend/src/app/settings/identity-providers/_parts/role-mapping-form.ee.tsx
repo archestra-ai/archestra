@@ -73,7 +73,10 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
 
       <Accordion type="single" collapsible className="w-full">
         <AccordionItem value="role-mapping" className="border-none">
-          <AccordionTrigger className="hover:no-underline">
+          <AccordionTrigger
+            className="hover:no-underline"
+            data-testid={E2eTestId.IdpRoleMappingAccordionTrigger}
+          >
             <div className="flex items-center gap-2">
               <h4 className="text-md font-medium">Role Mapping (Optional)</h4>
               <TooltipProvider>

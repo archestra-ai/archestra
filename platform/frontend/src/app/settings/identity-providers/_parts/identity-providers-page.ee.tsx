@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  E2eTestId,
   SSO_PROVIDER_ID,
   SSO_TRUSTED_PROVIDER_IDS,
   type SsoProviderId,
@@ -331,6 +332,7 @@ export function IdentityProvidersSettingsContent() {
               key={config.id}
               className="cursor-pointer hover:shadow-md transition-shadow flex flex-col h-full"
               onClick={() => handleProviderClick(config)}
+              data-testid={`${E2eTestId.IdentityProviderCard}-${config.id}`}
             >
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
@@ -358,6 +360,7 @@ export function IdentityProvidersSettingsContent() {
                   variant={existingProvider ? "outline" : "default"}
                   size="sm"
                   className="w-full"
+                  data-testid={`${E2eTestId.IdentityProviderOpenDialogButton}-${config.id}`}
                 >
                   {existingProvider ? "Edit" : "Enable"}
                 </Button>

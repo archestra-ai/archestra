@@ -2,6 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  E2eTestId,
   IdentityProviderFormSchema,
   type IdentityProviderFormValues,
 } from "@shared";
@@ -188,6 +189,7 @@ export function EditIdentityProviderDialog({
                 permissions={{ identityProvider: ["delete"] }}
                 className="sm:mr-auto"
                 onClick={() => setShowDeleteConfirm(true)}
+                data-testid={E2eTestId.IdentityProviderDeleteButton}
               >
                 <Trash2 className="mr-2 h-4 w-4" />
                 Delete
@@ -199,6 +201,7 @@ export function EditIdentityProviderDialog({
                 type="submit"
                 permissions={{ identityProvider: ["update"] }}
                 disabled={updateIdentityProvider.isPending}
+                data-testid={E2eTestId.IdentityProviderUpdateButton}
               >
                 {updateIdentityProvider.isPending
                   ? "Updating..."

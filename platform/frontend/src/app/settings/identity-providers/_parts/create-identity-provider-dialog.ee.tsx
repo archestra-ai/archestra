@@ -2,6 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  E2eTestId,
   IdentityProviderFormSchema,
   type IdentityProviderFormValues,
 } from "@shared";
@@ -143,6 +144,7 @@ export function CreateIdentityProviderDialog({
               type="submit"
               permissions={{ identityProvider: ["create"] }}
               disabled={createIdentityProvider.isPending}
+              data-testid={E2eTestId.IdentityProviderCreateButton}
             >
               {createIdentityProvider.isPending
                 ? "Creating..."

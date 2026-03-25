@@ -54,37 +54,6 @@ const adminRole = ac.newRole(allAvailableActions);
 const editorRole = ac.newRole(editorPermissions);
 const memberRole = ac.newRole(memberPermissions);
 
-export async function getTrustedAccountLinkingProviderIds(): Promise<string[]> {
-  let configuredProviderIds: Array<{ providerId: string }> = [];
-
-  try {
-    configuredProviderIds = await db
-      .selectDistinct({
-        providerId: schema.identityProvidersTable.providerId,
-      })
-      .from(schema.identityProvidersTable);
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      error.message.includes("Database not initialized")
-    ) {
-      return [...SSO_TRUSTED_PROVIDER_IDS];
-    }
-
-    throw error;
-  }
-
-  return [
-    ...new Set([
-      ...SSO_TRUSTED_PROVIDER_IDS,
-      ...configuredProviderIds
-        .map(({ providerId }) => providerId)
-        .filter((providerId) => providerId.length > 0)
-        .sort((a, b) => a.localeCompare(b)),
-    ]),
-  ];
-}
-
 export const auth = betterAuth({
   appName: APP_NAME,
   baseURL: frontendBaseUrl,
@@ -425,6 +394,19 @@ function getBetterAuthLogLevel(
 }
 
 export type BetterAuth = typeof auth;
+
+async function getTrustedAccountLinkingProviderIds(): Promise<string[]> {
+  if (!config.enterpriseFeatures.core) {
+    return [...SSO_TRUSTED_PROVIDER_IDS];
+  }
+
+  const { default: IdentityProviderModel } = await import(
+    // biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
+    "@/models/identity-provider.ee"
+  );
+
+  return IdentityProviderModel.getTrustedAccountLinkingProviderIds();
+}
 
 /**
  * Validates requests before they are processed by better-auth.

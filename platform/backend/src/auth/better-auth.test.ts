@@ -27,11 +27,7 @@ vi.mock("@/config", async (importOriginal) => {
 
 // Import after mock setup (dynamic import needed because of the mock)
 const { default: config } = await import("@/config");
-const {
-  handleAfterHook,
-  handleBeforeHook,
-  getTrustedAccountLinkingProviderIds,
-} = await import("./better-auth");
+const { handleAfterHook, handleBeforeHook } = await import("./better-auth");
 
 /**
  * Creates a mock JWT idToken with the given claims.
@@ -299,61 +295,6 @@ describe("handleBeforeHook", () => {
       const result = await handleBeforeHook(ctx);
       expect(result).toBe(ctx);
     });
-  });
-});
-
-describe("getTrustedAccountLinkingProviderIds", () => {
-  test("returns built-in trusted providers when no custom identity providers exist", async () => {
-    await expect(getTrustedAccountLinkingProviderIds()).resolves.toEqual([
-      "Okta",
-      "Google",
-      "GitHub",
-      "GitLab",
-      "EntraID",
-    ]);
-  });
-
-  test("includes configured generic OIDC and SAML provider IDs", async ({
-    makeOrganization,
-    makeIdentityProvider,
-  }) => {
-    const org = await makeOrganization();
-
-    await makeIdentityProvider(org.id, {
-      providerId: "custom-oidc",
-      oidcConfig: { clientId: "client-id" },
-    });
-    await makeIdentityProvider(org.id, {
-      providerId: "custom-saml",
-      samlConfig: { entryPoint: "https://example.com/saml" },
-    });
-
-    await expect(getTrustedAccountLinkingProviderIds()).resolves.toEqual([
-      "Okta",
-      "Google",
-      "GitHub",
-      "GitLab",
-      "EntraID",
-      "custom-oidc",
-      "custom-saml",
-    ]);
-  });
-
-  test("deduplicates built-in providers that are also configured in the database", async ({
-    makeOrganization,
-    makeIdentityProvider,
-  }) => {
-    const org = await makeOrganization();
-
-    await makeIdentityProvider(org.id, { providerId: "Okta" });
-
-    await expect(getTrustedAccountLinkingProviderIds()).resolves.toEqual([
-      "Okta",
-      "Google",
-      "GitHub",
-      "GitLab",
-      "EntraID",
-    ]);
   });
 });
 

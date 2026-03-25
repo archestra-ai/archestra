@@ -5,7 +5,9 @@ import {
   CornerDownLeftIcon,
   ImageIcon,
   Loader2Icon,
+  Maximize2Icon,
   MicIcon,
+  Minimize2Icon,
   PaperclipIcon,
   PlusIcon,
   SquareIcon,
@@ -905,6 +907,8 @@ export const PromptInputTextarea = ({
   const controller = useOptionalPromptInputController();
   const attachments = usePromptInputAttachments();
   const [isComposing, setIsComposing] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
     if (e.key === "Enter") {
@@ -983,17 +987,37 @@ export const PromptInputTextarea = ({
       };
 
   return (
-    <InputGroupTextarea
-      className={cn("field-sizing-content max-h-48 min-h-16", className)}
-      name="message"
-      onCompositionEnd={() => setIsComposing(false)}
-      onCompositionStart={() => setIsComposing(true)}
-      onKeyDown={handleKeyDown}
-      onPaste={handlePaste}
-      placeholder={placeholder}
-      {...props}
-      {...controlledProps}
-    />
+    <div className="relative flex w-full items-end">
+      <InputGroupTextarea
+        className={cn(
+          "field-sizing-content min-h-16 pr-10",
+          isExpanded ? "max-h-[80vh]" : "max-h-48",
+          className,
+        )}
+        name="message"
+        onCompositionEnd={() => setIsComposing(false)}
+        onCompositionStart={() => setIsComposing(true)}
+        onKeyDown={handleKeyDown}
+        onPaste={handlePaste}
+        placeholder={placeholder}
+        ref={textareaRef}
+        {...props}
+        {...controlledProps}
+      />
+      <Button
+        aria-label={isExpanded ? "Collapse input" : "Expand input"}
+        className="absolute bottom-2 right-2 size-8 cursor-pointer p-0 opacity-60 hover:opacity-100"
+        onClick={() => setIsExpanded(!isExpanded)}
+        type="button"
+        variant="ghost"
+      >
+        {isExpanded ? (
+          <Minimize2Icon className="size-4" />
+        ) : (
+          <Maximize2Icon className="size-4" />
+        )}
+      </Button>
+    </div>
   );
 };
 

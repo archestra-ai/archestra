@@ -34,6 +34,14 @@ on:
         required: false
       ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY:
         required: false
+      GCP_SERVICE_ACCOUNT_NAME:
+        required: false
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
+        required: false
+
+env:
+  PLATFORM_IMAGE_REGISTRY: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
+  PLATFORM_IMAGE_NAME: platform
 
 jobs:
   platform-linting-and-tests:
@@ -155,14 +163,17 @@ jobs:
 
           echo "✅ All validation checks passed"
 
-  # Build Docker images for e2e tests (platform and MCP server base)
-  # Images are exported as artifacts for fast co-located downloads in E2E jobs.
+  # Build Docker images for e2e tests (platform and MCP server base).
+  # Trusted PRs and merge queue runs push the platform image to Artifact Registry so
+  # each E2E shard can pull layers directly instead of downloading a tarball artifact.
+  # Fork PRs still fall back to artifacts because they do not receive OIDC-backed secrets.
   platform-e2e-build:
     name: Build ${{ matrix.name }} Image
     runs-on: ${{ matrix.runner }}
     if: ${{ inputs.should-skip-running-and-always-succeed != true }}
     permissions:
       contents: read
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
@@ -197,12 +208,29 @@ jobs:
           working-directory: ./platform
 
       - name: Build Platform image
-        if: ${{ matrix.use-build-action }}
+        if: ${{ matrix.use-build-action && inputs.is-fork-pr }}
         uses: ./.github/actions/build-platform-docker-image
         with:
           context: ${{ matrix.context }}
           load: "true"
           tags: ${{ matrix.local-tag-prefix }}:${{ github.sha }}
+          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+
+      - name: Authenticate to Google Artifact Registry
+        if: ${{ matrix.use-build-action && !inputs.is-fork-pr }}
+        uses: ./.github/actions/auth-to-gar
+        with:
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+      - name: Build Platform image and push to Artifact Registry
+        if: ${{ matrix.use-build-action && !inputs.is-fork-pr }}
+        uses: ./.github/actions/build-platform-docker-image
+        with:
+          context: ${{ matrix.context }}
+          push: "true"
+          tags: ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:${{ github.sha }}
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 
@@ -222,6 +250,7 @@ jobs:
 
       # Export as artifact for fast co-located downloads in E2E jobs
       - name: Export Docker image as tarball
+        if: ${{ !matrix.use-build-action || inputs.is-fork-pr }}
         env:
           GIT_SHA: ${{ github.sha }}
           LOCAL_TAG_PREFIX: ${{ matrix.local-tag-prefix }}
@@ -231,6 +260,7 @@ jobs:
           ls -lh "/tmp/${TARBALL_NAME}"
 
       - name: Upload Docker image artifact
+        if: ${{ !matrix.use-build-action || inputs.is-fork-pr }}
         uses: ./.github/actions/github-upload-artifact
         with:
           name: ${{ matrix.artifact-name }}
@@ -248,6 +278,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
@@ -324,6 +355,9 @@ jobs:
         id: load-platform-image
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: ./.github/actions/load-platform-image
+        with:
+          source: ${{ inputs.is-fork-pr && 'artifact' || 'registry' }}
+          image-tag: ${{ inputs.is-fork-pr && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
 
       - name: Load MCP server base image
         id: load-mcp-server-base-image
@@ -397,6 +431,7 @@ jobs:
     runs-on: blacksmith-16vcpu-ubuntu-2404
     permissions:
       contents: read
+      id-token: write
     steps:
       - name: Checkout repository
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -415,6 +450,9 @@ jobs:
         id: load-platform-image
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: ./.github/actions/load-platform-image
+        with:
+          source: ${{ inputs.is-fork-pr && 'artifact' || 'registry' }}
+          image-tag: ${{ inputs.is-fork-pr && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
 
       # Note: We intentionally don't load/use a custom MCP server base image for quickstart tests.
       # The embedded Kind cluster inside the quickstart container cannot easily access images
@@ -586,6 +624,7 @@ jobs:
     runs-on: blacksmith-16vcpu-ubuntu-2404
     permissions:
       contents: read
+      id-token: write
     steps:
       - name: Checkout repository
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -604,6 +643,9 @@ jobs:
         id: load-platform-image
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: ./.github/actions/load-platform-image
+        with:
+          source: ${{ inputs.is-fork-pr && 'artifact' || 'registry' }}
+          image-tag: ${{ inputs.is-fork-pr && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
 
       - name: Install Kind cluster
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -785,11 +827,14 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
-      # Platform image: Load from artifact (already built by platform-e2e-build)
+      # Platform image: pull from registry on trusted runs, fall back to artifacts for forks
       - name: Load platform image
         id: load-platform-image
         if: ${{ github.event_name == 'merge_group' && matrix.image-source == 'platform-e2e-build' }}
         uses: ./.github/actions/load-platform-image
+        with:
+          source: registry
+          image-tag: ${{ format('{0}/{1}:{2}', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
 
       # Other images: Build locally for scanning (single arch, no push)
       - name: Setup Blacksmith Builder

@@ -15,11 +15,11 @@ inputs:
   push:
     description: Whether to push the built image.
     required: false
-    default: ""
+    default: "false"
   load:
     description: Whether to load the built image into the local Docker daemon.
     required: false
-    default: ""
+    default: "false"
   tags:
     description: Image tags.
     required: false

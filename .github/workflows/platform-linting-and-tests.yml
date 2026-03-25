@@ -42,6 +42,8 @@ on:
 env:
   PLATFORM_IMAGE_REGISTRY: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
   PLATFORM_IMAGE_NAME: platform
+  MCP_SERVER_BASE_IMAGE_REGISTRY: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
+  MCP_SERVER_BASE_IMAGE_NAME: mcp-server-base
 
 jobs:
   platform-linting-and-tests:
@@ -238,6 +240,13 @@ jobs:
         if: ${{ !matrix.use-build-action }}
         uses: ./.github/actions/setup-blacksmith-builder
 
+      - name: Authenticate to Google Artifact Registry
+        if: ${{ !matrix.use-build-action && !inputs.is-fork-pr }}
+        uses: ./.github/actions/auth-to-gar
+        with:
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
       - name: Build MCP server base image
         if: ${{ !matrix.use-build-action }}
         uses: ./.github/actions/blacksmith-build-push
@@ -245,8 +254,9 @@ jobs:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
-          load: true
-          tags: ${{ matrix.local-tag-prefix }}:${{ github.sha }}
+          push: ${{ !inputs.is-fork-pr && 'true' || 'false' }}
+          load: ${{ inputs.is-fork-pr && 'true' || 'false' }}
+          tags: ${{ !inputs.is-fork-pr && format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) || format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
 
       # Export as artifact for fast co-located downloads in E2E jobs
       - name: Export Docker image as tarball
@@ -363,6 +373,9 @@ jobs:
         id: load-mcp-server-base-image
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: ./.github/actions/load-mcp-server-base-image
+        with:
+          source: ${{ inputs.is-fork-pr && 'artifact' || 'registry' }}
+          image-tag: ${{ inputs.is-fork-pr && format('mcp-server-base:{0}', github.sha) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
 
       - name: Setup Archestra Platform
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}

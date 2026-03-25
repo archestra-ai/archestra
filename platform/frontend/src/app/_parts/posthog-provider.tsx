@@ -14,6 +14,7 @@ export function PostHogProviderWrapper({
   const { data: session, isPending: isSessionPending } =
     authClient.useSession();
   const hasIdentifiedUserRef = useRef(false);
+  const isPostHogInitializedRef = useRef(false);
   const lastIdentifiedUserIdRef = useRef<string | null>(null);
   const userId = session?.user?.id;
   const userEmail = session?.user?.email;
@@ -26,8 +27,9 @@ export function PostHogProviderWrapper({
       config: posthogConfig,
     } = config.posthog;
 
-    if (analyticsEnabled && typeof window !== "undefined") {
+    if (analyticsEnabled) {
       posthog.init(token, posthogConfig);
+      isPostHogInitializedRef.current = true;
     }
   }, []);
 
@@ -35,7 +37,7 @@ export function PostHogProviderWrapper({
     const analyticsEnabled = config.posthog.enabled;
     if (
       !analyticsEnabled ||
-      typeof window === "undefined" ||
+      !isPostHogInitializedRef.current ||
       isSessionPending
     ) {
       return;

@@ -127,6 +127,57 @@ describe("PostHogProviderWrapper", () => {
     });
   });
 
+  it("identifies a different user after the session switches accounts", async () => {
+    let sessionData: unknown = {
+      user: {
+        id: "user-123",
+        email: "user@example.com",
+        name: "Example User",
+      },
+      session: { id: "session-123" },
+    };
+
+    vi.mocked(authClient.useSession).mockImplementation(() =>
+      makeSessionResult({ data: sessionData }),
+    );
+
+    const { rerender } = render(
+      <PostHogProviderWrapper>
+        <div>child</div>
+      </PostHogProviderWrapper>,
+    );
+
+    await waitFor(() => {
+      expect(mockIdentify).toHaveBeenCalledWith("user-123", {
+        email: "user@example.com",
+        name: "Example User",
+      });
+    });
+
+    sessionData = {
+      user: {
+        id: "user-456",
+        email: "other@example.com",
+        name: "Other User",
+      },
+      session: { id: "session-456" },
+    };
+
+    rerender(
+      <PostHogProviderWrapper>
+        <div>child</div>
+      </PostHogProviderWrapper>,
+    );
+
+    await waitFor(() => {
+      expect(mockIdentify).toHaveBeenCalledTimes(2);
+      expect(mockIdentify).toHaveBeenLastCalledWith("user-456", {
+        email: "other@example.com",
+        name: "Other User",
+      });
+    });
+  });
+
   it("uses the email as the fallback name when the user has no display name", async () => {
     vi.mocked(authClient.useSession).mockReturnValue(
       makeSessionResult({
@@ -198,38 +249,40 @@ describe("PostHogProviderWrapper", () => {
       "enabled",
     );
 
-    Object.defineProperty(config.posthog, "enabled", {
-      configurable: true,
-      value: false,
-    });
+    try {
+      Object.defineProperty(config.posthog, "enabled", {
+        configurable: true,
+        value: false,
+      });
 
-    vi.mocked(authClient.useSession).mockReturnValue(
-      makeSessionResult({
-        data: {
-          user: {
-            id: "user-123",
-            email: "user@example.com",
-            name: "Example User",
+      vi.mocked(authClient.useSession).mockReturnValue(
+        makeSessionResult({
+          data: {
+            user: {
+              id: "user-123",
+              email: "user@example.com",
+              name: "Example User",
+            },
+            session: { id: "session-123" },
           },
-          session: { id: "session-123" },
-        },
-      }),
-    );
+        }),
+      );
 
-    render(
-      <PostHogProviderWrapper>
-        <div>child</div>
-      </PostHogProviderWrapper>,
-    );
+      render(
+        <PostHogProviderWrapper>
+          <div>child</div>
+        </PostHogProviderWrapper>,
+      );
 
-    await waitFor(() => {
-      expect(mockInit).not.toHaveBeenCalled();
-    });
-    expect(mockIdentify).not.toHaveBeenCalled();
-    expect(mockReset).not.toHaveBeenCalled();
-
-    if (enabledDescriptor) {
-      Object.defineProperty(config.posthog, "enabled", enabledDescriptor);
+      await waitFor(() => {
+        expect(mockInit).not.toHaveBeenCalled();
+      });
+      expect(mockIdentify).not.toHaveBeenCalled();
+      expect(mockReset).not.toHaveBeenCalled();
+    } finally {
+      if (enabledDescriptor) {
+        Object.defineProperty(config.posthog, "enabled", enabledDescriptor);
+      }
     }
   });
 

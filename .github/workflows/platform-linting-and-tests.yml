@@ -208,7 +208,7 @@ jobs:
 
       - name: Setup Blacksmith Builder
         if: ${{ !matrix.use-build-action }}
-        uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
+        uses: ./.github/actions/setup-blacksmith-builder
 
       - name: Build MCP server base image
         if: ${{ !matrix.use-build-action }}
@@ -794,7 +794,7 @@ jobs:
       # Other images: Build locally for scanning (single arch, no push)
       - name: Setup Blacksmith Builder
         if: ${{ github.event_name == 'merge_group' && matrix.image-source == 'build' }}
-        uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
+        uses: ./.github/actions/setup-blacksmith-builder
 
       - name: Build image for scanning
         id: build-image

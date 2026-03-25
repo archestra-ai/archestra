@@ -1,3 +1,4 @@
+import type { Page } from "@playwright/test";
 import { E2eTestId } from "@shared";
 import { WIREMOCK_BASE_URL } from "../../consts";
 import { expect, test } from "../../fixtures";
@@ -27,16 +28,18 @@ test.beforeAll(async () => {
 
 interface ChatProviderTestConfig {
   providerName: string;
-  /** Display name shown in model selector dropdown */
+  /** Display name shown in model selector provider grouping */
   providerDisplayName: string;
-  /** Model ID to select from the dropdown */
-  modelId: string;
-  /** Model display name shown in selector */
-  modelDisplayName: string;
   /** Unique identifier used in wiremock mapping to match this test's requests (must appear in message body) */
   wiremockStubId: string;
   /** Expected response text from the mocked LLM */
   expectedResponse: string;
+}
+
+interface RuntimeChatModel {
+  provider: string;
+  id: string;
+  displayName: string;
 }
 
 // =============================================================================
@@ -47,8 +50,6 @@ interface ChatProviderTestConfig {
 const anthropicConfig: ChatProviderTestConfig = {
   providerName: "anthropic",
   providerDisplayName: "Anthropic",
-  modelId: "claude-3-5-sonnet-20241022",
-  modelDisplayName: "Claude 3.5 Sonnet",
   wiremockStubId: "chat-ui-e2e-test",
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
 };
@@ -57,8 +58,6 @@ const anthropicConfig: ChatProviderTestConfig = {
 const openaiConfig: ChatProviderTestConfig = {
   providerName: "openai",
   providerDisplayName: "OpenAI",
-  modelId: "gpt-4o",
-  modelDisplayName: "GPT-4o",
   wiremockStubId: "chat-ui-e2e-test",
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
 };
@@ -67,8 +66,6 @@ const openaiConfig: ChatProviderTestConfig = {
 const geminiConfig: ChatProviderTestConfig = {
   providerName: "gemini",
   providerDisplayName: "Google",
-  modelId: "gemini-2.5-flash",
-  modelDisplayName: "Gemini 2.5 Flash",
   wiremockStubId: "chat-ui-e2e-test",
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
 };
@@ -78,8 +75,6 @@ const geminiConfig: ChatProviderTestConfig = {
 const cerebrasConfig: ChatProviderTestConfig = {
   providerName: "cerebras",
   providerDisplayName: "Cerebras",
-  modelId: "cerebras-gpt-13b",
-  modelDisplayName: "cerebras-gpt-13b",
   wiremockStubId: "chat-ui-e2e-test",
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
 };
@@ -88,8 +83,6 @@ const cerebrasConfig: ChatProviderTestConfig = {
 const cohereConfig: ChatProviderTestConfig = {
   providerName: "cohere",
   providerDisplayName: "Cohere",
-  modelId: "command-r-plus-08-2024",
-  modelDisplayName: "Command R+",
   wiremockStubId: "chat-ui-e2e-test",
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
 };
@@ -98,8 +91,6 @@ const cohereConfig: ChatProviderTestConfig = {
 const mistralConfig: ChatProviderTestConfig = {
   providerName: "mistral",
   providerDisplayName: "Mistral",
-  modelId: "mistral-large-latest",
-  modelDisplayName: "Mistral Large",
   wiremockStubId: "chat-ui-e2e-test",
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
 };
@@ -108,8 +99,6 @@ const mistralConfig: ChatProviderTestConfig = {
 const perplexityConfig: ChatProviderTestConfig = {
   providerName: "perplexity",
   providerDisplayName: "Perplexity",
-  modelId: "sonar-pro",
-  modelDisplayName: "Sonar Pro",
   wiremockStubId: "chat-ui-e2e-test",
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
 };
@@ -118,8 +107,6 @@ const perplexityConfig: ChatProviderTestConfig = {
 const ollamaConfig: ChatProviderTestConfig = {
   providerName: "ollama",
   providerDisplayName: "Ollama",
-  modelId: "meta-llama/Llama-3.1-8B-Instruct",
-  modelDisplayName: "Llama 3.1 8B Instruct",
   wiremockStubId: "chat-ui-e2e-test",
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
 };
@@ -128,8 +115,6 @@ const ollamaConfig: ChatProviderTestConfig = {
 const vllmConfig: ChatProviderTestConfig = {
   providerName: "vllm",
   providerDisplayName: "vLLM",
-  modelId: "meta-llama/Llama-3.1-8B-Instruct",
-  modelDisplayName: "Llama 3.1 8B Instruct",
   wiremockStubId: "chat-ui-e2e-test",
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
 };
@@ -138,8 +123,6 @@ const vllmConfig: ChatProviderTestConfig = {
 const zhipuaiConfig: ChatProviderTestConfig = {
   providerName: "zhipuai",
   providerDisplayName: "ZhipuAI",
-  modelId: "glm-4.5-flash",
-  modelDisplayName: "GLM-4.5 Flash",
   wiremockStubId: "chat-ui-e2e-test",
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
 };
@@ -148,8 +131,6 @@ const zhipuaiConfig: ChatProviderTestConfig = {
 const deepseekConfig: ChatProviderTestConfig = {
   providerName: "deepseek",
   providerDisplayName: "DeepSeek",
-  modelId: "deepseek-chat",
-  modelDisplayName: "deepseek-chat",
   wiremockStubId: "chat-ui-e2e-test",
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
 };
@@ -158,8 +139,6 @@ const deepseekConfig: ChatProviderTestConfig = {
 const groqConfig: ChatProviderTestConfig = {
   providerName: "groq",
   providerDisplayName: "Groq",
-  modelId: "llama-3.1-8b-instant",
-  modelDisplayName: "llama-3.1-8b-instant",
   wiremockStubId: "chat-ui-e2e-test",
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
 };
@@ -168,8 +147,6 @@ const groqConfig: ChatProviderTestConfig = {
 const xaiConfig: ChatProviderTestConfig = {
   providerName: "xai",
   providerDisplayName: "xAI",
-  modelId: "grok-4",
-  modelDisplayName: "grok-4",
   wiremockStubId: "chat-ui-e2e-test",
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
 };
@@ -178,8 +155,6 @@ const xaiConfig: ChatProviderTestConfig = {
 const openrouterConfig: ChatProviderTestConfig = {
   providerName: "openrouter",
   providerDisplayName: "OpenRouter",
-  modelId: "openrouter/auto",
-  modelDisplayName: "openrouter/auto",
   wiremockStubId: "chat-ui-e2e-test",
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
 };
@@ -188,8 +163,6 @@ const openrouterConfig: ChatProviderTestConfig = {
 const minimaxConfig: ChatProviderTestConfig = {
   providerName: "minimax",
   providerDisplayName: "MiniMax",
-  modelId: "MiniMax-M2.1",
-  modelDisplayName: "MiniMax-M2.1",
   wiremockStubId: "chat-ui-e2e-test",
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
 };
@@ -218,6 +191,39 @@ const testConfigs: ChatProviderTestConfig[] = [
 
 const skippedProviders = new Set<string>();
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function buildModelOptionPattern(model: RuntimeChatModel): RegExp {
+  const displayName = escapeRegExp(model.displayName);
+  const modelId = escapeRegExp(model.id);
+  return new RegExp(
+    `${displayName}\\s*\\(${modelId}\\)|${modelId}|${displayName}`,
+    "i",
+  );
+}
+
+async function getRuntimeModelForProvider(
+  page: Page,
+  providerName: string,
+): Promise<RuntimeChatModel | null> {
+  return page.evaluate(async (provider) => {
+    const response = await fetch("/api/chat/models", {
+      credentials: "include",
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to load chat models: ${response.status} ${response.statusText}`,
+      );
+    }
+
+    const models = (await response.json()) as RuntimeChatModel[];
+    return models.find((entry) => entry.provider === provider) ?? null;
+  }, providerName);
+}
+
 for (const config of testConfigs) {
   test.describe(`Chat-UI-${config.providerName}`, () => {
     if (skippedProviders.has(config.providerName)) {
@@ -239,6 +245,18 @@ for (const config of testConfigs) {
       const textarea = page.getByTestId(E2eTestId.ChatPromptTextarea);
       await expect(textarea).toBeVisible({ timeout: 15_000 });
 
+      const runtimeModel = await getRuntimeModelForProvider(
+        page,
+        config.providerName,
+      );
+      test.skip(
+        !runtimeModel,
+        `${config.providerDisplayName} is not configured in this test environment`,
+      );
+      if (!runtimeModel) {
+        return;
+      }
+
       // Open model selector and choose the test model
       const modelSelectorTrigger = page
         .getByTestId(E2eTestId.ChatModelSelectorTrigger)
@@ -255,21 +273,22 @@ for (const config of testConfigs) {
       // Wait for the model selector dialog to open
       await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5_000 });
 
+      const modelOptionPattern = buildModelOptionPattern(runtimeModel);
+
       // Search for the model if search input is available
       const searchInput = page.getByPlaceholder("Search models...");
       if (await searchInput.isVisible({ timeout: 1_000 }).catch(() => false)) {
-        await searchInput.fill(config.modelId);
-        await page.waitForTimeout(500);
+        await searchInput.fill(runtimeModel.displayName);
       }
 
       // Match by exact model ID first, then fall back to display name for
       // providers whose rendered option text can vary slightly in CI.
       const exactModelOption = page
         .getByRole("option")
-        .filter({ hasText: `(${config.modelId})` });
+        .filter({ hasText: `(${runtimeModel.id})` });
       const displayNameModelOption = page
         .getByRole("option")
-        .filter({ hasText: new RegExp(config.modelDisplayName, "i") });
+        .filter({ hasText: modelOptionPattern });
 
       await expect(async () => {
         if (

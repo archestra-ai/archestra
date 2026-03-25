@@ -732,16 +732,17 @@ test.describe("Identity Provider Role Mapping E2E", () => {
       await expectAuthenticated(ssoPage, 15000);
 
       // STEP 5: Verify the user has admin role (from second rule, not editor from first)
-      // The Roles settings page is only accessible to admins
-      await ssoPage.goto(`${UI_BASE_URL}/settings/roles`);
-      await ssoPage.waitForLoadState("domcontentloaded");
-      await expect(ssoPage).toHaveURL(/\/settings\/roles/, { timeout: 10000 });
+      // The SSO callback can still be finalizing session state immediately after
+      // login on CI, so poll until we can load the admin-only Roles page.
+      await expect(async () => {
+        await ssoPage.goto(`${UI_BASE_URL}/settings/roles`);
+        await ssoPage.waitForLoadState("domcontentloaded");
 
-      // If user has admin role, they should see the Roles page
-      // If they got editor role (from rule 1) or member role (default), they would not see this
-      await expect(ssoPage.getByRole("heading", { name: "Roles" })).toBeVisible(
-        { timeout: 10000 },
-      );
+        await expect(ssoPage).toHaveURL(/\/settings\/roles/, { timeout: 5000 });
+        await expect(
+          ssoPage.getByRole("heading", { name: "Roles" }),
+        ).toBeVisible({ timeout: 5000 });
+      }).toPass({ timeout: 30_000, intervals: [1000, 2000, 5000] });
 
       // Success! The second rule matched and assigned admin role
     } finally {

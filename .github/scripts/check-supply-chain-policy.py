@@ -128,7 +128,7 @@ def has_inline_or_previous_marker(
         return True
 
     previous_index = index - 1
-    remaining_lines = 3
+    remaining_lines = 8
     while previous_index >= 0 and remaining_lines > 0:
         previous_line = lines[previous_index].strip()
         if not previous_line:

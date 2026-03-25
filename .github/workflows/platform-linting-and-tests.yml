@@ -516,6 +516,7 @@ jobs:
           #    causing failures when running on release PRs (the new version doesn't exist yet)
           # Using 'latest' ensures the image is always available regardless of version bumps
           #
+          # supply-chain-policy: allow-latest quickstart needs a published public fallback
           # Provider base URLs point to WireMock so quickstart tests can mock LLM responses
           docker run -d \
             --name archestra-quickstart \
@@ -523,7 +524,6 @@ jobs:
             -p 9000:9000 \
             -p 3000:3000 \
             -e ARCHESTRA_QUICKSTART=true \
-            # supply-chain-policy: allow-latest quickstart needs a published public fallback
             -e ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:latest \
             -e ARCHESTRA_OPENAI_BASE_URL=http://archestra-wiremock:8080/v1 \
             -e ARCHESTRA_ANTHROPIC_BASE_URL=http://archestra-wiremock:8080 \

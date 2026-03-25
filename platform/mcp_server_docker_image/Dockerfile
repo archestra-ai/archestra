@@ -1,9 +1,11 @@
+ARG PYTHON_IMAGE=python:3.12-alpine@sha256:7747d47f92cfca63a6e2b50275e23dba8407c30d8ae929a88ddd49a5d3f2d331
+ARG NODE_IMAGE=node:20-alpine@sha256:b88333c42c23fbd91596ebd7fd10de239cedab9617de04142dde7315e3bc0afa
 ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.9.26@sha256:9a23023be68b2ed09750ae636228e903a54a05ea56ed03a934d00fe9fbeded4b
 
 FROM ${UV_IMAGE} AS uv-bin
 
 # Multi-stage build for minimal final image
-FROM python:3.12-alpine AS python-builder
+FROM ${PYTHON_IMAGE} AS python-builder
 
 # Install Python build dependencies
 RUN apk add --no-cache \
@@ -32,26 +34,10 @@ RUN uv pip sync \
    /tmp/python-deps/requirements.lock
 
 # Node.js stage
-FROM node:20-alpine AS node-builder
+FROM ${NODE_IMAGE} AS node-builder
 
-# Upgrade npm to 11.11.0 which bundles fixed versions of all previously vulnerable dependencies:
-# tar@7.5.9 (CVE-2026-23950, CVE-2026-23745, CVE-2026-24842, CVE-2026-26960)
-# glob@13.0.6 (CVE-2025-64756)
-# brace-expansion@5.0.3 (GHSA-7h2j-956f-4vf2)
-# Note: npm 11.11.0 bundles minimatch@10.2.2 which is patched to 10.2.4 below
-RUN npm install -g npm@11.11.0
-
-# Patch npm's bundled minimatch 10.2.2 -> 10.2.4 to fix CVE-2026-27903, CVE-2026-27904
-RUN MINIMATCH_SHA256="89d2c40b4596326c5061d95a63a13c5b757f3e03bcad229ab496a66735925529" && \
-    NPM_MINIMATCH_PATH=$(find /usr/local/lib/node_modules/npm/node_modules -maxdepth 1 -name "minimatch" -type d 2>/dev/null | head -1) && \
-    [ -n "$NPM_MINIMATCH_PATH" ] || { echo "WARNING: No minimatch found in npm bundle"; exit 0; } && \
-    TMP_DIR=$(mktemp -d) && \
-    wget -qO "$TMP_DIR/minimatch.tgz" https://registry.npmjs.org/minimatch/-/minimatch-10.2.4.tgz && \
-    echo "$MINIMATCH_SHA256  $TMP_DIR/minimatch.tgz" | sha256sum -c - || { echo "ERROR: checksum mismatch"; rm -rf "$TMP_DIR"; exit 1; } && \
-    rm -rf "$NPM_MINIMATCH_PATH"/* && \
-    tar -xzf "$TMP_DIR/minimatch.tgz" -C "$NPM_MINIMATCH_PATH" --strip-components=1 && \
-    rm -rf "$TMP_DIR" && \
-    echo "Patched npm bundled minimatch to 10.2.4"
+# Upgrade npm to a version whose bundled dependencies already include the tar/minimatch fixes
+RUN npm install -g npm@11.12.0
 
 WORKDIR /opt/node-deps
 
@@ -67,7 +53,7 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 # Final stage - minimal runtime image with Python 3.12
-FROM python:3.12-alpine
+FROM ${PYTHON_IMAGE}
 
 # Install runtime dependencies only (npm copied from node-builder stage to avoid Alpine CVE)
 RUN apk add --no-cache \
@@ -78,6 +64,7 @@ RUN apk add --no-cache \
    ca-certificates \
    # Required for some Python packages
    libffi \
+   zlib \
    # Process management
    tini \
    # Git for installing packages from git repositories
@@ -95,7 +82,8 @@ RUN apk add --no-cache \
    # CVE-2025-13878: BIND vulnerability fixed in 9.20.18-r0
    # CVE-2026-22796 and 11 others: OpenSSL vulnerabilities fixed in 3.5.5-r0
    # CVE-2025-61732: Go vulnerability fixed in 1.25.7-r0
-   apk upgrade --no-cache nodejs bind openssl go
+   # CVE-2026-22184: zlib vulnerability fixed in 1.3.2-r0
+   apk upgrade --no-cache nodejs bind openssl go zlib
 
 # Copy npm from node-builder stage to avoid Alpine's vulnerable npm package
 # node:20-alpine has npm in /usr/local/lib/node_modules/npm

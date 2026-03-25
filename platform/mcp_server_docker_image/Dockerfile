@@ -23,8 +23,8 @@ RUN chmod +x /usr/local/bin/uv
 RUN uv venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 COPY pyproject.toml requirements.lock /tmp/python-deps/
-# CVE-2026-24049: Path Traversal vulnerability in wheel <= 0.46.1
-# CVE-2025-8869: Link Following vulnerability in pip <= 25.2
+# CVE-2026-24049: wheel path traversal fixed in wheel >= 0.46.2
+# CVE-2025-8869: pip link-following issue fixed in pip >= 25.3
 RUN uv pip install --upgrade wheel>=0.46.2 pip>=25.3
 RUN uv pip sync \
    --no-cache \
@@ -41,13 +41,9 @@ RUN npm install -g npm@11.12.0
 
 WORKDIR /opt/node-deps
 
-# Copy package.json with dependencies and overrides to fix CVEs in transitive dependencies
-# CVE-2024-21538: ReDoS in cross-spawn < 7.0.5
-# CVE-2025-64756: OS Command Injection in glob < 11.1.0
-# CVE-2026-23745: Path Traversal in tar <= 7.5.2
-# CVE-2026-23950: Improper Unicode Handling in tar <= 7.5.3
-# CVE-2026-24842: Path Traversal in tar <= 7.5.6
-# CVE-2026-26960: Path Traversal in tar <= 7.5.7
+# Copy package manifests for the MCP Node.js runtime dependencies.
+# Security-sensitive transitive packages are constrained in package.json overrides
+# where they still affect the resolved dependency graph.
 COPY package.json package-lock.json ./
 
 RUN npm ci

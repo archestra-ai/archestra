@@ -1,6 +1,11 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import {
+  type archestraApiTypes,
+  E2eTestId,
+  getDeleteVirtualKeyButtonTestId,
+  getVirtualKeyRowTestId,
+} from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Key, Loader2, Plus, Trash2 } from "lucide-react";
 import Image from "next/image";
@@ -89,7 +94,12 @@ export default function VirtualKeysPage() {
         accessorKey: "name",
         header: "Name",
         cell: ({ row }) => (
-          <span className="font-medium">{row.original.name}</span>
+          <span
+            className="font-medium"
+            data-testid={getVirtualKeyRowTestId(row.original.name)}
+          >
+            {row.original.name}
+          </span>
         ),
       },
       {
@@ -164,6 +174,7 @@ export default function VirtualKeysPage() {
                 icon: <Trash2 className="h-4 w-4" />,
                 label: "Delete",
                 variant: "destructive",
+                testId: getDeleteVirtualKeyButtonTestId(row.original.name),
                 onClick: () => {
                   setDeletingKey(row.original);
                   setIsDeleteDialogOpen(true);
@@ -186,6 +197,7 @@ export default function VirtualKeysPage() {
       <Button
         onClick={() => setIsCreateDialogOpen(true)}
         disabled={parentableKeys.length === 0}
+        data-testid={E2eTestId.AddVirtualKeyButton}
       >
         <Plus className="h-4 w-4 mr-2" />
         Create Virtual Key
@@ -196,7 +208,10 @@ export default function VirtualKeysPage() {
 
   return (
     <>
-      <div className="mb-4 flex flex-wrap gap-4">
+      <div
+        className="mb-4 flex flex-wrap gap-4"
+        data-testid={E2eTestId.VirtualKeysPage}
+      >
         <SearchInput
           objectNamePlural="virtual keys"
           searchFields={["name"]}
@@ -342,14 +357,19 @@ function CreateVirtualKeyDialog({
       size="small"
     >
       <DialogForm onSubmit={handleCreate}>
-        <DialogBody className="space-y-4">
+        <DialogBody
+          className="space-y-4"
+          data-testid={E2eTestId.VirtualKeyCreateDialog}
+        >
           {createdKeyValue ? (
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-sm font-medium">
                 <Key className="h-4 w-4" />
                 Copy this key now. It won&apos;t be shown again.
               </div>
-              <CopyableCode value={createdKeyValue} />
+              <div data-testid={E2eTestId.VirtualKeyValue}>
+                <CopyableCode value={createdKeyValue} />
+              </div>
               <div className="text-sm text-muted-foreground">
                 <span className="font-medium text-foreground">Expires:</span>{" "}
                 {formatExpiration(createdKeyExpiresAt)}
@@ -363,7 +383,10 @@ function CreateVirtualKeyDialog({
                   value={selectedParentKeyId}
                   onValueChange={setSelectedParentKeyId}
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger
+                    className="w-full"
+                    data-testid={E2eTestId.VirtualKeyParentKeySelect}
+                  >
                     <SelectValue placeholder="Select an API key" />
                   </SelectTrigger>
                   <SelectContent>
@@ -449,7 +472,12 @@ function DeleteVirtualKeyDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Delete Virtual Key"
-      description={`Are you sure you want to delete "${virtualKey?.name}"? This action cannot be undone.`}
+      description={
+        <div data-testid={E2eTestId.VirtualKeyDeleteDialog}>
+          Are you sure you want to delete "{virtualKey?.name}"? This action
+          cannot be undone.
+        </div>
+      }
       confirmLabel="Delete"
       isPending={deleteMutation.isPending}
       onConfirm={() => {

@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { E2eTestId } from "@shared";
+import { E2eTestId, getChatApiKeySelectorProviderGroupTestId } from "@shared";
 import { WIREMOCK_BASE_URL } from "../../consts";
 import { expect, test } from "../../fixtures";
 
@@ -284,6 +284,29 @@ async function selectRuntimeModelFromDialog(
   await displayNameModelOption.first().click();
 }
 
+async function selectApiKeyForProvider(
+  page: Page,
+  provider: string,
+): Promise<void> {
+  const trigger = page.getByTestId(E2eTestId.ChatApiKeySelectorTrigger).first();
+  await expect(trigger).toBeVisible({ timeout: 10_000 });
+  await trigger.click();
+
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible({ timeout: 5_000 });
+
+  const providerGroup = page.getByTestId(
+    getChatApiKeySelectorProviderGroupTestId(provider),
+  );
+  await expect(providerGroup).toBeVisible({ timeout: 10_000 });
+
+  const keyOption = providerGroup.getByRole("option").first();
+  await expect(keyOption).toBeVisible({ timeout: 10_000 });
+  await keyOption.click();
+
+  await expect(dialog).not.toBeVisible({ timeout: 5_000 });
+}
+
 for (const config of testConfigs) {
   test.describe(`Chat-UI-${config.providerName}`, () => {
     if (skippedProviders.has(config.providerName)) {
@@ -316,6 +339,8 @@ for (const config of testConfigs) {
       if (!runtimeModel) {
         return;
       }
+
+      await selectApiKeyForProvider(page, runtimeModel.provider);
 
       // Open model selector and choose the test model
       const modelSelectorTrigger = page

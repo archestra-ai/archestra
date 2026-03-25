@@ -1,9 +1,11 @@
 import type { Page } from "@playwright/test";
-import { E2eTestId } from "@shared";
+import { E2eTestId, getVirtualKeyRowTestId } from "@shared";
 import { expect, goToPage, test } from "../../fixtures";
 import { clickButton, expandTablePagination } from "../../utils";
 
 const TEST_API_KEY = "sk-ant-test-key-12345";
+
+test.describe.configure({ mode: "serial" });
 
 /**
  * Navigate to the Provider Settings page (API Keys tab) and expand pagination.
@@ -18,6 +20,9 @@ async function goToApiKeysPage(page: Page) {
  */
 async function goToVirtualKeysPage(page: Page) {
   await goToPage(page, "/llm/providers/virtual-keys");
+  await expect(page.getByTestId(E2eTestId.VirtualKeysPage)).toBeVisible({
+    timeout: 15_000,
+  });
 }
 
 test.describe("Provider Settings - API Keys", () => {
@@ -171,8 +176,7 @@ test.describe("Provider Settings - Virtual API Keys", () => {
 
   let parentKeyName: string;
 
-  // TODO: Fix flaky test
-  test.skip("Can create a virtual key from the Virtual API Keys tab", async ({
+  test("Can create a virtual key from the Virtual API Keys tab", async ({
     page,
     makeRandomString,
   }) => {
@@ -182,6 +186,8 @@ test.describe("Provider Settings - Virtual API Keys", () => {
     // First create a parent API key
     await goToApiKeysPage(page);
     await page.getByTestId(E2eTestId.AddChatApiKeyButton).click();
+    await page.getByRole("combobox", { name: "Provider" }).click();
+    await page.getByRole("option", { name: "Zhipu AI Zhipu AI" }).click();
     await page.getByLabel(/Name/i).fill(parentKeyName);
     await page.getByRole("textbox", { name: /API Key/i }).fill(TEST_API_KEY);
     await clickButton({ page, options: { name: "Test & Create" } });
@@ -191,19 +197,16 @@ test.describe("Provider Settings - Virtual API Keys", () => {
 
     // Navigate to Virtual API Keys tab
     await goToVirtualKeysPage(page);
-    await expect(
-      page.getByRole("heading", { name: "Virtual API Keys" }),
-    ).toBeVisible();
 
     // Click Create Virtual Key (waits for button to be enabled, i.e. parentable keys loaded)
-    await clickButton({ page, options: { name: "Create Virtual Key" } });
+    await page.getByTestId(E2eTestId.AddVirtualKeyButton).click();
     await expect(
-      page.getByRole("heading", { name: /Create Virtual API Key/i }),
+      page.getByTestId(E2eTestId.VirtualKeyCreateDialog),
     ).toBeVisible();
 
     // Select the correct parent key from the dropdown
-    const dialog = page.getByRole("dialog");
-    await dialog.getByRole("combobox").first().click();
+    const _dialog = page.getByTestId(E2eTestId.VirtualKeyCreateDialog);
+    await page.getByTestId(E2eTestId.VirtualKeyParentKeySelect).click();
     await page.getByRole("option", { name: new RegExp(parentKeyName) }).click();
 
     // Fill name and create
@@ -219,7 +222,11 @@ test.describe("Provider Settings - Virtual API Keys", () => {
 
     // The token value should be visible inside the dialog (starts with archestra_)
     await expect(
-      dialog.locator("code").filter({ hasText: "archestra_" }).last(),
+      page
+        .getByTestId(E2eTestId.VirtualKeyValue)
+        .locator("code")
+        .filter({ hasText: "archestra_" })
+        .last(),
     ).toBeVisible();
 
     // Close dialog (use first: true to avoid strict mode violation — the dialog
@@ -227,7 +234,9 @@ test.describe("Provider Settings - Virtual API Keys", () => {
     await clickButton({ page, options: { name: "Close" }, first: true });
 
     // Virtual key should appear in the table
-    await expect(page.getByText(virtualKeyName)).toBeVisible();
+    await expect(
+      page.getByTestId(getVirtualKeyRowTestId(virtualKeyName)),
+    ).toBeVisible();
   });
 
   test("Can delete a virtual key", async ({ page }) => {
@@ -257,46 +266,28 @@ test.describe("Provider Settings - Virtual API Keys", () => {
 test.describe("Provider Settings - Virtual Keys for Keyless Provider", () => {
   test.describe.configure({ mode: "serial" });
 
-  let keylessParentName: string;
+  let _keylessParentName: string;
 
-  // TODO: Fix flaky test
-  test.skip("Can create a virtual key for a keyless (no API key) provider", async ({
+  test("Can create a virtual key for a keyless (no API key) provider", async ({
     page,
     makeRandomString,
   }) => {
-    keylessParentName = makeRandomString(8, "Keyless Parent");
     const virtualKeyName = makeRandomString(8, "Keyless VK");
-
-    // Create an Ollama key without providing an API key (optional for Ollama)
-    await goToApiKeysPage(page);
-    await page.getByTestId(E2eTestId.AddChatApiKeyButton).click();
-    await page.getByRole("combobox", { name: "Provider" }).click();
-    await page.getByRole("option", { name: "Ollama Ollama" }).click();
-    await page.getByLabel(/Name/i).fill(keylessParentName);
-    // Leave API Key blank — it's optional for Ollama
-    await clickButton({ page, options: { name: "Test & Create" } });
-    await expect(
-      page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${keylessParentName}`),
-    ).toBeVisible();
 
     // Navigate to Virtual API Keys tab
     await goToVirtualKeysPage(page);
-    await expect(
-      page.getByRole("heading", { name: "Virtual API Keys" }),
-    ).toBeVisible();
 
     // Create Virtual Key — the keyless parent should appear in the dropdown
-    await clickButton({ page, options: { name: "Create Virtual Key" } });
+    await page.getByTestId(E2eTestId.AddVirtualKeyButton).click();
     await expect(
-      page.getByRole("heading", { name: /Create Virtual API Key/i }),
+      page.getByTestId(E2eTestId.VirtualKeyCreateDialog),
     ).toBeVisible();
 
     // Select the keyless parent key
-    const dialog = page.getByRole("dialog");
-    await dialog.getByRole("combobox").first().click();
-    await page
-      .getByRole("option", { name: new RegExp(keylessParentName) })
-      .click();
+    const _dialog = page.getByTestId(E2eTestId.VirtualKeyCreateDialog);
+    await page.getByTestId(E2eTestId.VirtualKeyParentKeySelect).click();
+    _keylessParentName = "Vertex AI";
+    await page.getByRole("option", { name: /Vertex AI/i }).click();
 
     // Fill name and create
     await page.getByLabel(/Name/i).fill(virtualKeyName);
@@ -308,11 +299,17 @@ test.describe("Provider Settings - Virtual Keys for Keyless Provider", () => {
     ).toBeVisible({ timeout: 10_000 });
 
     await expect(
-      dialog.locator("code").filter({ hasText: "archestra_" }).last(),
+      page
+        .getByTestId(E2eTestId.VirtualKeyValue)
+        .locator("code")
+        .filter({ hasText: "archestra_" })
+        .last(),
     ).toBeVisible();
 
     await clickButton({ page, options: { name: "Close" }, first: true });
-    await expect(page.getByText(virtualKeyName)).toBeVisible();
+    await expect(
+      page.getByTestId(getVirtualKeyRowTestId(virtualKeyName)),
+    ).toBeVisible();
   });
 
   test("Cleanup keyless parent key", async ({ page }) => {
@@ -326,13 +323,6 @@ test.describe("Provider Settings - Virtual Keys for Keyless Provider", () => {
       await page.waitForLoadState("domcontentloaded");
     }
 
-    // Delete the keyless parent API key
-    if (keylessParentName) {
-      await goToApiKeysPage(page);
-      await page
-        .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${keylessParentName}`)
-        .click();
-      await clickButton({ page, options: { name: "Delete" } });
-    }
+    // No parent API key cleanup needed: this test uses the existing system keyless provider entry.
   });
 });

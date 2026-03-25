@@ -208,7 +208,9 @@ async function deleteExistingProviderIfExists(
 
     await expect(updateButton).toBeVisible({ timeout: 5000 });
     await deleteProviderViaDialog(page);
-    throw new Error(`Deleted existing ${providerType}; retrying until create dialog is available`);
+    throw new Error(
+      `Deleted existing ${providerType}; retrying until create dialog is available`,
+    );
   }).toPass({ timeout: 60_000, intervals: [1000, 2000, 5000] });
 }
 
@@ -242,15 +244,25 @@ async function expectRolesPageAfterSsoLogin(
       expect(loginSucceeded).toBe(true);
 
       await expectAuthenticated(ssoPage, 15000);
+      await expectActiveSession(ssoPage);
 
       await expect(async () => {
         await ssoPage.goto(`${UI_BASE_URL}/settings/roles`);
         await ssoPage.waitForLoadState("domcontentloaded");
+        await ssoPage.waitForLoadState("networkidle").catch(() => {});
 
         await expect(ssoPage).toHaveURL(/\/settings\/roles/, { timeout: 5000 });
+        await expectActiveSession(ssoPage);
+        await expect(
+          ssoPage.getByTestId(E2eTestId.SidebarUserProfile),
+        ).toBeVisible({
+          timeout: 5000,
+        });
         await expect(
           ssoPage.getByRole("heading", { name: "Roles" }),
-        ).toBeVisible({ timeout: 5000 });
+        ).toBeVisible({
+          timeout: 10000,
+        });
       }).toPass({ timeout: 30_000, intervals: [1000, 2000, 5000] });
 
       await ssoContext.close();
@@ -270,6 +282,29 @@ async function expectRolesPageAfterSsoLogin(
   }
 
   throw lastError;
+}
+
+async function expectActiveSession(page: Page): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const response = await page.request.get(
+          `${UI_BASE_URL}/api/auth/get-session`,
+        );
+
+        if (!response.ok()) {
+          return null;
+        }
+
+        const session = await response.json();
+        return session?.user?.email ?? null;
+      },
+      {
+        timeout: 20_000,
+        intervals: [500, 1000, 2000, 5000],
+      },
+    )
+    .toBe(ADMIN_EMAIL);
 }
 
 test.describe("Identity Provider Team Sync E2E", () => {

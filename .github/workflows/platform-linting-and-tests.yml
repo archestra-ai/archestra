@@ -931,7 +931,11 @@ jobs:
               }
             ' helm-unittest-checksum.sha | sha256sum -c -
           )
-          helm plugin install "/tmp/${HELM_UNITTEST_ARCHIVE}"
+          HELM_UNITTEST_EXTRACT_DIR="$(mktemp -d)"
+          HELM_PLUGINS_DIR="$(helm env HELM_PLUGINS)"
+          mkdir -p "${HELM_PLUGINS_DIR}/unittest"
+          tar -xzf "/tmp/${HELM_UNITTEST_ARCHIVE}" -C "${HELM_UNITTEST_EXTRACT_DIR}"
+          cp -R "${HELM_UNITTEST_EXTRACT_DIR}/." "${HELM_PLUGINS_DIR}/unittest"
           helm unittest .
 
       - name: helm package

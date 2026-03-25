@@ -1,5 +1,8 @@
 export { default as AccountModel } from "./account";
 export { default as AgentModel } from "./agent";
+export {
+  default as AgentScheduleTriggerModel,
+} from "./agent-schedule-trigger";
 export { default as AgentConnectorAssignmentModel } from "./agent-connector-assignment";
 export { default as AgentKnowledgeBaseModel } from "./agent-knowledge-base";
 export { default as AgentLabelModel } from "./agent-label";

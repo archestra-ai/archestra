@@ -7,9 +7,91 @@ import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
+import { CodeBlock } from "@/components/ai-elements/code-block";
+import { CopyButton } from "@/components/copy-button";
 import { MermaidDiagram } from "@/components/mermaid-diagram";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+
+/** Maps raw language identifiers from markdown to human-readable display names. */
+const LANGUAGE_DISPLAY_NAMES: Record<string, string> = {
+  cpp: "C++",
+  c: "C",
+  cs: "C#",
+  csharp: "C#",
+  js: "JavaScript",
+  javascript: "JavaScript",
+  ts: "TypeScript",
+  typescript: "TypeScript",
+  jsx: "JSX",
+  tsx: "TSX",
+  py: "Python",
+  python: "Python",
+  rb: "Ruby",
+  ruby: "Ruby",
+  go: "Go",
+  rs: "Rust",
+  rust: "Rust",
+  java: "Java",
+  kt: "Kotlin",
+  kotlin: "Kotlin",
+  swift: "Swift",
+  php: "PHP",
+  html: "HTML",
+  css: "CSS",
+  scss: "SCSS",
+  sass: "Sass",
+  sql: "SQL",
+  bash: "Bash",
+  sh: "Shell",
+  shell: "Shell",
+  powershell: "PowerShell",
+  yaml: "YAML",
+  yml: "YAML",
+  json: "JSON",
+  xml: "XML",
+  markdown: "Markdown",
+  md: "Markdown",
+  docker: "Dockerfile",
+  dockerfile: "Dockerfile",
+  graphql: "GraphQL",
+  r: "R",
+  matlab: "MATLAB",
+  lua: "Lua",
+  perl: "Perl",
+  scala: "Scala",
+  dart: "Dart",
+  elixir: "Elixir",
+  haskell: "Haskell",
+  ocaml: "OCaml",
+  zig: "Zig",
+  toml: "TOML",
+  ini: "INI",
+  makefile: "Makefile",
+};
+
+/** Returns a prettified display name for a language identifier. */
+function getLanguageDisplayName(lang: string): string {
+  return LANGUAGE_DISPLAY_NAMES[lang.toLowerCase()] ?? lang;
+}
+
+/**
+ * Pre-computed set of all known language names (both keys and display values)
+ * for efficient heading redundancy checks.
+ */
+const REDUNDANT_CODE_HEADING_NAMES = new Set([
+  ...Object.keys(LANGUAGE_DISPLAY_NAMES),
+  ...Object.values(LANGUAGE_DISPLAY_NAMES).map((v) => v.toLowerCase()),
+]);
+
+/**
+ * Checks if a heading text is just a language/code label like "C++ Code", "Python", etc.
+ * These are redundant when the code block title bar already shows the language.
+ */
+function isRedundantCodeHeading(text: string): boolean {
+  const normalized = text.trim().toLowerCase().replace(/\s+code$/, "");
+  return REDUNDANT_CODE_HEADING_NAMES.has(normalized);
+}
 
 interface ConversationArtifactPanelProps {
   artifact?: string | null;
@@ -80,20 +162,73 @@ export function ConversationArtifactPanel({
 
   // Custom components for ReactMarkdown to handle Mermaid diagrams
   const markdownComponents: Components = {
-    code({ node, className, children, ...props }) {
+    // Hide headings that just repeat the language name (e.g. "C++ Code", "Python")
+    // since the code block title bar already shows the language.
+    h1({ children }) {
+      const text = String(children);
+      if (isRedundantCodeHeading(text)) return null;
+      return <h1>{children}</h1>;
+    },
+    h2({ children }) {
+      const text = String(children);
+      if (isRedundantCodeHeading(text)) return null;
+      return <h2>{children}</h2>;
+    },
+    h3({ children }) {
+      const text = String(children);
+      if (isRedundantCodeHeading(text)) return null;
+      return <h3>{children}</h3>;
+    },
+    h4({ children }) {
+      const text = String(children);
+      if (isRedundantCodeHeading(text)) return null;
+      return <h4>{children}</h4>;
+    },
+    // Override <pre> to avoid double-wrapping: ReactMarkdown wraps fenced code
+    // in <pre><code>, but CodeBlock already renders its own container.
+    pre({ children }) {
+      return <>{children}</>;
+    },
+    code({ className, children, ...props }) {
       const match = /language-(\w+)/.exec(className || "");
       const language = match ? match[1] : "";
+      const codeString = String(children).replace(/\n$/, "");
 
+      // Mermaid diagrams
       if (language === "mermaid") {
-        const code = String(children).replace(/\n$/, "");
         return (
           <div className="my-4 max-h-[600px] [&_svg]:!max-h-[600px] [&_svg]:!w-auto">
-            <MermaidDiagram chart={code} id={`mermaid-${Date.now()}`} />
+            <MermaidDiagram chart={codeString} id={`mermaid-${Date.now()}`} />
           </div>
         );
       }
 
-      // Default code block rendering
+      // Fenced code blocks (have a language-* class from ReactMarkdown)
+      if (language) {
+        return (
+          <div className="my-2 overflow-hidden rounded-md bg-muted">
+            {/* Title bar with language name and copy button */}
+            <div className="flex items-center justify-between border-b border-border/50 px-3 py-1.5">
+              <span className="text-xs font-medium text-muted-foreground">
+                {getLanguageDisplayName(language)}
+              </span>
+              <CopyButton text={codeString} size={14} />
+            </div>
+            {/* Code body */}
+            <CodeBlock
+              code={codeString}
+              language={language}
+              className="border-0 bg-transparent rounded-none"
+              contentStyle={{
+                background: "transparent",
+                padding: "0.75rem",
+              }}
+            />
+          </div>
+        );
+      }
+
+      // Inline code
       return (
         <code className={className} {...props}>
           {children}

@@ -62,6 +62,28 @@ export function NotionConfigFields({
           </FormItem>
         )}
       />
+
+      <FormField
+        control={form.control}
+        name={`${prefix}.batchSize`}
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Batch Size (optional)</FormLabel>
+            <FormControl>
+              <Input
+                type="number"
+                min={1}
+                placeholder="e.g. 50"
+                {...field}
+              />
+            </FormControl>
+            <FormDescription>
+              Number of Notion items to process per batch. Leave empty to use the default batch size.
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
     </div>
   );
 }

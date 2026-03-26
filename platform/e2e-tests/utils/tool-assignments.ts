@@ -1,5 +1,9 @@
 import { expect, type Page } from "@playwright/test";
-import { DEFAULT_MCP_GATEWAY_NAME, E2eTestId } from "@shared";
+import {
+  DEFAULT_MCP_GATEWAY_NAME,
+  E2eTestId,
+  getAgentToolCatalogPillTestId,
+} from "@shared";
 import { goToPage } from "../fixtures";
 import { clickButton } from "./dialogs";
 
@@ -83,7 +87,7 @@ async function openCatalogToolAssignment({
     .click();
 
   const pillButton = dialog.getByTestId(
-    `${E2eTestId.AgentToolCatalogPill}-${catalogItemName}`,
+    getAgentToolCatalogPillTestId(catalogItemName),
   );
   await expect(pillButton).toBeVisible({ timeout: 10_000 });
   await pillButton.click();

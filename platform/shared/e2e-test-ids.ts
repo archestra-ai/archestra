@@ -126,3 +126,7 @@ export function getVirtualKeyRowTestId(keyName: string): string {
 export function getDeleteVirtualKeyButtonTestId(keyName: string): string {
   return `delete-virtual-key-button-${keyName}`;
 }
+
+export function getAgentToolCatalogPillTestId(catalogItemName: string): string {
+  return `${E2eTestId.AgentToolCatalogPill}-${catalogItemName}`;
+}

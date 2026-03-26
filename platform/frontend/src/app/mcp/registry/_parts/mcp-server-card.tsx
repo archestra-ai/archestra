@@ -14,6 +14,7 @@ import {
   RefreshCw,
   Server,
   User,
+  Wrench,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -399,6 +400,7 @@ export function McpServerCard({
       {toolsCount > 0 && (
         <>
           <div className="flex items-center gap-1">
+            <Wrench className="h-3.5 w-3.5" />
             <span data-testid={`${E2eTestId.McpServerToolsCount}`}>
               {toolsCount}
             </span>

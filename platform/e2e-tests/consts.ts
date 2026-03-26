@@ -104,7 +104,10 @@ export const KEYCLOAK_REALM = "archestra";
 export const KEYCLOAK_OIDC = {
   clientId: "archestra-oidc",
   clientSecret: "archestra-oidc-secret",
-  issuer: `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}`,
+  // Better Auth resolves OIDC metadata server-side during the SSO callback,
+  // so the issuer must be reachable from the backend runtime. In CI the
+  // backend runs inside the cluster and cannot reach localhost:30081.
+  issuer: `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}`,
   discoveryEndpoint: `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}/.well-known/openid-configuration`,
   authorizationEndpoint: `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/auth`,
   tokenEndpoint: `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`,

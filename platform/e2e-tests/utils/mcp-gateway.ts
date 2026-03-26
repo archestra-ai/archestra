@@ -26,11 +26,9 @@ export async function verifyToolCallResultViaApi({
     | "Admin-personal-credential"
     | "Editor-personal-credential"
     | "Member-personal-credential"
-    | "Default-team-credential"
-    | "Engineering-team-credential"
-    | "Marketing-team-credential"
     | "AnySuccessText"
-    | "Error";
+    | "Error"
+    | string;
   tokenToUse:
     | "default-team"
     | "engineering-team"

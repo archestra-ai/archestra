@@ -8,7 +8,6 @@ import {
   getAssignmentComboboxSearchInputTestId,
 } from "@shared";
 import { goToPage } from "../fixtures";
-import { clickButton } from "./dialogs";
 
 type AssignmentTarget = {
   page: Page;

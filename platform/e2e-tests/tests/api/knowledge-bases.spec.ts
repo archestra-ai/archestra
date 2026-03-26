@@ -483,7 +483,6 @@ test.describe("Knowledge Bases API", () => {
       // Cleanup
       await deleteKnowledgeBase(request, kg.id);
     });
-
   });
 
   test.describe("Connector Runs", () => {

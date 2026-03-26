@@ -1,0 +1,21 @@
+name: Zizmor Org Ruleset Test
+
+on:
+  pull_request_target:
+
+permissions:
+  contents: read
+
+jobs:
+  test-zizmor:
+    name: Trigger Zizmor Finding
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout pull request head
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Run shell from pull request contents
+        run: |
+          echo "This workflow intentionally exists to trigger zizmor for org ruleset verification."

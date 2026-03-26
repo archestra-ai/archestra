@@ -46,6 +46,7 @@ import {
   UserModel,
   UserTokenModel,
 } from "@/models";
+import { findAgentAccessContextById } from "@/models/agent-access-context";
 import { metrics } from "@/observability";
 import {
   ATTR_MCP_IS_ERROR_RESULT,
@@ -752,7 +753,7 @@ async function validateOAuthTokenByHash(params: {
   try {
     const agent =
       params.agentAccessContext ??
-      (await AgentModel.findAccessContextById(params.profileId));
+      (await findAgentAccessContextById(params.profileId));
     if (!agent) {
       return null;
     }
@@ -864,7 +865,7 @@ export async function validateMCPGatewayToken(
   const getAgentAccessContext =
     async (): Promise<AgentAccessContext | null> => {
       if (!agentAccessContextPromise) {
-        agentAccessContextPromise = AgentModel.findAccessContextById(profileId);
+        agentAccessContextPromise = findAgentAccessContextById(profileId);
       }
       return agentAccessContextPromise;
     };

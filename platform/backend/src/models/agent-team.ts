@@ -2,6 +2,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import type { AgentAccessContext } from "@/types";
+import { findAgentAccessContextById } from "./agent-access-context";
 
 class AgentTeamModel {
   /**
@@ -82,8 +83,7 @@ class AgentTeamModel {
     }
 
     const agent =
-      agentAccessContext ??
-      (await AgentTeamModel.findAgentAccessContextById(agentId));
+      agentAccessContext ?? (await findAgentAccessContextById(agentId));
 
     if (!agent) {
       return false;
@@ -314,8 +314,7 @@ class AgentTeamModel {
     );
 
     const agent =
-      agentAccessContext ??
-      (await AgentTeamModel.findAgentAccessContextById(agentId));
+      agentAccessContext ?? (await findAgentAccessContextById(agentId));
 
     if (!agent) {
       return false;
@@ -452,23 +451,6 @@ class AgentTeamModel {
       "AgentTeamModel.getTeamDetailsForAgents: completed",
     );
     return teamsMap;
-  }
-
-  private static async findAgentAccessContextById(
-    agentId: string,
-  ): Promise<AgentAccessContext | null> {
-    const [agent] = await db
-      .select({
-        id: schema.agentsTable.id,
-        organizationId: schema.agentsTable.organizationId,
-        scope: schema.agentsTable.scope,
-        authorId: schema.agentsTable.authorId,
-      })
-      .from(schema.agentsTable)
-      .where(eq(schema.agentsTable.id, agentId))
-      .limit(1);
-
-    return agent ?? null;
   }
 }
 

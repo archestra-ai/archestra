@@ -232,6 +232,24 @@ async function expectApiResponseOk(
   ).toBe(true);
 }
 
+async function getTeamIdByNameViaApi(
+  page: Page,
+  teamName: string,
+): Promise<string> {
+  const response = await page.request.get(
+    `${UI_BASE_URL}/api/teams?limit=10&offset=0&name=${encodeURIComponent(teamName)}`,
+  );
+  await expectApiResponseOk(response, "list teams");
+
+  const body = (await response.json()) as {
+    data: Array<{ id: string; name: string }>;
+  };
+  const team = body.data.find((item) => item.name === teamName);
+
+  expect(team, `Expected team "${teamName}" to exist`).toBeDefined();
+  return team!.id;
+}
+
 function getRoleMappingRuleRow(page: Page, index: number) {
   return page.getByTestId(getIdpRoleMappingRuleRowTestId(index));
 }
@@ -525,48 +543,34 @@ test.describe("Identity Provider Team Sync E2E", () => {
 
     try {
       // STEP 5: Verify user was automatically added to the team
-      // Team sync is an async background operation during SSO callback
-      // Give it a moment to complete before navigating
-      await ssoPage.waitForTimeout(2000);
-
-      // Navigate to teams page
-      await ssoPage.goto(`${UI_BASE_URL}/settings/teams`);
-      await ssoPage.waitForLoadState("domcontentloaded");
-
       // Re-authenticate the admin page before polling. In CI, the SSO flow can
       // invalidate or age out the pre-existing admin session used for cleanup
-      // and verification, which leads to intermittent 401s on the polling API calls.
+      // and verification.
       await ensureAdminAuthenticated(page);
+      const teamId = await getTeamIdByNameViaApi(page, teamName);
 
-      // Poll the admin Teams UI until the synced member appears.
-      // This avoids CI flake from carrying API auth across the separate SSO flow.
+      // Poll the teams API until the synced membership row exists. This is a
+      // more direct assertion than reopening the members dialog and lets us
+      // verify the actual SSO-synced row shape.
       await expect(async () => {
-        await ensureAdminAuthenticated(page);
-        await goToPage(page, "/settings/teams");
-        await page.waitForLoadState("domcontentloaded");
+        const response = await page.request.get(
+          `${UI_BASE_URL}/api/teams/${teamId}/members`,
+        );
+        await expectApiResponseOk(response, "get team members");
 
-        await clickTeamActionButton({
-          page,
-          teamName,
-          actionName: "Manage Members",
-        });
+        const members = (await response.json()) as Array<{
+          email: string;
+          syncedFromSso: boolean;
+        }>;
 
-        const membersDialog = page.getByRole("dialog", {
-          name: "Manage Team Members",
-        });
-        await expect(membersDialog).toBeVisible({ timeout: 10_000 });
-
-        const syncedMemberRow = membersDialog.getByText(ADMIN_EMAIL, {
-          exact: true,
-        });
-        await expect(syncedMemberRow).toBeVisible({ timeout: 5_000 });
-
-        await clickButton({
-          page,
-          options: { name: "Close", exact: true },
-          first: true,
-        });
-        await expect(membersDialog).not.toBeVisible({ timeout: 5_000 });
+        const syncedMember = members.find(
+          (member) => member.email === ADMIN_EMAIL,
+        );
+        expect(
+          syncedMember,
+          `Expected ${ADMIN_EMAIL} to appear in synced members for ${teamName}`,
+        ).toBeDefined();
+        expect(syncedMember?.syncedFromSso).toBe(true);
       }).toPass({ timeout: 120_000, intervals: [3000, 5000, 7000, 10000] });
 
       // Success! The SSO user was automatically synced to the team.

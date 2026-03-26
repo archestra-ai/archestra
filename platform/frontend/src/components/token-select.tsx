@@ -86,7 +86,6 @@ export function TokenSelect({
       value={value ?? ""}
       onValueChange={onValueChange}
       disabled={disabled || isLoading}
-      data-testid={E2eTestId.TokenSelect}
     >
       <SelectTrigger
         className={cn(
@@ -94,6 +93,7 @@ export function TokenSelect({
           className,
         )}
         size="sm"
+        data-testid={E2eTestId.TokenSelect}
       >
         <SelectValue placeholder="Select connection..." />
       </SelectTrigger>

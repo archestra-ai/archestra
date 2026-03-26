@@ -97212,7 +97212,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "Delete a knowledge base and all its connectors\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeBase:delete`: Delete knowledge bases and connectors",
+        "description": "Delete a knowledge base and remove its connector assignments\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeBase:delete`: Delete knowledge bases and connectors",
         "parameters": [
           {
             "schema": {

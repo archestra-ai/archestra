@@ -89,11 +89,32 @@ export async function waitForMcpServerToolsDiscovered(
   const scope = catalogItemName
     ? page.getByTestId(`${E2eTestId.McpServerCard}-${catalogItemName}`)
     : page;
-
-  await scope
+  const toolsCount = scope
     .getByTestId(E2eTestId.McpServerToolsCount)
-    .getByText(/\d+/)
-    .waitFor({ state: "visible", timeout: 60_000 });
+    .getByText(/\d+/);
+  const errorBanner = catalogItemName
+    ? scope.getByTestId(`${E2eTestId.McpServerError}-${catalogItemName}`)
+    : page.locator("[data-testid^='mcp-server-error-']").first();
+
+  await expect
+    .poll(
+      async () => {
+        if (await toolsCount.isVisible().catch(() => false)) {
+          return { state: "ready" as const };
+        }
+
+        if (await errorBanner.isVisible().catch(() => false)) {
+          return {
+            state: "error" as const,
+            message: (await errorBanner.textContent().catch(() => "")) ?? "",
+          };
+        }
+
+        return { state: "pending" as const };
+      },
+      { timeout: 60_000, intervals: [500, 1000, 2000] },
+    )
+    .toMatchObject({ state: "ready" });
 }
 
 export async function openCatalogItemConnectDialog(
@@ -179,7 +200,7 @@ export async function addSharedLocalConnection(params: {
     .getByTestId(E2eTestId.ManageCredentialsAddToTeamButton)
     .click({
       timeout: params.timeoutMs ?? 15_000,
-  });
+    });
   await params.page
     .getByTestId(getManageCredentialsAddToTeamOptionTestId(params.teamName))
     .click({ timeout: params.timeoutMs ?? 15_000 });

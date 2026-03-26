@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { archestraApiSdk, DEFAULT_VAULT_TOKEN, E2eTestId } from "@shared";
-import { DEFAULT_TEAM_NAME } from "../../consts";
+import { ADMIN_EMAIL, DEFAULT_TEAM_NAME } from "../../consts";
 import { expect, goToPage, test } from "../../fixtures";
 import {
   addCustomSelfHostedCatalogItem,
@@ -8,9 +8,9 @@ import {
   clickButton,
   expandTablePagination,
   goToMcpRegistry,
+  installLocalCatalogItem,
   installTeamCatalogItemConnection,
-  openCatalogItemConnectDialog,
-  selectTeamCredentialType,
+  settleRegistryAfterInstall,
   verifyToolCallResultViaApi,
 } from "../../utils";
 
@@ -198,132 +198,127 @@ test.describe("Chat API Keys with Readonly Vault", () => {
 });
 
 test.describe("Test self-hosted MCP server with Readonly Vault", () => {
-    test("Test self-hosted MCP server with Vault - with prompt on installation", async ({
-      adminPage,
-      extractCookieHeaders,
-      makeRandomString,
-    }) => {
-      test.skip(!byosEnabled, "BYOS Vault is not enabled in this environment.");
-      test.setTimeout(90_000);
-      const cookieHeaders = await extractCookieHeaders(adminPage);
-      const catalogItemName = makeRandomString(10, "mcp");
-      const newCatalogItem = await addCustomSelfHostedCatalogItem({
-        page: adminPage,
-        cookieHeaders,
-        catalogItemName,
-        envVars: {
-          key: "ARCHESTRA_TEST",
-          promptOnInstallation: true,
-          isSecret: true,
-        },
-      });
-
-      await goToMcpRegistry(adminPage);
-      await openCatalogItemConnectDialog(adminPage, newCatalogItem.name);
-      await adminPage.waitForTimeout(2_000);
-
-      // The current prompt-on-install UX renders a direct secret input instead
-      // of the older team/vault picker flow.
-      await adminPage.getByRole("textbox", { name: "ARCHESTRA_TEST" }).fill(
-        secretValue,
-      );
-
-      // install server
-      await clickButton({ page: adminPage, options: { name: "Install" } });
-
-      await adminPage.waitForLoadState("domcontentloaded");
-
-      // Assign tool to profiles using default team credential
-      await assignCatalogCredentialToGateway({
-        page: adminPage,
-        catalogItemName: newCatalogItem.name,
-        credentialName: DEFAULT_TEAM_NAME,
-      });
-
-      // Verify tool call result using default team credential
-      await verifyToolCallResultViaApi({
-        request: adminPage.request,
-        expectedResult: secretValue,
-        tokenToUse: "org-token",
-        toolName: `${newCatalogItem.name}__print_archestra_test`,
-        cookieHeaders,
-      });
-
-      // CLEANUP: Delete the catalog item
-      await archestraApiSdk.deleteInternalMcpCatalogItem({
-        path: { id: newCatalogItem.id },
-        headers: { Cookie: cookieHeaders },
-      });
-
-      // CLEANUP: Delete the folder in Vault
-      await fetch(`${vaultAddr}/v1/${teamFolderPath}`, {
-        method: "DELETE",
-        headers: {
-          "X-Vault-Token": DEFAULT_VAULT_TOKEN,
-        },
-      });
+  test("Test self-hosted MCP server with Vault - with prompt on installation", async ({
+    adminPage,
+    extractCookieHeaders,
+    makeRandomString,
+  }) => {
+    test.skip(!byosEnabled, "BYOS Vault is not enabled in this environment.");
+    test.setTimeout(90_000);
+    const cookieHeaders = await extractCookieHeaders(adminPage);
+    const catalogItemName = makeRandomString(10, "mcp");
+    const newCatalogItem = await addCustomSelfHostedCatalogItem({
+      page: adminPage,
+      cookieHeaders,
+      catalogItemName,
+      envVars: {
+        key: "ARCHESTRA_TEST",
+        promptOnInstallation: true,
+        isSecret: true,
+      },
     });
 
-    test("Test self-hosted MCP server with Vault - without prompt on installation", async ({
-      adminPage,
-      extractCookieHeaders,
-      makeRandomString,
-    }) => {
-      test.skip(!byosEnabled, "BYOS Vault is not enabled in this environment.");
-      const cookieHeaders = await extractCookieHeaders(adminPage);
-      const catalogItemName = makeRandomString(10, "mcp");
+    await goToMcpRegistry(adminPage);
+    await installLocalCatalogItem({
+      page: adminPage,
+      catalogItemName: newCatalogItem.name,
+      envValues: {
+        ARCHESTRA_TEST: secretValue,
+      },
+    });
+    await settleRegistryAfterInstall(adminPage);
 
-      const newCatalogItem = await addCustomSelfHostedCatalogItem({
-        page: adminPage,
-        cookieHeaders,
-        catalogItemName,
-        envVars: {
-          key: "ARCHESTRA_TEST",
-          promptOnInstallation: false,
-          isSecret: true,
-          vaultSecret: {
-            teamName: DEFAULT_TEAM_NAME,
-            name: secretName,
-            key: secretKey,
-            value: secretValue,
-          },
-        },
-      });
+    // The current prompt-on-install flow creates a personal connection.
+    await assignCatalogCredentialToGateway({
+      page: adminPage,
+      catalogItemName: newCatalogItem.name,
+      credentialName: ADMIN_EMAIL,
+    });
 
-      await installTeamCatalogItemConnection({
-        page: adminPage,
-        catalogItemName: newCatalogItem.name,
-        teamName: DEFAULT_TEAM_NAME,
-      });
+    // Verify tool call result using default team credential
+    await verifyToolCallResultViaApi({
+      request: adminPage.request,
+      expectedResult: secretValue,
+      tokenToUse: "org-token",
+      toolName: `${newCatalogItem.name}__print_archestra_test`,
+      cookieHeaders,
+    });
 
-      // Assign tool to profiles using default team credential
-      await assignCatalogCredentialToGateway({
-        page: adminPage,
-        catalogItemName: newCatalogItem.name,
-        credentialName: DEFAULT_TEAM_NAME,
-      });
+    // CLEANUP: Delete the catalog item
+    await archestraApiSdk.deleteInternalMcpCatalogItem({
+      path: { id: newCatalogItem.id },
+      headers: { Cookie: cookieHeaders },
+    });
 
-      // Verify tool call result using default team credential
-      await verifyToolCallResultViaApi({
-        request: adminPage.request,
-        expectedResult: secretValue,
-        tokenToUse: "org-token",
-        toolName: `${newCatalogItem.name}__print_archestra_test`,
-        cookieHeaders,
-      });
-
-      // CLEANUP: Delete the catalog item
-      await archestraApiSdk.deleteInternalMcpCatalogItem({
-        path: { id: newCatalogItem.id },
-        headers: { Cookie: cookieHeaders },
-      });
-
-      // CLEANUP: Delete the folder in Vault
-      await fetch(`${vaultAddr}/v1/${teamFolderPath}`, {
-        method: "DELETE",
-        headers: {
-          "X-Vault-Token": DEFAULT_VAULT_TOKEN,
-        },
-      });
+    // CLEANUP: Delete the folder in Vault
+    await fetch(`${vaultAddr}/v1/${teamFolderPath}`, {
+      method: "DELETE",
+      headers: {
+        "X-Vault-Token": DEFAULT_VAULT_TOKEN,
+      },
     });
   });
+
+  test("Test self-hosted MCP server with Vault - without prompt on installation", async ({
+    adminPage,
+    extractCookieHeaders,
+    makeRandomString,
+  }) => {
+    test.skip(!byosEnabled, "BYOS Vault is not enabled in this environment.");
+    const cookieHeaders = await extractCookieHeaders(adminPage);
+    const catalogItemName = makeRandomString(10, "mcp");
+
+    const newCatalogItem = await addCustomSelfHostedCatalogItem({
+      page: adminPage,
+      cookieHeaders,
+      catalogItemName,
+      envVars: {
+        key: "ARCHESTRA_TEST",
+        promptOnInstallation: false,
+        isSecret: true,
+        vaultSecret: {
+          teamName: DEFAULT_TEAM_NAME,
+          name: secretName,
+          key: secretKey,
+          value: secretValue,
+        },
+      },
+    });
+
+    await installTeamCatalogItemConnection({
+      page: adminPage,
+      catalogItemName: newCatalogItem.name,
+      teamName: DEFAULT_TEAM_NAME,
+    });
+
+    // Assign tool to profiles using default team credential
+    await assignCatalogCredentialToGateway({
+      page: adminPage,
+      catalogItemName: newCatalogItem.name,
+      credentialName: DEFAULT_TEAM_NAME,
+    });
+
+    // Verify tool call result using default team credential
+    await verifyToolCallResultViaApi({
+      request: adminPage.request,
+      expectedResult: secretValue,
+      tokenToUse: "org-token",
+      toolName: `${newCatalogItem.name}__print_archestra_test`,
+      cookieHeaders,
+    });
+
+    // CLEANUP: Delete the catalog item
+    await archestraApiSdk.deleteInternalMcpCatalogItem({
+      path: { id: newCatalogItem.id },
+      headers: { Cookie: cookieHeaders },
+    });
+
+    // CLEANUP: Delete the folder in Vault
+    await fetch(`${vaultAddr}/v1/${teamFolderPath}`, {
+      method: "DELETE",
+      headers: {
+        "X-Vault-Token": DEFAULT_VAULT_TOKEN,
+      },
+    });
+  });
+});

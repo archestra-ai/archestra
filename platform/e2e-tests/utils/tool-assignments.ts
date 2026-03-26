@@ -2,10 +2,10 @@ import { expect, type Page } from "@playwright/test";
 import {
   DEFAULT_MCP_GATEWAY_NAME,
   E2eTestId,
+  getAgentToolCatalogPillTestId,
   getAssignmentComboboxDisabledOptionTestId,
   getAssignmentComboboxOptionTestId,
   getAssignmentComboboxSearchInputTestId,
-  getAgentToolCatalogPillTestId,
 } from "@shared";
 import { goToPage } from "../fixtures";
 import { clickButton } from "./dialogs";
@@ -62,7 +62,9 @@ export async function assignCatalogCredentialToGateway(params: {
     catalogItemName: params.catalogItemName,
     gatewayName: params.gatewayName,
   });
-  await params.page.getByRole("option", { name: params.credentialName }).click();
+  await params.page
+    .getByRole("option", { name: params.credentialName })
+    .click();
   await params.page.keyboard.press("Escape");
   await params.page.waitForTimeout(200);
   await saveOpenProfileDialog(params.page);
@@ -136,13 +138,32 @@ async function openCatalogToolAssignment({
     .toBe("enabled");
   await enabledCatalogItem.click();
 
-  const pillButton = dialog.getByTestId(
-    getAgentToolCatalogPillTestId(catalogItemName),
-  );
-  await expect(pillButton).toBeVisible({ timeout: 10_000 });
-  await pillButton.click();
+  const visibleTokenSelect = page
+    .getByRole("dialog")
+    .last()
+    .getByRole("combobox")
+    .first();
 
-  const tokenSelect = page.getByTestId(E2eTestId.TokenSelect);
-  await expect(tokenSelect).toBeVisible({ timeout: 10_000 });
-  await tokenSelect.click();
+  if (!(await visibleTokenSelect.isVisible().catch(() => false))) {
+    const pillButtonByTestId = dialog.getByTestId(
+      getAgentToolCatalogPillTestId(catalogItemName),
+    );
+    const pillButtonByRole = dialog.getByRole("button", {
+      name: new RegExp(escapeRegExp(catalogItemName)),
+    });
+
+    if (await pillButtonByTestId.isVisible().catch(() => false)) {
+      await pillButtonByTestId.click();
+    } else {
+      await expect(pillButtonByRole).toBeVisible({ timeout: 10_000 });
+      await pillButtonByRole.click();
+    }
+  }
+
+  await expect(visibleTokenSelect).toBeVisible({ timeout: 10_000 });
+  await visibleTokenSelect.click();
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

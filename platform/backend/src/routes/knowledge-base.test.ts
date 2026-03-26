@@ -1,7 +1,4 @@
-import {
-  KnowledgeBaseConnectorModel,
-  KnowledgeBaseModel,
-} from "@/models";
+import { KnowledgeBaseConnectorModel, KnowledgeBaseModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";

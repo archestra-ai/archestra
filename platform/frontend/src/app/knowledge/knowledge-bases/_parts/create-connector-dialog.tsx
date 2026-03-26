@@ -84,19 +84,9 @@ const CONNECTOR_OPTIONS: {
     label: "ServiceNow",
     description: "Sync incidents from ServiceNow",
   },
-];
-
-// ... (in handleSelectType)
-    const defaultConfigs: Record<ConnectorType, Record<string, unknown>> = {
-      jira: { type, isCloud: true },
-      confluence: { type, isCloud: true },
-      github: { type, githubUrl: "https://api.github.com" },
-      gitlab: { type, gitlabUrl: "https://gitlab.com" },
-      servicenow: { type, syncDataForLastMonths: 6 },
-      notion: { type },
-    };
-    form.setValue("config", defaultConfigs[type]);
-// ... (in Advanced section)
+ ];
+ 
+ // ... (in Advanced section)
                     {connectorType === "gitlab" && (
                       <GitlabConfigFields form={form} hideUrl />
                     )}

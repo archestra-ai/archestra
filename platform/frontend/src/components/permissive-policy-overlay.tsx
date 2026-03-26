@@ -19,12 +19,11 @@ export function PermissivePolicyOverlay({
   });
 
   const isPermissive = globalToolPolicy === "permissive";
-  const shouldShowOverlay = isPermissive && userCanUpdateOrganization === true;
 
   return (
     <div className="relative">
       {children}
-      {shouldShowOverlay && (
+      {isPermissive && (
         <>
           <div
             data-label="Permissive policy overlay"
@@ -39,13 +38,16 @@ export function PermissivePolicyOverlay({
                 </h3>
                 <p className="text-sm text-muted-foreground mb-4">
                   For now, all agent tool calls are allowed and all results are
-                  trusted. Individual policies are bypassed.
-                  <br />
-                  <br />
-                  Enable security engine in&nbsp;
-                  <Link href="/settings/agents" className="underline">
-                    Agent Settings
-                  </Link>
+                  trusted. Individual policies are bypassed. <br />
+                  {userCanUpdateOrganization && (
+                    <>
+                      <br />
+                      Enable security engine in&nbsp;
+                      <Link href="/settings/agents" className="underline">
+                        Agent Settings
+                      </Link>
+                    </>
+                  )}
                 </p>
               </div>
             </div>

@@ -4,12 +4,14 @@ import {
   type ErrorExtended,
 } from "@shared";
 
+import { ForbiddenPage } from "@/app/_parts/forbidden-page";
 import { ServerErrorFallback } from "@/components/error-fallback";
 import {
   DEFAULT_SORT_BY,
   DEFAULT_SORT_DIRECTION,
   DEFAULT_TABLE_LIMIT,
 } from "@/consts";
+import { serverCanAccessPage } from "@/lib/auth/auth.server";
 import { handleApiError } from "@/lib/utils";
 import { getServerApiHeaders } from "@/lib/utils/server";
 import LlmProxiesPage from "./page.client";
@@ -25,6 +27,10 @@ export default async function LlmProxiesPageServer() {
     teams: [],
   };
   try {
+    if (!(await serverCanAccessPage("/llm/proxies"))) {
+      return <ForbiddenPage />;
+    }
+
     const headers = await getServerApiHeaders();
     const [agentsResponse, teamsResponse] = await Promise.all([
       archestraApiSdk.getAgents({

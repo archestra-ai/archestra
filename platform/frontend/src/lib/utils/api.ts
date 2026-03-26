@@ -14,17 +14,6 @@ export function toApiError(error: ApiSdkError): Error {
   return new Error(error.error?.message ?? "API request failed");
 }
 
-export function isApiAuthorizationError(error: ApiSdkError): boolean {
-  if (error.error instanceof Error) {
-    return false;
-  }
-
-  return (
-    error.error?.type === "api_authorization_error" ||
-    error.error?.message === "Forbidden"
-  );
-}
-
 export function handleApiError(error: ApiSdkError) {
   if (typeof window !== "undefined") {
     toast.error(error.error?.message ?? "API request failed");

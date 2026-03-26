@@ -4,11 +4,20 @@ import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
-const { inspectServerMock } = vi.hoisted(() => ({
+const {
+  inspectServerMock,
+  MockMcpServerConnectionTimeoutError,
+  MockMcpServerNotReadyError,
+} = vi.hoisted(() => ({
   inspectServerMock: vi.fn(),
+  MockMcpServerNotReadyError: class MockMcpServerNotReadyError extends Error {},
+  MockMcpServerConnectionTimeoutError:
+    class MockMcpServerConnectionTimeoutError extends Error {},
 }));
 
 vi.mock("@/clients/mcp-client", () => ({
+  McpServerNotReadyError: MockMcpServerNotReadyError,
+  McpServerConnectionTimeoutError: MockMcpServerConnectionTimeoutError,
   default: {
     inspectServer: inspectServerMock,
   },
@@ -46,7 +55,9 @@ describe("mcp server inspect route", () => {
     });
 
     inspectServerMock.mockRejectedValueOnce(
-      new Error("No running pod found for MCP server deployment"),
+      new MockMcpServerNotReadyError(
+        "MCP server is not running yet. Start or restart it, then try inspecting it again.",
+      ),
     );
 
     const response = await app.inject({
@@ -76,7 +87,9 @@ describe("mcp server inspect route", () => {
     });
 
     inspectServerMock.mockRejectedValueOnce(
-      new Error("Connection timeout after 30 seconds"),
+      new MockMcpServerConnectionTimeoutError(
+        "MCP server did not become reachable within 30 seconds. Verify its configuration and runtime logs, then try again.",
+      ),
     );
 
     const response = await app.inject({

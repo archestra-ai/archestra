@@ -2,6 +2,10 @@ import { isPlaywrightCatalogItem, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
+import {
+  McpServerConnectionTimeoutError,
+  McpServerNotReadyError,
+} from "@/clients/mcp-client";
 import mcpClient from "@/clients/mcp-client";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
@@ -1228,14 +1232,15 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         return reply.send(result as Record<string, unknown>);
       } catch (error) {
-        const classifiedError = classifyInspectServerError(error);
-
-        if (classifiedError) {
+        if (
+          error instanceof McpServerNotReadyError ||
+          error instanceof McpServerConnectionTimeoutError
+        ) {
           logger.warn(
             { err: error, mcpServerId: mcpServer.id, statusCode: 409 },
             `MCP server ${mcpServer.name} is not ready for inspection`,
           );
-          throw new ApiError(409, classifiedError);
+          throw new ApiError(409, error.message);
         }
 
         logger.error(
@@ -1491,19 +1496,5 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 };
-
-function classifyInspectServerError(error: unknown): string | null {
-  const errorMessage = error instanceof Error ? error.message : String(error);
-
-  if (errorMessage.includes("No running pod found for MCP server deployment")) {
-    return "MCP server is not running yet. Start or restart it, then try inspecting it again.";
-  }
-
-  if (errorMessage.includes("Connection timeout after 30 seconds")) {
-    return "MCP server did not become reachable within 30 seconds. Verify its configuration and runtime logs, then try again.";
-  }
-
-  return null;
-}
 
 export default mcpServerRoutes;

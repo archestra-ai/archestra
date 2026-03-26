@@ -11,7 +11,8 @@ import {
   DEFAULT_SORT_DIRECTION,
   DEFAULT_TABLE_LIMIT,
 } from "@/consts";
-import { handleApiError, isApiAuthorizationError } from "@/lib/utils";
+import { serverCanAccessPage } from "@/lib/auth/auth.server";
+import { handleApiError } from "@/lib/utils";
 import { getServerApiHeaders } from "@/lib/utils/server";
 import McpGatewaysPage from "./page.client";
 
@@ -26,6 +27,10 @@ export default async function McpGatewaysPageServer() {
     teams: [],
   };
   try {
+    if (!(await serverCanAccessPage("/mcp/gateways"))) {
+      return <ForbiddenPage />;
+    }
+
     const headers = await getServerApiHeaders();
     const [agentsResponse, teamsResponse] = await Promise.all([
       archestraApiSdk.getAgents({
@@ -43,12 +48,6 @@ export default async function McpGatewaysPageServer() {
         query: { limit: 100, offset: 0 },
       }),
     ]);
-    if (
-      (agentsResponse.error && isApiAuthorizationError(agentsResponse.error)) ||
-      (teamsResponse.error && isApiAuthorizationError(teamsResponse.error))
-    ) {
-      return <ForbiddenPage />;
-    }
     if (agentsResponse.error) {
       handleApiError(agentsResponse.error);
     }

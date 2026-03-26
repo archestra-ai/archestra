@@ -10,6 +10,9 @@ const { getServerApiHeadersMock, getAgentsMock, getTeamsMock } = vi.hoisted(
     getTeamsMock: vi.fn(),
   }),
 );
+const { serverCanAccessPageMock } = vi.hoisted(() => ({
+  serverCanAccessPageMock: vi.fn(),
+}));
 
 vi.mock("@shared", () => ({
   archestraApiSdk: {
@@ -24,6 +27,10 @@ vi.mock("@shared", () => ({
 
 vi.mock("@/lib/utils/server", () => ({
   getServerApiHeaders: getServerApiHeadersMock,
+}));
+
+vi.mock("@/lib/auth/auth.server", () => ({
+  serverCanAccessPage: serverCanAccessPageMock,
 }));
 
 vi.mock("./page.client", () => ({
@@ -44,24 +51,19 @@ describe("McpGatewaysPageServer", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getServerApiHeadersMock.mockResolvedValue({});
+    serverCanAccessPageMock.mockResolvedValue(true);
   });
 
-  it("renders the forbidden page for expected authorization failures", async () => {
-    getAgentsMock.mockResolvedValue({
-      error: {
-        error: {
-          message: "Forbidden",
-          type: "api_authorization_error",
-        },
-      },
-    });
-    getTeamsMock.mockResolvedValue({ data: { data: [] } });
+  it("renders the forbidden page before fetching data when access is denied", async () => {
+    serverCanAccessPageMock.mockResolvedValue(false);
 
     render(await McpGatewaysPageServer());
 
     expect(
       screen.getByText("You don't have permission to access this page."),
     ).toBeInTheDocument();
+    expect(getAgentsMock).not.toHaveBeenCalled();
+    expect(getTeamsMock).not.toHaveBeenCalled();
   });
 
   it("renders the page client when data loads successfully", async () => {

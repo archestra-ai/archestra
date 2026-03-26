@@ -502,6 +502,7 @@ export function AgentDialog({
   const { data: canReadKnowledgeBase } = useHasPermissions({
     knowledgeBase: ["read"],
   });
+  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: identityProviders = [] } = useIdentityProviders({
     enabled: !!canReadIdentityProviders,
   });
@@ -529,6 +530,7 @@ export function AgentDialog({
       });
       return response.data?.data ?? [];
     },
+    enabled: !!canReadTeams,
   });
   const resource = getResourceForAgentType(agentType);
   const { data: isAdmin } = useHasPermissions({

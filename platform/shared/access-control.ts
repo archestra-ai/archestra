@@ -952,14 +952,14 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/chat/shared": { chat: ["read"] },
 
   // Agents
-  "/agents": { agent: ["read"] },
+  "/agents": { agent: ["read"], team: ["read"] },
   "/agents/triggers": { agentTrigger: ["read"] },
   "/agents/triggers/slack": { agentTrigger: ["read"] },
   "/agents/triggers/ms-teams": { agentTrigger: ["read"] },
   "/agents/triggers/email": { agentTrigger: ["read"] },
 
   // LLM
-  "/llm/proxies": { llmProxy: ["read"] },
+  "/llm/proxies": { llmProxy: ["read"], team: ["read"] },
   "/llm/providers/api-keys": { llmProvider: ["read"] },
   "/llm/providers/virtual-keys": { llmProvider: ["read"] },
   "/llm/providers/models": { llmProvider: ["read"] },
@@ -969,7 +969,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   // MCP
   "/mcp/registry": { mcpRegistry: ["read"] },
-  "/mcp/gateways": { mcpGateway: ["read"] },
+  "/mcp/gateways": { mcpGateway: ["read"], team: ["read"] },
   "/mcp/tool-policies": { toolPolicy: ["read"] },
   "/mcp/registry/installation-requests": {
     mcpServerInstallationRequest: ["read"],

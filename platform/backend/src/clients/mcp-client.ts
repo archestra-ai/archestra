@@ -56,6 +56,22 @@ import { deriveAuthMethod } from "@/utils/auth-method";
 import { previewToolResultContent } from "@/utils/tool-result-preview";
 import { K8sAttachTransport } from "./k8s-attach-transport";
 
+export class McpServerNotReadyError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "McpServerNotReadyError";
+  }
+}
+
+export class McpServerConnectionTimeoutError extends Error {
+  constructor(
+    message = "MCP server did not become reachable within 30 seconds. Verify its configuration and runtime logs, then try again.",
+  ) {
+    super(message);
+    this.name = "McpServerConnectionTimeoutError";
+  }
+}
+
 /**
  * Thrown when a stored HTTP session ID is no longer valid (e.g. pod restarted).
  * Caught by executeToolCall to trigger a transparent retry with a fresh session.
@@ -1224,12 +1240,16 @@ class McpClient {
       const k8sDeployment =
         await McpServerRuntimeManager.getOrLoadDeployment(targetMcpServerId);
       if (!k8sDeployment) {
-        throw new Error("Deployment not found for MCP server");
+        throw new McpServerNotReadyError(
+          "MCP server is not running yet. Start or restart it, then try inspecting it again.",
+        );
       }
 
       const podName = await k8sDeployment.getRunningPodName();
       if (!podName) {
-        throw new Error("No running pod found for MCP server deployment");
+        throw new McpServerNotReadyError(
+          "MCP server is not running yet. Start or restart it, then try inspecting it again.",
+        );
       }
 
       return new K8sAttachTransport({
@@ -1637,11 +1657,17 @@ class McpClient {
   private raceWithTimeout<T>(
     promise: Promise<T>,
     ms: number,
-    message: string,
+    errorOrMessage: string | Error,
   ): Promise<T> {
     let timerId: ReturnType<typeof setTimeout>;
     const timeout = new Promise<never>((_, reject) => {
-      timerId = setTimeout(() => reject(new Error(message)), ms);
+      timerId = setTimeout(() => {
+        reject(
+          typeof errorOrMessage === "string"
+            ? new Error(errorOrMessage)
+            : errorOrMessage,
+        );
+      }, ms);
     });
     return Promise.race([promise, timeout]).finally(() =>
       clearTimeout(timerId),
@@ -1771,7 +1797,7 @@ class McpClient {
       await this.raceWithTimeout(
         client.connect(transport),
         30000,
-        "Connection timeout after 30 seconds",
+        new McpServerConnectionTimeoutError(),
       );
 
       if (method === "tools/list") {

@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.1.40](https://github.com/archestra-ai/archestra/compare/platform-v1.1.39...platform-v1.1.40) (2026-03-26)
+
+
+### Features
+
+* add MCP Apps (SEP-1865) support ([#2898](https://github.com/archestra-ai/archestra/issues/2898)) ([9e46b21](https://github.com/archestra-ai/archestra/commit/9e46b21fef2e840e84ac887e5cb9b77c840851f0))
+
+
+### Bug Fixes
+
+* add sandbox proxying on nextjs ([#3554](https://github.com/archestra-ai/archestra/issues/3554)) ([7192dbd](https://github.com/archestra-ai/archestra/commit/7192dbd043f5fe198aaec54aa29d84ac79a8db0d))
+* improve Dockerfile ([#3560](https://github.com/archestra-ai/archestra/issues/3560)) ([9919c53](https://github.com/archestra-ai/archestra/commit/9919c538b0f143cc7a0f0afe33f0f0521df159b5))
+
+
+### Performance Improvements
+
+* reduce MCP gateway auth query churn ([#3557](https://github.com/archestra-ai/archestra/issues/3557)) ([236e063](https://github.com/archestra-ai/archestra/commit/236e0631f4747926f2b12a9669c589d348996d23))
+
+
+### Dependencies
+
+* bump fastify from 5.8.2 to 5.8.3 in /platform ([#3543](https://github.com/archestra-ai/archestra/issues/3543)) ([f367afb](https://github.com/archestra-ai/archestra/commit/f367afb2b41da0ac981aef65c01f16cd383cf0d6))
+* bump jsdom from 28.1.0 to 29.0.0 in /platform ([#3542](https://github.com/archestra-ai/archestra/issues/3542)) ([95851be](https://github.com/archestra-ai/archestra/commit/95851be2432cd4f21c840d95ad69edc5010d2f35))
+
+
+### Miscellaneous Chores
+
+* add PostHog user identification ([#3528](https://github.com/archestra-ai/archestra/issues/3528)) ([624b5b3](https://github.com/archestra-ai/archestra/commit/624b5b3e0ffef448f4b642a72cbd72e58ce53bce))
+* harden CI supply chain, action pinning, and e2e transport ([#3533](https://github.com/archestra-ai/archestra/issues/3533)) ([151f3db](https://github.com/archestra-ai/archestra/commit/151f3dbae71942e30534ea0a08eac964902ab69a))
+* improve MCP gateway resilience and permission-gated team UX ([#3550](https://github.com/archestra-ai/archestra/issues/3550)) ([fc26dce](https://github.com/archestra-ai/archestra/commit/fc26dce2872d89468ab5e255345419fb2fd5572c))
+* use `better-auth` trustedProviders resolver for SSO account linking ([#3537](https://github.com/archestra-ai/archestra/issues/3537)) ([9b6a95d](https://github.com/archestra-ai/archestra/commit/9b6a95dc74b99f1a26effec13a2673ee845106ba))
+
 ## [1.1.39](https://github.com/archestra-ai/archestra/compare/platform-v1.1.38...platform-v1.1.39) (2026-03-24)
 
 

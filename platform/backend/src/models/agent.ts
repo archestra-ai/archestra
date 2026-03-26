@@ -45,26 +45,6 @@ import MemberModel from "./member";
 import ToolModel from "./tool";
 
 class AgentModel {
-  static async findAccessContextById(
-    id: string,
-  ): Promise<Pick<
-    Agent,
-    "id" | "organizationId" | "scope" | "authorId"
-  > | null> {
-    const [agent] = await db
-      .select({
-        id: schema.agentsTable.id,
-        organizationId: schema.agentsTable.organizationId,
-        scope: schema.agentsTable.scope,
-        authorId: schema.agentsTable.authorId,
-      })
-      .from(schema.agentsTable)
-      .where(eq(schema.agentsTable.id, id))
-      .limit(1);
-
-    return agent ?? null;
-  }
-
   static async findBasicByOrganizationIdAndIds(params: {
     organizationId: string;
     agentIds: string[];

@@ -1,11 +1,27 @@
 import type { Page } from "@playwright/test";
-import { E2eTestId } from "@shared";
+import {
+  E2eTestId,
+  getManageCredentialsAddToTeamOptionTestId,
+  getManageCredentialsButtonTestId,
+} from "@shared";
 import { expect, goToPage } from "../fixtures";
-import { clickButton } from "../utils";
+import { clickButton, closeOpenDialogs } from "./dialogs";
+import { openManageCredentialsDialog } from "./mcp-gateway";
 
 export async function goToMcpRegistry(page: Page): Promise<void> {
   await goToPage(page, "/mcp/registry");
   await page.waitForLoadState("domcontentloaded");
+}
+
+export async function filterMcpRegistryByName(
+  page: Page,
+  catalogItemName: string,
+): Promise<void> {
+  const searchInput = page.getByRole("textbox", {
+    name: "Search MCP servers by name",
+  });
+  await expect(searchInput).toBeVisible({ timeout: 10_000 });
+  await searchInput.fill(catalogItemName);
 }
 
 export async function openAddMcpServerDialog(page: Page): Promise<void> {
@@ -60,10 +76,19 @@ export async function installMcpServer(page: Page): Promise<void> {
   await page.waitForLoadState("domcontentloaded");
 }
 
+export async function selectTeamCredentialType(
+  page: Page,
+  teamName: string,
+): Promise<void> {
+  await page.getByTestId(E2eTestId.SelectCredentialTypeTeamDropdown).click();
+  await page.getByRole("option", { name: teamName }).click();
+}
+
 export async function waitForMcpServerCard(
   page: Page,
   catalogItemName: string,
 ): Promise<void> {
+  await filterMcpRegistryByName(page, catalogItemName);
   await page
     .getByTestId(`${E2eTestId.McpServerCard}-${catalogItemName}`)
     .waitFor({ state: "visible", timeout: 30_000 });
@@ -76,11 +101,32 @@ export async function waitForMcpServerToolsDiscovered(
   const scope = catalogItemName
     ? page.getByTestId(`${E2eTestId.McpServerCard}-${catalogItemName}`)
     : page;
-
-  await scope
+  const toolsCount = scope
     .getByTestId(E2eTestId.McpServerToolsCount)
-    .getByText(/\d+/)
-    .waitFor({ state: "visible", timeout: 60_000 });
+    .getByText(/\d+/);
+  const errorBanner = catalogItemName
+    ? scope.getByTestId(`${E2eTestId.McpServerError}-${catalogItemName}`)
+    : page.locator("[data-testid^='mcp-server-error-']").first();
+
+  await expect
+    .poll(
+      async () => {
+        if (await toolsCount.isVisible().catch(() => false)) {
+          return { state: "ready" as const };
+        }
+
+        if (await errorBanner.isVisible().catch(() => false)) {
+          return {
+            state: "error" as const,
+            message: (await errorBanner.textContent().catch(() => "")) ?? "",
+          };
+        }
+
+        return { state: "pending" as const };
+      },
+      { timeout: 60_000, intervals: [500, 1000, 2000] },
+    )
+    .toMatchObject({ state: "ready" });
 }
 
 export async function openCatalogItemConnectDialog(
@@ -89,10 +135,176 @@ export async function openCatalogItemConnectDialog(
   options?: { timeoutMs?: number },
 ): Promise<void> {
   const timeoutMs = options?.timeoutMs ?? 30_000;
+  await filterMcpRegistryByName(page, catalogItemName);
   const connectButton = page.getByTestId(
     `${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`,
   );
   await connectButton.waitFor({ state: "visible", timeout: timeoutMs });
   await expect(connectButton).toBeEnabled({ timeout: timeoutMs });
   await connectButton.click({ timeout: timeoutMs });
+}
+
+export async function installLocalCatalogItem(params: {
+  page: Page;
+  catalogItemName: string;
+  envValues?: Record<string, string>;
+  expectDialog?: boolean;
+  timeoutMs?: number;
+}): Promise<void> {
+  await openCatalogItemConnectDialog(params.page, params.catalogItemName, {
+    timeoutMs: params.timeoutMs,
+  });
+
+  const shouldWaitForDialog =
+    params.expectDialog ?? Object.keys(params.envValues ?? {}).length > 0;
+  if (!shouldWaitForDialog) {
+    if (await maybeWaitForInstallDialog(params.page, params.timeoutMs)) {
+      await installMcpServer(params.page);
+      await waitForInstalledCardActions(params.page, params.catalogItemName);
+      await waitForMcpServerToolsDiscovered(
+        params.page,
+        params.catalogItemName,
+      );
+    }
+    return;
+  }
+
+  await waitForInstallDialog(params.page, { timeoutMs: params.timeoutMs });
+
+  await fillInstallDialogEnvValues(params.page, params.envValues);
+
+  await installMcpServer(params.page);
+  await waitForInstalledCardActions(params.page, params.catalogItemName);
+  await waitForMcpServerToolsDiscovered(params.page, params.catalogItemName);
+}
+
+export async function installTeamCatalogItemConnection(params: {
+  page: Page;
+  catalogItemName: string;
+  teamName: string;
+  envValues?: Record<string, string>;
+  timeoutMs?: number;
+}): Promise<void> {
+  await goToMcpRegistry(params.page);
+  await openCatalogItemConnectDialog(params.page, params.catalogItemName, {
+    timeoutMs: params.timeoutMs,
+  });
+  await waitForInstallDialog(params.page, { timeoutMs: params.timeoutMs });
+  await selectTeamCredentialType(params.page, params.teamName);
+  await fillInstallDialogEnvValues(params.page, params.envValues);
+  await installMcpServer(params.page);
+  await waitForInstalledCardActions(params.page, params.catalogItemName);
+  await waitForMcpServerToolsDiscovered(params.page, params.catalogItemName);
+}
+
+export async function addSharedLocalConnection(params: {
+  page: Page;
+  catalogItemName: string;
+  teamName: string;
+  envValues?: Record<string, string>;
+  expectDialog?: boolean;
+  timeoutMs?: number;
+}): Promise<void> {
+  await openManageCredentialsDialog(params.page, params.catalogItemName);
+  const sharedConnectionsSection = params.page.getByTestId(
+    E2eTestId.ManageCredentialsSharedConnectionsSection,
+  );
+  await sharedConnectionsSection
+    .getByTestId(E2eTestId.ManageCredentialsAddToTeamButton)
+    .click({
+      timeout: params.timeoutMs ?? 15_000,
+    });
+  await params.page
+    .getByTestId(getManageCredentialsAddToTeamOptionTestId(params.teamName))
+    .click({ timeout: params.timeoutMs ?? 15_000 });
+
+  const shouldWaitForDialog =
+    params.expectDialog ?? Object.keys(params.envValues ?? {}).length > 0;
+  if (!shouldWaitForDialog) {
+    if (await maybeWaitForInstallDialog(params.page, params.timeoutMs)) {
+      await installMcpServer(params.page);
+      await waitForInstalledCardActions(params.page, params.catalogItemName);
+      await waitForMcpServerToolsDiscovered(
+        params.page,
+        params.catalogItemName,
+      );
+      return;
+    }
+
+    await expect(
+      sharedConnectionsSection.getByTestId(
+        E2eTestId.ManageCredentialsSharedConnectionsEmptyState,
+      ),
+    ).not.toBeVisible({
+      timeout: params.timeoutMs ?? 15_000,
+    });
+    return;
+  }
+
+  await waitForInstallDialog(params.page, { timeoutMs: params.timeoutMs });
+
+  await fillInstallDialogEnvValues(params.page, params.envValues);
+
+  await installMcpServer(params.page);
+  await waitForInstalledCardActions(params.page, params.catalogItemName);
+  await waitForMcpServerToolsDiscovered(params.page, params.catalogItemName);
+}
+
+export async function settleRegistryAfterInstall(page: Page): Promise<void> {
+  await page.waitForLoadState("domcontentloaded");
+  await closeOpenDialogs(page, { timeoutMs: 15_000 });
+}
+
+async function fillInstallDialogEnvValues(
+  page: Page,
+  envValues?: Record<string, string>,
+): Promise<void> {
+  for (const [key, value] of Object.entries(envValues ?? {})) {
+    const input = page.getByRole("textbox", { name: key });
+    await expect(input).toBeEnabled({ timeout: 15_000 });
+    await input.fill(value);
+  }
+}
+
+async function maybeWaitForInstallDialog(
+  page: Page,
+  timeoutMs?: number,
+): Promise<boolean> {
+  try {
+    await waitForInstallDialog(page, {
+      timeoutMs: Math.min(timeoutMs ?? 5_000, 5_000),
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForInstalledCardActions(
+  page: Page,
+  catalogItemName: string,
+): Promise<void> {
+  await filterMcpRegistryByName(page, catalogItemName);
+  const targetCard = page.getByTestId(
+    `${E2eTestId.McpServerCard}-${catalogItemName}`,
+  );
+  const manageButton = targetCard.getByTestId(
+    getManageCredentialsButtonTestId(catalogItemName),
+  );
+  const deploymentButton = targetCard.getByRole("button", {
+    name: /^\d+\/\d+$/,
+  });
+  const uninstallButton = targetCard.getByRole("button", { name: "Uninstall" });
+  const progressBar = targetCard.getByRole("progressbar");
+
+  await expect
+    .poll(
+      async () =>
+        !(await progressBar.isVisible().catch(() => false)) &&
+        ((await manageButton.isVisible().catch(() => false)) ||
+          (await deploymentButton.isVisible().catch(() => false)) ||
+          (await uninstallButton.isVisible().catch(() => false))),
+      { timeout: 60_000, intervals: [500, 1000, 2000] },
+    )
+    .toBe(true);
 }

@@ -28,6 +28,7 @@ import {
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
+import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
 import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -247,6 +248,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       : undefined,
     labels: labelsFromUrl || undefined,
   });
+  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
 
   // Keep teams cache warm for AgentDialog
   const { data: userTeams } = useQuery({
@@ -258,6 +260,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       return data?.data || [];
     },
     initialData: initialData?.teams,
+    enabled: !!canReadTeams,
   });
 
   const { data: isAgentAdmin } = useHasPermissions({ agent: ["admin"] });
@@ -554,6 +557,12 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 />
                 <AgentScopeFilter showBuiltIn />
               </div>
+              {!canReadTeams && (
+                <PermissionRequirementHint
+                  message="Team-based filters and sharing details are unavailable without"
+                  permissions={[{ resource: "team", action: "read" }]}
+                />
+              )}
               <ActiveFilterBadges />
             </div>
 

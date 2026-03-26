@@ -10,6 +10,7 @@ import {
   parseLabelsParam,
   serializeLabels,
 } from "@/components/label-select";
+import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
 import { Badge } from "@/components/ui/badge";
 import { MultiSelect } from "@/components/ui/multi-select";
 import {
@@ -76,7 +77,8 @@ export function AgentScopeFilter({
 
   const { data: labelKeys } = useLabelKeys();
   const { data: isAdmin } = useHasPermissions({ member: ["read"] });
-  const { data: teams } = useTeams();
+  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
+  const { data: teams } = useTeams({ enabled: !!canReadTeams });
   const { data: members } = useOrganizationMembers(
     !!isAdmin && uiScope === "others_personal",
   );
@@ -171,7 +173,9 @@ export function AgentScopeFilter({
           {isAdmin && (
             <SelectItem value="others_personal">Others' Personal</SelectItem>
           )}
-          <SelectItem value="team">Team</SelectItem>
+          <SelectItem value="team" disabled={!canReadTeams}>
+            Team
+          </SelectItem>
           <SelectItem value="org">Organization</SelectItem>
           {showBuiltIn && isAdmin && (
             <>
@@ -181,7 +185,7 @@ export function AgentScopeFilter({
           )}
         </SelectContent>
       </Select>
-      {scope === "team" && teamItems.length > 0 && (
+      {scope === "team" && canReadTeams && teamItems.length > 0 && (
         <MultiSelect
           value={selectedTeamIds}
           onValueChange={handleTeamIdsChange}
@@ -190,6 +194,13 @@ export function AgentScopeFilter({
           className="w-[220px]"
           showSelectedBadges={false}
           selectedSuffix={(n) => `${n === 1 ? "team" : "teams"} selected`}
+        />
+      )}
+      {scope === "team" && !canReadTeams && (
+        <PermissionRequirementHint
+          message="Team filters are unavailable without"
+          permissions={[{ resource: "team", action: "read" }]}
+          className="inline"
         />
       )}
       {uiScope === "others_personal" && isAdmin && (
@@ -223,7 +234,8 @@ export function ActiveFilterBadges() {
   const scopeParam = searchParams.get("scope");
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
-  const { data: teams } = useTeams();
+  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
+  const { data: teams } = useTeams({ enabled: !!canReadTeams });
   const { data: isAdmin } = useHasPermissions({ member: ["read"] });
 
   // Determine if this is "others' personal" — mirrors uiScope derivation in AgentScopeFilter
@@ -313,10 +325,12 @@ export function ActiveFilterBadges() {
   );
 
   const hasTeams = selectedTeams.length > 0;
+  const hasUnavailableTeamsFilter = !!teamIdsParam && !canReadTeams;
   const hasUsers = isOthersPersonal && selectedUsers.length > 0;
   const hasLabels = parsedLabels && Object.keys(parsedLabels).length > 0;
 
-  if (!hasTeams && !hasUsers && !hasLabels) return null;
+  if (!hasTeams && !hasUsers && !hasLabels && !hasUnavailableTeamsFilter)
+    return null;
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -339,6 +353,14 @@ export function ActiveFilterBadges() {
               </button>
             </Badge>
           ))}
+        </div>
+      )}
+      {hasUnavailableTeamsFilter && (
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-muted-foreground">Teams</span>
+          <Badge variant="outline" className="text-muted-foreground">
+            Unavailable
+          </Badge>
         </div>
       )}
       {hasUsers && (

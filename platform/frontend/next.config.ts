@@ -61,6 +61,10 @@ const nextConfig: NextConfig = {
         destination: `${backendUrl}/health`,
       },
       {
+        source: "/_sandbox/:path*",
+        destination: `${backendUrl}/_sandbox/:path*`,
+      },
+      {
         source: "/ws",
         destination: `${backendUrl}/ws`,
       },

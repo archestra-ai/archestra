@@ -159,15 +159,21 @@ export const getMcpSandboxBaseUrl = (
     };
   }
 
-  // Mode 2: localhost ↔ 127.0.0.1 swap (dev mode, zero-config cross-origin)
   if (typeof window !== "undefined") {
+    // Mode 2: localhost ↔ 127.0.0.1 swap (dev/quickstart, zero-config cross-origin)
+    // Only applies when the backend is on localhost — swap gives a different origin on the same port.
     const swapped = swapLocalhostOrigin(getBackendBaseUrl());
     if (swapped) {
       return { baseUrl: swapped, hasCrossOrigin: true };
     }
+
+    // Mode 3: Production without sandbox domain — use the frontend's own origin.
+    // The /_sandbox/ path is proxied to the backend via Next.js rewrites.
+    // Same origin → opaque origin via sandbox attr (no allow-same-origin).
+    return { baseUrl: window.location.origin, hasCrossOrigin: false };
   }
 
-  // Mode 3: Fallback (same origin, opaque origin via sandbox attr)
+  // SSR fallback (not reached in browser)
   return { baseUrl: getBackendBaseUrl(), hasCrossOrigin: false };
 };
 

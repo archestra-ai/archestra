@@ -4,12 +4,17 @@ import {
   type ErrorExtended,
 } from "@shared";
 
+import { ForbiddenPage } from "@/app/_parts/forbidden-page";
 import { ServerErrorFallback } from "@/components/error-fallback";
 import {
   DEFAULT_SORT_BY,
   DEFAULT_SORT_DIRECTION,
   DEFAULT_TABLE_LIMIT,
 } from "@/consts";
+import {
+  serverCanAccessPage,
+  serverHasPermissions,
+} from "@/lib/auth/auth.server";
 import { handleApiError } from "@/lib/utils";
 import { getServerApiHeaders } from "@/lib/utils/server";
 import McpGatewaysPage from "./page.client";
@@ -25,7 +30,16 @@ export default async function McpGatewaysPageServer() {
     teams: [],
   };
   try {
+    if (!(await serverCanAccessPage("/mcp/gateways"))) {
+      return <ForbiddenPage />;
+    }
+
     const headers = await getServerApiHeaders();
+    const canReadTeams = await serverHasPermissions({ team: ["read"] });
+    const emptyTeamsResponse = {
+      data: { data: [] },
+      error: undefined,
+    };
     const [agentsResponse, teamsResponse] = await Promise.all([
       archestraApiSdk.getAgents({
         headers,
@@ -37,10 +51,12 @@ export default async function McpGatewaysPageServer() {
           agentTypes: ["mcp_gateway", "profile"],
         },
       }),
-      archestraApiSdk.getTeams({
-        headers,
-        query: { limit: 100, offset: 0 },
-      }),
+      canReadTeams
+        ? archestraApiSdk.getTeams({
+            headers,
+            query: { limit: 100, offset: 0 },
+          })
+        : Promise.resolve(emptyTeamsResponse),
     ]);
     if (agentsResponse.error) {
       handleApiError(agentsResponse.error);

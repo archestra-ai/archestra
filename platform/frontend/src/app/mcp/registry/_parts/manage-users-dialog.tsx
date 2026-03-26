@@ -3,6 +3,7 @@
 import {
   E2eTestId,
   formatSecretStorageType,
+  getManageCredentialsAddToTeamOptionTestId,
   type McpDeploymentStatusEntry,
 } from "@shared";
 import { format } from "date-fns";
@@ -395,6 +396,13 @@ export function ManageUsersContent({
                   : undefined
               }
               alwaysShow
+              sectionTestId={
+                E2eTestId.ManageCredentialsSharedConnectionsSection
+              }
+              emptyStateTestId={
+                E2eTestId.ManageCredentialsSharedConnectionsEmptyState
+              }
+              addButtonTestId={E2eTestId.ManageCredentialsAddToTeamButton}
             />
           </>
         )}
@@ -594,6 +602,9 @@ function ConnectionsTable({
   teamOptions,
   onAddForTeam,
   alwaysShow = false,
+  sectionTestId,
+  emptyStateTestId,
+  addButtonTestId,
 }: {
   title: string;
   servers: ServerEntry[];
@@ -620,13 +631,16 @@ function ConnectionsTable({
   onAddForTeam?: (teamId: string) => void;
   /** Always show the section even when empty and no add button */
   alwaysShow?: boolean;
+  sectionTestId?: string;
+  emptyStateTestId?: string;
+  addButtonTestId?: string;
 }) {
   const hasAddButton = onAdd || (teamOptions && onAddForTeam);
   if (servers.length === 0 && !hasAddButton && !alwaysShow) return null;
   const hasDeploymentStatuses = servers.some((s) => deploymentStatuses[s.id]);
 
   return (
-    <div>
+    <div data-testid={sectionTestId}>
       <div className="flex items-center justify-between mb-2">
         <h4 className="text-sm font-medium">{title}</h4>
         {onAdd && (
@@ -664,6 +678,7 @@ function ConnectionsTable({
                         size="sm"
                         className="h-7 text-xs"
                         disabled={teamOptions.length === 0}
+                        data-testid={addButtonTestId}
                       >
                         <Plus className="mr-1 h-3 w-3" />
                         Add to team
@@ -684,6 +699,9 @@ function ConnectionsTable({
                 <DropdownMenuItem
                   key={team.id}
                   onClick={() => onAddForTeam(team.id)}
+                  data-testid={getManageCredentialsAddToTeamOptionTestId(
+                    team.name,
+                  )}
                 >
                   {team.name}
                 </DropdownMenuItem>
@@ -693,7 +711,10 @@ function ConnectionsTable({
         )}
       </div>
       {servers.length === 0 ? (
-        <div className="text-center py-4 text-sm text-muted-foreground border rounded-md">
+        <div
+          className="text-center py-4 text-sm text-muted-foreground border rounded-md"
+          data-testid={emptyStateTestId}
+        >
           No {title.toLowerCase()} yet.
         </div>
       ) : (

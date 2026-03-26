@@ -2101,7 +2101,7 @@ export const createKnowledgeBase = <ThrowOnError extends boolean = false>(option
 });
 
 /**
- * Delete a knowledge base and all its connectors
+ * Delete a knowledge base and remove its connector assignments
  *
  * Authentication:
  *

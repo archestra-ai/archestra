@@ -1,6 +1,6 @@
 {
   "name": "@backend",
-  "version": "1.1.39",
+  "version": "1.1.40",
   "description": "",
   "author": "",
   "private": true,
@@ -105,7 +105,7 @@
     "drizzle-kit": "^0.31.9",
     "drizzle-orm": "^0.45.0",
     "drizzle-zod": "^0.8.3",
-    "fastify": "^5.8.2",
+    "fastify": "^5.8.3",
     "fastify-metrics": "^12.1.0",
     "fastify-plugin": "^5.1.0",
     "fastify-type-provider-zod": "^6.0.0",

@@ -4,6 +4,7 @@ import {
   archestraApiSdk,
   type archestraApiTypes,
   E2eTestId,
+  getManageCredentialsButtonTestId,
   type McpDeploymentStatusEntry,
 } from "@shared";
 import {
@@ -478,6 +479,7 @@ export function McpServerCard({
                   <Avatar
                     className="size-6 border-2 border-background cursor-pointer hover:opacity-80 transition-opacity"
                     onClick={() => openSettingsPage("connections")}
+                    data-testid={getManageCredentialsButtonTestId(item.name)}
                   >
                     <AvatarFallback className="text-muted-foreground bg-muted">
                       <Plus className="h-3 w-3" />

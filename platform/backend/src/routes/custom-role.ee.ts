@@ -112,6 +112,11 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
           throw new ApiError(500, "Role created but data not returned");
         }
 
+        OrganizationRoleModel.invalidatePermissionsCacheForRole(
+          organizationId,
+          result.roleData.role,
+        );
+
         logger.info({ role: result.roleData }, "Role created successfully");
         return reply.send(normalizeRoleResponse(result.roleData));
       } catch (error) {
@@ -212,6 +217,15 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(500, "Role updated but data not returned");
       }
 
+      OrganizationRoleModel.invalidatePermissionsCacheForRole(
+        organizationId,
+        existingRole.role,
+      );
+      OrganizationRoleModel.invalidatePermissionsCacheForRole(
+        organizationId,
+        result.roleData.role,
+      );
+
       return reply.send(normalizeRoleResponse(result.roleData));
     },
   );
@@ -253,6 +267,11 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
         },
       });
+
+      OrganizationRoleModel.invalidatePermissionsCacheForRole(
+        organizationId,
+        role.role,
+      );
 
       return reply.send({ success: true });
     },

@@ -1,22 +1,27 @@
 import { archestraApiSdk } from "@shared";
 import {
   ADMIN_EMAIL,
+  DEFAULT_TEAM_NAME,
   E2eTestId,
   EDITOR_EMAIL,
+  ENGINEERING_TEAM_NAME,
+  MARKETING_TEAM_NAME,
   MEMBER_EMAIL,
 } from "../../consts";
 import { expect, goToPage, test } from "../../fixtures";
 import {
   addCustomSelfHostedCatalogItem,
+  assignCatalogCredentialToGateway,
   assignEngineeringTeamToDefaultProfileViaApi,
-  clickButton,
-  goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect,
+  goToMcpRegistry,
+  installLocalCatalogItem,
   openManageCredentialsDialog,
+  settleRegistryAfterInstall,
   verifyToolCallResultViaApi,
+  waitForMcpServerToolsDiscovered,
 } from "../../utils";
 
-// Skipped after redesign, needs to be updated
-test.skip("Verify tool calling using dynamic credentials", async ({
+test("Verify tool calling using dynamic credentials", async ({
   request,
   adminPage,
   editorPage,
@@ -36,6 +41,7 @@ test.skip("Verify tool calling using dynamic credentials", async ({
       page: adminPage,
       cookieHeaders,
       catalogItemName: CATALOG_ITEM_NAME,
+      scope: "org",
       envVars: {
         key: "ARCHESTRA_TEST",
         promptOnInstallation: true,
@@ -46,77 +52,62 @@ test.skip("Verify tool calling using dynamic credentials", async ({
   }
 
   const MATRIX_A = [
-    { user: "Admin", page: adminPage, team: "Default" },
-    { user: "Editor", page: editorPage, team: "Engineering" },
-    { user: "Member", page: memberPage, team: "Marketing" },
+    { user: "Admin", page: adminPage, team: DEFAULT_TEAM_NAME },
+    { user: "Editor", page: editorPage, team: ENGINEERING_TEAM_NAME },
+    { user: "Member", page: memberPage, team: MARKETING_TEAM_NAME },
   ] as const;
 
-  const CONNECT_BUTTON_TIMEOUT = 25_000;
-
   const install = async ({ page, user, team }: (typeof MATRIX_A)[number]) => {
-    // Go to MCP Registry page
-    await goToPage(page, "/mcp/registry");
-    await page.waitForLoadState("domcontentloaded");
-    // Click connect button for the catalog item - wait for it to be visible
-    const btn = page.getByTestId(
-      `${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`,
-    );
-    await btn.waitFor({ state: "visible", timeout: CONNECT_BUTTON_TIMEOUT });
-    await btn.click();
-    // Fill ARCHESTRA_TEST environment variable to mark personal credential
-    await page
-      .getByRole("textbox", { name: "ARCHESTRA_TEST" })
-      .fill(`${user}-personal-credential`);
-    // Install using personal credential
-    await clickButton({ page, options: { name: "Install" } });
+    const pageCookieHeaders = await extractCookieHeaders(page);
+
+    await goToMcpRegistry(page);
+    await installLocalCatalogItem({
+      page,
+      catalogItemName,
+      envValues: { ARCHESTRA_TEST: `${user}-personal-credential` },
+    });
+    await settleRegistryAfterInstall(page);
 
     // Members lack mcpServer:update permission and cannot create team installations.
     // After personal install, they see an "Already installed" banner.
     if (user === "Member") {
-      await page.waitForLoadState("domcontentloaded");
       return;
     }
 
-    // After adding a server, the install dialog may open automatically.
-    // If it does, close it so the calling test can control when to open it.
-    const assignmentsDialog = page
-      .getByRole("dialog")
-      .filter({ hasText: /Assignments/ });
-    try {
-      await assignmentsDialog.waitFor({ state: "visible", timeout: 5000 });
-      await page.keyboard.press("Escape");
-      await page.waitForTimeout(500);
-    } catch {
-      // Dialog didn't appear - that's fine, continue
+    const teamsResponse = await archestraApiSdk.getTeams({
+      headers: { Cookie: pageCookieHeaders },
+    });
+    if (teamsResponse.error) {
+      throw new Error(
+        `Failed to get teams for ${user}: ${JSON.stringify(teamsResponse.error)}`,
+      );
     }
 
-    // Wait for any dialog overlay to fully disappear before proceeding
-    await page
-      .locator('[data-slot="dialog-overlay"]')
-      .waitFor({ state: "hidden", timeout: 10_000 })
-      .catch(() => {});
+    const teamId = teamsResponse.data?.data.find(
+      (currentTeam) => currentTeam.name === team,
+    )?.id;
+    if (!teamId) {
+      throw new Error(`Team "${team}" not found for ${user}`);
+    }
 
-    // Wait for dialog to close and button to be visible and enabled again
-    const connectButton = page.getByTestId(
-      `${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`,
-    );
-    await connectButton.waitFor({
-      state: "visible",
-      timeout: CONNECT_BUTTON_TIMEOUT,
+    const installResponse = await archestraApiSdk.installMcpServer({
+      headers: { Cookie: pageCookieHeaders },
+      body: {
+        name: catalogItemName,
+        catalogId: catalogItemId,
+        teamId,
+        environmentValues: {
+          ARCHESTRA_TEST: `${team}-team-credential`,
+        },
+      },
     });
-    await expect(connectButton).toBeEnabled({
-      timeout: CONNECT_BUTTON_TIMEOUT,
-    });
-    await connectButton.click();
-    // Fill ARCHESTRA_TEST environment variable to mark team credential
-    await page
-      .getByRole("textbox", { name: "ARCHESTRA_TEST" })
-      .fill(`${team}-team-credential`);
-    // And this time team credential type should be selected by default for everyone, install using team credential
-    await clickButton({ page, options: { name: "Install" } });
-    // Wait for installation to complete and pod to be ready
-    await page.waitForLoadState("domcontentloaded");
-    await page.waitForTimeout(1_000); // Additional wait for pod to be ready
+    if (installResponse.error) {
+      throw new Error(
+        `Failed to install shared connection for ${user}: ${JSON.stringify(installResponse.error)}`,
+      );
+    }
+    await settleRegistryAfterInstall(page);
+    await waitForMcpServerToolsDiscovered(page, catalogItemName);
   };
 
   // Each user adds personal and 1 team credential
@@ -125,18 +116,11 @@ test.skip("Verify tool calling using dynamic credentials", async ({
   }
 
   // Assign tool to profiles using dynamic credential
-  await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
+  await assignCatalogCredentialToGateway({
     page: adminPage,
     catalogItemName: CATALOG_ITEM_NAME,
+    credentialName: "Resolve at call time",
   });
-  // Select "Resolve at call time" (dynamic credential) from dropdown
-  await adminPage.getByRole("option", { name: "Resolve at call time" }).click();
-  // Close the popover by pressing Escape
-  await adminPage.keyboard.press("Escape");
-  await adminPage.waitForTimeout(200);
-  // Click Save button at the bottom of the McpAssignmentsDialog
-  await clickButton({ page: adminPage, options: { name: "Save" } });
-  await adminPage.waitForLoadState("domcontentloaded");
 
   /**
    * Credentials we have:
@@ -185,7 +169,7 @@ test.skip("Verify tool calling using dynamic credentials", async ({
   await goToPage(adminPage, "/mcp/registry");
   await openManageCredentialsDialog(adminPage, CATALOG_ITEM_NAME);
   await adminPage
-    .getByTestId(`${E2eTestId.RevokeCredentialButton}-${ADMIN_EMAIL}`)
+    .getByTestId(`${E2eTestId.RevokeCredentialButton}-personal`)
     .click();
   await adminPage
     .getByTestId(`${E2eTestId.RevokeCredentialButton}-${EDITOR_EMAIL}`)

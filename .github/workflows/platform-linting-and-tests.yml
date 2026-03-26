@@ -58,6 +58,15 @@ jobs:
       TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
     steps:
+      - name: Checkout project
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: ${{ inputs.is-release-please-pr }} # zizmor: ignore[artipacked]
+          ref: ${{ inputs.is-release-please-pr && github.head_ref || '' }}
+          token: ${{ github.token }}
+          fetch-depth: 1
+
       # Generate GitHub App token for release-please PRs to push codegen changes
       # (pushes made with GITHUB_TOKEN do not trigger workflows by design)
       - name: Generate token for release-please PR
@@ -68,13 +77,13 @@ jobs:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
 
-      - name: Checkout project
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+      - name: Update checkout credentials for release-please PR
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && inputs.is-release-please-pr == true }}
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          persist-credentials: ${{ inputs.is-release-please-pr }} # zizmor: ignore[artipacked]
-          ref: ${{ inputs.is-release-please-pr && github.head_ref || '' }}
-          token: ${{ steps.generate-token.outputs.token || github.token }}
+          persist-credentials: true # zizmor: ignore[artipacked]
+          ref: ${{ github.head_ref }}
+          token: ${{ steps.generate-token.outputs.token }}
           fetch-depth: 1
 
       - name: Setup environment

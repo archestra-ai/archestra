@@ -1373,6 +1373,13 @@
       "when": 1774442794704,
       "tag": "0195_opposite_shocker",
       "breakpoints": true
+    },
+    {
+      "idx": 196,
+      "version": "7",
+      "when": 1774488938098,
+      "tag": "0196_easy_shriek",
+      "breakpoints": true
     }
   ]
 }

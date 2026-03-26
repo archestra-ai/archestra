@@ -7,6 +7,7 @@ import {
   type archestraApiTypes,
   BUILT_IN_AGENT_IDS,
   DocsPage,
+  E2eTestId,
   getDocsUrl,
   getResourceForAgentType,
   MAX_SUGGESTED_PROMPT_TEXT_LENGTH,
@@ -49,6 +50,10 @@ import {
   type AgentToolsEditorRef,
 } from "@/components/agent-tools-editor";
 import { ModelSelector } from "@/components/chat/model-selector";
+import {
+  formatPermissionRequirement,
+  PermissionRequirementHint,
+} from "@/components/permission-requirement-hint";
 import { SystemPromptEditor } from "@/components/system-prompt-editor";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -377,6 +382,7 @@ function AccessLevelSelector({
   onScopeChange,
   isAdmin,
   isTeamAdmin,
+  canReadTeams,
   initialScope,
   agentType,
   teams,
@@ -389,6 +395,7 @@ function AccessLevelSelector({
   onScopeChange: (scope: AgentScope) => void;
   isAdmin: boolean;
   isTeamAdmin: boolean;
+  canReadTeams: boolean;
   initialScope?: AgentScope;
   agentType: AgentType;
   teams: Array<{ id: string; name: string }> | undefined;
@@ -403,7 +410,7 @@ function AccessLevelSelector({
   const isOptionDisabled = (value: string) => {
     if (value === "personal" && initialScope && initialScope !== "personal")
       return true;
-    if (value === "team" && !canShareWithTeams) return true;
+    if (value === "team" && (!canShareWithTeams || !canReadTeams)) return true;
     if (value === "org" && !isAdmin) return true;
     return false;
   };
@@ -419,6 +426,8 @@ function AccessLevelSelector({
   const getDisabledReason = (value: string) => {
     if (value === "personal" && initialScope && initialScope !== "personal")
       return "Shared agents cannot be made personal";
+    if (value === "team" && !canReadTeams)
+      return `Team sharing is unavailable without ${formatPermissionRequirement({ resource: "team", action: "read" })}`;
     if (value === "team" && !canShareWithTeams)
       return `You need ${resourceName}:team-admin permission to share with teams`;
     if (value === "org" && !isAdmin)
@@ -447,7 +456,9 @@ function AccessLevelSelector({
         <div className="space-y-2">
           <Label>Teams{showTeamRequired && " *"}</Label>
           <MultiSelectCombobox
-            disabled={!canShareWithTeams || hasNoAvailableTeams}
+            disabled={
+              !canShareWithTeams || hasNoAvailableTeams || !canReadTeams
+            }
             options={
               teams?.map((team) => ({
                 value: team.id,
@@ -457,10 +468,20 @@ function AccessLevelSelector({
             value={assignedTeamIds}
             onChange={onTeamIdsChange}
             placeholder={
-              hasNoAvailableTeams ? "No teams available" : "Search teams..."
+              !canReadTeams
+                ? "Teams unavailable"
+                : hasNoAvailableTeams
+                  ? "No teams available"
+                  : "Search teams..."
             }
             emptyMessage="No teams found."
           />
+          {!canReadTeams && (
+            <PermissionRequirementHint
+              message="Team selection is unavailable without"
+              permissions={[{ resource: "team", action: "read" }]}
+            />
+          )}
         </div>
       )}
     </SharedVisibilitySelector>
@@ -502,6 +523,7 @@ export function AgentDialog({
   const { data: canReadKnowledgeBase } = useHasPermissions({
     knowledgeBase: ["read"],
   });
+  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: identityProviders = [] } = useIdentityProviders({
     enabled: !!canReadIdentityProviders,
   });
@@ -529,6 +551,7 @@ export function AgentDialog({
       });
       return response.data?.data ?? [];
     },
+    enabled: !!canReadTeams,
   });
   const resource = getResourceForAgentType(agentType);
   const { data: isAdmin } = useHasPermissions({
@@ -1364,6 +1387,7 @@ export function AgentDialog({
             {/* Section 3: Capabilities (Tools, Subagents, Knowledge Sources) */}
             {showToolsAndSubagents && (
               <div className="rounded-lg border bg-card p-4 space-y-4">
+                <div data-testid={E2eTestId.AgentCapabilitiesSection} />
                 <h3 className="text-sm font-semibold">Capabilities</h3>
 
                 {/* Tools */}
@@ -1577,6 +1601,7 @@ export function AgentDialog({
                     initialScope={agent?.scope}
                     agentType={agentType}
                     teams={teams}
+                    canReadTeams={!!canReadTeams}
                     assignedTeamIds={assignedTeamIds}
                     onTeamIdsChange={setAssignedTeamIds}
                     hasNoAvailableTeams={hasNoAvailableTeams}

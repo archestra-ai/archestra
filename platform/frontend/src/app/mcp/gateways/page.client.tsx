@@ -38,6 +38,7 @@ import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { PageLayout } from "@/components/page-layout";
+import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
 import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
@@ -242,6 +243,7 @@ function McpGateways({
       : undefined,
     labels: labelsFromUrl || undefined,
   });
+  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
 
   const { data: userTeams } = useQuery({
     queryKey: ["teams"],
@@ -252,6 +254,7 @@ function McpGateways({
       return data?.data || [];
     },
     initialData: initialData?.teams,
+    enabled: !!canReadTeams,
   });
 
   const { data: isAdmin } = useHasPermissions({ mcpGateway: ["admin"] });
@@ -524,6 +527,12 @@ function McpGateways({
                 />
                 <AgentScopeFilter />
               </div>
+              {!canReadTeams && (
+                <PermissionRequirementHint
+                  message="Team-based filters and sharing details are unavailable without"
+                  permissions={[{ resource: "team", action: "read" }]}
+                />
+              )}
               <ActiveFilterBadges />
             </div>
 

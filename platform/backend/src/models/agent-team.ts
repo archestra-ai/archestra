@@ -1,6 +1,8 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
+import type { AgentAccessContext } from "@/types";
+import { findAgentAccessContextById } from "./agent-access-context";
 
 class AgentTeamModel {
   /**
@@ -65,6 +67,7 @@ class AgentTeamModel {
     userId: string,
     agentId: string,
     isAgentAdmin: boolean,
+    agentAccessContext?: AgentAccessContext | null,
   ): Promise<boolean> {
     logger.debug(
       { userId, agentId, isAgentAdmin },
@@ -79,15 +82,8 @@ class AgentTeamModel {
       return true;
     }
 
-    // Fetch agent's scope and authorId
-    const [agent] = await db
-      .select({
-        scope: schema.agentsTable.scope,
-        authorId: schema.agentsTable.authorId,
-      })
-      .from(schema.agentsTable)
-      .where(eq(schema.agentsTable.id, agentId))
-      .limit(1);
+    const agent =
+      agentAccessContext ?? (await findAgentAccessContextById(agentId));
 
     if (!agent) {
       return false;
@@ -310,18 +306,15 @@ class AgentTeamModel {
   static async teamHasAgentAccess(
     agentId: string,
     teamId: string | null,
+    agentAccessContext?: AgentAccessContext | null,
   ): Promise<boolean> {
     logger.debug(
       { agentId, teamId },
       "AgentTeamModel.teamHasAgentAccess: checking access",
     );
 
-    // Fetch agent's scope
-    const [agent] = await db
-      .select({ scope: schema.agentsTable.scope })
-      .from(schema.agentsTable)
-      .where(eq(schema.agentsTable.id, agentId))
-      .limit(1);
+    const agent =
+      agentAccessContext ?? (await findAgentAccessContextById(agentId));
 
     if (!agent) {
       return false;

@@ -46,13 +46,21 @@ import {
   UserModel,
   UserTokenModel,
 } from "@/models";
+import { findAgentAccessContextById } from "@/models/agent-access-context";
 import { metrics } from "@/observability";
 import {
   ATTR_MCP_IS_ERROR_RESULT,
   startActiveMcpSpan,
 } from "@/observability/tracing";
 import { jwksValidator } from "@/services/jwks-validator";
-import { type AgentType, type CommonToolCall, UuidIdSchema } from "@/types";
+import {
+  type AgentAccessContext,
+  type AgentType,
+  type CommonToolCall,
+  type SelectTeamToken,
+  type SelectUserToken,
+  UuidIdSchema,
+} from "@/types";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { estimateToolResultContentLength } from "@/utils/tool-result-preview";
 
@@ -87,7 +95,18 @@ export type AgentInfo = {
 type TokenHashes = {
   cacheKey: string;
   oauthTokenHash: string;
+  rawTokenHash: string;
 };
+
+type ResolvedArchestraToken =
+  | {
+      type: "team";
+      token: SelectTeamToken;
+    }
+  | {
+      type: "user";
+      token: SelectUserToken;
+    };
 
 const TOKEN_AUTH_CACHE_TTL_MS = 30_000;
 const TOKEN_AUTH_CACHE_NULL_TTL_MS = 5_000;
@@ -96,6 +115,11 @@ const tokenAuthCache = new LRUCacheManager<TokenAuthResult | null>({
   maxSize: TOKEN_AUTH_CACHE_MAX_ENTRIES,
   defaultTtl: TOKEN_AUTH_CACHE_TTL_MS,
 });
+const rawArchestraTokenCache =
+  new LRUCacheManager<ResolvedArchestraToken | null>({
+    maxSize: TOKEN_AUTH_CACHE_MAX_ENTRIES,
+    defaultTtl: TOKEN_AUTH_CACHE_TTL_MS,
+  });
 
 /**
  * Creates an MCP server for the given agent.
@@ -547,6 +571,7 @@ export function extractProfileIdAndTokenFromRequest(
 export async function validateTeamToken(
   profileId: string,
   tokenValue: string,
+  agentAccessContext?: AgentAccessContext | null,
 ): Promise<TokenAuthResult | null> {
   // Validate the token itself
   const token = await TeamTokenModel.validateToken(tokenValue);
@@ -554,12 +579,27 @@ export async function validateTeamToken(
     return null;
   }
 
+  return validateResolvedTeamToken({
+    profileId,
+    token,
+    agentAccessContext,
+  });
+}
+
+async function validateResolvedTeamToken(params: {
+  profileId: string;
+  token: SelectTeamToken;
+  agentAccessContext?: AgentAccessContext | null;
+}): Promise<TokenAuthResult | null> {
+  const { profileId, token, agentAccessContext } = params;
+
   // Check if profile is accessible via this token
   if (!token.isOrganizationToken) {
     // Team token: profile must be assigned to this team, or be teamless (org-wide)
     const hasAccess = await AgentTeamModel.teamHasAgentAccess(
       profileId,
       token.teamId,
+      agentAccessContext,
     );
     if (!hasAccess) {
       logger.warn(
@@ -593,6 +633,7 @@ export async function validateTeamToken(
 export async function validateUserToken(
   profileId: string,
   tokenValue: string,
+  agentAccessContext?: AgentAccessContext | null,
 ): Promise<TokenAuthResult | null> {
   // Validate the token itself
   const token = await UserTokenModel.validateToken(tokenValue);
@@ -603,6 +644,20 @@ export async function validateUserToken(
     );
     return null;
   }
+
+  return validateResolvedUserToken({
+    profileId,
+    token,
+    agentAccessContext,
+  });
+}
+
+async function validateResolvedUserToken(params: {
+  profileId: string;
+  token: SelectUserToken;
+  agentAccessContext?: AgentAccessContext | null;
+}): Promise<TokenAuthResult | null> {
+  const { profileId, token, agentAccessContext } = params;
 
   // Check if user has MCP gateway admin permission (can access all gateways)
   const isGatewayAdmin = await userHasPermission(
@@ -625,7 +680,12 @@ export async function validateUserToken(
 
   // Non-admin: user can access profile if it's teamless (org-wide) or shares a team
   if (
-    !(await AgentTeamModel.userHasAgentAccess(token.userId, profileId, false))
+    !(await AgentTeamModel.userHasAgentAccess(
+      token.userId,
+      profileId,
+      false,
+      agentAccessContext,
+    ))
   ) {
     logger.warn(
       { profileId, userId: token.userId },
@@ -688,9 +748,12 @@ export async function validateOAuthToken(
 async function validateOAuthTokenByHash(params: {
   profileId: string;
   oauthTokenHash: string;
+  agentAccessContext?: AgentAccessContext | null;
 }): Promise<TokenAuthResult | null> {
   try {
-    const agent = await AgentModel.findAccessContextById(params.profileId);
+    const agent =
+      params.agentAccessContext ??
+      (await findAgentAccessContextById(params.profileId));
     if (!agent) {
       return null;
     }
@@ -753,6 +816,7 @@ async function validateOAuthTokenByHash(params: {
         userId,
         params.profileId,
         false,
+        agent,
       ))
     ) {
       logger.warn(
@@ -797,6 +861,15 @@ export async function validateMCPGatewayToken(
     return cachedResult;
   }
 
+  let agentAccessContextPromise: Promise<AgentAccessContext | null> | undefined;
+  const getAgentAccessContext =
+    async (): Promise<AgentAccessContext | null> => {
+      if (!agentAccessContextPromise) {
+        agentAccessContextPromise = findAgentAccessContextById(profileId);
+      }
+      return agentAccessContextPromise;
+    };
+
   // Try external IdP JWKS validation first (if profile has an IdP configured)
   if (!tokenValue.startsWith(ARCHESTRA_TOKEN_PREFIX)) {
     const externalIdpResult = await validateExternalIdpToken(
@@ -809,32 +882,56 @@ export async function validateMCPGatewayToken(
     }
   }
 
-  // Try team/org token validation
-  const teamTokenResult = await validateTeamToken(profileId, tokenValue);
-  if (teamTokenResult) {
-    cacheTokenAuthResult(tokenHashes.cacheKey, teamTokenResult);
-    return teamTokenResult;
-  }
+  if (tokenValue.startsWith(ARCHESTRA_TOKEN_PREFIX)) {
+    const resolvedToken = await resolveArchestraToken(
+      tokenValue,
+      tokenHashes.rawTokenHash,
+    );
+    if (resolvedToken?.type === "team") {
+      const teamTokenResult = await validateResolvedTeamToken({
+        profileId,
+        token: resolvedToken.token,
+        agentAccessContext: resolvedToken.token.isOrganizationToken
+          ? null
+          : await getAgentAccessContext(),
+      });
+      if (teamTokenResult) {
+        cacheTokenAuthResult(tokenHashes.cacheKey, teamTokenResult);
+        return teamTokenResult;
+      }
+    }
 
-  // Then try user token validation
-  const userTokenResult = await validateUserToken(profileId, tokenValue);
-  if (userTokenResult) {
-    cacheTokenAuthResult(tokenHashes.cacheKey, userTokenResult);
-    return userTokenResult;
+    if (resolvedToken?.type === "user") {
+      const userTokenResult = await validateResolvedUserToken({
+        profileId,
+        token: resolvedToken.token,
+        agentAccessContext: await getAgentAccessContext(),
+      });
+      if (userTokenResult) {
+        cacheTokenAuthResult(tokenHashes.cacheKey, userTokenResult);
+        return userTokenResult;
+      }
+    }
+
+    logger.warn(
+      { profileId, tokenPrefix: tokenValue.substring(0, 14) },
+      "validateMCPGatewayToken: token validation failed - not found in any token table or access denied",
+    );
+    cacheTokenAuthResult(tokenHashes.cacheKey, null);
+    return null;
   }
 
   // Try OAuth token validation (for MCP clients like Open WebUI)
-  if (!tokenValue.startsWith(ARCHESTRA_TOKEN_PREFIX)) {
-    const oauthResult = await validateOAuthTokenByHash({
-      profileId,
-      oauthTokenHash: tokenHashes.oauthTokenHash,
-    });
-    if (oauthResult) {
-      // This cache is intentionally short-lived and process-local. Revocations
-      // may take up to TOKEN_AUTH_CACHE_TTL_MS to fully age out across requests.
-      cacheTokenAuthResult(tokenHashes.cacheKey, oauthResult);
-      return oauthResult;
-    }
+  const oauthResult = await validateOAuthTokenByHash({
+    profileId,
+    oauthTokenHash: tokenHashes.oauthTokenHash,
+    agentAccessContext: await getAgentAccessContext(),
+  });
+  if (oauthResult) {
+    // This cache is intentionally short-lived and process-local. Revocations
+    // may take up to TOKEN_AUTH_CACHE_TTL_MS to fully age out across requests.
+    cacheTokenAuthResult(tokenHashes.cacheKey, oauthResult);
+    return oauthResult;
   }
 
   logger.warn(
@@ -1137,6 +1234,12 @@ function getCachedTokenAuthResult(
   return tokenAuthCache.get(cacheKey);
 }
 
+function getCachedRawArchestraToken(
+  rawTokenHash: string,
+): ResolvedArchestraToken | null | undefined {
+  return rawArchestraTokenCache.get(rawTokenHash);
+}
+
 function cacheTokenAuthResult(
   cacheKey: string,
   result: TokenAuthResult | null,
@@ -1148,16 +1251,61 @@ function cacheTokenAuthResult(
   );
 }
 
+function cacheRawArchestraToken(
+  rawTokenHash: string,
+  result: ResolvedArchestraToken | null,
+): void {
+  rawArchestraTokenCache.set(
+    rawTokenHash,
+    result,
+    result ? TOKEN_AUTH_CACHE_TTL_MS : TOKEN_AUTH_CACHE_NULL_TTL_MS,
+  );
+}
+
 function buildTokenHashes(profileId: string, tokenValue: string): TokenHashes {
   const digest = createHash("sha256").update(tokenValue).digest();
   return {
     cacheKey: `${profileId}:${digest.toString("hex")}`,
     oauthTokenHash: digest.toString("base64url"),
+    rawTokenHash: digest.toString("hex"),
   };
 }
 
 function buildOAuthTokenHash(tokenValue: string): string {
   return createHash("sha256").update(tokenValue).digest("base64url");
+}
+
+async function resolveArchestraToken(
+  tokenValue: string,
+  rawTokenHash: string,
+): Promise<ResolvedArchestraToken | null> {
+  const cached = getCachedRawArchestraToken(rawTokenHash);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const teamToken = await TeamTokenModel.validateToken(tokenValue);
+  if (teamToken) {
+    const result: ResolvedArchestraToken = {
+      type: "team",
+      token: teamToken,
+    };
+    cacheRawArchestraToken(rawTokenHash, result);
+    return result;
+  }
+
+  const userToken = await UserTokenModel.validateToken(tokenValue);
+  if (userToken) {
+    const result: ResolvedArchestraToken = {
+      type: "user",
+      token: userToken,
+    };
+    cacheRawArchestraToken(rawTokenHash, result);
+    return result;
+  }
+
+  cacheRawArchestraToken(rawTokenHash, null);
+  return null;
 }
 
 /**

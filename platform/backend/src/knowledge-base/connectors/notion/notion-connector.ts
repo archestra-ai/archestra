@@ -143,9 +143,6 @@ export class NotionConnector extends BaseConnector {
         }
       }
 
-      hasMore = data.has_more;
-      nextCursor = data.next_cursor;
-
       const lastItem = itemsToProcess[itemsToProcess.length - 1];
       const lastSyncedAt = lastItem?.last_edited_time;
 

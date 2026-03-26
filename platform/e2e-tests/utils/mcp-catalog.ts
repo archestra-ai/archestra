@@ -128,11 +128,16 @@ export async function addCustomSelfHostedCatalogItem({
     throw new Error(`Failed to find catalog item "${catalogItemName}"`);
   }
 
+  const createdCatalogItem = newCatalogItem as { id: string; name: string };
+
   if (await createDialog.isVisible().catch(() => false)) {
     await page.keyboard.press("Escape").catch(() => undefined);
   }
 
-  return { id: newCatalogItem!.id, name: newCatalogItem!.name };
+  return {
+    id: createdCatalogItem.id,
+    name: createdCatalogItem.name,
+  };
 }
 
 export async function findCatalogItem(

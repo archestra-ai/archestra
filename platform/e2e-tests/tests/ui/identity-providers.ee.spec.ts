@@ -9,7 +9,13 @@ import {
   SSO_DOMAIN,
   UI_BASE_URL,
 } from "../../consts";
-import { type Browser, expect, type Page, test } from "../../fixtures";
+import {
+  type Browser,
+  expect,
+  type Page,
+  test,
+  type APIResponse,
+} from "../../fixtures";
 import {
   clickButton,
   clickTeamActionButton,
@@ -136,23 +142,94 @@ async function fillOidcProviderForm(
   await page.getByLabel("JWKS Endpoint").fill(KEYCLOAK_OIDC.jwksEndpoint);
 }
 
-async function configureTeamSyncForGroups(page: Page): Promise<void> {
-  const groupsTemplateInput = page.getByLabel("Groups Handlebars Template");
+async function createOidcProviderViaApi(
+  page: Page,
+  providerName: string,
+): Promise<void> {
+  const response = await page.request.post(
+    `${UI_BASE_URL}/api/identity-providers`,
+    {
+      data: {
+        providerId: providerName,
+        issuer: KEYCLOAK_OIDC.issuer,
+        domain: SSO_DOMAIN,
+        oidcConfig: {
+          issuer: KEYCLOAK_OIDC.issuer,
+          pkce: true,
+          enableRpInitiatedLogout: true,
+          clientId: KEYCLOAK_OIDC.clientId,
+          clientSecret: KEYCLOAK_OIDC.clientSecret,
+          discoveryEndpoint: KEYCLOAK_OIDC.discoveryEndpoint,
+          authorizationEndpoint: KEYCLOAK_OIDC.authorizationEndpoint,
+          tokenEndpoint: KEYCLOAK_OIDC.tokenEndpoint,
+          jwksEndpoint: KEYCLOAK_OIDC.jwksEndpoint,
+          scopes: ["openid", "email", "profile"],
+          mapping: {
+            id: "sub",
+            email: "email",
+            name: "name",
+          },
+          overrideUserInfo: true,
+        },
+        teamSyncConfig: {
+          enabled: true,
+          groupsExpression: "{{#each groups}}{{this}},{{/each}}",
+        },
+      },
+    },
+  );
 
-  if (!(await groupsTemplateInput.isVisible().catch(() => false))) {
-    await page
-      .getByRole("button", { name: /Team Sync Configuration \(Optional\)/i })
-      .click();
+  await expectApiResponseOk(response, "create identity provider");
+
+  const createdProvider = (await response.json()) as {
+    providerId: string;
+    teamSyncConfig?: {
+      enabled?: boolean;
+      groupsExpression?: string;
+    };
+  };
+
+  expect(createdProvider.providerId).toBe(providerName);
+  expect(createdProvider.teamSyncConfig?.enabled).toBe(true);
+  expect(createdProvider.teamSyncConfig?.groupsExpression).toBe(
+    "{{#each groups}}{{this}},{{/each}}",
+  );
+}
+
+async function deleteProviderByProviderIdViaApi(
+  page: Page,
+  providerName: string,
+): Promise<void> {
+  const providersResponse = await page.request.get(
+    `${UI_BASE_URL}/api/identity-providers`,
+  );
+  await expectApiResponseOk(providersResponse, "list identity providers");
+
+  const providers = (await providersResponse.json()) as Array<{
+    id: string;
+    providerId: string;
+  }>;
+
+  const provider = providers.find((item) => item.providerId === providerName);
+  if (!provider) {
+    return;
   }
 
-  const enableTeamSyncCheckbox = page.getByLabel("Enable Team Sync");
-  await expect(enableTeamSyncCheckbox).toBeVisible({ timeout: 10_000 });
-  if (!(await enableTeamSyncCheckbox.isChecked())) {
-    await enableTeamSyncCheckbox.click();
-  }
+  const deleteResponse = await page.request.delete(
+    `${UI_BASE_URL}/api/identity-providers/${provider.id}`,
+  );
+  await expectApiResponseOk(deleteResponse, "delete identity provider");
+}
 
-  await expect(groupsTemplateInput).toBeVisible({ timeout: 10_000 });
-  await groupsTemplateInput.fill("{{#each groups}}{{this}},{{/each}}");
+async function expectApiResponseOk(
+  response: APIResponse,
+  action: string,
+): Promise<void> {
+  const bodyText = await response.text();
+  expect(
+    response.ok(),
+    `${action} failed with ${response.status()}: ${bodyText}`,
+  ).toBe(true);
 }
 
 function getRoleMappingRuleRow(page: Page, index: number) {
@@ -392,16 +469,10 @@ test.describe("Identity Provider Team Sync E2E", () => {
 
     // STEP 1: Authenticate and create OIDC provider
     await ensureAdminAuthenticated(page);
-    await goToPage(page, "/settings/identity-providers");
-    await page.waitForLoadState("domcontentloaded");
-    await deleteExistingProviderIfExists(page, "Generic OIDC");
-    await fillOidcProviderForm(page, providerName);
-    await configureTeamSyncForGroups(page);
-    await page.getByTestId(E2eTestId.IdentityProviderCreateButton).click();
-    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+    await deleteProviderByProviderIdViaApi(page, providerName);
+    await createOidcProviderViaApi(page, providerName);
 
     // STEP 2: Navigate to teams page and create a team
-    // Re-authenticate in case session was invalidated during identity provider creation
     await ensureAdminAuthenticated(page);
     await goToPage(page, "/settings/teams");
     await page.waitForLoadState("domcontentloaded");
@@ -509,11 +580,7 @@ test.describe("Identity Provider Team Sync E2E", () => {
     await page.waitForLoadState("domcontentloaded");
     await deleteTeamByName(page, teamName);
 
-    // Delete the identity provider
-    await goToPage(page, "/settings/identity-providers");
-    await page.waitForLoadState("domcontentloaded");
-    await openIdentityProviderDialog(page, "Generic OIDC");
-    await deleteProviderViaDialog(page);
+    await deleteProviderByProviderIdViaApi(page, providerName);
   });
 });
 

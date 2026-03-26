@@ -1320,7 +1320,7 @@ const MessageTool = memo(
       const iconInfo = toolIconMap?.get(toolName);
 
       return (
-        <div className="mb-3">
+        <div className="mb-1">
           <div className="flex items-center gap-1.5">
             <TooltipProvider delayDuration={200}>
               <Tooltip>
@@ -1531,7 +1531,8 @@ const MessageTool = memo(
     prev.toolResultPart?.state === next.toolResultPart?.state &&
     prev.earlyToolUiData?.uiResourceUri ===
       next.earlyToolUiData?.uiResourceUri &&
-    !!prev.earlyToolUiData?.html === !!next.earlyToolUiData?.html,
+    !!prev.earlyToolUiData?.html === !!next.earlyToolUiData?.html &&
+    prev.toolIconMap === next.toolIconMap,
 );
 
 const getHeaderState = ({

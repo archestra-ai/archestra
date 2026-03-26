@@ -75,7 +75,6 @@ export async function syncSsoRole(
   userId: string,
   userEmail: string,
   providerIdHint?: string,
-  retryOnMissingAccount = false,
 ): Promise<void> {
   logger.info({ userId, userEmail }, "🔄 syncSsoRole called");
 
@@ -83,7 +82,6 @@ export async function syncSsoRole(
     userId,
     providerIdHint,
     requireIdToken: false,
-    retryOnMissingAccount,
   });
 
   if (!ssoAccount) {
@@ -252,7 +250,6 @@ export async function syncSsoTeams(
   userId: string,
   userEmail: string,
   providerIdHint?: string,
-  retryOnMissingAccount = false,
 ): Promise<void> {
   logger.info({ userId, userEmail }, "🔄 syncSsoTeams called");
 
@@ -266,7 +263,6 @@ export async function syncSsoTeams(
     userId,
     providerIdHint,
     requireIdToken: false,
-    retryOnMissingAccount,
   });
 
   logger.info(
@@ -410,57 +406,29 @@ async function getRecentSsoAccount(params: {
   userId: string;
   providerIdHint?: string;
   requireIdToken: boolean;
-  retryOnMissingAccount: boolean;
 }) {
-  const maxAttempts = 10;
+  const allAccounts = await AccountModel.getAllByUserId(params.userId);
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const allAccounts = await AccountModel.getAllByUserId(params.userId);
-
-    const matchingAccounts = allAccounts.filter((account) => {
-      if (account.providerId === "credential") {
-        return false;
-      }
-
-      if (params.providerIdHint) {
-        return account.providerId === params.providerIdHint;
-      }
-
-      return true;
-    });
-
-    const accountWithIdToken = matchingAccounts.find(
-      (account) => account.idToken,
-    );
-    const fallbackAccount = matchingAccounts[0];
-
-    if (
-      !params.retryOnMissingAccount &&
-      !accountWithIdToken &&
-      !fallbackAccount
-    ) {
-      return null;
+  const matchingAccounts = allAccounts.filter((account) => {
+    if (account.providerId === "credential") {
+      return false;
     }
 
-    if (params.requireIdToken) {
-      if (accountWithIdToken) {
-        return accountWithIdToken;
-      }
-    } else if (accountWithIdToken || fallbackAccount) {
-      return accountWithIdToken ?? fallbackAccount;
+    if (params.providerIdHint) {
+      return account.providerId === params.providerIdHint;
     }
 
-    if (attempt < maxAttempts) {
-      await waitForAccountPersistence(attempt);
-    }
+    return true;
+  });
+
+  const accountWithIdToken = matchingAccounts.find(
+    (account) => account.idToken,
+  );
+  const fallbackAccount = matchingAccounts[0];
+
+  if (params.requireIdToken) {
+    return accountWithIdToken ?? null;
   }
 
-  return null;
-}
-
-async function waitForAccountPersistence(attempt: number): Promise<void> {
-  const delayMs = Math.min(attempt * 500, 2_000);
-  await new Promise((resolve) => {
-    setTimeout(resolve, delayMs);
-  });
+  return accountWithIdToken ?? fallbackAccount ?? null;
 }

@@ -798,28 +798,17 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
           path,
           requestUrl: request?.url,
         });
-        const retryOnMissingAccount = Boolean(request?.url);
 
         logger.debug(
-          { userId, email: user.email, providerIdHint, retryOnMissingAccount },
+          { userId, email: user.email, providerIdHint },
           "[auth:afterHook] Processing SSO role and team sync",
         );
 
         // Sync role first (based on role mapping rules)
-        await syncSsoRole(
-          userId,
-          user.email,
-          providerIdHint,
-          retryOnMissingAccount,
-        );
+        await syncSsoRole(userId, user.email, providerIdHint);
 
         // Then sync teams (based on SSO groups)
-        await syncSsoTeams(
-          userId,
-          user.email,
-          providerIdHint,
-          retryOnMissingAccount,
-        );
+        await syncSsoTeams(userId, user.email, providerIdHint);
       }
     }
   }

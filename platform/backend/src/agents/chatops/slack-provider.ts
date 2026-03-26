@@ -6,8 +6,8 @@ import { slackifyMarkdown } from "slackify-markdown";
 import {
   type AllowedCacheKey,
   CacheKey,
-  LRUCacheManager,
   cacheManager,
+  LRUCacheManager,
 } from "@/cache-manager";
 import logger from "@/logging";
 import { AgentModel, ChatOpsChannelBindingModel, UserModel } from "@/models";
@@ -477,9 +477,7 @@ class SlackProvider implements ChatOpsProvider {
     try {
       // Fetch all messages using cursor-based pagination
       const allMessages: NonNullable<
-        Awaited<
-          ReturnType<WebClient["conversations"]["replies"]>
-        >["messages"]
+        Awaited<ReturnType<WebClient["conversations"]["replies"]>>["messages"]
       > = [];
       let cursor: string | undefined;
 
@@ -506,10 +504,7 @@ class SlackProvider implements ChatOpsProvider {
         ...new Set(
           filtered
             .filter(
-              (msg) =>
-                msg.user &&
-                !msg.bot_id &&
-                msg.user !== this.botUserId,
+              (msg) => msg.user && !msg.bot_id && msg.user !== this.botUserId,
             )
             .map((msg) => msg.user as string),
         ),
@@ -527,13 +522,10 @@ class SlackProvider implements ChatOpsProvider {
             size: f.size,
           }));
 
-        const isFromBot =
-          Boolean(msg.bot_id) || msg.user === this.botUserId;
+        const isFromBot = Boolean(msg.bot_id) || msg.user === this.botUserId;
         const senderName = isFromBot
-          ? (msg.user || "Unknown")
-          : (userNameMap.get(msg.user as string) ||
-              msg.user ||
-              "Unknown");
+          ? msg.user || "Unknown"
+          : userNameMap.get(msg.user as string) || msg.user || "Unknown";
 
         return {
           messageId: msg.ts as string,

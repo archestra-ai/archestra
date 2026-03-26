@@ -48,6 +48,23 @@ export async function saveOpenProfileDialog(page: Page): Promise<void> {
   await page.waitForLoadState("domcontentloaded");
 }
 
+export async function assignCatalogCredentialToGateway(params: {
+  page: Page;
+  catalogItemName: string;
+  credentialName: string;
+  gatewayName?: string;
+}): Promise<void> {
+  await openGatewayCatalogToolAssignment({
+    page: params.page,
+    catalogItemName: params.catalogItemName,
+    gatewayName: params.gatewayName,
+  });
+  await params.page.getByRole("option", { name: params.credentialName }).click();
+  await params.page.keyboard.press("Escape");
+  await params.page.waitForTimeout(200);
+  await saveOpenProfileDialog(params.page);
+}
+
 async function openCatalogToolAssignment({
   page,
   targetName,

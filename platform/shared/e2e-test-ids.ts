@@ -130,3 +130,9 @@ export function getDeleteVirtualKeyButtonTestId(keyName: string): string {
 export function getAgentToolCatalogPillTestId(catalogItemName: string): string {
   return `${E2eTestId.AgentToolCatalogPill}-${catalogItemName}`;
 }
+
+export function getManageCredentialsButtonTestId(
+  catalogItemName: string,
+): string {
+  return `${E2eTestId.ManageCredentialsButton}-${catalogItemName}`;
+}

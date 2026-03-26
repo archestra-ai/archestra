@@ -61,6 +61,14 @@ export async function installMcpServer(page: Page): Promise<void> {
   await page.waitForLoadState("domcontentloaded");
 }
 
+export async function selectTeamCredentialType(
+  page: Page,
+  teamName: string,
+): Promise<void> {
+  await page.getByTestId(E2eTestId.SelectCredentialTypeTeamDropdown).click();
+  await page.getByRole("option", { name: teamName }).click();
+}
+
 export async function waitForMcpServerCard(
   page: Page,
   catalogItemName: string,
@@ -117,10 +125,25 @@ export async function installLocalCatalogItem(params: {
 
   await waitForInstallDialog(params.page, { timeoutMs: params.timeoutMs });
 
-  for (const [key, value] of Object.entries(params.envValues ?? {})) {
-    await params.page.getByRole("textbox", { name: key }).fill(value);
-  }
+  await fillInstallDialogEnvValues(params.page, params.envValues);
 
+  await installMcpServer(params.page);
+}
+
+export async function installTeamCatalogItemConnection(params: {
+  page: Page;
+  catalogItemName: string;
+  teamName: string;
+  envValues?: Record<string, string>;
+  timeoutMs?: number;
+}): Promise<void> {
+  await goToMcpRegistry(params.page);
+  await openCatalogItemConnectDialog(params.page, params.catalogItemName, {
+    timeoutMs: params.timeoutMs,
+  });
+  await waitForInstallDialog(params.page, { timeoutMs: params.timeoutMs });
+  await selectTeamCredentialType(params.page, params.teamName);
+  await fillInstallDialogEnvValues(params.page, params.envValues);
   await installMcpServer(params.page);
 }
 
@@ -158,9 +181,7 @@ export async function addSharedLocalConnection(params: {
   });
   await waitForInstallDialog(params.page, { timeoutMs: params.timeoutMs });
 
-  for (const [key, value] of Object.entries(params.envValues ?? {})) {
-    await params.page.getByRole("textbox", { name: key }).fill(value);
-  }
+  await fillInstallDialogEnvValues(params.page, params.envValues);
 
   await installMcpServer(params.page);
 }
@@ -168,4 +189,13 @@ export async function addSharedLocalConnection(params: {
 export async function settleRegistryAfterInstall(page: Page): Promise<void> {
   await page.waitForLoadState("domcontentloaded");
   await closeOpenDialogs(page, { timeoutMs: 15_000 });
+}
+
+async function fillInstallDialogEnvValues(
+  page: Page,
+  envValues?: Record<string, string>,
+): Promise<void> {
+  for (const [key, value] of Object.entries(envValues ?? {})) {
+    await page.getByRole("textbox", { name: key }).fill(value);
+  }
 }

@@ -4,12 +4,17 @@ import { DEFAULT_TEAM_NAME } from "../../consts";
 import { expect, goToPage, test } from "../../fixtures";
 import {
   addCustomSelfHostedCatalogItem,
+  assignCatalogCredentialToGateway,
   clickButton,
   expandTablePagination,
-  openGatewayCatalogToolAssignment,
-  saveOpenProfileDialog,
   verifyToolCallResultViaApi,
 } from "../../utils";
+import {
+  goToMcpRegistry,
+  installTeamCatalogItemConnection,
+  openCatalogItemConnectDialog,
+  selectTeamCredentialType,
+} from "../../utils/mcp-registry";
 
 /**
  * Navigate to the LLM API Keys page and expand pagination to show all rows.
@@ -217,23 +222,12 @@ test.describe
         },
       });
 
-      // Go to MCP Registry page
-      await goToPage(adminPage, "/mcp/registry");
-      await adminPage.waitForLoadState("domcontentloaded");
-
-      // Click connect button for the catalog item
-      await adminPage
-        .getByTestId(
-          `${E2eTestId.ConnectCatalogItemButton}-${newCatalogItem.name}`,
-        )
-        .click();
+      await goToMcpRegistry(adminPage);
+      await openCatalogItemConnectDialog(adminPage, newCatalogItem.name);
       await adminPage.waitForTimeout(2_000);
 
       // Select team credential type (defaults to personal now, but vault secrets need a team)
-      await adminPage
-        .getByTestId(E2eTestId.SelectCredentialTypeTeamDropdown)
-        .click();
-      await adminPage.getByRole("option", { name: DEFAULT_TEAM_NAME }).click();
+      await selectTeamCredentialType(adminPage, DEFAULT_TEAM_NAME);
 
       // Select secret from vault
       await adminPage
@@ -252,17 +246,11 @@ test.describe
       await adminPage.waitForLoadState("domcontentloaded");
 
       // Assign tool to profiles using default team credential
-      await openGatewayCatalogToolAssignment({
+      await assignCatalogCredentialToGateway({
         page: adminPage,
         catalogItemName: newCatalogItem.name,
+        credentialName: DEFAULT_TEAM_NAME,
       });
-      // Select default team credential from dropdown
-      await adminPage.getByRole("option", { name: DEFAULT_TEAM_NAME }).click();
-      // Close the popover by pressing Escape
-      await adminPage.keyboard.press("Escape");
-      await adminPage.waitForTimeout(200);
-      // Save the edit dialog
-      await saveOpenProfileDialog(adminPage);
 
       // Verify tool call result using default team credential
       await verifyToolCallResultViaApi({
@@ -314,39 +302,18 @@ test.describe
         },
       });
 
-      // Go to MCP Registry page
-      await goToPage(adminPage, "/mcp/registry");
-      await adminPage.waitForLoadState("domcontentloaded");
-
-      // Click connect button for the catalog item
-      await adminPage
-        .getByTestId(
-          `${E2eTestId.ConnectCatalogItemButton}-${newCatalogItem.name}`,
-        )
-        .click();
-
-      // Select team credential type (defaults to personal now, but we need team for vault secrets)
-      await adminPage
-        .getByTestId(E2eTestId.SelectCredentialTypeTeamDropdown)
-        .click();
-      await adminPage.getByRole("option", { name: DEFAULT_TEAM_NAME }).click();
-
-      // install server
-      await clickButton({ page: adminPage, options: { name: "Install" } });
-      await adminPage.waitForLoadState("domcontentloaded");
-
-      // Assign tool to profiles using default team credential
-      await openGatewayCatalogToolAssignment({
+      await installTeamCatalogItemConnection({
         page: adminPage,
         catalogItemName: newCatalogItem.name,
+        teamName: DEFAULT_TEAM_NAME,
       });
-      // Select default team credential from dropdown
-      await adminPage.getByRole("option", { name: DEFAULT_TEAM_NAME }).click();
-      // Close the popover by pressing Escape
-      await adminPage.keyboard.press("Escape");
-      await adminPage.waitForTimeout(200);
-      // Save the edit dialog
-      await saveOpenProfileDialog(adminPage);
+
+      // Assign tool to profiles using default team credential
+      await assignCatalogCredentialToGateway({
+        page: adminPage,
+        catalogItemName: newCatalogItem.name,
+        credentialName: DEFAULT_TEAM_NAME,
+      });
 
       // Verify tool call result using default team credential
       await verifyToolCallResultViaApi({

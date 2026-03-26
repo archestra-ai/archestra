@@ -1,5 +1,5 @@
-import { expect, type APIRequestContext, type Page } from "@playwright/test";
-import { archestraApiSdk } from "@shared";
+import { type APIRequestContext, expect, type Page } from "@playwright/test";
+import { archestraApiSdk, getManageCredentialsButtonTestId } from "@shared";
 import {
   DEFAULT_TEAM_NAME,
   E2eTestId,
@@ -86,12 +86,17 @@ export async function verifyToolCallResultViaApi({
     throw error;
   }
 
-  const textContent = toolResult.content.find((content) => content.type === "text");
+  const textContent = toolResult.content.find(
+    (content) => content.type === "text",
+  );
   if (expectedResult === "AnySuccessText") {
     return;
   }
 
-  if (!textContent?.text?.includes(expectedResult) && expectedResult !== "Error") {
+  if (
+    !textContent?.text?.includes(expectedResult) &&
+    expectedResult !== "Error"
+  ) {
     throw new Error(
       `Expected tool result to contain "${expectedResult}" but got "${textContent?.text}"`,
     );
@@ -159,7 +164,7 @@ export async function openManageCredentialsDialog(
     ).toBeVisible({ timeout: 15_000 });
 
     const manageButton = targetCard.getByTestId(
-      `${E2eTestId.ManageCredentialsButton}-${catalogItemName}`,
+      getManageCredentialsButtonTestId(catalogItemName),
     );
     const deploymentButton = targetCard.getByRole("button", {
       name: /^\d+\/\d+$/,
@@ -181,11 +186,15 @@ export async function openManageCredentialsDialog(
 }
 
 export async function getVisibleCredentials(page: Page): Promise<string[]> {
-  const visibleDialog = page.getByRole("dialog").filter({ visible: true }).last();
+  const visibleDialog = page
+    .getByRole("dialog")
+    .filter({ visible: true })
+    .last();
   const connectionsNavButton = visibleDialog.getByRole("button", {
     name: /^Connections\b/,
   });
-  const badgeText = (await connectionsNavButton.textContent().catch(() => "")) ?? "";
+  const badgeText =
+    (await connectionsNavButton.textContent().catch(() => "")) ?? "";
   const expectedConnectionCount = Number.parseInt(
     badgeText.match(/\d+/)?.[0] ?? "0",
     10,

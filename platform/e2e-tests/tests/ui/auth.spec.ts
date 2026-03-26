@@ -1,4 +1,3 @@
-import type { Page } from "@playwright/test";
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
@@ -9,7 +8,7 @@ import {
   MEMBER_PASSWORD,
 } from "../../consts";
 import { expect, test } from "../../fixtures";
-import { expandSidebar, loginViaApi } from "../../utils";
+import { expandSidebar, navigateAndVerifyAuth } from "../../utils";
 
 test.describe("Multi-user authentication", {
   tag: ["@firefox", "@webkit"],
@@ -26,28 +25,24 @@ test.describe("Multi-user authentication", {
   }) => {
     // Use polling with page reload to handle slow React hydration in Firefox/WebKit CI
     const verifyEmailInSidebar = async (
-      page: Page,
+      page: Parameters<typeof navigateAndVerifyAuth>[0]["page"],
       email: string,
       password: string,
     ) => {
-      await expect(async () => {
-        await goToPage(page, "/chat");
-        await page.waitForLoadState("domcontentloaded");
-        // WebKit sometimes fails to load session from storageState.
-        // If we detect the sign-in page, re-authenticate via API.
-        const loginButton = page.getByRole("button", { name: /login/i });
-        if (
-          await loginButton.isVisible({ timeout: 2_000 }).catch(() => false)
-        ) {
-          await loginViaApi(page, email, password);
-          await goToPage(page, "/chat");
-          await page.waitForLoadState("domcontentloaded");
-        }
-        await expandSidebar(page);
-        await expect(
-          page.getByTestId(E2eTestId.SidebarUserProfile).getByText(email),
-        ).toBeVisible({ timeout: 15_000 });
-      }).toPass({ timeout: 60_000, intervals: [2000, 5000, 10000] });
+      await navigateAndVerifyAuth({
+        page,
+        path: "/chat",
+        email,
+        password,
+        goToPage,
+        timeout: 60_000,
+        intervals: [2000, 5000, 10000],
+        verifyLocator: page.getByTestId(E2eTestId.SidebarUserProfile),
+      });
+      await expandSidebar(page);
+      await expect(
+        page.getByTestId(E2eTestId.SidebarUserProfile).getByText(email),
+      ).toBeVisible({ timeout: 15_000 });
     };
 
     await verifyEmailInSidebar(adminPage, ADMIN_EMAIL, ADMIN_PASSWORD);

@@ -12,15 +12,14 @@ import {
 import { expect, goToPage, test } from "../../fixtures";
 import {
   addCustomSelfHostedCatalogItem,
+  assignCatalogCredentialToGateway,
   assignEngineeringTeamToDefaultProfileViaApi,
   clickButton,
   closeOpenDialogs,
   createTeamMcpGatewayViaApi,
   getVisibleCredentials,
   getVisibleStaticCredentials,
-  openGatewayCatalogToolAssignment,
   openManageCredentialsDialog,
-  saveOpenProfileDialog,
   verifyToolCallResultViaApi,
 } from "../../utils";
 import {
@@ -172,9 +171,10 @@ test.describe
           }
 
           // Check TokenSelect shows correct credentials
-          await openGatewayCatalogToolAssignment({
+          await assignCatalogCredentialToGateway({
             page,
             catalogItemName,
+            credentialName: expectedCredentials[0] ?? "",
             gatewayName: teamGateway?.name,
           });
           const visibleStaticCredentials =
@@ -379,17 +379,11 @@ test("Verify tool calling using different static credentials", async ({
   await settleRegistryAfterInstall(editorPage);
 
   // Assign tool to profiles using admin static credential
-  await openGatewayCatalogToolAssignment({
+  await assignCatalogCredentialToGateway({
     page: adminPage,
     catalogItemName: CATALOG_ITEM_NAME,
+    credentialName: "admin@example.com",
   });
-  // Select admin static credential from dropdown
-  await adminPage.getByRole("option", { name: "admin@example.com" }).click();
-  // Close the popover by pressing Escape
-  await adminPage.keyboard.press("Escape");
-  await adminPage.waitForTimeout(200);
-  // Save the edit dialog
-  await saveOpenProfileDialog(adminPage);
   // Verify tool call result using admin static credential
   await verifyToolCallResultViaApi({
     request,
@@ -400,18 +394,12 @@ test("Verify tool calling using different static credentials", async ({
   });
 
   // Assign tool to profiles using editor static credential
-  await openGatewayCatalogToolAssignment({
+  await assignCatalogCredentialToGateway({
     page: editorPage,
     catalogItemName: CATALOG_ITEM_NAME,
+    credentialName: "editor@example.com",
     gatewayName: teamGateway.name,
   });
-  // Select editor static credential from dropdown
-  await editorPage.getByRole("option", { name: "editor@example.com" }).click();
-  // Close the popover by pressing Escape
-  await editorPage.keyboard.press("Escape");
-  await editorPage.waitForTimeout(200);
-  // Save the edit dialog
-  await saveOpenProfileDialog(editorPage);
   // Verify tool call result using editor static credential
   await verifyToolCallResultViaApi({
     request,

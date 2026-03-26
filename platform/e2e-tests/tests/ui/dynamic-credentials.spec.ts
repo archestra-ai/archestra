@@ -8,11 +8,9 @@ import {
 import { expect, goToPage, test } from "../../fixtures";
 import {
   addCustomSelfHostedCatalogItem,
+  assignCatalogCredentialToGateway,
   assignEngineeringTeamToDefaultProfileViaApi,
-  clickButton,
-  openGatewayCatalogToolAssignment,
   openManageCredentialsDialog,
-  saveOpenProfileDialog,
   verifyToolCallResultViaApi,
 } from "../../utils";
 import {
@@ -88,17 +86,11 @@ test("Verify tool calling using dynamic credentials", async ({
   }
 
   // Assign tool to profiles using dynamic credential
-  await openGatewayCatalogToolAssignment({
+  await assignCatalogCredentialToGateway({
     page: adminPage,
     catalogItemName: CATALOG_ITEM_NAME,
+    credentialName: "Resolve at call time",
   });
-  // Select "Resolve at call time" (dynamic credential) from dropdown
-  await adminPage.getByRole("option", { name: "Resolve at call time" }).click();
-  // Close the popover by pressing Escape
-  await adminPage.keyboard.press("Escape");
-  await adminPage.waitForTimeout(200);
-  // Save the edit dialog
-  await saveOpenProfileDialog(adminPage);
 
   /**
    * Credentials we have:

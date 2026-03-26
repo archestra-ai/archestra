@@ -451,6 +451,32 @@ describe("handleAfterHook", () => {
       await expect(handleAfterHook(ctx)).resolves.toBeUndefined();
     });
 
+    test("should handle normalized SSO callback path when request URL contains /api/auth prefix", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "member" });
+
+      const ctx = createMockContext({
+        path: "/sso/callback/:providerId",
+        method: "GET",
+        requestUrl:
+          "http://localhost:3000/api/auth/sso/callback/keycloak?code=test",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: "test-session-id", activeOrganizationId: null },
+          },
+        },
+      });
+
+      await expect(handleAfterHook(ctx)).resolves.toBeUndefined();
+    });
+
     test("should handle user without any memberships", async ({ makeUser }) => {
       const user = await makeUser();
 
@@ -1563,6 +1589,79 @@ describe("handleAfterHook", () => {
       await expect(handleAfterHook(ctx)).resolves.not.toThrow();
 
       // Verify user role was updated to admin
+      const member = await MemberModel.getByUserId(user.id, org.id);
+      expect(member?.role).toBe("admin");
+    });
+
+    test("uses the callback provider account for role sync when multiple SSO accounts exist", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeAccount,
+      makeIdentityProvider,
+    }) => {
+      const user = await makeUser({ email: "role-multi-sso@example.com" });
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "member" });
+
+      await makeIdentityProvider(org.id, {
+        providerId: "keycloak-role-target",
+        roleMapping: {
+          defaultRole: "member",
+          rules: [
+            {
+              expression: '{{#includes groups "admins"}}true{{/includes}}',
+              role: "admin",
+            },
+          ],
+        } as unknown as Record<string, unknown>,
+      });
+      await makeIdentityProvider(org.id, {
+        providerId: "keycloak-role-stale",
+        roleMapping: {
+          defaultRole: "member",
+          rules: [
+            {
+              expression: '{{#includes groups "wrong-group"}}true{{/includes}}',
+              role: "admin",
+            },
+          ],
+        } as unknown as Record<string, unknown>,
+      });
+
+      await makeAccount(user.id, {
+        providerId: "keycloak-role-stale",
+        idToken: createMockIdToken({
+          sub: user.id,
+          email: user.email,
+          groups: ["wrong-group"],
+        }),
+      });
+      await makeAccount(user.id, {
+        providerId: "keycloak-role-target",
+        idToken: createMockIdToken({
+          sub: user.id,
+          email: user.email,
+          groups: ["admins"],
+        }),
+      });
+
+      const ctx = createMockContext({
+        path: "/sso/callback/:providerId",
+        method: "GET",
+        requestUrl:
+          "http://localhost:3000/api/auth/sso/callback/keycloak-role-target?code=test",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: "test-session-id", activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      await handleAfterHook(ctx);
+
       const member = await MemberModel.getByUserId(user.id, org.id);
       expect(member?.role).toBe("admin");
     });

@@ -3,7 +3,6 @@ import type {
   ConnectorDocument,
   ConnectorSyncBatch,
   NotionCheckpoint,
-  NotionConfig,
 } from "@/types";
 import { NotionConfigSchema } from "@/types";
 import {

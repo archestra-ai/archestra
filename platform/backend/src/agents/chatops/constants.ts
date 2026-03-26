@@ -30,7 +30,7 @@ export const CHATOPS_MESSAGE_RETENTION = {
  */
 export const CHATOPS_THREAD_HISTORY = {
   /** Default number of messages to fetch for context */
-  DEFAULT_LIMIT: 10,
+  DEFAULT_LIMIT: 50,
   /** Maximum number of messages to fetch */
   MAX_LIMIT: 50,
 };

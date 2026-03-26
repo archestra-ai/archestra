@@ -28,6 +28,7 @@ import { ConnectorTypeIcon } from "./connector-icons";
 import { GithubConfigFields } from "./github-config-fields";
 import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
+import { NotionConfigFields } from "./notion-config-fields";
 import { SchedulePicker } from "./schedule-picker";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
 import { transformConfigArrayFields } from "./transform-config-array-fields";
@@ -217,26 +218,37 @@ export function EditConnectorDialog({
             )}
           />
 
-          <FormField
-            control={form.control}
-            // biome-ignore lint/suspicious/noExplicitAny: dynamic field name for connector-specific URL
-            name={urlConfig.fieldName as any}
-            rules={{ required: `${urlConfig.label} is required` }}
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{urlConfig.label}</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder={urlConfig.placeholder}
-                    {...field}
-                    value={(field.value as string) ?? ""}
-                  />
-                </FormControl>
-                <FormDescription>{urlConfig.description}</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          {urlConfig && (
+            <FormField
+              control={form.control}
+              // biome-ignore lint/suspicious/noExplicitAny: dynamic field name for connector-specific URL
+              name={urlConfig.fieldName as any}
+              rules={{ required: `${urlConfig.label} is required` }}
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{urlConfig.label}</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder={urlConfig.placeholder}
+                      {...field}
+                      value={(field.value as string) ?? ""}
+                    />
+                  </FormControl>
+                  <FormDescription>{urlConfig.description}</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+
+// ... (in Advanced section)
+              {connectorType === "gitlab" && (
+                <GithubConfigFields form={form} hideUrl />
+              )}
+              {connectorType === "notion" && (
+                <NotionConfigFields form={form} />
+              )}
+              {connectorType === "servicenow" && (
 
           {(connectorType === "jira" || connectorType === "confluence") && (
             <FormField
@@ -380,8 +392,10 @@ function getEditUrlConfig(type: ConnectorType): {
   placeholder: string;
   description: string;
   typeLabel: string;
-} {
+} | null {
   switch (type) {
+    case "notion":
+      return null;
     case "jira":
       return {
         fieldName: "config.jiraBaseUrl",

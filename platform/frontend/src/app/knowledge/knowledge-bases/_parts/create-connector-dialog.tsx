@@ -41,6 +41,7 @@ import { ConnectorTypeIcon } from "./connector-icons";
 import { GithubConfigFields } from "./github-config-fields";
 import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
+import { NotionConfigFields } from "./notion-config-fields";
 import { SchedulePicker } from "./schedule-picker";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
 import { transformConfigArrayFields } from "./transform-config-array-fields";
@@ -64,6 +65,11 @@ const CONNECTOR_OPTIONS: {
     description: "Sync pages and spaces from Confluence",
   },
   {
+    type: "notion",
+    label: CONNECTOR_TYPE_LABELS.notion,
+    description: "Sync pages and databases from Notion",
+  },
+  {
     type: "github",
     label: CONNECTOR_TYPE_LABELS.github,
     description: "Sync issues and pull requests from GitHub",
@@ -79,6 +85,37 @@ const CONNECTOR_OPTIONS: {
     description: "Sync incidents from ServiceNow",
   },
 ];
+
+// ... (in handleSelectType)
+    const defaultConfigs: Record<ConnectorType, Record<string, unknown>> = {
+      jira: { type, isCloud: true },
+      confluence: { type, isCloud: true },
+      github: { type, githubUrl: "https://api.github.com" },
+      gitlab: { type, gitlabUrl: "https://gitlab.com" },
+      servicenow: { type, syncDataForLastMonths: 6 },
+      notion: { type },
+    };
+    form.setValue("config", defaultConfigs[type]);
+// ... (in Advanced section)
+                    {connectorType === "gitlab" && (
+                      <GitlabConfigFields form={form} hideUrl />
+                    )}
+                    {connectorType === "notion" && (
+                      <NotionConfigFields form={form} />
+                    )}
+                    {connectorType === "servicenow" && (
+// ... (in getUrlConfig)
+function getUrlConfig(type: ConnectorType): {
+  fieldName: string;
+  label: string;
+  placeholder: string;
+  description: string;
+} | null {
+  switch (type) {
+    case "notion":
+      return null;
+    case "jira":
+// ... (rest of getUrlConfig calls should check for null)
 
 interface CreateConnectorFormValues {
   name: string;
@@ -307,26 +344,27 @@ export function CreateConnectorDialog({
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  // biome-ignore lint/suspicious/noExplicitAny: dynamic field name for connector-specific URL
-                  name={urlConfig.fieldName as any}
-                  rules={{ required: `${urlConfig.label} is required` }}
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{urlConfig.label}</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder={urlConfig.placeholder}
-                          {...field}
-                          value={(field.value as string) ?? ""}
-                        />
-                      </FormControl>
-                      <FormDescription>{urlConfig.description}</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {urlConfig && (
+                  <FormField
+                    control={form.control}
+                    name={urlConfig.fieldName as any}
+                    rules={{ required: `${urlConfig.label} is required` }}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{urlConfig.label}</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder={urlConfig.placeholder}
+                            {...field}
+                            value={(field.value as string) ?? ""}
+                          />
+                        </FormControl>
+                        <FormDescription>{urlConfig.description}</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
 
                 {(connectorType === "jira" ||
                   connectorType === "confluence") && (
@@ -528,8 +566,10 @@ function getUrlConfig(type: ConnectorType): {
   label: string;
   placeholder: string;
   description: string;
-} {
+} | null {
   switch (type) {
+    case "notion":
+      return null;
     case "jira":
       return {
         fieldName: "config.jiraBaseUrl",

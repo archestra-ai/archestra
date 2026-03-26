@@ -78,6 +78,18 @@ Ingests issues, merge requests, and their comments from GitLab.com or self-hoste
 
 Authentication uses a [personal access token](https://docs.gitlab.com/user/profile/personal_access_tokens/) (PAT). System-generated notes (assignment changes, label updates, etc.) are automatically filtered out. Incremental sync uses the `updated_after` parameter.
 
+## Notion
+
+Ingests page and database content from Notion. Content is converted from blocks to Markdown.
+
+| Field        | Description                                                                 |
+| ------------ | --------------------------------------------------------------------------- |
+| Database IDs | Comma-separated specific database IDs to sync (optional)                    |
+| Page IDs     | Comma-separated specific page IDs to sync (optional)                        |
+| Batch Size   | Pages/Databases per batch (default: 100)                                    |
+
+Authentication uses a [Notion Integration Token](https://www.notion.so/my-integrations) (Internal Integration Secret). For the connector to access your content, you must explicitly "Share" the desired pages or databases with your integration. Incremental sync uses the `last_edited_time` timestamp.
+
 ## ServiceNow
 
 Ingests records from ServiceNow instances via the Table API. HTML descriptions are converted to plain text. Multiple entity types can be enabled via toggles.

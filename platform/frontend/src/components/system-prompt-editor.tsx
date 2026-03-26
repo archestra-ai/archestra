@@ -1,8 +1,11 @@
 "use client";
 
 import { DocsPage, SYSTEM_PROMPT_TEMPLATE_EXPRESSIONS } from "@shared";
+import { Maximize2, Minimize2 } from "lucide-react";
+import { useState } from "react";
 
 import { Editor } from "@/components/editor";
+import { Button } from "@/components/ui/button";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import {
   computeHandlebarsReplaceOffsets,
@@ -14,12 +17,14 @@ export function SystemPromptEditor({
   onChange,
   readOnly,
   height = "200px",
+  expandedHeight = "420px",
   variant = "default",
 }: {
   value: string;
   onChange: (value: string) => void;
   readOnly?: boolean;
   height?: string;
+  expandedHeight?: string;
   /** "section" uses bold h3 (matching section headings), "default" uses lighter text */
   variant?: "default" | "section";
 }) {
@@ -27,48 +32,66 @@ export function SystemPromptEditor({
     DocsPage.PlatformAgents,
     "system-prompt-templating",
   );
+  const [isExpanded, setIsExpanded] = useState(false);
+  const editorHeight = isExpanded ? expandedHeight : height;
 
   return (
     <div className="space-y-2">
-      <div>
-        {variant === "section" ? (
-          <h3 className="text-sm font-semibold">Instruction</h3>
-        ) : (
-          <p className="text-sm font-medium">Instruction</p>
-        )}
-        <p className="text-xs text-muted-foreground">
-          System prompt used by the agent. Supports{" "}
-          <a
-            href="https://handlebarsjs.com/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-foreground"
-          >
-            Handlebars
-          </a>{" "}
-          templating
-          {docsUrl ? (
-            <>
-              {" "}
-              — see{" "}
-              <a
-                href={docsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:text-foreground"
-              >
-                docs
-              </a>{" "}
-              for available variables.
-            </>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          {variant === "section" ? (
+            <h3 className="text-sm font-semibold">Instruction</h3>
           ) : (
-            "."
+            <p className="text-sm font-medium">Instruction</p>
           )}
-        </p>
+          <p className="text-xs text-muted-foreground">
+            System prompt used by the agent. Supports{" "}
+            <a
+              href="https://handlebarsjs.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-foreground"
+            >
+              Handlebars
+            </a>{" "}
+            templating
+            {docsUrl ? (
+              <>
+                {" "}
+                — see{" "}
+                <a
+                  href={docsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-foreground"
+                >
+                  docs
+                </a>{" "}
+                for available variables.
+              </>
+            ) : (
+              "."
+            )}
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="shrink-0"
+          onClick={() => setIsExpanded((current) => !current)}
+        >
+          {isExpanded ? (
+            <Minimize2 className="size-4" />
+          ) : (
+            <Maximize2 className="size-4" />
+          )}
+          <span>{isExpanded ? "Collapse" : "Expand"}</span>
+        </Button>
       </div>
       <div className="border rounded-md overflow-hidden">
         <Editor
-          height={height}
+          height={editorHeight}
           defaultLanguage="handlebars"
           value={value}
           onChange={(v) => onChange(v || "")}

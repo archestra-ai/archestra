@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 import { E2eTestId, getChatApiKeySelectorProviderGroupTestId } from "@shared";
 import { expect, goToPage } from "../fixtures";
 
-export interface RuntimeChatModel {
+interface RuntimeChatModel {
   provider: string;
   id: string;
   displayName: string;

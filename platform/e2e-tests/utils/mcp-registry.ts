@@ -13,7 +13,7 @@ export async function goToMcpRegistry(page: Page): Promise<void> {
   await page.waitForLoadState("domcontentloaded");
 }
 
-export async function filterMcpRegistryByName(
+async function filterMcpRegistryByName(
   page: Page,
   catalogItemName: string,
 ): Promise<void> {
@@ -76,7 +76,7 @@ export async function installMcpServer(page: Page): Promise<void> {
   await page.waitForLoadState("domcontentloaded");
 }
 
-export async function selectTeamCredentialType(
+async function selectTeamCredentialType(
   page: Page,
   teamName: string,
 ): Promise<void> {
@@ -129,7 +129,7 @@ export async function waitForMcpServerToolsDiscovered(
     .toMatchObject({ state: "ready" });
 }
 
-export async function openCatalogItemConnectDialog(
+async function openCatalogItemConnectDialog(
   page: Page,
   catalogItemName: string,
   options?: { timeoutMs?: number },
@@ -184,7 +184,7 @@ export async function installLocalCatalogItem(params: {
   await waitForMcpServerToolsDiscovered(params.page, params.catalogItemName);
 }
 
-export async function installTeamCatalogItemConnection(params: {
+async function installTeamCatalogItemConnection(params: {
   page: Page;
   catalogItemName: string;
   teamName: string;

@@ -44,6 +44,13 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
+import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useProfileToolsWithIds } from "@/lib/chat/chat.query";
 import { useUpdateChatMessage } from "@/lib/chat/chat-message.query";
@@ -75,13 +82,6 @@ import {
   getToolErrorText,
   getToolHeaderState,
 } from "./chat-tools-display.utils";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { CompactToolGroup, type ToolIconMap } from "./compact-tool-call";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
@@ -1315,7 +1315,7 @@ const MessageTool = memo(
     if (uiResourceUri && !isApprovalRequested && !errorText) {
       const compactState = getCompactToolState({ part, toolResultPart });
       const shortName = toolName.includes("__")
-        ? toolName.split("__").pop()!.replace(/_/g, " ")
+        ? toolName.split("__").pop()?.replace(/_/g, " ")
         : toolName.replace(/_/g, " ");
       const iconInfo = toolIconMap?.get(toolName);
 

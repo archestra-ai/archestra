@@ -17,7 +17,7 @@ type AssignmentTarget = {
   dialogTitle: "Edit Agent" | "Edit MCP Gateway";
 };
 
-export async function openAgentCatalogToolAssignment(params: {
+async function openAgentCatalogToolAssignment(params: {
   page: Page;
   agentName: string;
   catalogItemName: string;

@@ -24,16 +24,18 @@ export function SidebarWarningsAccordion() {
     useDefaultCredentialsEnabled();
   const globalToolPolicy = useFeature("globalToolPolicy");
   const { data: canUpdateOrg } = useHasPermissions({
+    organization: ["update"],
+  });
+  const { data: canUpdateAgentSettings } = useHasPermissions({
     agentSettings: ["update"],
   });
 
   const isPermissive = globalToolPolicy === "permissive";
-  const canUpdateAgentSettings = canUpdateOrg === true;
 
   const showSecurityEngineWarning =
-    !!session && canUpdateAgentSettings && isPermissive;
+    !!session && canUpdateAgentSettings === true && isPermissive;
   const showDefaultCredsWarning =
-    canUpdateAgentSettings &&
+    canUpdateOrg === true &&
     !isLoadingCreds &&
     defaultCredentialsEnabled !== undefined &&
     defaultCredentialsEnabled &&
@@ -68,7 +70,7 @@ export function SidebarWarningsAccordion() {
                 tooltip="Enable security engine"
                 className="text-destructive hover:text-destructive"
               >
-                <Link href="/settings/agents">
+                <Link href="/mcp/tool-policies">
                   <AlertTriangle className="shrink-0" />
                   <span>Enable security engine</span>
                 </Link>

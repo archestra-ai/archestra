@@ -85,10 +85,10 @@ describe("McpClient", () => {
     });
     agentId = agent.id;
 
-    // Create secret with access token
+    // Create secret with access tokenId
     const secret = await secretManager().createSecret(
-      { access_token: "test-github-token-123" },
-      "testmcptoken",
+      { access_tokenId: "test-github-tokenId-123" },
+      "testmcptokenId",
     );
 
     // Create catalog entry for the MCP server
@@ -742,7 +742,7 @@ describe("McpClient", () => {
         };
 
         const result = await mcpClient.executeToolCall(toolCall, agentId, {
-          tokenId: "test-token",
+          tokenId: "test-tokenId",
           teamId: null,
           isOrganizationToken: false,
           userId: testUser.id,
@@ -769,7 +769,7 @@ describe("McpClient", () => {
         ]);
       });
 
-      test("returns install URL with team context when team token has no server", async ({
+      test("returns install URL with team context when team tokenId has no server", async ({
         makeUser,
         makeTeam,
         makeOrganization,
@@ -809,7 +809,7 @@ describe("McpClient", () => {
         };
 
         const result = await mcpClient.executeToolCall(toolCall, agentId, {
-          tokenId: "team-token",
+          tokenId: "team-tokenId",
           teamId: team.id,
           isOrganizationToken: false,
         });
@@ -849,7 +849,7 @@ describe("McpClient", () => {
         });
 
         const ownerSecret = await secretManager().createSecret(
-          { access_token: "owner-slack-token" },
+          { access_tokenId: "owner-slack-tokenId" },
           "slack-owner-secret",
         );
 
@@ -882,9 +882,9 @@ describe("McpClient", () => {
           arguments: { channel: "#general", text: "hello" },
         };
 
-        // Call with teamMember's team token - serverOwner is NOT in this team
+        // Call with teamMember's team tokenId - serverOwner is NOT in this team
         const result = await mcpClient.executeToolCall(toolCall, agentId, {
-          tokenId: "team-token-no-cred",
+          tokenId: "team-tokenId-no-cred",
           teamId: team.id,
           isOrganizationToken: false,
         });
@@ -930,9 +930,9 @@ describe("McpClient", () => {
           },
         });
 
-        // Create secret WITHOUT refresh_token (simulates expired token, no refresh)
+        // Create secret WITHOUT refresh_tokenId (simulates expired tokenId, no refresh)
         const secret = await secretManager().createSecret(
-          { access_token: "expired-token" },
+          { access_tokenId: "expired-tokenId" },
           "expired-oauth-secret",
         );
 
@@ -969,7 +969,7 @@ describe("McpClient", () => {
         };
 
         const result = await mcpClient.executeToolCall(toolCall, agentId, {
-          tokenId: "test-token",
+          tokenId: "test-tokenId",
           teamId: null,
           isOrganizationToken: false,
           userId: testUser.id,
@@ -1011,7 +1011,7 @@ describe("McpClient", () => {
         });
 
         const secret = await secretManager().createSecret(
-          { access_token: "expired-token-2" },
+          { access_tokenId: "expired-tokenId-2" },
           "expired-oauth-secret-2",
         );
 
@@ -1050,7 +1050,7 @@ describe("McpClient", () => {
         };
 
         const result = await mcpClient.executeToolCall(toolCall, agentId, {
-          tokenId: "test-token",
+          tokenId: "test-tokenId",
           teamId: null,
           isOrganizationToken: false,
           userId: testUser.id,
@@ -1080,7 +1080,7 @@ describe("McpClient", () => {
         });
 
         const secret = await secretManager().createSecret(
-          { access_token: "bad-token" },
+          { access_tokenId: "bad-tokenId" },
           "non-oauth-secret",
         );
 
@@ -1116,7 +1116,7 @@ describe("McpClient", () => {
         };
 
         const result = await mcpClient.executeToolCall(toolCall, agentId, {
-          tokenId: "test-token",
+          tokenId: "test-tokenId",
           teamId: null,
           isOrganizationToken: false,
           userId: testUser.id,
@@ -1147,7 +1147,7 @@ describe("McpClient", () => {
         });
 
         const secret = await secretManager().createSecret(
-          { access_token: "expired-pat" },
+          { access_tokenId: "expired-pat" },
           "expired-pat-secret",
         );
 
@@ -1190,7 +1190,7 @@ describe("McpClient", () => {
         };
 
         const result = await mcpClient.executeToolCall(toolCall, agentId, {
-          tokenId: "test-token",
+          tokenId: "test-tokenId",
           teamId: null,
           isOrganizationToken: false,
           userId: testUser.id,
@@ -1234,7 +1234,7 @@ describe("McpClient", () => {
         });
 
         const secret = await secretManager().createSecret(
-          { access_token: "expired-team-token" },
+          { access_tokenId: "expired-team-tokenId" },
           "expired-team-oauth-secret",
         );
 
@@ -1270,7 +1270,7 @@ describe("McpClient", () => {
         };
 
         const result = await mcpClient.executeToolCall(toolCall, agentId, {
-          tokenId: "team-token",
+          tokenId: "team-tokenId",
           teamId: team.id,
           isOrganizationToken: false,
         });

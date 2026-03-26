@@ -1,29 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type { ClientCapabilities } from "@modelcontextprotocol/sdk/types.js";
-
-/** Extended ClientCapabilities with UI extension support (replaces @mcp-ui/client re-export). */
-type ClientCapabilitiesWithExtensions = ClientCapabilities & {
-  extensions?: Record<string, unknown>;
-};
-
-const UI_EXTENSION_CAPABILITIES = {
-  "io.modelcontextprotocol/ui": {
-    mimeTypes: ["text/html;profile=mcp-app"] as const,
-  },
-} as const;
-
-import {
-  type McpUiResourceCsp,
-  type McpUiResourcePermissions,
-  type McpUiToolMeta,
-  RESOURCE_MIME_TYPE,
-} from "@modelcontextprotocol/ext-apps";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import type {
-  ContentBlock,
-  EmbeddedResource,
-} from "@modelcontextprotocol/sdk/types.js";
 import {
   isAgentTool,
   isBrowserMcpTool,
@@ -38,8 +15,7 @@ import {
   getAgentTools,
 } from "@/archestra-mcp-server";
 import { CacheKey, LRUCacheManager } from "@/cache-manager";
-import mcpClient from "@/clients/mcp-client";
-import config from "@/config";
+import { mcpClient } from "@/clients/mcp-client";
 import logger from "@/logging";
 import {
   AgentTeamModel,
@@ -58,17 +34,10 @@ import {
 import type { AgentType, GlobalToolPolicy } from "@/types";
 
 /**
- * MIME types that indicate a renderable UI resource (SEP-1865).
- * `text/html;profile=mcp-app` is the canonical type per the spec;
- */
-const RENDERABLE_UI_MIME_TYPES = [RESOURCE_MIME_TYPE];
-
-/**
  * MCP Gateway base URL (internal)
- * Chat connects to the MCP Gateway endpoint with profile ID in path.
- * Derives from the configured API port to work in multi-pod deployments.
+ * Chat connects to the new MCP Gateway endpoint with profile ID in path
  */
-const MCP_GATEWAY_BASE_URL = `http://localhost:${config.api.port}/v1/mcp`;
+const MCP_GATEWAY_BASE_URL = "http://localhost:9000/v1/mcp";
 
 /**
  * Maximum client cache size to prevent unbounded memory growth.
@@ -134,23 +103,6 @@ const toolCache = new LRUCacheManager<Record<string, Tool>>({
 });
 
 /**
- * UI resource cache TTL — 60 seconds.
- * UI resources (MCP App HTML) rarely change during a conversation, so a
- * generous TTL avoids repeated round-trips through the MCP gateway.
- */
-const UI_RESOURCE_CACHE_TTL_MS = 60 * TimeInMs.Second;
-
-const uiResourceCache = new LRUCacheManager<ToolUiResourceData | null>({
-  maxSize: 500,
-  defaultTtl: UI_RESOURCE_CACHE_TTL_MS,
-});
-
-/** Exported for test cleanup only. */
-export function clearUiResourceCache(): void {
-  uiResourceCache.clear();
-}
-
-/**
  * Generate cache key from agentId, userId, and optional conversationId.
  * When conversationId is provided, each conversation gets its own MCP client
  * and therefore its own browser instance for proper isolation.
@@ -201,16 +153,16 @@ export const __test = {
 };
 
 /**
- * Select the appropriate token for a user based on team overlap
+ * Select the appropriate tokenId for a user based on team overlap
  * Priority:
- * 1. Personal user token (always preferred - ensures userId is available for global catalog tools)
- * 2. Organization token (fallback for admins)
- * 3. Team token where user is a member AND team is assigned to profile
+ * 1. Personal user tokenId (always preferred - ensures userId is available for global catalog tools)
+ * 2. Organization tokenId (fallback for admins)
+ * 3. Team tokenId where user is a member AND team is assigned to profile
  *
  * @param agentId - The profile (agent) ID
  * @param userId - The user requesting access
  * @param userIsAgentAdmin - Whether the user has agent:admin permission
- * @returns Token value and metadata, or null if no token available
+ * @returns Token value and metadata, or null if no tokenId available
  */
 export async function selectMCPGatewayToken(
   agentId: string,
@@ -218,39 +170,39 @@ export async function selectMCPGatewayToken(
   organizationId: string,
   userIsAgentAdmin: boolean,
 ): Promise<{
-  tokenValue: string;
+  tokenIdValue: string;
   tokenId: string;
   teamId: string | null;
   isOrganizationToken: boolean;
   isUserToken?: boolean;
 } | null> {
-  // Get user's team IDs and profile's team IDs (needed for fallback token selection)
+  // Get user's team IDs and profile's team IDs (needed for fallback tokenId selection)
   const userTeamIds = await TeamModel.getUserTeamIds(userId);
   const profileTeamIds = await AgentTeamModel.getTeamsForAgent(agentId);
   const commonTeamIds = userTeamIds.filter((id) => profileTeamIds.includes(id));
 
-  // 1. Always try to get/create a personal user token first
-  // This ensures userId is available in the token for global catalog tools
+  // 1. Always try to get/create a personal user tokenId first
+  // This ensures userId is available in the tokenId for global catalog tools
   // Skip when userId is "system" (e.g., internal/public email security modes)
-  // since "system" is not a real user and cannot have a user token
+  // since "system" is not a real user and cannot have a user tokenId
   if (userId !== "system") {
-    // Ensure user has a token (creates one if missing)
+    // Ensure user has a tokenId (creates one if missing)
     const userToken = await UserTokenModel.ensureUserToken(
       userId,
       organizationId,
     );
-    const tokenValue = await UserTokenModel.getTokenValue(userToken.id);
-    if (tokenValue) {
+    const tokenIdValue = await UserTokenModel.getTokenValue(userToken.id);
+    if (tokenIdValue) {
       logger.info(
         {
           agentId,
           userId,
           tokenId: userToken.id,
         },
-        "Using personal user token for chat MCP client",
+        "Using personal user tokenId for chat MCP client",
       );
       return {
-        tokenValue,
+        tokenIdValue,
         tokenId: userToken.id,
         teamId: null,
         isOrganizationToken: false,
@@ -259,25 +211,25 @@ export async function selectMCPGatewayToken(
     }
   }
 
-  // Get all team tokens for this organization
-  const tokens = await TeamTokenModel.findAll(organizationId);
+  // Get all team tokenIds
+  const tokenIds = await TeamTokenModel.findAll();
 
-  // 2. If user is agent admin, use organization token (teamId is null)
+  // 2. If user is agent admin, use organization tokenId (teamId is null)
   if (userIsAgentAdmin) {
-    const orgToken = tokens.find((t) => t.isOrganizationToken);
+    const orgToken = tokenIds.find((t) => t.isOrganizationToken);
     if (orgToken) {
-      const tokenValue = await TeamTokenModel.getTokenValue(orgToken.id);
-      if (tokenValue) {
+      const tokenIdValue = await TeamTokenModel.getTokenValue(orgToken.id);
+      if (tokenIdValue) {
         logger.info(
           {
             agentId,
             userId,
             tokenId: orgToken.id,
           },
-          "Using organization token for chat MCP client (fallback)",
+          "Using organization tokenId for chat MCP client (fallback)",
         );
         return {
-          tokenValue,
+          tokenIdValue,
           tokenId: orgToken.id,
           teamId: null,
           isOrganizationToken: true,
@@ -286,25 +238,25 @@ export async function selectMCPGatewayToken(
     }
   }
 
-  // 3. Try to find a team token where user is in that team and profile is assigned to it
+  // 3. Try to find a team tokenId where user is in that team and profile is assigned to it
   if (commonTeamIds.length > 0) {
-    for (const token of tokens) {
-      if (token.teamId && commonTeamIds.includes(token.teamId)) {
-        const tokenValue = await TeamTokenModel.getTokenValue(token.id);
-        if (tokenValue) {
+    for (const tokenId of tokenIds) {
+      if (tokenId.teamId && commonTeamIds.includes(tokenId.teamId)) {
+        const tokenIdValue = await TeamTokenModel.getTokenValue(tokenId.id);
+        if (tokenIdValue) {
           logger.info(
             {
               agentId,
               userId,
-              tokenId: token.id,
-              teamId: token.teamId,
+              tokenId: tokenId.id,
+              teamId: tokenId.teamId,
             },
-            "Selected team-scoped token for chat MCP client (fallback)",
+            "Selected team-scoped tokenId for chat MCP client (fallback)",
           );
           return {
-            tokenValue,
-            tokenId: token.id,
-            teamId: token.teamId,
+            tokenIdValue,
+            tokenId: tokenId.id,
+            teamId: tokenId.teamId,
             isOrganizationToken: false,
           };
         }
@@ -319,9 +271,9 @@ export async function selectMCPGatewayToken(
       userTeamCount: userTeamIds.length,
       profileTeamCount: profileTeamIds.length,
       commonTeamCount: commonTeamIds.length,
-      tokenCount: tokens.length,
+      tokenIdCount: tokenIds.length,
     },
-    "No valid token found for user",
+    "No valid tokenId found for user",
   );
 
   return null;
@@ -432,11 +384,11 @@ export function closeChatMcpClient(
 
 /**
  * Get or create MCP client for the specified agent and user
- * Connects to internal MCP Gateway with team token authentication
+ * Connects to internal MCP Gateway with team tokenId authentication
  *
  * @param agentId - The agent (profile) ID
- * @param userId - The user ID for token selection
- * @param organizationId - The organization ID for token creation
+ * @param userId - The user ID for tokenId selection
+ * @param organizationId - The organization ID for tokenId creation
  * @param userIsAgentAdmin - Whether the user has agent:admin permission
  * @param conversationId - Optional conversation ID for per-conversation browser isolation
  * @returns MCP Client connected to the gateway, or null if connection fails
@@ -447,8 +399,6 @@ export async function getChatMcpClient(
   organizationId: string,
   userIsAgentAdmin: boolean,
   conversationId?: string,
-  /** Pre-resolved token to avoid a redundant selectMCPGatewayToken call */
-  preResolvedTokenValue?: string,
 ): Promise<Client | null> {
   const cacheKey = getCacheKey(agentId, userId, conversationId);
 
@@ -496,49 +446,39 @@ export async function getChatMcpClient(
     "🔄 No cached client found - creating new MCP client for agent/user via gateway",
   );
 
-  // Reuse pre-resolved token when available to avoid a redundant DB round-trip
-  // (getChatMcpTools already calls selectMCPGatewayToken before this).
-  let tokenValue: string;
-  if (preResolvedTokenValue) {
-    tokenValue = preResolvedTokenValue;
-  } else {
-    const tokenResult = await selectMCPGatewayToken(
-      agentId,
-      userId,
-      organizationId,
-      userIsAgentAdmin,
+  // Select appropriate tokenId for this user
+  const tokenIdResult = await selectMCPGatewayToken(
+    agentId,
+    userId,
+    organizationId,
+    userIsAgentAdmin,
+  );
+  if (!tokenIdResult) {
+    logger.error(
+      { agentId, userId },
+      "No valid team tokenId available for user - cannot connect to MCP Gateway",
     );
-    if (!tokenResult) {
-      logger.error(
-        { agentId, userId },
-        "No valid team token available for user - cannot connect to MCP Gateway",
-      );
-      return null;
-    }
-    tokenValue = tokenResult.tokenValue;
+    return null;
   }
+
+  const { tokenIdValue } = tokenIdResult;
 
   // Use new URL format with profileId in path
   const mcpGatewayUrl = `${MCP_GATEWAY_BASE_URL}/${agentId}`;
 
   try {
-    // Create StreamableHTTP transport with profile token authentication
+    // Create StreamableHTTP transport with profile tokenId authentication
     const transport = new StreamableHTTPClientTransport(
       new URL(mcpGatewayUrl),
       {
         requestInit: {
           headers: new Headers({
-            Authorization: `Bearer ${tokenValue}`,
+            Authorization: `Bearer ${tokenIdValue}`,
             Accept: "application/json, text/event-stream",
           }),
         },
       },
     );
-
-    const capabilities: ClientCapabilitiesWithExtensions = {
-      roots: { listChanged: true },
-      extensions: UI_EXTENSION_CAPABILITIES,
-    };
 
     // Create MCP client
     const client = new Client(
@@ -547,7 +487,7 @@ export async function getChatMcpClient(
         version: "1.0.0",
       },
       {
-        capabilities,
+        capabilities: {},
       },
     );
 
@@ -675,7 +615,7 @@ function addAdditionalPropertiesFalse(
  *
  * @param agentId - The agent ID to fetch tools for
  * @param userId - The user ID for authentication
- * @param organizationId - The organization ID for token creation
+ * @param organizationId - The organization ID for tokenId creation
  * @param userIsAgentAdmin - Whether the user has agent:admin permission
  * @param enabledToolIds - Optional array of tool IDs to filter by. Empty array = all tools enabled.
  * @param conversationId - Optional conversation ID for browser tab selection
@@ -745,7 +685,7 @@ export async function getChatMcpTools({
     "Tool cache miss - fetching tools from MCP Gateway. If this happens frequently for the same conversation, check that sticky sessions are configured for your load balancer.",
   );
 
-  // Get token for direct tool execution (bypasses HTTP for security)
+  // Get tokenId for direct tool execution (bypasses HTTP for security)
   const mcpGwToken = await selectMCPGatewayToken(
     agentId,
     userId,
@@ -755,21 +695,19 @@ export async function getChatMcpTools({
   if (!mcpGwToken) {
     logger.warn(
       { agentId, userId },
-      "No valid team token available for user - cannot execute tools",
+      "No valid team tokenId available for user - cannot execute tools",
     );
     return {};
   }
 
   // Still use MCP client for listing tools (via MCP Gateway)
-  // Pass conversationId for per-conversation browser isolation.
-  // Forward the already-resolved token to avoid a duplicate selectMCPGatewayToken call.
+  // Pass conversationId for per-conversation browser isolation
   const client = await getChatMcpClient(
     agentId,
     userId,
     organizationId,
     userIsAgentAdmin,
     conversationId,
-    mcpGwToken.tokenValue,
   );
 
   if (!client) {
@@ -784,16 +722,8 @@ export async function getChatMcpTools({
     logger.info({ agentId, userId }, "MCP client available, listing tools...");
     const { tools: mcpTools } = await client.listTools();
 
-    // Filter out agent skills and app-only tools.
-    // Tools with _meta.ui.visibility that does not include "model" are intended
-    // for app-iframe use only and must not appear in the LLM's tool list.
-    // Default (no visibility field) = visible to both model and app.
-    const filteredMcpTools = mcpTools.filter((tool) => {
-      if (isAgentTool(tool.name)) return false;
-      const uiVisibility = (tool._meta as { ui?: McpUiToolMeta } | undefined)
-        ?.ui?.visibility;
-      return !(uiVisibility && !uiVisibility.includes("model"));
-    });
+    // Filter out agent skills (tools starting with "agent__")
+    const filteredMcpTools = mcpTools.filter((tool) => !isAgentTool(tool.name));
 
     logger.info(
       {
@@ -890,9 +820,14 @@ export async function getChatMcpTools({
 
                     // Check for errors
                     if (archestraResponse.isError) {
-                      const errorText = archestraResponse.content
+                      const errorText = (
+                        archestraResponse.content as Array<{
+                          type: string;
+                          text?: string;
+                        }>
+                      )
                         .map((item) =>
-                          item.type === "text"
+                          item.type === "text" && item.text
                             ? item.text
                             : JSON.stringify(item),
                         )
@@ -901,9 +836,16 @@ export async function getChatMcpTools({
                     }
 
                     // Convert MCP content to string for AI SDK
-                    return archestraResponse.content
+                    return (
+                      archestraResponse.content as Array<{
+                        type: string;
+                        text?: string;
+                      }>
+                    )
                       .map((item) =>
-                        item.type === "text" ? item.text : JSON.stringify(item),
+                        item.type === "text" && item.text
+                          ? item.text
+                          : JSON.stringify(item),
                       )
                       .join("\n");
                   }
@@ -947,9 +889,6 @@ export async function getChatMcpTools({
               },
             });
           },
-          // Strip UI-only fields (structuredContent, rawContent, _meta) so the LLM
-          // only receives the plain-text `content` summary (SEP-1865).
-          toModelOutput: mcpToolToModelOutput,
         };
       } catch (error) {
         logger.error(
@@ -985,7 +924,7 @@ export async function getChatMcpTools({
           // Pass delegation chain for tracking delegated agent calls
           delegationChain,
           abortSignal,
-          tokenAuth: mcpGwToken
+          tokenIdAuth: mcpGwToken
             ? {
                 tokenId: mcpGwToken.tokenId,
                 teamId: mcpGwToken.teamId,
@@ -1065,9 +1004,14 @@ export async function getChatMcpTools({
                     });
 
                     if (response.isError) {
-                      const errorText = response.content
+                      const errorText = (
+                        response.content as Array<{
+                          type: string;
+                          text?: string;
+                        }>
+                      )
                         .map((item) =>
-                          item.type === "text"
+                          item.type === "text" && item.text
                             ? item.text
                             : JSON.stringify(item),
                         )
@@ -1075,9 +1019,16 @@ export async function getChatMcpTools({
                       throw new Error(errorText);
                     }
 
-                    return response.content
+                    return (
+                      response.content as Array<{
+                        type: string;
+                        text?: string;
+                      }>
+                    )
                       .map((item) =>
-                        item.type === "text" ? item.text : JSON.stringify(item),
+                        item.type === "text" && item.text
+                          ? item.text
+                          : JSON.stringify(item),
                       )
                       .join("\n");
                   } catch (error) {
@@ -1143,146 +1094,6 @@ export async function getChatMcpTools({
 }
 
 /**
- * Converts the rich output of `executeMcpTool` into a plain text model output.
- * Strips UI-only fields (structuredContent, rawContent, _meta) so the LLM
- * only receives the plain-text `content` summary (SEP-1865).
- */
-export function mcpToolToModelOutput({
-  output,
-}: {
-  output:
-    | string
-    | {
-        content: string;
-        _meta?: unknown;
-        structuredContent?: unknown;
-        rawContent?: unknown;
-      };
-}): { type: "text"; value: string } {
-  return {
-    type: "text",
-    value: typeof output === "string" ? output : output.content,
-  };
-}
-
-/** Pre-fetched UI resource data delivered via `data-tool-ui-start` SSE events. */
-export interface ToolUiResourceData {
-  html: string;
-  csp?: McpUiResourceCsp;
-  permissions?: McpUiResourcePermissions;
-}
-
-/**
- * Returns a map of tool name → UI resource URI for every MCP App tool assigned
- * to an agent. Used to emit `data-tool-ui-start` SSE events as soon as a tool
- * call begins streaming so the frontend can render the app iframe immediately.
- */
-export async function getChatMcpToolUiResourceUris(
-  agentId: string,
-): Promise<Record<string, string>> {
-  try {
-    const tools = await ToolModel.getMcpToolsByAgent(agentId);
-    const result: Record<string, string> = {};
-    for (const tool of tools) {
-      const uriFromMeta = (
-        tool.meta as { _meta?: { ui?: McpUiToolMeta } } | undefined
-      )?._meta?.ui?.resourceUri;
-      if (uriFromMeta) {
-        result[tool.name] = uriFromMeta;
-      }
-    }
-    return result;
-  } catch (error) {
-    logger.debug({ error, agentId }, "Failed to fetch tool UI resource URIs");
-    return {};
-  }
-}
-
-/**
- * Fetches the UI resource HTML for a single MCP App tool on demand.
- *
- * Called when `tool-input-start` fires for a tool that has a UI resource URI.
- *
- * @returns ToolUiResourceData if the resource was fetched successfully, null otherwise
- */
-export async function fetchToolUiResource({
-  agentId,
-  userId,
-  organizationId,
-  userIsAgentAdmin,
-  conversationId,
-  toolName,
-  uri,
-}: {
-  agentId: string;
-  userId: string;
-  organizationId: string;
-  userIsAgentAdmin: boolean;
-  conversationId?: string;
-  toolName: string;
-  uri: string;
-}): Promise<ToolUiResourceData | null> {
-  const cacheKey = `${agentId}:${userId}:${uri}`;
-  const cached = uiResourceCache.get(cacheKey);
-  if (cached !== undefined) {
-    logger.debug({ uri, agentId, toolName }, "UI resource cache hit");
-    return cached;
-  }
-
-  const client = await getChatMcpClient(
-    agentId,
-    userId,
-    organizationId,
-    userIsAgentAdmin,
-    conversationId,
-  );
-  if (!client) return null;
-
-  try {
-    const resourceResult = await client.readResource({ uri });
-    const content = resourceResult.contents?.[0];
-    if (!content) return null;
-
-    const html =
-      "blob" in content && content.blob
-        ? Buffer.from(content.blob, "base64").toString("utf-8")
-        : (content as { text?: string }).text;
-
-    if (!html) return null;
-
-    type ContentUiMeta = {
-      csp?: McpUiResourceCsp;
-      permissions?: McpUiResourcePermissions;
-      domain?: string;
-    };
-    const uiMeta = (content as { _meta?: { ui?: ContentUiMeta } })._meta?.ui;
-
-    if (uiMeta?.domain && !config.mcpSandbox.domain) {
-      logger.warn(
-        { toolName, uri, domain: uiMeta.domain },
-        "MCP server requested stable origin via _meta.ui.domain but sandbox uses opaque origin. " +
-          "OAuth callbacks and origin-restricted APIs will not work for this app. " +
-          "Set ARCHESTRA_MCP_SANDBOX_DOMAIN to enable per-server origins.",
-      );
-    }
-
-    const result: ToolUiResourceData = {
-      html,
-      csp: uiMeta?.csp,
-      permissions: uiMeta?.permissions,
-    };
-    uiResourceCache.set(cacheKey, result);
-    return result;
-  } catch (error) {
-    logger.debug(
-      { error, toolName, uri, agentId },
-      "Failed to fetch UI resource HTML",
-    );
-    return null;
-  }
-}
-
-/**
  * Context for MCP tool execution with browser sync support.
  */
 interface ToolExecutionContext {
@@ -1310,15 +1121,10 @@ interface ToolExecutionContext {
  * - Browser state sync (tabs and navigation)
  * - Content conversion to string format
  *
- * @returns The tool result as a string and metadata for the UI renderer
+ * @returns The tool result as a string
  * @throws Error if tool execution fails
  */
-async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
-  content: string;
-  _meta?: Record<string, unknown>;
-  structuredContent?: Record<string, unknown>;
-  rawContent?: ContentBlock[];
-}> {
+async function executeMcpTool(ctx: ToolExecutionContext): Promise<string> {
   const {
     toolName,
     toolArguments,
@@ -1405,21 +1211,22 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
   }
   throwIfAborted(abortSignal);
 
-  // The MCP path always returns ContentBlock[] in content — narrow from unknown.
-  const mcpContent = result.content as ContentBlock[];
-
   // Check if MCP tool returned an error
   // Return error text as tool result instead of throwing so the AI SDK includes
   // it in the conversation as a tool-result message. This allows the frontend to
   // parse structured errors (e.g. auth-required with install URL) and render
   // actionable UI instead of showing a generic stream error.
   if (result.isError) {
-    const extractedError = mcpContent
-      ?.map((item) => (item.type === "text" ? item.text : JSON.stringify(item)))
-      .join("\n");
-    return {
-      content: extractedError || result.error || "Tool execution failed",
-    };
+    const extractedError = Array.isArray(result.content)
+      ? result.content
+          .map((item: { type: string; text?: string }) =>
+            item.type === "text" && item.text
+              ? item.text
+              : JSON.stringify(item),
+          )
+          .join("\n")
+      : null;
+    return extractedError || result.error || "Tool execution failed";
   }
 
   // Sync browser state if needed
@@ -1449,109 +1256,20 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
         agentId,
         conversationId,
         userContext: { userId, organizationId, userIsAgentAdmin },
-        toolResultContent: mcpContent,
+        toolResultContent: result.content,
       });
     }
   }
 
   // Convert MCP content to string for AI SDK
-  // Handles standard content types: text, image, resource (embedded UI resources)
-  const hasRenderableUI = mcpContent.some(
-    (item) =>
-      item.type === "resource" &&
-      RENDERABLE_UI_MIME_TYPES.includes(item.resource.mimeType ?? ""),
-  );
-
-  let textContent: string;
-  if (hasRenderableUI) {
-    // When a UI is rendered, give the LLM almost nothing to work with.
-    // No data, no descriptions - just a terse confirmation. This prevents
-    // verbose LLM responses that describe or explain the already-visible UI.
-    textContent = "OK";
-  } else {
-    textContent = mcpContent
-      .map((item) => {
-        if (item.type === "text") {
-          return item.text;
-        }
-        if (item.type === "resource") {
-          if ("text" in item.resource) return item.resource.text;
-          return `[Resource: ${item.resource.uri}]`;
-        }
-        return JSON.stringify(item);
-      })
-      .join("\n");
-  }
-
-  // The _meta block from tool definitions, containing the ui sub-object (SEP-1865).
-  type ToolDefinitionMeta = { ui?: McpUiToolMeta; [key: string]: unknown };
-
-  // Fetch tool definition to get _meta.ui.resourceUri for MCP Apps
-  // Per SEP-1865, tool definitions declare _meta.ui.resourceUri to link tools to their UI
-  // The tools table stores: meta = { _meta: { ui: { resourceUri: "..." } }, annotations: {...} }
-  // Scoped to agent to prevent cross-org metadata leak (findByName is unscoped).
-  let toolDefinitionMeta: ToolDefinitionMeta | undefined;
-  try {
-    const toolDef = await ToolModel.findByNameForAgent(toolName, agentId);
-    if (toolDef?.meta) {
-      // Extract _meta from the stored structure: { _meta: {...}, annotations: {...} }
-      toolDefinitionMeta = (toolDef.meta as { _meta?: ToolDefinitionMeta })
-        ?._meta;
-    }
-  } catch (error) {
-    logger.debug(
-      { error, toolName, agentId },
-      "Failed to fetch tool definition meta",
-    );
-  }
-
-  // Check for embedded resources (type: "resource" content items with UI resources)
-  // MCP servers can return UI resources inline in tool results as an alternative to
-  // declaring _meta.ui.resourceUri in tool definitions. Both patterns are standard MCP.
-  const resourceItems = mcpContent.filter(
-    (item): item is EmbeddedResource => item.type === "resource",
-  );
-  // Prefer renderable resources (text/html) over data resources (application/json, etc.)
-  const embeddedResourceItem =
-    resourceItems.find((item) =>
-      RENDERABLE_UI_MIME_TYPES.includes(item.resource.mimeType ?? ""),
-    ) ?? resourceItems[0];
-
-  if (embeddedResourceItem && !toolDefinitionMeta?.ui?.resourceUri) {
-    // Synthesize _meta.ui from the embedded resource so frontend can detect and render it
-    toolDefinitionMeta = {
-      ...toolDefinitionMeta,
-      ui: {
-        ...toolDefinitionMeta?.ui,
-        resourceUri: embeddedResourceItem.resource.uri,
-      },
-    };
-  }
-
-  // Merge tool definition meta with result meta (tool definition takes precedence for ui.resourceUri)
-  const mergedMeta = {
-    ...result._meta,
-    ...toolDefinitionMeta,
-  };
-
-  if (toolDefinitionMeta || result.structuredContent) {
-    logger.debug(
-      {
-        toolName,
-        hasToolDefinitionMeta: !!toolDefinitionMeta,
-        hasStructuredContent: !!result.structuredContent,
-        uiResourceUri: toolDefinitionMeta?.ui?.resourceUri,
-      },
-      "MCP Apps: Tool result with metadata for AppRenderer",
-    );
-  }
-
-  return {
-    content: textContent,
-    _meta: Object.keys(mergedMeta).length > 0 ? mergedMeta : undefined,
-    structuredContent: result.structuredContent,
-    rawContent: mcpContent,
-  };
+  return (result.content as Array<{ type: string; text?: string }>)
+    .map((item: { type: string; text?: string }) => {
+      if (item.type === "text" && item.text) {
+        return item.text;
+      }
+      return JSON.stringify(item);
+    })
+    .join("\n");
 }
 
 /**

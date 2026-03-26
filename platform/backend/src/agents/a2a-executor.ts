@@ -10,7 +10,7 @@ import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
 import { subagentExecutionTracker } from "@/agents/subagent-execution-tracker";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import { createLLMModelForAgent } from "@/clients/llm-client";
-import mcpClient from "@/clients/mcp-client";
+import { mcpClient } from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
 import {

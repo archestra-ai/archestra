@@ -28196,7 +28196,7 @@ export type McpGatewayGetResponses = {
         capabilities: {
             tools: boolean;
         };
-        tokenAuth?: {
+        tokenIdAuth?: {
             tokenId: string;
             teamId: string | null;
             isOrganizationToken: boolean;

@@ -2,10 +2,7 @@ import { isPlaywrightCatalogItem, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
-import mcpClient, {
-  McpServerConnectionTimeoutError,
-  McpServerNotReadyError,
-} from "@/clients/mcp-client";
+import { mcpClient } from "@/clients/mcp-client";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import {
@@ -574,7 +571,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   name: ToolModel.slugifyName(toolNamePrefix, tool.name),
                   description: tool.description,
                   parameters: tool.inputSchema,
-                  meta: { _meta: tool._meta, annotations: tool.annotations },
                   catalogId: capturedCatalogId,
                 }));
 
@@ -662,7 +658,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           name: ToolModel.slugifyName(mcpServer.name, tool.name),
           description: tool.description,
           parameters: tool.inputSchema,
-          meta: { _meta: tool._meta, annotations: tool.annotations },
           catalogId: catalogItem.id,
         }));
 
@@ -1231,17 +1226,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         return reply.send(result as Record<string, unknown>);
       } catch (error) {
-        if (
-          error instanceof McpServerNotReadyError ||
-          error instanceof McpServerConnectionTimeoutError
-        ) {
-          logger.warn(
-            { err: error, mcpServerId: mcpServer.id, statusCode: 409 },
-            `MCP server ${mcpServer.name} is not ready for inspection`,
-          );
-          throw new ApiError(409, error.message);
-        }
-
         logger.error(
           { err: error },
           `Failed to inspect MCP server ${mcpServer.name}`,

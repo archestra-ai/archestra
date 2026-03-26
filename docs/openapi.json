@@ -105363,7 +105363,7 @@
                       ],
                       "additionalProperties": false
                     },
-                    "tokenAuth": {
+                    "tokenIdAuth": {
                       "type": "object",
                       "properties": {
                         "tokenId": {

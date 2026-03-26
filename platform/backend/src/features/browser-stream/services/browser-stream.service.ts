@@ -8,7 +8,7 @@ import {
 } from "@shared";
 import { LRUCacheManager } from "@/cache-manager";
 import { selectMCPGatewayToken } from "@/clients/chat-mcp-client";
-import mcpClient from "@/clients/mcp-client";
+import { mcpClient } from "@/clients/mcp-client";
 import logger from "@/logging";
 import { BrowserTabStateModel, ToolModel } from "@/models";
 import { ApiError } from "@/types";
@@ -148,9 +148,9 @@ export class BrowserStreamService {
       userContext.userIsAgentAdmin,
     );
 
-    const tokenAuth = mcpGwToken
+    const tokenIdAuth = mcpGwToken
       ? {
-          tokenId: mcpGwToken.tokenId,
+          tokenIdId: mcpGwToken.tokenIdId,
           teamId: mcpGwToken.teamId,
           isOrganizationToken: mcpGwToken.isOrganizationToken,
           organizationId: userContext.organizationId,
@@ -167,7 +167,7 @@ export class BrowserStreamService {
     const result = await mcpClient.executeToolCall(
       toolCall,
       agentId,
-      tokenAuth,
+      tokenIdAuth,
       {
         conversationId,
       },
@@ -1317,7 +1317,7 @@ export class BrowserStreamService {
       return { error: "No screenshot returned from browser tool" };
     }
 
-    // Log screenshot size for debugging token usage issues
+    // Log screenshot size for debugging tokenId usage issues
     const base64Match = screenshot.match(/^data:([^;]+);base64,(.+)$/);
     if (base64Match) {
       const mimeType = base64Match[1];

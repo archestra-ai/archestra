@@ -43,7 +43,7 @@ async function handleMcpPostRequest(
   request: FastifyRequest,
   reply: FastifyReply,
   profileId: string,
-  tokenAuthContext: TokenAuthContext | undefined,
+  tokenIdAuthContext: TokenAuthContext | undefined,
 ): Promise<unknown> {
   const body = request.body as Record<string, unknown>;
   const isInitialize =
@@ -54,14 +54,14 @@ async function handleMcpPostRequest(
       profileId,
       method: body?.method,
       isInitialize,
-      hasTokenAuth: !!tokenAuthContext,
+      hasTokenAuth: !!tokenIdAuthContext,
     },
     "MCP gateway POST request received (stateless)",
   );
 
   try {
     // Create fresh server and transport for each request (stateless mode)
-    const { server } = await createAgentServer(profileId, tokenAuthContext);
+    const { server } = await createAgentServer(profileId, tokenIdAuthContext);
     const transport = createStatelessTransport(profileId);
 
     fastify.log.trace({ profileId }, "Connecting server to transport");
@@ -99,8 +99,8 @@ async function handleMcpPostRequest(
             },
             // biome-ignore lint/suspicious/noExplicitAny: toolResult structure varies by method type
           } as any,
-          userId: tokenAuthContext?.userId ?? null,
-          authMethod: deriveAuthMethod(tokenAuthContext) ?? null,
+          userId: tokenIdAuthContext?.userId ?? null,
+          authMethod: deriveAuthMethod(tokenIdAuthContext) ?? null,
         });
         fastify.log.trace({ profileId }, "Saved initialize request");
       } catch (dbError) {
@@ -137,9 +137,9 @@ async function handleMcpPostRequest(
 }
 
 // =============================================================================
-// MCP Gateway endpoints with token authentication (stateless)
+// MCP Gateway endpoints with tokenId authentication (stateless)
 // /v1/mcp/<profile_id>
-// Authorization header: Bearer <archestra_token>
+// Authorization header: Bearer <archestra_tokenId>
 // =============================================================================
 export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const { endpoint } = config.mcpGateway;
@@ -163,7 +163,7 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
             capabilities: z.object({
               tools: z.boolean(),
             }),
-            tokenAuth: z
+            tokenIdAuth: z
               .object({
                 tokenId: z.string(),
                 teamId: z.string().nullable(),
@@ -181,20 +181,20 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { profileId, token } =
+      const { profileId, tokenId } =
         extractProfileIdAndTokenFromRequest(request) ?? {};
 
-      if (!profileId || !token) {
+      if (!profileId || !tokenId) {
         setWWWAuthenticateHeader(request, reply);
         reply.status(401);
         return {
           error: "Unauthorized",
           message:
-            "Missing or invalid Authorization header. Expected: Bearer <archestra_token> or Bearer <agent-id>",
+            "Missing or invalid Authorization header. Expected: Bearer <archestra_tokenId> or Bearer <agent-id>",
         };
       }
 
-      const tokenAuth = await validateMCPGatewayToken(profileId, token);
+      const tokenIdAuth = await validateMCPGatewayToken(profileId, tokenId);
 
       reply.type("application/json");
       return {
@@ -205,13 +205,13 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         capabilities: {
           tools: true,
         },
-        ...(tokenAuth && {
-          tokenAuth: {
-            tokenId: tokenAuth.tokenId,
-            teamId: tokenAuth.teamId,
-            isOrganizationToken: tokenAuth.isOrganizationToken,
-            ...(tokenAuth.isUserToken && { isUserToken: true }),
-            ...(tokenAuth.userId && { userId: tokenAuth.userId }),
+        ...(tokenIdAuth && {
+          tokenIdAuth: {
+            tokenId: tokenIdAuth.tokenId,
+            teamId: tokenIdAuth.teamId,
+            isOrganizationToken: tokenIdAuth.isOrganizationToken,
+            ...(tokenIdAuth.isUserToken && { isUserToken: true }),
+            ...(tokenIdAuth.userId && { userId: tokenIdAuth.userId }),
           },
         }),
       };
@@ -219,7 +219,7 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   // POST endpoint for JSON-RPC requests with profile ID in URL
-  // New auth: Validates archestra token for the profile
+  // New auth: Validates archestra tokenId for the profile
   fastify.post(
     `${endpoint}/:profileId`,
     {
@@ -233,10 +233,10 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { profileId, token } =
+      const { profileId, tokenId } =
         extractProfileIdAndTokenFromRequest(request) ?? {};
 
-      if (!profileId || !token) {
+      if (!profileId || !tokenId) {
         setWWWAuthenticateHeader(request, reply);
         reply.status(401);
         return {
@@ -244,35 +244,35 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           error: {
             code: -32000,
             message:
-              "Unauthorized: Missing or invalid Authorization header. Expected: Bearer <archestra_token> or Bearer <agent-id>",
+              "Unauthorized: Missing or invalid Authorization header. Expected: Bearer <archestra_tokenId> or Bearer <agent-id>",
           },
           id: null,
         };
       }
 
-      const tokenAuth = await validateMCPGatewayToken(profileId, token);
-      if (!tokenAuth) {
+      const tokenIdAuth = await validateMCPGatewayToken(profileId, tokenId);
+      if (!tokenIdAuth) {
         setWWWAuthenticateHeader(request, reply);
         reply.status(401);
         return {
           jsonrpc: "2.0",
           error: {
             code: -32000,
-            message: "Unauthorized: Invalid token for this profile",
+            message: "Unauthorized: Invalid tokenId for this profile",
           },
           id: null,
         };
       }
 
-      const tokenAuthContext: TokenAuthContext = {
-        tokenId: tokenAuth.tokenId,
-        teamId: tokenAuth.teamId,
-        isOrganizationToken: tokenAuth.isOrganizationToken,
-        organizationId: tokenAuth.organizationId,
-        ...(tokenAuth.isUserToken && { isUserToken: true }),
-        ...(tokenAuth.userId && { userId: tokenAuth.userId }),
-        ...(tokenAuth.isExternalIdp && { isExternalIdp: true }),
-        ...(tokenAuth.rawToken && { rawToken: tokenAuth.rawToken }),
+      const tokenIdAuthContext: TokenAuthContext = {
+        tokenId: tokenIdAuth.tokenId,
+        teamId: tokenIdAuth.teamId,
+        isOrganizationToken: tokenIdAuth.isOrganizationToken,
+        organizationId: tokenIdAuth.organizationId,
+        ...(tokenIdAuth.isUserToken && { isUserToken: true }),
+        ...(tokenIdAuth.userId && { userId: tokenIdAuth.userId }),
+        ...(tokenIdAuth.isExternalIdp && { isExternalIdp: true }),
+        ...(tokenIdAuth.rawToken && { rawToken: tokenIdAuth.rawToken }),
       };
 
       return handleMcpPostRequest(
@@ -280,7 +280,7 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request,
         reply,
         profileId,
-        tokenAuthContext,
+        tokenIdAuthContext,
       );
     },
   );

@@ -1,4 +1,5 @@
 // biome-ignore-all lint/suspicious/noConsole: we use console.log for logging in this file
+import { archestraApiSdk } from "@shared";
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
@@ -112,6 +113,11 @@ async function ensureAdminAuthenticated(page: Page): Promise<void> {
   await expect(
     page.getByRole("heading", { name: "Identity Providers" }),
   ).toBeVisible({ timeout: 10000 });
+}
+
+async function extractCookieHeader(page: Page): Promise<string> {
+  const cookies = await page.context().cookies();
+  return cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join("; ");
 }
 
 /**
@@ -471,45 +477,44 @@ test.describe("Identity Provider Team Sync E2E", () => {
         await ssoPage.goto(`${UI_BASE_URL}/settings/teams`);
         await ssoPage.waitForLoadState("domcontentloaded");
 
-        const memberEmails = await ssoPage.evaluate(async (targetTeamName) => {
-          const response = await fetch("/api/teams?limit=100&offset=0", {
-            credentials: "include",
-            cache: "no-store",
-          });
-
-          if (!response.ok) {
-            throw new Error(`Failed to fetch teams: ${response.status}`);
-          }
-
-          const teamsPayload = await response.json();
-          const syncedTeam = teamsPayload?.data?.find(
-            (team: { id: string; name: string }) =>
-              team.name === targetTeamName,
+        const cookieHeader = await extractCookieHeader(ssoPage);
+        const teamsResponse = await archestraApiSdk.getTeams({
+          headers: {
+            Cookie: cookieHeader,
+          },
+          query: {
+            limit: 100,
+            offset: 0,
+          },
+        });
+        if (teamsResponse.error) {
+          throw new Error(
+            `Failed to fetch teams: ${JSON.stringify(teamsResponse.error)}`,
           );
+        }
 
-          if (!syncedTeam?.id) {
-            throw new Error(`Team not found: ${targetTeamName}`);
-          }
+        const syncedTeam = teamsResponse.data?.data.find(
+          (team) => team.name === teamName,
+        );
+        if (!syncedTeam?.id) {
+          throw new Error(`Team not found: ${teamName}`);
+        }
 
-          const membersResponse = await fetch(
-            `/api/teams/${syncedTeam.id}/members`,
-            {
-              credentials: "include",
-              cache: "no-store",
-            },
+        const membersResponse = await archestraApiSdk.getTeamMembers({
+          headers: {
+            Cookie: cookieHeader,
+          },
+          path: {
+            id: syncedTeam.id,
+          },
+        });
+        if (membersResponse.error || !membersResponse.data) {
+          throw new Error(
+            `Failed to fetch team members: ${JSON.stringify(membersResponse.error)}`,
           );
+        }
 
-          if (!membersResponse.ok) {
-            throw new Error(
-              `Failed to fetch team members: ${membersResponse.status}`,
-            );
-          }
-
-          const membersPayload = await membersResponse.json();
-          return membersPayload.map(
-            (member: { email?: string | null }) => member.email,
-          );
-        }, teamName);
+        const memberEmails = membersResponse.data.map((member) => member.email);
 
         if (!memberEmails.includes(ADMIN_EMAIL)) {
           throw new Error(

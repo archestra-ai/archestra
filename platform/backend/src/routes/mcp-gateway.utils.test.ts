@@ -3,7 +3,12 @@ import { OAUTH_TOKEN_ID_PREFIX } from "@shared";
 import { vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import type * as originalConfigModule from "@/config";
-import { TeamTokenModel, ToolModel, UserTokenModel } from "@/models";
+import {
+  AgentTeamModel,
+  TeamTokenModel,
+  ToolModel,
+  UserTokenModel,
+} from "@/models";
 import type { JwksValidationResult } from "@/services/jwks-validator";
 import { describe, expect, test } from "@/test";
 
@@ -116,6 +121,34 @@ describe("validateMCPGatewayToken", () => {
       const result = await validateMCPGatewayToken(agent.id, value);
       expect(result).toBeNull();
     });
+
+    test("reuses resolved team tokens across profiles", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const { value } = await TeamTokenModel.create({
+        organizationId: org.id,
+        name: "Org Token",
+        teamId: null,
+        isOrganizationToken: true,
+      });
+      const validateTeamTokenSpy = vi.spyOn(TeamTokenModel, "validateToken");
+
+      const firstResult = await validateMCPGatewayToken(
+        crypto.randomUUID(),
+        value,
+      );
+      const secondResult = await validateMCPGatewayToken(
+        crypto.randomUUID(),
+        value,
+      );
+
+      expect(firstResult).not.toBeNull();
+      expect(secondResult).not.toBeNull();
+      expect(validateTeamTokenSpy).toHaveBeenCalledTimes(1);
+
+      validateTeamTokenSpy.mockRestore();
+    });
   });
 
   describe("user token validation", () => {
@@ -217,6 +250,41 @@ describe("validateMCPGatewayToken", () => {
       expect(result?.tokenId).toBe(token.id);
       expect(result?.isUserToken).toBe(true);
       expect(result?.userId).toBe(adminUser.id);
+    });
+
+    test("passes preloaded access context into user access checks", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeTeam,
+      makeTeamMember,
+      makeAgent,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "member" });
+
+      const team = await makeTeam(org.id, user.id, { name: "Dev Team" });
+      await makeTeamMember(team.id, user.id);
+      const agent = await makeAgent({ teams: [team.id], scope: "team" });
+      const { value } = await UserTokenModel.create(user.id, org.id);
+      const userHasAgentAccessSpy = vi.spyOn(
+        AgentTeamModel,
+        "userHasAgentAccess",
+      );
+
+      const result = await validateMCPGatewayToken(agent.id, value);
+
+      expect(result).not.toBeNull();
+      expect(userHasAgentAccessSpy).toHaveBeenCalledTimes(1);
+      expect(userHasAgentAccessSpy.mock.calls[0]?.[3]).toMatchObject({
+        id: agent.id,
+        organizationId: agent.organizationId,
+        scope: "team",
+        authorId: agent.authorId,
+      });
+
+      userHasAgentAccessSpy.mockRestore();
     });
   });
 

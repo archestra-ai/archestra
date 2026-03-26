@@ -49,6 +49,10 @@ import {
   type AgentToolsEditorRef,
 } from "@/components/agent-tools-editor";
 import { ModelSelector } from "@/components/chat/model-selector";
+import {
+  formatPermissionRequirement,
+  PermissionRequirementHint,
+} from "@/components/permission-requirement-hint";
 import { SystemPromptEditor } from "@/components/system-prompt-editor";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -106,10 +110,6 @@ import {
   VisibilitySelector as SharedVisibilitySelector,
   type VisibilityOption,
 } from "@/components/visibility-selector";
-import {
-  formatPermissionRequirement,
-  PermissionRequirementHint,
-} from "@/components/permission-requirement-hint";
 import {
   useCreateProfile,
   useInternalAgents,

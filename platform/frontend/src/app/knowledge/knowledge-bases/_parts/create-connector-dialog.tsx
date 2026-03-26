@@ -85,27 +85,6 @@ const CONNECTOR_OPTIONS: {
     description: "Sync incidents from ServiceNow",
   },
  ];
- 
- // ... (in Advanced section)
-                    {connectorType === "gitlab" && (
-                      <GitlabConfigFields form={form} hideUrl />
-                    )}
-                    {connectorType === "notion" && (
-                      <NotionConfigFields form={form} />
-                    )}
-                    {connectorType === "servicenow" && (
-// ... (in getUrlConfig)
-function getUrlConfig(type: ConnectorType): {
-  fieldName: string;
-  label: string;
-  placeholder: string;
-  description: string;
-} | null {
-  switch (type) {
-    case "notion":
-      return null;
-    case "jira":
-// ... (rest of getUrlConfig calls should check for null)
 
 interface CreateConnectorFormValues {
   name: string;

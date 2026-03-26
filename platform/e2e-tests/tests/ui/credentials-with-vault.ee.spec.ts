@@ -6,7 +6,8 @@ import {
   addCustomSelfHostedCatalogItem,
   clickButton,
   expandTablePagination,
-  goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect,
+  openGatewayCatalogToolAssignment,
+  saveOpenProfileDialog,
   verifyToolCallResultViaApi,
 } from "../../utils";
 
@@ -251,7 +252,7 @@ test.describe
       await adminPage.waitForLoadState("domcontentloaded");
 
       // Assign tool to profiles using default team credential
-      await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
+      await openGatewayCatalogToolAssignment({
         page: adminPage,
         catalogItemName: newCatalogItem.name,
       });
@@ -260,9 +261,8 @@ test.describe
       // Close the popover by pressing Escape
       await adminPage.keyboard.press("Escape");
       await adminPage.waitForTimeout(200);
-      // Click Save button at the bottom of the McpAssignmentsDialog
-      await clickButton({ page: adminPage, options: { name: "Save" } });
-      await adminPage.waitForLoadState("domcontentloaded");
+      // Save the edit dialog
+      await saveOpenProfileDialog(adminPage);
 
       // Verify tool call result using default team credential
       await verifyToolCallResultViaApi({
@@ -336,7 +336,7 @@ test.describe
       await adminPage.waitForLoadState("domcontentloaded");
 
       // Assign tool to profiles using default team credential
-      await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
+      await openGatewayCatalogToolAssignment({
         page: adminPage,
         catalogItemName: newCatalogItem.name,
       });
@@ -345,9 +345,8 @@ test.describe
       // Close the popover by pressing Escape
       await adminPage.keyboard.press("Escape");
       await adminPage.waitForTimeout(200);
-      // Click Save button at the bottom of the McpAssignmentsDialog
-      await clickButton({ page: adminPage, options: { name: "Save" } });
-      await adminPage.waitForLoadState("domcontentloaded");
+      // Save the edit dialog
+      await saveOpenProfileDialog(adminPage);
 
       // Verify tool call result using default team credential
       await verifyToolCallResultViaApi({

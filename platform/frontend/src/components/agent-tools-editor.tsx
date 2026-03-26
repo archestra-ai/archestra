@@ -3,6 +3,7 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   type archestraApiTypes,
+  E2eTestId,
   isPlaywrightCatalogItem,
   parseFullToolName,
 } from "@shared";
@@ -550,6 +551,7 @@ const AgentToolsEditorContent = forwardRef<
         onItemAdded={setAutoOpenCatalogId}
         placeholder="Search MCP servers..."
         emptyMessage="No MCP servers found."
+        testId={E2eTestId.AgentToolsAddButton}
         createAction={{
           label: "Install New MCP Server",
           href: "/mcp/registry",
@@ -769,6 +771,7 @@ function McpServerPill({
               isEmpty && "rounded-r-none border-r-0",
               hasPendingChanges && "border-primary opacity-100",
             )}
+            data-testid={`${E2eTestId.AgentToolCatalogPill}-${catalogItem.name}`}
           >
             <McpCatalogIcon
               icon={catalogItem.icon}

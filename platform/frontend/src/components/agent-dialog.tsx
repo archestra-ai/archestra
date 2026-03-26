@@ -7,6 +7,7 @@ import {
   type archestraApiTypes,
   BUILT_IN_AGENT_IDS,
   DocsPage,
+  E2eTestId,
   getDocsUrl,
   getResourceForAgentType,
   MAX_SUGGESTED_PROMPT_TEXT_LENGTH,
@@ -1364,6 +1365,7 @@ export function AgentDialog({
             {/* Section 3: Capabilities (Tools, Subagents, Knowledge Sources) */}
             {showToolsAndSubagents && (
               <div className="rounded-lg border bg-card p-4 space-y-4">
+                <div data-testid={E2eTestId.AgentCapabilitiesSection} />
                 <h3 className="text-sm font-semibold">Capabilities</h3>
 
                 {/* Tools */}

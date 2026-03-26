@@ -14,7 +14,6 @@ import {
   RefreshCw,
   Server,
   User,
-  Wrench,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -51,7 +50,6 @@ import {
   DeploymentStatusDot,
 } from "./deployment-status";
 import { InstallationProgress } from "./installation-progress";
-import { McpAssignmentsDialog } from "./mcp-assignments-dialog";
 import {
   McpServerSettingsDialog,
   type SettingsPage,
@@ -183,7 +181,6 @@ export function McpServerCard({
   const [settingsInitialPage, setSettingsInitialPage] = useState<
     SettingsPage | undefined
   >(undefined);
-  const [toolsDialogOpen, setToolsDialogOpen] = useState(false);
   const [logsInitialServerId, setLogsInitialServerId] = useState<string | null>(
     null,
   );
@@ -401,17 +398,11 @@ export function McpServerCard({
     <div className="flex items-center gap-3 text-sm text-muted-foreground border-t pt-3">
       {toolsCount > 0 && (
         <>
-          <button
-            type="button"
-            onClick={() => setToolsDialogOpen(true)}
-            className="flex items-center gap-1 cursor-pointer hover:text-foreground transition-colors"
-            data-testid={`${E2eTestId.ManageToolsButton}-${item.name}`}
-          >
-            <Wrench className="h-3.5 w-3.5" />
+          <div className="flex items-center gap-1">
             <span data-testid={`${E2eTestId.McpServerToolsCount}`}>
               {toolsCount}
             </span>
-          </button>
+          </div>
           <div className="h-4 w-px bg-border" />
         </>
       )}
@@ -736,13 +727,6 @@ export function McpServerCard({
           !!needsReinstall && !isInstalling && isCurrentUserAuthenticated
         }
         onDelete={!isPlaywrightVariant ? onDelete : undefined}
-      />
-      <McpAssignmentsDialog
-        open={toolsDialogOpen}
-        onOpenChange={setToolsDialogOpen}
-        catalogId={item.id}
-        serverName={item.label || item.name}
-        isBuiltin={isBuiltinVariant}
       />
 
       <UninstallServerDialog

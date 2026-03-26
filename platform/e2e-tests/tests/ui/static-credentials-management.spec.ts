@@ -18,8 +18,9 @@ import {
   createTeamMcpGatewayViaApi,
   getVisibleCredentials,
   getVisibleStaticCredentials,
-  goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect,
+  openGatewayCatalogToolAssignment,
   openManageCredentialsDialog,
+  saveOpenProfileDialog,
   verifyToolCallResultViaApi,
 } from "../../utils";
 import {
@@ -171,7 +172,7 @@ test.describe
           }
 
           // Check TokenSelect shows correct credentials
-          await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
+          await openGatewayCatalogToolAssignment({
             page,
             catalogItemName,
             gatewayName: teamGateway?.name,
@@ -378,7 +379,7 @@ test("Verify tool calling using different static credentials", async ({
   await settleRegistryAfterInstall(editorPage);
 
   // Assign tool to profiles using admin static credential
-  await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
+  await openGatewayCatalogToolAssignment({
     page: adminPage,
     catalogItemName: CATALOG_ITEM_NAME,
   });
@@ -387,9 +388,8 @@ test("Verify tool calling using different static credentials", async ({
   // Close the popover by pressing Escape
   await adminPage.keyboard.press("Escape");
   await adminPage.waitForTimeout(200);
-  // Click Save button at the bottom of the McpAssignmentsDialog
-  await clickButton({ page: adminPage, options: { name: "Save" } });
-  await adminPage.waitForLoadState("domcontentloaded");
+  // Save the edit dialog
+  await saveOpenProfileDialog(adminPage);
   // Verify tool call result using admin static credential
   await verifyToolCallResultViaApi({
     request,
@@ -400,7 +400,7 @@ test("Verify tool calling using different static credentials", async ({
   });
 
   // Assign tool to profiles using editor static credential
-  await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
+  await openGatewayCatalogToolAssignment({
     page: editorPage,
     catalogItemName: CATALOG_ITEM_NAME,
     gatewayName: teamGateway.name,
@@ -410,9 +410,8 @@ test("Verify tool calling using different static credentials", async ({
   // Close the popover by pressing Escape
   await editorPage.keyboard.press("Escape");
   await editorPage.waitForTimeout(200);
-  // Click Save button at the bottom of the McpAssignmentsDialog
-  await clickButton({ page: editorPage, options: { name: "Save" } });
-  await editorPage.waitForLoadState("domcontentloaded");
+  // Save the edit dialog
+  await saveOpenProfileDialog(editorPage);
   // Verify tool call result using editor static credential
   await verifyToolCallResultViaApi({
     request,

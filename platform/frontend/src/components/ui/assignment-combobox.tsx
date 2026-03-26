@@ -37,6 +37,7 @@ interface AssignmentComboboxProps {
   createAction?: { label: string; href: string };
   className?: string;
   label?: string;
+  testId?: string;
 }
 
 export function AssignmentCombobox({
@@ -49,6 +50,7 @@ export function AssignmentCombobox({
   createAction,
   className,
   label = "Add",
+  testId,
 }: AssignmentComboboxProps) {
   const [search, setSearch] = React.useState("");
 
@@ -89,6 +91,7 @@ export function AssignmentCombobox({
             "h-8 px-3 gap-1.5 text-xs border-dashed text-muted-foreground",
             className,
           )}
+          data-testid={testId}
         >
           <Plus className="h-3.5 w-3.5" />
           <span>{label}</span>

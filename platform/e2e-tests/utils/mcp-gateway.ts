@@ -1,106 +1,17 @@
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
-import { archestraApiSdk, DEFAULT_MCP_GATEWAY_NAME } from "@shared";
+import { archestraApiSdk } from "@shared";
 import {
   DEFAULT_TEAM_NAME,
   E2eTestId,
   ENGINEERING_TEAM_NAME,
   MARKETING_TEAM_NAME,
-  UI_BASE_URL,
 } from "../consts";
-import { goToPage } from "../fixtures";
 import {
   callMcpTool,
   getOrgTokenForProfile,
   getTeamTokenForProfile,
 } from "../tests/api/mcp-gateway-utils";
 import { closeOpenDialogs } from "./dialogs";
-
-export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
-  page,
-  catalogItemName,
-  gatewayName,
-  timeoutMs,
-}: {
-  page: Page;
-  catalogItemName: string;
-  gatewayName?: string;
-  timeoutMs?: number;
-}) {
-  const effectiveGatewayName = gatewayName ?? DEFAULT_MCP_GATEWAY_NAME;
-  const waitTimeoutMs = timeoutMs ?? 60_000;
-  await goToPage(page, "/mcp/registry");
-  await page.waitForLoadState("domcontentloaded");
-  await expect(page).toHaveURL(/\/mcp\/registry/, { timeout: 10000 });
-
-  const manageToolsButton = page.getByTestId(
-    `${E2eTestId.ManageToolsButton}-${catalogItemName}`,
-  );
-
-  await expect(async () => {
-    await page.goto(`${UI_BASE_URL}/mcp/registry`);
-    await page.waitForLoadState("domcontentloaded");
-
-    const errorElement = page.getByTestId(
-      `${E2eTestId.McpServerError}-${catalogItemName}`,
-    );
-    if (await errorElement.isVisible()) {
-      const errorText = await errorElement.innerText();
-      throw new Error(
-        `MCP Server installation failed with error: ${errorText}`,
-      );
-    }
-
-    await expect(manageToolsButton).toBeVisible({ timeout: 5000 });
-  }).toPass({ timeout: waitTimeoutMs, intervals: [3000, 5000, 7000, 10000] });
-
-  await manageToolsButton.click();
-
-  await page.getByRole("dialog").waitFor({ state: "visible", timeout: 30_000 });
-  await page.waitForLoadState("domcontentloaded");
-
-  const dialog = page.getByRole("dialog");
-  const profilePill = dialog.getByRole("button", {
-    name: new RegExp(`${effectiveGatewayName}.*\\(\\d+/\\d+\\)`),
-  });
-  const showMoreButton = dialog.getByRole("button", {
-    name: /^\+\d+ more$/,
-  });
-  const addButton = dialog.getByRole("button", { name: "Add" }).first();
-
-  await expect(async () => {
-    if (!(await profilePill.isVisible().catch(() => false))) {
-      if (await showMoreButton.isVisible().catch(() => false)) {
-        await showMoreButton.click();
-        await page.waitForTimeout(200);
-      }
-
-      if (!(await profilePill.isVisible().catch(() => false))) {
-        if (await addButton.isVisible().catch(() => false)) {
-          await addButton.click();
-          await page.waitForTimeout(300);
-          const gatewayItem = page.getByRole("menuitemcheckbox", {
-            name: new RegExp(effectiveGatewayName),
-          });
-          if (await gatewayItem.isVisible().catch(() => false)) {
-            await gatewayItem.click();
-            await page.waitForTimeout(300);
-          }
-        }
-      }
-    }
-    await expect(profilePill).toBeVisible({ timeout: 5_000 });
-  }).toPass({ timeout: 30_000, intervals: [1000, 2000, 5000] });
-
-  await profilePill.click();
-
-  const checkbox = page.getByRole("checkbox").first();
-  await checkbox.waitFor({ state: "visible", timeout: 10_000 });
-
-  const combobox = page.getByRole("combobox");
-  await combobox.waitFor({ state: "visible" });
-  await combobox.click();
-  await page.waitForTimeout(100);
-}
 
 export async function verifyToolCallResultViaApi({
   request,

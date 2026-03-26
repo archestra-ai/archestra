@@ -7,6 +7,7 @@ const CONFLUENCE = z.literal("confluence");
 const GITHUB = z.literal("github");
 const GITLAB = z.literal("gitlab");
 const SERVICENOW = z.literal("servicenow");
+const NOTION = z.literal("notion");
 
 export const ConnectorTypeSchema = z.union([
   JIRA,
@@ -14,6 +15,7 @@ export const ConnectorTypeSchema = z.union([
   GITHUB,
   GITLAB,
   SERVICENOW,
+  NOTION,
 ]);
 export type ConnectorType = z.infer<typeof ConnectorTypeSchema>;
 

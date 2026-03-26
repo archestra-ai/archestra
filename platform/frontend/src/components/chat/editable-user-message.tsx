@@ -198,7 +198,7 @@ export function EditableUserMessage({
       className="group/message"
       onMouseLeave={() => setIsRegenerateConfirming(false)}
     >
-      <div className="relative flex flex-col items-end w-full">
+      <div className="relative flex flex-col items-end pb-2 w-full">
         {/* Image attachments above the message bubble */}
         {imageAttachments.length > 0 && (
           <div className="flex flex-wrap gap-1 justify-end mb-2">

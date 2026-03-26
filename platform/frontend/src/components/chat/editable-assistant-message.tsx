@@ -168,7 +168,7 @@ export function EditableAssistantMessage({
 
   return (
     <Message from="assistant" className="group/message">
-      <div className="relative flex flex-col items-start w-full">
+      <div className="relative flex flex-col items-start pb-2 w-full">
         <MessageContent>
           <Response isStreaming={isStreaming}>{text}</Response>
           {citationParts && <KnowledgeGraphCitations parts={citationParts} />}

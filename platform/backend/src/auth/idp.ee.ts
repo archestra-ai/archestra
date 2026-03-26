@@ -407,7 +407,7 @@ async function getRecentSsoAccount(params: {
   providerIdHint?: string;
   requireIdToken: boolean;
 }) {
-  const maxAttempts = 5;
+  const maxAttempts = 10;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const allAccounts = await AccountModel.getAllByUserId(params.userId);
@@ -446,7 +446,7 @@ async function getRecentSsoAccount(params: {
 }
 
 async function waitForAccountPersistence(attempt: number): Promise<void> {
-  const delayMs = attempt * 200;
+  const delayMs = Math.min(attempt * 500, 2_000);
   await new Promise((resolve) => {
     setTimeout(resolve, delayMs);
   });

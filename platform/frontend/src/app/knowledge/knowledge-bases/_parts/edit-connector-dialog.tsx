@@ -392,10 +392,8 @@ function getEditUrlConfig(type: ConnectorType): {
   placeholder: string;
   description: string;
   typeLabel: string;
-} | null {
+} {
   switch (type) {
-    case "notion":
-      return null;
     case "jira":
       return {
         fieldName: "config.jiraBaseUrl",

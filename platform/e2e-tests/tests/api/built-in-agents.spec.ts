@@ -231,13 +231,33 @@ test.describe("Built-In Agents API", () => {
       expect(toolIds.length).toBeGreaterThan(0);
 
       // 3. Call auto-configure-policies route
-      const autoConfigResponse = await makeApiRequest({
-        request,
-        method: "post",
-        urlSuffix: "/api/agent-tools/auto-configure-policies",
-        data: { toolIds },
-      });
-      const autoConfigResult = await autoConfigResponse.json();
+      let autoConfigResult!: {
+        results: Array<{
+          toolId: string;
+          success: boolean;
+          config?: {
+            toolInvocationAction: string;
+            trustedDataAction: string;
+            reasoning: string;
+          };
+          error?: string;
+        }>;
+      };
+      await expect(async () => {
+        const autoConfigResponse = await makeApiRequest({
+          request,
+          method: "post",
+          urlSuffix: "/api/agent-tools/auto-configure-policies",
+          data: { toolIds },
+        });
+        autoConfigResult = await autoConfigResponse.json();
+
+        expect(autoConfigResult.results).toHaveLength(toolIds.length);
+        for (const result of autoConfigResult.results) {
+          expect(result.error).toBeUndefined();
+          expect(result.success).toBe(true);
+        }
+      }).toPass({ timeout: 30_000, intervals: [1000, 3000, 5000] });
 
       // 4. Verify route response
       expect(autoConfigResult.results).toHaveLength(toolIds.length);

@@ -10,11 +10,11 @@ import {
   UI_BASE_URL,
 } from "../../consts";
 import {
+  type APIResponse,
   type Browser,
   expect,
   type Page,
   test,
-  type APIResponse,
 } from "../../fixtures";
 import {
   clickButton,

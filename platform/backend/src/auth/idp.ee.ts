@@ -74,14 +74,15 @@ export const ssoConfig = {
 export async function syncSsoRole(
   userId: string,
   userEmail: string,
+  providerIdHint?: string,
 ): Promise<void> {
   logger.info({ userId, userEmail }, "🔄 syncSsoRole called");
 
-  // Get the user's accounts and find the most recently used SSO account
-  const allAccounts = await AccountModel.getAllByUserId(userId);
-
-  // Find an SSO account (providerId != "credential")
-  const ssoAccount = allAccounts.find((acc) => acc.providerId !== "credential");
+  const ssoAccount = await getRecentSsoAccount({
+    userId,
+    providerIdHint,
+    requireIdToken: false,
+  });
 
   if (!ssoAccount) {
     logger.debug(
@@ -248,6 +249,7 @@ export async function syncSsoRole(
 export async function syncSsoTeams(
   userId: string,
   userEmail: string,
+  providerIdHint?: string,
 ): Promise<void> {
   logger.info({ userId, userEmail }, "🔄 syncSsoTeams called");
 
@@ -257,18 +259,17 @@ export async function syncSsoTeams(
     return;
   }
 
-  // Get the user's accounts and find the most recently used SSO account
-  // Order by updatedAt DESC to get the account from the current login
-  const allAccounts = await AccountModel.getAllByUserId(userId);
-
-  // Find an SSO account (providerId != "credential") - first match is most recent due to ordering
-  const ssoAccount = allAccounts.find((acc) => acc.providerId !== "credential");
+  const ssoAccount = await getRecentSsoAccount({
+    userId,
+    providerIdHint,
+    requireIdToken: false,
+  });
 
   logger.info(
     {
-      allAccountsCount: allAccounts.length,
       ssoAccountFound: !!ssoAccount,
       providerId: ssoAccount?.providerId,
+      providerIdHint,
     },
     "🔄 Found accounts for user",
   );
@@ -397,4 +398,56 @@ export async function syncSsoTeams(
       "❌ Failed to sync SSO teams",
     );
   }
+}
+
+// === Internal helpers ===
+
+async function getRecentSsoAccount(params: {
+  userId: string;
+  providerIdHint?: string;
+  requireIdToken: boolean;
+}) {
+  const maxAttempts = 5;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const allAccounts = await AccountModel.getAllByUserId(params.userId);
+
+    const matchingAccounts = allAccounts.filter((account) => {
+      if (account.providerId === "credential") {
+        return false;
+      }
+
+      if (params.providerIdHint) {
+        return account.providerId === params.providerIdHint;
+      }
+
+      return true;
+    });
+
+    const accountWithIdToken = matchingAccounts.find(
+      (account) => account.idToken,
+    );
+    const fallbackAccount = matchingAccounts[0];
+
+    if (params.requireIdToken) {
+      if (accountWithIdToken) {
+        return accountWithIdToken;
+      }
+    } else if (accountWithIdToken || fallbackAccount) {
+      return accountWithIdToken ?? fallbackAccount;
+    }
+
+    if (attempt < maxAttempts) {
+      await waitForAccountPersistence(attempt);
+    }
+  }
+
+  return null;
+}
+
+async function waitForAccountPersistence(attempt: number): Promise<void> {
+  const delayMs = attempt * 200;
+  await new Promise((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
 }

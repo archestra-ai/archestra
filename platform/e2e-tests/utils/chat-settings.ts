@@ -35,9 +35,7 @@ export async function createChatApiKey(
 
   if (params.providerOptionName) {
     await page.getByRole("combobox", { name: "Provider" }).click();
-    await page
-      .getByRole("option", { name: params.providerOptionName })
-      .click();
+    await page.getByRole("option", { name: params.providerOptionName }).click();
   }
 
   await page.getByLabel(/Name/i).fill(params.name);

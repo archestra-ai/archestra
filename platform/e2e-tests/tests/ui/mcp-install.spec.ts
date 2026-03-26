@@ -75,7 +75,10 @@ test.describe("MCP Install", () => {
     await waitForMcpServerCard(adminPage, CONTEXT7_CATALOG_ITEM_NAME);
 
     // Check that tools are discovered
-    await waitForMcpServerToolsDiscovered(adminPage, CONTEXT7_CATALOG_ITEM_NAME);
+    await waitForMcpServerToolsDiscovered(
+      adminPage,
+      CONTEXT7_CATALOG_ITEM_NAME,
+    );
 
     // cleanup
     await deleteCatalogItem(

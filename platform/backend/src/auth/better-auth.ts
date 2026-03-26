@@ -823,9 +823,10 @@ function getSsoCallbackProviderId(params: {
   if (params.requestUrl) {
     try {
       const callbackPath = new URL(params.requestUrl).pathname;
-      if (callbackPath.startsWith(callbackPrefix)) {
+      const callbackIndex = callbackPath.indexOf(callbackPrefix);
+      if (callbackIndex >= 0) {
         const providerId = callbackPath
-          .slice(callbackPrefix.length)
+          .slice(callbackIndex + callbackPrefix.length)
           .split("/")[0];
         if (providerId) {
           return providerId;

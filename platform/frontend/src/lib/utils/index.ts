@@ -1,4 +1,4 @@
-export { handleApiError, toApiError } from "./api";
+export { handleApiError, isApiAuthorizationError, toApiError } from "./api";
 export {
   formatDate,
   formatRelativeTime,

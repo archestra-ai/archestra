@@ -1228,6 +1228,16 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         return reply.send(result as Record<string, unknown>);
       } catch (error) {
+        const classifiedError = classifyInspectServerError(error);
+
+        if (classifiedError) {
+          logger.warn(
+            { err: error, mcpServerId: mcpServer.id, statusCode: 409 },
+            `MCP server ${mcpServer.name} is not ready for inspection`,
+          );
+          throw new ApiError(409, classifiedError);
+        }
+
         logger.error(
           { err: error },
           `Failed to inspect MCP server ${mcpServer.name}`,
@@ -1481,5 +1491,19 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 };
+
+function classifyInspectServerError(error: unknown): string | null {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+
+  if (errorMessage.includes("No running pod found for MCP server deployment")) {
+    return "MCP server is not running yet. Start or restart it, then try inspecting it again.";
+  }
+
+  if (errorMessage.includes("Connection timeout after 30 seconds")) {
+    return "MCP server did not become reachable within 30 seconds. Verify its configuration and runtime logs, then try again.";
+  }
+
+  return null;
+}
 
 export default mcpServerRoutes;

@@ -4,13 +4,14 @@ import {
   type ErrorExtended,
 } from "@shared";
 
+import { ForbiddenPage } from "@/app/_parts/forbidden-page";
 import { ServerErrorFallback } from "@/components/error-fallback";
 import {
   DEFAULT_SORT_BY,
   DEFAULT_SORT_DIRECTION,
   DEFAULT_TABLE_LIMIT,
 } from "@/consts";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError, isApiAuthorizationError } from "@/lib/utils";
 import { getServerApiHeaders } from "@/lib/utils/server";
 import McpGatewaysPage from "./page.client";
 
@@ -42,6 +43,12 @@ export default async function McpGatewaysPageServer() {
         query: { limit: 100, offset: 0 },
       }),
     ]);
+    if (
+      (agentsResponse.error && isApiAuthorizationError(agentsResponse.error)) ||
+      (teamsResponse.error && isApiAuthorizationError(teamsResponse.error))
+    ) {
+      return <ForbiddenPage />;
+    }
     if (agentsResponse.error) {
       handleApiError(agentsResponse.error);
     }

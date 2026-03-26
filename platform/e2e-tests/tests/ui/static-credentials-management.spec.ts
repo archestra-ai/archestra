@@ -12,6 +12,7 @@ import {
 import { expect, goToPage, test } from "../../fixtures";
 import {
   addCustomSelfHostedCatalogItem,
+  addSharedLocalConnection,
   assignCatalogCredentialToGateway,
   assignEngineeringTeamToDefaultProfileViaApi,
   clickButton,
@@ -19,15 +20,12 @@ import {
   createTeamMcpGatewayViaApi,
   getVisibleCredentials,
   getVisibleStaticCredentials,
-  openManageCredentialsDialog,
-  verifyToolCallResultViaApi,
-} from "../../utils";
-import {
-  addSharedLocalConnection,
   goToMcpRegistry,
   installLocalCatalogItem,
+  openManageCredentialsDialog,
   settleRegistryAfterInstall,
-} from "../../utils/mcp-registry";
+  verifyToolCallResultViaApi,
+} from "../../utils";
 
 test.describe
   ("Custom Self-hosted MCP Server - installation and static credentials management (vault disabled, prompt-on-installation disabled)", () => {

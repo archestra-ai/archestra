@@ -7,7 +7,7 @@ import {
   goToChat,
   selectApiKeyForProvider,
   selectRuntimeModelFromDialog,
-} from "../../utils/chat-ui";
+} from "../../utils";
 
 // Run all provider tests sequentially to avoid WireMock stub timing issues.
 // Retries handle transient streaming/WireMock flakiness in CI.

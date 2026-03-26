@@ -1,9 +1,12 @@
 import { E2eTestId } from "@shared";
 import { ADMIN_EMAIL, ADMIN_PASSWORD, UI_BASE_URL } from "../../consts";
 import { expect, test } from "../../fixtures";
-import { loginViaApi } from "../../utils";
-import { createChatApiKey } from "../../utils/chat-settings";
-import { expectChatReady, sendChatMessage } from "../../utils/chat-ui";
+import {
+  createChatApiKey,
+  expectChatReady,
+  loginViaApi,
+  sendChatMessage,
+} from "../../utils";
 
 /**
  * Quickstart test: validates the first-time user experience end-to-end.

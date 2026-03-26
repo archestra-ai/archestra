@@ -8,17 +8,15 @@ import {
 import { expect, goToPage, test } from "../../fixtures";
 import {
   addCustomSelfHostedCatalogItem,
+  addSharedLocalConnection,
   assignCatalogCredentialToGateway,
   assignEngineeringTeamToDefaultProfileViaApi,
-  openManageCredentialsDialog,
-  verifyToolCallResultViaApi,
-} from "../../utils";
-import {
-  addSharedLocalConnection,
   goToMcpRegistry,
   installLocalCatalogItem,
+  openManageCredentialsDialog,
   settleRegistryAfterInstall,
-} from "../../utils/mcp-registry";
+  verifyToolCallResultViaApi,
+} from "../../utils";
 
 test("Verify tool calling using dynamic credentials", async ({
   request,

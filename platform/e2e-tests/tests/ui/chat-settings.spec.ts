@@ -1,13 +1,13 @@
 import { E2eTestId, getVirtualKeyRowTestId } from "@shared";
 import { expect, test } from "../../fixtures";
-import { clickButton } from "../../utils";
 import {
+  clickButton,
   createChatApiKey,
   createVirtualKey,
   deleteChatApiKey,
   goToChatApiKeysPage,
   goToVirtualKeysPage,
-} from "../../utils/chat-settings";
+} from "../../utils";
 
 const TEST_API_KEY = "sk-ant-test-key-12345";
 

@@ -7,14 +7,12 @@ import {
   assignCatalogCredentialToGateway,
   clickButton,
   expandTablePagination,
-  verifyToolCallResultViaApi,
-} from "../../utils";
-import {
   goToMcpRegistry,
   installTeamCatalogItemConnection,
   openCatalogItemConnectDialog,
   selectTeamCredentialType,
-} from "../../utils/mcp-registry";
+  verifyToolCallResultViaApi,
+} from "../../utils";
 
 /**
  * Navigate to the LLM API Keys page and expand pagination to show all rows.

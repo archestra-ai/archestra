@@ -1,8 +1,8 @@
 import { expect } from "@playwright/test";
 import { archestraApiSdk, E2eTestId } from "@shared";
 import { type Page, test } from "../../fixtures";
-import { clickButton } from "../../utils";
 import {
+  clickButton,
   fillRemoteServerForm,
   goToMcpRegistry,
   installMcpServer,
@@ -12,7 +12,7 @@ import {
   waitForInstallDialog,
   waitForMcpServerCard,
   waitForMcpServerToolsDiscovered,
-} from "../../utils/mcp-registry";
+} from "../../utils";
 
 /**
  * To cover:

@@ -80,7 +80,7 @@ export function conversationStorageKeys(conversationId: string) {
 
 /**
  * Extracts a display title for a conversation.
- * Priority: explicit title > first user message > default session name
+ * Priority: explicit title > first user message > neutral placeholder
  */
 export function getConversationDisplayTitle(
   title: string | null,
@@ -102,5 +102,8 @@ export function getConversationDisplayTitle(
     }
   }
 
-  return DEFAULT_SESSION_NAME;
+  // When no title or messages are available (e.g., sidebar list),
+  // show a neutral placeholder instead of "New Chat Session"
+  // to avoid mismatch with the chat page header
+  return "";
 }

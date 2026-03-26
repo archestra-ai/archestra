@@ -143,8 +143,18 @@ export class NotionConnector extends BaseConnector {
         }
       }
 
-      const lastItem = itemsToProcess[itemsToProcess.length - 1];
-      const lastSyncedAt = lastItem?.last_edited_time;
+      let lastSyncedAt: string | undefined;
+      if (itemsToProcess.length > 0) {
+        lastSyncedAt = itemsToProcess
+          .map((item: any) => item.last_edited_time as string | undefined)
+          .filter((time): time is string => Boolean(time))
+          .reduce<string | undefined>((max, time) => {
+            if (!max) {
+              return time;
+            }
+            return new Date(time) > new Date(max) ? time : max;
+          }, undefined);
+      }
 
       yield {
         documents,

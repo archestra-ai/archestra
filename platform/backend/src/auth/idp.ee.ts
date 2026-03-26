@@ -1,7 +1,10 @@
 import { MEMBER_ROLE_NAME } from "@shared";
 import { APIError } from "better-auth";
 import { jwtDecode } from "jwt-decode";
-import { extractGroupsFromClaims } from "@/auth/idp-team-sync-cache.ee";
+import {
+  extractGroupsFromClaims,
+  retrieveIdpGroups,
+} from "@/auth/idp-team-sync-cache.ee";
 import config from "@/config";
 import logger from "@/logging";
 // Direct imports to avoid circular dependencies when importing from barrel files
@@ -300,22 +303,11 @@ export async function syncSsoTeams(
     return;
   }
 
-  // Decode the idToken to get groups
-  // Note: better-auth stores the idToken in the account table
-  if (!ssoAccount.idToken) {
-    logger.debug(
-      { providerId, userEmail },
-      "No idToken in SSO account, skipping team sync",
-    );
-    return;
-  }
-
   let groups: string[] = [];
-  try {
-    const idTokenClaims = jwtDecode<Record<string, unknown>>(
-      ssoAccount.idToken,
-    );
-    groups = extractGroupsFromClaims(idTokenClaims, idpProvider.teamSyncConfig);
+
+  const cachedGroups = await retrieveIdpGroups(providerId, userEmail);
+  if (cachedGroups?.groups.length) {
+    groups = cachedGroups.groups;
     logger.debug(
       {
         providerId,
@@ -323,14 +315,44 @@ export async function syncSsoTeams(
         groups,
         hasGroups: groups.length > 0,
       },
-      "Decoded idToken claims for team sync",
+      "Using cached IdP groups for team sync",
     );
-  } catch (error) {
-    logger.warn(
-      { err: error, providerId, userEmail },
-      "Failed to decode idToken for team sync",
-    );
-    return;
+  } else {
+    // Fall back to the persisted idToken if the short-lived callback cache
+    // is unavailable. better-auth stores the idToken in the account table,
+    // but that write can lag the afterHook in CI.
+    if (!ssoAccount.idToken) {
+      logger.debug(
+        { providerId, userEmail },
+        "No cached groups or idToken in SSO account, skipping team sync",
+      );
+      return;
+    }
+
+    try {
+      const idTokenClaims = jwtDecode<Record<string, unknown>>(
+        ssoAccount.idToken,
+      );
+      groups = extractGroupsFromClaims(
+        idTokenClaims,
+        idpProvider.teamSyncConfig,
+      );
+      logger.debug(
+        {
+          providerId,
+          userEmail,
+          groups,
+          hasGroups: groups.length > 0,
+        },
+        "Decoded idToken claims for team sync",
+      );
+    } catch (error) {
+      logger.warn(
+        { err: error, providerId, userEmail },
+        "Failed to decode idToken for team sync",
+      );
+      return;
+    }
   }
 
   if (groups.length === 0) {

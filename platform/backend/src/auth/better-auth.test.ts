@@ -792,6 +792,58 @@ describe("handleAfterHook", () => {
       setEnterpriseLicense(originalEnterpriseValue);
     });
 
+    test("uses cached IdP groups when the account idToken is not available yet", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeTeam,
+      makeAccount,
+      makeIdentityProvider,
+    }) => {
+      setEnterpriseLicense(true);
+
+      const idpTeamSyncCacheModule = await import(
+        "@/auth/idp-team-sync-cache.ee"
+      );
+
+      const user = await makeUser({ email: "cached-sso-user@example.com" });
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "member" });
+      const team = await makeTeam(org.id, user.id, { name: "Cached SSO Team" });
+
+      await makeIdentityProvider(org.id, { providerId: "keycloak-cached" });
+
+      await makeAccount(user.id, {
+        providerId: "keycloak-cached",
+        idToken: null,
+      });
+
+      await TeamModel.addExternalGroup(team.id, "engineering");
+      vi.spyOn(idpTeamSyncCacheModule, "retrieveIdpGroups").mockResolvedValue({
+        groups: ["engineering"],
+        organizationId: org.id,
+      });
+
+      const ctx = createMockContext({
+        path: "/sso/callback/keycloak-cached",
+        method: "GET",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: "test-session-id", activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      await handleAfterHook(ctx);
+
+      const isInTeam = await TeamModel.isUserInTeam(team.id, user.id);
+      expect(isInTeam).toBe(true);
+
+      setEnterpriseLicense(originalEnterpriseValue);
+    });
+
     test("should remove user from teams when SSO groups change", async ({
       makeUser,
       makeOrganization,

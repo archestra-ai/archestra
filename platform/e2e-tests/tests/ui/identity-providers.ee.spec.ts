@@ -1,5 +1,4 @@
 // biome-ignore-all lint/suspicious/noConsole: we use console.log for logging in this file
-import { archestraApiSdk } from "@shared";
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
@@ -113,11 +112,6 @@ async function ensureAdminAuthenticated(page: Page): Promise<void> {
   await expect(
     page.getByRole("heading", { name: "Identity Providers" }),
   ).toBeVisible({ timeout: 10000 });
-}
-
-async function extractCookieHeader(page: Page): Promise<string> {
-  const cookies = await page.context().cookies();
-  return cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join("; ");
 }
 
 /**
@@ -473,64 +467,38 @@ test.describe("Identity Provider Team Sync E2E", () => {
       // and verification, which leads to intermittent 401s on the polling API calls.
       await ensureAdminAuthenticated(page);
 
-      // Poll until the teams API shows the synced member.
-      // The row count in the table can lag behind the underlying membership update.
+      // Poll the admin Teams UI until the synced member appears.
+      // This avoids CI flake from carrying API auth across the separate SSO flow.
       await expect(async () => {
-        // Force a fresh page load by navigating away and back
-        await ssoPage.goto(`${UI_BASE_URL}/`);
-        await ssoPage.waitForLoadState("domcontentloaded");
-        await ssoPage.goto(`${UI_BASE_URL}/settings/teams`);
-        await ssoPage.waitForLoadState("domcontentloaded");
+        await ensureAdminAuthenticated(page);
+        await goToPage(page, "/settings/teams");
+        await page.waitForLoadState("domcontentloaded");
 
-        const cookieHeader = await extractCookieHeader(page);
-        const teamsResponse = await archestraApiSdk.getTeams({
-          headers: {
-            Cookie: cookieHeader,
-          },
-          query: {
-            limit: 100,
-            offset: 0,
-          },
+        await clickTeamActionButton({
+          page,
+          teamName,
+          actionName: "Manage Members",
         });
-        if (teamsResponse.error) {
-          throw new Error(
-            `Failed to fetch teams: ${JSON.stringify(teamsResponse.error)}`,
-          );
-        }
 
-        const syncedTeam = teamsResponse.data?.data.find(
-          (team) => team.name === teamName,
-        );
-        if (!syncedTeam?.id) {
-          throw new Error(`Team not found: ${teamName}`);
-        }
-
-        const membersResponse = await archestraApiSdk.getTeamMembers({
-          headers: {
-            Cookie: cookieHeader,
-          },
-          path: {
-            id: syncedTeam.id,
-          },
+        const membersDialog = page.getByRole("dialog", {
+          name: "Manage Team Members",
         });
-        if (membersResponse.error || !membersResponse.data) {
-          throw new Error(
-            `Failed to fetch team members: ${JSON.stringify(membersResponse.error)}`,
-          );
-        }
+        await expect(membersDialog).toBeVisible({ timeout: 10_000 });
 
-        const memberEmails = membersResponse.data.map((member) => member.email);
+        const syncedMemberRow = membersDialog.getByText(ADMIN_EMAIL, {
+          exact: true,
+        });
+        await expect(syncedMemberRow).toBeVisible({ timeout: 5_000 });
 
-        if (!memberEmails.includes(ADMIN_EMAIL)) {
-          throw new Error(
-            `Team membership not synced yet, got: ${memberEmails.join(", ") || "no members"}`,
-          );
-        }
+        await clickButton({
+          page,
+          options: { name: "Close", exact: true },
+          first: true,
+        });
+        await expect(membersDialog).not.toBeVisible({ timeout: 5_000 });
       }).toPass({ timeout: 120_000, intervals: [3000, 5000, 7000, 10000] });
 
       // Success! The SSO user was automatically synced to the team.
-      // Stop here instead of asserting via the Teams table, which can lag
-      // behind the API-visible membership update in CI.
     } finally {
       await ssoContext.close();
     }

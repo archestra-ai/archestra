@@ -169,7 +169,7 @@ test("Verify tool calling using dynamic credentials", async ({
   await goToPage(adminPage, "/mcp/registry");
   await openManageCredentialsDialog(adminPage, CATALOG_ITEM_NAME);
   await adminPage
-    .getByTestId(`${E2eTestId.RevokeCredentialButton}-${ADMIN_EMAIL}`)
+    .getByTestId(`${E2eTestId.RevokeCredentialButton}-personal`)
     .click();
   await adminPage
     .getByTestId(`${E2eTestId.RevokeCredentialButton}-${EDITOR_EMAIL}`)

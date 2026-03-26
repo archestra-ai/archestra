@@ -13,6 +13,17 @@ export async function goToMcpRegistry(page: Page): Promise<void> {
   await page.waitForLoadState("domcontentloaded");
 }
 
+export async function filterMcpRegistryByName(
+  page: Page,
+  catalogItemName: string,
+): Promise<void> {
+  const searchInput = page.getByRole("textbox", {
+    name: "Search MCP servers by name",
+  });
+  await expect(searchInput).toBeVisible({ timeout: 10_000 });
+  await searchInput.fill(catalogItemName);
+}
+
 export async function openAddMcpServerDialog(page: Page): Promise<void> {
   await clickButton({
     page,
@@ -77,6 +88,7 @@ export async function waitForMcpServerCard(
   page: Page,
   catalogItemName: string,
 ): Promise<void> {
+  await filterMcpRegistryByName(page, catalogItemName);
   await page
     .getByTestId(`${E2eTestId.McpServerCard}-${catalogItemName}`)
     .waitFor({ state: "visible", timeout: 30_000 });
@@ -123,6 +135,7 @@ export async function openCatalogItemConnectDialog(
   options?: { timeoutMs?: number },
 ): Promise<void> {
   const timeoutMs = options?.timeoutMs ?? 30_000;
+  await filterMcpRegistryByName(page, catalogItemName);
   const connectButton = page.getByTestId(
     `${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`,
   );
@@ -271,6 +284,7 @@ async function waitForInstalledCardActions(
   page: Page,
   catalogItemName: string,
 ): Promise<void> {
+  await filterMcpRegistryByName(page, catalogItemName);
   const targetCard = page.getByTestId(
     `${E2eTestId.McpServerCard}-${catalogItemName}`,
   );

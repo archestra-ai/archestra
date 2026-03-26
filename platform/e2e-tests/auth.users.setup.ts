@@ -151,6 +151,18 @@ async function createInvitation(
 
   if (!response.ok()) {
     const errorText = await response.text();
+    if (errorText.includes("USER_IS_ALREADY_INVITED_TO_THIS_ORGANIZATION")) {
+      const existingInvitationId = await getExistingInvitation(
+        request,
+        email,
+        organizationId,
+      );
+
+      if (existingInvitationId) {
+        return existingInvitationId;
+      }
+    }
+
     throw new Error(
       `Invitation API failed (${response.status()}): ${errorText}`,
     );

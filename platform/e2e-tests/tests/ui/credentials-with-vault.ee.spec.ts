@@ -250,13 +250,13 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
       headers: { Cookie: cookieHeaders },
     });
 
-    // CLEANUP: Delete the folder in Vault
-    await fetch(`${vaultAddr}/v1/${teamFolderPath}`, {
+    // Best-effort local cleanup. The Vault sidecar may already be gone by teardown.
+    await fetch(`${vaultAddr}/v1/${teamFolderPath}/${secretName}`, {
       method: "DELETE",
       headers: {
         "X-Vault-Token": DEFAULT_VAULT_TOKEN,
       },
-    });
+    }).catch(() => undefined);
   });
 
   test("Test self-hosted MCP server with Vault - without prompt on installation", async ({

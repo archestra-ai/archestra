@@ -9,15 +9,12 @@ import {
   SSO_DOMAIN,
   UI_BASE_URL,
 } from "../../consts";
-import {
-  type Browser,
-  expect,
-  type Locator,
-  type Page,
-  test,
-} from "../../fixtures";
+import { type Browser, expect, type Page, test } from "../../fixtures";
 import {
   clickButton,
+  clickTeamActionButton,
+  createTeam,
+  deleteTeamByName,
   expectAuthenticated,
   extractCertFromMetadata,
   fetchKeycloakSamlMetadata,
@@ -139,6 +136,25 @@ async function fillOidcProviderForm(
   await page.getByLabel("JWKS Endpoint").fill(KEYCLOAK_OIDC.jwksEndpoint);
 }
 
+async function configureTeamSyncForGroups(page: Page): Promise<void> {
+  const groupsTemplateInput = page.getByLabel("Groups Handlebars Template");
+
+  if (!(await groupsTemplateInput.isVisible().catch(() => false))) {
+    await page
+      .getByRole("button", { name: /Team Sync Configuration \(Optional\)/i })
+      .click();
+  }
+
+  const enableTeamSyncCheckbox = page.getByLabel("Enable Team Sync");
+  await expect(enableTeamSyncCheckbox).toBeVisible({ timeout: 10_000 });
+  if (!(await enableTeamSyncCheckbox.isChecked())) {
+    await enableTeamSyncCheckbox.click();
+  }
+
+  await expect(groupsTemplateInput).toBeVisible({ timeout: 10_000 });
+  await groupsTemplateInput.fill("{{#each groups}}{{this}},{{/each}}");
+}
+
 function getRoleMappingRuleRow(page: Page, index: number) {
   return page.getByTestId(getIdpRoleMappingRuleRowTestId(index));
 }
@@ -218,59 +234,6 @@ async function deleteExistingProviderIfExists(
       `Deleted existing ${providerType}; retrying until create dialog is available`,
     );
   }).toPass({ timeout: 60_000, intervals: [1000, 2000, 5000] });
-}
-
-function getTeamRow(page: Page, teamName: string): Locator {
-  return page.getByRole("row", {
-    name: new RegExp(teamName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"),
-  });
-}
-
-async function clickTeamActionButton(params: {
-  page: Page;
-  teamName: string;
-  actionName: string | RegExp;
-}): Promise<void> {
-  const row = getTeamRow(params.page, params.teamName);
-  await expect(row).toBeVisible({ timeout: 10_000 });
-
-  const actionButton = row.getByRole("button", { name: params.actionName });
-  await expect(actionButton).toBeVisible({ timeout: 10_000 });
-  await actionButton.click();
-}
-
-async function createTeam(params: {
-  page: Page;
-  name: string;
-  description: string;
-}): Promise<void> {
-  const createTeamButton = params.page.getByRole("button", {
-    name: "Create Team",
-  });
-  await expect(createTeamButton).toBeVisible({ timeout: 15_000 });
-  await expect(createTeamButton).toBeEnabled({ timeout: 10_000 });
-  await createTeamButton.click();
-
-  const dialog = params.page.getByRole("dialog");
-  await expect(dialog).toBeVisible({ timeout: 10_000 });
-  await params.page.getByLabel("Team Name").fill(params.name);
-  await params.page.getByLabel("Description").fill(params.description);
-  await dialog.getByRole("button", { name: "Create Team" }).click();
-  await expect(dialog).not.toBeVisible({ timeout: 10_000 });
-  await expect(getTeamRow(params.page, params.name)).toBeVisible({
-    timeout: 10_000,
-  });
-}
-
-async function deleteTeamByName(page: Page, teamName: string): Promise<void> {
-  await clickTeamActionButton({
-    page,
-    teamName,
-    actionName: "Delete",
-  });
-  await expect(page.getByText(/Are you sure/i)).toBeVisible({ timeout: 5000 });
-  await clickButton({ page, options: { name: "Delete", exact: true } });
-  await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10_000 });
 }
 
 async function signInViaIdentityProvider(params: {
@@ -421,6 +384,7 @@ test.describe("Identity Provider Team Sync E2E", () => {
     makeRandomString,
   }) => {
     test.slow();
+    test.setTimeout(180_000);
 
     const providerName = `TeamSyncOIDC${Date.now()}`;
     const teamName = makeRandomString(8, "SyncTeam");
@@ -432,6 +396,7 @@ test.describe("Identity Provider Team Sync E2E", () => {
     await page.waitForLoadState("domcontentloaded");
     await deleteExistingProviderIfExists(page, "Generic OIDC");
     await fillOidcProviderForm(page, providerName);
+    await configureTeamSyncForGroups(page);
     await page.getByTestId(E2eTestId.IdentityProviderCreateButton).click();
     await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
 
@@ -497,7 +462,8 @@ test.describe("Identity Provider Team Sync E2E", () => {
       await ssoPage.goto(`${UI_BASE_URL}/settings/teams`);
       await ssoPage.waitForLoadState("domcontentloaded");
 
-      // Poll until the team card shows at least 1 member
+      // Poll until the teams API shows the synced member.
+      // The row count in the table can lag behind the underlying membership update.
       await expect(async () => {
         // Force a fresh page load by navigating away and back
         await ssoPage.goto(`${UI_BASE_URL}/`);
@@ -505,16 +471,46 @@ test.describe("Identity Provider Team Sync E2E", () => {
         await ssoPage.goto(`${UI_BASE_URL}/settings/teams`);
         await ssoPage.waitForLoadState("domcontentloaded");
 
-        const teamRow = getTeamRow(ssoPage, teamName);
-        await expect(teamRow).toBeVisible({ timeout: 5000 });
+        const memberEmails = await ssoPage.evaluate(async (targetTeamName) => {
+          const response = await fetch("/api/teams?limit=100&offset=0", {
+            credentials: "include",
+            cache: "no-store",
+          });
 
-        // Get the member count text
-        const memberText = await teamRow.textContent();
-        // Team should have at least 1 member after sync
-        if (!memberText || memberText.includes("0 members")) {
-          throw new Error(`Team still shows 0 members, got: ${memberText}`);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch teams: ${response.status}`);
+          }
+
+          const teamsPayload = await response.json();
+          const syncedTeam = teamsPayload?.data?.find(
+            (team: { id: string; name: string }) => team.name === targetTeamName,
+          );
+
+          if (!syncedTeam?.id) {
+            throw new Error(`Team not found: ${targetTeamName}`);
+          }
+
+          const membersResponse = await fetch(`/api/teams/${syncedTeam.id}/members`, {
+            credentials: "include",
+            cache: "no-store",
+          });
+
+          if (!membersResponse.ok) {
+            throw new Error(`Failed to fetch team members: ${membersResponse.status}`);
+          }
+
+          const membersPayload = await membersResponse.json();
+          return membersPayload.map(
+            (member: { email?: string | null }) => member.email,
+          );
+        }, teamName);
+
+        if (!memberEmails.includes(ADMIN_EMAIL)) {
+          throw new Error(
+            `Team membership not synced yet, got: ${memberEmails.join(", ") || "no members"}`,
+          );
         }
-      }).toPass({ timeout: 60_000, intervals: [3000, 5000, 7000, 10000] });
+      }).toPass({ timeout: 120_000, intervals: [3000, 5000, 7000, 10000] });
 
       // Verify the SSO user is in the team members list by opening the dialog
       // Open manage members dialog

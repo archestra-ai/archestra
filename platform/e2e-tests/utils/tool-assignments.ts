@@ -47,7 +47,16 @@ export async function openGatewayCatalogToolAssignment(params: {
 }
 
 export async function saveOpenProfileDialog(page: Page): Promise<void> {
-  await clickButton({ page, options: { name: "Save" } });
+  const saveButton = page.getByRole("button", { name: "Save" });
+  const updateButton = page.getByRole("button", { name: "Update" });
+
+  if (await saveButton.isVisible().catch(() => false)) {
+    await saveButton.click();
+  } else {
+    await expect(updateButton).toBeVisible({ timeout: 15_000 });
+    await updateButton.click();
+  }
+
   await page.waitForLoadState("domcontentloaded");
 }
 
@@ -138,29 +147,44 @@ async function openCatalogToolAssignment({
     .toBe("enabled");
   await enabledCatalogItem.click();
 
-  const visibleTokenSelect = page
-    .getByRole("dialog")
-    .last()
-    .getByRole("combobox")
-    .first();
+  const visibleTokenSelect = page.getByTestId(E2eTestId.TokenSelect).last();
+  const pillButtonByTestId = page.getByTestId(
+    getAgentToolCatalogPillTestId(catalogItemName),
+  );
+  const pillButtonByRole = page.getByRole("button", {
+    name: new RegExp(escapeRegExp(catalogItemName)),
+  });
 
-  if (!(await visibleTokenSelect.isVisible().catch(() => false))) {
-    const pillButtonByTestId = dialog.getByTestId(
-      getAgentToolCatalogPillTestId(catalogItemName),
-    );
-    const pillButtonByRole = dialog.getByRole("button", {
-      name: new RegExp(escapeRegExp(catalogItemName)),
-    });
+  try {
+    await expect(visibleTokenSelect).toBeVisible({ timeout: 5_000 });
+  } catch {
+    await expect
+      .poll(
+        async () => {
+          if (await visibleTokenSelect.isVisible().catch(() => false)) {
+            return "token-select";
+          }
+          if (await pillButtonByTestId.isVisible().catch(() => false)) {
+            return "pill-testid";
+          }
+          if (await pillButtonByRole.isVisible().catch(() => false)) {
+            return "pill-role";
+          }
+          return "missing";
+        },
+        { timeout: 10_000, intervals: [500, 1000, 2000] },
+      )
+      .not.toBe("missing");
 
     if (await pillButtonByTestId.isVisible().catch(() => false)) {
       await pillButtonByTestId.click();
-    } else {
-      await expect(pillButtonByRole).toBeVisible({ timeout: 10_000 });
+    } else if (await pillButtonByRole.isVisible().catch(() => false)) {
       await pillButtonByRole.click();
     }
+
+    await expect(visibleTokenSelect).toBeVisible({ timeout: 10_000 });
   }
 
-  await expect(visibleTokenSelect).toBeVisible({ timeout: 10_000 });
   await visibleTokenSelect.click();
 }
 

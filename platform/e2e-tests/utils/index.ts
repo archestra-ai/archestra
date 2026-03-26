@@ -6,4 +6,5 @@ export * from "./mcp-catalog";
 export * from "./mcp-gateway";
 export * from "./mcp-registry";
 export * from "./sso";
+export * from "./teams";
 export * from "./tool-assignments";

@@ -68,8 +68,16 @@ export function MermaidDiagram({
         } catch (error) {
           console.error("Error rendering mermaid diagram:", error);
           if (ref.current) {
+            // Clean up any mermaid-generated elements that may have leaked into document.body
+            const leakedElements = document.body.querySelectorAll('[id^="mermaid-"]');
+            leakedElements.forEach((el) => el.remove());
+            // Also clean up the injected <div> that mermaid sometimes creates
+            const mermaidDivs = document.body.querySelectorAll('.mermaid');
+            mermaidDivs.forEach((el) => el.remove());
+
             const pre = document.createElement("pre");
             pre.textContent = chart;
+            pre.className = "text-red-500 text-sm p-2 bg-red-50 dark:bg-red-950 rounded border border-red-200 dark:border-red-800 overflow-auto";
             ref.current.replaceChildren(pre);
             setIsLoaded(true);
           }

@@ -1,9 +1,7 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
-import type { Agent } from "@/types";
-
-type AgentAccessContext = Pick<Agent, "scope" | "authorId">;
+import type { AgentAccessContext } from "@/types";
 
 class AgentTeamModel {
   /**
@@ -461,6 +459,8 @@ class AgentTeamModel {
   ): Promise<AgentAccessContext | null> {
     const [agent] = await db
       .select({
+        id: schema.agentsTable.id,
+        organizationId: schema.agentsTable.organizationId,
         scope: schema.agentsTable.scope,
         authorId: schema.agentsTable.authorId,
       })

@@ -53,7 +53,7 @@ import {
 } from "@/observability/tracing";
 import { jwksValidator } from "@/services/jwks-validator";
 import {
-  type Agent,
+  type AgentAccessContext,
   type AgentType,
   type CommonToolCall,
   type SelectTeamToken,
@@ -96,11 +96,6 @@ type TokenHashes = {
   oauthTokenHash: string;
   rawTokenHash: string;
 };
-
-type AgentAccessContext = Pick<
-  Agent,
-  "id" | "organizationId" | "scope" | "authorId"
->;
 
 type ResolvedArchestraToken =
   | {

@@ -200,6 +200,8 @@ describe("AgentTeamModel", () => {
         crypto.randomUUID(),
         false,
         {
+          id: crypto.randomUUID(),
+          organizationId: crypto.randomUUID(),
           scope: "personal",
           authorId: author.id,
         },
@@ -209,6 +211,8 @@ describe("AgentTeamModel", () => {
         crypto.randomUUID(),
         false,
         {
+          id: crypto.randomUUID(),
+          organizationId: crypto.randomUUID(),
           scope: "personal",
           authorId: author.id,
         },
@@ -228,6 +232,8 @@ describe("AgentTeamModel", () => {
         crypto.randomUUID(),
         false,
         {
+          id: crypto.randomUUID(),
+          organizationId: crypto.randomUUID(),
           scope: "org",
           authorId: null,
         },
@@ -355,6 +361,8 @@ describe("AgentTeamModel", () => {
         crypto.randomUUID(),
         team.id,
         {
+          id: crypto.randomUUID(),
+          organizationId: org.id,
           scope: "org",
           authorId: null,
         },
@@ -382,6 +390,8 @@ describe("AgentTeamModel", () => {
         agent.id,
         team.id,
         {
+          id: agent.id,
+          organizationId: org.id,
           scope: "team",
           authorId: agent.authorId,
         },

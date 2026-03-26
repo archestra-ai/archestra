@@ -75,6 +75,7 @@ export async function syncSsoRole(
   userId: string,
   userEmail: string,
   providerIdHint?: string,
+  retryOnMissingAccount = false,
 ): Promise<void> {
   logger.info({ userId, userEmail }, "🔄 syncSsoRole called");
 
@@ -82,6 +83,7 @@ export async function syncSsoRole(
     userId,
     providerIdHint,
     requireIdToken: false,
+    retryOnMissingAccount,
   });
 
   if (!ssoAccount) {
@@ -250,6 +252,7 @@ export async function syncSsoTeams(
   userId: string,
   userEmail: string,
   providerIdHint?: string,
+  retryOnMissingAccount = false,
 ): Promise<void> {
   logger.info({ userId, userEmail }, "🔄 syncSsoTeams called");
 
@@ -263,6 +266,7 @@ export async function syncSsoTeams(
     userId,
     providerIdHint,
     requireIdToken: false,
+    retryOnMissingAccount,
   });
 
   logger.info(
@@ -406,6 +410,7 @@ async function getRecentSsoAccount(params: {
   userId: string;
   providerIdHint?: string;
   requireIdToken: boolean;
+  retryOnMissingAccount: boolean;
 }) {
   const maxAttempts = 10;
 
@@ -428,6 +433,14 @@ async function getRecentSsoAccount(params: {
       (account) => account.idToken,
     );
     const fallbackAccount = matchingAccounts[0];
+
+    if (
+      !params.retryOnMissingAccount &&
+      !accountWithIdToken &&
+      !fallbackAccount
+    ) {
+      return null;
+    }
 
     if (params.requireIdToken) {
       if (accountWithIdToken) {

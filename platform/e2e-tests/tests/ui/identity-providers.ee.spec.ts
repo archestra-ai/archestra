@@ -468,6 +468,11 @@ test.describe("Identity Provider Team Sync E2E", () => {
       await ssoPage.goto(`${UI_BASE_URL}/settings/teams`);
       await ssoPage.waitForLoadState("domcontentloaded");
 
+      // Re-authenticate the admin page before polling. In CI, the SSO flow can
+      // invalidate or age out the pre-existing admin session used for cleanup
+      // and verification, which leads to intermittent 401s on the polling API calls.
+      await ensureAdminAuthenticated(page);
+
       // Poll until the teams API shows the synced member.
       // The row count in the table can lag behind the underlying membership update.
       await expect(async () => {

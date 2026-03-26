@@ -9,7 +9,13 @@ import {
   SSO_DOMAIN,
   UI_BASE_URL,
 } from "../../consts";
-import { type Browser, expect, type Page, test } from "../../fixtures";
+import {
+  type Browser,
+  expect,
+  type Locator,
+  type Page,
+  test,
+} from "../../fixtures";
 import {
   clickButton,
   expectAuthenticated,
@@ -214,6 +220,91 @@ async function deleteExistingProviderIfExists(
   }).toPass({ timeout: 60_000, intervals: [1000, 2000, 5000] });
 }
 
+function getTeamRow(page: Page, teamName: string): Locator {
+  return page.getByRole("row", {
+    name: new RegExp(teamName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"),
+  });
+}
+
+async function clickTeamActionButton(params: {
+  page: Page;
+  teamName: string;
+  actionName: string | RegExp;
+}): Promise<void> {
+  const row = getTeamRow(params.page, params.teamName);
+  await expect(row).toBeVisible({ timeout: 10_000 });
+
+  const actionButton = row.getByRole("button", { name: params.actionName });
+  await expect(actionButton).toBeVisible({ timeout: 10_000 });
+  await actionButton.click();
+}
+
+async function createTeam(params: {
+  page: Page;
+  name: string;
+  description: string;
+}): Promise<void> {
+  const createTeamButton = params.page.getByRole("button", {
+    name: "Create Team",
+  });
+  await expect(createTeamButton).toBeVisible({ timeout: 15_000 });
+  await expect(createTeamButton).toBeEnabled({ timeout: 10_000 });
+  await createTeamButton.click();
+
+  const dialog = params.page.getByRole("dialog");
+  await expect(dialog).toBeVisible({ timeout: 10_000 });
+  await params.page.getByLabel("Team Name").fill(params.name);
+  await params.page.getByLabel("Description").fill(params.description);
+  await dialog.getByRole("button", { name: "Create Team" }).click();
+  await expect(dialog).not.toBeVisible({ timeout: 10_000 });
+  await expect(getTeamRow(params.page, params.name)).toBeVisible({
+    timeout: 10_000,
+  });
+}
+
+async function deleteTeamByName(page: Page, teamName: string): Promise<void> {
+  await clickTeamActionButton({
+    page,
+    teamName,
+    actionName: "Delete",
+  });
+  await expect(page.getByText(/Are you sure/i)).toBeVisible({ timeout: 5000 });
+  await clickButton({ page, options: { name: "Delete", exact: true } });
+  await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10_000 });
+}
+
+async function signInViaIdentityProvider(params: {
+  browser: Browser;
+  providerName: string;
+}): Promise<{
+  context: Awaited<ReturnType<Browser["newContext"]>>;
+  page: Page;
+}> {
+  const context = await params.browser.newContext({
+    storageState: undefined,
+  });
+  const page = await context.newPage();
+
+  await page.goto(`${UI_BASE_URL}/auth/sign-in`);
+  await page.waitForLoadState("domcontentloaded");
+
+  const ssoButton = page.getByRole("button", {
+    name: new RegExp(params.providerName, "i"),
+  });
+  await expect(ssoButton).toBeVisible({ timeout: 10_000 });
+
+  await clickButton({
+    page,
+    options: { name: new RegExp(params.providerName, "i") },
+  });
+
+  const loginSucceeded = await loginViaKeycloak(page);
+  expect(loginSucceeded).toBe(true);
+  await expectAuthenticated(page, 15_000);
+
+  return { context, page };
+}
+
 async function expectRolesPageAfterSsoLogin(
   browser: Browser,
   providerName: string,
@@ -307,8 +398,9 @@ async function expectActiveSession(page: Page): Promise<void> {
           const sidebarEmail =
             document
               .querySelector('[data-testid="sidebar-user-profile"]')
-              ?.textContent?.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] ??
-            null;
+              ?.textContent?.match(
+                /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i,
+              )?.[0] ?? null;
 
           return sidebarEmail;
         });
@@ -322,8 +414,7 @@ async function expectActiveSession(page: Page): Promise<void> {
 }
 
 test.describe("Identity Provider Team Sync E2E", () => {
-  // TODO: Fix flaky test
-  test.skip("should sync user to team based on SSO group membership", async ({
+  test("should sync user to team based on SSO group membership", async ({
     page,
     browser,
     goToPage,
@@ -334,43 +425,6 @@ test.describe("Identity Provider Team Sync E2E", () => {
     const providerName = `TeamSyncOIDC${Date.now()}`;
     const teamName = makeRandomString(8, "SyncTeam");
     const externalGroup = "archestra-admins"; // Matches Keycloak admin user's group
-
-    // STEP 0: Clean up orphan SyncTeam teams from previous failed test runs
-    // These teams can have the same external group mapping, causing SSO sync to add
-    // users to the wrong team
-    await ensureAdminAuthenticated(page);
-    await goToPage(page, "/settings/teams");
-    await page.waitForLoadState("domcontentloaded");
-
-    // Find and delete any existing SyncTeam-* teams
-    const orphanTeams = page.locator(".rounded-lg.border.p-4").filter({
-      has: page.locator('h3:text-matches("SyncTeam-.*")'),
-    });
-    const orphanCount = await orphanTeams.count();
-
-    for (let i = orphanCount - 1; i >= 0; i--) {
-      // Re-locate since DOM changes after each delete
-      const team = page
-        .locator(".rounded-lg.border.p-4")
-        .filter({ has: page.locator('h3:text-matches("SyncTeam-.*")') })
-        .first();
-      if ((await team.count()) === 0) break;
-
-      // Find and click the delete button (trash icon)
-      await team
-        .getByRole("button")
-        .filter({ has: page.locator("svg") })
-        .last()
-        .click();
-      await expect(page.getByText(/Are you sure/i)).toBeVisible({
-        timeout: 5000,
-      });
-      await clickButton({ page, options: { name: "Delete", exact: true } });
-      await expect(page.getByRole("dialog")).not.toBeVisible({
-        timeout: 10000,
-      });
-      await page.waitForLoadState("domcontentloaded");
-    }
 
     // STEP 1: Authenticate and create OIDC provider
     await ensureAdminAuthenticated(page);
@@ -386,48 +440,18 @@ test.describe("Identity Provider Team Sync E2E", () => {
     await ensureAdminAuthenticated(page);
     await goToPage(page, "/settings/teams");
     await page.waitForLoadState("domcontentloaded");
-
-    // Wait for page to fully load and Create Team button to be enabled
-    // The button may be disabled while permissions/data are loading
-    const createTeamButton = page.getByRole("button", { name: "Create Team" });
-    await expect(createTeamButton).toBeVisible({ timeout: 15000 });
-    await expect(createTeamButton).toBeEnabled({ timeout: 10000 });
-    await createTeamButton.click();
-    await expect(page.getByRole("dialog")).toBeVisible();
-
-    // Fill in team details
-    await page.getByLabel("Team Name").fill(teamName);
-    await page
-      .getByLabel("Description")
-      .fill("Team for testing SSO group sync");
-
-    // Submit
-    await page
-      .getByRole("dialog")
-      .getByRole("button", { name: "Create Team" })
-      .click();
-    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
-
-    // Wait for team to appear in the list
-    await expect(page.getByText(teamName)).toBeVisible({ timeout: 5000 });
+    await createTeam({
+      page,
+      name: teamName,
+      description: "Team for testing SSO group sync",
+    });
 
     // STEP 3: Link external group to the team
-    // First get the team ID from the API since we need it for the testid
-    const teamResponse = await page.request.get(
-      `http://localhost:9000/api/teams`,
-    );
-    const teamsResponse = await teamResponse.json();
-    const teams = Array.isArray(teamsResponse)
-      ? teamsResponse
-      : (teamsResponse.data ?? []);
-    const createdTeam = teams.find(
-      (t: { name: string }) => t.name === teamName,
-    );
-
-    // Click the SSO Team Sync button using data-testid
-    await page
-      .getByTestId(`${E2eTestId.ConfigureIdpTeamSyncButton}-${createdTeam.id}`)
-      .click();
+    await clickTeamActionButton({
+      page,
+      teamName,
+      actionName: "Configure SSO Team Sync",
+    });
 
     // Wait for dialog to appear
     await expect(page.getByRole("dialog")).toBeVisible();
@@ -457,34 +481,13 @@ test.describe("Identity Provider Team Sync E2E", () => {
     await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 5000 });
 
     // STEP 4: Test SSO login with admin user (in archestra-admins group)
-    const ssoContext = await browser.newContext({
-      storageState: undefined,
-    });
-    const ssoPage = await ssoContext.newPage();
+    const { context: ssoContext, page: ssoPage } =
+      await signInViaIdentityProvider({
+        browser,
+        providerName,
+      });
 
     try {
-      await ssoPage.goto(`${UI_BASE_URL}/auth/sign-in`);
-      await ssoPage.waitForLoadState("domcontentloaded");
-
-      // Wait for SSO button to appear (provider was just created)
-      const ssoButton = ssoPage.getByRole("button", {
-        name: new RegExp(providerName, "i"),
-      });
-      await expect(ssoButton).toBeVisible({ timeout: 10000 });
-
-      // Click SSO button and login via Keycloak
-      await clickButton({
-        page: ssoPage,
-        options: { name: new RegExp(providerName, "i") },
-      });
-
-      // Login via Keycloak (admin user is in archestra-admins group)
-      const loginSucceeded = await loginViaKeycloak(ssoPage);
-      expect(loginSucceeded).toBe(true);
-
-      // Verify we're logged in
-      await expectAuthenticated(ssoPage, 15000);
-
       // STEP 5: Verify user was automatically added to the team
       // Team sync is an async background operation during SSO callback
       // Give it a moment to complete before navigating
@@ -494,10 +497,6 @@ test.describe("Identity Provider Team Sync E2E", () => {
       await ssoPage.goto(`${UI_BASE_URL}/settings/teams`);
       await ssoPage.waitForLoadState("domcontentloaded");
 
-      // Find the team row helper
-      const getTeamRow = () =>
-        ssoPage.locator(".rounded-lg.border.p-4").filter({ hasText: teamName });
-
       // Poll until the team card shows at least 1 member
       await expect(async () => {
         // Force a fresh page load by navigating away and back
@@ -506,26 +505,24 @@ test.describe("Identity Provider Team Sync E2E", () => {
         await ssoPage.goto(`${UI_BASE_URL}/settings/teams`);
         await ssoPage.waitForLoadState("domcontentloaded");
 
-        const teamRow = getTeamRow();
+        const teamRow = getTeamRow(ssoPage, teamName);
         await expect(teamRow).toBeVisible({ timeout: 5000 });
 
         // Get the member count text
-        const memberText = await teamRow
-          .locator("text=/\\d+ member/")
-          .textContent();
+        const memberText = await teamRow.textContent();
         // Team should have at least 1 member after sync
-        if (memberText === "0 members") {
+        if (!memberText || memberText.includes("0 members")) {
           throw new Error(`Team still shows 0 members, got: ${memberText}`);
         }
       }).toPass({ timeout: 60_000, intervals: [3000, 5000, 7000, 10000] });
 
       // Verify the SSO user is in the team members list by opening the dialog
       // Open manage members dialog
-      const teamRow = getTeamRow();
-      const manageButton = teamRow.getByTestId(
-        `${E2eTestId.ManageMembersButton}-${teamName}`,
-      );
-      await manageButton.click();
+      await clickTeamActionButton({
+        page: ssoPage,
+        teamName,
+        actionName: "Manage Members",
+      });
       await ssoPage.getByRole("dialog").waitFor({ state: "visible" });
 
       // The email should now be visible since the member was synced
@@ -543,22 +540,7 @@ test.describe("Identity Provider Team Sync E2E", () => {
     // Delete the team
     await goToPage(page, "/settings/teams");
     await page.waitForLoadState("domcontentloaded");
-
-    // Find the team card by name and click the delete button
-    const teamCard = page
-      .locator(".rounded-lg.border.p-4")
-      .filter({ hasText: teamName });
-    await expect(teamCard).toBeVisible({ timeout: 5000 });
-    // The delete button has a Trash icon - find it within the team card
-    await teamCard
-      .getByRole("button")
-      .filter({ has: page.locator("svg") })
-      .last()
-      .click();
-
-    await expect(page.getByText(/Are you sure/i)).toBeVisible();
-    await clickButton({ page, options: { name: "Delete", exact: true } });
-    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+    await deleteTeamByName(page, teamName);
 
     // Delete the identity provider
     await goToPage(page, "/settings/identity-providers");
@@ -569,8 +551,6 @@ test.describe("Identity Provider Team Sync E2E", () => {
 });
 
 test.describe("Identity Provider OIDC E2E Flow with Keycloak", () => {
-  // TODO: Fix flaky Keycloak OIDC test - external service timing issues in CI
-  test.skip();
   test("should configure OIDC provider, login via SSO, update, and delete", async ({
     page,
     browser,
@@ -598,33 +578,12 @@ test.describe("Identity Provider OIDC E2E Flow with Keycloak", () => {
 
     // STEP 3: Verify SSO button appears on login page and test SSO login
     // Use a fresh browser context (not logged in) to test the SSO flow
-    const ssoContext = await browser.newContext({
-      storageState: undefined,
+    const { context: ssoContext } = await signInViaIdentityProvider({
+      browser,
+      providerName,
     });
-    const ssoPage = await ssoContext.newPage();
 
     try {
-      await ssoPage.goto(`${UI_BASE_URL}/auth/sign-in`);
-      await ssoPage.waitForLoadState("domcontentloaded");
-
-      // Verify SSO button for our provider appears
-      await expect(
-        ssoPage.getByRole("button", { name: new RegExp(providerName, "i") }),
-      ).toBeVisible({ timeout: 5000 });
-
-      // STEP 4: Click SSO button and login via Keycloak
-      await clickButton({
-        page: ssoPage,
-        options: { name: new RegExp(providerName, "i") },
-      });
-
-      // Login via Keycloak and wait for redirect back to Archestra
-      const loginSucceeded = await loginViaKeycloak(ssoPage);
-      expect(loginSucceeded).toBe(true);
-
-      // Verify we're logged in
-      await expectAuthenticated(ssoPage, 15000);
-
       // SSO login successful - user is now logged in
     } finally {
       await ssoContext.close();
@@ -676,7 +635,7 @@ test.describe("Identity Provider OIDC E2E Flow with Keycloak", () => {
 });
 
 test.describe("Identity Provider IdP Logout (RP-Initiated Logout)", () => {
-  test.skip("should terminate IdP session on Archestra sign-out", async ({
+  test("should terminate IdP session on Archestra sign-out", async ({
     page,
     browser,
     goToPage,
@@ -692,28 +651,13 @@ test.describe("Identity Provider IdP Logout (RP-Initiated Logout)", () => {
     await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
 
     // STEP 2: Login via SSO in a fresh context
-    const ssoContext = await browser.newContext({ storageState: undefined });
-    const ssoPage = await ssoContext.newPage();
+    const { context: ssoContext, page: ssoPage } =
+      await signInViaIdentityProvider({
+        browser,
+        providerName,
+      });
 
     try {
-      await ssoPage.goto(`${UI_BASE_URL}/auth/sign-in`);
-      await ssoPage.waitForLoadState("domcontentloaded");
-
-      const ssoButton = ssoPage.getByRole("button", {
-        name: new RegExp(providerName, "i"),
-      });
-      await expect(ssoButton).toBeVisible({ timeout: 10000 });
-      await clickButton({
-        page: ssoPage,
-        options: { name: new RegExp(providerName, "i") },
-      });
-
-      const loginSucceeded = await loginViaKeycloak(ssoPage);
-      expect(loginSucceeded).toBe(true);
-
-      // Verify we're logged in
-      await expectAuthenticated(ssoPage, 15000);
-
       // STEP 3: Sign out from Archestra
       // Navigate to sign-out which should redirect to Keycloak logout, then back to sign-in
       await ssoPage.goto(`${UI_BASE_URL}/auth/sign-out`);

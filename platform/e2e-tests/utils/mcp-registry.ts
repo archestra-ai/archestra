@@ -1,7 +1,8 @@
 import type { Page } from "@playwright/test";
 import { E2eTestId } from "@shared";
 import { expect, goToPage } from "../fixtures";
-import { clickButton } from "../utils";
+import { clickButton, closeOpenDialogs } from "./dialogs";
+import { openManageCredentialsDialog } from "./mcp-gateway";
 
 export async function goToMcpRegistry(page: Page): Promise<void> {
   await goToPage(page, "/mcp/registry");
@@ -95,4 +96,76 @@ export async function openCatalogItemConnectDialog(
   await connectButton.waitFor({ state: "visible", timeout: timeoutMs });
   await expect(connectButton).toBeEnabled({ timeout: timeoutMs });
   await connectButton.click({ timeout: timeoutMs });
+}
+
+export async function installLocalCatalogItem(params: {
+  page: Page;
+  catalogItemName: string;
+  envValues?: Record<string, string>;
+  expectDialog?: boolean;
+  timeoutMs?: number;
+}): Promise<void> {
+  await openCatalogItemConnectDialog(params.page, params.catalogItemName, {
+    timeoutMs: params.timeoutMs,
+  });
+
+  const shouldWaitForDialog =
+    params.expectDialog ?? Object.keys(params.envValues ?? {}).length > 0;
+  if (!shouldWaitForDialog) {
+    return;
+  }
+
+  await waitForInstallDialog(params.page, { timeoutMs: params.timeoutMs });
+
+  for (const [key, value] of Object.entries(params.envValues ?? {})) {
+    await params.page.getByRole("textbox", { name: key }).fill(value);
+  }
+
+  await installMcpServer(params.page);
+}
+
+export async function addSharedLocalConnection(params: {
+  page: Page;
+  catalogItemName: string;
+  teamName: string;
+  envValues?: Record<string, string>;
+  expectDialog?: boolean;
+  timeoutMs?: number;
+}): Promise<void> {
+  await openManageCredentialsDialog(params.page, params.catalogItemName);
+  const connectionsDialog = params.page
+    .getByRole("dialog")
+    .filter({ has: params.page.getByRole("heading", { name: "Connections" }) });
+  await clickButton({
+    page: params.page,
+    options: { name: "Add to team" },
+  });
+  await params.page
+    .getByRole("menuitem", { name: params.teamName })
+    .click({ timeout: params.timeoutMs ?? 15_000 });
+
+  const shouldWaitForDialog =
+    params.expectDialog ?? Object.keys(params.envValues ?? {}).length > 0;
+  if (!shouldWaitForDialog) {
+    await expect(connectionsDialog).not.toBeVisible({
+      timeout: params.timeoutMs ?? 15_000,
+    });
+    return;
+  }
+
+  await expect(connectionsDialog).not.toBeVisible({
+    timeout: params.timeoutMs ?? 15_000,
+  });
+  await waitForInstallDialog(params.page, { timeoutMs: params.timeoutMs });
+
+  for (const [key, value] of Object.entries(params.envValues ?? {})) {
+    await params.page.getByRole("textbox", { name: key }).fill(value);
+  }
+
+  await installMcpServer(params.page);
+}
+
+export async function settleRegistryAfterInstall(page: Page): Promise<void> {
+  await page.waitForLoadState("domcontentloaded");
+  await closeOpenDialogs(page, { timeoutMs: 15_000 });
 }

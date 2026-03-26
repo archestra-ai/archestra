@@ -14,9 +14,14 @@ import {
   openManageCredentialsDialog,
   verifyToolCallResultViaApi,
 } from "../../utils";
+import {
+  addSharedLocalConnection,
+  goToMcpRegistry,
+  installLocalCatalogItem,
+  settleRegistryAfterInstall,
+} from "../../utils/mcp-registry";
 
-// Skipped after redesign, needs to be updated
-test.skip("Verify tool calling using dynamic credentials", async ({
+test("Verify tool calling using dynamic credentials", async ({
   request,
   adminPage,
   editorPage,
@@ -36,6 +41,7 @@ test.skip("Verify tool calling using dynamic credentials", async ({
       page: adminPage,
       cookieHeaders,
       catalogItemName: CATALOG_ITEM_NAME,
+      scope: "org",
       envVars: {
         key: "ARCHESTRA_TEST",
         promptOnInstallation: true,
@@ -51,72 +57,28 @@ test.skip("Verify tool calling using dynamic credentials", async ({
     { user: "Member", page: memberPage, team: "Marketing" },
   ] as const;
 
-  const CONNECT_BUTTON_TIMEOUT = 25_000;
-
   const install = async ({ page, user, team }: (typeof MATRIX_A)[number]) => {
-    // Go to MCP Registry page
-    await goToPage(page, "/mcp/registry");
-    await page.waitForLoadState("domcontentloaded");
-    // Click connect button for the catalog item - wait for it to be visible
-    const btn = page.getByTestId(
-      `${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`,
-    );
-    await btn.waitFor({ state: "visible", timeout: CONNECT_BUTTON_TIMEOUT });
-    await btn.click();
-    // Fill ARCHESTRA_TEST environment variable to mark personal credential
-    await page
-      .getByRole("textbox", { name: "ARCHESTRA_TEST" })
-      .fill(`${user}-personal-credential`);
-    // Install using personal credential
-    await clickButton({ page, options: { name: "Install" } });
+    await goToMcpRegistry(page);
+    await installLocalCatalogItem({
+      page,
+      catalogItemName,
+      envValues: { ARCHESTRA_TEST: `${user}-personal-credential` },
+    });
+    await settleRegistryAfterInstall(page);
 
     // Members lack mcpServer:update permission and cannot create team installations.
     // After personal install, they see an "Already installed" banner.
     if (user === "Member") {
-      await page.waitForLoadState("domcontentloaded");
       return;
     }
 
-    // After adding a server, the install dialog may open automatically.
-    // If it does, close it so the calling test can control when to open it.
-    const assignmentsDialog = page
-      .getByRole("dialog")
-      .filter({ hasText: /Assignments/ });
-    try {
-      await assignmentsDialog.waitFor({ state: "visible", timeout: 5000 });
-      await page.keyboard.press("Escape");
-      await page.waitForTimeout(500);
-    } catch {
-      // Dialog didn't appear - that's fine, continue
-    }
-
-    // Wait for any dialog overlay to fully disappear before proceeding
-    await page
-      .locator('[data-slot="dialog-overlay"]')
-      .waitFor({ state: "hidden", timeout: 10_000 })
-      .catch(() => {});
-
-    // Wait for dialog to close and button to be visible and enabled again
-    const connectButton = page.getByTestId(
-      `${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`,
-    );
-    await connectButton.waitFor({
-      state: "visible",
-      timeout: CONNECT_BUTTON_TIMEOUT,
+    await addSharedLocalConnection({
+      page,
+      catalogItemName,
+      teamName: team,
+      envValues: { ARCHESTRA_TEST: `${team}-team-credential` },
     });
-    await expect(connectButton).toBeEnabled({
-      timeout: CONNECT_BUTTON_TIMEOUT,
-    });
-    await connectButton.click();
-    // Fill ARCHESTRA_TEST environment variable to mark team credential
-    await page
-      .getByRole("textbox", { name: "ARCHESTRA_TEST" })
-      .fill(`${team}-team-credential`);
-    // And this time team credential type should be selected by default for everyone, install using team credential
-    await clickButton({ page, options: { name: "Install" } });
-    // Wait for installation to complete and pod to be ready
-    await page.waitForLoadState("domcontentloaded");
-    await page.waitForTimeout(1_000); // Additional wait for pod to be ready
+    await settleRegistryAfterInstall(page);
   };
 
   // Each user adds personal and 1 team credential

@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { E2eTestId } from "@shared";
 import { expect, goToPage } from "../fixtures";
-import { clickButton, expandTablePagination } from "../utils";
+import { clickButton, expandTablePagination } from "./dialogs";
 
 export async function goToChatApiKeysPage(page: Page): Promise<void> {
   await goToPage(page, "/llm/providers/api-keys");

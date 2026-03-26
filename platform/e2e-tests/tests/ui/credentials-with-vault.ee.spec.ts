@@ -199,9 +199,7 @@ test.describe("Chat API Keys with Readonly Vault", () => {
   });
 });
 
-// Skipped after redesign, needs to be updated
-test.describe
-  .skip("Test self-hosted MCP server with Readonly Vault", () => {
+test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     test("Test self-hosted MCP server with Vault - with prompt on installation", async ({
       adminPage,
       extractCookieHeaders,

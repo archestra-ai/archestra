@@ -120,9 +120,9 @@ export async function openManageCredentialsDialog(
   const settingsDialog = page.getByRole("dialog", {
     name: new RegExp(`^${escapeRegExp(catalogItemName)} Settings$`),
   });
-  const connectionsNavButton = settingsDialog.getByRole("button", {
-    name: /^Connections\b/,
-  });
+  const connectionsNavButton = settingsDialog.getByTestId(
+    E2eTestId.McpServerSettingsConnectionsNavButton,
+  );
   const connectionsHeading = settingsDialog.getByRole("heading", {
     name: "Connections",
     exact: true,

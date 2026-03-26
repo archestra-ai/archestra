@@ -477,7 +477,7 @@ test.describe("Identity Provider Team Sync E2E", () => {
         await ssoPage.goto(`${UI_BASE_URL}/settings/teams`);
         await ssoPage.waitForLoadState("domcontentloaded");
 
-        const cookieHeader = await extractCookieHeader(ssoPage);
+        const cookieHeader = await extractCookieHeader(page);
         const teamsResponse = await archestraApiSdk.getTeams({
           headers: {
             Cookie: cookieHeader,

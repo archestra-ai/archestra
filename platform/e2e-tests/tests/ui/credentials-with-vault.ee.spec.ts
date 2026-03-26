@@ -14,7 +14,6 @@ import {
   clickButton,
   expandTablePagination,
   goToMcpRegistry,
-  installTeamCatalogItemConnection,
   settleRegistryAfterInstall,
   verifyToolCallResultViaApi,
   waitForMcpServerToolsDiscovered,
@@ -293,11 +292,33 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
       name: createCatalogResponse.data.name,
     };
 
-    await installTeamCatalogItemConnection({
-      page: adminPage,
-      catalogItemName: newCatalogItem.name,
-      teamName: DEFAULT_TEAM_NAME,
+    const teamsResponse = await archestraApiSdk.getTeams({
+      headers: { Cookie: cookieHeaders },
     });
+    const defaultTeamId = teamsResponse.data?.data.find(
+      (team) => team.name === DEFAULT_TEAM_NAME,
+    )?.id;
+    if (!defaultTeamId) {
+      throw new Error(`Team "${DEFAULT_TEAM_NAME}" not found`);
+    }
+
+    const installResponse = await archestraApiSdk.installMcpServer({
+      headers: { Cookie: cookieHeaders },
+      body: {
+        name: newCatalogItem.name,
+        catalogId: newCatalogItem.id,
+        teamId: defaultTeamId,
+      },
+    });
+    if (installResponse.error) {
+      throw new Error(
+        `Failed to install readonly-vault MCP server: ${JSON.stringify(installResponse.error)}`,
+      );
+    }
+
+    await goToMcpRegistry(adminPage);
+    await waitForMcpServerToolsDiscovered(adminPage, newCatalogItem.name);
+    await settleRegistryAfterInstall(adminPage);
 
     // Assign tool to profiles using default team credential
     await assignCatalogCredentialToGateway({

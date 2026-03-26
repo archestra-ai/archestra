@@ -1,5 +1,9 @@
 import type { Page } from "@playwright/test";
-import { E2eTestId, getManageCredentialsButtonTestId } from "@shared";
+import {
+  E2eTestId,
+  getManageCredentialsAddToTeamOptionTestId,
+  getManageCredentialsButtonTestId,
+} from "@shared";
 import { expect, goToPage } from "../fixtures";
 import { clickButton, closeOpenDialogs } from "./dialogs";
 import { openManageCredentialsDialog } from "./mcp-gateway";
@@ -168,15 +172,16 @@ export async function addSharedLocalConnection(params: {
   timeoutMs?: number;
 }): Promise<void> {
   await openManageCredentialsDialog(params.page, params.catalogItemName);
-  const connectionsDialog = params.page
-    .getByRole("dialog")
-    .filter({ has: params.page.getByRole("heading", { name: "Connections" }) });
-  await clickButton({
-    page: params.page,
-    options: { name: "Add to team" },
+  const sharedConnectionsSection = params.page.getByTestId(
+    E2eTestId.ManageCredentialsSharedConnectionsSection,
+  );
+  await sharedConnectionsSection
+    .getByTestId(E2eTestId.ManageCredentialsAddToTeamButton)
+    .click({
+      timeout: params.timeoutMs ?? 15_000,
   });
   await params.page
-    .getByRole("menuitem", { name: params.teamName })
+    .getByTestId(getManageCredentialsAddToTeamOptionTestId(params.teamName))
     .click({ timeout: params.timeoutMs ?? 15_000 });
 
   const shouldWaitForDialog =
@@ -192,15 +197,16 @@ export async function addSharedLocalConnection(params: {
       return;
     }
 
-    await expect(connectionsDialog).not.toBeVisible({
+    await expect(
+      sharedConnectionsSection.getByTestId(
+        E2eTestId.ManageCredentialsSharedConnectionsEmptyState,
+      ),
+    ).not.toBeVisible({
       timeout: params.timeoutMs ?? 15_000,
     });
     return;
   }
 
-  await expect(connectionsDialog).not.toBeVisible({
-    timeout: params.timeoutMs ?? 15_000,
-  });
   await waitForInstallDialog(params.page, { timeoutMs: params.timeoutMs });
 
   await fillInstallDialogEnvValues(params.page, params.envValues);

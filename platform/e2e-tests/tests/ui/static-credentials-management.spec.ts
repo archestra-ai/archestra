@@ -87,7 +87,9 @@ test.describe
         if (user === "Member") {
           await openManageCredentialsDialog(page, catalogItemName);
           await expect(
-            page.getByText("No shared connections yet."),
+            page.getByTestId(
+              E2eTestId.ManageCredentialsSharedConnectionsEmptyState,
+            ),
           ).toBeVisible();
           await closeOpenDialogs(page);
         } else {

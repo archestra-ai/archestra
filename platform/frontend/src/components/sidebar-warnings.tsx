@@ -23,11 +23,13 @@ export function SidebarWarnings() {
   });
 
   const isPermissive = globalToolPolicy === "permissive";
+  const canUpdateAgentSettings = canUpdateOrg === true;
 
   // Determine which warnings should be shown (only for authenticated users with org update permission)
-  const showSecurityEngineWarning = !!session && canUpdateOrg && isPermissive;
+  const showSecurityEngineWarning =
+    !!session && canUpdateAgentSettings && isPermissive;
   const showDefaultCredsWarning =
-    canUpdateOrg &&
+    canUpdateAgentSettings &&
     disableBasicAuth === false &&
     !isLoadingCreds &&
     defaultCredentialsEnabled !== undefined &&
@@ -48,7 +50,7 @@ export function SidebarWarnings() {
             <span>
               Security engine off
               {" - "}
-              <Link href="/mcp/tool-policies" className="underline font-medium">
+              <Link href="/settings/agents" className="underline font-medium">
                 Fix
               </Link>
             </span>

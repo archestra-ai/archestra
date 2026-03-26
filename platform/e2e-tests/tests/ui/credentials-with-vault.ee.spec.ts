@@ -222,19 +222,11 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
       await openCatalogItemConnectDialog(adminPage, newCatalogItem.name);
       await adminPage.waitForTimeout(2_000);
 
-      // Select team credential type (defaults to personal now, but vault secrets need a team)
-      await selectTeamCredentialType(adminPage, DEFAULT_TEAM_NAME);
-
-      // Select secret from vault
-      await adminPage
-        .getByTestId(E2eTestId.InlineVaultSecretSelectorSecretTrigger)
-        .click();
-      await adminPage.getByRole("option", { name: secretName }).click();
-      await adminPage.waitForLoadState("domcontentloaded");
-      await adminPage
-        .getByTestId(E2eTestId.InlineVaultSecretSelectorSecretTriggerKey)
-        .click();
-      await adminPage.getByRole("option", { name: secretKey }).click();
+      // The current prompt-on-install UX renders a direct secret input instead
+      // of the older team/vault picker flow.
+      await adminPage.getByRole("textbox", { name: "ARCHESTRA_TEST" }).fill(
+        secretValue,
+      );
 
       // install server
       await clickButton({ page: adminPage, options: { name: "Install" } });

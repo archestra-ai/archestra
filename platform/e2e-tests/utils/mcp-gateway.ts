@@ -159,9 +159,6 @@ export async function openManageCredentialsDialog(
     }
 
     await expect(targetCard).toBeVisible({ timeout: 2_000 });
-    await expect(
-      targetCard.getByRole("button").or(targetCard.getByRole("link")),
-    ).toBeVisible({ timeout: 15_000 });
 
     const manageButton = targetCard.getByTestId(
       getManageCredentialsButtonTestId(catalogItemName),

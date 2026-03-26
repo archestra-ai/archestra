@@ -1,4 +1,4 @@
-import type { APIRequestContext, Page } from "@playwright/test";
+import { type APIRequestContext, expect, type Page } from "@playwright/test";
 import { archestraApiSdk } from "@shared";
 import { testMcpServerCommand } from "@shared/test-mcp-server";
 import { API_BASE_URL, E2eTestId, UI_BASE_URL } from "../consts";
@@ -33,89 +33,106 @@ export async function addCustomSelfHostedCatalogItem({
   await addButton.waitFor({ state: "visible", timeout: 30_000 });
   await addButton.click();
 
-  await page.getByRole("button", { name: "Self-hosted" }).click();
-  await page.getByRole("textbox", { name: "Name *" }).fill(catalogItemName);
-  await page.getByRole("textbox", { name: "Command" }).fill("sh");
+  const createDialog = page.getByRole("dialog", {
+    name: /Add MCP Server to the Private Registry/i,
+  });
+  await expect(createDialog).toBeVisible({ timeout: 30_000 });
+
+  await createDialog.getByRole("button", { name: "Self-hosted" }).click();
+  await createDialog
+    .getByRole("textbox", { name: "Name *" })
+    .fill(catalogItemName);
+  await createDialog.getByRole("textbox", { name: "Command" }).fill("sh");
   const singleLineCommand = testMcpServerCommand.replace(/\n/g, " ");
-  await page
+  await createDialog
     .getByRole("textbox", { name: "Arguments (one per line)" })
     .fill(`-c\n${singleLineCommand}`);
   if (envVars) {
-    await page.getByRole("button", { name: "Add Variable" }).click();
-    await page.getByRole("textbox", { name: "API_KEY" }).fill(envVars.key);
+    await createDialog.getByRole("button", { name: "Add Variable" }).click();
+    await createDialog
+      .getByRole("textbox", { name: "API_KEY" })
+      .fill(envVars.key);
     if (envVars.isSecret) {
-      await page.getByTestId(E2eTestId.SelectEnvironmentVariableType).click();
+      await createDialog
+        .getByTestId(E2eTestId.SelectEnvironmentVariableType)
+        .click();
       await page.getByRole("option", { name: "Secret" }).click();
     }
     if (envVars.promptOnInstallation) {
-      await page
+      await createDialog
         .getByTestId(E2eTestId.PromptOnInstallationCheckbox)
         .click({ force: true });
     }
     if (envVars.vaultSecret) {
-      await page.getByText("Set Secret").click();
-      await page
+      await createDialog.getByText("Set Secret").click();
+      await createDialog
         .getByTestId(E2eTestId.ExternalSecretSelectorTeamTrigger)
         .click();
       await page
         .getByRole("option", { name: envVars.vaultSecret.teamName })
         .click();
-      await page
+      await createDialog
         .getByTestId(E2eTestId.ExternalSecretSelectorSecretTrigger)
         .click();
       await page.getByText(envVars.vaultSecret.name).click();
-      await page
+      await createDialog
         .getByTestId(E2eTestId.ExternalSecretSelectorSecretTriggerKey)
         .click();
       await page.getByRole("option", { name: envVars.vaultSecret.key }).click();
-      await page.getByRole("button", { name: "Confirm" }).click();
+      await createDialog.getByRole("button", { name: "Confirm" }).click();
       await page.waitForTimeout(2_000);
     }
   }
   if (scope && scope !== "personal") {
-    await page
+    await createDialog
       .getByRole("button", { name: /Only you can access this MCP server/i })
       .click();
     const scopeLabel = scope === "org" ? "Organization" : "Teams";
-    await page
+    await createDialog
       .getByRole("button", { name: new RegExp(scopeLabel, "i") })
       .click();
   }
-  await page.getByRole("button", { name: "Add Server" }).click();
+  await createDialog.getByRole("button", { name: "Add Server" }).click();
   await page.waitForLoadState("domcontentloaded");
 
-  await page
-    .getByRole("dialog")
-    .filter({ hasText: /Install -/ })
-    .waitFor({ state: "visible", timeout: 30_000 });
-  await page.keyboard.press("Escape");
-  await page.waitForTimeout(500);
+  let newCatalogItem: { id: string; name: string } | null = null;
+  await expect
+    .poll(
+      async () => {
+        const catalogItems = await archestraApiSdk.getInternalMcpCatalog({
+          headers: { Cookie: cookieHeaders },
+        });
 
-  const catalogItems = await archestraApiSdk.getInternalMcpCatalog({
-    headers: { Cookie: cookieHeaders },
-  });
+        if (catalogItems.error) {
+          throw new Error(
+            `Failed to get catalog items: ${JSON.stringify(catalogItems.error)}`,
+          );
+        }
+        if (!catalogItems.data || catalogItems.data.length === 0) {
+          return false;
+        }
 
-  if (catalogItems.error) {
-    throw new Error(
-      `Failed to get catalog items: ${JSON.stringify(catalogItems.error)}`,
-    );
-  }
-  if (!catalogItems.data || catalogItems.data.length === 0) {
-    throw new Error(
-      `No catalog items returned from API. Response: ${JSON.stringify(catalogItems)}`,
-    );
-  }
+        newCatalogItem =
+          catalogItems.data.find((item) => item.name === catalogItemName) ??
+          null;
+        return newCatalogItem !== null;
+      },
+      {
+        timeout: 30_000,
+        intervals: [250, 500, 1000],
+      },
+    )
+    .toBe(true);
 
-  const newCatalogItem = catalogItems.data.find(
-    (item) => item.name === catalogItemName,
-  );
   if (!newCatalogItem) {
-    const itemNames = catalogItems.data.map((i) => i.name).join(", ");
-    throw new Error(
-      `Failed to find catalog item "${catalogItemName}". Available items: [${itemNames}]`,
-    );
+    throw new Error(`Failed to find catalog item "${catalogItemName}"`);
   }
-  return { id: newCatalogItem.id, name: newCatalogItem.name };
+
+  if (await createDialog.isVisible().catch(() => false)) {
+    await page.keyboard.press("Escape").catch(() => undefined);
+  }
+
+  return { id: newCatalogItem!.id, name: newCatalogItem!.name };
 }
 
 export async function findCatalogItem(

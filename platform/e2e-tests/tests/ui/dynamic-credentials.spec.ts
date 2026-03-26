@@ -1,14 +1,16 @@
 import { archestraApiSdk } from "@shared";
 import {
   ADMIN_EMAIL,
+  DEFAULT_TEAM_NAME,
   E2eTestId,
   EDITOR_EMAIL,
+  ENGINEERING_TEAM_NAME,
+  MARKETING_TEAM_NAME,
   MEMBER_EMAIL,
 } from "../../consts";
 import { expect, goToPage, test } from "../../fixtures";
 import {
   addCustomSelfHostedCatalogItem,
-  addSharedLocalConnection,
   assignCatalogCredentialToGateway,
   assignEngineeringTeamToDefaultProfileViaApi,
   goToMcpRegistry,
@@ -16,6 +18,7 @@ import {
   openManageCredentialsDialog,
   settleRegistryAfterInstall,
   verifyToolCallResultViaApi,
+  waitForMcpServerToolsDiscovered,
 } from "../../utils";
 
 test("Verify tool calling using dynamic credentials", async ({
@@ -49,12 +52,14 @@ test("Verify tool calling using dynamic credentials", async ({
   }
 
   const MATRIX_A = [
-    { user: "Admin", page: adminPage, team: "Default" },
-    { user: "Editor", page: editorPage, team: "Engineering" },
-    { user: "Member", page: memberPage, team: "Marketing" },
+    { user: "Admin", page: adminPage, team: DEFAULT_TEAM_NAME },
+    { user: "Editor", page: editorPage, team: ENGINEERING_TEAM_NAME },
+    { user: "Member", page: memberPage, team: MARKETING_TEAM_NAME },
   ] as const;
 
   const install = async ({ page, user, team }: (typeof MATRIX_A)[number]) => {
+    const pageCookieHeaders = await extractCookieHeaders(page);
+
     await goToMcpRegistry(page);
     await installLocalCatalogItem({
       page,
@@ -69,13 +74,40 @@ test("Verify tool calling using dynamic credentials", async ({
       return;
     }
 
-    await addSharedLocalConnection({
-      page,
-      catalogItemName,
-      teamName: team,
-      envValues: { ARCHESTRA_TEST: `${team}-team-credential` },
+    const teamsResponse = await archestraApiSdk.getTeams({
+      headers: { Cookie: pageCookieHeaders },
     });
+    if (teamsResponse.error) {
+      throw new Error(
+        `Failed to get teams for ${user}: ${JSON.stringify(teamsResponse.error)}`,
+      );
+    }
+
+    const teamId = teamsResponse.data?.data.find(
+      (currentTeam) => currentTeam.name === team,
+    )?.id;
+    if (!teamId) {
+      throw new Error(`Team "${team}" not found for ${user}`);
+    }
+
+    const installResponse = await archestraApiSdk.installMcpServer({
+      headers: { Cookie: pageCookieHeaders },
+      body: {
+        name: catalogItemName,
+        catalogId: catalogItemId,
+        teamId,
+        environmentValues: {
+          ARCHESTRA_TEST: `${team}-team-credential`,
+        },
+      },
+    });
+    if (installResponse.error) {
+      throw new Error(
+        `Failed to install shared connection for ${user}: ${JSON.stringify(installResponse.error)}`,
+      );
+    }
     await settleRegistryAfterInstall(page);
+    await waitForMcpServerToolsDiscovered(page, catalogItemName);
   };
 
   // Each user adds personal and 1 team credential

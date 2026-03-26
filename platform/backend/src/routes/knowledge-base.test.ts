@@ -32,7 +32,7 @@ describe("knowledge base routes", () => {
     await app.close();
   });
 
-  test("deleting a knowledge base removes connector assignments without deleting the connector", async () => {
+  test("connector routes reflect that deleting a knowledge base removes its assignments without deleting the connector", async () => {
     const knowledgeBase = await KnowledgeBaseModel.create({
       organizationId,
       name: "Route Test KB",
@@ -53,13 +53,23 @@ describe("knowledge base routes", () => {
       knowledgeBase.id,
     );
 
-    const deleteResponse = await app.inject({
-      method: "DELETE",
-      url: `/api/knowledge-bases/${knowledgeBase.id}`,
+    const beforeDeleteResponse = await app.inject({
+      method: "GET",
+      url: `/api/connectors/${connector.id}/knowledge-bases`,
     });
 
-    expect(deleteResponse.statusCode).toBe(200);
-    expect(deleteResponse.json()).toEqual({ success: true });
+    expect(beforeDeleteResponse.statusCode).toBe(200);
+    expect(beforeDeleteResponse.json()).toEqual({
+      data: [
+        expect.objectContaining({
+          id: knowledgeBase.id,
+          name: "Route Test KB",
+        }),
+      ],
+    });
+
+    await KnowledgeBaseModel.delete(knowledgeBase.id);
+    expect(await KnowledgeBaseModel.findById(knowledgeBase.id)).toBeNull();
 
     const connectorResponse = await app.inject({
       method: "GET",

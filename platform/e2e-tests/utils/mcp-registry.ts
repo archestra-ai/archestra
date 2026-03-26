@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { E2eTestId } from "@shared";
+import { E2eTestId, getManageCredentialsButtonTestId } from "@shared";
 import { expect, goToPage } from "../fixtures";
 import { clickButton, closeOpenDialogs } from "./dialogs";
 import { openManageCredentialsDialog } from "./mcp-gateway";
@@ -120,6 +120,14 @@ export async function installLocalCatalogItem(params: {
   const shouldWaitForDialog =
     params.expectDialog ?? Object.keys(params.envValues ?? {}).length > 0;
   if (!shouldWaitForDialog) {
+    if (await maybeWaitForInstallDialog(params.page, params.timeoutMs)) {
+      await installMcpServer(params.page);
+      await waitForInstalledCardActions(params.page, params.catalogItemName);
+      await waitForMcpServerToolsDiscovered(
+        params.page,
+        params.catalogItemName,
+      );
+    }
     return;
   }
 
@@ -128,6 +136,8 @@ export async function installLocalCatalogItem(params: {
   await fillInstallDialogEnvValues(params.page, params.envValues);
 
   await installMcpServer(params.page);
+  await waitForInstalledCardActions(params.page, params.catalogItemName);
+  await waitForMcpServerToolsDiscovered(params.page, params.catalogItemName);
 }
 
 export async function installTeamCatalogItemConnection(params: {
@@ -145,6 +155,8 @@ export async function installTeamCatalogItemConnection(params: {
   await selectTeamCredentialType(params.page, params.teamName);
   await fillInstallDialogEnvValues(params.page, params.envValues);
   await installMcpServer(params.page);
+  await waitForInstalledCardActions(params.page, params.catalogItemName);
+  await waitForMcpServerToolsDiscovered(params.page, params.catalogItemName);
 }
 
 export async function addSharedLocalConnection(params: {
@@ -170,6 +182,16 @@ export async function addSharedLocalConnection(params: {
   const shouldWaitForDialog =
     params.expectDialog ?? Object.keys(params.envValues ?? {}).length > 0;
   if (!shouldWaitForDialog) {
+    if (await maybeWaitForInstallDialog(params.page, params.timeoutMs)) {
+      await installMcpServer(params.page);
+      await waitForInstalledCardActions(params.page, params.catalogItemName);
+      await waitForMcpServerToolsDiscovered(
+        params.page,
+        params.catalogItemName,
+      );
+      return;
+    }
+
     await expect(connectionsDialog).not.toBeVisible({
       timeout: params.timeoutMs ?? 15_000,
     });
@@ -184,6 +206,8 @@ export async function addSharedLocalConnection(params: {
   await fillInstallDialogEnvValues(params.page, params.envValues);
 
   await installMcpServer(params.page);
+  await waitForInstalledCardActions(params.page, params.catalogItemName);
+  await waitForMcpServerToolsDiscovered(params.page, params.catalogItemName);
 }
 
 export async function settleRegistryAfterInstall(page: Page): Promise<void> {
@@ -196,6 +220,50 @@ async function fillInstallDialogEnvValues(
   envValues?: Record<string, string>,
 ): Promise<void> {
   for (const [key, value] of Object.entries(envValues ?? {})) {
-    await page.getByRole("textbox", { name: key }).fill(value);
+    const input = page.getByRole("textbox", { name: key });
+    await expect(input).toBeEnabled({ timeout: 15_000 });
+    await input.fill(value);
   }
+}
+
+async function maybeWaitForInstallDialog(
+  page: Page,
+  timeoutMs?: number,
+): Promise<boolean> {
+  try {
+    await waitForInstallDialog(page, {
+      timeoutMs: Math.min(timeoutMs ?? 5_000, 5_000),
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForInstalledCardActions(
+  page: Page,
+  catalogItemName: string,
+): Promise<void> {
+  const targetCard = page.getByTestId(
+    `${E2eTestId.McpServerCard}-${catalogItemName}`,
+  );
+  const manageButton = targetCard.getByTestId(
+    getManageCredentialsButtonTestId(catalogItemName),
+  );
+  const deploymentButton = targetCard.getByRole("button", {
+    name: /^\d+\/\d+$/,
+  });
+  const uninstallButton = targetCard.getByRole("button", { name: "Uninstall" });
+  const progressBar = targetCard.getByRole("progressbar");
+
+  await expect
+    .poll(
+      async () =>
+        !(await progressBar.isVisible().catch(() => false)) &&
+        ((await manageButton.isVisible().catch(() => false)) ||
+          (await deploymentButton.isVisible().catch(() => false)) ||
+          (await uninstallButton.isVisible().catch(() => false))),
+      { timeout: 60_000, intervals: [500, 1000, 2000] },
+    )
+    .toBe(true);
 }

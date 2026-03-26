@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  getAssignmentComboboxDisabledOptionTestId,
+  getAssignmentComboboxOptionTestId,
+  getAssignmentComboboxSearchInputTestId,
+} from "@shared";
 import { ExternalLink, Plus } from "lucide-react";
 import * as React from "react";
 import { Button } from "@/components/ui/button";
@@ -109,6 +114,11 @@ export function AssignmentCombobox({
             onChange={(e) => setSearch(e.target.value)}
             className="h-8 text-sm"
             onKeyDown={(e) => e.stopPropagation()}
+            data-testid={
+              testId
+                ? getAssignmentComboboxSearchInputTestId(testId)
+                : undefined
+            }
           />
         </div>
         <div className="overflow-y-auto flex-1">
@@ -126,6 +136,14 @@ export function AssignmentCombobox({
                       key={item.id}
                       disabled
                       className="cursor-pointer opacity-50"
+                      data-testid={
+                        testId
+                          ? getAssignmentComboboxDisabledOptionTestId(
+                              testId,
+                              item.name,
+                            )
+                          : undefined
+                      }
                     >
                       <div className="flex items-center gap-3 min-w-0 pl-6">
                         {item.icon}
@@ -146,6 +164,11 @@ export function AssignmentCombobox({
                     key={item.id}
                     checked={isSelected}
                     className="cursor-pointer"
+                    data-testid={
+                      testId
+                        ? getAssignmentComboboxOptionTestId(testId, item.name)
+                        : undefined
+                    }
                     onCheckedChange={() => {
                       onToggle(item.id);
                       if (!isSelected) onItemAdded?.(item.id);

@@ -2,6 +2,9 @@ import { expect, type Page } from "@playwright/test";
 import {
   DEFAULT_MCP_GATEWAY_NAME,
   E2eTestId,
+  getAssignmentComboboxDisabledOptionTestId,
+  getAssignmentComboboxOptionTestId,
+  getAssignmentComboboxSearchInputTestId,
   getAgentToolCatalogPillTestId,
 } from "@shared";
 import { goToPage } from "../fixtures";
@@ -72,7 +75,7 @@ async function openCatalogToolAssignment({
   pagePath,
   dialogTitle,
 }: AssignmentTarget): Promise<void> {
-  await goToPage(page, pagePath);
+  await goToPage(page, `${pagePath}?name=${encodeURIComponent(targetName)}`);
   await page.waitForLoadState("domcontentloaded");
 
   const editButton = page.getByTestId(
@@ -84,24 +87,54 @@ async function openCatalogToolAssignment({
   const dialog = page.getByRole("dialog", { name: dialogTitle });
   await expect(dialog).toBeVisible({ timeout: 15_000 });
 
-  const capabilitiesSection = dialog.getByTestId(
+  const capabilitiesAnchor = dialog.getByTestId(
     E2eTestId.AgentCapabilitiesSection,
   );
-  await capabilitiesSection.scrollIntoViewIfNeeded();
-  await expect(capabilitiesSection).toBeVisible({ timeout: 10_000 });
+  await capabilitiesAnchor.scrollIntoViewIfNeeded();
+
+  const capabilitiesHeading = dialog.getByRole("heading", {
+    name: "Capabilities",
+  });
+  await expect(capabilitiesHeading).toBeVisible({ timeout: 10_000 });
 
   const addButton = dialog.getByTestId(E2eTestId.AgentToolsAddButton);
   await expect(addButton).toBeVisible({ timeout: 10_000 });
   await addButton.click();
 
-  const searchInput = page.getByPlaceholder("Search MCP servers...");
+  const searchInput = page.getByTestId(
+    getAssignmentComboboxSearchInputTestId(E2eTestId.AgentToolsAddButton),
+  );
   await expect(searchInput).toBeVisible({ timeout: 10_000 });
   await searchInput.fill(catalogItemName);
-  await page
-    .getByRole("menuitemcheckbox", {
-      name: new RegExp(escapeRegExp(catalogItemName)),
-    })
-    .click();
+
+  const enabledCatalogItem = page.getByTestId(
+    getAssignmentComboboxOptionTestId(
+      E2eTestId.AgentToolsAddButton,
+      catalogItemName,
+    ),
+  );
+  const disabledCatalogItem = page.getByTestId(
+    getAssignmentComboboxDisabledOptionTestId(
+      E2eTestId.AgentToolsAddButton,
+      catalogItemName,
+    ),
+  );
+
+  await expect
+    .poll(
+      async () => {
+        if (await enabledCatalogItem.isVisible().catch(() => false)) {
+          return "enabled";
+        }
+        if (await disabledCatalogItem.isVisible().catch(() => false)) {
+          return "disabled";
+        }
+        return "missing";
+      },
+      { timeout: 30_000, intervals: [500, 1000, 2000] },
+    )
+    .toBe("enabled");
+  await enabledCatalogItem.click();
 
   const pillButton = dialog.getByTestId(
     getAgentToolCatalogPillTestId(catalogItemName),
@@ -112,8 +145,4 @@ async function openCatalogToolAssignment({
   const tokenSelect = page.getByTestId(E2eTestId.TokenSelect);
   await expect(tokenSelect).toBeVisible({ timeout: 10_000 });
   await tokenSelect.click();
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

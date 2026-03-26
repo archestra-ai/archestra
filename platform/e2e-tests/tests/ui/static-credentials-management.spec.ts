@@ -22,10 +22,13 @@ import {
   getVisibleStaticCredentials,
   goToMcpRegistry,
   installLocalCatalogItem,
-  openManageCredentialsDialog,
-  settleRegistryAfterInstall,
-  verifyToolCallResultViaApi,
-} from "../../utils";
+    openManageCredentialsDialog,
+    settleRegistryAfterInstall,
+    waitForMcpServerToolsDiscovered,
+    verifyToolCallResultViaApi,
+  } from "../../utils";
+
+test.describe.configure({ mode: "serial" });
 
 test.describe
   ("Custom Self-hosted MCP Server - installation and static credentials management (vault disabled, prompt-on-installation disabled)", () => {
@@ -126,6 +129,7 @@ test.describe
             );
           }
           await settleRegistryAfterInstall(page);
+          await waitForMcpServerToolsDiscovered(page, catalogItemName);
 
         }
 

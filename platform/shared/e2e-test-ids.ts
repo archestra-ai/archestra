@@ -49,6 +49,9 @@ export const E2eTestId = {
   AgentCapabilitiesSection: "agent-capabilities-section",
   AgentToolsAddButton: "agent-tools-add-button",
   AgentToolCatalogPill: "agent-tool-catalog-pill",
+  AssignmentComboboxSearchInput: "assignment-combobox-search-input",
+  AssignmentComboboxOption: "assignment-combobox-option",
+  AssignmentComboboxDisabledOption: "assignment-combobox-disabled-option",
   RemoveTeamBadge: "remove-team-badge",
   PromptOnInstallationCheckbox: "prompt-on-installation-checkbox",
   RevokeCredentialButton: "revoke-credential-button",
@@ -65,6 +68,14 @@ export const E2eTestId = {
     "inline-vault-secret-selector-secret-trigger",
   InlineVaultSecretSelectorSecretTriggerKey:
     "inline-vault-secret-selector-secret-trigger-key",
+  McpServerSettingsConnectionsNavButton:
+    "mcp-server-settings-connections-nav-button",
+  ManageCredentialsSharedConnectionsSection:
+    "manage-credentials-shared-connections-section",
+  ManageCredentialsSharedConnectionsEmptyState:
+    "manage-credentials-shared-connections-empty-state",
+  ManageCredentialsAddToTeamButton: "manage-credentials-add-to-team-button",
+  ManageCredentialsAddToTeamOption: "manage-credentials-add-to-team-option",
   ManageMembersButton: "manage-members-button",
   // Chat Settings
   ChatApiKeysTable: "chat-api-keys-table",
@@ -135,4 +146,30 @@ export function getManageCredentialsButtonTestId(
   catalogItemName: string,
 ): string {
   return `${E2eTestId.ManageCredentialsButton}-${catalogItemName}`;
+}
+
+export function getAssignmentComboboxSearchInputTestId(
+  comboboxTestId: string,
+): string {
+  return `${E2eTestId.AssignmentComboboxSearchInput}-${comboboxTestId}`;
+}
+
+export function getAssignmentComboboxOptionTestId(
+  comboboxTestId: string,
+  itemName: string,
+): string {
+  return `${E2eTestId.AssignmentComboboxOption}-${comboboxTestId}-${itemName}`;
+}
+
+export function getAssignmentComboboxDisabledOptionTestId(
+  comboboxTestId: string,
+  itemName: string,
+): string {
+  return `${E2eTestId.AssignmentComboboxDisabledOption}-${comboboxTestId}-${itemName}`;
+}
+
+export function getManageCredentialsAddToTeamOptionTestId(
+  teamName: string,
+): string {
+  return `${E2eTestId.ManageCredentialsAddToTeamOption}-${teamName}`;
 }

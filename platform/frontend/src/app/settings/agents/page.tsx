@@ -26,15 +26,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useOrgScopedAgents } from "@/lib/agent.query";
-import { useArchestraMcpIdentity } from "@/lib/archestra-mcp-server";
-import { useChatModels } from "@/lib/chat-models.query";
-import { useAvailableChatApiKeys } from "@/lib/chat-settings.query";
+import { useChatModels } from "@/lib/chat/chat-models.query";
+import { useAvailableChatApiKeys } from "@/lib/chat/chat-settings.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
+import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import {
   useOrganization,
   useUpdateAgentSettings,
   useUpdateSecuritySettings,
 } from "@/lib/organization.query";
-import { useAppName } from "@/lib/use-app-name";
 import {
   type AgentSettingsState,
   buildSavePayload,

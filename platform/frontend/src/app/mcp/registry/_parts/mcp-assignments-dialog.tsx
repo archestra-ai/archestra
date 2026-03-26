@@ -29,9 +29,9 @@ import {
   useProfileToolPatchMutation,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
-import { useAllPermissions } from "@/lib/auth.query";
-import { useCatalogTools } from "@/lib/internal-mcp-catalog.query";
-import { useMcpServersGroupedByCatalog } from "@/lib/mcp-server.query";
+import { useAllPermissions } from "@/lib/auth/auth.query";
+import { useCatalogTools } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpServersGroupedByCatalog } from "@/lib/mcp/mcp-server.query";
 import { cn } from "@/lib/utils";
 
 type CatalogTool =

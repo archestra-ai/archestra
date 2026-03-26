@@ -29,11 +29,12 @@ const ToolContext = createContext<{ hasOpened: boolean }>({ hasOpened: false });
 export const Tool = ({
   className,
   onOpenChange,
+  open,
   children,
   ...props
 }: ToolProps) => {
-  const [hasOpened, setHasOpened] = useState(
-    props.defaultOpen || props.open || false,
+  const [hasOpened, setHasOpened] = useState<boolean>(
+    open ?? Boolean((props as Record<string, unknown>).defaultOpen) ?? true,
   );
 
   const handleOpenChange = (open: boolean) => {
@@ -42,9 +43,10 @@ export const Tool = ({
   };
 
   return (
-    <ToolContext.Provider value={{ hasOpened }}>
+    <ToolContext.Provider value={{ hasOpened: hasOpened || !!open }}>
       <Collapsible
         defaultOpen={false}
+        open={open}
         className={cn("not-prose mb-4 w-full rounded-md border", className)}
         onOpenChange={handleOpenChange}
         {...props}
@@ -144,23 +146,39 @@ export const ToolHeader = ({
   </CollapsibleTrigger>
 );
 
-export type ToolContentProps = ComponentProps<typeof CollapsibleContent>;
+export type ToolContentProps = Omit<
+  ComponentProps<typeof CollapsibleContent>,
+  "forceMount"
+> & {
+  /** Keep children mounted even when closed (useful for MCP apps that need to preserve iframe state) */
+  forceMount?: boolean;
+};
 
 export const ToolContent = ({
   className,
   children,
+  forceMount = false,
   ...props
 }: ToolContentProps) => {
   const { hasOpened } = useContext(ToolContext);
 
+  const resolvedClassName = cn(
+    "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
+    forceMount &&
+      "overflow-hidden data-[state=closed]:max-h-0 data-[state=open]:max-h-[5000px]",
+    className,
+  );
+
+  if (forceMount) {
+    return (
+      <CollapsibleContent className={resolvedClassName} forceMount {...props}>
+        {children}
+      </CollapsibleContent>
+    );
+  }
+
   return (
-    <CollapsibleContent
-      className={cn(
-        "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
-        className,
-      )}
-      {...props}
-    >
+    <CollapsibleContent className={resolvedClassName} {...props}>
       {hasOpened ? children : null}
     </CollapsibleContent>
   );
@@ -174,16 +192,27 @@ export const ToolInput = ({ className, input, ...props }: ToolInputProps) => {
   const serializedInput = JSON.stringify(input, null, 2);
 
   return (
-    <div className={cn("space-y-2 overflow-hidden p-4", className)} {...props}>
-      <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-        Parameters
-      </h4>
-      <div className="rounded-md bg-muted/50">
-        <CodeBlock code={serializedInput} language="json">
-          <CopyButton text={serializedInput} />
-        </CodeBlock>
+    <Collapsible
+      defaultOpen={false}
+      className={cn("space-y-2 overflow-hidden p-4", className)}
+      {...props}
+    >
+      <div className="space-y-2">
+        <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 cursor-pointer">
+          <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+            Parameters
+          </h4>
+          <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in">
+          <div className="rounded-md bg-muted/50 mt-2">
+            <CodeBlock code={serializedInput} language="json">
+              <CopyButton text={serializedInput} />
+            </CodeBlock>
+          </div>
+        </CollapsibleContent>
       </div>
-    </div>
+    </Collapsible>
   );
 };
 

@@ -9,12 +9,12 @@ import { SetupDialog } from "@/components/setup-dialog";
 import { StepCard } from "@/components/step-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useChatOpsStatus } from "@/lib/chatops.query";
-import { useUpdateSlackChatOpsConfig } from "@/lib/chatops-config.query";
-import { usePublicBaseUrl } from "@/lib/config.query";
-import { getFrontendDocsUrl } from "@/lib/docs";
+import { useChatOpsStatus } from "@/lib/chatops/chatops.query";
+import { useUpdateSlackChatOpsConfig } from "@/lib/chatops/chatops-config.query";
+import { usePublicBaseUrl } from "@/lib/config/config.query";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { useOrganization } from "@/lib/organization.query";
-import { useAppName } from "@/lib/use-app-name";
 
 type ConnectionMode = NonNullable<
   NonNullable<

@@ -1,6 +1,6 @@
 import type { archestraApiTypes } from "@shared";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { useDeleteInternalMcpCatalogItem } from "@/lib/internal-mcp-catalog.query";
+import { useDeleteInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
 
 interface DeleteCatalogDialogProps {
   item: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] | null;

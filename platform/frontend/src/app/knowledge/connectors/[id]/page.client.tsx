@@ -67,10 +67,10 @@ import {
   useSyncConnector,
   useTestConnectorConnection,
   useUnassignConnectorFromKnowledgeBase,
-} from "@/lib/connector.query";
-import { formatCronSchedule } from "@/lib/format-cron";
-import { useKnowledgeBases } from "@/lib/knowledge-base.query";
+} from "@/lib/knowledge/connector.query";
+import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
 import { formatDate } from "@/lib/utils";
+import { formatCronSchedule } from "@/lib/utils/format-cron";
 
 type ConnectorRunItem =
   archestraApiTypes.GetConnectorRunsResponses["200"]["data"][number];

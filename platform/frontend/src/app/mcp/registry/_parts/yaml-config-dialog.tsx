@@ -18,11 +18,11 @@ import {
   DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useGetDeploymentYamlPreview,
   useUpdateInternalMcpCatalogItem,
-} from "@/lib/internal-mcp-catalog.query";
-import { useAppName } from "@/lib/use-app-name";
+} from "@/lib/mcp/internal-mcp-catalog.query";
 import { K8sYamlEditor } from "./k8s-yaml-editor";
 
 type CatalogItem =

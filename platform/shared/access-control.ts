@@ -654,9 +654,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.SyncChatModels]: {
     llmProvider: ["update"],
   },
-  [RouteId.SyncChatModelsFull]: {
-    llmProvider: ["update"],
-  },
   [RouteId.UpdateChatMessage]: {
     chat: ["update"],
   },
@@ -789,6 +786,12 @@ export const requiredEndpointPermissionsMap: Partial<
    * Note: Auth is skipped in middleware for this route
    */
   [RouteId.GetPublicIdentityProviders]: {},
+  /**
+   * Get public config for login and invitation UI
+   * Available to unauthenticated users
+   * Note: Auth is skipped in middleware for this route
+   */
+  [RouteId.GetPublicConfig]: {},
   /**
    * Get public appearance settings (theme, logo, font) for login page
    * Available to unauthenticated users
@@ -932,6 +935,11 @@ export const requiredEndpointPermissionsMap: Partial<
 
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},
+
+  // MCP Gateway Routes - available to all authenticated users
+  [RouteId.McpGatewayGet]: {}, // Server discovery endpoint
+  [RouteId.McpGatewayPost]: {}, // JSON-RPC endpoint for resources/read and tools/call
+  [RouteId.McpProxyPost]: {}, // Frontend proxy to MCP Gateway with session auth
 };
 
 /**

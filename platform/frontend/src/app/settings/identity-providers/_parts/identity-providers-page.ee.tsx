@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  E2eTestId,
   SSO_PROVIDER_ID,
   SSO_TRUSTED_PROVIDER_IDS,
   type SsoProviderId,
@@ -12,8 +13,8 @@ import { LoadingSpinner } from "@/components/loading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import config from "@/lib/config";
-import { useIdentityProviders } from "@/lib/identity-provider.query.ee";
+import { useIdentityProviders } from "@/lib/auth/identity-provider.query.ee";
+import config from "@/lib/config/config";
 import { CreateIdentityProviderDialog } from "./create-identity-provider-dialog.ee";
 import { EditIdentityProviderDialog } from "./edit-identity-provider-dialog.ee";
 
@@ -43,6 +44,7 @@ interface IdpConfig {
     tokenEndpoint?: string;
     userInfoEndpoint?: string;
     jwksEndpoint?: string;
+    enableRpInitiatedLogout?: boolean;
     scopes: string[];
     mapping: {
       id: string;
@@ -330,6 +332,7 @@ export function IdentityProvidersSettingsContent() {
               key={config.id}
               className="cursor-pointer hover:shadow-md transition-shadow flex flex-col h-full"
               onClick={() => handleProviderClick(config)}
+              data-testid={`${E2eTestId.IdentityProviderCard}-${config.id}`}
             >
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
@@ -357,6 +360,7 @@ export function IdentityProvidersSettingsContent() {
                   variant={existingProvider ? "outline" : "default"}
                   size="sm"
                   className="w-full"
+                  data-testid={`${E2eTestId.IdentityProviderOpenDialogButton}-${config.id}`}
                 >
                   {existingProvider ? "Edit" : "Enable"}
                 </Button>
@@ -404,6 +408,9 @@ export function IdentityProvidersSettingsContent() {
                     discoveryEndpoint:
                       createConfig.config.defaultOidcConfig
                         ?.discoveryEndpoint || "",
+                    enableRpInitiatedLogout:
+                      createConfig.config.defaultOidcConfig
+                        ?.enableRpInitiatedLogout ?? true,
                     scopes: createConfig.config.defaultOidcConfig?.scopes || [
                       "openid",
                       "email",

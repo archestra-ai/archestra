@@ -6,14 +6,14 @@ import {
 } from "@shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import {
+  applyPendingActions,
+  type PendingToolAction,
+} from "@/lib/chat/pending-tool-state";
+import {
   parseAuthRequired,
   parseExpiredAuth,
   parsePolicyDenied,
-} from "@/lib/llmProviders/common";
-import {
-  applyPendingActions,
-  type PendingToolAction,
-} from "@/lib/pending-tool-state";
+} from "@/lib/interactions/llmProviders/common";
 
 /**
  * Compute the default set of enabled tool IDs for a conversation.

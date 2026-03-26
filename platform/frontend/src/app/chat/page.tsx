@@ -1,6 +1,7 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
+import { E2eTestId } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -72,8 +73,8 @@ import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { TypingText } from "@/components/ui/typing-text";
 import { Version } from "@/components/version";
 import { useDefaultAgentId, useInternalAgents } from "@/lib/agent.query";
-import { useHasPermissions } from "@/lib/auth.query";
-import { useRecentlyGeneratedTitles } from "@/lib/chat.hook";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useRecentlyGeneratedTitles } from "@/lib/chat/chat.hook";
 import {
   fetchConversationEnabledTools,
   useConversation,
@@ -82,28 +83,27 @@ import {
   useStopChatStream,
   useUpdateConversation,
   useUpdateConversationEnabledTools,
-} from "@/lib/chat.query";
-import { useChatAgentState } from "@/lib/chat-agent-state.hook";
-import { useChatModels, useModelsByProvider } from "@/lib/chat-models.query";
+} from "@/lib/chat/chat.query";
+import { useChatAgentState } from "@/lib/chat/chat-agent-state.hook";
+import {
+  useChatModels,
+  useModelsByProvider,
+} from "@/lib/chat/chat-models.query";
 import {
   type SupportedProvider,
   useChatApiKeys,
-} from "@/lib/chat-settings.query";
-import { useConversationShare } from "@/lib/chat-share.query";
+} from "@/lib/chat/chat-settings.query";
+import { useConversationShare } from "@/lib/chat/chat-share.query";
 import {
   conversationStorageKeys,
   getConversationDisplayTitle,
-} from "@/lib/chat-utils";
-import { useConfig } from "@/lib/config.query";
-import { useDialogs } from "@/lib/dialog.hook";
-import { useChatSession } from "@/lib/global-chat.context";
-import { useOrganization } from "@/lib/organization.query";
+} from "@/lib/chat/chat-utils";
+import { useChatSession } from "@/lib/chat/global-chat.context";
 import {
   applyPendingActions,
   clearPendingActions,
   getPendingActions,
-} from "@/lib/pending-tool-state";
-import { useTeams } from "@/lib/team.query";
+} from "@/lib/chat/pending-tool-state";
 import {
   clearModelOverride,
   getSavedAgent,
@@ -113,8 +113,12 @@ import {
   resolveModelForAgent,
   saveAgent,
   saveModelOverride,
-} from "@/lib/use-chat-preferences";
-import { useIsMobile } from "@/lib/use-mobile.hook";
+} from "@/lib/chat/use-chat-preferences";
+import { useConfig } from "@/lib/config/config.query";
+import { useDialogs } from "@/lib/hooks/use-dialog";
+import { useIsMobile } from "@/lib/hooks/use-mobile";
+import { useOrganization } from "@/lib/organization.query";
+import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import ArchestraPromptInput from "./prompt-input";
 
@@ -1993,7 +1997,10 @@ function NoApiKeySetup() {
             Connect an LLM provider to start chatting
           </p>
         </div>
-        <Button onClick={() => setIsDialogOpen(true)}>
+        <Button
+          data-testid={E2eTestId.QuickstartAddApiKeyButton}
+          onClick={() => setIsDialogOpen(true)}
+        >
           <Plus className="h-4 w-4 mr-2" />
           Add API Key
         </Button>

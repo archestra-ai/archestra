@@ -29,7 +29,7 @@ vi.mock("next/link", () => ({
   }) => <a href={href}>{children}</a>,
 }));
 
-vi.mock("@/lib/config", () => ({
+vi.mock("@/lib/config/config", () => ({
   default: new Proxy(
     {},
     {
@@ -41,11 +41,11 @@ vi.mock("@/lib/config", () => ({
   ),
 }));
 
-vi.mock("@/lib/health.query", () => ({
+vi.mock("@/lib/config/health.query", () => ({
   useHealth: () => mockUseHealth(),
 }));
 
-vi.mock("@/lib/github-release.query", () => ({
+vi.mock("@/lib/github/github-release.query", () => ({
   useLatestGitHubRelease: () => mockUseLatestGitHubRelease(),
 }));
 

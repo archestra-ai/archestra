@@ -3,9 +3,9 @@
 import { DEFAULT_APP_NAME } from "@shared";
 import Image from "next/image";
 import { useTheme } from "next-themes";
-import config from "@/lib/config";
+import config from "@/lib/config/config";
+import { DEFAULT_APP_LOGO } from "@/lib/hooks/use-app-name";
 import { useOrgTheme } from "@/lib/theme.hook";
-import { DEFAULT_APP_LOGO } from "@/lib/use-app-name";
 
 interface AppLogoProps {
   /**

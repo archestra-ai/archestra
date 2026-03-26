@@ -1,8 +1,8 @@
-import { useChatApiKeys } from "@/lib/chat-settings.query";
-import { useChatOpsStatus } from "@/lib/chatops.query";
-import config from "@/lib/config";
-import { useConfig } from "@/lib/config.query";
-import { useIncomingEmailStatus } from "@/lib/incoming-email.query";
+import { useChatApiKeys } from "@/lib/chat/chat-settings.query";
+import { useChatOpsStatus } from "@/lib/chatops/chatops.query";
+import { useIncomingEmailStatus } from "@/lib/chatops/incoming-email.query";
+import config from "@/lib/config/config";
+import { useConfig } from "@/lib/config/config.query";
 
 export function useTriggerStatuses() {
   const { data: chatOpsProviders, isLoading: chatOpsLoading } =

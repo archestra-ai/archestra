@@ -19,7 +19,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useArchestraMcpIdentity } from "@/lib/archestra-mcp-server";
+import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { cn } from "@/lib/utils";
 import {
   getCompactToolState,

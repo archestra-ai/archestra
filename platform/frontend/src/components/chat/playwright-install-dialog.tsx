@@ -19,15 +19,15 @@ import {
   useHasPlaywrightMcpTools,
   useProfileToolsWithIds,
   useUpdateConversationEnabledTools,
-} from "@/lib/chat.query";
-import { authClient } from "@/lib/clients/auth/auth-client";
-import { useMcpServers } from "@/lib/mcp-server.query";
+} from "@/lib/chat/chat.query";
 import {
   addPendingAction,
   applyPendingActions,
   getPendingActions,
   PENDING_TOOL_STATE_CHANGE_EVENT,
-} from "@/lib/pending-tool-state";
+} from "@/lib/chat/pending-tool-state";
+import { authClient } from "@/lib/clients/auth/auth-client";
+import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { cn } from "@/lib/utils";
 
 /**

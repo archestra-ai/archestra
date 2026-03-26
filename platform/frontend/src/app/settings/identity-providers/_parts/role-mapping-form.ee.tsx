@@ -1,6 +1,10 @@
 "use client";
 
-import { E2eTestId, type IdentityProviderFormValues } from "@shared";
+import {
+  E2eTestId,
+  getIdpRoleMappingRuleRowTestId,
+  type IdentityProviderFormValues,
+} from "@shared";
 import { Info, Plus, Trash2 } from "lucide-react";
 import { type UseFormReturn, useFieldArray } from "react-hook-form";
 import {
@@ -29,7 +33,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useAppName } from "@/lib/use-app-name";
+import { useAppName } from "@/lib/hooks/use-app-name";
 
 interface RoleMappingFormProps {
   form: UseFormReturn<IdentityProviderFormValues>;
@@ -69,7 +73,10 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
 
       <Accordion type="single" collapsible className="w-full">
         <AccordionItem value="role-mapping" className="border-none">
-          <AccordionTrigger className="hover:no-underline">
+          <AccordionTrigger
+            className="hover:no-underline"
+            data-testid={E2eTestId.IdpRoleMappingAccordionTrigger}
+          >
             <div className="flex items-center gap-2">
               <h4 className="text-md font-medium">Role Mapping (Optional)</h4>
               <TooltipProvider>
@@ -124,7 +131,7 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                     <div
                       key={field.id}
                       className="flex items-start gap-3 p-3 border rounded-md"
-                      data-testid={`role-mapping-rule-${index}`}
+                      data-testid={getIdpRoleMappingRuleRowTestId(index)}
                     >
                       <div className="flex items-start gap-3 w-full flex-1 min-w-0">
                         <FormField

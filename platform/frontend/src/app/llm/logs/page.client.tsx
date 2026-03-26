@@ -30,13 +30,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useProfiles } from "@/lib/agent.query";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import {
   useInteractionSessions,
   useUniqueUserIds,
-} from "@/lib/interaction.query";
-import { DynamicInteraction } from "@/lib/interaction.utils";
-import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
-import { useDateTimeRangePicker } from "@/lib/use-date-time-range-picker";
+} from "@/lib/interactions/interaction.query";
+import { DynamicInteraction } from "@/lib/interactions/interaction.utils";
 import { formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../../_parts/error-boundary";
 

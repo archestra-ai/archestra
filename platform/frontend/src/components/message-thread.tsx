@@ -43,8 +43,8 @@ import { MessageActions } from "@/components/chat/message-actions";
 import { PolicyDeniedTool } from "@/components/chat/policy-denied-tool";
 import Divider from "@/components/divider";
 import { Button } from "@/components/ui/button";
-import { preserveNewlines } from "@/lib/chat-utils";
-import { parsePolicyDenied } from "@/lib/llmProviders/common";
+import { preserveNewlines } from "@/lib/chat/chat-utils";
+import { parsePolicyDenied } from "@/lib/interactions/llmProviders/common";
 import { cn } from "@/lib/utils";
 
 const MessageThread = ({

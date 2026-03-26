@@ -19,7 +19,7 @@ import {
   TeamModel,
   VirtualApiKeyModel,
 } from "@/models";
-import { testProviderApiKey } from "@/routes/chat/routes.models";
+import { testProviderApiKey } from "@/routes/chat/model-fetchers/registry";
 import {
   assertByosEnabled,
   isByosEnabled,
@@ -271,7 +271,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // For optional-key providers (Ollama, vLLM), sync even without an API key value.
       const canSync =
         actualApiKeyValue || PROVIDERS_WITH_OPTIONAL_API_KEY.has(body.provider);
-      if (canSync && modelSyncService.hasFetcher(body.provider)) {
+      if (canSync) {
         try {
           await modelSyncService.syncModelsForApiKey({
             apiKeyId: createdApiKey.id,

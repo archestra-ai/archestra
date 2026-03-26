@@ -202,8 +202,7 @@ test.describe("Knowledge Settings API", () => {
     });
   });
 
-  // TODO: Fix test - error message was updated to support Ollama as embedding provider
-  test.skip("should reject non-OpenAI API key for embedding", async ({
+  test("should reject non-OpenAI API key for embedding", async ({
     request,
     makeApiRequest,
   }) => {
@@ -233,7 +232,7 @@ test.describe("Knowledge Settings API", () => {
 
     const errorBody = await response.json();
     expect(errorBody.error.message).toContain(
-      "Embedding API key must be an OpenAI provider key",
+      "Embedding API key must use a compatible provider (OpenAI or Ollama)",
     );
 
     // Cleanup

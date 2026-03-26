@@ -5,8 +5,9 @@ import {
 } from "@shared";
 
 import { ServerErrorFallback } from "@/components/error-fallback";
-import { getServerApiHeaders } from "@/lib/server-utils";
-import { DEFAULT_TABLE_LIMIT, handleApiError } from "@/lib/utils";
+import { DEFAULT_TABLE_LIMIT } from "@/consts";
+import { handleApiError } from "@/lib/utils";
+import { getServerApiHeaders } from "@/lib/utils/server";
 import McpGatewayLogsPage from "./page.client";
 
 export const dynamic = "force-dynamic";

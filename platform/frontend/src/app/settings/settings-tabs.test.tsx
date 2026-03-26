@@ -26,10 +26,6 @@ vi.mock("@shared", async () => {
   };
 });
 
-vi.mock("@/lib/auth.utils", () => ({
-  hasPermission: vi.fn(),
-}));
-
 let mockSecretsType = "DB";
 
 vi.mock("@/lib/secrets.query", () => ({
@@ -40,7 +36,7 @@ vi.mock("@/lib/secrets.query", () => ({
 
 let mockEnterpriseFeatures = false;
 
-vi.mock("@/lib/config", () => ({
+vi.mock("@/lib/config/config", () => ({
   default: {
     get enterpriseFeatures() {
       return { core: mockEnterpriseFeatures };

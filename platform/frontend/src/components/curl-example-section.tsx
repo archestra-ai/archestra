@@ -5,7 +5,10 @@ import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { CodeBlock } from "@/components/ai-elements/code-block";
 import { Button } from "@/components/ui/button";
-import type { TeamToken, useFetchTeamTokenValue } from "@/lib/team-token.query";
+import type {
+  TeamToken,
+  useFetchTeamTokenValue,
+} from "@/lib/teams/team-token.query";
 import type { useFetchUserTokenValue } from "@/lib/user-token.query";
 
 interface CurlExampleSectionProps {

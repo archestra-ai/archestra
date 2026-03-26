@@ -7,7 +7,7 @@ vi.mock("@/components/editor", () => ({
   Editor: () => <div data-testid="editor" />,
 }));
 
-vi.mock("@/lib/docs", () => ({
+vi.mock("@/lib/docs/docs", () => ({
   getFrontendDocsUrl: (...args: unknown[]) => mockGetFrontendDocsUrl(...args),
 }));
 

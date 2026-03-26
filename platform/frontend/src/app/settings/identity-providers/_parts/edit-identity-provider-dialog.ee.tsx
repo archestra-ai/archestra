@@ -2,6 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  E2eTestId,
   IdentityProviderFormSchema,
   type IdentityProviderFormValues,
 } from "@shared";
@@ -22,7 +23,7 @@ import {
   useDeleteIdentityProvider,
   useIdentityProvider,
   useUpdateIdentityProvider,
-} from "@/lib/identity-provider.query.ee";
+} from "@/lib/auth/identity-provider.query.ee";
 import { OidcConfigForm } from "./oidc-config-form.ee";
 import { SamlConfigForm } from "./saml-config-form.ee";
 
@@ -53,6 +54,7 @@ export function EditIdentityProviderDialog({
       oidcConfig: {
         issuer: "",
         pkce: true,
+        enableRpInitiatedLogout: true,
         clientId: "",
         clientSecret: "",
         discoveryEndpoint: "",
@@ -107,9 +109,10 @@ export function EditIdentityProviderDialog({
               },
             }
           : {
-              oidcConfig: provider.oidcConfig || {
+              oidcConfig: {
                 issuer: "",
                 pkce: true,
+                enableRpInitiatedLogout: true,
                 clientId: "",
                 clientSecret: "",
                 discoveryEndpoint: "",
@@ -120,6 +123,7 @@ export function EditIdentityProviderDialog({
                   name: "name",
                 },
                 overrideUserInfo: true,
+                ...provider.oidcConfig,
               },
             }),
       });
@@ -185,6 +189,7 @@ export function EditIdentityProviderDialog({
                 permissions={{ identityProvider: ["delete"] }}
                 className="sm:mr-auto"
                 onClick={() => setShowDeleteConfirm(true)}
+                data-testid={E2eTestId.IdentityProviderDeleteButton}
               >
                 <Trash2 className="mr-2 h-4 w-4" />
                 Delete
@@ -196,6 +201,7 @@ export function EditIdentityProviderDialog({
                 type="submit"
                 permissions={{ identityProvider: ["update"] }}
                 disabled={updateIdentityProvider.isPending}
+                data-testid={E2eTestId.IdentityProviderUpdateButton}
               >
                 {updateIdentityProvider.isPending
                   ? "Updating..."

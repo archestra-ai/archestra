@@ -38,18 +38,19 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import {
   useConnectors as useAllConnectors,
   useAssignConnectorToKnowledgeBases,
   useConnectors,
   useUnassignConnectorFromKnowledgeBase,
-} from "@/lib/connector.query";
+} from "@/lib/knowledge/connector.query";
 import {
   useDeleteKnowledgeBase,
   useKnowledgeBasesPaginated,
-} from "@/lib/knowledge-base.query";
-import { useTeams } from "@/lib/team.query";
-import { cn, DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
+} from "@/lib/knowledge/knowledge-base.query";
+import { useTeams } from "@/lib/teams/team.query";
+import { cn, formatDate } from "@/lib/utils";
 import { ConnectorTypeIcon } from "./_parts/connector-icons";
 import { CreateConnectorDialog } from "./_parts/create-connector-dialog";
 import { CreateKnowledgeBaseDialog } from "./_parts/create-knowledge-base-dialog";

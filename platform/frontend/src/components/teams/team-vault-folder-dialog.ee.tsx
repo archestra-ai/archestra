@@ -21,14 +21,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useFeature } from "@/lib/config.query";
+import { useFeature } from "@/lib/config/config.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useCheckTeamVaultFolderConnectivity,
   useDeleteTeamVaultFolder,
   useSetTeamVaultFolder,
   useTeamVaultFolder,
-} from "@/lib/team-vault-folder.query.ee";
-import { useAppName } from "@/lib/use-app-name";
+} from "@/lib/teams/team-vault-folder.query.ee";
 
 interface Team {
   id: string;

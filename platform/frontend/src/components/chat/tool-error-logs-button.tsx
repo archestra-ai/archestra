@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import {
   useMcpDeploymentStatuses,
   useMcpServers,
-} from "@/lib/mcp-server.query";
+} from "@/lib/mcp/mcp-server.query";
 
 interface ToolErrorLogsButtonProps {
   toolName: string;

@@ -862,6 +862,39 @@ describe("mcp-reinstall", () => {
       });
     });
 
+    test("passes _meta and annotations as meta when syncing tools", async () => {
+      const server = createServer({ serverType: "remote" });
+      const catalog = createCatalog({ serverType: "remote" });
+
+      const toolMeta = { ui: { resourceUri: "mcp://app/view" } };
+      const toolAnnotations = { readOnlyHint: true };
+
+      vi.mocked(McpServerModel.getToolsFromServer).mockResolvedValue([
+        {
+          name: "ui-tool",
+          description: "Tool with UI",
+          inputSchema: {},
+          _meta: toolMeta,
+          annotations: toolAnnotations,
+        },
+      ]);
+      vi.mocked(ToolModel.syncToolsForCatalog).mockResolvedValue({
+        created: [],
+        updated: [],
+        unchanged: [],
+        deleted: [],
+      });
+      vi.mocked(McpServerModel.update).mockResolvedValue({} as McpServer);
+
+      await autoReinstallServer(server, catalog);
+
+      expect(ToolModel.syncToolsForCatalog).toHaveBeenCalledWith([
+        expect.objectContaining({
+          meta: { _meta: toolMeta, annotations: toolAnnotations },
+        }),
+      ]);
+    });
+
     test("succeeds for local server with full flow", async () => {
       const server = createServer({
         serverType: "local",

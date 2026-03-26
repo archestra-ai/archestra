@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.1.36"
+    "version": "1.1.40"
   },
   "components": {
     "schemas": {
@@ -36871,6 +36871,39 @@
                                   "nullable": true,
                                   "type": "string"
                                 },
+                                "meta": {
+                                  "nullable": true,
+                                  "anyOf": [
+                                    {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "number"
+                                        },
+                                        {
+                                          "type": "boolean"
+                                        },
+                                        {
+                                          "type": "string",
+                                          "nullable": true,
+                                          "enum": [
+                                            null
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "type": "object",
+                                      "additionalProperties": {}
+                                    },
+                                    {
+                                      "type": "array",
+                                      "items": {}
+                                    }
+                                  ]
+                                },
                                 "policiesAutoConfiguredAt": {
                                   "nullable": true,
                                   "type": "string",
@@ -36905,6 +36938,7 @@
                                 "delegateToAgentId",
                                 "name",
                                 "description",
+                                "meta",
                                 "policiesAutoConfiguredAt",
                                 "policiesAutoConfiguringStartedAt",
                                 "policiesAutoConfiguredReasoning",
@@ -37732,6 +37766,39 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "meta": {
+                            "nullable": true,
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      null
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": {}
+                              },
+                              {
+                                "type": "array",
+                                "items": {}
+                              }
+                            ]
+                          },
                           "policiesAutoConfiguredAt": {
                             "nullable": true,
                             "type": "string",
@@ -37766,6 +37833,7 @@
                           "delegateToAgentId",
                           "name",
                           "description",
+                          "meta",
                           "policiesAutoConfiguredAt",
                           "policiesAutoConfiguringStartedAt",
                           "policiesAutoConfiguredReasoning",
@@ -38391,6 +38459,39 @@
                               "nullable": true,
                               "type": "string"
                             },
+                            "meta": {
+                              "nullable": true,
+                              "anyOf": [
+                                {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "boolean"
+                                    },
+                                    {
+                                      "type": "string",
+                                      "nullable": true,
+                                      "enum": [
+                                        null
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "additionalProperties": {}
+                                },
+                                {
+                                  "type": "array",
+                                  "items": {}
+                                }
+                              ]
+                            },
                             "policiesAutoConfiguredAt": {
                               "nullable": true,
                               "type": "string",
@@ -38425,6 +38526,7 @@
                             "delegateToAgentId",
                             "name",
                             "description",
+                            "meta",
                             "policiesAutoConfiguredAt",
                             "policiesAutoConfiguringStartedAt",
                             "policiesAutoConfiguredReasoning",
@@ -38990,6 +39092,39 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "meta": {
+                            "nullable": true,
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      null
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": {}
+                              },
+                              {
+                                "type": "array",
+                                "items": {}
+                              }
+                            ]
+                          },
                           "policiesAutoConfiguredAt": {
                             "nullable": true,
                             "type": "string",
@@ -39024,6 +39159,7 @@
                           "delegateToAgentId",
                           "name",
                           "description",
+                          "meta",
                           "policiesAutoConfiguredAt",
                           "policiesAutoConfiguringStartedAt",
                           "policiesAutoConfiguredReasoning",
@@ -39589,6 +39725,39 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "meta": {
+                            "nullable": true,
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      null
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": {}
+                              },
+                              {
+                                "type": "array",
+                                "items": {}
+                              }
+                            ]
+                          },
                           "policiesAutoConfiguredAt": {
                             "nullable": true,
                             "type": "string",
@@ -39623,6 +39792,7 @@
                           "delegateToAgentId",
                           "name",
                           "description",
+                          "meta",
                           "policiesAutoConfiguredAt",
                           "policiesAutoConfiguringStartedAt",
                           "policiesAutoConfiguredReasoning",
@@ -40200,6 +40370,39 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "meta": {
+                            "nullable": true,
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      null
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": {}
+                              },
+                              {
+                                "type": "array",
+                                "items": {}
+                              }
+                            ]
+                          },
                           "policiesAutoConfiguredAt": {
                             "nullable": true,
                             "type": "string",
@@ -40234,6 +40437,7 @@
                           "delegateToAgentId",
                           "name",
                           "description",
+                          "meta",
                           "policiesAutoConfiguredAt",
                           "policiesAutoConfiguringStartedAt",
                           "policiesAutoConfiguredReasoning",
@@ -41018,6 +41222,39 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "meta": {
+                            "nullable": true,
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      null
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": {}
+                              },
+                              {
+                                "type": "array",
+                                "items": {}
+                              }
+                            ]
+                          },
                           "policiesAutoConfiguredAt": {
                             "nullable": true,
                             "type": "string",
@@ -41052,6 +41289,7 @@
                           "delegateToAgentId",
                           "name",
                           "description",
+                          "meta",
                           "policiesAutoConfiguredAt",
                           "policiesAutoConfiguringStartedAt",
                           "policiesAutoConfiguredReasoning",
@@ -44211,6 +44449,39 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "meta": {
+                        "nullable": true,
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "boolean"
+                              },
+                              {
+                                "type": "string",
+                                "nullable": true,
+                                "enum": [
+                                  null
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "array",
+                            "items": {}
+                          }
+                        ]
+                      },
                       "policiesAutoConfiguredAt": {
                         "nullable": true,
                         "type": "string",
@@ -44245,6 +44516,7 @@
                       "delegateToAgentId",
                       "name",
                       "description",
+                      "meta",
                       "policiesAutoConfiguredAt",
                       "policiesAutoConfiguringStartedAt",
                       "policiesAutoConfiguredReasoning",
@@ -61600,252 +61872,6 @@
         }
       }
     },
-    "/api/chat/models/sync-full": {
-      "post": {
-        "operationId": "syncChatModelsFull",
-        "tags": [
-          "Chat"
-        ],
-        "description": "Sync models from providers, overwriting all fields including custom modifications\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmProvider:update`: Modify LLM provider configuration and model pricing",
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "success"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmProvider:update"
-          ]
-        }
-      }
-    },
     "/api/models": {
       "get": {
         "operationId": "getModelsWithApiKeys",
@@ -61951,6 +61977,9 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "ignored": {
+                        "type": "boolean"
+                      },
                       "discoveredViaLlmProxy": {
                         "type": "boolean"
                       },
@@ -62005,76 +62034,24 @@
                           "additionalProperties": false
                         }
                       },
-                      "capabilities": {
-                        "type": "object",
-                        "properties": {
-                          "contextLength": {
-                            "nullable": true,
-                            "type": "integer",
-                            "minimum": -2147483648,
-                            "maximum": 2147483647
-                          },
-                          "inputModalities": {
-                            "nullable": true,
-                            "type": "array",
-                            "items": {
-                              "type": "string",
-                              "enum": [
-                                "text",
-                                "image",
-                                "audio",
-                                "video",
-                                "pdf"
-                              ]
-                            }
-                          },
-                          "outputModalities": {
-                            "nullable": true,
-                            "type": "array",
-                            "items": {
-                              "type": "string",
-                              "enum": [
-                                "text",
-                                "image",
-                                "audio"
-                              ]
-                            }
-                          },
-                          "supportsToolCalling": {
-                            "nullable": true,
-                            "type": "boolean"
-                          },
-                          "pricePerMillionInput": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "pricePerMillionOutput": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "isCustomPrice": {
-                            "type": "boolean"
-                          },
-                          "priceSource": {
-                            "type": "string",
-                            "enum": [
-                              "custom",
-                              "models_dev",
-                              "default"
-                            ]
-                          }
-                        },
-                        "required": [
-                          "contextLength",
-                          "inputModalities",
-                          "outputModalities",
-                          "supportsToolCalling",
-                          "pricePerMillionInput",
-                          "pricePerMillionOutput",
-                          "isCustomPrice",
-                          "priceSource"
-                        ],
-                        "additionalProperties": false
+                      "pricePerMillionInput": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "pricePerMillionOutput": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "isCustomPrice": {
+                        "type": "boolean"
+                      },
+                      "priceSource": {
+                        "type": "string",
+                        "enum": [
+                          "custom",
+                          "models_dev",
+                          "default"
+                        ]
                       }
                     },
                     "required": [
@@ -62091,6 +62068,7 @@
                       "completionPricePerToken",
                       "customPricePerMillionInput",
                       "customPricePerMillionOutput",
+                      "ignored",
                       "discoveredViaLlmProxy",
                       "lastSyncedAt",
                       "createdAt",
@@ -62098,7 +62076,10 @@
                       "isFastest",
                       "isBest",
                       "apiKeys",
-                      "capabilities"
+                      "pricePerMillionInput",
+                      "pricePerMillionOutput",
+                      "isCustomPrice",
+                      "priceSource"
                     ],
                     "additionalProperties": false
                   }
@@ -62347,6 +62328,9 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "ignored": {
+                    "type": "boolean"
+                  },
                   "inputModalities": {
                     "nullable": true,
                     "minItems": 1,
@@ -62488,6 +62472,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "ignored": {
+                      "type": "boolean"
+                    },
                     "discoveredViaLlmProxy": {
                       "type": "boolean"
                     },
@@ -62518,6 +62505,7 @@
                     "completionPricePerToken",
                     "customPricePerMillionInput",
                     "customPricePerMillionOutput",
+                    "ignored",
                     "discoveredViaLlmProxy",
                     "lastSyncedAt",
                     "createdAt",
@@ -72882,6 +72870,45 @@
         }
       }
     },
+    "/api/config/public": {
+      "get": {
+        "operationId": "getPublicConfig",
+        "tags": [
+          "Config"
+        ],
+        "description": "Get public config\n\nAuthentication:\n\nNot required.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "disableBasicAuth": {
+                      "type": "boolean"
+                    },
+                    "disableInvitations": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "disableBasicAuth",
+                    "disableInvitations"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      }
+    },
     "/api/config": {
       "get": {
         "operationId": "getConfig",
@@ -72985,6 +73012,10 @@
                         },
                         "virtualKeyDefaultExpirationSeconds": {
                           "type": "number"
+                        },
+                        "mcpSandboxDomain": {
+                          "nullable": true,
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -72999,7 +73030,8 @@
                         "orchestratorK8sNamespace",
                         "isQuickstart",
                         "ngrokDomain",
-                        "virtualKeyDefaultExpirationSeconds"
+                        "virtualKeyDefaultExpirationSeconds",
+                        "mcpSandboxDomain"
                       ],
                       "additionalProperties": false
                     },
@@ -97180,7 +97212,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "Delete a knowledge base and all its connectors\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeBase:delete`: Delete knowledge bases and connectors",
+        "description": "Delete a knowledge base and remove its connector assignments\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeBase:delete`: Delete knowledge bases and connectors",
         "parameters": [
           {
             "schema": {
@@ -105283,6 +105315,7 @@
     },
     "/v1/mcp/{profileId}": {
       "get": {
+        "operationId": "mcpGatewayGet",
         "tags": [
           "MCP Gateway"
         ],
@@ -105396,6 +105429,7 @@
         }
       },
       "post": {
+        "operationId": "mcpGatewayPost",
         "tags": [
           "MCP Gateway"
         ],
@@ -105426,6 +105460,48 @@
           "200": {
             "description": "Default Response"
           }
+        }
+      }
+    },
+    "/api/mcp/{agentId}": {
+      "post": {
+        "operationId": "mcpProxyPost",
+        "tags": [
+          "mcp-proxy"
+        ],
+        "description": "Proxy MCP Gateway requests with session auth\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": {}
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "agentId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -114740,7 +114816,8 @@
                               "user_token",
                               "org_token",
                               "team_token",
-                              "external_idp"
+                              "external_idp",
+                              "session"
                             ]
                           },
                           "createdAt": {
@@ -115120,7 +115197,8 @@
                         "user_token",
                         "org_token",
                         "team_token",
-                        "external_idp"
+                        "external_idp",
+                        "session"
                       ]
                     },
                     "createdAt": {
@@ -123301,7 +123379,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Get organization appearance settings\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Get organization appearance settings\n\nAuthentication:\n\nNot required.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -135465,6 +135543,39 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "meta": {
+                        "nullable": true,
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "boolean"
+                              },
+                              {
+                                "type": "string",
+                                "nullable": true,
+                                "enum": [
+                                  null
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "array",
+                            "items": {}
+                          }
+                        ]
+                      },
                       "policiesAutoConfiguredAt": {
                         "nullable": true,
                         "type": "string",
@@ -135532,6 +135643,7 @@
                       "delegateToAgentId",
                       "name",
                       "description",
+                      "meta",
                       "policiesAutoConfiguredAt",
                       "policiesAutoConfiguringStartedAt",
                       "policiesAutoConfiguredReasoning",
@@ -140452,7 +140564,7 @@
         "tags": [
           "Identity Providers"
         ],
-        "description": "Get public identity provider list for login page (no secrets exposed)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Get public identity provider list for login page (no secrets exposed)\n\nAuthentication:\n\nNot required.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -140728,6 +140840,9 @@
                             "type": "string"
                           },
                           "pkce": {
+                            "type": "boolean"
+                          },
+                          "enableRpInitiatedLogout": {
                             "type": "boolean"
                           },
                           "clientId": {
@@ -141298,6 +141413,9 @@
                       "pkce": {
                         "type": "boolean"
                       },
+                      "enableRpInitiatedLogout": {
+                        "type": "boolean"
+                      },
                       "clientId": {
                         "type": "string"
                       },
@@ -141624,6 +141742,9 @@
                           "type": "string"
                         },
                         "pkce": {
+                          "type": "boolean"
+                        },
+                        "enableRpInitiatedLogout": {
                           "type": "boolean"
                         },
                         "clientId": {
@@ -142455,6 +142576,9 @@
                         "pkce": {
                           "type": "boolean"
                         },
+                        "enableRpInitiatedLogout": {
+                          "type": "boolean"
+                        },
                         "clientId": {
                           "type": "string"
                         },
@@ -143022,6 +143146,9 @@
                       "pkce": {
                         "type": "boolean"
                       },
+                      "enableRpInitiatedLogout": {
+                        "type": "boolean"
+                      },
                       "clientId": {
                         "type": "string"
                       },
@@ -143349,6 +143476,9 @@
                           "type": "string"
                         },
                         "pkce": {
+                          "type": "boolean"
+                        },
+                        "enableRpInitiatedLogout": {
                           "type": "boolean"
                         },
                         "clientId": {

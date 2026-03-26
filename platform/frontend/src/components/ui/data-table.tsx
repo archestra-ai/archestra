@@ -27,6 +27,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 import { DataTablePagination } from "./data-table-pagination";
 
 const COMPACT_ICON_COLUMN_IDS = new Set(["icon", "avatar"]);
@@ -56,6 +57,8 @@ interface DataTableProps<TData, TValue> {
   getRowId?: (row: TData, index: number) => string;
   /** Render a sub-component below a row when it is expanded. */
   renderSubComponent?: (props: { row: Row<TData> }) => React.ReactNode;
+  /** Return an optional class name for each rendered row. */
+  getRowClassName?: (row: TData) => string | undefined;
   /** Show a loading spinner instead of "No results" when data is being fetched */
   isLoading?: boolean;
   /** Custom empty state message (defaults to "No results") */
@@ -85,6 +88,7 @@ export function DataTable<TData, TValue>({
   hideSelectedCount,
   getRowId,
   renderSubComponent,
+  getRowClassName,
   isLoading = false,
   emptyMessage = "No results",
   emptyIcon,
@@ -143,6 +147,7 @@ export function DataTable<TData, TValue>({
     onColumnVisibilityChange: setColumnVisibility,
     manualPagination,
     manualSorting,
+    autoResetPageIndex: false,
     pageCount: pagination
       ? Math.ceil(pagination.total / pagination.pageSize)
       : undefined,
@@ -217,9 +222,10 @@ export function DataTable<TData, TValue>({
                 <React.Fragment key={row.id}>
                   <TableRow
                     data-state={row.getIsSelected() && "selected"}
-                    className={
-                      onRowClick ? "cursor-pointer hover:bg-muted/50" : ""
-                    }
+                    className={cn(
+                      onRowClick ? "cursor-pointer hover:bg-muted/50" : "",
+                      getRowClassName?.(row.original),
+                    )}
                     onClick={(e) => onRowClick?.(row.original, e)}
                   >
                     {row.getVisibleCells().map((cell) => (

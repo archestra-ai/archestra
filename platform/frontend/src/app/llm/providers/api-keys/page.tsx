@@ -54,11 +54,11 @@ import {
   useChatApiKeys,
   useDeleteChatApiKey,
   useUpdateChatApiKey,
-} from "@/lib/chat-settings.query";
-import { useFeature } from "@/lib/config.query";
-import { getFrontendDocsUrl } from "@/lib/docs";
+} from "@/lib/chat/chat-settings.query";
+import { useFeature } from "@/lib/config/config.query";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useOrganization } from "@/lib/organization.query";
-import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 import { useSetProviderAction } from "../layout";
 
 const SCOPE_ICONS: Record<ChatApiKeyScope, React.ReactNode> = {

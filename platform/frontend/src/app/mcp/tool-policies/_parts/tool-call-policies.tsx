@@ -20,7 +20,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useUniqueExternalAgentIds } from "@/lib/interaction.query";
+import { useUniqueExternalAgentIds } from "@/lib/interactions/interaction.query";
 import {
   useCallPolicyMutation,
   useToolInvocationPolicies,
@@ -32,7 +32,7 @@ import {
   type CallPolicyAction,
   getCallPolicyActionFromPolicies,
 } from "@/lib/policy.utils";
-import { useTeams } from "@/lib/team.query";
+import { useTeams } from "@/lib/teams/team.query";
 import { CallPolicyToggle } from "./call-policy-toggle";
 import { PolicyCard } from "./policy-card";
 import {

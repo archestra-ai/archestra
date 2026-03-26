@@ -4,6 +4,7 @@ import {
   archestraApiSdk,
   type archestraApiTypes,
   E2eTestId,
+  getManageCredentialsButtonTestId,
   type McpDeploymentStatusEntry,
 } from "@shared";
 import {
@@ -40,12 +41,12 @@ import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
 import { useCreateProfile } from "@/lib/agent.query";
 import { useBulkAssignTools } from "@/lib/agent-tools.query";
-import { useHasPermissions } from "@/lib/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { useFeature } from "@/lib/config.query";
-import { useCatalogTools } from "@/lib/internal-mcp-catalog.query";
-import { useMcpServers, useMcpServerTools } from "@/lib/mcp-server.query";
-import { useTeams } from "@/lib/team.query";
+import { useFeature } from "@/lib/config/config.query";
+import { useCatalogTools } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpServers, useMcpServerTools } from "@/lib/mcp/mcp-server.query";
+import { useTeams } from "@/lib/teams/team.query";
 import {
   computeDeploymentStatusSummary,
   DeploymentStatusDot,
@@ -478,6 +479,7 @@ export function McpServerCard({
                   <Avatar
                     className="size-6 border-2 border-background cursor-pointer hover:opacity-80 transition-opacity"
                     onClick={() => openSettingsPage("connections")}
+                    data-testid={getManageCredentialsButtonTestId(item.name)}
                   >
                     <AvatarFallback className="text-muted-foreground bg-muted">
                       <Plus className="h-3 w-3" />

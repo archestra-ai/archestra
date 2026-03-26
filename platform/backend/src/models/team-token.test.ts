@@ -97,12 +97,15 @@ describe("TeamTokenModel", () => {
         teamId: team.id,
       });
 
-      const tokens = await TeamTokenModel.findAll();
+      const tokens = await TeamTokenModel.findAll(org.id);
       expect(tokens).toHaveLength(2);
     });
 
-    test("returns empty array when no tokens exist", async () => {
-      const tokens = await TeamTokenModel.findAll();
+    test("returns empty array when no tokens exist", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const tokens = await TeamTokenModel.findAll(org.id);
       expect(tokens).toHaveLength(0);
     });
   });

@@ -37,6 +37,7 @@ export { default as invitationRoutes } from "./invitation";
 export { default as knowledgeBaseRoutes } from "./knowledge-base";
 export { default as limitsRoutes } from "./limits";
 export { mcpGatewayRoutes } from "./mcp-gateway";
+export { mcpProxyRoutes } from "./mcp-proxy";
 export { default as mcpServerRoutes } from "./mcp-server";
 export { default as mcpServerInstallationRequestRoutes } from "./mcp-server-installation-requests";
 export { default as mcpToolCallRoutes } from "./mcp-tool-call";

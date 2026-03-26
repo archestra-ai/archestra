@@ -71,25 +71,25 @@ import {
   useSyncAgentDelegations,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
-import { useArchestraMcpIdentity } from "@/lib/archestra-mcp-server";
-import { useHasPermissions } from "@/lib/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { useConnectors } from "@/lib/connector.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
+import { useConnectors } from "@/lib/knowledge/connector.query";
+import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
+import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import {
   fetchCatalogTools,
   useCatalogTools,
   useInternalMcpCatalog,
-} from "@/lib/internal-mcp-catalog.query";
-import { useKnowledgeBases } from "@/lib/knowledge-base.query";
+} from "@/lib/mcp/internal-mcp-catalog.query";
 import {
   type McpInstallOrchestrator,
   useMcpInstallOrchestrator,
-} from "@/lib/mcp-install-orchestrator.hook";
+} from "@/lib/mcp/mcp-install-orchestrator.hook";
 import {
   useMcpServers,
   useMcpServersGroupedByCatalog,
-} from "@/lib/mcp-server.query";
-import { useAppName } from "@/lib/use-app-name";
+} from "@/lib/mcp/mcp-server.query";
 import { cn } from "@/lib/utils";
 import {
   filterAndSortInitialAgents,

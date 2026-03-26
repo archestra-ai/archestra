@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import config from "@/lib/config";
+import config from "@/lib/config/config";
 
 const { externalProxyUrls } = config.api;
 

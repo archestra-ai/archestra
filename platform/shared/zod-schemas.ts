@@ -158,6 +158,7 @@ export const IdentityProviderOidcConfigSchema = z
   .object({
     issuer: z.string(),
     pkce: z.boolean(),
+    enableRpInitiatedLogout: z.boolean().optional(),
     clientId: z.string(),
     clientSecret: z.string(),
     authorizationEndpoint: z.string().optional(),

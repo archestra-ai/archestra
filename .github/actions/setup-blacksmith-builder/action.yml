@@ -1,0 +1,7 @@
+name: Setup Blacksmith Builder
+description: Wrapper around useblacksmith/setup-docker-builder pinned to a vetted version.
+runs:
+  using: composite
+  steps:
+    - name: Setup Blacksmith Builder
+      uses: useblacksmith/setup-docker-builder@ef12d5b165b596e3aa44ea8198d8fde563eab402 # v1.4.0

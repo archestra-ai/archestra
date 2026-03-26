@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { type TeamToken, useRotateToken } from "@/lib/team-token.query";
+import { type TeamToken, useRotateToken } from "@/lib/teams/team-token.query";
 
 interface TokenManagerDialogProps {
   open: boolean;

@@ -484,44 +484,6 @@ test.describe("Knowledge Bases API", () => {
       await deleteKnowledgeBase(request, kg.id);
     });
 
-    test.skip("connectors are cascade-deleted when knowledge base is deleted", async ({
-      request,
-      makeApiRequest,
-      createKnowledgeBase,
-      createConnector,
-    }) => {
-      const uniqueSuffix = crypto.randomUUID().slice(0, 8);
-      const kgRes = await createKnowledgeBase(
-        request,
-        `E2E Knowledge Base Cascade ${uniqueSuffix}`,
-      );
-      const kg = await kgRes.json();
-
-      const connRes = await createConnector(
-        request,
-        kg.id,
-        `E2E Conn Cascade ${uniqueSuffix}`,
-      );
-      const connector = await connRes.json();
-
-      // Delete the knowledge base
-      const deleteResponse = await makeApiRequest({
-        request,
-        method: "delete",
-        urlSuffix: `/api/knowledge-bases/${kg.id}`,
-      });
-      const result = await deleteResponse.json();
-      expect(result.success).toBe(true);
-
-      // Verify connector is gone (knowledge base cascade-deleted the connector)
-      const getResponse = await makeApiRequest({
-        request,
-        method: "get",
-        urlSuffix: `/api/connectors/${connector.id}`,
-        ignoreStatusCheck: true,
-      });
-      expect(getResponse.status()).toBe(404);
-    });
   });
 
   test.describe("Connector Runs", () => {

@@ -2,7 +2,8 @@ import type { SupportedProvider } from "@shared";
 import { vi } from "vitest";
 import ApiKeyModelModel from "@/models/api-key-model";
 import ModelModel from "@/models/model";
-import { describe, expect, test } from "@/test";
+import { modelFetchers } from "@/routes/chat/model-fetchers";
+import { afterEach, describe, expect, test } from "@/test";
 import { modelSyncService } from "./model-sync";
 
 // Mock the models.dev client to avoid external API calls
@@ -13,6 +14,14 @@ vi.mock("@/clients/models-dev-client", () => ({
 }));
 
 describe("ModelSyncService", () => {
+  const originalOpenAiFetcher = modelFetchers.openai;
+  const originalGeminiFetcher = modelFetchers.gemini;
+
+  afterEach(() => {
+    modelFetchers.openai = originalOpenAiFetcher;
+    modelFetchers.gemini = originalGeminiFetcher;
+  });
+
   test("stores models with the API key's provider, not detected provider", async ({
     makeOrganization,
     makeSecret,
@@ -26,7 +35,7 @@ describe("ModelSyncService", () => {
 
     // Register a fetcher that returns models with various detected providers
     // (simulating an OpenAI-compatible proxy returning models from multiple providers)
-    modelSyncService.registerFetcher("openai", async () => [
+    modelFetchers.openai = async () => [
       {
         id: "gpt-4o",
         displayName: "GPT-4o",
@@ -44,7 +53,7 @@ describe("ModelSyncService", () => {
         displayName: "Gemini 2.5 Pro",
         provider: "gemini" as SupportedProvider,
       },
-    ]);
+    ];
 
     await modelSyncService.syncModelsForApiKey({
       apiKeyId: apiKey.id,
@@ -103,13 +112,13 @@ describe("ModelSyncService", () => {
       provider: "openai",
     });
 
-    modelSyncService.registerFetcher("openai", async () => [
+    modelFetchers.openai = async () => [
       {
         id: "gpt-4o",
         displayName: "GPT-4o",
         provider: "openai" as SupportedProvider,
       },
-    ]);
+    ];
 
     // Initial sync creates the model
     await modelSyncService.syncModelsForApiKey({
@@ -122,12 +131,9 @@ describe("ModelSyncService", () => {
     const model = await ModelModel.findByProviderAndModelId("openai", "gpt-4o");
     expect(model).not.toBeNull();
     // biome-ignore lint/style/noNonNullAssertion: asserted above
-    await ModelModel.updatePricing(model!.id, {
+    await ModelModel.update(model!.id, {
       customPricePerMillionInput: "1.00",
       customPricePerMillionOutput: "2.00",
-    });
-    // biome-ignore lint/style/noNonNullAssertion: asserted above
-    await ModelModel.update(model!.id, {
       inputModalities: ["text", "image"],
       outputModalities: ["text"],
     });
@@ -164,5 +170,110 @@ describe("ModelSyncService", () => {
     expect(afterForceRefresh?.customPricePerMillionOutput).toBeNull();
     expect(afterForceRefresh?.inputModalities).toBeNull();
     expect(afterForceRefresh?.outputModalities).toBeNull();
+  });
+
+  test("infers Gemini modalities and backfills missing values without overwriting user edits", async ({
+    makeOrganization,
+    makeSecret,
+    makeChatApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret({
+      secret: { apiKey: "vertex-placeholder" },
+    });
+    const apiKey = await makeChatApiKey(org.id, secret.id, {
+      provider: "gemini",
+    });
+
+    await ModelModel.create({
+      externalId: "gemini/gemini-2.5-flash",
+      provider: "gemini",
+      modelId: "gemini-2.5-flash",
+      description: null,
+      contextLength: null,
+      inputModalities: null,
+      outputModalities: null,
+      supportsToolCalling: null,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      lastSyncedAt: new Date(),
+    });
+
+    modelFetchers.gemini = async () => [
+      {
+        id: "gemini-2.5-flash",
+        displayName: "Gemini 2.5 Flash",
+        provider: "gemini" as SupportedProvider,
+      },
+      {
+        id: "gemini-embedding-001",
+        displayName: "Gemini Embedding 001",
+        provider: "gemini" as SupportedProvider,
+      },
+      {
+        id: "gemini-live-2.5-flash-native-audio",
+        displayName: "Gemini Live 2.5 Flash Native Audio",
+        provider: "gemini" as SupportedProvider,
+      },
+      {
+        id: "gemini-2.5-flash-image-preview",
+        displayName: "Gemini 2.5 Flash Image Preview",
+        provider: "gemini" as SupportedProvider,
+      },
+    ];
+
+    await modelSyncService.syncModelsForApiKey({
+      apiKeyId: apiKey.id,
+      provider: "gemini",
+      apiKeyValue: "vertex-placeholder",
+    });
+
+    const flash = await ModelModel.findByProviderAndModelId(
+      "gemini",
+      "gemini-2.5-flash",
+    );
+    expect(flash).not.toBeNull();
+    expect(flash?.inputModalities).toEqual(["text"]);
+    expect(flash?.outputModalities).toEqual(["text"]);
+
+    const embedding = await ModelModel.findByProviderAndModelId(
+      "gemini",
+      "gemini-embedding-001",
+    );
+    expect(embedding?.inputModalities).toEqual(["text"]);
+    expect(embedding?.outputModalities).toEqual([]);
+
+    const liveAudio = await ModelModel.findByProviderAndModelId(
+      "gemini",
+      "gemini-live-2.5-flash-native-audio",
+    );
+    expect(liveAudio?.inputModalities).toEqual(["text", "audio"]);
+    expect(liveAudio?.outputModalities).toEqual(["audio"]);
+
+    const imagePreview = await ModelModel.findByProviderAndModelId(
+      "gemini",
+      "gemini-2.5-flash-image-preview",
+    );
+    expect(imagePreview?.inputModalities).toEqual(["text", "image"]);
+    expect(imagePreview?.outputModalities).toEqual(["image"]);
+
+    // biome-ignore lint/style/noNonNullAssertion: asserted above
+    await ModelModel.update(flash!.id, {
+      inputModalities: ["text", "image"],
+      outputModalities: ["text", "image"],
+    });
+
+    await modelSyncService.syncModelsForApiKey({
+      apiKeyId: apiKey.id,
+      provider: "gemini",
+      apiKeyValue: "vertex-placeholder",
+    });
+
+    const flashAfterResync = await ModelModel.findByProviderAndModelId(
+      "gemini",
+      "gemini-2.5-flash",
+    );
+    expect(flashAfterResync?.inputModalities).toEqual(["text", "image"]);
+    expect(flashAfterResync?.outputModalities).toEqual(["text", "image"]);
   });
 });

@@ -8,7 +8,6 @@ import type {
   ModelCapabilities,
   PatchModelBody,
   PriceSource,
-  UpdateModelPricing,
 } from "@/types";
 
 /**
@@ -167,13 +166,17 @@ class ModelModel {
         set: {
           externalId: data.externalId,
           description: data.description,
+          contextLength: sql`COALESCE(${schema.modelsTable.contextLength}, excluded.context_length)`,
+          inputModalities: sql`COALESCE(${schema.modelsTable.inputModalities}, excluded.input_modalities)`,
+          outputModalities: sql`COALESCE(${schema.modelsTable.outputModalities}, excluded.output_modalities)`,
+          supportsToolCalling: sql`COALESCE(${schema.modelsTable.supportsToolCalling}, excluded.supports_tool_calling)`,
           promptPricePerToken: data.promptPricePerToken,
           completionPricePerToken: data.completionPricePerToken,
           lastSyncedAt: new Date(),
           updatedAt: new Date(),
           // NOTE: customPricePerMillionInput/Output intentionally NOT updated
-          // NOTE: contextLength, inputModalities, outputModalities, supportsToolCalling
-          // intentionally NOT updated to preserve user-edited values
+          // NOTE: capability fields only backfill when the existing DB value is null
+          // to preserve user-edited values while still populating missing metadata
         },
       })
       .returning();
@@ -224,13 +227,17 @@ class ModelModel {
             set: {
               externalId: sql`excluded.external_id`,
               description: sql`excluded.description`,
+              contextLength: sql`COALESCE(${schema.modelsTable.contextLength}, excluded.context_length)`,
+              inputModalities: sql`COALESCE(${schema.modelsTable.inputModalities}, excluded.input_modalities)`,
+              outputModalities: sql`COALESCE(${schema.modelsTable.outputModalities}, excluded.output_modalities)`,
+              supportsToolCalling: sql`COALESCE(${schema.modelsTable.supportsToolCalling}, excluded.supports_tool_calling)`,
               promptPricePerToken: sql`excluded.prompt_price_per_token`,
               completionPricePerToken: sql`excluded.completion_price_per_token`,
               lastSyncedAt: sql`excluded.last_synced_at`,
               updatedAt: sql`NOW()`,
               // NOTE: customPricePerMillionInput/Output intentionally NOT updated
-              // NOTE: contextLength, inputModalities, outputModalities, supportsToolCalling
-              // intentionally NOT updated to preserve user-edited values
+              // NOTE: capability fields only backfill when the existing DB value is null
+              // to preserve user-edited values while still populating missing metadata
             },
           })
           .returning();
@@ -384,6 +391,9 @@ class ModelModel {
     if (data.customPricePerMillionOutput !== undefined) {
       set.customPricePerMillionOutput = data.customPricePerMillionOutput;
     }
+    if (data.ignored !== undefined) {
+      set.ignored = data.ignored;
+    }
     if (data.inputModalities !== undefined) {
       set.inputModalities = data.inputModalities;
     }
@@ -394,27 +404,6 @@ class ModelModel {
     const [result] = await db
       .update(schema.modelsTable)
       .set(set)
-      .where(eq(schema.modelsTable.id, id))
-      .returning();
-
-    return result || null;
-  }
-
-  /**
-   * Update custom pricing for a model by its internal UUID.
-   * Set to null to reset to default pricing.
-   */
-  static async updatePricing(
-    id: string,
-    data: UpdateModelPricing,
-  ): Promise<Model | null> {
-    const [result] = await db
-      .update(schema.modelsTable)
-      .set({
-        customPricePerMillionInput: data.customPricePerMillionInput,
-        customPricePerMillionOutput: data.customPricePerMillionOutput,
-        updatedAt: new Date(),
-      })
       .where(eq(schema.modelsTable.id, id))
       .returning();
 
@@ -559,6 +548,22 @@ class ModelModel {
       isCustomPrice: pricing.source === "custom",
       priceSource: pricing.source,
     };
+  }
+
+  static supportsTextChat(model: Model): boolean {
+    if (model.ignored) {
+      return false;
+    }
+
+    if (model.inputModalities && !model.inputModalities.includes("text")) {
+      return false;
+    }
+
+    if (model.outputModalities && !model.outputModalities.includes("text")) {
+      return false;
+    }
+
+    return true;
   }
 }
 

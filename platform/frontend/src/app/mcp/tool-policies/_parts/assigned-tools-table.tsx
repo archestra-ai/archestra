@@ -35,8 +35,14 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  DEFAULT_FILTER_ALL,
+  DEFAULT_SORT_BY,
+  DEFAULT_TABLE_LIMIT,
+} from "@/consts";
 import { useAutoConfigurePolicies } from "@/lib/agent-tools.query";
-import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
   useBulkCallPolicyMutation,
   useBulkResultPolicyMutation,
@@ -55,14 +61,8 @@ import {
 import {
   type ToolWithAssignmentsData,
   useToolsWithAssignments,
-} from "@/lib/tool.query";
-import { isMcpToolByProperties } from "@/lib/tool.utils";
-import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
-import {
-  DEFAULT_FILTER_ALL,
-  DEFAULT_SORT_BY,
-  DEFAULT_TABLE_LIMIT,
-} from "@/lib/utils";
+} from "@/lib/tools/tool.query";
+import { isMcpToolByProperties } from "@/lib/tools/tool.utils";
 import type { ToolsInitialData } from "../page";
 import { CallPolicyToggle } from "./call-policy-toggle";
 

@@ -19,8 +19,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { useCompleteOnboarding } from "@/lib/organization.query";
-import { useAppName } from "@/lib/use-app-name";
 import { cn } from "@/lib/utils";
 
 interface AlternativeOnboardingDialogProps {

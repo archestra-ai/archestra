@@ -9,7 +9,7 @@ import {
   prefetchToolInvocationPolicies,
   prefetchToolResultPolicies,
 } from "@/lib/policy.query";
-import type { ToolWithAssignmentsData } from "@/lib/tool.query";
+import type { ToolWithAssignmentsData } from "@/lib/tools/tool.query";
 import { AssignedToolsTable } from "./_parts/assigned-tools-table";
 import { ToolDetailsDialog } from "./_parts/tool-details-dialog";
 import type { ToolsInitialData } from "./page";

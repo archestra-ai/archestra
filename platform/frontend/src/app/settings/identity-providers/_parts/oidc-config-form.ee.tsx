@@ -1,7 +1,8 @@
 "use client";
 
 import type { IdentityProviderFormValues } from "@shared";
-import { Plus, X } from "lucide-react";
+import { ExternalLink, Plus, X } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useState } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import { Badge } from "@/components/ui/badge";
@@ -325,6 +326,37 @@ export function OidcConfigForm({
             )}
           />
         )}
+
+        <FormField
+          control={form.control}
+          name="oidcConfig.enableRpInitiatedLogout"
+          render={({ field }) => (
+            <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+              <FormControl>
+                <Checkbox
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                />
+              </FormControl>
+              <div className="space-y-1 leading-none">
+                <FormLabel>Enable RP-Initiated Logout</FormLabel>
+                <FormDescription>
+                  Send the <code>post_logout_redirect_uri</code> parameter
+                  during sign-out.{" "}
+                  <Link
+                    href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 underline underline-offset-4"
+                  >
+                    Learn more
+                    <ExternalLink className="h-3 w-3" />
+                  </Link>
+                </FormDescription>
+              </div>
+            </FormItem>
+          )}
+        />
 
         <FormField
           control={form.control}

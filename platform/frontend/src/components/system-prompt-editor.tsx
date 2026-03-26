@@ -3,11 +3,11 @@
 import { DocsPage, SYSTEM_PROMPT_TEMPLATE_EXPRESSIONS } from "@shared";
 
 import { Editor } from "@/components/editor";
-import { getFrontendDocsUrl } from "@/lib/docs";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import {
   computeHandlebarsReplaceOffsets,
   shouldShowHandlebarsCompletions,
-} from "@/lib/handlebars-completion";
+} from "@/lib/utils/handlebars-completion";
 
 export function SystemPromptEditor({
   value,

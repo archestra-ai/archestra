@@ -13,7 +13,7 @@ import { Response } from "@/components/ai-elements/response";
 import { MessageActions } from "@/components/chat/message-actions";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { preserveNewlines } from "@/lib/chat-utils";
+import { preserveNewlines } from "@/lib/chat/chat-utils";
 import { cn } from "@/lib/utils";
 
 export interface FileAttachment {

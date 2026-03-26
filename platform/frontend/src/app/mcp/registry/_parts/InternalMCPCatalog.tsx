@@ -25,23 +25,8 @@ import {
 } from "@/components/oauth-confirmation-dialog";
 import { SearchInput } from "@/components/search-input";
 import { Button } from "@/components/ui/button";
-import { useHasPermissions } from "@/lib/auth.query";
-import { authClient } from "@/lib/clients/auth/auth-client";
-import { useDialogs } from "@/lib/dialog.hook";
-import { useMcpRegistryServer } from "@/lib/external-mcp-catalog.query";
-import {
-  useInternalMcpCatalog,
-  useMcpCatalogLabelKeys,
-  useMcpCatalogLabelValues,
-} from "@/lib/internal-mcp-catalog.query";
-import {
-  useInstallMcpServer,
-  useMcpDeploymentStatuses,
-  useMcpServers,
-  useReauthenticateMcpServer,
-  useReinstallMcpServer,
-} from "@/lib/mcp-server.query";
-import { useInitiateOAuth } from "@/lib/oauth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useInitiateOAuth } from "@/lib/auth/oauth.query";
 import {
   clearInstallationCompleteCatalogId,
   clearPendingAfterEnvVars,
@@ -56,8 +41,23 @@ import {
   setOAuthServerType,
   setOAuthState,
   setOAuthTeamId,
-} from "@/lib/oauth-session";
-import websocketService from "@/lib/websocket";
+} from "@/lib/auth/oauth-session";
+import { authClient } from "@/lib/clients/auth/auth-client";
+import { useDialogs } from "@/lib/hooks/use-dialog";
+import { useMcpRegistryServer } from "@/lib/mcp/external-mcp-catalog.query";
+import {
+  useInternalMcpCatalog,
+  useMcpCatalogLabelKeys,
+  useMcpCatalogLabelValues,
+} from "@/lib/mcp/internal-mcp-catalog.query";
+import {
+  useInstallMcpServer,
+  useMcpDeploymentStatuses,
+  useMcpServers,
+  useReauthenticateMcpServer,
+  useReinstallMcpServer,
+} from "@/lib/mcp/mcp-server.query";
+import websocketService from "@/lib/websocket/websocket";
 import { CreateCatalogDialog } from "./create-catalog-dialog";
 import { CustomServerRequestDialog } from "./custom-server-request-dialog";
 import { DeleteCatalogDialog } from "./delete-catalog-dialog";

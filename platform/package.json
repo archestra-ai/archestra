@@ -1,6 +1,6 @@
 {
   "name": "archestra-platform",
-  "version": "1.1.36",
+  "version": "1.1.40",
   "description": "Enterprise MCP platform",
   "author": "Archestra",
   "engines": {
@@ -71,5 +71,5 @@
       "ai@6.0.90": "patches/ai@6.0.90.patch"
     }
   },
-  "packageManager": "pnpm@10.29.3"
+  "packageManager": "pnpm@10.33.0"
 }

@@ -225,7 +225,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.DeleteKnowledgeBase,
-        description: "Delete a knowledge base and all its connectors",
+        description:
+          "Delete a knowledge base and remove its connector assignments",
         tags: ["Knowledge Bases"],
         params: z.object({ id: z.string() }),
         response: constructResponseSchema(DeleteObjectResponseSchema),

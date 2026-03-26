@@ -43,8 +43,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { TablePagination } from "@/components/ui/table-pagination";
+import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useProfiles } from "@/lib/agent.query";
-import { useSession } from "@/lib/auth.query";
+import { useSession } from "@/lib/auth/auth.query";
 import {
   useBulkUpdateChatOpsBindings,
   useChatOpsBindings,
@@ -52,9 +53,9 @@ import {
   useCreateChatOpsDmBinding,
   useRefreshChatOpsChannelDiscovery,
   useUpdateChatOpsBinding,
-} from "@/lib/chatops.query";
-import { useAppName } from "@/lib/use-app-name";
-import { cn, DEFAULT_TABLE_LIMIT } from "@/lib/utils";
+} from "@/lib/chatops/chatops.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
+import { cn } from "@/lib/utils";
 import { ChannelsEmptyState } from "./channels-empty-state";
 import type { ProviderConfig } from "./types";
 

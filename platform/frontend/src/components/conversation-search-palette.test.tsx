@@ -21,20 +21,20 @@ vi.mock("@uidotdev/usehooks", () => ({
   useDebounce: (value: string) => value,
 }));
 
-vi.mock("@/lib/platform.hook", () => ({
+vi.mock("@/lib/hooks/use-platform", () => ({
   usePlatform: () => ({ modKey: "⌘", altKey: "⌥", isMac: true }),
 }));
 
-vi.mock("@/lib/auth.hook", () => ({
+vi.mock("@/lib/auth/auth.hook", () => ({
   useIsAuthenticated: () => true,
 }));
 
-vi.mock("@/lib/chat-utils", () => ({
+vi.mock("@/lib/chat/chat-utils", () => ({
   getConversationDisplayTitle: (title: string | null) =>
     title ?? "Untitled chat",
 }));
 
-vi.mock("@/lib/chat.query", () => ({
+vi.mock("@/lib/chat/chat.query", () => ({
   useConversations: () => ({
     data: [
       {

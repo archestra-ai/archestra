@@ -225,6 +225,10 @@ export const UpdateAgentSchema = UpdateAgentSchemaBase.superRefine(
 );
 
 export type Agent = z.infer<typeof SelectAgentSchema>;
+export type AgentAccessContext = Pick<
+  Agent,
+  "id" | "organizationId" | "scope" | "authorId"
+>;
 export type InsertAgent = z.input<typeof InsertAgentSchema>;
 export type UpdateAgent = z.infer<typeof UpdateAgentSchema>;
 

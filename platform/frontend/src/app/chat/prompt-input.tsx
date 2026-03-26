@@ -52,13 +52,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useProfile } from "@/lib/agent.query";
-import { useHasPermissions } from "@/lib/auth.query";
-import { useChatPlaceholder } from "@/lib/chat-placeholder.hook";
-import { conversationStorageKeys } from "@/lib/chat-utils";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useChatPlaceholder } from "@/lib/chat/chat-placeholder.hook";
+import { conversationStorageKeys } from "@/lib/chat/chat-utils";
+import type { ModelSource } from "@/lib/chat/use-chat-preferences";
+import { useModelSelectorDisplay } from "@/lib/chat/use-model-selector-display.hook";
+import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { useOrganization } from "@/lib/organization.query";
-import type { ModelSource } from "@/lib/use-chat-preferences";
-import { useIsMobile } from "@/lib/use-mobile.hook";
-import { useModelSelectorDisplay } from "@/lib/use-model-selector-display.hook";
 
 interface ArchestraPromptInputProps {
   onSubmit: (

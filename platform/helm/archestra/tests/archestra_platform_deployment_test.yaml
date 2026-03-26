@@ -564,6 +564,100 @@ tests:
             mountPath: /var/run/gcp
             readOnly: true
 
+  - it: should mount diagnostics volume and env var when diagnostics are enabled
+    documentIndex: 1
+    set:
+      archestra.diagnostics.enabled: true
+      archestra.worker.enabled: false
+      archestra.deploymentStrategy.type: Recreate
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_NODE_DIAGNOSTIC_DIR
+            value: /var/diagnostics
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: diagnostics
+            persistentVolumeClaim:
+              claimName: RELEASE-NAME-archestra-platform-diagnostics
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: diagnostics
+            mountPath: /var/diagnostics
+            readOnly: false
+
+  - it: should use an existing diagnostics claim when configured
+    documentIndex: 1
+    set:
+      archestra.diagnostics.enabled: true
+      archestra.diagnostics.existingClaimName: customer-diagnostics
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: diagnostics
+            persistentVolumeClaim:
+              claimName: customer-diagnostics
+
+  - it: should fail when chart-managed diagnostics use ReadWriteOnce with web and worker pods
+    set:
+      archestra.diagnostics.enabled: true
+      archestra.replicaCount: 1
+      archestra.worker.enabled: true
+      archestra.worker.replicaCount: 1
+      archestra.diagnostics.accessModes:
+        - ReadWriteOnce
+    asserts:
+      - failedTemplate:
+          errorMessage: "Configuration error: archestra.diagnostics.enabled with a chart-managed claim requires ReadWriteMany access when more than one diagnostics-writing pod can run concurrently. Use archestra.diagnostics.accessModes=[ReadWriteMany] with a compatible storage class, or disable diagnostics for multi-pod/shared-rollout environments."
+
+  - it: should fail when chart-managed diagnostics use ReadWriteOnce with rolling surge updates
+    set:
+      archestra.diagnostics.enabled: true
+      archestra.worker.enabled: false
+      archestra.replicaCount: 1
+      archestra.deploymentStrategy.type: RollingUpdate
+      archestra.deploymentStrategy.rollingUpdate.maxSurge: 1
+      archestra.diagnostics.accessModes:
+        - ReadWriteOnce
+    asserts:
+      - failedTemplate:
+          errorMessage: "Configuration error: archestra.diagnostics.enabled with a chart-managed claim requires ReadWriteMany access when more than one diagnostics-writing pod can run concurrently. Use archestra.diagnostics.accessModes=[ReadWriteMany] with a compatible storage class, or disable diagnostics for multi-pod/shared-rollout environments."
+
+  - it: should allow chart-managed diagnostics with ReadWriteMany
+    documentIndex: 1
+    set:
+      archestra.diagnostics.enabled: true
+      archestra.replicaCount: 4
+      archestra.worker.enabled: true
+      archestra.worker.replicaCount: 3
+      archestra.diagnostics.accessModes:
+        - ReadWriteMany
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: diagnostics
+            persistentVolumeClaim:
+              claimName: RELEASE-NAME-archestra-platform-diagnostics
+
+  - it: should set heap snapshot env var when diagnostics heap snapshots are enabled
+    documentIndex: 1
+    set:
+      archestra.diagnostics.enabled: true
+      archestra.worker.enabled: false
+      archestra.deploymentStrategy.type: Recreate
+      archestra.diagnostics.heapSnapshotsNearHeapLimit: 1
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_NODE_HEAPSNAPSHOT_NEAR_HEAP_LIMIT
+            value: "1"
+
   - it: should set ARCHESTRA_ORCHESTRATOR_KUBECONFIG env var when kubeconfig volume is mounted
     documentIndex: 1
     set:

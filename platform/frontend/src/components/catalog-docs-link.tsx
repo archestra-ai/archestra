@@ -1,7 +1,7 @@
 "use client";
 
 import { ExternalLink } from "lucide-react";
-import { getVisibleDocsUrl } from "@/lib/docs";
+import { getVisibleDocsUrl } from "@/lib/docs/docs";
 
 export function CatalogDocsLink({
   url,

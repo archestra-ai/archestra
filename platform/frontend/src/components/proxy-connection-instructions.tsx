@@ -13,9 +13,9 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import config from "@/lib/config";
-import { getFrontendDocsUrl } from "@/lib/docs";
-import { useAppName } from "@/lib/use-app-name";
+import config from "@/lib/config/config";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useAppName } from "@/lib/hooks/use-app-name";
 
 const { externalProxyUrls, internalProxyUrl } = config.api;
 

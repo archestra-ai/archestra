@@ -1,3 +1,16 @@
+import type { ClientCapabilities } from "@modelcontextprotocol/sdk/types.js";
+
+/** Extended ClientCapabilities with UI extension support (replaces @mcp-ui/client re-export). */
+type ClientCapabilitiesWithExtensions = ClientCapabilities & {
+  extensions?: Record<string, unknown>;
+};
+
+const UI_EXTENSION_CAPABILITIES = {
+  "io.modelcontextprotocol/ui": {
+    mimeTypes: ["text/html;profile=mcp-app"] as const,
+  },
+} as const;
+
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import {
@@ -5,7 +18,11 @@ import {
   StreamableHTTPError,
 } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import type {
+  ContentBlock,
+  ReadResourceResult,
+  Tool,
+} from "@modelcontextprotocol/sdk/types.js";
 import {
   MCP_CATALOG_INSTALL_PATH,
   MCP_CATALOG_INSTALL_QUERY_PARAM,
@@ -13,6 +30,7 @@ import {
   MCP_CATALOG_SERVER_QUERY_PARAM,
   parseFullToolName,
 } from "@shared";
+import QuickLRU from "quick-lru";
 import config from "@/config";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
@@ -37,6 +55,22 @@ import type {
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { previewToolResultContent } from "@/utils/tool-result-preview";
 import { K8sAttachTransport } from "./k8s-attach-transport";
+
+export class McpServerNotReadyError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "McpServerNotReadyError";
+  }
+}
+
+export class McpServerConnectionTimeoutError extends Error {
+  constructor(
+    message = "MCP server did not become reachable within 30 seconds. Verify its configuration and runtime logs, then try again.",
+  ) {
+    super(message);
+    this.name = "McpServerConnectionTimeoutError";
+  }
+}
 
 /**
  * Thrown when a stored HTTP session ID is no longer valid (e.g. pod restarted).
@@ -66,6 +100,8 @@ export type TokenAuthContext = {
   isExternalIdp?: boolean;
   /** Raw JWT token for propagation to underlying MCP servers (set when isExternalIdp is true) */
   rawToken?: string;
+  /** True if authenticated via browser session (MCP proxy route) */
+  isSessionAuth?: boolean;
 };
 
 /**
@@ -131,6 +167,16 @@ type TransportKind = "stdio" | "http";
 
 const HTTP_CONCURRENCY_LIMIT = 4;
 
+const RESOURCE_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 1 day
+const RESOURCE_CACHE_MAX_SIZE = 1000;
+
+type ResourceContents = { contents: ReadResourceResult["contents"] };
+
+type CachedResource = {
+  result: ResourceContents;
+  ttl: number;
+};
+
 class McpClient {
   private clients = new Map<string, Client>();
   private activeConnections = new Map<string, Client>();
@@ -147,6 +193,12 @@ class McpClient {
     string,
     { sessionEndpointUrl: string | null; sessionEndpointPodName: string | null }
   >();
+  // Cache for resource reads: key is `${agentId}:${uri}`, value is cached result with TTL.
+  // Bounded to RESOURCE_CACHE_MAX_SIZE entries (LRU eviction) to prevent unbounded growth
+  // in multi-tenant environments with many agents and resources.
+  private resourceCache = new QuickLRU<string, CachedResource>({
+    maxSize: RESOURCE_CACHE_MAX_SIZE,
+  });
   // Short-lived cache for MCP server secrets to avoid N+1 queries when multiple
   // tool calls hit the same MCP server within a batch or concurrent request window.
   // Key: targetMcpServerId, Value: { result, expiresAt }
@@ -207,19 +259,22 @@ class McpClient {
     options?: { conversationId?: string },
   ): Promise<CommonToolResult> {
     // Derive auth info for logging
-    const authInfo = tokenAuth
-      ? {
-          userId: tokenAuth.userId,
-          authMethod: deriveAuthMethod(tokenAuth),
-        }
-      : undefined;
+    const authInfo =
+      tokenAuth && Object.keys(tokenAuth).length
+        ? {
+            userId: tokenAuth.userId,
+            authMethod: deriveAuthMethod(tokenAuth),
+          }
+        : undefined;
 
     // Validate and get tool metadata
     const validationResult = await this.validateAndGetTool(toolCall, agentId);
     if ("error" in validationResult) {
       return validationResult.error;
     }
-    const { tool, catalogItem } = validationResult;
+    const { tool, catalogItem, resolvedToolCall } = validationResult;
+    // Use the resolved name (may have been prefixed by suffix fallback lookup)
+    toolCall = resolvedToolCall;
 
     const targetMcpServerIdResult =
       await this.determineTargetMcpServerIdForCatalogItem({
@@ -302,16 +357,19 @@ class McpClient {
           name: targetToolName,
           arguments: toolCall.arguments,
         });
-
         // Apply template and return
-        return await this.createSuccessResult(
+        return await this.createSuccessResult({
           toolCall,
           agentId,
           mcpServerName,
-          result.content,
-          !!result.isError,
+          content: result.content as ContentBlock[],
+          isError: !!result.isError,
+          _meta: result._meta,
           authInfo,
-        );
+          structuredContent: result.structuredContent as
+            | Record<string, unknown>
+            | undefined,
+        });
       } catch (error) {
         // Handle stale HTTP session.  The MCP SDK skips the `initialize`
         // handshake when `transport.sessionId` is already set (session
@@ -571,6 +629,12 @@ class McpClient {
       }
     }
 
+    // Create the client with UI extension capabilities
+    const capabilities: ClientCapabilitiesWithExtensions = {
+      roots: { listChanged: true },
+      extensions: UI_EXTENSION_CAPABILITIES,
+    };
+
     // Create new client
     logger.info({ connectionKey }, "Creating new MCP client");
     const client = new Client(
@@ -579,7 +643,7 @@ class McpClient {
         version: "1.0.0",
       },
       {
-        capabilities: {},
+        capabilities,
       },
     );
 
@@ -672,14 +736,34 @@ class McpClient {
     toolCall: CommonToolCall,
     agentId: string,
   ): Promise<
-    | { tool: McpToolAssignment; catalogItem: InternalMcpCatalog }
+    | {
+        tool: McpToolAssignment;
+        catalogItem: InternalMcpCatalog;
+        resolvedToolCall: CommonToolCall;
+      }
     | { error: CommonToolResult }
   > {
     // Get MCP tool from agent-assigned tools
-    const mcpTools = await ToolModel.getMcpToolsAssignedToAgent(
+    let mcpTools = await ToolModel.getMcpToolsAssignedToAgent(
       [toolCall.name],
       agentId,
     );
+
+    // Fallback: if the name has no server prefix (no "__"), try finding a tool
+    // that ends with "__<name>". This handles MCP App iframes calling oncalltool
+    // with the raw tool name (e.g. "refresh-stats" instead of "system__refresh-stats"),
+    // which happens when third-party hosts render MCP Apps.
+    if (mcpTools.length === 0 && !toolCall.name.includes("__")) {
+      mcpTools = await ToolModel.getMcpToolsAssignedToAgentBySuffix(
+        toolCall.name,
+        agentId,
+      );
+      if (mcpTools.length > 0) {
+        // Use the full prefixed name for downstream execution but don't mutate the caller's object.
+        toolCall = { ...toolCall, name: mcpTools[0].toolName };
+      }
+    }
+
     const tool = mcpTools[0];
 
     if (!tool) {
@@ -717,7 +801,7 @@ class McpClient {
       };
     }
 
-    return { tool, catalogItem };
+    return { tool, catalogItem, resolvedToolCall: toolCall };
   }
 
   // Gets secrets of a given MCP server, with short-lived caching to prevent
@@ -1156,12 +1240,16 @@ class McpClient {
       const k8sDeployment =
         await McpServerRuntimeManager.getOrLoadDeployment(targetMcpServerId);
       if (!k8sDeployment) {
-        throw new Error("Deployment not found for MCP server");
+        throw new McpServerNotReadyError(
+          "MCP server is not running yet. Start or restart it, then try inspecting it again.",
+        );
       }
 
       const podName = await k8sDeployment.getRunningPodName();
       if (!podName) {
-        throw new Error("No running pod found for MCP server deployment");
+        throw new McpServerNotReadyError(
+          "MCP server is not running yet. Start or restart it, then try inspecting it again.",
+        );
       }
 
       return new K8sAttachTransport({
@@ -1275,22 +1363,34 @@ class McpClient {
   /**
    * Create success result with template application
    */
-  private async createSuccessResult(
-    toolCall: CommonToolCall,
-    agentId: string,
-    mcpServerName: string,
-    content: unknown,
-    isError: boolean,
-    authInfo?: {
-      userId?: string;
-      authMethod?: MCPGatewayAuthMethod;
-    },
-  ): Promise<CommonToolResult> {
+  private async createSuccessResult(opts: {
+    toolCall: CommonToolCall;
+    agentId: string;
+    mcpServerName: string;
+    content: ContentBlock[];
+    isError: boolean;
+    _meta?: Record<string, unknown>;
+    authInfo?: { userId?: string; authMethod?: MCPGatewayAuthMethod };
+    structuredContent?: Record<string, unknown>;
+  }): Promise<CommonToolResult> {
+    const {
+      toolCall,
+      agentId,
+      mcpServerName,
+      content,
+      isError,
+      _meta,
+      authInfo,
+      structuredContent,
+    } = opts;
+
     const toolResult: CommonToolResult = {
       id: toolCall.id,
       name: toolCall.name,
       content,
       isError,
+      _meta,
+      structuredContent,
     };
 
     await this.persistToolCall(
@@ -1551,12 +1651,27 @@ class McpClient {
   }
 
   /**
-   * Create a timeout promise
+   * Race a promise against a timeout, clearing the timer when the primary
+   * promise settles to prevent dangling timers under high throughput.
    */
-  private createTimeout(ms: number, message: string): Promise<never> {
-    return new Promise((_, reject) => {
-      setTimeout(() => reject(new Error(message)), ms);
+  private raceWithTimeout<T>(
+    promise: Promise<T>,
+    ms: number,
+    errorOrMessage: string | Error,
+  ): Promise<T> {
+    let timerId: ReturnType<typeof setTimeout>;
+    const timeout = new Promise<never>((_, reject) => {
+      timerId = setTimeout(() => {
+        reject(
+          typeof errorOrMessage === "string"
+            ? new Error(errorOrMessage)
+            : errorOrMessage,
+        );
+      }, ms);
     });
+    return Promise.race([promise, timeout]).finally(() =>
+      clearTimeout(timerId),
+    );
   }
 
   /**
@@ -1585,6 +1700,11 @@ class McpClient {
           secrets,
         );
 
+        const capabilities: ClientCapabilitiesWithExtensions = {
+          roots: { listChanged: true },
+          extensions: UI_EXTENSION_CAPABILITIES,
+        };
+
         // Create client with transport
         const client = new Client(
           {
@@ -1592,21 +1712,23 @@ class McpClient {
             version: "1.0.0",
           },
           {
-            capabilities: {},
+            capabilities,
           },
         );
 
         // Connect with timeout
-        await Promise.race([
+        await this.raceWithTimeout(
           client.connect(transport),
-          this.createTimeout(30000, "Connection timeout after 30 seconds"),
-        ]);
+          30000,
+          "Connection timeout after 30 seconds",
+        );
 
         // List tools with timeout
-        const toolsResult = await Promise.race([
+        const toolsResult = await this.raceWithTimeout(
           client.listTools(),
-          this.createTimeout(30000, "List tools timeout after 30 seconds"),
-        ]);
+          30000,
+          "List tools timeout after 30 seconds",
+        );
 
         // Close connection (we just needed the tools)
         await client.close();
@@ -1616,6 +1738,8 @@ class McpClient {
           name: tool.name,
           description: tool.description || `Tool: ${tool.name}`,
           inputSchema: tool.inputSchema as Record<string, unknown>,
+          _meta: tool._meta,
+          annotations: tool.annotations,
         }));
       } catch (error) {
         lastError = error instanceof Error ? error : new Error("Unknown error");
@@ -1670,28 +1794,31 @@ class McpClient {
     );
 
     try {
-      await Promise.race([
+      await this.raceWithTimeout(
         client.connect(transport),
-        this.createTimeout(30000, "Connection timeout after 30 seconds"),
-      ]);
+        30000,
+        new McpServerConnectionTimeoutError(),
+      );
 
       if (method === "tools/list") {
-        return await Promise.race([
+        return await this.raceWithTimeout(
           client.listTools(),
-          this.createTimeout(30000, "List tools timeout"),
-        ]);
+          30000,
+          "List tools timeout",
+        );
       }
 
       if (!params.toolName) {
         throw new Error("toolName is required for tools/call");
       }
-      return await Promise.race([
+      return await this.raceWithTimeout(
         client.callTool({
           name: params.toolName,
           arguments: params.toolArguments ?? {},
         }),
-        this.createTimeout(60000, "Tool call timeout"),
-      ]);
+        60000,
+        "Tool call timeout",
+      );
     } finally {
       await client.close().catch(() => {});
     }
@@ -1734,6 +1861,343 @@ class McpClient {
     await Promise.all([...disconnectPromises, ...activeDisconnectPromises]);
     this.activeConnections.clear();
     this.pendingHttpSessionMetadata.clear();
+  }
+
+  /**
+   * Read a resource from its assigned MCP server
+   */
+  async readResource(
+    uri: string,
+    agentId: string,
+    tokenAuth?: TokenAuthContext,
+  ): Promise<ResourceContents> {
+    // Include userId in cache key so per-user OAuth sessions are never mixed.
+    const userScope = tokenAuth?.userId ?? "anonymous";
+    const cacheKey = `${agentId}:${userScope}:${uri}`;
+    const now = Date.now();
+
+    const cached = this.resourceCache.get(cacheKey);
+    if (cached && cached.ttl > now) {
+      logger.debug(
+        { uri, agentId, cached: true },
+        "readResource: Cache hit, returning cached result",
+      );
+      this.refreshResourceInBackground(
+        uri,
+        agentId,
+        tokenAuth,
+        cacheKey,
+        cached.result,
+      ).catch((err) =>
+        logger.warn(
+          { err, uri, agentId },
+          "readResource: Background refresh failed",
+        ),
+      );
+      return cached.result;
+    }
+
+    const staleCache = cached;
+
+    logger.info(
+      { uri, agentId, hasStaleCache: !!staleCache },
+      "readResource: Starting resource read",
+    );
+
+    const mcpServer = await this.findMcpServerForResource(uri, agentId);
+
+    if (!mcpServer) {
+      logger.error(
+        { uri, agentId },
+        "readResource: No server could be found for resource",
+      );
+      if (staleCache) {
+        logger.info(
+          { uri, agentId },
+          "readResource: Returning stale cache due to no server found",
+        );
+        return staleCache.result;
+      }
+      throw new Error(`Resource not found or no server could read it: ${uri}`);
+    }
+
+    try {
+      const result = await this.doReadResource(
+        uri,
+        agentId,
+        mcpServer,
+        tokenAuth,
+      );
+      this.resourceCache.set(cacheKey, {
+        result,
+        ttl: now + RESOURCE_CACHE_TTL_MS,
+      });
+      logger.info(
+        { uri, agentId, serverId: mcpServer.server.id },
+        "readResource: Successfully read and cached resource",
+      );
+      return result;
+    } catch (error) {
+      if (staleCache) {
+        logger.warn(
+          { uri, agentId, error },
+          "readResource: Refresh failed, returning stale cache",
+        );
+        return staleCache.result;
+      }
+      throw error;
+    }
+  }
+
+  private async findMcpServerForResource(
+    uri: string,
+    agentId: string,
+  ): Promise<{
+    server: NonNullable<Awaited<ReturnType<typeof McpServerModel.findById>>>;
+    catalogItem: NonNullable<
+      Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>
+    >;
+  } | null> {
+    const matchingTools = await ToolModel.findToolsByUiResourceUri(
+      agentId,
+      uri,
+    );
+
+    if (matchingTools.length > 0 && matchingTools[0].catalogId) {
+      const catalogId = matchingTools[0].catalogId;
+      const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
+      if (catalogItem) {
+        const servers = await McpServerModel.findByCatalogId(catalogId);
+        const server = servers[0];
+        if (server) {
+          logger.info(
+            { uri, agentId, serverId: server.id, serverName: catalogItem.name },
+            "readResource: Found server via tool meta (fast lookup)",
+          );
+          return { server, catalogItem };
+        }
+      }
+    }
+
+    logger.warn(
+      { uri, agentId },
+      "readResource: No tool found with matching ui/resourceUri in meta",
+    );
+    return null;
+  }
+
+  private async doReadResource(
+    uri: string,
+    agentId: string,
+    mcpServer: {
+      server: NonNullable<Awaited<ReturnType<typeof McpServerModel.findById>>>;
+      catalogItem: NonNullable<
+        Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>
+      >;
+    },
+    tokenAuth?: TokenAuthContext,
+  ): Promise<ResourceContents> {
+    const { server, catalogItem } = mcpServer;
+
+    const secretResult = await this.getSecretsForMcpServer({
+      targetMcpServerId: server.id,
+      toolCall: { id: "resource-read", name: "read", arguments: {} },
+      agentId,
+    });
+
+    if ("error" in secretResult) {
+      throw new Error(`Secret resolution failed: ${secretResult.error}`);
+    }
+    const { secrets } = secretResult;
+
+    const transport = await this.getTransport(
+      catalogItem,
+      server.id,
+      secrets,
+      undefined,
+      tokenAuth,
+    );
+    const connectionKey = `${catalogItem.id}:${server.id}:${agentId}`;
+    const client = await this.getOrCreateClient(connectionKey, transport);
+
+    const result = await client.readResource({ uri });
+    return result;
+  }
+
+  private async refreshResourceInBackground(
+    uri: string,
+    agentId: string,
+    _tokenAuth: TokenAuthContext | undefined,
+    cacheKey: string,
+    _currentResult: ResourceContents,
+  ): Promise<void> {
+    try {
+      const mcpServer = await this.findMcpServerForResource(uri, agentId);
+      if (!mcpServer) {
+        logger.debug(
+          { uri, agentId },
+          "readResource: Background refresh - no server found",
+        );
+        return;
+      }
+
+      const newResult = await this.doReadResource(
+        uri,
+        agentId,
+        mcpServer,
+        _tokenAuth,
+      );
+      this.resourceCache.set(cacheKey, {
+        result: newResult,
+        ttl: Date.now() + RESOURCE_CACHE_TTL_MS,
+      });
+      logger.debug(
+        { uri, agentId },
+        "readResource: Background refresh succeeded",
+      );
+    } catch (error) {
+      logger.warn(
+        { uri, agentId, error },
+        "readResource: Background refresh failed, keeping old data",
+      );
+    }
+  }
+
+  /**
+   * Get connected MCP SDK clients for all upstream servers of an agent.
+   * Returns one client per distinct catalog item (MCP server installation).
+   */
+  private async getClientsForAgent(agentId: string): Promise<Client[]> {
+    const tools = await ToolModel.getMcpToolsByAgent(agentId);
+
+    // Collect distinct catalog IDs (skip Archestra built-in tools which have no upstream server)
+    const catalogIds = [
+      ...new Set(
+        tools.map((t) => t.catalogId).filter((id): id is string => !!id),
+      ),
+    ];
+
+    const clients: Client[] = [];
+
+    for (const catalogId of catalogIds) {
+      try {
+        const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
+        if (!catalogItem) continue;
+
+        const servers = await McpServerModel.findByCatalogId(catalogId);
+        const server = servers[0];
+        if (!server) continue;
+
+        const secretResult = await this.getSecretsForMcpServer({
+          targetMcpServerId: server.id,
+          toolCall: { id: "list-op", name: "list", arguments: {} },
+          agentId,
+        });
+        if ("error" in secretResult) continue;
+
+        const transport = await this.getTransport(
+          catalogItem,
+          server.id,
+          secretResult.secrets,
+        );
+        const connectionKey = `${catalogItem.id}:${server.id}`;
+        const client = await this.getOrCreateClient(connectionKey, transport);
+        clients.push(client);
+      } catch (error) {
+        logger.warn(
+          { agentId, catalogId, error },
+          "getClientsForAgent: failed to connect to upstream server, skipping",
+        );
+      }
+    }
+
+    return clients;
+  }
+
+  /**
+   * List resources from all upstream MCP servers connected to an agent.
+   */
+  async listResources(
+    agentId: string,
+  ): Promise<{ resources: Array<Record<string, unknown>> }> {
+    const clients = await this.getClientsForAgent(agentId);
+    const allResources: Array<Record<string, unknown>> = [];
+
+    await Promise.all(
+      clients.map(async (client) => {
+        try {
+          const result = await client.listResources();
+          allResources.push(
+            ...(result.resources as unknown as Array<Record<string, unknown>>),
+          );
+        } catch (error) {
+          logger.warn(
+            { error },
+            "listResources: upstream server failed, skipping",
+          );
+        }
+      }),
+    );
+
+    return { resources: allResources };
+  }
+
+  /**
+   * List resource templates from all upstream MCP servers connected to an agent.
+   */
+  async listResourceTemplates(
+    agentId: string,
+  ): Promise<{ resourceTemplates: Array<Record<string, unknown>> }> {
+    const clients = await this.getClientsForAgent(agentId);
+    const allTemplates: Array<Record<string, unknown>> = [];
+
+    await Promise.all(
+      clients.map(async (client) => {
+        try {
+          const result = await client.listResourceTemplates();
+          allTemplates.push(
+            ...(result.resourceTemplates as unknown as Array<
+              Record<string, unknown>
+            >),
+          );
+        } catch (error) {
+          logger.warn(
+            { error },
+            "listResourceTemplates: upstream server failed, skipping",
+          );
+        }
+      }),
+    );
+
+    return { resourceTemplates: allTemplates };
+  }
+
+  /**
+   * List prompts from all upstream MCP servers connected to an agent.
+   */
+  async listPrompts(
+    agentId: string,
+  ): Promise<{ prompts: Array<Record<string, unknown>> }> {
+    const clients = await this.getClientsForAgent(agentId);
+    const allPrompts: Array<Record<string, unknown>> = [];
+
+    await Promise.all(
+      clients.map(async (client) => {
+        try {
+          const result = await client.listPrompts();
+          allPrompts.push(
+            ...(result.prompts as unknown as Array<Record<string, unknown>>),
+          );
+        } catch (error) {
+          logger.warn(
+            { error },
+            "listPrompts: upstream server failed, skipping",
+          );
+        }
+      }),
+    );
+
+    return { prompts: allPrompts };
   }
 }
 

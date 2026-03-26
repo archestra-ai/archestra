@@ -28,7 +28,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useModelsWithApiKeys } from "@/lib/chat-models.query";
+import { useModelsWithApiKeys } from "@/lib/chat/chat-models.query";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import type { OptimizationRule } from "@/lib/optimization-rule.query";
 import {
   useCreateOptimizationRule,
@@ -37,8 +38,7 @@ import {
   useUpdateOptimizationRule,
 } from "@/lib/optimization-rule.query";
 import { useOrganization } from "@/lib/organization.query";
-import { useTeams } from "@/lib/team.query";
-import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
+import { useTeams } from "@/lib/teams/team.query";
 
 const DEFAULT_RULE = {
   entityType: "organization",
@@ -100,8 +100,8 @@ export default function OptimizationRulesPage() {
       modelsWithApiKeys.map((model) => ({
         model: model.modelId,
         provider: model.provider,
-        pricePerMillionInput: model.capabilities?.pricePerMillionInput ?? "0",
-        pricePerMillionOutput: model.capabilities?.pricePerMillionOutput ?? "0",
+        pricePerMillionInput: model.pricePerMillionInput ?? "0",
+        pricePerMillionOutput: model.pricePerMillionOutput ?? "0",
       })),
     [modelsWithApiKeys],
   );

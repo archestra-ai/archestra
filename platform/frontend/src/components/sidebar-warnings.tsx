@@ -7,10 +7,9 @@ import { DefaultCredentialsWarning } from "@/components/default-credentials-warn
 import {
   useDefaultCredentialsEnabled,
   useHasPermissions,
-} from "@/lib/auth.query";
+} from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import config from "@/lib/config";
-import { useFeature } from "@/lib/config.query";
+import { useDisableBasicAuth, useFeature } from "@/lib/config/config.query";
 
 export function SidebarWarnings() {
   const { data: session } = authClient.useSession();
@@ -18,6 +17,7 @@ export function SidebarWarnings() {
   const { data: defaultCredentialsEnabled, isLoading: isLoadingCreds } =
     useDefaultCredentialsEnabled();
   const globalToolPolicy = useFeature("globalToolPolicy");
+  const disableBasicAuth = useDisableBasicAuth();
   const { data: canUpdateOrg } = useHasPermissions({
     agentSettings: ["update"],
   });
@@ -28,7 +28,7 @@ export function SidebarWarnings() {
   const showSecurityEngineWarning = !!session && canUpdateOrg && isPermissive;
   const showDefaultCredsWarning =
     canUpdateOrg &&
-    !config.disableBasicAuth &&
+    disableBasicAuth === false &&
     !isLoadingCreds &&
     defaultCredentialsEnabled !== undefined &&
     defaultCredentialsEnabled &&

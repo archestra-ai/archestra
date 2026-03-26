@@ -44,17 +44,20 @@ import {
   useAgentDelegations,
   useAllProfileTools,
 } from "@/lib/agent-tools.query";
-import { useArchestraMcpIdentity } from "@/lib/archestra-mcp-server";
-import { useHasPermissions } from "@/lib/auth.query";
-import { useChatProfileMcpTools } from "@/lib/chat.query";
-import config from "@/lib/config";
-import { getFrontendDocsUrl } from "@/lib/docs";
-import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useChatProfileMcpTools } from "@/lib/chat/chat.query";
+import config from "@/lib/config/config";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
+import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
   useMcpServers,
   useMcpServersGroupedByCatalog,
-} from "@/lib/mcp-server.query";
-import { useFetchTeamTokenValue, useTokens } from "@/lib/team-token.query";
+} from "@/lib/mcp/mcp-server.query";
+import {
+  useFetchTeamTokenValue,
+  useTokens,
+} from "@/lib/teams/team-token.query";
 import { useFetchUserTokenValue, useUserToken } from "@/lib/user-token.query";
 
 const { externalProxyUrls, internalProxyUrl } = config.api;

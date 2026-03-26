@@ -32,13 +32,13 @@ import {
   useConnectors,
   useDeleteConnector,
   useUpdateConnector,
-} from "@/lib/connector.query";
-import { formatCronSchedule } from "@/lib/format-cron";
+} from "@/lib/knowledge/connector.query";
 import {
   useKnowledgeBase,
   useKnowledgeBaseHealth,
-} from "@/lib/knowledge-base.query";
+} from "@/lib/knowledge/knowledge-base.query";
 import { cn, formatDate } from "@/lib/utils";
+import { formatCronSchedule } from "@/lib/utils/format-cron";
 
 export default function KnowledgeBaseDetailPage({ id }: { id: string }) {
   return (

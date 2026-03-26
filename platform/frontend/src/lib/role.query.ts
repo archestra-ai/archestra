@@ -1,8 +1,9 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useIsAuthenticated } from "./auth.hook";
-import { useHasPermissions } from "./auth.query";
-import { DEFAULT_TABLE_LIMIT, handleApiError } from "./utils";
+import { DEFAULT_TABLE_LIMIT } from "@/consts";
+import { useIsAuthenticated } from "@/lib/auth/auth.hook";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { handleApiError } from "@/lib/utils";
 
 const { getRoles, createRole, getRole, updateRole, deleteRole } =
   archestraApiSdk;

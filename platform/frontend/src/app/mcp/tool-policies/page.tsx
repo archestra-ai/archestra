@@ -6,16 +6,16 @@ import {
 
 import { ServerErrorFallback } from "@/components/error-fallback";
 import {
-  transformToolInvocationPolicies,
-  transformToolResultPolicies,
-} from "@/lib/policy.utils";
-import { getServerApiHeaders } from "@/lib/server-utils";
-import {
   DEFAULT_SORT_BY,
   DEFAULT_SORT_DIRECTION,
   DEFAULT_TABLE_LIMIT,
-  handleApiError,
-} from "@/lib/utils";
+} from "@/consts";
+import {
+  transformToolInvocationPolicies,
+  transformToolResultPolicies,
+} from "@/lib/policy.utils";
+import { handleApiError } from "@/lib/utils";
+import { getServerApiHeaders } from "@/lib/utils/server";
 import { ToolPoliciesClient } from "./page.client";
 
 export const dynamic = "force-dynamic";

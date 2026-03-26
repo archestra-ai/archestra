@@ -17,6 +17,7 @@ const oauthClient = pgTable("oauth_client", {
   disabled: boolean("disabled").default(false),
   skipConsent: boolean("skip_consent"),
   enableEndSession: boolean("enable_end_session"),
+  subjectType: text("subject_type"),
   scopes: text("scopes").array(),
   userId: text("user_id").references(() => usersTable.id, {
     onDelete: "cascade",
@@ -29,6 +30,7 @@ const oauthClient = pgTable("oauth_client", {
   responseTypes: text("response_types").array(),
   public: boolean("public"),
   type: text("type"),
+  requirePKCE: boolean("require_pkce"),
   metadata: jsonb("metadata"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")

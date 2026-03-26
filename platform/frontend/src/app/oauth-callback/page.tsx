@@ -11,11 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  useInstallMcpServer,
-  useReauthenticateMcpServer,
-} from "@/lib/mcp-server.query";
-import { useHandleOAuthCallback } from "@/lib/oauth.query";
+import { useHandleOAuthCallback } from "@/lib/auth/oauth.query";
 import {
   clearCallbackProcessing,
   clearInstallContext,
@@ -30,7 +26,11 @@ import {
   isCallbackProcessed,
   markCallbackProcessing,
   setOAuthInstallationCompleteCatalogId,
-} from "@/lib/oauth-session";
+} from "@/lib/auth/oauth-session";
+import {
+  useInstallMcpServer,
+  useReauthenticateMcpServer,
+} from "@/lib/mcp/mcp-server.query";
 
 function OAuthCallbackContent() {
   const searchParams = useSearchParams();

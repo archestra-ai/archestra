@@ -19,11 +19,11 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useInteraction } from "@/lib/interaction.query";
+import { useInteraction } from "@/lib/interactions/interaction.query";
 import {
   calculateCostSavings,
   DynamicInteraction,
-} from "@/lib/interaction.utils";
+} from "@/lib/interactions/interaction.utils";
 import { formatDate } from "@/lib/utils";
 
 export function ChatPage({

@@ -1,5 +1,5 @@
 import type { IdpRoleMappingConfig } from "@shared";
-import { MEMBER_ROLE_NAME } from "@shared";
+import { MEMBER_ROLE_NAME, SSO_TRUSTED_PROVIDER_IDS } from "@shared";
 import { APIError } from "better-auth";
 import { vi } from "vitest";
 import { retrieveIdpGroups } from "@/auth/idp-team-sync-cache.ee";
@@ -120,6 +120,83 @@ describe("IdentityProviderModel", () => {
       expect(providerIds).toContain("Okta");
       expect(providerIds).toContain("Google");
       expect(providerIds).toContain("GitHub");
+    });
+  });
+
+  describe("getTrustedAccountLinkingProviderIds", () => {
+    test("returns built-in trusted providers when no custom identity providers exist", async () => {
+      await expect(
+        IdentityProviderModel.getTrustedAccountLinkingProviderIds(),
+      ).resolves.toEqual([...SSO_TRUSTED_PROVIDER_IDS]);
+    });
+
+    test("includes configured generic OIDC and SAML provider IDs", async ({
+      makeOrganization,
+      makeIdentityProvider,
+    }) => {
+      const org = await makeOrganization();
+
+      await makeIdentityProvider(org.id, {
+        providerId: "custom-oidc",
+        oidcConfig: { clientId: "client-id" },
+      });
+      await makeIdentityProvider(org.id, {
+        providerId: "custom-saml",
+        samlConfig: { entryPoint: "https://example.com/saml" },
+      });
+
+      await expect(
+        IdentityProviderModel.getTrustedAccountLinkingProviderIds(),
+      ).resolves.toEqual([
+        ...SSO_TRUSTED_PROVIDER_IDS,
+        "custom-oidc",
+        "custom-saml",
+      ]);
+    });
+
+    test("deduplicates built-in providers that are also configured in the database", async ({
+      makeOrganization,
+      makeIdentityProvider,
+    }) => {
+      const org = await makeOrganization();
+
+      await makeIdentityProvider(org.id, { providerId: "Okta" });
+
+      await expect(
+        IdentityProviderModel.getTrustedAccountLinkingProviderIds(),
+      ).resolves.toEqual([...SSO_TRUSTED_PROVIDER_IDS]);
+    });
+
+    test("returns the built-in trusted providers before database initialization", async () => {
+      vi.resetModules();
+      vi.doMock("@/database", async () => {
+        const actual =
+          await vi.importActual<typeof import("@/database")>("@/database");
+
+        return {
+          ...actual,
+          default: new Proxy(
+            {},
+            {
+              get() {
+                throw new Error(
+                  "Database not initialized. Call initializeDatabase() first.",
+                );
+              },
+            },
+          ),
+        };
+      });
+
+      const { default: IsolatedIdentityProviderModel } = await import(
+        "./identity-provider.ee"
+      );
+
+      await expect(
+        IsolatedIdentityProviderModel.getTrustedAccountLinkingProviderIds(),
+      ).resolves.toEqual([...SSO_TRUSTED_PROVIDER_IDS]);
+
+      vi.doUnmock("@/database");
     });
   });
 

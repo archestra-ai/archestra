@@ -101,7 +101,7 @@ runs:
     - name: Cache MCP example OAuth server image
       if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
       id: cache-oauth-image
-      uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      uses: ./.github/actions/github-cache
       with:
         path: /tmp/mcp-oauth-server.tar
         key: mcp-oauth-server-0.0.1-${{ runner.arch }}

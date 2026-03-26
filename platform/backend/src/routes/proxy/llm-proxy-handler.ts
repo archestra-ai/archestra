@@ -17,6 +17,7 @@ import {
   SOURCE_HEADER,
 } from "@shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -24,6 +25,7 @@ import {
   InteractionModel,
   LimitValidationService,
   ModelModel,
+  ToolInvocationPolicyModel,
   UserModel,
 } from "@/models";
 import { metrics } from "@/observability";
@@ -72,6 +74,16 @@ const {
     otel: { captureContent, contentMaxLength },
   },
 } = config;
+
+/**
+ * Module-level LRU cache for per-tool blocking policy lookups.
+ * Keyed by `${agentId}:${toolName}:${contextIsTrusted}` to scope per agent/trust context.
+ * Shared across requests to avoid repeated DB queries for the same tool.
+ */
+const toolPolicyCache = new LRUCacheManager<boolean>({
+  maxSize: 500,
+  defaultTtl: 60_000, // 60 seconds
+});
 
 /**
  * Shared context passed to streaming and non-streaming handlers.
@@ -629,6 +641,10 @@ async function handleStreaming<
   const streamStartTime = Date.now();
   let firstChunkTime: number | undefined;
   let streamCompleted = false;
+  const streamedEventIndices = new Set<number>();
+  // Once a blocking tool is encountered, buffer all subsequent tool call chunks
+  // to prevent streaming data for tools that appear after a blocked tool.
+  let bufferAllToolCalls = false;
 
   logger.debug(
     { model: actualModel },
@@ -657,6 +673,9 @@ async function handleStreaming<
         const stream = await provider.executeStream(client, request);
 
         // Process chunks
+        // Per-tool buffer/stream decisions: only "Allow always" tools stream immediately.
+        // Policy lookups are cached in the module-level toolPolicyCache (LRU with TTL).
+
         for await (const chunk of stream) {
           // Track first chunk time
           if (!firstChunkTime) {
@@ -674,10 +693,62 @@ async function handleStreaming<
 
           const result = streamAdapter.processChunk(chunk);
 
-          // Stream non-tool-call data immediately
+          // Stream text deltas immediately. For tool call chunks, check
+          // the specific tool's policy to decide buffer vs stream:
+          //  - "Allow always" tools: stream immediately for low latency
+          //    (important for MCP Apps streaming UX).
+          //  - Tools with blocking policies: buffer until policy evaluation
+          //    completes so blocked call data is never exposed.
           if (result.sseData) {
             ensureStreamHeaders();
             reply.raw.write(result.sseData);
+          } else if (result.isToolCallChunk) {
+            // Determine if the current tool call should be streamed
+            let shouldStream = globalToolPolicy === "permissive";
+            if (!shouldStream && !bufferAllToolCalls) {
+              const currentToolCall =
+                streamAdapter.state.toolCalls[
+                  streamAdapter.state.toolCalls.length - 1
+                ];
+              if (currentToolCall?.name) {
+                const cacheKey = `${agent.id}:${currentToolCall.name}:${contextIsTrusted}`;
+                let hasBlocking = toolPolicyCache.get(cacheKey);
+                if (hasBlocking === undefined) {
+                  try {
+                    hasBlocking =
+                      await ToolInvocationPolicyModel.hasBlockingPolicy(
+                        currentToolCall.name,
+                        contextIsTrusted,
+                      );
+                  } catch (err) {
+                    logger.warn(
+                      { err, toolName: currentToolCall.name },
+                      "hasBlockingPolicy lookup failed, defaulting to buffer",
+                    );
+                    hasBlocking = true;
+                  }
+                  toolPolicyCache.set(cacheKey, hasBlocking);
+                }
+                if (hasBlocking) {
+                  bufferAllToolCalls = true;
+                }
+                shouldStream = !hasBlocking;
+              }
+            }
+
+            if (shouldStream) {
+              const allEvents = streamAdapter.getRawToolCallEvents();
+              ensureStreamHeaders();
+              for (let i = 0; i < allEvents.length; i++) {
+                if (!streamedEventIndices.has(i)) {
+                  reply.raw.write(allEvents[i]);
+                  streamedEventIndices.add(i);
+                }
+              }
+            }
+            // Buffered tools: events accumulate in
+            // streamAdapter.state.rawToolCallEvents and are flushed
+            // (or discarded) after policy evaluation below.
           }
 
           if (result.isFinal) {
@@ -769,7 +840,10 @@ async function handleStreaming<
       const { contentMessage, reason, allToolCallNames } =
         toolInvocationRefusal;
 
-      // Stream refusal
+      // When not buffering, tool call chunks were already streamed — append
+      // refusal so clients know not to execute them. When buffering,
+      // tool call chunks were held back and discarded — send only the refusal
+      // so blocked tool call data is never exposed.
       ensureStreamHeaders();
       const refusalEvents = streamAdapter.formatCompleteTextSSE(contentMessage);
       for (const event of refusalEvents) {
@@ -788,17 +862,18 @@ async function handleStreaming<
         source,
         externalAgentId,
       });
-    } else if (toolCalls.length > 0) {
-      // Tool calls approved - stream raw events
-      logger.info(
-        { toolCallCount: toolCalls.length },
-        "Tool calls allowed, streaming them now",
-      );
-
+    } else if (
+      toolCalls.length > 0 &&
+      streamedEventIndices.size < streamAdapter.getRawToolCallEvents().length
+    ) {
+      // Some tool call chunks were buffered during streaming (per-tool
+      // blocking policies). Policy allowed them, so flush un-streamed events now.
+      const allEvents = streamAdapter.getRawToolCallEvents();
       ensureStreamHeaders();
-      const rawEvents = streamAdapter.getRawToolCallEvents();
-      for (const event of rawEvents) {
-        reply.raw.write(event);
+      for (let i = 0; i < allEvents.length; i++) {
+        if (!streamedEventIndices.has(i)) {
+          reply.raw.write(allEvents[i]);
+        }
       }
     }
 

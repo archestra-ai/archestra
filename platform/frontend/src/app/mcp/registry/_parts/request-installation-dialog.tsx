@@ -7,7 +7,7 @@ import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useCreateMcpServerInstallationRequest } from "@/lib/mcp-server-installation-request.query";
+import { useCreateMcpServerInstallationRequest } from "@/lib/mcp/mcp-server-installation-request.query";
 
 export function RequestInstallationDialog({
   server,

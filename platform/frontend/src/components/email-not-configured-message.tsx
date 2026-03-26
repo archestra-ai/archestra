@@ -1,6 +1,6 @@
 import { ExternalLink } from "lucide-react";
 import Link from "next/link";
-import { getFrontendDocsUrl } from "@/lib/docs";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
 
 interface EmailNotConfiguredMessageProps {
   /** Optional className for the container */

@@ -3,11 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import { BackendConnectivityStatus } from "./backend-connectivity-status";
 
 // Mock the hooks
-vi.mock("@/lib/backend-connectivity", () => ({
+vi.mock("@/lib/config/backend-connectivity", () => ({
   useBackendConnectivity: vi.fn(),
 }));
 
-vi.mock("@/lib/use-app-name", () => ({
+vi.mock("@/lib/hooks/use-app-name", () => ({
   useAppName: () => "Sparky",
 }));
 
@@ -16,7 +16,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { useSearchParams } from "next/navigation";
-import { useBackendConnectivity } from "@/lib/backend-connectivity";
+import { useBackendConnectivity } from "@/lib/config/backend-connectivity";
 
 describe("BackendConnectivityStatus", () => {
   const mockRetry = vi.fn();

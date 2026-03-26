@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import websocketService from "@/lib/websocket";
+import websocketService from "@/lib/websocket/websocket";
 
 /** localStorage key for tracking the active browser conversation */
 const ACTIVE_BROWSER_CONVERSATION_KEY = "activeBrowserConversation";

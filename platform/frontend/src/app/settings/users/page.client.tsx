@@ -29,8 +29,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useHasPermissions } from "@/lib/auth.query";
-import config from "@/lib/config";
+import { DEFAULT_TABLE_LIMIT } from "@/consts";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useDisableInvitations } from "@/lib/config/config.query";
 import {
   type Invitation,
   type Member,
@@ -47,7 +48,7 @@ import {
   useMemberSignupStatus,
 } from "@/lib/organization.query";
 import { useRoles } from "@/lib/role.query";
-import { cn, DEFAULT_TABLE_LIMIT } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { useSetSettingsAction } from "../layout";
 
 export default function UsersPageClient() {
@@ -142,7 +143,9 @@ function TabButtons({
 function InviteUserButton({ organizationId }: { organizationId: string }) {
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const { data: canInvite } = useHasPermissions({ invitation: ["create"] });
-  const invitationsEnabled = !config.disableInvitations;
+  const disableInvitations = useDisableInvitations();
+  const invitationsEnabled =
+    disableInvitations === undefined ? false : !disableInvitations;
 
   if (!invitationsEnabled || !canInvite) return null;
 

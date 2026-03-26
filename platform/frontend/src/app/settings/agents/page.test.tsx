@@ -135,7 +135,7 @@ vi.mock("@/lib/agent.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/chat-models.query", () => ({
+vi.mock("@/lib/chat/chat-models.query", () => ({
   useChatModels: () => ({
     data: [
       {
@@ -148,7 +148,7 @@ vi.mock("@/lib/chat-models.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/chat-settings.query", () => ({
+vi.mock("@/lib/chat/chat-settings.query", () => ({
   useAvailableChatApiKeys: () => ({
     data: mockApiKeys,
   }),

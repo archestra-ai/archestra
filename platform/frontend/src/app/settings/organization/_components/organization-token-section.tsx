@@ -7,7 +7,7 @@ import { SettingsCardHeader } from "@/components/settings/settings-block";
 import { TokenManagerDialog } from "@/components/teams/token-manager-dialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { type TeamToken, useTokens } from "@/lib/team-token.query";
+import { type TeamToken, useTokens } from "@/lib/teams/team-token.query";
 
 export function OrganizationTokenSection() {
   const { data: tokensData, isLoading: tokensLoading } = useTokens();

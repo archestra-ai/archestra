@@ -3,7 +3,7 @@
 import { Mail } from "lucide-react";
 import { useMemo } from "react";
 import { PageLayout } from "@/components/page-layout";
-import { useHasPermissions } from "@/lib/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { cn } from "@/lib/utils";
 import { useTriggerStatuses } from "./_components/use-trigger-statuses";
 

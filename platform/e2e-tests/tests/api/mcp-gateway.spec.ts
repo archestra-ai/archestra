@@ -21,6 +21,7 @@ import { expect, test } from "./fixtures";
 import {
   assignArchestraToolsToProfile,
   getOrgTokenForProfile,
+  getUserTokenForCurrentUser,
   makeApiRequest,
 } from "./mcp-gateway-utils";
 
@@ -33,7 +34,7 @@ import {
 
 test.describe("MCP Gateway - Authentication", () => {
   let profileId: string;
-  let archestraToken: string;
+  let userToken: string;
 
   test.beforeAll(async ({ request, createAgent }) => {
     // Create test profile with unique name to avoid conflicts in parallel runs
@@ -49,8 +50,8 @@ test.describe("MCP Gateway - Authentication", () => {
     // Assign Archestra tools to the profile (required for tools/list to return them)
     await assignArchestraToolsToProfile(request, profileId);
 
-    // Get org token using shared utility
-    archestraToken = await getOrgTokenForProfile(request);
+    // Use a user token so RBAC-filtered Archestra tools remain visible in tools/list.
+    userToken = await getUserTokenForCurrentUser(request);
   });
 
   test.afterAll(async ({ request, deleteAgent }) => {
@@ -58,13 +59,12 @@ test.describe("MCP Gateway - Authentication", () => {
   });
 
   const makeMcpGatewayRequestHeaders = () => ({
-    Authorization: `Bearer ${archestraToken}`,
+    Authorization: `Bearer ${userToken}`,
     "Content-Type": "application/json",
     Accept: "application/json, text/event-stream",
   });
 
-  // TODO: Fix flaky test
-  test.skip("should initialize and list tools (stateless)", async ({
+  test("should initialize and list tools (stateless)", async ({
     request,
     makeApiRequest,
   }) => {
@@ -1772,7 +1772,7 @@ test.describe("MCP Gateway - CIMD (Client ID Metadata Documents)", () => {
 
 test.describe("MCP Gateway - Knowledge Sources Tool Description", () => {
   let profileId: string;
-  let archestraToken: string;
+  let userToken: string;
   let knowledgeBaseId: string;
 
   test.beforeAll(async ({ request, createKnowledgeBase, createConnector }) => {
@@ -1811,8 +1811,8 @@ test.describe("MCP Gateway - Knowledge Sources Tool Description", () => {
     // Assign Archestra tools to the profile
     await assignArchestraToolsToProfile(request, profileId);
 
-    // Get org token
-    archestraToken = await getOrgTokenForProfile(request);
+    // Use a user token so the RBAC-protected knowledge tool is visible in tools/list.
+    userToken = await getUserTokenForCurrentUser(request);
   });
 
   test.afterAll(async ({ request, deleteAgent, deleteKnowledgeBase }) => {
@@ -1820,8 +1820,7 @@ test.describe("MCP Gateway - Knowledge Sources Tool Description", () => {
     await deleteKnowledgeBase(request, knowledgeBaseId);
   });
 
-  // TODO: Fix flaky test
-  test.skip("query_knowledge_sources tool has dynamic description with KB name and connector type", async ({
+  test("query_knowledge_sources tool has dynamic description with KB name and connector type", async ({
     request,
   }) => {
     // Allow time for MCP tool cache to pick up the knowledge base assignment
@@ -1833,7 +1832,7 @@ test.describe("MCP Gateway - Knowledge Sources Tool Description", () => {
       method: "post",
       urlSuffix: `${MCP_GATEWAY_URL_SUFFIX}/${profileId}`,
       headers: {
-        Authorization: `Bearer ${archestraToken}`,
+        Authorization: `Bearer ${userToken}`,
         "Content-Type": "application/json",
         Accept: "application/json, text/event-stream",
       },
@@ -1855,7 +1854,7 @@ test.describe("MCP Gateway - Knowledge Sources Tool Description", () => {
       method: "post",
       urlSuffix: `${MCP_GATEWAY_URL_SUFFIX}/${profileId}`,
       headers: {
-        Authorization: `Bearer ${archestraToken}`,
+        Authorization: `Bearer ${userToken}`,
         "Content-Type": "application/json",
         Accept: "application/json, text/event-stream",
       },

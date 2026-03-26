@@ -1,6 +1,20 @@
 name: Load Platform Image
 description: |
-  Loads the platform Docker image from a co-located artifact.
+  Loads the platform Docker image from a registry or a co-located artifact.
+
+inputs:
+  source:
+    description: "Where to load the image from: registry or artifact"
+    required: false
+    default: artifact
+  image-tag:
+    description: "Platform image tag to pull or report"
+    required: false
+    default: ""
+  artifact-name:
+    description: "Artifact name to download when source=artifact"
+    required: false
+    default: platform-docker-image
 
 outputs:
   image-tag:
@@ -10,13 +24,22 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Pull platform image from registry
+      if: ${{ inputs.source == 'registry' }}
+      shell: bash
+      env:
+        PLATFORM_IMAGE_TAG: ${{ inputs.image-tag }}
+      run: docker pull "${PLATFORM_IMAGE_TAG}"
+
     - name: Download platform image artifact
-      uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+      if: ${{ inputs.source == 'artifact' }}
+      uses: ./.github/actions/github-download-artifact
       with:
-        name: platform-docker-image
+        name: ${{ inputs.artifact-name }}
         path: /tmp
 
     - name: Load platform Docker image
+      if: ${{ inputs.source == 'artifact' }}
       shell: bash
       run: |
         gunzip -c /tmp/platform-image.tar.gz | docker load
@@ -25,6 +48,6 @@ runs:
       id: resolve-tag
       shell: bash
       env:
-        GIT_SHA: ${{ github.sha }}
+        PLATFORM_IMAGE_TAG: ${{ inputs.image-tag }}
       run: |
-        echo "tag=archestra-platform:${GIT_SHA}" >> "$GITHUB_OUTPUT"
+        echo "tag=${PLATFORM_IMAGE_TAG}" >> "$GITHUB_OUTPUT"

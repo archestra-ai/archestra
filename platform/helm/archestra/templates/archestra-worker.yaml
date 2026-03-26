@@ -37,9 +37,9 @@ spec:
           imagePullPolicy: {{ .Values.archestra.imagePullPolicy | default "IfNotPresent" }}
           workingDir: /app/backend
           {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
-          {{- include "archestra-platform.vaultSecretsCommand" "node --enable-source-maps dist/server.mjs" | nindent 10 }}
+          {{- include "archestra-platform.vaultSecretsCommand" "./scripts/start-production.sh" | nindent 10 }}
           {{- else }}
-          command: ["node", "--enable-source-maps", "dist/server.mjs"]
+          command: ["./scripts/start-production.sh"]
           {{- end }}
           ports:
             - name: backend

@@ -60,3 +60,36 @@ tests:
       - equal:
           path: spec.template.metadata.annotations["prometheus.io/path"]
           value: "/metrics"
+
+  - it: worker mounts diagnostics volume and env var when diagnostics are enabled
+    set:
+      archestra.diagnostics.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_NODE_DIAGNOSTIC_DIR
+            value: /var/diagnostics
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: diagnostics
+            persistentVolumeClaim:
+              claimName: RELEASE-NAME-archestra-platform-diagnostics
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: diagnostics
+            mountPath: /var/diagnostics
+            readOnly: false
+
+  - it: worker sets heap snapshot env var when diagnostics heap snapshots are enabled
+    set:
+      archestra.diagnostics.enabled: true
+      archestra.diagnostics.heapSnapshotsNearHeapLimit: 1
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_NODE_HEAPSNAPSHOT_NEAR_HEAP_LIMIT
+            value: "1"

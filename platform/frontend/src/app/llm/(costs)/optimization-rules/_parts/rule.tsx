@@ -30,7 +30,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { OptimizationRule } from "@/lib/optimization-rule.query";
-import type { Team } from "@/lib/team.query";
+import type { Team } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 
 type EntityType = OptimizationRule["entityType"];

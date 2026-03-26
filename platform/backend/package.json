@@ -1,6 +1,6 @@
 {
   "name": "@backend",
-  "version": "1.1.36",
+  "version": "1.1.40",
   "description": "",
   "author": "",
   "private": true,
@@ -8,7 +8,7 @@
   "type": "module",
   "scripts": {
     "build": "tsdown && pnpm run sentry:sourcemaps",
-    "start": "NODE_ENV=production node --enable-source-maps dist/server.mjs",
+    "start": "NODE_ENV=production ./scripts/start-production.sh",
     "dev": "tsdown --watch",
     "dev:debug": "DEBUG=1 tsdown --watch",
     "test": "vitest",
@@ -68,6 +68,7 @@
     "@microsoft/msgraph-sdk-chats": "1.0.0-preview.80",
     "@microsoft/msgraph-sdk-teams": "1.0.0-preview.80",
     "@microsoft/msgraph-sdk-users": "1.0.0-preview.80",
+    "@modelcontextprotocol/ext-apps": "^1.1.1",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@octokit/rest": "^22.0.1",
     "@opentelemetry/api": "^1.9.0",
@@ -104,7 +105,7 @@
     "drizzle-kit": "^0.31.9",
     "drizzle-orm": "^0.45.0",
     "drizzle-zod": "^0.8.3",
-    "fastify": "^5.8.2",
+    "fastify": "^5.8.3",
     "fastify-metrics": "^12.1.0",
     "fastify-plugin": "^5.1.0",
     "fastify-type-provider-zod": "^6.0.0",

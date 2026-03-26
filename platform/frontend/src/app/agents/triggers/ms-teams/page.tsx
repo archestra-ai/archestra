@@ -16,11 +16,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useChatOpsStatus } from "@/lib/chatops.query";
-import config from "@/lib/config";
-import { useConfig, usePublicBaseUrl } from "@/lib/config.query";
-import { getFrontendDocsUrl } from "@/lib/docs";
-import { useAppName } from "@/lib/use-app-name";
+import { useChatOpsStatus } from "@/lib/chatops/chatops.query";
+import config from "@/lib/config/config";
+import { useConfig, usePublicBaseUrl } from "@/lib/config/config.query";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { ChannelsSection } from "../_components/channels-section";
 import { CollapsibleSetupSection } from "../_components/collapsible-setup-section";
 import { CredentialField } from "../_components/credential-field";

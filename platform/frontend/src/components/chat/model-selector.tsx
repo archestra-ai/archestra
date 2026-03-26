@@ -48,9 +48,9 @@ import {
   type ChatModel,
   type ModelCapabilities,
   useModelsByProvider,
-} from "@/lib/chat-models.query";
-import { useSyncChatModels } from "@/lib/chat-settings.query";
-import { resolveAutoSelectedModel } from "@/lib/use-chat-preferences";
+} from "@/lib/chat/chat-models.query";
+import { useSyncChatModels } from "@/lib/chat/chat-settings.query";
+import { resolveAutoSelectedModel } from "@/lib/chat/use-chat-preferences";
 import { cn } from "@/lib/utils";
 
 /** Modalities that can be filtered (excludes "text" since all models support it) */

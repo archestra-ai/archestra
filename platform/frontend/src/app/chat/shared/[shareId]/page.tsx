@@ -30,8 +30,8 @@ import { useInternalAgents } from "@/lib/agent.query";
 import {
   useForkSharedConversation,
   useSharedConversation,
-} from "@/lib/chat-share.query";
-import { getConversationDisplayTitle } from "@/lib/chat-utils";
+} from "@/lib/chat/chat-share.query";
+import { getConversationDisplayTitle } from "@/lib/chat/chat-utils";
 
 export default function SharedConversationPage() {
   const params = useParams<{ shareId: string }>();

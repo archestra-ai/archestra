@@ -30,6 +30,7 @@ export const RouteId = {
 
   // Config Routes
   GetConfig: "getConfig",
+  GetPublicConfig: "getPublicConfig",
 
   // Auth Routes
   GetDefaultCredentialsStatus: "getDefaultCredentialsStatus",
@@ -59,7 +60,10 @@ export const RouteId = {
   ReauthenticateMcpServer: "reauthenticateMcpServer",
   ReinstallMcpServer: "reinstallMcpServer",
   GetMcpServerInstallationStatus: "getMcpServerInstallationStatus",
-  McpProxy: "mcpProxy",
+  // MCP Gateway Routes
+  McpGatewayGet: "mcpGatewayGet",
+  McpGatewayPost: "mcpGatewayPost",
+  McpProxyPost: "mcpProxyPost", // Frontend session-based proxy to MCP Gateway
 
   // MCP Server Installation Request Routes
   GetMcpServerInstallationRequests: "getMcpServerInstallationRequests",
@@ -236,7 +240,6 @@ export const RouteId = {
   ForkSharedConversation: "forkSharedConversation",
   GetChatModels: "getChatModels",
   SyncChatModels: "syncChatModels",
-  SyncChatModelsFull: "syncChatModelsFull",
 
   // Chat API Key Routes
   GetChatApiKeys: "getChatApiKeys",

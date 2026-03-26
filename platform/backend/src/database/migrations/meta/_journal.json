@@ -1352,6 +1352,34 @@
       "when": 1774269049316,
       "tag": "0192_api_key_reference_migration",
       "breakpoints": true
+    },
+    {
+      "idx": 193,
+      "version": "7",
+      "when": 1774290125961,
+      "tag": "0193_odd_wolf_cub",
+      "breakpoints": true
+    },
+    {
+      "idx": 194,
+      "version": "7",
+      "when": 1774297576960,
+      "tag": "0194_orange_doctor_faustus",
+      "breakpoints": true
+    },
+    {
+      "idx": 195,
+      "version": "7",
+      "when": 1774442794704,
+      "tag": "0195_opposite_shocker",
+      "breakpoints": true
+    },
+    {
+      "idx": 196,
+      "version": "7",
+      "when": 1774488938098,
+      "tag": "0196_easy_shriek",
+      "breakpoints": true
     }
   ]
 }

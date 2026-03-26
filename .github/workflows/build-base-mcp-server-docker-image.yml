@@ -22,11 +22,42 @@ env:
   IMAGE_NAME: mcp-server-base
 
 jobs:
+  python-mcp-lockfile-check:
+    name: MCP Python Lockfile Check
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    defaults:
+      run:
+        working-directory: ./platform
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        with:
+          version: "0.9.26"
+
+      - name: Regenerate lockfile and verify it is committed
+        run: |
+          make -C mcp_server_docker_image update-python-lockfile
+
+          if ! git diff --exit-code -- mcp_server_docker_image/requirements.lock; then
+            echo "::error::mcp_server_docker_image/requirements.lock is out of date. Regenerate it with uv pip compile."
+            exit 1
+          fi
+
   # Build on native runners for each architecture to avoid QEMU emulation issues
   # (Alpine's musl libc has known issues with QEMU emulation for ARM64)
   build-mcp-server-base-image:
     name: Build MCP Server Base Image (${{ matrix.os_and_arch }})
     runs-on: ${{ matrix.platform }}
+    needs:
+      - python-mcp-lockfile-check
     strategy:
       fail-fast: false
       matrix:
@@ -40,7 +71,7 @@ jobs:
       id-token: write # Required for Workload Identity Federation
     steps:
       - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -53,11 +84,11 @@ jobs:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
       - name: Setup Blacksmith Builder
-        uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
+        uses: ./.github/actions/setup-blacksmith-builder
 
       - name: Build Docker image
         id: build
-        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
+        uses: ./.github/actions/blacksmith-build-push
         with:
           context: ./platform/mcp_server_docker_image
           file: ./platform/mcp_server_docker_image/Dockerfile
@@ -76,7 +107,7 @@ jobs:
 
       - name: Upload digest
         if: inputs.push_to_gcr
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: ./.github/actions/github-upload-artifact
         with:
           name: mcp-base-digests-${{ strategy.job-index }}
           path: /tmp/digests/*
@@ -94,20 +125,20 @@ jobs:
       id-token: write # Required for Workload Identity Federation
     steps:
       - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
           fetch-depth: 1
 
       - name: Download digests
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        uses: ./.github/actions/github-download-artifact
         with:
           path: /tmp/digests
           pattern: mcp-base-digests-*
           merge-multiple: true
 
       - name: Setup Blacksmith Builder
-        uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
+        uses: ./.github/actions/setup-blacksmith-builder
 
       - name: Authenticate to Google Artifact Registry
         uses: ./.github/actions/auth-to-gar
@@ -118,6 +149,7 @@ jobs:
       - name: Create manifest list and push
         working-directory: /tmp/digests
         run: |
+          # supply-chain-policy: allow-latest internal release channel
           docker buildx imagetools create \
             -t "${IMAGE_REGISTRY}/${IMAGE_NAME}:${VERSION}" \
             -t "${IMAGE_REGISTRY}/${IMAGE_NAME}:latest" \

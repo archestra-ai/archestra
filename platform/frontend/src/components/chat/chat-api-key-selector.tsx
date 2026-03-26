@@ -1,6 +1,12 @@
 "use client";
 
-import { providerDisplayNames, type SupportedProvider } from "@shared";
+import {
+  E2eTestId,
+  getChatApiKeySelectorOptionTestId,
+  getChatApiKeySelectorProviderGroupTestId,
+  providerDisplayNames,
+  type SupportedProvider,
+} from "@shared";
 import { Building2, CheckIcon, Key, User, Users } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
@@ -18,12 +24,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { useUpdateConversation } from "@/lib/chat.query";
+import { useUpdateConversation } from "@/lib/chat/chat.query";
 import {
   type ChatApiKey,
   type ChatApiKeyScope,
   useAvailableChatApiKeys,
-} from "@/lib/chat-settings.query";
+} from "@/lib/chat/chat-settings.query";
 
 interface ChatApiKeySelectorProps {
   /** Conversation ID for persisting selection (optional for initial chat) */
@@ -271,19 +277,24 @@ export function ChatApiKeySelector({
         <PromptInputButton
           disabled={disabled}
           className="max-w-[220px] min-w-0"
+          data-testid={E2eTestId.ChatApiKeySelectorTrigger}
         >
           <Key className="size-4 shrink-0" />
         </PromptInputButton>
       </PopoverTrigger>
       <PopoverContent className="w-80 p-0" align="start">
         <Command>
-          <CommandInput placeholder="Search API Keys..." />
+          <CommandInput
+            placeholder="Search API Keys..."
+            data-testid={E2eTestId.ChatApiKeySelectorSearchInput}
+          />
           <CommandList>
             <CommandEmpty>No API keys found.</CommandEmpty>
             {/* Group keys by provider */}
             {availableProviders.map((provider) => (
               <CommandGroup
                 key={provider}
+                data-testid={getChatApiKeySelectorProviderGroupTestId(provider)}
                 heading={
                   providerDisplayNames[provider as SupportedProvider] ??
                   provider
@@ -292,6 +303,7 @@ export function ChatApiKeySelector({
                 {keysByProvider[provider]?.map((key) => (
                   <CommandItem
                     key={key.id}
+                    data-testid={getChatApiKeySelectorOptionTestId(key.id)}
                     value={`${provider} ${key.name} ${key.teamName || ""}`}
                     onSelect={() => handleSelectKey(key.id)}
                     className="cursor-pointer"

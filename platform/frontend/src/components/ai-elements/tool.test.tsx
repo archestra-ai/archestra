@@ -28,6 +28,9 @@ describe("Tool copy actions", () => {
 
     render(<ToolInput input={{ city: "Toronto", limit: 5 }} />);
 
+    // Expand the collapsible to reveal the copy button
+    await user.click(screen.getByText("Parameters"));
+
     await user.click(screen.getByRole("button", { name: "Copy to clipboard" }));
 
     expect(writeText).toHaveBeenCalledWith(

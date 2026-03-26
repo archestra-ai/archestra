@@ -10585,6 +10585,9 @@ export type GetAgentsResponses = {
                     [key: string]: unknown;
                 };
                 description: string | null;
+                meta: string | number | boolean | null | {
+                    [key: string]: unknown;
+                } | Array<unknown> | null;
                 policiesAutoConfiguredAt: string | null;
                 policiesAutoConfiguringStartedAt: string | null;
                 policiesAutoConfiguredReasoning: string | null;
@@ -10783,6 +10786,9 @@ export type CreateAgentResponses = {
                 [key: string]: unknown;
             };
             description: string | null;
+            meta: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -10951,6 +10957,9 @@ export type GetAllAgentsResponses = {
                 [key: string]: unknown;
             };
             description: string | null;
+            meta: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -11102,6 +11111,9 @@ export type GetDefaultMcpGatewayResponses = {
                 [key: string]: unknown;
             };
             description: string | null;
+            meta: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -11253,6 +11265,9 @@ export type GetDefaultLlmProxyResponses = {
                 [key: string]: unknown;
             };
             description: string | null;
+            meta: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -11485,6 +11500,9 @@ export type GetAgentResponses = {
                 [key: string]: unknown;
             };
             description: string | null;
+            meta: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -11676,6 +11694,9 @@ export type UpdateAgentResponses = {
                 [key: string]: unknown;
             };
             description: string | null;
+            meta: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -12522,6 +12543,9 @@ export type GetAgentToolsResponses = {
             [key: string]: unknown;
         };
         description: string | null;
+        meta: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
         policiesAutoConfiguredAt: string | null;
         policiesAutoConfiguringStartedAt: string | null;
         policiesAutoConfiguredReasoning: string | null;
@@ -17235,83 +17259,6 @@ export type SyncChatModelsResponses = {
 
 export type SyncChatModelsResponse = SyncChatModelsResponses[keyof SyncChatModelsResponses];
 
-export type SyncChatModelsFullData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/chat/models/sync-full';
-};
-
-export type SyncChatModelsFullErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type SyncChatModelsFullError = SyncChatModelsFullErrors[keyof SyncChatModelsFullErrors];
-
-export type SyncChatModelsFullResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type SyncChatModelsFullResponse = SyncChatModelsFullResponses[keyof SyncChatModelsFullResponses];
-
 export type GetModelsWithApiKeysData = {
     body?: never;
     path?: never;
@@ -17396,6 +17343,7 @@ export type GetModelsWithApiKeysResponses = {
         completionPricePerToken: string | null;
         customPricePerMillionInput: string | null;
         customPricePerMillionOutput: string | null;
+        ignored: boolean;
         discoveredViaLlmProxy: boolean;
         lastSyncedAt: string;
         createdAt: string;
@@ -17409,16 +17357,10 @@ export type GetModelsWithApiKeysResponses = {
             scope: string;
             isSystem: boolean;
         }>;
-        capabilities: {
-            contextLength: number | null;
-            inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
-            outputModalities: Array<'text' | 'image' | 'audio'> | null;
-            supportsToolCalling: boolean | null;
-            pricePerMillionInput: string | null;
-            pricePerMillionOutput: string | null;
-            isCustomPrice: boolean;
-            priceSource: 'custom' | 'models_dev' | 'default';
-        };
+        pricePerMillionInput: string | null;
+        pricePerMillionOutput: string | null;
+        isCustomPrice: boolean;
+        priceSource: 'custom' | 'models_dev' | 'default';
     }>;
 };
 
@@ -17428,6 +17370,7 @@ export type UpdateModelData = {
     body: {
         customPricePerMillionInput?: string | null;
         customPricePerMillionOutput?: string | null;
+        ignored?: boolean;
         inputModalities?: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
         outputModalities?: Array<'text' | 'image' | 'audio'> | null;
     };
@@ -17515,6 +17458,7 @@ export type UpdateModelResponses = {
         completionPricePerToken: string | null;
         customPricePerMillionInput: string | null;
         customPricePerMillionOutput: string | null;
+        ignored: boolean;
         discoveredViaLlmProxy: boolean;
         lastSyncedAt: string;
         createdAt: string;
@@ -20328,6 +20272,25 @@ export type CohereChatWithAgentResponses = {
 
 export type CohereChatWithAgentResponse = CohereChatWithAgentResponses[keyof CohereChatWithAgentResponses];
 
+export type GetPublicConfigData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/config/public';
+};
+
+export type GetPublicConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        disableBasicAuth: boolean;
+        disableInvitations: boolean;
+    };
+};
+
+export type GetPublicConfigResponse = GetPublicConfigResponses[keyof GetPublicConfigResponses];
+
 export type GetConfigData = {
     body?: never;
     path?: never;
@@ -20363,6 +20326,7 @@ export type GetConfigResponses = {
             isQuickstart: boolean;
             ngrokDomain: string;
             virtualKeyDefaultExpirationSeconds: number;
+            mcpSandboxDomain: string | null;
         };
         providerBaseUrls: {
             [key: string]: string | null;
@@ -28199,7 +28163,7 @@ export type UpdateLimitResponses = {
 
 export type UpdateLimitResponse = UpdateLimitResponses[keyof UpdateLimitResponses];
 
-export type GetV1McpByProfileIdData = {
+export type McpGatewayGetData = {
     body?: never;
     path: {
         profileId: string;
@@ -28208,7 +28172,7 @@ export type GetV1McpByProfileIdData = {
     url: '/v1/mcp/{profileId}';
 };
 
-export type GetV1McpByProfileIdErrors = {
+export type McpGatewayGetErrors = {
     /**
      * Default Response
      */
@@ -28218,9 +28182,9 @@ export type GetV1McpByProfileIdErrors = {
     };
 };
 
-export type GetV1McpByProfileIdError = GetV1McpByProfileIdErrors[keyof GetV1McpByProfileIdErrors];
+export type McpGatewayGetError = McpGatewayGetErrors[keyof McpGatewayGetErrors];
 
-export type GetV1McpByProfileIdResponses = {
+export type McpGatewayGetResponses = {
     /**
      * Default Response
      */
@@ -28242,9 +28206,9 @@ export type GetV1McpByProfileIdResponses = {
     };
 };
 
-export type GetV1McpByProfileIdResponse = GetV1McpByProfileIdResponses[keyof GetV1McpByProfileIdResponses];
+export type McpGatewayGetResponse = McpGatewayGetResponses[keyof McpGatewayGetResponses];
 
-export type PostV1McpByProfileIdData = {
+export type McpGatewayPostData = {
     body: {
         [key: string]: unknown;
     };
@@ -28255,7 +28219,25 @@ export type PostV1McpByProfileIdData = {
     url: '/v1/mcp/{profileId}';
 };
 
-export type PostV1McpByProfileIdResponses = {
+export type McpGatewayPostResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type McpProxyPostData = {
+    body: {
+        [key: string]: unknown;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/api/mcp/{agentId}';
+};
+
+export type McpProxyPostResponses = {
     /**
      * Default Response
      */
@@ -30713,7 +30695,7 @@ export type GetMcpToolCallsResponses = {
             } | null;
             toolResult: unknown;
             userId: string | null;
-            authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp';
+            authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp' | 'session';
             createdAt: string;
             userName: string | null;
         }>;
@@ -30819,7 +30801,7 @@ export type GetMcpToolCallResponses = {
         } | null;
         toolResult: unknown;
         userId: string | null;
-        authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp';
+        authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp' | 'session';
         createdAt: string;
         userName: string | null;
     };
@@ -36543,6 +36525,9 @@ export type GetToolsResponses = {
             [key: string]: unknown;
         };
         description: string | null;
+        meta: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
         policiesAutoConfiguredAt: string | null;
         policiesAutoConfiguringStartedAt: string | null;
         policiesAutoConfiguredReasoning: string | null;
@@ -38128,6 +38113,7 @@ export type GetIdentityProvidersResponses = {
         oidcConfig?: {
             issuer: string;
             pkce: boolean;
+            enableRpInitiatedLogout?: boolean;
             clientId: string;
             clientSecret: string;
             authorizationEndpoint?: string;
@@ -38243,6 +38229,7 @@ export type CreateIdentityProviderData = {
         oidcConfig?: {
             issuer: string;
             pkce: boolean;
+            enableRpInitiatedLogout?: boolean;
             clientId: string;
             clientSecret: string;
             authorizationEndpoint?: string;
@@ -38421,6 +38408,7 @@ export type CreateIdentityProviderResponses = {
         oidcConfig?: {
             issuer: string;
             pkce: boolean;
+            enableRpInitiatedLogout?: boolean;
             clientId: string;
             clientSecret: string;
             authorizationEndpoint?: string;
@@ -38764,6 +38752,7 @@ export type GetIdentityProviderResponses = {
         oidcConfig?: {
             issuer: string;
             pkce: boolean;
+            enableRpInitiatedLogout?: boolean;
             clientId: string;
             clientSecret: string;
             authorizationEndpoint?: string;
@@ -38879,6 +38868,7 @@ export type UpdateIdentityProviderData = {
         oidcConfig?: {
             issuer: string;
             pkce: boolean;
+            enableRpInitiatedLogout?: boolean;
             clientId: string;
             clientSecret: string;
             authorizationEndpoint?: string;
@@ -39058,6 +39048,7 @@ export type UpdateIdentityProviderResponses = {
         oidcConfig?: {
             issuer: string;
             pkce: boolean;
+            enableRpInitiatedLogout?: boolean;
             clientId: string;
             clientSecret: string;
             authorizationEndpoint?: string;

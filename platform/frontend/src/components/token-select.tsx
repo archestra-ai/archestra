@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useMcpServersGroupedByCatalog } from "@/lib/mcp-server.query";
+import { useMcpServersGroupedByCatalog } from "@/lib/mcp/mcp-server.query";
 import { cn } from "@/lib/utils";
 import Divider from "./divider";
 import { LoadingSpinner } from "./loading";
@@ -86,7 +86,6 @@ export function TokenSelect({
       value={value ?? ""}
       onValueChange={onValueChange}
       disabled={disabled || isLoading}
-      data-testid={E2eTestId.TokenSelect}
     >
       <SelectTrigger
         className={cn(
@@ -94,6 +93,7 @@ export function TokenSelect({
           className,
         )}
         size="sm"
+        data-testid={E2eTestId.TokenSelect}
       >
         <SelectValue placeholder="Select connection..." />
       </SelectTrigger>

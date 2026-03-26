@@ -9,7 +9,7 @@ import {
   useConversationShare,
   useShareConversation,
   useUnshareConversation,
-} from "@/lib/chat-share.query";
+} from "@/lib/chat/chat-share.query";
 import { cn } from "@/lib/utils";
 
 export function ShareConversationDialog({

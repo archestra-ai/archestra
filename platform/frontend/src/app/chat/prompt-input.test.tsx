@@ -147,7 +147,7 @@ vi.mock("@/lib/agent-tools.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/chat.query", () => ({
+vi.mock("@/lib/chat/chat.query", () => ({
   useProfileToolsWithIds: () => ({
     data: [],
     isLoading: false,
@@ -159,7 +159,7 @@ vi.mock("@/lib/organization.query", () => ({
   useOrganization: () => mockUseOrganization(),
 }));
 
-vi.mock("@/lib/chat-placeholder.hook", () => ({
+vi.mock("@/lib/chat/chat-placeholder.hook", () => ({
   useChatPlaceholder: (...args: unknown[]) => mockUseChatPlaceholder(...args),
 }));
 
@@ -170,7 +170,7 @@ const mockUseHasPermissions = vi.fn().mockReturnValue({
   isLoading: false,
 });
 
-vi.mock("@/lib/auth.query", () => ({
+vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => mockUseHasPermissions(),
 }));
 

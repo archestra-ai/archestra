@@ -4,8 +4,8 @@ import {
   DEFAULT_SORT_BY,
   DEFAULT_SORT_DIRECTION,
   DEFAULT_TABLE_LIMIT,
-  handleApiError,
-} from "./utils";
+} from "@/consts";
+import { handleApiError } from "@/lib/utils";
 
 const {
   createAgent,

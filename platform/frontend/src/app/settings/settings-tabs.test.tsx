@@ -26,10 +26,6 @@ vi.mock("@shared", async () => {
   };
 });
 
-vi.mock("@/lib/auth/auth.utils", () => ({
-  hasPermission: vi.fn(),
-}));
-
 let mockSecretsType = "DB";
 
 vi.mock("@/lib/secrets.query", () => ({

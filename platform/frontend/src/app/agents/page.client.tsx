@@ -28,6 +28,7 @@ import {
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
+import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
 import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -557,10 +558,10 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 <AgentScopeFilter showBuiltIn />
               </div>
               {!canReadTeams && (
-                <p className="text-xs text-muted-foreground">
-                  Team-based filters and sharing details are unavailable without
-                  team read permission.
-                </p>
+                <PermissionRequirementHint
+                  message="Team-based filters and sharing details are unavailable without"
+                  permissions={[{ resource: "team", action: "read" }]}
+                />
               )}
               <ActiveFilterBadges />
             </div>

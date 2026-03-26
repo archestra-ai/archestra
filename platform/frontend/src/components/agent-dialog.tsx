@@ -107,6 +107,10 @@ import {
   type VisibilityOption,
 } from "@/components/visibility-selector";
 import {
+  formatPermissionRequirement,
+  PermissionRequirementHint,
+} from "@/components/permission-requirement-hint";
+import {
   useCreateProfile,
   useInternalAgents,
   useProfile,
@@ -422,7 +426,7 @@ function AccessLevelSelector({
     if (value === "personal" && initialScope && initialScope !== "personal")
       return "Shared agents cannot be made personal";
     if (value === "team" && !canReadTeams)
-      return "Team sharing is unavailable without team read permission";
+      return `Team sharing is unavailable without ${formatPermissionRequirement({ resource: "team", action: "read" })}`;
     if (value === "team" && !canShareWithTeams)
       return `You need ${resourceName}:team-admin permission to share with teams`;
     if (value === "org" && !isAdmin)
@@ -472,9 +476,10 @@ function AccessLevelSelector({
             emptyMessage="No teams found."
           />
           {!canReadTeams && (
-            <p className="text-xs text-muted-foreground">
-              Team selection is unavailable without team read permission.
-            </p>
+            <PermissionRequirementHint
+              message="Team selection is unavailable without"
+              permissions={[{ resource: "team", action: "read" }]}
+            />
           )}
         </div>
       )}

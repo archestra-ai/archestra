@@ -10,6 +10,7 @@ import {
   parseLabelsParam,
   serializeLabels,
 } from "@/components/label-select";
+import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
 import { Badge } from "@/components/ui/badge";
 import { MultiSelect } from "@/components/ui/multi-select";
 import {
@@ -196,9 +197,11 @@ export function AgentScopeFilter({
         />
       )}
       {scope === "team" && !canReadTeams && (
-        <span className="text-xs text-muted-foreground">
-          Team filters unavailable without team read permission.
-        </span>
+        <PermissionRequirementHint
+          message="Team filters are unavailable without"
+          permissions={[{ resource: "team", action: "read" }]}
+          className="inline"
+        />
       )}
       {uiScope === "others_personal" && isAdmin && (
         <MultiSelect

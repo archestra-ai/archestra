@@ -75,6 +75,10 @@ export function NotionConfigFields({
                 min={1}
                 placeholder="e.g. 50"
                 {...field}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  field.onChange(value === "" ? undefined : Number(value));
+                }}
               />
             </FormControl>
             <FormDescription>

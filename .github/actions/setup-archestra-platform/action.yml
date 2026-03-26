@@ -176,8 +176,7 @@ runs:
         E2E_PID=""
         if [ "${DEPLOY_E2E_DEPS}" == "true" ]; then
           echo "Starting e2e-tests Helm install in background..."
-          helm install e2e-tests "${PLATFORM_CONTEXT}/helm/e2e-tests" \
-            --set keycloak.hostnameUrl=http://e2e-tests-keycloak:8080 &
+          helm install e2e-tests "${PLATFORM_CONTEXT}/helm/e2e-tests" &
           E2E_PID=$!
         fi
 

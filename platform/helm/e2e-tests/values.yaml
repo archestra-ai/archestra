@@ -37,6 +37,7 @@ keycloak:
   # Local dev uses the NodePort forwarded to the host. CI overrides this to the
   # in-cluster service URL so server-side OIDC flows from the backend pod work.
   hostnameUrl: "http://localhost:30081"
+  hostnameBackchannelDynamic: true
   # Resource limits for CI environment
   # Keycloak 26 (Java) needs ~1.5GB+ for JVM + realm import; 1024Mi causes OOMKill
   resources:

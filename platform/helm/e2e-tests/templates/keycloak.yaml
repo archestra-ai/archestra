@@ -70,6 +70,8 @@ spec:
               value: {{ .Values.keycloak.hostnameUrl | quote }}
             - name: KC_HOSTNAME_STRICT
               value: "false"
+            - name: KC_HOSTNAME_BACKCHANNEL_DYNAMIC
+              value: {{ ternary "true" "false" .Values.keycloak.hostnameBackchannelDynamic | quote }}
           ports:
             - containerPort: 8080
               name: http

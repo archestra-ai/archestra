@@ -2,11 +2,10 @@ import { isPlaywrightCatalogItem, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
-import {
+import mcpClient, {
   McpServerConnectionTimeoutError,
   McpServerNotReadyError,
 } from "@/clients/mcp-client";
-import mcpClient from "@/clients/mcp-client";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import {

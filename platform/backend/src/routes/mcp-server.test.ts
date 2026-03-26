@@ -11,8 +11,7 @@ const {
 } = vi.hoisted(() => ({
   inspectServerMock: vi.fn(),
   MockMcpServerNotReadyError: class MockMcpServerNotReadyError extends Error {},
-  MockMcpServerConnectionTimeoutError:
-    class MockMcpServerConnectionTimeoutError extends Error {},
+  MockMcpServerConnectionTimeoutError: class MockMcpServerConnectionTimeoutError extends Error {},
 }));
 
 vi.mock("@/clients/mcp-client", () => ({

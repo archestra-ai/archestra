@@ -242,6 +242,7 @@ function McpGateways({
       : undefined,
     labels: labelsFromUrl || undefined,
   });
+  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
 
   const { data: userTeams } = useQuery({
     queryKey: ["teams"],
@@ -252,6 +253,7 @@ function McpGateways({
       return data?.data || [];
     },
     initialData: initialData?.teams,
+    enabled: !!canReadTeams,
   });
 
   const { data: isAdmin } = useHasPermissions({ mcpGateway: ["admin"] });
@@ -524,6 +526,12 @@ function McpGateways({
                 />
                 <AgentScopeFilter />
               </div>
+              {!canReadTeams && (
+                <p className="text-xs text-muted-foreground">
+                  Team-based filters and sharing details are unavailable without
+                  team read permission.
+                </p>
+              )}
               <ActiveFilterBadges />
             </div>
 

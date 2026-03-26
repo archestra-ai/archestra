@@ -17,10 +17,7 @@ export function hasPermissions(
   userPermissions: Permissions | undefined,
   permissionsToCheck: Permissions,
 ): boolean {
-  if (
-    !permissionsToCheck ||
-    Object.keys(permissionsToCheck).length === 0
-  ) {
+  if (!permissionsToCheck || Object.keys(permissionsToCheck).length === 0) {
     return true;
   }
 

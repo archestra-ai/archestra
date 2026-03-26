@@ -10,9 +10,12 @@ const { getServerApiHeadersMock, getAgentsMock, getTeamsMock } = vi.hoisted(
     getTeamsMock: vi.fn(),
   }),
 );
-const { serverCanAccessPageMock } = vi.hoisted(() => ({
-  serverCanAccessPageMock: vi.fn(),
-}));
+const { serverCanAccessPageMock, serverHasPermissionsMock } = vi.hoisted(
+  () => ({
+    serverCanAccessPageMock: vi.fn(),
+    serverHasPermissionsMock: vi.fn(),
+  }),
+);
 
 vi.mock("@shared", () => ({
   archestraApiSdk: {
@@ -31,6 +34,7 @@ vi.mock("@/lib/utils/server", () => ({
 
 vi.mock("@/lib/auth/auth.server", () => ({
   serverCanAccessPage: serverCanAccessPageMock,
+  serverHasPermissions: serverHasPermissionsMock,
 }));
 
 vi.mock("./page.client", () => ({
@@ -52,6 +56,7 @@ describe("McpGatewaysPageServer", () => {
     vi.clearAllMocks();
     getServerApiHeadersMock.mockResolvedValue({});
     serverCanAccessPageMock.mockResolvedValue(true);
+    serverHasPermissionsMock.mockResolvedValue(true);
   });
 
   it("renders the forbidden page before fetching data when access is denied", async () => {
@@ -77,5 +82,17 @@ describe("McpGatewaysPageServer", () => {
     render(await McpGatewaysPageServer());
 
     expect(screen.getByTestId("mcp-gateways-page")).toBeInTheDocument();
+  });
+
+  it("skips the teams fetch when the user cannot read teams", async () => {
+    serverHasPermissionsMock.mockResolvedValue(false);
+    getAgentsMock.mockResolvedValue({
+      data: { data: [{ id: "agent-1" }] },
+    });
+
+    render(await McpGatewaysPageServer());
+
+    expect(screen.getByTestId("mcp-gateways-page")).toBeInTheDocument();
+    expect(getTeamsMock).not.toHaveBeenCalled();
   });
 });

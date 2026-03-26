@@ -11,7 +11,10 @@ import {
   DEFAULT_SORT_DIRECTION,
   DEFAULT_TABLE_LIMIT,
 } from "@/consts";
-import { serverCanAccessPage } from "@/lib/auth/auth.server";
+import {
+  serverCanAccessPage,
+  serverHasPermissions,
+} from "@/lib/auth/auth.server";
 import { handleApiError } from "@/lib/utils";
 import { getServerApiHeaders } from "@/lib/utils/server";
 import LlmProxiesPage from "./page.client";
@@ -32,6 +35,11 @@ export default async function LlmProxiesPageServer() {
     }
 
     const headers = await getServerApiHeaders();
+    const canReadTeams = await serverHasPermissions({ team: ["read"] });
+    const emptyTeamsResponse = {
+      data: { data: [] },
+      error: undefined,
+    };
     const [agentsResponse, teamsResponse] = await Promise.all([
       archestraApiSdk.getAgents({
         headers,
@@ -43,10 +51,12 @@ export default async function LlmProxiesPageServer() {
           agentTypes: ["llm_proxy", "profile"],
         },
       }),
-      archestraApiSdk.getTeams({
-        headers,
-        query: { limit: 100, offset: 0 },
-      }),
+      canReadTeams
+        ? archestraApiSdk.getTeams({
+            headers,
+            query: { limit: 100, offset: 0 },
+          })
+        : Promise.resolve(emptyTeamsResponse),
     ]);
     if (agentsResponse.error) {
       handleApiError(agentsResponse.error);

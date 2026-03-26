@@ -247,6 +247,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       : undefined,
     labels: labelsFromUrl || undefined,
   });
+  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
 
   // Keep teams cache warm for AgentDialog
   const { data: userTeams } = useQuery({
@@ -258,6 +259,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       return data?.data || [];
     },
     initialData: initialData?.teams,
+    enabled: !!canReadTeams,
   });
 
   const { data: isAgentAdmin } = useHasPermissions({ agent: ["admin"] });
@@ -554,6 +556,12 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 />
                 <AgentScopeFilter showBuiltIn />
               </div>
+              {!canReadTeams && (
+                <p className="text-xs text-muted-foreground">
+                  Team-based filters and sharing details are unavailable without
+                  team read permission.
+                </p>
+              )}
               <ActiveFilterBadges />
             </div>
 

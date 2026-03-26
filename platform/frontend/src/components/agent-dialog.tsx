@@ -377,6 +377,7 @@ function AccessLevelSelector({
   onScopeChange,
   isAdmin,
   isTeamAdmin,
+  canReadTeams,
   initialScope,
   agentType,
   teams,
@@ -389,6 +390,7 @@ function AccessLevelSelector({
   onScopeChange: (scope: AgentScope) => void;
   isAdmin: boolean;
   isTeamAdmin: boolean;
+  canReadTeams: boolean;
   initialScope?: AgentScope;
   agentType: AgentType;
   teams: Array<{ id: string; name: string }> | undefined;
@@ -403,7 +405,7 @@ function AccessLevelSelector({
   const isOptionDisabled = (value: string) => {
     if (value === "personal" && initialScope && initialScope !== "personal")
       return true;
-    if (value === "team" && !canShareWithTeams) return true;
+    if (value === "team" && (!canShareWithTeams || !canReadTeams)) return true;
     if (value === "org" && !isAdmin) return true;
     return false;
   };
@@ -419,6 +421,8 @@ function AccessLevelSelector({
   const getDisabledReason = (value: string) => {
     if (value === "personal" && initialScope && initialScope !== "personal")
       return "Shared agents cannot be made personal";
+    if (value === "team" && !canReadTeams)
+      return "Team sharing is unavailable without team read permission";
     if (value === "team" && !canShareWithTeams)
       return `You need ${resourceName}:team-admin permission to share with teams`;
     if (value === "org" && !isAdmin)
@@ -447,7 +451,9 @@ function AccessLevelSelector({
         <div className="space-y-2">
           <Label>Teams{showTeamRequired && " *"}</Label>
           <MultiSelectCombobox
-            disabled={!canShareWithTeams || hasNoAvailableTeams}
+            disabled={
+              !canShareWithTeams || hasNoAvailableTeams || !canReadTeams
+            }
             options={
               teams?.map((team) => ({
                 value: team.id,
@@ -457,10 +463,19 @@ function AccessLevelSelector({
             value={assignedTeamIds}
             onChange={onTeamIdsChange}
             placeholder={
-              hasNoAvailableTeams ? "No teams available" : "Search teams..."
+              !canReadTeams
+                ? "Teams unavailable"
+                : hasNoAvailableTeams
+                  ? "No teams available"
+                  : "Search teams..."
             }
             emptyMessage="No teams found."
           />
+          {!canReadTeams && (
+            <p className="text-xs text-muted-foreground">
+              Team selection is unavailable without team read permission.
+            </p>
+          )}
         </div>
       )}
     </SharedVisibilitySelector>
@@ -1579,6 +1594,7 @@ export function AgentDialog({
                     initialScope={agent?.scope}
                     agentType={agentType}
                     teams={teams}
+                    canReadTeams={!!canReadTeams}
                     assignedTeamIds={assignedTeamIds}
                     onTeamIdsChange={setAssignedTeamIds}
                     hasNoAvailableTeams={hasNoAvailableTeams}

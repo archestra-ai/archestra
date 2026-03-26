@@ -27,10 +27,6 @@ vi.mock("@shared", async () => {
   };
 });
 
-vi.mock("@/lib/auth/auth.utils", () => ({
-  hasPermission: vi.fn(),
-}));
-
 // Helper to wrap hooks with QueryClient
 const createWrapper = () => {
   const queryClient = new QueryClient({

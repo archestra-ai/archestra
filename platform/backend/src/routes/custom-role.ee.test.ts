@@ -1,5 +1,7 @@
+import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
+import OrganizationRoleModel from "@/models/organization-role";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -218,5 +220,107 @@ describe("custom role routes", () => {
 
     expect(deleteResponse.statusCode).toBe(200);
     expect(deleteResponse.json()).toEqual({ success: true });
+  });
+
+  test("update invalidates cached permissions so the latest role data is visible immediately", async ({
+    makeCustomRole,
+  }) => {
+    const existingRole = await makeCustomRole(organizationId, {
+      role: "reader",
+      name: "Reader",
+      permission: { ac: ["read"] },
+    });
+
+    await expect(
+      OrganizationRoleModel.getPermissions(existingRole.role, organizationId),
+    ).resolves.toEqual({ ac: ["read"] });
+
+    updateOrgRoleMock.mockImplementation(async () => {
+      const updatedAt = new Date("2026-03-16T00:00:00.000Z");
+      await db
+        .update(schema.organizationRolesTable)
+        .set({
+          name: "Reader Plus",
+          description: "Updated description",
+          permission: JSON.stringify({ ac: ["read", "update"] }),
+          updatedAt,
+        })
+        .where(
+          and(
+            eq(schema.organizationRolesTable.id, existingRole.id),
+            eq(schema.organizationRolesTable.organizationId, organizationId),
+          ),
+        );
+
+      return {
+        roleData: {
+          ...existingRole,
+          name: "Reader Plus",
+          description: "Updated description",
+          permission: JSON.stringify({ ac: ["read", "update"] }),
+          updatedAt,
+        },
+      };
+    });
+
+    const updateResponse = await app.inject({
+      method: "PUT",
+      url: `/api/roles/${existingRole.id}`,
+      payload: {
+        name: "Reader Plus",
+        description: "Updated description",
+        permission: { ac: ["read", "update"] },
+      },
+    });
+
+    expect(updateResponse.statusCode).toBe(200);
+    expect(updateResponse.json()).toMatchObject({
+      id: existingRole.id,
+      name: "Reader Plus",
+      permission: { ac: ["read", "update"] },
+    });
+
+    await expect(
+      OrganizationRoleModel.getPermissions(existingRole.role, organizationId),
+    ).resolves.toEqual({ ac: ["read", "update"] });
+  });
+
+  test("delete invalidates cached permissions so the removed role disappears immediately", async ({
+    makeCustomRole,
+  }) => {
+    const existingRole = await makeCustomRole(organizationId, {
+      role: "reader",
+      name: "Reader",
+      permission: { ac: ["read"] },
+    });
+
+    await expect(
+      OrganizationRoleModel.getPermissions(existingRole.role, organizationId),
+    ).resolves.toEqual({ ac: ["read"] });
+
+    deleteOrgRoleMock.mockImplementation(async () => {
+      await db
+        .delete(schema.organizationRolesTable)
+        .where(
+          and(
+            eq(schema.organizationRolesTable.id, existingRole.id),
+            eq(schema.organizationRolesTable.organizationId, organizationId),
+          ),
+        );
+
+      return { success: true };
+    });
+
+    const deleteResponse = await app.inject({
+      method: "DELETE",
+      url: `/api/roles/${existingRole.id}`,
+    });
+
+    expect(deleteResponse.statusCode).toBe(200);
+    expect(deleteResponse.json()).toEqual({ success: true });
+
+    await expect(
+      OrganizationRoleModel.getPermissions(existingRole.role, organizationId),
+    ).resolves.toEqual({});
   });
 });

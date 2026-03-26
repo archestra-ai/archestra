@@ -10,9 +10,16 @@ import {
 } from "@shared";
 import { predefinedPermissionsMap } from "@shared/access-control";
 import { and, eq, getTableColumns, ilike, sql } from "drizzle-orm";
+import { LRUCacheManager } from "@/cache-manager";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import type { OrganizationRole } from "@/types";
+
+const ROLE_PERMISSIONS_CACHE_TTL_MS = 30_000;
+const rolePermissionsCache = new LRUCacheManager<Permissions>({
+  maxSize: 1_000,
+  defaultTtl: ROLE_PERMISSIONS_CACHE_TTL_MS,
+});
 
 const generatePredefinedRole = (
   role: PredefinedRoleName,
@@ -31,6 +38,15 @@ const generatePredefinedRole = (
 });
 
 class OrganizationRoleModel {
+  static invalidatePermissionsCacheForRole(
+    organizationId: string,
+    identifier: string,
+  ) {
+    rolePermissionsCache.delete(
+      OrganizationRoleModel.getPermissionsCacheKey(organizationId, identifier),
+    );
+  }
+
   /**
    * Check if a role is a predefined role (not a custom one)
    */
@@ -320,6 +336,15 @@ class OrganizationRoleModel {
       return OrganizationRoleModel.getPredefinedRolePermissions(identifier);
     }
 
+    const cacheKey = OrganizationRoleModel.getPermissionsCacheKey(
+      organizationId,
+      identifier,
+    );
+    const cachedPermissions = rolePermissionsCache.get(cacheKey);
+    if (cachedPermissions) {
+      return cachedPermissions;
+    }
+
     const role = await OrganizationRoleModel.getByIdentifier(
       identifier,
       organizationId,
@@ -332,6 +357,8 @@ class OrganizationRoleModel {
       );
       return {};
     }
+
+    rolePermissionsCache.set(cacheKey, role.permission);
 
     logger.debug(
       { identifier },
@@ -508,6 +535,13 @@ class OrganizationRoleModel {
     throw new Error(
       "OrganizationRoleModel.delete() should not be called directly. Use betterAuth.api.deleteOrgRole() in routes, or direct DB operations in test fixtures.",
     );
+  }
+
+  private static getPermissionsCacheKey(
+    organizationId: string,
+    identifier: string,
+  ): string {
+    return `${organizationId}:${identifier}`;
   }
 }
 

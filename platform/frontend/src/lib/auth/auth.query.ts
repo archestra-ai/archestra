@@ -1,6 +1,7 @@
 import { archestraApiSdk, type Permissions } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
+import { hasPermissions } from "@/lib/auth/auth.utils";
 import { authClient } from "@/lib/clients/auth/auth-client";
 
 /**
@@ -44,34 +45,10 @@ export function useHasPermissions(permissionsToCheck: Permissions) {
     status,
   } = useAllPermissions();
 
-  // Compute permission check result
-  const hasPermissionResult = (() => {
-    // If no permissions to check, allow access
-    if (!permissionsToCheck || Object.keys(permissionsToCheck).length === 0) {
-      return true;
-    }
-
-    // If permissions not loaded yet, deny access
-    if (!userPermissions) {
-      return false;
-    }
-
-    // Check if user has all required permissions
-    for (const [resource, actions] of Object.entries(permissionsToCheck)) {
-      const userActions = userPermissions[resource as keyof Permissions];
-      if (!userActions) {
-        return false;
-      }
-
-      for (const action of actions) {
-        if (!(userActions as readonly string[]).includes(action)) {
-          return false;
-        }
-      }
-    }
-
-    return true;
-  })();
+  const hasPermissionResult = hasPermissions(
+    userPermissions,
+    permissionsToCheck,
+  );
 
   return {
     data: hasPermissionResult,
@@ -155,38 +132,7 @@ export function usePermissionMap<Key extends string>(
     Key,
     Permissions,
   ][]) {
-    // If no permissions required, allow access
-    if (!requiredPermissions || Object.keys(requiredPermissions).length === 0) {
-      result[key] = true;
-      continue;
-    }
-
-    // If permissions not loaded yet, deny access
-    if (!userPermissions) {
-      result[key] = false;
-      continue;
-    }
-
-    // Check if user has all required permissions
-    let hasAllPermissions = true;
-    for (const [resource, actions] of Object.entries(requiredPermissions)) {
-      const userActions = userPermissions[resource as keyof Permissions];
-      if (!userActions) {
-        hasAllPermissions = false;
-        break;
-      }
-
-      for (const action of actions) {
-        if (!(userActions as readonly string[]).includes(action)) {
-          hasAllPermissions = false;
-          break;
-        }
-      }
-
-      if (!hasAllPermissions) break;
-    }
-
-    result[key] = hasAllPermissions;
+    result[key] = hasPermissions(userPermissions, requiredPermissions);
   }
 
   return result;

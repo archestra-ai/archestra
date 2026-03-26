@@ -12,3 +12,31 @@ export function formatMissingPermissions(permissions: Permissions): string {
 
   return `Missing permissions: ${parts.join(", ")}`;
 }
+
+export function hasPermissions(
+  userPermissions: Permissions | undefined,
+  permissionsToCheck: Permissions,
+): boolean {
+  if (!permissionsToCheck || Object.keys(permissionsToCheck).length === 0) {
+    return true;
+  }
+
+  if (!userPermissions) {
+    return false;
+  }
+
+  for (const [resource, actions] of Object.entries(permissionsToCheck)) {
+    const userActions = userPermissions[resource as keyof Permissions];
+    if (!userActions) {
+      return false;
+    }
+
+    for (const action of actions) {
+      if (!(userActions as readonly string[]).includes(action)) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}

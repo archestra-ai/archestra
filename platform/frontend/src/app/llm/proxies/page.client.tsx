@@ -37,6 +37,7 @@ import {
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
+import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
 import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
@@ -232,6 +233,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
       : undefined,
     labels: labelsFromUrl || undefined,
   });
+  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
 
   const { data: userTeams } = useQuery({
     queryKey: ["teams"],
@@ -242,6 +244,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
       return data?.data || [];
     },
     initialData: initialData?.teams,
+    enabled: !!canReadTeams,
   });
 
   const { data: isAdmin } = useHasPermissions({ llmProxy: ["admin"] });
@@ -467,6 +470,12 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                 />
                 <AgentScopeFilter />
               </div>
+              {!canReadTeams && (
+                <PermissionRequirementHint
+                  message="Team-based filters and sharing details are unavailable without"
+                  permissions={[{ resource: "team", action: "read" }]}
+                />
+              )}
               <ActiveFilterBadges />
             </div>
 

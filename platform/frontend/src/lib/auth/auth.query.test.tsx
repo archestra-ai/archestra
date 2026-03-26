@@ -9,6 +9,7 @@ import {
   usePermissionMap,
   useSession,
 } from "@/lib/auth/auth.query";
+import * as authUtils from "@/lib/auth/auth.utils";
 import { authClient } from "@/lib/clients/auth/auth-client";
 
 // Mock the auth client and SDK
@@ -32,10 +33,6 @@ vi.mock("@shared", async () => {
     },
   };
 });
-
-vi.mock("@/lib/auth/auth.utils", () => ({
-  hasPermission: vi.fn(),
-}));
 
 // Helper to wrap hooks with QueryClient
 const createWrapper = () => {
@@ -130,6 +127,35 @@ describe("useDefaultCredentialsEnabled", () => {
 });
 
 describe("useHasPermissions", () => {
+  it("delegates evaluation to hasPermissions", async () => {
+    const hasPermissionsSpy = vi.spyOn(authUtils, "hasPermissions");
+    const userPermissions: Permissions = {
+      organization: ["read"],
+    };
+
+    vi.mocked(archestraApiSdk.getUserPermissions).mockResolvedValue({
+      data: userPermissions,
+    } as Awaited<ReturnType<typeof archestraApiSdk.getUserPermissions>>);
+
+    const permissionsToCheck: Permissions = {
+      organization: ["read"],
+    };
+
+    const { result } = renderHook(() => useHasPermissions(permissionsToCheck), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(hasPermissionsSpy).toHaveBeenCalledWith(
+      userPermissions,
+      permissionsToCheck,
+    );
+    expect(result.current.data).toBe(true);
+  });
+
   it("should return true when user has all required permissions", async () => {
     const userPermissions: Permissions = {
       organization: ["read", "create", "update"],
@@ -282,6 +308,40 @@ describe("useHasPermissions", () => {
 });
 
 describe("usePermissionMap", () => {
+  it("delegates each permission set to hasPermissions", async () => {
+    const hasPermissionsSpy = vi.spyOn(authUtils, "hasPermissions");
+    const userPermissions: Permissions = {
+      organization: ["read"],
+      agent: ["read"],
+    };
+
+    vi.mocked(archestraApiSdk.getUserPermissions).mockResolvedValue({
+      data: userPermissions,
+    } as Awaited<ReturnType<typeof archestraApiSdk.getUserPermissions>>);
+
+    const permissionMap: Record<string, Permissions> = {
+      canReadOrg: { organization: ["read"] },
+      canReadAgent: { agent: ["read"] },
+    };
+
+    const { result } = renderHook(() => usePermissionMap(permissionMap), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current?.canReadOrg).toBe(true);
+    });
+
+    expect(hasPermissionsSpy).toHaveBeenCalledWith(
+      userPermissions,
+      permissionMap.canReadOrg,
+    );
+    expect(hasPermissionsSpy).toHaveBeenCalledWith(
+      userPermissions,
+      permissionMap.canReadAgent,
+    );
+  });
+
   it("should check multiple permission sets and return a map of results", async () => {
     const userPermissions: Permissions = {
       organization: ["read", "create"],

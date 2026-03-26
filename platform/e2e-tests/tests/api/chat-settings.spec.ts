@@ -593,7 +593,7 @@ test.describe("LLM Provider API Keys Scope Update", () => {
 test.describe("LLM Provider API Keys Access Control", () => {
   test.describe.configure({ mode: "serial" });
 
-  test("member should be able to read LLM provider API keys", async ({
+  test("member should not be able to read LLM provider API keys", async ({
     memberRequest,
     makeApiRequest,
   }) => {
@@ -601,9 +601,10 @@ test.describe("LLM Provider API Keys Access Control", () => {
       request: memberRequest,
       method: "get",
       urlSuffix: "/api/chat-api-keys",
+      ignoreStatusCheck: true,
     });
 
-    expect(response.ok()).toBe(true);
+    expect(response.status()).toBe(403);
   });
 
   test("member should not be able to create LLM provider API keys", async ({

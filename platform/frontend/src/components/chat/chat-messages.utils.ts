@@ -128,12 +128,27 @@ export function identifyCompactToolGroups(
   options?: {
     nonCompactToolNames?: Set<string>;
     getToolShortName?: (toolName: string) => ArchestraToolShortName | null;
+    mcpAppToolCallIds?: Set<string>;
   },
 ): { groupMap: Map<number, CompactToolGroup>; consumedIndices: Set<number> } {
   const groupMap = new Map<number, CompactToolGroup>();
   const consumedIndices = new Set<number>();
 
   if (!parts) return { groupMap, consumedIndices };
+
+  // Collect toolCallIds from data-tool-ui-start parts (MCP Apps known before output arrives)
+  const mcpAppCallIds = new Set(options?.mcpAppToolCallIds);
+  for (const part of parts) {
+    // biome-ignore lint/suspicious/noExplicitAny: data-tool-ui-start shape is dynamic
+    const earlyPart = part as any;
+    if (
+      typeof earlyPart?.type === "string" &&
+      earlyPart.type.startsWith("data-tool-ui-start") &&
+      earlyPart.data?.toolCallId
+    ) {
+      mcpAppCallIds.add(earlyPart.data.toolCallId as string);
+    }
+  }
 
   const seenToolCallIds = new Set<string>();
   const invocationIndices: number[] = [];
@@ -145,6 +160,8 @@ export function identifyCompactToolGroups(
     // biome-ignore lint/suspicious/noExplicitAny: checking nested _meta shape on unknown output
     if (!isToolPart(part) || (part.output as any)?._meta?.ui?.resourceUri)
       continue;
+    // Also skip tools identified as MCP Apps via early UI start or earlyToolUiStarts
+    if (part.toolCallId && mcpAppCallIds.has(part.toolCallId)) continue;
 
     const callId = part.toolCallId;
     if (callId && seenToolCallIds.has(callId)) {

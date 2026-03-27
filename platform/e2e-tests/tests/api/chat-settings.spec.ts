@@ -601,9 +601,10 @@ test.describe("LLM Provider API Keys Access Control", () => {
       request: memberRequest,
       method: "get",
       urlSuffix: "/api/chat-api-keys",
+      ignoreStatusCheck: true,
     });
 
-    expect(response.ok()).toBe(true);
+    expect(response.status()).toBe(200);
   });
 
   test("member should not be able to create LLM provider API keys", async ({

@@ -198,7 +198,7 @@ export function EditableUserMessage({
       className="group/message"
       onMouseLeave={() => setIsRegenerateConfirming(false)}
     >
-      <div className="relative flex flex-col items-end pb-8 w-full">
+      <div className="relative flex flex-col items-end pb-2 w-full">
         {/* Image attachments above the message bubble */}
         {imageAttachments.length > 0 && (
           <div className="flex flex-wrap gap-1 justify-end mb-2">
@@ -243,7 +243,7 @@ export function EditableUserMessage({
             isRegenerateConfirming={isRegenerateConfirming}
             editDisabled={editDisabled}
             className={cn(
-              "absolute -bottom-1 right-0 transition-opacity",
+              "absolute -bottom-1 right-0 translate-y-full z-10 transition-opacity",
               isRegenerateConfirming
                 ? "opacity-100"
                 : "opacity-0 group-hover/message:opacity-100",

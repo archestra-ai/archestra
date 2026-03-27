@@ -67,9 +67,11 @@ spec:
             # In v2, KC_HOSTNAME can be a full URL: scheme://hostname:port
             # See: https://www.keycloak.org/server/hostname
             - name: KC_HOSTNAME
-              value: "http://localhost:30081"
+              value: {{ .Values.keycloak.hostnameUrl | quote }}
             - name: KC_HOSTNAME_STRICT
               value: "false"
+            - name: KC_HOSTNAME_BACKCHANNEL_DYNAMIC
+              value: {{ ternary "true" "false" .Values.keycloak.hostnameBackchannelDynamic | quote }}
           ports:
             - containerPort: 8080
               name: http

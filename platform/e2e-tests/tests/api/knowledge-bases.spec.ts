@@ -191,16 +191,19 @@ test.describe("Knowledge Bases API", () => {
       memberRequest,
       makeApiRequest,
     }) => {
-      const response = await makeApiRequest({
-        request: memberRequest,
-        method: "get",
-        urlSuffix: "/api/knowledge-bases?limit=10&offset=0",
-      });
-      expect(response.status()).toBe(200);
+      await expect(async () => {
+        const response = await makeApiRequest({
+          request: memberRequest,
+          method: "get",
+          urlSuffix: "/api/knowledge-bases?limit=10&offset=0",
+          ignoreStatusCheck: true,
+        });
+        expect(response.status()).toBe(200);
 
-      const body = await response.json();
-      expect(body).toHaveProperty("data");
-      expect(body).toHaveProperty("pagination");
+        const body = await response.json();
+        expect(body).toHaveProperty("data");
+        expect(body).toHaveProperty("pagination");
+      }).toPass({ timeout: 15_000, intervals: [1000, 3000, 5000] });
     });
 
     test("member cannot create a knowledge base", async ({
@@ -483,7 +486,6 @@ test.describe("Knowledge Bases API", () => {
       // Cleanup
       await deleteKnowledgeBase(request, kg.id);
     });
-
   });
 
   test.describe("Connector Runs", () => {

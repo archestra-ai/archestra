@@ -625,7 +625,7 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
  * - Setting active organization for new sessions
  */
 export async function handleAfterHook(ctx: HookEndpointContext) {
-  const { path, method, body, context } = ctx;
+  const { path, method, body, context, request } = ctx;
 
   if (!path) {
     return ctx;
@@ -794,17 +794,57 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
       // SSO Role & Team Sync: Synchronize role and team memberships based on SSO claims
       // Only applies to SSO logins (not regular email/password logins)
       if (path.startsWith("/sso/callback")) {
+        const providerIdHint = getSsoCallbackProviderId({
+          path,
+          requestUrl: request?.url,
+        });
+
         logger.debug(
-          { userId, email: user.email },
+          { userId, email: user.email, providerIdHint },
           "[auth:afterHook] Processing SSO role and team sync",
         );
 
         // Sync role first (based on role mapping rules)
-        await syncSsoRole(userId, user.email);
+        await syncSsoRole(userId, user.email, providerIdHint);
 
         // Then sync teams (based on SSO groups)
-        await syncSsoTeams(userId, user.email);
+        await syncSsoTeams(userId, user.email, providerIdHint);
       }
     }
   }
+}
+
+function getSsoCallbackProviderId(params: {
+  path: string;
+  requestUrl?: string;
+}): string | undefined {
+  const callbackPrefix = "/sso/callback/";
+
+  if (params.requestUrl) {
+    try {
+      const callbackPath = new URL(params.requestUrl).pathname;
+      const callbackIndex = callbackPath.indexOf(callbackPrefix);
+      if (callbackIndex >= 0) {
+        const providerId = callbackPath
+          .slice(callbackIndex + callbackPrefix.length)
+          .split("/")[0];
+        if (providerId) {
+          return providerId;
+        }
+      }
+    } catch {
+      // Fall back to the normalized route path below.
+    }
+  }
+
+  if (!params.path.startsWith(callbackPrefix)) {
+    return undefined;
+  }
+
+  const providerId = params.path.slice(callbackPrefix.length).split("/")[0];
+  if (providerId.startsWith(":")) {
+    return undefined;
+  }
+
+  return providerId || undefined;
 }

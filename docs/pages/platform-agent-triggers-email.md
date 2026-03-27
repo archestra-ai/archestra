@@ -4,15 +4,22 @@ category: Agents
 subcategory: Agent Triggers
 order: 6
 description: Invoke agents by sending emails to auto-generated addresses
-lastUpdated: 2026-03-02
+lastUpdated: 2026-03-27
 ---
 
-Incoming Email allows external users to invoke agents by sending emails to auto-generated addresses. Each Prompt gets a unique email address using plus-addressing (e.g., `mailbox+agent-<promptId>@domain.com`).
+Incoming Email lets users invoke agents by sending mail to agent-specific aliases. Archestra watches a shared mailbox, extracts the target agent from the alias, and turns the email body into the agent's first message.
+
+Use **Agent Triggers** → **Email** to:
+
+- run the setup wizard for the webhook subscription
+- reconfigure or renew the Microsoft Graph subscription
+- enable or edit email invocation settings for individual agents
+- review which agents currently have an active email alias
 
 When an email arrives:
 
 1. Microsoft Graph sends a webhook notification to Archestra
-2. Archestra extracts the Prompt ID from the recipient address
+2. Archestra extracts the agent ID from the recipient alias
 3. The email body becomes the agent's input message
 4. The agent executes and generates a response
 5. Optionally, the agent's response is sent back as an email reply
@@ -58,27 +65,28 @@ ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_MAILBOX_ADDRESS=agents@yourcompany.com
 
 ## Webhook Setup
 
-**Option 1: Automatic** - Set `ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL` and the subscription is created on server startup.
+Archestra needs a public webhook URL so Microsoft Graph can notify it about new mail.
 
-**Option 2: Manual** - Navigate to Settings > Incoming Email and enter your webhook URL.
+- **Automatic**: set `ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL` and Archestra creates the subscription on startup
+- **Manual**: open **Agent Triggers** → **Email** and run the setup wizard
 
-Microsoft Graph subscriptions expire after 3 days. Archestra automatically renews subscriptions before expiration.
+Microsoft Graph subscriptions expire after 3 days. Archestra automatically renews them before expiration, and the Email trigger page also lets you renew or replace the subscription manually.
 
 ## Email Address Format
 
-Agent email addresses follow the pattern:
+Agent aliases follow this pattern:
 
 ```
-<mailbox-local>+agent-<promptId>@<domain>
+<mailbox-local>+agent-<agentId>@<domain>
 ```
 
-For example, if your mailbox is `agents@company.com` and your Prompt ID is `abc12345-6789-...`, emails sent to:
+For example, if your mailbox is `agents@company.com` and your agent ID is `abc12345-6789-...`, emails sent to:
 
 ```
 agents+agent-abc123456789...@company.com
 ```
 
-will invoke that specific agent.
+will invoke that specific agent. You can copy the exact alias for any enabled agent from **Agent Triggers** → **Email**.
 
 ## Security Modes
 

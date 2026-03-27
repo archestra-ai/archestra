@@ -1,304 +1,469 @@
 "use client";
+
+import type { archestraApiTypes } from "@shared";
 import {
-  AlertCircle,
+  AlertTriangle,
   CheckCircle2,
   ExternalLink,
+  Mail,
   RefreshCw,
+  Settings2,
   Trash2,
-  XCircle,
 } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { useMemo, useState } from "react";
+import { CopyButton } from "@/components/copy-button";
+import Divider from "@/components/divider";
+import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { PermissionButton } from "@/components/ui/permission-button";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { useInternalAgents } from "@/lib/agent.query";
+import { useSession } from "@/lib/auth/auth.query";
+import {
+  useAgentEmailAddress,
   useDeleteIncomingEmailSubscription,
   useIncomingEmailStatus,
   useRenewIncomingEmailSubscription,
-  useSetupIncomingEmailWebhook,
 } from "@/lib/chatops/incoming-email.query";
-import { useConfig } from "@/lib/config/config.query";
+import config from "@/lib/config/config";
+import { useConfig, usePublicBaseUrl } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { CollapsibleSetupSection } from "../_components/collapsible-setup-section";
+import { CredentialField } from "../_components/credential-field";
+import { SetupStep } from "../_components/setup-step";
+import { useTriggerStatuses } from "../_components/use-trigger-statuses";
+import { AgentEmailSettingsDialog } from "./agent-email-settings-dialog";
+import { EmailSetupDialog } from "./email-setup-dialog";
+import {
+  describeIncomingEmailSecurityMode,
+  formatIncomingEmailExpiry,
+  formatIncomingEmailSecurityMode,
+  getIncomingEmailTimeUntilExpiry,
+} from "./email-trigger.utils";
+
+type AgentRecord = archestraApiTypes.GetAllAgentsResponses["200"][number];
 
 export default function EmailPage() {
   const appName = useAppName();
+  const docsUrl = getFrontendDocsUrl("platform-agent-triggers-email");
+  const publicBaseUrl = usePublicBaseUrl();
+  const { data: session } = useSession();
   const { data: configData, isLoading: featuresLoading } = useConfig();
   const { data: status, isLoading: statusLoading } = useIncomingEmailStatus();
-  const setupMutation = useSetupIncomingEmailWebhook();
+  const { data: agents = [], isLoading: agentsLoading } = useInternalAgents({
+    enabled: true,
+  });
   const renewMutation = useRenewIncomingEmailSubscription();
   const deleteMutation = useDeleteIncomingEmailSubscription();
+  const { email: allStepsCompleted } = useTriggerStatuses();
 
-  const [webhookUrl, setWebhookUrl] = useState("");
-  const docsUrl = getFrontendDocsUrl("platform-agent-triggers-email");
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [editingAgent, setEditingAgent] = useState<AgentRecord | null>(null);
 
-  const isLoading = featuresLoading || statusLoading;
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-32">
-        <p className="text-sm text-muted-foreground">Loading...</p>
-      </div>
-    );
-  }
-
+  const isLoading = featuresLoading || statusLoading || agentsLoading;
   const emailInfo = configData?.features.incomingEmail;
-  if (!emailInfo?.enabled) {
-    return (
-      <Card>
-        <CardContent className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Email is not configured</p>
-            <p className="text-sm text-muted-foreground">
-              {docsUrl ? (
-                <>
-                  See the{" "}
-                  <Link
-                    href={docsUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-primary hover:underline"
-                  >
-                    setup guide
-                    <ExternalLink className="h-3 w-3" />
-                  </Link>{" "}
-                  for supported email providers and configuration.
-                </>
-              ) : (
-                "Supported email providers and configuration are managed by your administrator."
-              )}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  const providerEnabled = !!emailInfo?.enabled;
+  const isLocalDev =
+    configData?.features.isQuickstart || config.environment === "development";
 
-  const handleSetup = async () => {
-    if (!webhookUrl) return;
-    await setupMutation.mutateAsync(webhookUrl);
-    setWebhookUrl("");
-  };
+  const sortedAgents = useMemo(() => {
+    return [...agents].sort((left, right) => {
+      if (left.incomingEmailEnabled !== right.incomingEmailEnabled) {
+        return left.incomingEmailEnabled ? -1 : 1;
+      }
 
-  const handleRenew = async () => {
-    await renewMutation.mutateAsync();
-  };
+      return left.name.localeCompare(right.name);
+    });
+  }, [agents]);
 
-  const handleDelete = async () => {
-    await deleteMutation.mutateAsync();
-  };
-
-  const formatExpiryDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleString();
-  };
-
-  const getTimeUntilExpiry = (dateString: string) => {
-    const now = new Date();
-    const expiry = new Date(dateString);
-    const diffMs = expiry.getTime() - now.getTime();
-
-    if (diffMs <= 0) return "Expired";
-
-    const hours = Math.floor(diffMs / (1000 * 60 * 60));
-    const days = Math.floor(hours / 24);
-    const remainingHours = hours % 24;
-
-    if (days > 0) {
-      return `${days}d ${remainingHours}h remaining`;
-    }
-    return `${hours}h remaining`;
-  };
+  const enabledAgentsCount = sortedAgents.filter(
+    (agent) => agent.incomingEmailEnabled,
+  ).length;
+  const publicAgentsCount = sortedAgents.filter(
+    (agent) =>
+      agent.incomingEmailEnabled &&
+      agent.incomingEmailSecurityMode === "public",
+  ).length;
+  const restrictedAgentsCount = enabledAgentsCount - publicAgentsCount;
 
   return (
-    <div className="space-y-4">
-      {/* How It Works Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle>How It Works</CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground space-y-2">
-          <p>
-            Incoming email allows external users to invoke agents by sending
-            emails to auto-generated addresses. Each prompt gets a unique email
-            address using plus-addressing.
-          </p>
-          <p>
-            Microsoft Graph subscriptions expire after 3 days. The system
-            automatically renews subscriptions 24 hours before expiration. You
-            can also manually renew or delete subscriptions from this page.
-          </p>
-          <p>
-            Alternatively, set{" "}
-            <code className="bg-muted px-1 py-0.5 rounded">
-              ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL
-            </code>{" "}
-            to automatically create a subscription on server startup.
-          </p>
-          <p className="mt-2">
-            {docsUrl && (
-              <Link
-                href={docsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-primary hover:underline"
-              >
-                Learn more in our documentation
-                <ExternalLink className="h-3 w-3" />
-              </Link>
-            )}
-          </p>
-        </CardContent>
-      </Card>
+    <div className="flex flex-col gap-6">
+      <CollapsibleSetupSection
+        allStepsCompleted={allStepsCompleted}
+        isLoading={isLoading}
+        providerLabel="Email"
+        docsUrl={docsUrl}
+      >
+        <SetupStep
+          title="Configure an incoming mailbox"
+          description={`Connect ${appName} to a shared mailbox and provider credentials`}
+          done={providerEnabled}
+        >
+          {providerEnabled ? (
+            <div className="flex items-center flex-wrap gap-4">
+              <CredentialField
+                label="Provider"
+                value={emailInfo?.displayName ?? "Configured"}
+              />
+              <CredentialField
+                label="Email domain"
+                value={
+                  emailInfo?.emailDomain
+                    ? `@${emailInfo.emailDomain}`
+                    : undefined
+                }
+              />
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <p>
+                Incoming email is configured at deployment time. Add the mailbox
+                and provider credentials first, then return here to activate the
+                webhook subscription and agent aliases.
+              </p>
+              {docsUrl && (
+                <Link
+                  href={docsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                >
+                  Review the email setup guide
+                  <ExternalLink className="h-3 w-3" />
+                </Link>
+              )}
+            </div>
+          )}
+        </SetupStep>
 
-      {/* Provider Info Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Email Provider</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="text-sm font-mono bg-muted p-3 rounded space-y-1">
-            <p>
-              <span className="text-muted-foreground">Provider:</span>{" "}
-              {emailInfo.displayName}
-            </p>
-            <p>
-              <span className="text-muted-foreground">Email Domain:</span>{" "}
-              {emailInfo.emailDomain}
-            </p>
-          </div>
-
-          <div className="text-sm text-muted-foreground">
-            <p className="font-medium mb-1">Agent Email Format:</p>
-            <code className="bg-muted px-2 py-1 rounded">
-              {`{configured-mailbox}+agent-{promptId}@${emailInfo.emailDomain}`}
-            </code>
-            <p className="text-xs mt-1">
-              The mailbox portion is the local part of{" "}
-              <code className="bg-muted px-1 rounded">
-                ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_MAILBOX_ADDRESS
-              </code>
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Subscription Status Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            {status?.isActive ? (
-              <CheckCircle2 className="h-5 w-5 text-green-500" />
-            ) : (
-              <XCircle className="h-5 w-5 text-amber-500" />
-            )}
-            Webhook Subscription
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+        <SetupStep
+          title="Activate the webhook subscription"
+          description="Create or reconfigure the Microsoft Graph subscription that sends new mail events to Archestra"
+          done={!!status?.isActive}
+          ctaLabel={providerEnabled ? "Setup Email" : undefined}
+          onAction={providerEnabled ? () => setSetupOpen(true) : undefined}
+          doneActionLabel="Reconfigure"
+          onDoneAction={providerEnabled ? () => setSetupOpen(true) : undefined}
+        >
           {status?.subscription ? (
-            <>
-              <div className="text-sm font-mono bg-muted p-3 rounded space-y-1">
-                <p>
-                  <span className="text-muted-foreground">Status:</span>{" "}
-                  <span
-                    className={
-                      status.isActive ? "text-green-500" : "text-amber-500"
-                    }
-                  >
-                    {status.isActive ? "Active" : "Expired"}
-                  </span>
-                </p>
-                <p>
-                  <span className="text-muted-foreground">
-                    Subscription ID:
-                  </span>{" "}
-                  {status.subscription.subscriptionId}
-                </p>
-                <p>
-                  <span className="text-muted-foreground">Webhook URL:</span>{" "}
-                  {status.subscription.webhookUrl}
-                </p>
-                <p>
-                  <span className="text-muted-foreground">Expires:</span>{" "}
-                  {formatExpiryDate(status.subscription.expiresAt)} (
-                  {getTimeUntilExpiry(status.subscription.expiresAt)})
-                </p>
+            <div className="space-y-4">
+              <div className="flex items-center flex-wrap gap-4">
+                <CredentialField
+                  label="Subscription"
+                  value={status.subscription.subscriptionId}
+                />
+                <CredentialField
+                  label="Webhook URL"
+                  value={status.subscription.webhookUrl}
+                />
+                <CredentialField
+                  label="Expires"
+                  value={`${formatIncomingEmailExpiry(status.subscription.expiresAt)} (${getIncomingEmailTimeUntilExpiry(status.subscription.expiresAt)})`}
+                />
               </div>
 
-              <div className="flex items-center gap-2">
-                <Button
-                  onClick={handleRenew}
-                  disabled={renewMutation.isPending}
+              {!status.isActive && (
+                <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500 mt-0.5" />
+                  <span className="text-xs text-muted-foreground">
+                    This subscription has expired. Reconfigure it or renew it to
+                    resume email delivery.
+                  </span>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center gap-2">
+                <PermissionButton
+                  permissions={{ agentTrigger: ["update"] }}
                   variant="outline"
+                  onClick={() => renewMutation.mutate()}
+                  disabled={renewMutation.isPending}
                 >
                   {renewMutation.isPending && (
                     <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                   )}
-                  Renew Subscription
-                </Button>
-                <Button
-                  onClick={handleDelete}
-                  disabled={deleteMutation.isPending}
+                  Renew subscription
+                </PermissionButton>
+                <PermissionButton
+                  permissions={{ agentTrigger: ["delete"] }}
                   variant="destructive"
+                  onClick={() => deleteMutation.mutate()}
+                  disabled={deleteMutation.isPending}
                 >
                   {deleteMutation.isPending && (
                     <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                   )}
                   <Trash2 className="mr-2 h-4 w-4" />
-                  Delete Subscription
-                </Button>
+                  Delete subscription
+                </PermissionButton>
               </div>
-            </>
+            </div>
           ) : (
-            <>
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>No Active Subscription</AlertTitle>
-                <AlertDescription>
-                  Create a webhook subscription to receive incoming email
-                  notifications. The subscription will automatically renew
-                  before expiration.
-                </AlertDescription>
-              </Alert>
+            <div className="space-y-2">
+              <p>
+                No active subscription exists yet. Open the setup wizard to add
+                the public webhook URL that Microsoft Graph should call when new
+                mail arrives.
+              </p>
+              {isLocalDev && (
+                <p className="text-xs">
+                  Local development needs a public tunnel such as ngrok so the
+                  webhook can be reached from Microsoft Graph.
+                </p>
+              )}
+            </div>
+          )}
+        </SetupStep>
+      </CollapsibleSetupSection>
 
-              <div className="space-y-2">
-                <Label htmlFor="webhookUrl">Webhook URL</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="webhookUrl"
-                    placeholder="https://your-public-domain.com/api/webhooks/incoming-email"
-                    value={webhookUrl}
-                    onChange={(e) => setWebhookUrl(e.target.value)}
-                  />
-                  <Button
-                    onClick={handleSetup}
-                    disabled={setupMutation.isPending || !webhookUrl}
-                  >
-                    {setupMutation.isPending && (
-                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                    )}
-                    Setup Webhook
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Enter the publicly accessible URL for this {appName}
-                  instance&apos;s webhook endpoint. For local development, use a
-                  tunnel service like ngrok (e.g.,{" "}
-                  <code className="bg-muted px-1 py-0.5 rounded">
-                    https://xxx.ngrok-free.app/api/webhooks/incoming-email
-                  </code>
-                  ). Microsoft Graph will send POST requests to this URL when
-                  new emails arrive.
+      {providerEnabled && (
+        <>
+          <Divider />
+
+          <section className="flex flex-col gap-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold">Agent Email Access</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Enable email invocation, adjust security rules, and review
+                  which agents currently have an email alias.
                 </p>
               </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium">
+                    Email-enabled agents
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="flex items-center gap-3">
+                  <Mail className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <div className="text-2xl font-semibold">
+                      {enabledAgentsCount}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Agents currently invocable by email
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium">
+                    Private or internal
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="flex items-center gap-3">
+                  <CheckCircle2 className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <div className="text-2xl font-semibold">
+                      {restrictedAgentsCount}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Restricted to known users or approved domains
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium">
+                    Public agents
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="flex items-center gap-3">
+                  <Badge
+                    variant="secondary"
+                    className="bg-amber-500/10 text-amber-700"
+                  >
+                    Public
+                  </Badge>
+                  <div>
+                    <div className="text-2xl font-semibold">
+                      {publicAgentsCount}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Agents accepting email from any sender
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card className="overflow-hidden">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Agent aliases</CardTitle>
+              </CardHeader>
+              <CardContent className="px-0 pb-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[26%]">Agent</TableHead>
+                      <TableHead className="w-[16%]">Status</TableHead>
+                      <TableHead className="w-[24%]">Security</TableHead>
+                      <TableHead className="w-[24%]">Email alias</TableHead>
+                      <TableHead className="w-[10%] text-right">
+                        Action
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sortedAgents.length > 0 ? (
+                      sortedAgents.map((agent) => (
+                        <EmailAgentRow
+                          key={agent.id}
+                          agent={agent}
+                          currentUserId={session?.user?.id}
+                          onEdit={() => setEditingAgent(agent)}
+                          providerEnabled={providerEnabled}
+                        />
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell
+                          colSpan={5}
+                          className="py-10 text-center text-sm text-muted-foreground"
+                        >
+                          No internal agents are available yet.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </section>
+        </>
+      )}
+
+      <EmailSetupDialog
+        open={setupOpen}
+        onOpenChange={setSetupOpen}
+        emailDomain={emailInfo?.emailDomain}
+        providerLabel={emailInfo?.displayName}
+        publicBaseUrl={publicBaseUrl}
+      />
+
+      <AgentEmailSettingsDialog
+        agent={editingAgent}
+        open={!!editingAgent}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingAgent(null);
+          }
+        }}
+        providerEnabled={providerEnabled}
+      />
     </div>
+  );
+}
+
+function EmailAgentRow({
+  agent,
+  currentUserId,
+  onEdit,
+  providerEnabled,
+}: {
+  agent: AgentRecord;
+  currentUserId: string | undefined;
+  onEdit: () => void;
+  providerEnabled: boolean;
+}) {
+  const { data: emailAddress } = useAgentEmailAddress(
+    providerEnabled && agent.incomingEmailEnabled ? agent.id : null,
+  );
+
+  return (
+    <TableRow>
+      <TableCell>
+        <div className="space-y-2">
+          <div className="font-medium">{agent.name}</div>
+          <ResourceVisibilityBadge
+            scope={agent.scope}
+            teams={agent.teams}
+            authorId={agent.authorId}
+            authorName={agent.authorName}
+            currentUserId={currentUserId}
+          />
+        </div>
+      </TableCell>
+      <TableCell>
+        {agent.incomingEmailEnabled ? (
+          <Badge
+            variant="secondary"
+            className="bg-green-500/10 text-green-700 dark:text-green-400"
+          >
+            Enabled
+          </Badge>
+        ) : (
+          <Badge variant="secondary">Disabled</Badge>
+        )}
+      </TableCell>
+      <TableCell>
+        {agent.incomingEmailEnabled ? (
+          <div className="space-y-1">
+            <div className="font-medium">
+              {formatIncomingEmailSecurityMode(agent.incomingEmailSecurityMode)}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {describeIncomingEmailSecurityMode(
+                agent.incomingEmailSecurityMode,
+                agent.incomingEmailAllowedDomain,
+              )}
+            </p>
+          </div>
+        ) : (
+          <span className="text-sm text-muted-foreground">
+            Not enabled for this agent
+          </span>
+        )}
+      </TableCell>
+      <TableCell>
+        {agent.incomingEmailEnabled ? (
+          emailAddress?.emailAddress ? (
+            <div className="flex items-start gap-2">
+              <code className="min-w-0 flex-1 break-all text-xs">
+                {emailAddress.emailAddress}
+              </code>
+              <CopyButton text={emailAddress.emailAddress} />
+            </div>
+          ) : (
+            <span className="text-sm text-muted-foreground">
+              Loading alias...
+            </span>
+          )
+        ) : (
+          <span className="text-sm text-muted-foreground">
+            Save settings to generate an alias
+          </span>
+        )}
+      </TableCell>
+      <TableCell className="text-right">
+        <PermissionButton
+          permissions={{ agent: ["update"] }}
+          size="sm"
+          variant="outline"
+          onClick={onEdit}
+        >
+          <Settings2 className="mr-2 h-4 w-4" />
+          {agent.incomingEmailEnabled ? "Edit" : "Configure"}
+        </PermissionButton>
+      </TableCell>
+    </TableRow>
   );
 }

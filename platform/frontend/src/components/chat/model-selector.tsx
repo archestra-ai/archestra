@@ -44,13 +44,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  type ChatModel,
-  type ModelCapabilities,
-  useModelsByProvider,
-} from "@/lib/chat/chat-models.query";
-import { useSyncChatModels } from "@/lib/chat/chat-settings.query";
 import { resolveAutoSelectedModel } from "@/lib/chat/use-chat-preferences";
+import {
+  type LlmModel,
+  type ModelCapabilities,
+  useLlmModelsByProvider,
+  useSyncLlmModels,
+} from "@/lib/llm-models.query";
 import { cn } from "@/lib/utils";
 
 /** Modalities that can be filtered (excludes "text" since all models support it) */
@@ -491,7 +491,7 @@ function ModelFiltersBar({
 /**
  * Checks if a model has unknown capabilities (no data available).
  */
-function hasUnknownCapabilities(model: ChatModel): boolean {
+function hasUnknownCapabilities(model: LlmModel): boolean {
   const capabilities = model.capabilities;
   if (!capabilities) return true;
 
@@ -508,7 +508,7 @@ function hasUnknownCapabilities(model: ChatModel): boolean {
  * Checks if a model matches the given filters.
  * Models with unknown capabilities are always shown.
  */
-function modelMatchesFilters(model: ChatModel, filters: ModelFilters): boolean {
+function modelMatchesFilters(model: LlmModel, filters: ModelFilters): boolean {
   // Always show models with unknown capabilities
   if (hasUnknownCapabilities(model)) {
     return true;
@@ -550,10 +550,10 @@ export function ModelSelector({
     modelsByProvider,
     isPending: isLoading,
     isPlaceholderData,
-  } = useModelsByProvider({
+  } = useLlmModelsByProvider({
     apiKeyId: apiKeyId ?? undefined,
   });
-  const syncMutation = useSyncChatModels();
+  const syncMutation = useSyncLlmModels();
   const [open, setOpen] = useState(false);
   const [filters, setFilters] = useState<ModelFilters>(INITIAL_FILTERS);
 
@@ -596,7 +596,7 @@ export function ModelSelector({
       return modelsByProvider;
     }
 
-    const filtered: Partial<Record<SupportedProvider, ChatModel[]>> = {};
+    const filtered: Partial<Record<SupportedProvider, LlmModel[]>> = {};
     for (const provider of availableProviders) {
       const models = modelsByProvider[provider] ?? [];
       const matchingModels = models.filter((model) =>

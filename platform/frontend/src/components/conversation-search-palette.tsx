@@ -38,6 +38,7 @@ import {
   SHORTCUT_SIDEBAR,
 } from "@/consts";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   useConversations,
   useDeleteConversation,
@@ -202,6 +203,9 @@ export function ConversationSearchPalette({
     null,
   );
   const isAuthenticated = useIsAuthenticated();
+  const { data: canReadConversation } = useHasPermissions({
+    chat: ["read"],
+  });
   const { modKey, altKey } = usePlatform();
 
   const deleteMutation = useDeleteConversation();
@@ -220,7 +224,7 @@ export function ConversationSearchPalette({
     isLoading,
     isFetching,
   } = useConversations({
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && canReadConversation === true,
     search: debouncedSearch,
   });
 

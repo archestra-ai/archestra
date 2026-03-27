@@ -8,8 +8,8 @@ import { z } from "zod";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import logger from "@/logging";
 import {
-  ApiKeyModelModel,
-  ChatApiKeyModel,
+  LlmProviderApiKeyModel,
+  LlmProviderApiKeyModelLinkModel,
   ModelModel,
   TeamModel,
 } from "@/models";
@@ -25,7 +25,7 @@ import {
   UuidIdSchema,
 } from "@/types";
 
-const ChatModelSchema = z.object({
+const LlmModelSchema = z.object({
   id: z.string(),
   displayName: z.string(),
   provider: SupportedProvidersSchema,
@@ -35,20 +35,20 @@ const ChatModelSchema = z.object({
   isFastest: z.boolean().optional(),
 });
 
-const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
+const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
-    "/api/chat/models",
+    "/api/llm-models/available",
     {
       schema: {
-        operationId: RouteId.GetChatModels,
+        operationId: RouteId.GetLlmModels,
         description:
-          "Get available LLM models from all configured providers. Models are fetched directly from provider APIs. Includes model capabilities (context length, modalities, tool calling support) when available.",
-        tags: ["Chat"],
+          "Get available LLM models from configured provider API keys. Models are fetched from the provider-backed catalog and include capabilities when available.",
+        tags: ["LLM Models"],
         querystring: z.object({
           provider: SupportedProvidersSchema.optional(),
           apiKeyId: z.string().uuid().optional(),
         }),
-        response: constructResponseSchema(z.array(ChatModelSchema)),
+        response: constructResponseSchema(z.array(LlmModelSchema)),
       },
     },
     async ({ query, organizationId, user }, reply) => {
@@ -57,7 +57,7 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       modelsDevClient.syncIfNeeded();
 
       const userTeamIds = await TeamModel.getUserTeamIds(user.id);
-      const apiKeys = await ChatApiKeyModel.getAvailableKeysForUser(
+      const apiKeys = await LlmProviderApiKeyModel.getAvailableKeysForUser(
         organizationId,
         user.id,
         userTeamIds,
@@ -92,7 +92,8 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         apiKeyId && accessibleKeyIds.includes(apiKeyId)
           ? [apiKeyId]
           : accessibleKeyIds;
-      const dbModels = await ApiKeyModelModel.getModelsForApiKeyIds(apiKeyIds);
+      const dbModels =
+        await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds(apiKeyIds);
 
       logger.info(
         {
@@ -121,7 +122,7 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       logger.info(
         { organizationId, provider, totalModels: models.length },
-        "Returning chat models from database",
+        "Returning available LLM models from database",
       );
 
       return reply.send(models);
@@ -129,13 +130,13 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.post(
-    "/api/chat/models/sync",
+    "/api/llm-models/sync",
     {
       schema: {
-        operationId: RouteId.SyncChatModels,
+        operationId: RouteId.SyncLlmModels,
         description:
-          "Sync models from providers for all API keys and store them in the database",
-        tags: ["Chat"],
+          "Sync models from providers for all visible API keys and store them in the database",
+        tags: ["LLM Models"],
         response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
@@ -149,19 +150,19 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
-    "/api/models",
+    "/api/llm-models",
     {
       schema: {
         operationId: RouteId.GetModelsWithApiKeys,
         description:
-          "Get all models with their linked API keys. Returns models from the database with information about which API keys provide access to them.",
-        tags: ["Models"],
+          "Get all synced LLM models with their linked provider API keys.",
+        tags: ["LLM Models"],
         response: constructResponseSchema(z.array(ModelWithApiKeysSchema)),
       },
     },
     async (_, reply) => {
       const modelsWithApiKeys =
-        await ApiKeyModelModel.getAllModelsWithApiKeys();
+        await LlmProviderApiKeyModelLinkModel.getAllModelsWithApiKeys();
 
       const linkedModelIds = new Set(
         modelsWithApiKeys.map((item) => item.model.id),
@@ -210,13 +211,13 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.patch(
-    "/api/models/:id",
+    "/api/llm-models/:id",
     {
       schema: {
         operationId: RouteId.UpdateModel,
         description:
-          "Update model details including custom pricing and modalities.",
-        tags: ["Models"],
+          "Update LLM model details including custom pricing and modalities.",
+        tags: ["LLM Models"],
         params: z.object({
           id: UuidIdSchema,
         }),
@@ -240,7 +241,7 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 };
 
-export default chatModelsRoutes;
+export default llmModelsRoutes;
 
 export async function syncModelsForVisibleApiKeys(params: {
   organizationId: string;
@@ -248,7 +249,7 @@ export async function syncModelsForVisibleApiKeys(params: {
 }): Promise<void> {
   const { organizationId, userId } = params;
   const userTeamIds = await TeamModel.getUserTeamIds(userId);
-  const apiKeys = await ChatApiKeyModel.getAvailableKeysForUser(
+  const apiKeys = await LlmProviderApiKeyModel.getAvailableKeysForUser(
     organizationId,
     userId,
     userTeamIds,

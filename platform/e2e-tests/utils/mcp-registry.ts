@@ -76,7 +76,7 @@ export async function installMcpServer(page: Page): Promise<void> {
   await page.waitForLoadState("domcontentloaded");
 }
 
-async function selectTeamCredentialType(
+async function _selectTeamCredentialType(
   page: Page,
   teamName: string,
 ): Promise<void> {
@@ -179,25 +179,6 @@ export async function installLocalCatalogItem(params: {
   });
   await fillInstallDialogEnvValues(params.page, params.envValues);
 
-  await installMcpServer(params.page);
-  await waitForInstalledCardActions(params.page, params.catalogItemName);
-  await waitForMcpServerToolsDiscovered(params.page, params.catalogItemName);
-}
-
-async function installTeamCatalogItemConnection(params: {
-  page: Page;
-  catalogItemName: string;
-  teamName: string;
-  envValues?: Record<string, string>;
-  timeoutMs?: number;
-}): Promise<void> {
-  await goToMcpRegistry(params.page);
-  await openCatalogItemConnectDialog(params.page, params.catalogItemName, {
-    timeoutMs: params.timeoutMs,
-  });
-  await waitForInstallDialog(params.page, { timeoutMs: params.timeoutMs });
-  await selectTeamCredentialType(params.page, params.teamName);
-  await fillInstallDialogEnvValues(params.page, params.envValues);
   await installMcpServer(params.page);
   await waitForInstalledCardActions(params.page, params.catalogItemName);
   await waitForMcpServerToolsDiscovered(params.page, params.catalogItemName);

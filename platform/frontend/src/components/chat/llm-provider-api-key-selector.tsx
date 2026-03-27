@@ -5,6 +5,7 @@ import {
   getChatApiKeySelectorOptionTestId,
   getChatApiKeySelectorProviderGroupTestId,
   providerDisplayNames,
+  type ResourceVisibilityScope,
   type SupportedProvider,
 } from "@shared";
 import { Building2, CheckIcon, Key, User, Users } from "lucide-react";
@@ -26,12 +27,11 @@ import {
 } from "@/components/ui/popover";
 import { useUpdateConversation } from "@/lib/chat/chat.query";
 import {
-  type ChatApiKey,
-  type ChatApiKeyScope,
-  useAvailableChatApiKeys,
-} from "@/lib/chat/chat-settings.query";
+  type LlmProviderApiKey,
+  useAvailableLlmProviderApiKeys,
+} from "@/lib/llm-provider-api-keys.query";
 
-interface ChatApiKeySelectorProps {
+interface LlmProviderApiKeySelectorProps {
   /** Conversation ID for persisting selection (optional for initial chat) */
   conversationId?: string;
   /** Current Conversation Chat API key ID set on the backend */
@@ -52,10 +52,10 @@ interface ChatApiKeySelectorProps {
   agentLlmApiKeyId?: string | null;
 }
 
-const SCOPE_ICONS: Record<ChatApiKeyScope, React.ReactNode> = {
+const SCOPE_ICONS: Record<ResourceVisibilityScope, React.ReactNode> = {
   personal: <User className="h-3 w-3" />,
   team: <Users className="h-3 w-3" />,
-  org_wide: <Building2 className="h-3 w-3" />,
+  org: <Building2 className="h-3 w-3" />,
 };
 
 // Note: This stores the API key's database ID (UUID), NOT the actual API key secret.
@@ -66,7 +66,7 @@ const SCOPE_ICONS: Record<ChatApiKeyScope, React.ReactNode> = {
  * API Key selector for chat - allows users to select which API key to use for the conversation.
  * Shows available keys for the current provider, grouped by scope.
  */
-export function ChatApiKeySelector({
+export function LlmProviderApiKeySelector({
   conversationId,
   currentConversationChatApiKeyId,
   disabled = false,
@@ -76,11 +76,11 @@ export function ChatApiKeySelector({
   onOpenChange,
   isModelsLoading = false,
   agentLlmApiKeyId,
-}: ChatApiKeySelectorProps) {
+}: LlmProviderApiKeySelectorProps) {
   // Fetch ALL API keys (not filtered by provider) so user can switch providers
   // Include agent's configured key even if user doesn't have direct access
   const { data: availableKeys = [], isLoading: isLoadingKeys } =
-    useAvailableChatApiKeys({
+    useAvailableLlmProviderApiKeys({
       includeKeyId: agentLlmApiKeyId ?? undefined,
     });
 
@@ -100,7 +100,7 @@ export function ChatApiKeySelector({
 
   // Group keys by provider for display
   const keysByProvider = useMemo(() => {
-    const grouped = {} as Record<SupportedProvider, ChatApiKey[]>;
+    const grouped = {} as Record<SupportedProvider, LlmProviderApiKey[]>;
 
     for (const key of availableKeys) {
       if (!grouped[key.provider]) {
@@ -123,12 +123,12 @@ export function ChatApiKeySelector({
     });
   }, [keysByProvider, currentProvider]);
 
-  // Group keys by scope (personal, team, org_wide) for auto-selection priority
+  // Group keys by scope (personal, team, org) for auto-selection priority
   const keysByScope = useMemo(() => {
-    const grouped: Record<ChatApiKeyScope, ChatApiKey[]> = {
+    const grouped: Record<ResourceVisibilityScope, LlmProviderApiKey[]> = {
       personal: [],
       team: [],
-      org_wide: [],
+      org: [],
     };
 
     for (const key of availableKeys) {
@@ -181,10 +181,10 @@ export function ChatApiKeySelector({
       ? (keysByProvider[currentProvider] ?? [])
       : [];
 
-    // Priority: personal > team > org_wide (within current provider)
+    // Priority: personal > team > org (within current provider)
     const personalKeys = providerKeys.filter((k) => k.scope === "personal");
     const teamKeys = providerKeys.filter((k) => k.scope === "team");
-    const orgWideKeys = providerKeys.filter((k) => k.scope === "org_wide");
+    const orgWideKeys = providerKeys.filter((k) => k.scope === "org");
 
     const keyToSelect =
       personalKeys[0] ||
@@ -193,7 +193,7 @@ export function ChatApiKeySelector({
       // Fall back to any key if no provider-specific key found
       keysByScope.personal[0] ||
       keysByScope.team[0] ||
-      keysByScope.org_wide[0];
+      keysByScope.org[0];
 
     const keyToSelectValid =
       keyToSelect && availableKeys.some((k) => k.id === keyToSelect.id);

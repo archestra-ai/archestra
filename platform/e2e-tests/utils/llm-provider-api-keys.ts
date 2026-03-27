@@ -1,9 +1,10 @@
 import type { Page } from "@playwright/test";
 import { E2eTestId } from "@shared";
 import { expect, goToPage } from "../fixtures";
+import { LLM_PROVIDER_API_KEYS_ROUTE } from "../tests/api/fixtures";
 import { clickButton, expandTablePagination } from "./dialogs";
 
-export async function goToChatApiKeysPage(page: Page): Promise<void> {
+export async function goToLlmProviderApiKeysPage(page: Page): Promise<void> {
   await goToPage(page, "/llm/providers/api-keys");
   await expandTablePagination(page, E2eTestId.ChatApiKeysTable);
 }
@@ -15,7 +16,7 @@ export async function goToVirtualKeysPage(page: Page): Promise<void> {
   });
 }
 
-export async function createChatApiKey(
+export async function createLlmProviderApiKey(
   page: Page,
   params: {
     name: string;
@@ -46,7 +47,7 @@ export async function createChatApiKey(
   ).toBeVisible({ timeout: 30_000 });
 }
 
-export async function deleteChatApiKey(
+export async function deleteLlmProviderApiKey(
   page: Page,
   keyName: string,
 ): Promise<void> {
@@ -93,9 +94,9 @@ async function getParentKeyOptionNameForProvider(
   page: Page,
   provider: string,
 ): Promise<string> {
-  return page.evaluate(async (targetProvider) => {
+  return page.evaluate(async ({ targetProvider, route }) => {
     const response = await fetch(
-      `/api/chat-api-keys?provider=${encodeURIComponent(targetProvider)}`,
+      `${route}?provider=${encodeURIComponent(targetProvider)}`,
       {
         credentials: "include",
       },
@@ -103,7 +104,7 @@ async function getParentKeyOptionNameForProvider(
 
     if (!response.ok) {
       throw new Error(
-        `Failed to load chat API keys for ${targetProvider}: ${response.status} ${response.statusText}`,
+        `Failed to load LLM provider API keys for ${targetProvider}: ${response.status} ${response.statusText}`,
       );
     }
 
@@ -111,9 +112,11 @@ async function getParentKeyOptionNameForProvider(
     const matchingKey = apiKeys[0];
 
     if (!matchingKey?.name) {
-      throw new Error(`No chat API keys found for provider ${targetProvider}`);
+      throw new Error(
+        `No LLM provider API keys found for provider ${targetProvider}`,
+      );
     }
 
     return matchingKey.name;
-  }, provider);
+  }, { targetProvider: provider, route: LLM_PROVIDER_API_KEYS_ROUTE });
 }

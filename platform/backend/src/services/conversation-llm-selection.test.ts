@@ -1,5 +1,9 @@
 import { vi } from "vitest";
-import { ApiKeyModelModel, ChatApiKeyModel, OrganizationModel } from "@/models";
+import {
+  LlmProviderApiKeyModel,
+  LlmProviderApiKeyModelLinkModel,
+  OrganizationModel,
+} from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import { resolveSmartDefaultLlmForChat } from "@/utils/llm-resolution";
 import { resolveConversationLlmSelectionForAgent } from "./conversation-llm-selection";
@@ -22,7 +26,7 @@ describe("resolveConversationLlmSelectionForAgent", () => {
   });
 
   test("uses the agent model and key when both are configured", async () => {
-    vi.spyOn(ChatApiKeyModel, "findById").mockResolvedValue({
+    vi.spyOn(LlmProviderApiKeyModel, "findById").mockResolvedValue({
       id: "key-openai",
       provider: "openai",
     } as never);
@@ -44,13 +48,15 @@ describe("resolveConversationLlmSelectionForAgent", () => {
   });
 
   test("uses the best model for the agent key when only the key is configured", async () => {
-    vi.spyOn(ChatApiKeyModel, "findById").mockResolvedValue({
+    vi.spyOn(LlmProviderApiKeyModel, "findById").mockResolvedValue({
       id: "key-anthropic",
       provider: "anthropic",
     } as never);
-    vi.spyOn(ApiKeyModelModel, "getBestModel").mockResolvedValue({
-      modelId: "claude-3-5-sonnet",
-    } as never);
+    vi.spyOn(LlmProviderApiKeyModelLinkModel, "getBestModel").mockResolvedValue(
+      {
+        modelId: "claude-3-5-sonnet",
+      } as never,
+    );
 
     const result = await resolveConversationLlmSelectionForAgent({
       agent: {
@@ -69,7 +75,7 @@ describe("resolveConversationLlmSelectionForAgent", () => {
   });
 
   test("falls back to the model provider when the agent key provider is unsupported", async () => {
-    vi.spyOn(ChatApiKeyModel, "findById").mockResolvedValue({
+    vi.spyOn(LlmProviderApiKeyModel, "findById").mockResolvedValue({
       id: "key-unknown",
       provider: "not-a-provider",
     } as never);
@@ -97,7 +103,7 @@ describe("resolveConversationLlmSelectionForAgent", () => {
       defaultLlmProvider: "openai",
       defaultLlmApiKeyId: "org-key",
     } as never);
-    vi.spyOn(ChatApiKeyModel, "findById").mockResolvedValue({
+    vi.spyOn(LlmProviderApiKeyModel, "findById").mockResolvedValue({
       id: "org-key",
       provider: "openai",
     } as never);

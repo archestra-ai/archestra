@@ -1,17 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import type { ChatApiKeyFormValues } from "@/components/chat-api-key-form";
-import { CreateChatApiKeyDialog } from "@/components/create-chat-api-key-dialog";
-import { useChatApiKeys } from "@/lib/chat/chat-settings.query";
+import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
+import type { LlmProviderApiKeyFormValues } from "@/components/llm-provider-api-key-form";
+import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { SetupStep } from "./setup-step";
 
-const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
+const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   name: "",
   provider: "anthropic",
   apiKey: null,
   baseUrl: null,
-  scope: "org_wide",
+  scope: "org",
   teamId: null,
   vaultSecretPath: null,
   vaultSecretKey: null,
@@ -20,7 +20,7 @@ const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
 
 export function LlmKeySetupStep() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const { data: chatApiKeys = [] } = useChatApiKeys();
+  const { data: chatApiKeys = [] } = useLlmProviderApiKeys();
 
   const hasAnyApiKey = chatApiKeys.length > 0;
 
@@ -33,7 +33,7 @@ export function LlmKeySetupStep() {
         ctaLabel="Add API Key"
         onAction={() => setIsDialogOpen(true)}
       />
-      <CreateChatApiKeyDialog
+      <CreateLlmProviderApiKeyDialog
         open={isDialogOpen}
         onOpenChange={setIsDialogOpen}
         title="Add API Key"

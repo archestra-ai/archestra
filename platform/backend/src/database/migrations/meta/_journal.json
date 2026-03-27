@@ -1380,6 +1380,13 @@
       "when": 1774488938098,
       "tag": "0196_easy_shriek",
       "breakpoints": true
+    },
+    {
+      "idx": 197,
+      "version": "7",
+      "when": 1774579648786,
+      "tag": "0197_wise_northstar",
+      "breakpoints": true
     }
   ]
 }

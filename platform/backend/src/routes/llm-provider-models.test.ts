@@ -1,6 +1,6 @@
 import { vi } from "vitest";
-import ApiKeyModelModel from "@/models/api-key-model";
-import ChatApiKeyModel from "@/models/chat-api-key";
+import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
+import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
@@ -8,7 +8,7 @@ import { createFastifyInstance } from "@/server";
 import { modelSyncService } from "@/services/model-sync";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
-import { syncModelsForVisibleApiKeys } from "./routes.models";
+import { syncModelsForVisibleApiKeys } from "./llm-provider-models";
 
 vi.mock("@/clients/models-dev-client", async (importOriginal) => {
   const actual =
@@ -58,8 +58,8 @@ describe("chat model routes", () => {
       (request as typeof request & { user: User }).user = user;
     });
 
-    const { default: chatModelsRoutes } = await import("./routes.models");
-    await app.register(chatModelsRoutes);
+    const { default: llmModelsRoutes } = await import("./llm-provider-models");
+    await app.register(llmModelsRoutes);
   });
 
   afterEach(async () => {
@@ -68,10 +68,10 @@ describe("chat model routes", () => {
 
   test("GET /api/chat/models only returns models suitable for chat", async ({
     makeSecret,
-    makeChatApiKey,
+    makeLlmProviderApiKey,
   }) => {
     const secret = await makeSecret({ secret: { apiKey: "test-key" } });
-    const apiKey = await makeChatApiKey(organizationId, secret.id, {
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "gemini",
       scope: "personal",
       userId: user.id,
@@ -120,7 +120,7 @@ describe("chat model routes", () => {
       lastSyncedAt: new Date(),
     });
 
-    await ApiKeyModelModel.syncModelsForApiKey(
+    await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
       apiKey.id,
       [
         { id: chatModel.id, modelId: chatModel.modelId },
@@ -132,7 +132,7 @@ describe("chat model routes", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: "/api/chat/models",
+      url: "/api/llm-models/available",
     });
 
     expect(response.statusCode).toBe(200);
@@ -149,7 +149,7 @@ describe("chat model routes", () => {
     makeSecret,
   }) => {
     const secret = await makeSecret({ secret: { apiKey: "test-key" } });
-    const openAiKey = await ChatApiKeyModel.create({
+    const openAiKey = await LlmProviderApiKeyModel.create({
       organizationId,
       secretId: secret.id,
       name: "OpenAI Key",
@@ -158,7 +158,7 @@ describe("chat model routes", () => {
       userId: user.id,
       baseUrl: "https://proxy.example.com/v1",
     });
-    const vllmKey = await ChatApiKeyModel.create({
+    const vllmKey = await LlmProviderApiKeyModel.create({
       organizationId,
       secretId: null,
       name: "vLLM Key",
@@ -196,7 +196,7 @@ describe("chat model routes", () => {
     makeSecret,
   }) => {
     const secret = await makeSecret({ secret: { apiKey: "test-key" } });
-    await ChatApiKeyModel.create({
+    await LlmProviderApiKeyModel.create({
       organizationId,
       secretId: secret.id,
       name: "OpenAI Key",
@@ -205,7 +205,7 @@ describe("chat model routes", () => {
       userId: user.id,
     });
     const availableKeysSpy = vi.spyOn(
-      ChatApiKeyModel,
+      LlmProviderApiKeyModel,
       "getAvailableKeysForUser",
     );
     const syncSpy = vi

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-// Mock the ai module before importing routes.chat
+// Mock the ai module before importing chat routes
 const mockGenerateText = vi.hoisted(() => vi.fn());
 vi.mock("ai", async (importOriginal) => {
   const actual = await importOriginal<typeof import("ai")>();
@@ -19,21 +19,97 @@ vi.mock("@/clients/llm-client", async (importOriginal) => {
   };
 });
 
-// Mock ApiKeyModelModel for fast model DB lookup
+// Mock LlmProviderApiKeyModelLinkModel for fast model DB lookup
 const mockGetFastestModel = vi.hoisted(() => vi.fn());
-vi.mock("@/models/api-key-model", () => ({
+vi.mock("@/models/llm-provider-api-key-model", () => ({
   default: { getFastestModel: mockGetFastestModel },
 }));
 
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { createDirectLLMModel } from "@/clients/llm-client";
 import {
+  __test,
   buildChatStopConditions,
   buildTitlePrompt,
   extractFirstMessages,
   generateConversationTitle,
   getChatStopToolNames,
-} from "./routes.chat";
+} from "./routes";
+
+describe("prepareMessagesForProvider", () => {
+  it("normalizes csv files to text/plain for anthropic", () => {
+    const messages = __test.prepareMessagesForProvider({
+      provider: "anthropic",
+      messages: [
+        {
+          role: "user",
+          parts: [
+            {
+              type: "file",
+              mediaType: "text/csv",
+              filename: "report.csv",
+              url: "data:text/csv;base64,YSxiLGM=",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(messages[0].parts?.[0]).toMatchObject({
+      type: "file",
+      mediaType: "text/plain",
+      filename: "report.csv",
+      url: "data:text/plain;base64,YSxiLGM=",
+    });
+  });
+
+  it("normalizes markdown files to text/plain for anthropic", () => {
+    const messages = __test.prepareMessagesForProvider({
+      provider: "anthropic",
+      messages: [
+        {
+          role: "user",
+          parts: [
+            {
+              type: "file",
+              mediaType: "text/markdown",
+              filename: "README.md",
+              url: "data:text/markdown;base64,IyBUaXRsZQ==",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(messages[0].parts?.[0]).toMatchObject({
+      type: "file",
+      mediaType: "text/plain",
+      filename: "README.md",
+      url: "data:text/plain;base64,IyBUaXRsZQ==",
+    });
+  });
+
+  it("leaves non-anthropic file parts unchanged", () => {
+    const message = {
+      role: "user" as const,
+      parts: [
+        {
+          type: "file",
+          mediaType: "text/csv",
+          filename: "report.csv",
+          url: "data:text/csv;base64,YSxiLGM=",
+        },
+      ],
+    };
+
+    const messages = __test.prepareMessagesForProvider({
+      provider: "openai",
+      messages: [message],
+    });
+
+    expect(messages[0]).toBe(message);
+  });
+});
 
 describe("extractFirstMessages", () => {
   it("extracts first user message from parts", () => {

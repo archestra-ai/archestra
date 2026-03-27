@@ -1,6 +1,11 @@
 "use client";
 
-import type { ModelInputModality, ModelOutputModality } from "@shared";
+import {
+  INPUT_MODALITY_OPTIONS,
+  type ModelInputModality,
+  type ModelOutputModality,
+  OUTPUT_MODALITY_OPTIONS,
+} from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   AlertCircle,
@@ -11,11 +16,12 @@ import {
   RefreshCw,
   RotateCcw,
   Server,
+  X,
 } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
-import { PROVIDER_CONFIG } from "@/components/chat-api-key-form";
+import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
 import { LlmProviderApiKeyFilterSelect } from "@/components/llm-provider-options";
 import {
   BestModelBadge,
@@ -38,25 +44,23 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { MultiSelect } from "@/components/ui/multi-select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   type ModelWithApiKeys,
   useModelsWithApiKeys,
+  useSyncLlmModels,
   useUpdateModel,
-} from "@/lib/chat/chat-models.query";
-import {
-  useChatApiKeys,
-  useSyncChatModels,
-} from "@/lib/chat/chat-settings.query";
-import { useAppName } from "@/lib/hooks/use-app-name";
+} from "@/lib/llm-models.query";
+import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useSetProviderAction } from "../layout";
 
 export default function ModelsPage() {
   const { data: models = [], isPending, refetch } = useModelsWithApiKeys();
-  const { data: apiKeys = [] } = useChatApiKeys();
-  const syncModelsMutation = useSyncChatModels();
+  const { data: apiKeys = [] } = useLlmProviderApiKeys();
+  const syncModelsMutation = useSyncLlmModels();
   const updateModel = useUpdateModel();
   const [isRefreshingModels, setIsRefreshingModels] = useState(false);
   const [search, setSearch] = useState("");
@@ -337,26 +341,6 @@ export default function ModelsPage() {
 
 // --- Edit Model Dialog ---
 
-const INPUT_MODALITY_OPTIONS: Array<{
-  value: ModelInputModality;
-  label: string;
-}> = [
-  { value: "text", label: "Text" },
-  { value: "image", label: "Image" },
-  { value: "audio", label: "Audio" },
-  { value: "video", label: "Video" },
-  { value: "pdf", label: "PDF" },
-];
-
-const OUTPUT_MODALITY_OPTIONS: Array<{
-  value: ModelOutputModality;
-  label: string;
-}> = [
-  { value: "text", label: "Text" },
-  { value: "image", label: "Image" },
-  { value: "audio", label: "Audio" },
-];
-
 interface EditModelFormValues {
   customPricePerMillionInput: string;
   customPricePerMillionOutput: string;
@@ -375,6 +359,8 @@ function EditModelDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const appName = useAppName();
+  const [inputModalityToAdd, setInputModalityToAdd] = useState("");
+  const [outputModalityToAdd, setOutputModalityToAdd] = useState("");
   const updateModel = useUpdateModel();
   const providerConfig = PROVIDER_CONFIG[model.provider];
   const fallbackPricing = getFallbackPricing(model);
@@ -540,11 +526,14 @@ function EditModelDialog({
                 <ul className="list-disc space-y-1 pl-5">
                   <li>
                     Text input means the model can accept normal chat prompts.
-                    Text output means it can return standard chat responses.
+                    In {appName} chat, it also enables text-based uploads such
+                    as <code>.txt</code> and <code>.csv</code>, which are passed
+                    to the model as text content. Text output means the model
+                    can return standard chat responses.
                   </li>
                   <li>
-                    A model is considered a supported chat model only when both
-                    text input and text output are enabled, and the model is not
+                    In {appName} chat, a model appears as a standard chat model
+                    when it supports both text input and text output and is not
                     marked as ignored.
                   </li>
                   <li>
@@ -561,7 +550,7 @@ function EditModelDialog({
               </AlertDescription>
             </Alert>
 
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid items-start gap-3 md:grid-cols-2">
               <FormField
                 control={form.control}
                 name="inputModalities"
@@ -573,12 +562,13 @@ function EditModelDialog({
                   <FormItem>
                     <FormLabel>Input</FormLabel>
                     <FormControl>
-                      <MultiSelect
-                        items={INPUT_MODALITY_OPTIONS}
+                      <ModalitySelectField
+                        options={INPUT_MODALITY_OPTIONS}
                         value={field.value}
                         onValueChange={field.onChange}
-                        placeholder="Select input modalities..."
-                        searchable={false}
+                        selectValue={inputModalityToAdd}
+                        onSelectValueChange={setInputModalityToAdd}
+                        placeholder="Add input modality..."
                       />
                     </FormControl>
                     <FormMessage />
@@ -597,12 +587,13 @@ function EditModelDialog({
                   <FormItem>
                     <FormLabel>Output</FormLabel>
                     <FormControl>
-                      <MultiSelect
-                        items={OUTPUT_MODALITY_OPTIONS}
+                      <ModalitySelectField
+                        options={OUTPUT_MODALITY_OPTIONS}
                         value={field.value}
                         onValueChange={field.onChange}
-                        placeholder="Select output modalities..."
-                        searchable={false}
+                        selectValue={outputModalityToAdd}
+                        onSelectValueChange={setOutputModalityToAdd}
+                        placeholder="Add output modality..."
                       />
                     </FormControl>
                     <FormMessage />
@@ -646,6 +637,86 @@ function EditModelDialog({
 }
 
 // --- Internal helpers ---
+
+function ModalitySelectField<T extends string>(params: {
+  options: Array<{ value: T; label: string; description: string }>;
+  value: string[];
+  onValueChange: (value: string[]) => void;
+  selectValue: string;
+  onSelectValueChange: (value: string) => void;
+  placeholder: string;
+}) {
+  const {
+    options,
+    value,
+    onValueChange,
+    selectValue,
+    onSelectValueChange,
+    placeholder,
+  } = params;
+
+  return (
+    <div className="space-y-2">
+      <SearchableSelect
+        value={selectValue}
+        onValueChange={(nextValue) => {
+          onSelectValueChange("");
+          if (value.includes(nextValue)) {
+            return;
+          }
+
+          onValueChange([...value, nextValue]);
+        }}
+        placeholder={placeholder}
+        searchPlaceholder="Search modalities..."
+        className="w-full"
+        items={options.map((option) => ({
+          value: option.value,
+          label: option.label,
+          content: (
+            <span className="block min-w-0">
+              <span className="block text-sm font-medium">{option.label}</span>
+              <span className="block truncate text-xs text-muted-foreground">
+                {option.description}
+              </span>
+            </span>
+          ),
+          checked: value.includes(option.value),
+          disabled: value.includes(option.value),
+        }))}
+      />
+      <div className="flex flex-wrap gap-1">
+        {value.map((selectedValue) => {
+          const option = options.find((item) => item.value === selectedValue);
+          if (!option) {
+            return null;
+          }
+
+          return (
+            <Badge
+              key={option.value}
+              variant="secondary"
+              className="gap-1 pr-1"
+            >
+              {option.label}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-4 w-4"
+                onClick={() =>
+                  onValueChange(value.filter((item) => item !== option.value))
+                }
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </Badge>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function formatContextLength(contextLength: number | null): string {
   if (contextLength === null) return "-";

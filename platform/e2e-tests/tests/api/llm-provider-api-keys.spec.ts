@@ -1,5 +1,10 @@
 import type { APIRequestContext } from "@playwright/test";
-import { expect, test } from "./fixtures";
+import {
+  expect,
+  LLM_PROVIDER_API_KEYS_AVAILABLE_ROUTE,
+  LLM_PROVIDER_API_KEYS_ROUTE,
+  test,
+} from "./fixtures";
 
 type MakeApiRequest = (args: {
   request: APIRequestContext;
@@ -22,7 +27,7 @@ async function cleanupKeyByName(
   const existingKeys = await makeApiRequest({
     request,
     method: "get",
-    urlSuffix: "/api/chat-api-keys",
+    urlSuffix: LLM_PROVIDER_API_KEYS_ROUTE,
   });
   const existingKeysData = (await existingKeys.json()) as {
     id: string;
@@ -33,7 +38,7 @@ async function cleanupKeyByName(
       await makeApiRequest({
         request,
         method: "delete",
-        urlSuffix: `/api/chat-api-keys/${key.id}`,
+        urlSuffix: `/api/llm-provider-api-keys/${key.id}`,
         ignoreStatusCheck: true,
       });
     }
@@ -50,7 +55,7 @@ test.describe("LLM Provider API Keys CRUD", () => {
     const response = await makeApiRequest({
       request,
       method: "get",
-      urlSuffix: "/api/chat-api-keys",
+      urlSuffix: LLM_PROVIDER_API_KEYS_ROUTE,
     });
     const apiKeys = await response.json();
     expect(Array.isArray(apiKeys)).toBe(true);
@@ -66,7 +71,7 @@ test.describe("LLM Provider API Keys CRUD", () => {
     const response = await makeApiRequest({
       request,
       method: "post",
-      urlSuffix: "/api/chat-api-keys",
+      urlSuffix: LLM_PROVIDER_API_KEYS_ROUTE,
       data: {
         name: "Test Anthropic Key",
         provider: "anthropic",
@@ -88,7 +93,7 @@ test.describe("LLM Provider API Keys CRUD", () => {
     await makeApiRequest({
       request,
       method: "delete",
-      urlSuffix: `/api/chat-api-keys/${apiKey.id}`,
+      urlSuffix: `/api/llm-provider-api-keys/${apiKey.id}`,
     });
   });
 
@@ -105,25 +110,25 @@ test.describe("LLM Provider API Keys CRUD", () => {
     const response = await makeApiRequest({
       request,
       method: "post",
-      urlSuffix: "/api/chat-api-keys",
+      urlSuffix: LLM_PROVIDER_API_KEYS_ROUTE,
       data: {
         name: "Org Wide Test Key",
         provider: "anthropic",
         apiKey: "sk-ant-org-wide-test-key",
-        scope: "org_wide",
+        scope: "org",
       },
     });
 
     expect(response.ok()).toBe(true);
     const apiKey = await response.json();
 
-    expect(apiKey.scope).toBe("org_wide");
+    expect(apiKey.scope).toBe("org");
 
     // Cleanup
     await makeApiRequest({
       request,
       method: "delete",
-      urlSuffix: `/api/chat-api-keys/${apiKey.id}`,
+      urlSuffix: `/api/llm-provider-api-keys/${apiKey.id}`,
     });
   });
 
@@ -138,7 +143,7 @@ test.describe("LLM Provider API Keys CRUD", () => {
     const createResponse = await makeApiRequest({
       request,
       method: "post",
-      urlSuffix: "/api/chat-api-keys",
+      urlSuffix: LLM_PROVIDER_API_KEYS_ROUTE,
       data: {
         name: "Get By ID Test Key",
         provider: "anthropic",
@@ -151,7 +156,7 @@ test.describe("LLM Provider API Keys CRUD", () => {
     const response = await makeApiRequest({
       request,
       method: "get",
-      urlSuffix: `/api/chat-api-keys/${createdKey.id}`,
+      urlSuffix: `/api/llm-provider-api-keys/${createdKey.id}`,
     });
 
     expect(response.ok()).toBe(true);
@@ -164,7 +169,7 @@ test.describe("LLM Provider API Keys CRUD", () => {
     await makeApiRequest({
       request,
       method: "delete",
-      urlSuffix: `/api/chat-api-keys/${createdKey.id}`,
+      urlSuffix: `/api/llm-provider-api-keys/${createdKey.id}`,
     });
   });
 
@@ -180,7 +185,7 @@ test.describe("LLM Provider API Keys CRUD", () => {
     const createResponse = await makeApiRequest({
       request,
       method: "post",
-      urlSuffix: "/api/chat-api-keys",
+      urlSuffix: LLM_PROVIDER_API_KEYS_ROUTE,
       data: {
         name: "Original Name",
         provider: "anthropic",
@@ -193,7 +198,7 @@ test.describe("LLM Provider API Keys CRUD", () => {
     const updateResponse = await makeApiRequest({
       request,
       method: "patch",
-      urlSuffix: `/api/chat-api-keys/${createdKey.id}`,
+      urlSuffix: `/api/llm-provider-api-keys/${createdKey.id}`,
       data: {
         name: "Updated Name",
       },
@@ -208,7 +213,7 @@ test.describe("LLM Provider API Keys CRUD", () => {
     await makeApiRequest({
       request,
       method: "delete",
-      urlSuffix: `/api/chat-api-keys/${createdKey.id}`,
+      urlSuffix: `/api/llm-provider-api-keys/${createdKey.id}`,
     });
   });
 
@@ -223,7 +228,7 @@ test.describe("LLM Provider API Keys CRUD", () => {
     const createResponse = await makeApiRequest({
       request,
       method: "post",
-      urlSuffix: "/api/chat-api-keys",
+      urlSuffix: LLM_PROVIDER_API_KEYS_ROUTE,
       data: {
         name: "Delete Test Key",
         provider: "anthropic",
@@ -236,7 +241,7 @@ test.describe("LLM Provider API Keys CRUD", () => {
     const deleteResponse = await makeApiRequest({
       request,
       method: "delete",
-      urlSuffix: `/api/chat-api-keys/${createdKey.id}`,
+      urlSuffix: `/api/llm-provider-api-keys/${createdKey.id}`,
     });
 
     expect(deleteResponse.ok()).toBe(true);
@@ -247,7 +252,7 @@ test.describe("LLM Provider API Keys CRUD", () => {
     const getResponse = await makeApiRequest({
       request,
       method: "get",
-      urlSuffix: `/api/chat-api-keys/${createdKey.id}`,
+      urlSuffix: `/api/llm-provider-api-keys/${createdKey.id}`,
       ignoreStatusCheck: true,
     });
 
@@ -261,7 +266,8 @@ test.describe("LLM Provider API Keys CRUD", () => {
     const response = await makeApiRequest({
       request,
       method: "get",
-      urlSuffix: "/api/chat-api-keys/00000000-0000-0000-0000-000000000000",
+      urlSuffix:
+        "/api/llm-provider-api-keys/00000000-0000-0000-0000-000000000000",
       ignoreStatusCheck: true,
     });
 
@@ -280,7 +286,7 @@ test.describe("LLM Provider API Keys CRUD", () => {
     const key1Response = await makeApiRequest({
       request,
       method: "post",
-      urlSuffix: "/api/chat-api-keys",
+      urlSuffix: LLM_PROVIDER_API_KEYS_ROUTE,
       data: {
         name: "Personal Anthropic Key 1",
         provider: "anthropic",
@@ -295,7 +301,7 @@ test.describe("LLM Provider API Keys CRUD", () => {
     const key2Response = await makeApiRequest({
       request,
       method: "post",
-      urlSuffix: "/api/chat-api-keys",
+      urlSuffix: LLM_PROVIDER_API_KEYS_ROUTE,
       data: {
         name: "Personal Anthropic Key 2",
         provider: "anthropic",
@@ -310,12 +316,12 @@ test.describe("LLM Provider API Keys CRUD", () => {
     await makeApiRequest({
       request,
       method: "delete",
-      urlSuffix: `/api/chat-api-keys/${key1.id}`,
+      urlSuffix: `/api/llm-provider-api-keys/${key1.id}`,
     });
     await makeApiRequest({
       request,
       method: "delete",
-      urlSuffix: `/api/chat-api-keys/${key2.id}`,
+      urlSuffix: `/api/llm-provider-api-keys/${key2.id}`,
     });
   });
 
@@ -331,7 +337,7 @@ test.describe("LLM Provider API Keys CRUD", () => {
     const anthropicResponse = await makeApiRequest({
       request,
       method: "post",
-      urlSuffix: "/api/chat-api-keys",
+      urlSuffix: LLM_PROVIDER_API_KEYS_ROUTE,
       data: {
         name: "Personal Anthropic Key",
         provider: "anthropic",
@@ -346,7 +352,7 @@ test.describe("LLM Provider API Keys CRUD", () => {
     const openaiResponse = await makeApiRequest({
       request,
       method: "post",
-      urlSuffix: "/api/chat-api-keys",
+      urlSuffix: LLM_PROVIDER_API_KEYS_ROUTE,
       data: {
         name: "Personal OpenAI Key",
         provider: "openai",
@@ -361,12 +367,12 @@ test.describe("LLM Provider API Keys CRUD", () => {
     await makeApiRequest({
       request,
       method: "delete",
-      urlSuffix: `/api/chat-api-keys/${anthropicKey.id}`,
+      urlSuffix: `/api/llm-provider-api-keys/${anthropicKey.id}`,
     });
     await makeApiRequest({
       request,
       method: "delete",
-      urlSuffix: `/api/chat-api-keys/${openaiKey.id}`,
+      urlSuffix: `/api/llm-provider-api-keys/${openaiKey.id}`,
     });
   });
 });
@@ -386,7 +392,7 @@ test.describe("LLM Provider API Keys Available Endpoint", () => {
     const createResponse = await makeApiRequest({
       request,
       method: "post",
-      urlSuffix: "/api/chat-api-keys",
+      urlSuffix: LLM_PROVIDER_API_KEYS_ROUTE,
       data: {
         name: "Available Test Key",
         provider: "openai",
@@ -400,7 +406,7 @@ test.describe("LLM Provider API Keys Available Endpoint", () => {
     const response = await makeApiRequest({
       request,
       method: "get",
-      urlSuffix: "/api/chat-api-keys/available",
+      urlSuffix: LLM_PROVIDER_API_KEYS_AVAILABLE_ROUTE,
     });
 
     expect(response.ok()).toBe(true);
@@ -414,7 +420,7 @@ test.describe("LLM Provider API Keys Available Endpoint", () => {
     await makeApiRequest({
       request,
       method: "delete",
-      urlSuffix: `/api/chat-api-keys/${createdKey.id}`,
+      urlSuffix: `/api/llm-provider-api-keys/${createdKey.id}`,
     });
   });
 
@@ -429,7 +435,7 @@ test.describe("LLM Provider API Keys Available Endpoint", () => {
     const openaiResponse = await makeApiRequest({
       request,
       method: "post",
-      urlSuffix: "/api/chat-api-keys",
+      urlSuffix: LLM_PROVIDER_API_KEYS_ROUTE,
       data: {
         name: "Filter OpenAI Key",
         provider: "openai",
@@ -443,7 +449,7 @@ test.describe("LLM Provider API Keys Available Endpoint", () => {
     const response = await makeApiRequest({
       request,
       method: "get",
-      urlSuffix: "/api/chat-api-keys/available?provider=anthropic",
+      urlSuffix: "/api/llm-provider-api-keys/available?provider=anthropic",
     });
 
     expect(response.ok()).toBe(true);
@@ -458,7 +464,7 @@ test.describe("LLM Provider API Keys Available Endpoint", () => {
     await makeApiRequest({
       request,
       method: "delete",
-      urlSuffix: `/api/chat-api-keys/${openaiKey.id}`,
+      urlSuffix: `/api/llm-provider-api-keys/${openaiKey.id}`,
     });
   });
 });
@@ -495,7 +501,7 @@ test.describe("LLM Provider API Keys Team Scope", () => {
     const response = await makeApiRequest({
       request,
       method: "post",
-      urlSuffix: "/api/chat-api-keys",
+      urlSuffix: LLM_PROVIDER_API_KEYS_ROUTE,
       data: {
         name: "Team Test Key",
         provider: "openai",
@@ -515,7 +521,7 @@ test.describe("LLM Provider API Keys Team Scope", () => {
     await makeApiRequest({
       request,
       method: "delete",
-      urlSuffix: `/api/chat-api-keys/${apiKey.id}`,
+      urlSuffix: `/api/llm-provider-api-keys/${apiKey.id}`,
     });
   });
 
@@ -526,7 +532,7 @@ test.describe("LLM Provider API Keys Team Scope", () => {
     const response = await makeApiRequest({
       request,
       method: "post",
-      urlSuffix: "/api/chat-api-keys",
+      urlSuffix: LLM_PROVIDER_API_KEYS_ROUTE,
       data: {
         name: "Team Key Without TeamId",
         provider: "anthropic",
@@ -544,7 +550,7 @@ test.describe("LLM Provider API Keys Team Scope", () => {
 test.describe("LLM Provider API Keys Scope Update", () => {
   test.describe.configure({ mode: "serial" });
 
-  test("should update scope from personal to org_wide", async ({
+  test("should update scope from personal to org", async ({
     request,
     makeApiRequest,
   }) => {
@@ -556,7 +562,7 @@ test.describe("LLM Provider API Keys Scope Update", () => {
     const createResponse = await makeApiRequest({
       request,
       method: "post",
-      urlSuffix: "/api/chat-api-keys",
+      urlSuffix: LLM_PROVIDER_API_KEYS_ROUTE,
       data: {
         name: "Scope Update Test Key",
         provider: "anthropic",
@@ -566,26 +572,26 @@ test.describe("LLM Provider API Keys Scope Update", () => {
     });
     const createdKey = await createResponse.json();
 
-    // Update scope to org_wide
+    // Update scope to org
     const updateResponse = await makeApiRequest({
       request,
       method: "patch",
-      urlSuffix: `/api/chat-api-keys/${createdKey.id}`,
+      urlSuffix: `/api/llm-provider-api-keys/${createdKey.id}`,
       data: {
-        scope: "org_wide",
+        scope: "org",
       },
     });
 
     expect(updateResponse.ok()).toBe(true);
     const updatedKey = await updateResponse.json();
-    expect(updatedKey.scope).toBe("org_wide");
+    expect(updatedKey.scope).toBe("org");
     expect(updatedKey.userId).toBeNull();
 
     // Cleanup
     await makeApiRequest({
       request,
       method: "delete",
-      urlSuffix: `/api/chat-api-keys/${createdKey.id}`,
+      urlSuffix: `/api/llm-provider-api-keys/${createdKey.id}`,
     });
   });
 });
@@ -600,7 +606,7 @@ test.describe("LLM Provider API Keys Access Control", () => {
     const response = await makeApiRequest({
       request: memberRequest,
       method: "get",
-      urlSuffix: "/api/chat-api-keys",
+      urlSuffix: LLM_PROVIDER_API_KEYS_ROUTE,
       ignoreStatusCheck: true,
     });
 
@@ -614,7 +620,7 @@ test.describe("LLM Provider API Keys Access Control", () => {
     const response = await makeApiRequest({
       request: memberRequest,
       method: "post",
-      urlSuffix: "/api/chat-api-keys",
+      urlSuffix: LLM_PROVIDER_API_KEYS_ROUTE,
       data: {
         name: "Unauthorized Key",
         provider: "anthropic",

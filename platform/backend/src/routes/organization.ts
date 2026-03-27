@@ -14,11 +14,11 @@ import db, { schema } from "@/database";
 import { resolveApiKeyFromChatApiKey } from "@/knowledge-base/kb-llm-client";
 import {
   AgentModel,
-  ChatApiKeyModel,
   InteractionModel,
   InvitationModel,
   KbDocumentModel,
   KnowledgeBaseConnectorModel,
+  LlmProviderApiKeyModel,
   McpToolCallModel,
   MemberModel,
   OrganizationModel,
@@ -166,7 +166,9 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ organizationId, body }, reply) => {
       if (body.defaultLlmApiKeyId) {
-        const apiKey = await ChatApiKeyModel.findById(body.defaultLlmApiKeyId);
+        const apiKey = await LlmProviderApiKeyModel.findById(
+          body.defaultLlmApiKeyId,
+        );
         if (!apiKey || apiKey.organizationId !== organizationId) {
           throw new ApiError(404, "API key not found");
         }
@@ -218,7 +220,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Validate embedding API key uses an embedding-compatible provider
       if (body.embeddingChatApiKeyId) {
-        const chatApiKey = await ChatApiKeyModel.findById(
+        const chatApiKey = await LlmProviderApiKeyModel.findById(
           body.embeddingChatApiKeyId,
         );
         if (!chatApiKey) {
@@ -305,7 +307,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ body }, reply) => {
       // Validate API key exists and uses an embedding-compatible provider
-      const chatApiKey = await ChatApiKeyModel.findById(
+      const chatApiKey = await LlmProviderApiKeyModel.findById(
         body.embeddingChatApiKeyId,
       );
       if (!chatApiKey) {

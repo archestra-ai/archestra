@@ -28,7 +28,7 @@ import {
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config from "@/config";
 import logger from "@/logging";
-import { ChatApiKeyModel, TeamModel } from "@/models";
+import { LlmProviderApiKeyModel, TeamModel } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { ApiError } from "@/types";
 
@@ -99,10 +99,10 @@ export function detectProviderFromModel(model: string): SupportedProvider {
 
 /**
  * Resolve API key for a provider using priority:
- * agent's configured key > conversation > personal > team > org_wide > environment variable
+ * agent's configured key > conversation > personal > team > org > environment variable
  *
- * When userId is provided: resolves via getCurrentApiKey (agent key > personal > team > org_wide).
- * When no userId: checks org_wide keys only.
+ * When userId is provided: resolves via getCurrentApiKey (agent key > personal > team > org).
+ * When no userId: checks org keys only.
  */
 export async function resolveProviderApiKey(params: {
   organizationId: string;
@@ -129,7 +129,7 @@ export async function resolveProviderApiKey(params: {
 
   if (userId) {
     const userTeamIds = await TeamModel.getUserTeamIds(userId);
-    resolvedApiKey = await ChatApiKeyModel.getCurrentApiKey({
+    resolvedApiKey = await LlmProviderApiKeyModel.getCurrentApiKey({
       organizationId,
       userId,
       userTeamIds,
@@ -138,10 +138,10 @@ export async function resolveProviderApiKey(params: {
       agentLlmApiKeyId,
     });
   } else {
-    resolvedApiKey = await ChatApiKeyModel.findByScope(
+    resolvedApiKey = await LlmProviderApiKeyModel.findByScope(
       organizationId,
       provider,
-      "org_wide",
+      "org",
     );
   }
 

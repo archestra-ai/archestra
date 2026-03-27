@@ -13,6 +13,12 @@ import {
   WIREMOCK_BASE_URL,
 } from "../../consts";
 
+export const LLM_PROVIDER_API_KEYS_ROUTE = "/api/llm-provider-api-keys";
+export const LLM_PROVIDER_API_KEYS_AVAILABLE_ROUTE =
+  "/api/llm-provider-api-keys/available";
+export const LLM_MODELS_ROUTE = "/api/llm-models";
+export const SYNC_LLM_MODELS_ROUTE = "/api/llm-models/sync";
+
 /**
  * Playwright test extension with fixtures
  * https://playwright.dev/docs/test-fixtures#creating-a-fixture
@@ -805,7 +811,7 @@ const getModels = async (request: APIRequestContext) =>
   makeApiRequest({
     request,
     method: "get",
-    urlSuffix: "/api/models",
+    urlSuffix: LLM_MODELS_ROUTE,
   });
 
 /**
@@ -818,7 +824,7 @@ const syncModels = async (request: APIRequestContext) =>
   makeApiRequest({
     request,
     method: "post",
-    urlSuffix: "/api/chat/models/sync",
+    urlSuffix: SYNC_LLM_MODELS_ROUTE,
   });
 
 /**
@@ -837,7 +843,7 @@ const updateModelPricing = async (
   makeApiRequest({
     request,
     method: "patch",
-    urlSuffix: `/api/models/${modelId}`,
+    urlSuffix: `${LLM_MODELS_ROUTE}/${modelId}`,
     data: pricing,
   });
 

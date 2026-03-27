@@ -6,7 +6,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
-import chatApiKeysTable from "./chat-api-key";
+import llmProviderApiKeysTable from "./llm-provider-api-key";
 import modelsTable from "./model";
 
 /**
@@ -20,13 +20,13 @@ import modelsTable from "./model";
  * Models themselves remain in the database even if all linked API keys are removed
  * (for metadata retention).
  */
-const apiKeyModelsTable = pgTable(
+const llmProviderApiKeyModelsTable = pgTable(
   "api_key_models",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     apiKeyId: uuid("api_key_id")
       .notNull()
-      .references(() => chatApiKeysTable.id, { onDelete: "cascade" }),
+      .references(() => llmProviderApiKeysTable.id, { onDelete: "cascade" }),
     modelId: uuid("model_id")
       .notNull()
       .references(() => modelsTable.id, { onDelete: "cascade" }),
@@ -49,4 +49,4 @@ const apiKeyModelsTable = pgTable(
   }),
 );
 
-export default apiKeyModelsTable;
+export default llmProviderApiKeyModelsTable;

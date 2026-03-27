@@ -1,5 +1,5 @@
 import { vi } from "vitest";
-import ApiKeyModelModel from "@/models/api-key-model";
+import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -13,7 +13,7 @@ vi.mock("@/clients/gemini-client", () => ({
 }));
 
 import { isVertexAiEnabled } from "@/clients/gemini-client";
-import { validateProviderAllowed } from "./routes.api-keys";
+import { validateProviderAllowed } from "./llm-provider-api-keys";
 
 const mockIsVertexAiEnabled = vi.mocked(isVertexAiEnabled);
 
@@ -50,7 +50,7 @@ describe("validateProviderAllowed", () => {
   });
 });
 
-describe("GET /api/chat-api-keys/available", () => {
+describe("GET /api/llm-provider-api-keys/available", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
   let user: User;
@@ -71,8 +71,10 @@ describe("GET /api/chat-api-keys/available", () => {
       (request as typeof request & { user: User }).user = user;
     });
 
-    const { default: chatApiKeysRoutes } = await import("./routes.api-keys");
-    await app.register(chatApiKeysRoutes);
+    const { default: llmProviderApiKeyRoutes } = await import(
+      "./llm-provider-api-keys"
+    );
+    await app.register(llmProviderApiKeyRoutes);
   });
 
   afterEach(async () => {
@@ -81,10 +83,10 @@ describe("GET /api/chat-api-keys/available", () => {
 
   test("loads best models in a single batched call", async ({
     makeSecret,
-    makeChatApiKey,
+    makeLlmProviderApiKey,
   }) => {
     const secret = await makeSecret();
-    const apiKey = await makeChatApiKey(organizationId, secret.id, {
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "openai",
       scope: "personal",
       userId: user.id,
@@ -104,13 +106,16 @@ describe("GET /api/chat-api-keys/available", () => {
     });
 
     const getBestModelsForApiKeysSpy = vi
-      .spyOn(ApiKeyModelModel, "getBestModelsForApiKeys")
+      .spyOn(LlmProviderApiKeyModelLinkModel, "getBestModelsForApiKeys")
       .mockResolvedValue(new Map([[apiKey.id, model]]));
-    const getBestModelSpy = vi.spyOn(ApiKeyModelModel, "getBestModel");
+    const getBestModelSpy = vi.spyOn(
+      LlmProviderApiKeyModelLinkModel,
+      "getBestModel",
+    );
 
     const response = await app.inject({
       method: "GET",
-      url: "/api/chat-api-keys/available",
+      url: "/api/llm-provider-api-keys/available",
     });
 
     expect(response.statusCode).toBe(200);

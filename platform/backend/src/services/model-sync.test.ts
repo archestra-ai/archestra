@@ -1,6 +1,6 @@
 import type { SupportedProvider } from "@shared";
 import { vi } from "vitest";
-import ApiKeyModelModel from "@/models/api-key-model";
+import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
 import { modelFetchers } from "@/routes/chat/model-fetchers";
 import { afterEach, describe, expect, test } from "@/test";
@@ -25,11 +25,11 @@ describe("ModelSyncService", () => {
   test("stores models with the API key's provider, not detected provider", async ({
     makeOrganization,
     makeSecret,
-    makeChatApiKey,
+    makeLlmProviderApiKey,
   }) => {
     const org = await makeOrganization();
     const secret = await makeSecret({ secret: { apiKey: "test-key" } });
-    const apiKey = await makeChatApiKey(org.id, secret.id, {
+    const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
       provider: "openai",
     });
 
@@ -94,9 +94,8 @@ describe("ModelSyncService", () => {
     expect(geminiAsGemini).toBeNull();
 
     // Verify all 3 models are linked to the API key
-    const linkedModels = await ApiKeyModelModel.getModelsForApiKeyIds([
-      apiKey.id,
-    ]);
+    const linkedModels =
+      await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds([apiKey.id]);
     expect(linkedModels).toHaveLength(3);
     expect(linkedModels.every((m) => m.model.provider === "openai")).toBe(true);
   });
@@ -104,11 +103,11 @@ describe("ModelSyncService", () => {
   test("forceRefresh resets custom pricing, normal sync preserves it", async ({
     makeOrganization,
     makeSecret,
-    makeChatApiKey,
+    makeLlmProviderApiKey,
   }) => {
     const org = await makeOrganization();
     const secret = await makeSecret({ secret: { apiKey: "test-key" } });
-    const apiKey = await makeChatApiKey(org.id, secret.id, {
+    const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
       provider: "openai",
     });
 
@@ -175,13 +174,13 @@ describe("ModelSyncService", () => {
   test("infers Gemini modalities and backfills missing values without overwriting user edits", async ({
     makeOrganization,
     makeSecret,
-    makeChatApiKey,
+    makeLlmProviderApiKey,
   }) => {
     const org = await makeOrganization();
     const secret = await makeSecret({
       secret: { apiKey: "vertex-placeholder" },
     });
-    const apiKey = await makeChatApiKey(org.id, secret.id, {
+    const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
       provider: "gemini",
     });
 

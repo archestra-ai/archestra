@@ -247,7 +247,7 @@ async function getTeamIdByNameViaApi(
   const team = body.data.find((item) => item.name === teamName);
 
   expect(team, `Expected team "${teamName}" to exist`).toBeDefined();
-  return team!.id;
+  return team?.id ?? "";
 }
 
 function getRoleMappingRuleRow(page: Page, index: number) {
@@ -535,11 +535,10 @@ test.describe("Identity Provider Team Sync E2E", () => {
     await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 5000 });
 
     // STEP 4: Test SSO login with admin user (in archestra-admins group)
-    const { context: ssoContext, page: ssoPage } =
-      await signInViaIdentityProvider({
-        browser,
-        providerName,
-      });
+    const { context: ssoContext } = await signInViaIdentityProvider({
+      browser,
+      providerName,
+    });
 
     try {
       // STEP 5: Verify user was automatically added to the team

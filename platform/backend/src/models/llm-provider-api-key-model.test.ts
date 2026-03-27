@@ -1,11 +1,12 @@
 import { describe, expect, test } from "@/test";
-import ApiKeyModelModel from "./api-key-model";
+import LlmProviderApiKeyModelLinkModel from "./llm-provider-api-key-model";
 import ModelModel from "./model";
 
-describe("ApiKeyModelModel", () => {
+describe("LlmProviderApiKeyModelLinkModel", () => {
   describe("getBestModelsForApiKeys", () => {
     test("returns an empty map for empty input", async () => {
-      const bestModels = await ApiKeyModelModel.getBestModelsForApiKeys([]);
+      const bestModels =
+        await LlmProviderApiKeyModelLinkModel.getBestModelsForApiKeys([]);
 
       expect(bestModels).toEqual(new Map());
     });
@@ -13,15 +14,15 @@ describe("ApiKeyModelModel", () => {
     test("returns best-marked models and falls back to the first linked model", async ({
       makeOrganization,
       makeSecret,
-      makeChatApiKey,
+      makeLlmProviderApiKey,
     }) => {
       const org = await makeOrganization();
       const secret = await makeSecret();
 
-      const bestMarkedKey = await makeChatApiKey(org.id, secret.id, {
+      const bestMarkedKey = await makeLlmProviderApiKey(org.id, secret.id, {
         provider: "openai",
       });
-      const fallbackKey = await makeChatApiKey(org.id, secret.id, {
+      const fallbackKey = await makeLlmProviderApiKey(org.id, secret.id, {
         provider: "openai",
       });
 
@@ -65,7 +66,7 @@ describe("ApiKeyModelModel", () => {
         lastSyncedAt: new Date(),
       });
 
-      await ApiKeyModelModel.syncModelsForApiKey(
+      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
         bestMarkedKey.id,
         [
           { id: fallbackFirstModel.id, modelId: fallbackFirstModel.modelId },
@@ -73,15 +74,16 @@ describe("ApiKeyModelModel", () => {
         ],
         "openai",
       );
-      await ApiKeyModelModel.linkModelsToApiKey(fallbackKey.id, [
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(fallbackKey.id, [
         fallbackSecondModel.id,
         fallbackFirstModel.id,
       ]);
 
-      const bestModels = await ApiKeyModelModel.getBestModelsForApiKeys([
-        bestMarkedKey.id,
-        fallbackKey.id,
-      ]);
+      const bestModels =
+        await LlmProviderApiKeyModelLinkModel.getBestModelsForApiKeys([
+          bestMarkedKey.id,
+          fallbackKey.id,
+        ]);
 
       expect(bestModels.get(bestMarkedKey.id)?.id).toBe(bestCandidateModel.id);
       expect(bestModels.get(fallbackKey.id)?.id).toBe(fallbackFirstModel.id);
@@ -93,20 +95,21 @@ describe("ApiKeyModelModel", () => {
       makeOrganization,
     }) => {
       await makeOrganization();
-      const result = await ApiKeyModelModel.getAllModelsWithApiKeys();
+      const result =
+        await LlmProviderApiKeyModelLinkModel.getAllModelsWithApiKeys();
       expect(result).toEqual([]);
     });
 
     test("returns models that have linked API keys", async ({
       makeOrganization,
       makeSecret,
-      makeChatApiKey,
+      makeLlmProviderApiKey,
     }) => {
       const org = await makeOrganization();
       const secret = await makeSecret();
 
       // Create an API key
-      const apiKey = await makeChatApiKey(org.id, secret.id, {
+      const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
         provider: "openai",
       });
 
@@ -125,9 +128,12 @@ describe("ApiKeyModelModel", () => {
         lastSyncedAt: new Date(),
       });
 
-      await ApiKeyModelModel.linkModelsToApiKey(apiKey.id, [model.id]);
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(apiKey.id, [
+        model.id,
+      ]);
 
-      const result = await ApiKeyModelModel.getAllModelsWithApiKeys();
+      const result =
+        await LlmProviderApiKeyModelLinkModel.getAllModelsWithApiKeys();
       expect(result).toHaveLength(1);
       expect(result[0].model.id).toBe(model.id);
       expect(result[0].apiKeys).toHaveLength(1);
@@ -137,13 +143,13 @@ describe("ApiKeyModelModel", () => {
     test("excludes orphaned models with no linked API keys", async ({
       makeOrganization,
       makeSecret,
-      makeChatApiKey,
+      makeLlmProviderApiKey,
     }) => {
       const org = await makeOrganization();
       const secret = await makeSecret();
 
       // Create an API key and a linked model
-      const apiKey = await makeChatApiKey(org.id, secret.id, {
+      const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
         provider: "openai",
       });
       const linkedModel = await ModelModel.create({
@@ -159,7 +165,9 @@ describe("ApiKeyModelModel", () => {
         completionPricePerToken: "0.000015",
         lastSyncedAt: new Date(),
       });
-      await ApiKeyModelModel.linkModelsToApiKey(apiKey.id, [linkedModel.id]);
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(apiKey.id, [
+        linkedModel.id,
+      ]);
 
       // Create an orphaned model (no API key link)
       await ModelModel.create({
@@ -176,7 +184,8 @@ describe("ApiKeyModelModel", () => {
         lastSyncedAt: new Date(),
       });
 
-      const result = await ApiKeyModelModel.getAllModelsWithApiKeys();
+      const result =
+        await LlmProviderApiKeyModelLinkModel.getAllModelsWithApiKeys();
 
       // Only the linked model should be returned
       expect(result).toHaveLength(1);
@@ -187,13 +196,13 @@ describe("ApiKeyModelModel", () => {
     test("orphaned models appear after API key deletion due to cascade", async ({
       makeOrganization,
       makeSecret,
-      makeChatApiKey,
+      makeLlmProviderApiKey,
     }) => {
       const org = await makeOrganization();
       const secret = await makeSecret();
 
       // Create API key and link a model
-      const apiKey = await makeChatApiKey(org.id, secret.id, {
+      const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
         provider: "anthropic",
       });
       const model = await ModelModel.create({
@@ -209,23 +218,69 @@ describe("ApiKeyModelModel", () => {
         completionPricePerToken: "0.000015",
         lastSyncedAt: new Date(),
       });
-      await ApiKeyModelModel.linkModelsToApiKey(apiKey.id, [model.id]);
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(apiKey.id, [
+        model.id,
+      ]);
 
       // Verify model is visible before deletion
-      let result = await ApiKeyModelModel.getAllModelsWithApiKeys();
+      let result =
+        await LlmProviderApiKeyModelLinkModel.getAllModelsWithApiKeys();
       expect(result).toHaveLength(1);
 
       // Delete the API key (cascade deletes api_key_models entries)
-      const { ChatApiKeyModel } = await import("@/models");
-      await ChatApiKeyModel.delete(apiKey.id);
+      const { LlmProviderApiKeyModel } = await import("@/models");
+      await LlmProviderApiKeyModel.delete(apiKey.id);
 
       // Model should no longer appear since it has no linked API keys
-      result = await ApiKeyModelModel.getAllModelsWithApiKeys();
+      result = await LlmProviderApiKeyModelLinkModel.getAllModelsWithApiKeys();
       expect(result).toHaveLength(0);
 
       // But the model itself still exists in the models table
       const orphanedModel = await ModelModel.findById(model.id);
       expect(orphanedModel).not.toBeNull();
+    });
+  });
+
+  describe("syncModelsForApiKey", () => {
+    test("deduplicates repeated models before inserting links", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const secret = await makeSecret();
+      const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+        provider: "openai",
+      });
+
+      const model = await ModelModel.create({
+        externalId: "openai/gpt-4.1",
+        provider: "openai",
+        modelId: "gpt-4.1",
+        description: "GPT-4.1",
+        contextLength: 128000,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        promptPricePerToken: "0.000002",
+        completionPricePerToken: "0.000008",
+        lastSyncedAt: new Date(),
+      });
+
+      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+        apiKey.id,
+        [
+          { id: model.id, modelId: model.modelId },
+          { id: model.id, modelId: model.modelId },
+        ],
+        "openai",
+      );
+
+      const linkedModels =
+        await LlmProviderApiKeyModelLinkModel.getModelsForApiKey(apiKey.id);
+
+      expect(linkedModels).toHaveLength(1);
+      expect(linkedModels[0].id).toBe(model.id);
     });
   });
 });

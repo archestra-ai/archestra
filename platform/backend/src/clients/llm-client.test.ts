@@ -238,12 +238,12 @@ describe("resolveProviderApiKey", () => {
     makeOrganization,
     makeUser,
     makeSecret,
-    makeChatApiKey,
+    makeLlmProviderApiKey,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
     const secret = await makeSecret({ secret: { apiKey: "sk-personal-key" } });
-    await makeChatApiKey(org.id, secret.id, {
+    await makeLlmProviderApiKey(org.id, secret.id, {
       provider: "openai",
       scope: "personal",
       userId: user.id,
@@ -261,16 +261,16 @@ describe("resolveProviderApiKey", () => {
     expect(result.baseUrl).toBeNull();
   });
 
-  test("resolves org_wide key when no user provided", async ({
+  test("resolves org key when no user provided", async ({
     makeOrganization,
     makeSecret,
-    makeChatApiKey,
+    makeLlmProviderApiKey,
   }) => {
     const org = await makeOrganization();
     const secret = await makeSecret({ secret: { apiKey: "sk-org-key" } });
-    await makeChatApiKey(org.id, secret.id, {
+    await makeLlmProviderApiKey(org.id, secret.id, {
       provider: "anthropic",
-      scope: "org_wide",
+      scope: "org",
     });
 
     const result = await resolveProviderApiKey({
@@ -279,7 +279,7 @@ describe("resolveProviderApiKey", () => {
     });
 
     expect(result.apiKey).toBe("sk-org-key");
-    expect(result.source).toBe("org_wide");
+    expect(result.source).toBe("org");
     expect(result.chatApiKeyId).toBeDefined();
   });
 
@@ -292,9 +292,9 @@ describe("resolveProviderApiKey", () => {
     const user = await makeUser();
     const secret = await makeSecret({ secret: { apiKey: "sk-custom-base" } });
 
-    // makeChatApiKey doesn't support baseUrl, create directly
-    const { ChatApiKeyModel } = await import("@/models");
-    await ChatApiKeyModel.create({
+    // makeLlmProviderApiKey doesn't support baseUrl, create directly
+    const { LlmProviderApiKeyModel } = await import("@/models");
+    await LlmProviderApiKeyModel.create({
       organizationId: org.id,
       secretId: secret.id,
       name: "Custom Base URL Key",
@@ -332,25 +332,25 @@ describe("resolveProviderApiKey", () => {
     expect(result.baseUrl).toBeNull();
   });
 
-  test("personal key takes priority over org_wide", async ({
+  test("personal key takes priority over org", async ({
     makeOrganization,
     makeUser,
     makeSecret,
-    makeChatApiKey,
+    makeLlmProviderApiKey,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
 
     const orgSecret = await makeSecret({ secret: { apiKey: "sk-org-wide" } });
-    await makeChatApiKey(org.id, orgSecret.id, {
+    await makeLlmProviderApiKey(org.id, orgSecret.id, {
       provider: "anthropic",
-      scope: "org_wide",
+      scope: "org",
     });
 
     const personalSecret = await makeSecret({
       secret: { apiKey: "sk-personal" },
     });
-    await makeChatApiKey(org.id, personalSecret.id, {
+    await makeLlmProviderApiKey(org.id, personalSecret.id, {
       provider: "anthropic",
       scope: "personal",
       userId: user.id,
@@ -366,13 +366,13 @@ describe("resolveProviderApiKey", () => {
     expect(result.source).toBe("personal");
   });
 
-  test("team key takes priority over org_wide when user is in team", async ({
+  test("team key takes priority over org when user is in team", async ({
     makeOrganization,
     makeUser,
     makeTeam,
     makeTeamMember,
     makeSecret,
-    makeChatApiKey,
+    makeLlmProviderApiKey,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
@@ -381,13 +381,13 @@ describe("resolveProviderApiKey", () => {
     await makeTeamMember(team.id, user.id);
 
     const orgSecret = await makeSecret({ secret: { apiKey: "sk-org-wide" } });
-    await makeChatApiKey(org.id, orgSecret.id, {
+    await makeLlmProviderApiKey(org.id, orgSecret.id, {
       provider: "openai",
-      scope: "org_wide",
+      scope: "org",
     });
 
     const teamSecret = await makeSecret({ secret: { apiKey: "sk-team" } });
-    await makeChatApiKey(org.id, teamSecret.id, {
+    await makeLlmProviderApiKey(org.id, teamSecret.id, {
       provider: "openai",
       scope: "team",
       teamId: team.id,
@@ -406,16 +406,16 @@ describe("resolveProviderApiKey", () => {
   test("supports legacy secret formats (anthropicApiKey)", async ({
     makeOrganization,
     makeSecret,
-    makeChatApiKey,
+    makeLlmProviderApiKey,
   }) => {
     const org = await makeOrganization();
     // Old format used provider-specific key names
     const secret = await makeSecret({
       secret: { anthropicApiKey: "sk-legacy-key" },
     });
-    await makeChatApiKey(org.id, secret.id, {
+    await makeLlmProviderApiKey(org.id, secret.id, {
       provider: "anthropic",
-      scope: "org_wide",
+      scope: "org",
     });
 
     const result = await resolveProviderApiKey({

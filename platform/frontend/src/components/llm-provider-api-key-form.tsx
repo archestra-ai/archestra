@@ -10,21 +10,25 @@ import { Building2, CheckCircle2, User, Users } from "lucide-react";
 import Link from "next/link";
 import { lazy, Suspense, useEffect, useMemo } from "react";
 import type { UseFormReturn } from "react-hook-form";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import {
+  type VisibilityOption,
+  VisibilitySelector,
+} from "@/components/visibility-selector";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFeature, useProviderBaseUrls } from "@/lib/config/config.query";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useTeams } from "@/lib/teams/team.query";
+import { LlmProviderSelectItems } from "./llm-provider-options";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { useFeature, useProviderBaseUrls } from "@/lib/config/config.query";
-import { getFrontendDocsUrl } from "@/lib/docs/docs";
-import { useTeams } from "@/lib/teams/team.query";
-import { LlmProviderSelectItems } from "./llm-provider-options";
-import { WithPermissions } from "./roles/with-permissions";
+} from "./ui/select";
+import { Switch } from "./ui/switch";
 
 const ExternalSecretSelector = lazy(
   () =>
@@ -37,28 +41,26 @@ const InlineVaultSecretSelector = lazy(
     import("@/components/inline-vault-secret-selector.ee"),
 );
 
-type CreateChatApiKeyBody = archestraApiTypes.CreateChatApiKeyData["body"];
+type CreateLlmProviderApiKeyBody =
+  archestraApiTypes.CreateLlmProviderApiKeyData["body"];
 
-// Form values type - combines create/update fields
-export type ChatApiKeyFormValues = {
+export type LlmProviderApiKeyFormValues = {
   name: string;
-  provider: CreateChatApiKeyBody["provider"];
+  provider: CreateLlmProviderApiKeyBody["provider"];
   apiKey: string | null;
   baseUrl: string | null;
-  scope: NonNullable<CreateChatApiKeyBody["scope"]>;
+  scope: NonNullable<CreateLlmProviderApiKeyBody["scope"]>;
   teamId: string | null;
   vaultSecretPath: string | null;
   vaultSecretKey: string | null;
-  /** When multiple keys exist for the same provider+scope, the primary key is preferred */
   isPrimary: boolean;
 };
 
-// Response type for existing keys
-export type ChatApiKeyResponse =
-  archestraApiTypes.GetChatApiKeysResponses["200"][number];
+export type LlmProviderApiKeyResponse =
+  archestraApiTypes.GetLlmProviderApiKeysResponses["200"][number];
 
 const PROVIDER_CONFIG: Record<
-  CreateChatApiKeyBody["provider"],
+  CreateLlmProviderApiKeyBody["provider"],
   {
     name: string;
     icon: string;
@@ -202,67 +204,34 @@ const PROVIDER_CONFIG: Record<
 
 export { PROVIDER_CONFIG };
 
-export const PLACEHOLDER_KEY = "••••••••••••••••";
+export const LLM_PROVIDER_API_KEY_PLACEHOLDER = "••••••••••••••••";
 
-interface ChatApiKeyFormProps {
-  /**
-   * Form mode:
-   * - "full": Shows all fields including name (for settings page dialog)
-   * - "compact": Hides name field, auto-generates name (for onboarding)
-   */
+interface LlmProviderApiKeyFormProps {
+  /** Layout mode for the form container. */
   mode?: "full" | "compact";
-  /**
-   * Whether to show the console link for getting API keys
-   */
+  /** Whether to show the provider console/help link below the credential input. */
   showConsoleLink?: boolean;
-  /**
-   * Existing key to edit. When provided, form is in "edit" mode.
-   * Provider is disabled, but scope and team can be changed.
-   */
-  existingKey?: ChatApiKeyResponse;
-  /**
-   * All existing API keys visible to the user.
-   * Used to determine isPrimary default and show existing primary key info.
-   */
-  existingKeys?: ChatApiKeyResponse[];
-  /**
-   * Form object from parent (created with useForm)
-   */
-  form: UseFormReturn<ChatApiKeyFormValues>;
-  /**
-   * Whether mutation is pending (from parent)
-   */
+  /** Existing key being edited; omitted for create flows. */
+  existingKey?: LlmProviderApiKeyResponse;
+  /** Visible sibling keys used for primary-key defaults and conflicts. */
+  existingKeys?: LlmProviderApiKeyResponse[];
+  /** Parent-owned React Hook Form instance. */
+  form: UseFormReturn<LlmProviderApiKeyFormValues>;
+  /** Disables interactive controls while a mutation is pending. */
   isPending?: boolean;
-  /**
-   * Whether Gemini Vertex AI mode is enabled.
-   * When true, Gemini provider is disabled (uses ADC instead of API key).
-   */
+  /** Whether Gemini direct API keys are disabled in favor of Vertex AI. */
   geminiVertexAiEnabled?: boolean;
-  /**
-   * Whether Bedrock IAM auth mode is enabled.
-   * When true, Bedrock provider is disabled (uses AWS IAM instead of API key).
-   */
+  /** Whether Bedrock IAM auth is enabled, making direct API key entry optional. */
   bedrockIamAuthEnabled?: boolean;
-  /**
-   * Force-disable the provider selector (e.g. when only one provider is valid).
-   */
+  /** Prevent changing the selected provider. */
   disableProvider?: boolean;
-  /**
-   * Restrict selectable providers to this list.
-   */
-  allowedProviders?: CreateChatApiKeyBody["provider"][];
-  /**
-   * Hide the scope, team, and primary key fields (e.g. for org-level settings).
-   */
+  /** Optional allowlist for provider selection. */
+  allowedProviders?: CreateLlmProviderApiKeyBody["provider"][];
+  /** Hide scope and primary-key controls when the parent fixes those values. */
   hideScopeAndPrimary?: boolean;
 }
 
-/**
- * Form for creating/updating Chat API keys.
- * Form state is managed by parent via react-hook-form.
- * Parent handles mutations and submission.
- */
-export function ChatApiKeyForm({
+export function LlmProviderApiKeyForm({
   mode = "full",
   showConsoleLink = true,
   existingKey,
@@ -274,75 +243,114 @@ export function ChatApiKeyForm({
   disableProvider = false,
   allowedProviders,
   hideScopeAndPrimary = false,
-}: ChatApiKeyFormProps) {
+}: LlmProviderApiKeyFormProps) {
   const authDocsUrl = getFrontendDocsUrl("platform-llm-proxy-authentication");
   const byosEnabled = useFeature("byosEnabled");
   const { data: providerBaseUrls } = useProviderBaseUrls();
+  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
+  const { data: isLlmProviderApiKeyAdmin } = useHasPermissions({
+    llmProviderApiKey: ["admin"],
+  });
+  const { data: teams = [] } = useTeams();
   const isEditMode = Boolean(existingKey);
 
-  // Data fetching for team selector
-  const { data: teams = [] } = useTeams();
-
-  // Watch form values
   const provider = form.watch("provider");
   const apiKey = form.watch("apiKey");
   const scope = form.watch("scope");
   const teamId = form.watch("teamId");
 
-  // Check if API key has been changed from placeholder
-  const hasApiKeyChanged = apiKey !== PLACEHOLDER_KEY && apiKey !== "";
-
+  const hasApiKeyChanged =
+    apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER && apiKey !== "";
   const providerConfig = PROVIDER_CONFIG[provider];
   const allowedProviderSet = useMemo(
     () =>
-      new Set<CreateChatApiKeyBody["provider"]>(
+      new Set<CreateLlmProviderApiKeyBody["provider"]>(
         allowedProviders ??
-          (Object.keys(PROVIDER_CONFIG) as CreateChatApiKeyBody["provider"][]),
+          (Object.keys(
+            PROVIDER_CONFIG,
+          ) as CreateLlmProviderApiKeyBody["provider"][]),
       ),
     [allowedProviders],
   );
-
-  // Determine if we should show the "configured" styling
   const showConfiguredStyling = isEditMode && !hasApiKeyChanged;
 
-  // Disable team scope if no teams exist
-  const isTeamScopeDisabled = teams.length === 0;
-
-  // Find existing primary key for the current provider+scope combination
   const existingPrimaryKey = useMemo(() => {
-    if (!existingKeys) return null;
-    // In edit mode, exclude the current key
+    if (!existingKeys) {
+      return null;
+    }
+
     const otherKeys = existingKey
-      ? existingKeys.filter((k) => k.id !== existingKey.id)
+      ? existingKeys.filter((key) => key.id !== existingKey.id)
       : existingKeys;
+
     return (
       otherKeys.find(
-        (k) =>
-          k.provider === provider &&
-          k.scope === scope &&
-          (scope !== "team" || k.teamId === teamId) &&
-          k.isPrimary,
+        (key) =>
+          key.provider === provider &&
+          key.scope === scope &&
+          (scope !== "team" || key.teamId === teamId) &&
+          key.isPrimary,
       ) ?? null
     );
-  }, [existingKeys, existingKey, provider, scope, teamId]);
+  }, [existingKey, existingKeys, provider, scope, teamId]);
 
-  // Auto-set isPrimary when no user-created keys exist for this provider+scope (create mode only).
-  // System keys are auto-managed and shouldn't prevent the user from marking their key as primary.
   const hasAnyKeyForProvider = useMemo(() => {
-    if (!existingKeys) return false;
+    if (!existingKeys) {
+      return false;
+    }
+
     return existingKeys.some(
-      (k) =>
-        k.provider === provider &&
-        k.scope === scope &&
-        (scope !== "team" || k.teamId === teamId) &&
-        !k.isSystem,
+      (key) =>
+        key.provider === provider &&
+        key.scope === scope &&
+        (scope !== "team" || key.teamId === teamId) &&
+        !key.isSystem,
     );
   }, [existingKeys, provider, scope, teamId]);
 
+  const visibilityOptions = useMemo(
+    (): Array<
+      VisibilityOption<NonNullable<CreateLlmProviderApiKeyBody["scope"]>>
+    > => [
+      {
+        value: "personal",
+        label: "Personal",
+        description: "Only you can use this key",
+        icon: User,
+      },
+      {
+        value: "team",
+        label: "Team",
+        description: "Available to members of one selected team",
+        icon: Users,
+        disabled: !canReadTeams || teams.length === 0,
+        disabledReason: !canReadTeams
+          ? "Team sharing is unavailable without team:read permission"
+          : teams.length === 0
+            ? "Create a team before using team scope"
+            : undefined,
+      },
+      {
+        value: "org",
+        label: "Organization",
+        description: "Available to everyone in the organization",
+        icon: Building2,
+        disabled: !isLlmProviderApiKeyAdmin,
+        disabledReason: !isLlmProviderApiKeyAdmin
+          ? "You need llmProviderApiKey:admin permission to share org-wide"
+          : undefined,
+      },
+    ],
+    [canReadTeams, isLlmProviderApiKeyAdmin, teams.length],
+  );
+
   useEffect(() => {
-    if (isEditMode) return;
+    if (isEditMode) {
+      return;
+    }
+
     form.setValue("isPrimary", !hasAnyKeyForProvider);
-  }, [hasAnyKeyForProvider, isEditMode, form]);
+  }, [form, hasAnyKeyForProvider, isEditMode]);
 
   useEffect(() => {
     if (allowedProviderSet.has(provider)) {
@@ -355,13 +363,14 @@ export function ChatApiKeyForm({
     }
   }, [allowedProviderSet, form, provider]);
 
-  // Clean vault secret values when changing scope
   useEffect(() => {
-    if (scope !== "team") {
-      form.setValue("vaultSecretPath", null);
-      form.setValue("vaultSecretKey", null);
+    if (scope === "team") {
+      return;
     }
-  }, [scope, form]);
+
+    form.setValue("vaultSecretPath", null);
+    form.setValue("vaultSecretKey", null);
+  }, [form, scope]);
 
   const vaultSecretSelector =
     scope === "team" ? (
@@ -369,35 +378,40 @@ export function ChatApiKeyForm({
         teamId={teamId}
         selectedSecretPath={form.getValues("vaultSecretPath")}
         selectedSecretKey={form.getValues("vaultSecretKey")}
-        onSecretPathChange={(v) => form.setValue("vaultSecretPath", v)}
-        onSecretKeyChange={(v) => form.setValue("vaultSecretKey", v)}
+        onSecretPathChange={(value) => form.setValue("vaultSecretPath", value)}
+        onSecretKeyChange={(value) => form.setValue("vaultSecretKey", value)}
       />
     ) : (
       <ExternalSecretSelector
         selectedTeamId={teamId}
         selectedSecretPath={form.getValues("vaultSecretPath")}
         selectedSecretKey={form.getValues("vaultSecretKey")}
-        onTeamChange={(v) => form.setValue("teamId", v)}
-        onSecretChange={(v) => form.setValue("vaultSecretPath", v)}
-        onSecretKeyChange={(v) => form.setValue("vaultSecretKey", v)}
+        onTeamChange={(value) => form.setValue("teamId", value)}
+        onSecretChange={(value) => form.setValue("vaultSecretPath", value)}
+        onSecretKeyChange={(value) => form.setValue("vaultSecretKey", value)}
       />
     );
 
   return (
     <div data-testid={E2eTestId.ChatApiKeyForm}>
       <div className="space-y-4">
-        {/* Provider + Name (same row in full mode) */}
         <div className={mode === "full" ? "grid grid-cols-2 gap-4" : ""}>
           <div className="space-y-2">
-            <Label htmlFor="chat-api-key-provider">Provider</Label>
+            <Label htmlFor="llm-provider-api-key-provider">Provider</Label>
             <Select
               value={provider}
-              onValueChange={(v) =>
-                form.setValue("provider", v as CreateChatApiKeyBody["provider"])
+              onValueChange={(value) =>
+                form.setValue(
+                  "provider",
+                  value as CreateLlmProviderApiKeyBody["provider"],
+                )
               }
               disabled={isEditMode || isPending || disableProvider}
             >
-              <SelectTrigger id="chat-api-key-provider" className="w-full">
+              <SelectTrigger
+                id="llm-provider-api-key-provider"
+                className="w-full"
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -406,20 +420,18 @@ export function ChatApiKeyForm({
                     .sort(([, a], [, b]) => a.name.localeCompare(b.name))
                     .map(([key, config]) => {
                       const providerKey =
-                        key as CreateChatApiKeyBody["provider"];
+                        key as CreateLlmProviderApiKeyBody["provider"];
                       const isGeminiDisabledByVertexAi =
                         providerKey === "gemini" && geminiVertexAiEnabled;
                       const isBedrockDisabledByIamAuth =
                         providerKey === "bedrock" && bedrockIamAuthEnabled;
-                      const isAllowedProvider =
-                        allowedProviderSet.has(providerKey);
 
                       return {
                         value: providerKey,
                         icon: config.icon,
                         name: config.name,
                         disabled:
-                          !isAllowedProvider ||
+                          !allowedProviderSet.has(providerKey) ||
                           !config.enabled ||
                           isGeminiDisabledByVertexAi ||
                           isBedrockDisabledByIamAuth,
@@ -435,9 +447,9 @@ export function ChatApiKeyForm({
 
           {mode === "full" && (
             <div className="space-y-2">
-              <Label htmlFor="chat-api-key-name">Name</Label>
+              <Label htmlFor="llm-provider-api-key-name">Name</Label>
               <Input
-                id="chat-api-key-name"
+                id="llm-provider-api-key-name"
                 placeholder={`My ${providerConfig.name} Key`}
                 disabled={isPending}
                 {...form.register("name")}
@@ -446,7 +458,6 @@ export function ChatApiKeyForm({
           )}
         </div>
 
-        {/* API Key input */}
         {byosEnabled ? (
           <Suspense
             fallback={
@@ -457,15 +468,15 @@ export function ChatApiKeyForm({
           </Suspense>
         ) : (
           <div className="space-y-2">
-            <Label htmlFor="chat-api-key-value">
+            <Label htmlFor="llm-provider-api-key-value">
               API Key{" "}
               {PROVIDERS_WITH_OPTIONAL_API_KEY.has(provider) ? (
-                <span className="text-muted-foreground font-normal">
+                <span className="font-normal text-muted-foreground">
                   (optional)
                 </span>
               ) : (
                 isEditMode && (
-                  <span className="text-muted-foreground font-normal">
+                  <span className="font-normal text-muted-foreground">
                     (leave blank to keep current)
                   </span>
                 )
@@ -478,7 +489,7 @@ export function ChatApiKeyForm({
             )}
             <div className="relative">
               <Input
-                id="chat-api-key-value"
+                id="llm-provider-api-key-value"
                 type="password"
                 placeholder={providerConfig.placeholder}
                 disabled={isPending}
@@ -488,7 +499,7 @@ export function ChatApiKeyForm({
                 {...form.register("apiKey")}
               />
               {showConfiguredStyling && (
-                <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-500" />
+                <CheckCircle2 className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-green-500" />
               )}
             </div>
             {showConsoleLink && (
@@ -509,9 +520,17 @@ export function ChatApiKeyForm({
 
         {!hideScopeAndPrimary && (
           <>
-            {/* Visibility/Scope selector */}
-            <div className="space-y-2">
-              <Label htmlFor="chat-api-key-scope">Scope</Label>
+            <VisibilitySelector
+              label="Scope"
+              value={scope}
+              options={visibilityOptions}
+              onValueChange={(nextScope) => {
+                form.setValue("scope", nextScope);
+                if (nextScope !== "team") {
+                  form.setValue("teamId", null);
+                }
+              }}
+            >
               <p className="text-xs text-muted-foreground">
                 Controls who can use this key.
                 {authDocsUrl && (
@@ -528,82 +547,38 @@ export function ChatApiKeyForm({
                   </>
                 )}
               </p>
-              <Select
-                value={scope}
-                onValueChange={(v) => {
-                  form.setValue(
-                    "scope",
-                    v as NonNullable<CreateChatApiKeyBody["scope"]>,
-                  );
-                  if (v !== "team") {
-                    form.setValue("teamId", "");
-                  }
-                }}
-                disabled={isPending}
-              >
-                <SelectTrigger id="chat-api-key-scope" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="personal">
-                    <div className="flex items-center gap-2">
-                      <User className="h-4 w-4" />
-                      <span>Personal</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="team" disabled={isTeamScopeDisabled}>
-                    <div className="flex items-center gap-2">
-                      <Users className="h-4 w-4" />
-                      <span>Team</span>
-                      {isTeamScopeDisabled && (
-                        <span className="text-xs text-muted-foreground">
-                          (no teams available)
-                        </span>
-                      )}
-                    </div>
-                  </SelectItem>
-                  <WithPermissions
-                    permissions={{ team: ["admin"] }}
-                    noPermissionHandle="hide"
+
+              {scope === "team" && (
+                <div className="space-y-2">
+                  <Label htmlFor="llm-provider-api-key-team">Team</Label>
+                  <Select
+                    value={teamId ?? undefined}
+                    onValueChange={(value) => form.setValue("teamId", value)}
+                    disabled={isPending || !canReadTeams || teams.length === 0}
                   >
-                    <SelectItem value="org_wide">
-                      <div className="flex items-center gap-2">
-                        <Building2 className="h-4 w-4" />
-                        <span>Organization</span>
-                      </div>
-                    </SelectItem>
-                  </WithPermissions>
-                </SelectContent>
-              </Select>
-            </div>
+                    <SelectTrigger
+                      id="llm-provider-api-key-team"
+                      className="w-full"
+                    >
+                      <SelectValue placeholder="Select a team" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {teams.map((team) => (
+                        <SelectItem key={team.id} value={team.id}>
+                          {team.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </VisibilitySelector>
 
-            {/* Team selector - only when scope is team */}
-            {scope === "team" && (
-              <div className="space-y-2">
-                <Label htmlFor="chat-api-key-team">Team</Label>
-                <Select
-                  value={teamId ?? undefined}
-                  onValueChange={(v) => form.setValue("teamId", v)}
-                  disabled={isPending}
-                >
-                  <SelectTrigger id="chat-api-key-team" className="w-full">
-                    <SelectValue placeholder="Select a team" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {teams.map((team) => (
-                      <SelectItem key={team.id} value={team.id}>
-                        {team.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {/* Primary key toggle */}
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label htmlFor="chat-api-key-is-primary">Primary key</Label>
+                <Label htmlFor="llm-provider-api-key-is-primary">
+                  Primary key
+                </Label>
                 <p className="text-xs text-muted-foreground">
                   {existingPrimaryKey
                     ? `"${existingPrimaryKey.name}" is already the primary key for this provider and scope`
@@ -611,22 +586,21 @@ export function ChatApiKeyForm({
                 </p>
               </div>
               <Switch
-                id="chat-api-key-is-primary"
+                id="llm-provider-api-key-is-primary"
                 checked={form.watch("isPrimary")}
                 onCheckedChange={(checked) =>
                   form.setValue("isPrimary", checked)
                 }
-                disabled={isPending || !!existingPrimaryKey}
+                disabled={isPending || Boolean(existingPrimaryKey)}
               />
             </div>
           </>
         )}
 
-        {/* Base URL input */}
         <div className="space-y-2">
-          <Label htmlFor="chat-api-key-base-url">
+          <Label htmlFor="llm-provider-api-key-base-url">
             Base URL{" "}
-            <span className="text-muted-foreground font-normal">
+            <span className="font-normal text-muted-foreground">
               (optional)
             </span>
           </Label>
@@ -635,7 +609,7 @@ export function ChatApiKeyForm({
             setups.
           </p>
           <Input
-            id="chat-api-key-base-url"
+            id="llm-provider-api-key-base-url"
             type="url"
             placeholder={
               providerBaseUrls?.[provider] ||
@@ -645,7 +619,10 @@ export function ChatApiKeyForm({
             disabled={isPending}
             {...form.register("baseUrl", {
               validate: (value) => {
-                if (!value) return true;
+                if (!value) {
+                  return true;
+                }
+
                 try {
                   const url = new URL(value);
                   if (!["http:", "https:"].includes(url.protocol)) {

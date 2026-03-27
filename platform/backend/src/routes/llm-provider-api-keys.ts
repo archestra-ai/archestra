@@ -8,12 +8,12 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { capitalize } from "lodash-es";
 import { z } from "zod";
-import { hasAnyAgentTypeAdminPermission, hasPermission } from "@/auth";
+import { hasPermission, userHasPermission } from "@/auth";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import logger from "@/logging";
 import {
-  ApiKeyModelModel,
-  ChatApiKeyModel,
+  LlmProviderApiKeyModel,
+  LlmProviderApiKeyModelLinkModel,
   ModelModel,
   OrganizationModel,
   TeamModel,
@@ -28,10 +28,11 @@ import {
 import { modelSyncService } from "@/services/model-sync";
 import {
   ApiError,
-  ChatApiKeyScopeSchema,
-  ChatApiKeyWithScopeInfoSchema,
   constructResponseSchema,
-  SelectChatApiKeySchema,
+  LlmProviderApiKeyWithScopeInfoSchema,
+  type ResourceVisibilityScope,
+  ResourceVisibilityScopeSchema,
+  SelectLlmProviderApiKeySchema,
   type SelectSecret,
 } from "@/types";
 
@@ -50,22 +51,22 @@ async function testApiKeyOrThrow(
   }
 }
 
-const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  // List all visible chat API keys for the user
+const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  // List all visible LLM provider API keys for the user
   fastify.get(
-    "/api/chat-api-keys",
+    "/api/llm-provider-api-keys",
     {
       schema: {
-        operationId: RouteId.GetChatApiKeys,
+        operationId: RouteId.GetLlmProviderApiKeys,
         description:
-          "Get all chat API keys visible to the current user based on scope access",
-        tags: ["Chat API Keys"],
+          "Get all LLM provider API keys visible to the current user based on scope access",
+        tags: ["LLM Provider API Keys"],
         querystring: z.object({
           search: z.string().trim().min(1).optional(),
           provider: SupportedProvidersSchema.optional(),
         }),
         response: constructResponseSchema(
-          z.array(ChatApiKeyWithScopeInfoSchema),
+          z.array(LlmProviderApiKeyWithScopeInfoSchema),
         ),
       },
     },
@@ -73,17 +74,18 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Get user's team IDs
       const userTeamIds = await TeamModel.getUserTeamIds(user.id);
 
-      // Check if user is an agent admin
-      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
-        userId: user.id,
+      const isLlmProviderApiKeyAdmin = await userHasPermission(
+        user.id,
         organizationId,
-      });
+        "llmProviderApiKey",
+        "admin",
+      );
 
-      const apiKeys = await ChatApiKeyModel.getVisibleKeys(
+      const apiKeys = await LlmProviderApiKeyModel.getVisibleKeys(
         organizationId,
         user.id,
         userTeamIds,
-        isAgentAdmin,
+        isLlmProviderApiKeyAdmin,
         {
           search: query.search,
           provider: query.provider,
@@ -93,29 +95,29 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  // Get available API keys for chat (keys the user can use)
+  // Get available API keys for LLM-powered features
   fastify.get(
-    "/api/chat-api-keys/available",
+    "/api/llm-provider-api-keys/available",
     {
       schema: {
-        operationId: RouteId.GetAvailableChatApiKeys,
+        operationId: RouteId.GetAvailableLlmProviderApiKeys,
         description:
-          "Get API keys available for the current user to use in chat",
-        tags: ["Chat API Keys"],
+          "Get LLM provider API keys available for the current user to use",
+        tags: ["LLM Provider API Keys"],
         querystring: z.object({
           provider: SupportedProvidersSchema.optional(),
           /** Include a specific key by ID even if user doesn't have direct access (e.g. agent's configured key) */
           includeKeyId: z.string().uuid().optional(),
         }),
         response: constructResponseSchema(
-          z.array(ChatApiKeyWithScopeInfoSchema),
+          z.array(LlmProviderApiKeyWithScopeInfoSchema),
         ),
       },
     },
     async ({ organizationId, user, query }, reply) => {
       const userTeamIds = await TeamModel.getUserTeamIds(user.id);
 
-      const apiKeys = await ChatApiKeyModel.getAvailableKeysForUser(
+      const apiKeys = await LlmProviderApiKeyModel.getAvailableKeysForUser(
         organizationId,
         user.id,
         userTeamIds,
@@ -127,7 +129,9 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         query.includeKeyId &&
         !apiKeys.some((k) => k.id === query.includeKeyId)
       ) {
-        const agentKey = await ChatApiKeyModel.findById(query.includeKeyId);
+        const agentKey = await LlmProviderApiKeyModel.findById(
+          query.includeKeyId,
+        );
         if (agentKey && agentKey.organizationId === organizationId) {
           apiKeys.push({
             ...agentKey,
@@ -139,7 +143,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const bestModelsByApiKeyId =
-        await ApiKeyModelModel.getBestModelsForApiKeys(
+        await LlmProviderApiKeyModelLinkModel.getBestModelsForApiKeys(
           apiKeys.map((key) => key.id),
         );
 
@@ -152,21 +156,22 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  // Create a new chat API key
+  // Create a new LLM provider API key
   fastify.post(
-    "/api/chat-api-keys",
+    "/api/llm-provider-api-keys",
     {
       schema: {
-        operationId: RouteId.CreateChatApiKey,
-        description: "Create a new chat API key with specified scope",
-        tags: ["Chat API Keys"],
+        operationId: RouteId.CreateLlmProviderApiKey,
+        description:
+          "Create a new LLM provider API key with specified visibility",
+        tags: ["LLM Provider API Keys"],
         body: z
           .object({
             name: z.string().min(1, "Name is required"),
             provider: SupportedProvidersSchema,
             apiKey: z.string().min(1).optional(),
             baseUrl: z.string().url().nullable().optional(),
-            scope: ChatApiKeyScopeSchema.default("personal"),
+            scope: ResourceVisibilityScopeSchema.default("personal"),
             teamId: z.string().optional(),
             isPrimary: z.boolean().optional(),
             vaultSecretPath: z.string().min(1).optional(),
@@ -183,7 +188,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 "Either apiKey or both vaultSecretPath and vaultSecretKey must be provided",
             },
           ),
-        response: constructResponseSchema(SelectChatApiKeySchema),
+        response: constructResponseSchema(SelectLlmProviderApiKeySchema),
       },
     },
     async ({ body, organizationId, user, headers }, reply) => {
@@ -254,7 +259,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Create the API key record
-      const createdApiKey = await ChatApiKeyModel.create({
+      const createdApiKey = await LlmProviderApiKeyModel.create({
         organizationId,
         name: body.name,
         provider: body.provider,
@@ -297,43 +302,45 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  // Get a single chat API key
+  // Get a single LLM provider API key
   fastify.get(
-    "/api/chat-api-keys/:id",
+    "/api/llm-provider-api-keys/:id",
     {
       schema: {
-        operationId: RouteId.GetChatApiKey,
-        description: "Get a specific chat API key",
-        tags: ["Chat API Keys"],
+        operationId: RouteId.GetLlmProviderApiKey,
+        description: "Get a specific LLM provider API key",
+        tags: ["LLM Provider API Keys"],
         params: z.object({
           id: z.string().uuid(),
         }),
-        response: constructResponseSchema(ChatApiKeyWithScopeInfoSchema),
+        response: constructResponseSchema(LlmProviderApiKeyWithScopeInfoSchema),
       },
     },
     async ({ params, organizationId, user }, reply) => {
-      const apiKey = await ChatApiKeyModel.findById(params.id);
+      const apiKey = await LlmProviderApiKeyModel.findById(params.id);
 
       if (!apiKey || apiKey.organizationId !== organizationId) {
-        throw new ApiError(404, "Chat API key not found");
+        throw new ApiError(404, "LLM provider API key not found");
       }
 
       // Check visibility based on scope
       const userTeamIds = await TeamModel.getUserTeamIds(user.id);
-      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
-        userId: user.id,
+      const isLlmProviderApiKeyAdmin = await userHasPermission(
+        user.id,
         organizationId,
-      });
+        "llmProviderApiKey",
+        "admin",
+      );
 
       // Personal keys: only visible to owner
       if (apiKey.scope === "personal" && apiKey.userId !== user.id) {
-        throw new ApiError(404, "Chat API key not found");
+        throw new ApiError(404, "LLM provider API key not found");
       }
 
       // Team keys: visible to team members or admins
-      if (apiKey.scope === "team" && !isAgentAdmin) {
+      if (apiKey.scope === "team" && !isLlmProviderApiKeyAdmin) {
         if (!apiKey.teamId || !userTeamIds.includes(apiKey.teamId)) {
-          throw new ApiError(404, "Chat API key not found");
+          throw new ApiError(404, "LLM provider API key not found");
         }
       }
 
@@ -341,15 +348,15 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  // Update a chat API key
+  // Update an LLM provider API key
   fastify.patch(
-    "/api/chat-api-keys/:id",
+    "/api/llm-provider-api-keys/:id",
     {
       schema: {
-        operationId: RouteId.UpdateChatApiKey,
+        operationId: RouteId.UpdateLlmProviderApiKey,
         description:
-          "Update a chat API key (name, API key value, scope, or team)",
-        tags: ["Chat API Keys"],
+          "Update an LLM provider API key (name, API key value, visibility, or team)",
+        tags: ["LLM Provider API Keys"],
         params: z.object({
           id: z.string().uuid(),
         }),
@@ -358,7 +365,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
             name: z.string().min(1).optional(),
             apiKey: z.string().min(1).optional(),
             baseUrl: z.string().url().nullable().optional(),
-            scope: ChatApiKeyScopeSchema.optional(),
+            scope: ResourceVisibilityScopeSchema.optional(),
             teamId: z.string().uuid().nullable().optional(),
             isPrimary: z.boolean().optional(),
             vaultSecretPath: z.string().min(1).optional(),
@@ -389,14 +396,14 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 "Either apiKey or both vaultSecretPath and vaultSecretKey must be provided",
             },
           ),
-        response: constructResponseSchema(SelectChatApiKeySchema),
+        response: constructResponseSchema(SelectLlmProviderApiKeySchema),
       },
     },
     async ({ params, body, organizationId, user, headers }, reply) => {
-      const apiKeyFromDB = await ChatApiKeyModel.findById(params.id);
+      const apiKeyFromDB = await LlmProviderApiKeyModel.findById(params.id);
 
       if (!apiKeyFromDB || apiKeyFromDB.organizationId !== organizationId) {
-        throw new ApiError(404, "Chat API key not found");
+        throw new ApiError(404, "LLM provider API key not found");
       }
 
       // Check authorization based on current scope
@@ -485,7 +492,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const updateData: Partial<{
         name: string;
         baseUrl: string | null;
-        scope: "personal" | "team" | "org_wide";
+        scope: ResourceVisibilityScope;
         userId: string | null;
         teamId: string | null;
         secretId: string | null;
@@ -519,25 +526,25 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       if (Object.keys(updateData).length > 0) {
-        await ChatApiKeyModel.update(params.id, updateData);
+        await LlmProviderApiKeyModel.update(params.id, updateData);
       }
 
-      const updated = await ChatApiKeyModel.findById(params.id);
+      const updated = await LlmProviderApiKeyModel.findById(params.id);
       if (!updated) {
-        throw new ApiError(404, "Chat API key not found");
+        throw new ApiError(404, "LLM provider API key not found");
       }
       return reply.send(updated);
     },
   );
 
-  // Delete a chat API key
+  // Delete an LLM provider API key
   fastify.delete(
-    "/api/chat-api-keys/:id",
+    "/api/llm-provider-api-keys/:id",
     {
       schema: {
-        operationId: RouteId.DeleteChatApiKey,
-        description: "Delete a chat API key",
-        tags: ["Chat API Keys"],
+        operationId: RouteId.DeleteLlmProviderApiKey,
+        description: "Delete an LLM provider API key",
+        tags: ["LLM Provider API Keys"],
         params: z.object({
           id: z.string().uuid(),
         }),
@@ -545,10 +552,10 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params, organizationId, user, headers }, reply) => {
-      const apiKey = await ChatApiKeyModel.findById(params.id);
+      const apiKey = await LlmProviderApiKeyModel.findById(params.id);
 
       if (!apiKey || apiKey.organizationId !== organizationId) {
-        throw new ApiError(404, "Chat API key not found");
+        throw new ApiError(404, "LLM provider API key not found");
       }
 
       // Check authorization based on scope
@@ -576,9 +583,13 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Delete virtual key secrets before deleting the parent API key.
       // The DB cascades the virtual key rows, but their secrets in the
       // secret manager would be orphaned without explicit cleanup.
-      const virtualKeys = await VirtualApiKeyModel.findByChatApiKeyId(
-        params.id,
-      );
+      const virtualKeys = await VirtualApiKeyModel.findByChatApiKeyId({
+        chatApiKeyId: params.id,
+        organizationId,
+        userId: user.id,
+        userTeamIds: await TeamModel.getUserTeamIds(user.id),
+        isAdmin: true,
+      });
       for (const vk of virtualKeys) {
         try {
           await secretManager().deleteSecret(vk.secretId);
@@ -599,7 +610,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await secretManager().deleteSecret(apiKey.secretId);
       }
 
-      await ChatApiKeyModel.delete(params.id);
+      await LlmProviderApiKeyModel.delete(params.id);
 
       // Clean up orphaned models that lost their last API key link.
       // Models discovered via LLM Proxy are preserved for custom pricing.
@@ -621,7 +632,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
  * Used for both creating and updating API keys.
  */
 async function validateScopeAndAuthorization(params: {
-  scope: "personal" | "team" | "org_wide";
+  scope: ResourceVisibilityScope;
   teamId: string | null | undefined;
   userId: string;
   organizationId: string;
@@ -641,7 +652,7 @@ async function validateScopeAndAuthorization(params: {
     );
   }
 
-  if (scope === "org_wide" && teamId) {
+  if (scope === "org" && teamId) {
     throw new ApiError(
       400,
       "teamId should not be provided for org-wide API keys",
@@ -666,14 +677,19 @@ async function validateScopeAndAuthorization(params: {
     }
   }
 
-  // For org-wide keys, require agent admin permission
-  if (scope === "org_wide") {
-    const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+  // For org-wide keys, require the dedicated API-key admin permission
+  if (scope === "org") {
+    const isLlmProviderApiKeyAdmin = await userHasPermission(
       userId,
       organizationId,
-    });
-    if (!isAgentAdmin) {
-      throw new ApiError(403, "Only admins can use organization-wide scope");
+      "llmProviderApiKey",
+      "admin",
+    );
+    if (!isLlmProviderApiKeyAdmin) {
+      throw new ApiError(
+        403,
+        "Only llmProviderApiKey admins can use organization-wide scope",
+      );
     }
   }
 }
@@ -716,16 +732,18 @@ async function authorizeApiKeyAccess(params: {
     return;
   }
 
-  // Org-wide keys: require agent admin
-  if (apiKey.scope === "org_wide") {
-    const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+  // Org-wide keys: require the dedicated API-key admin permission
+  if (apiKey.scope === "org") {
+    const isLlmProviderApiKeyAdmin = await userHasPermission(
       userId,
       organizationId,
-    });
-    if (!isAgentAdmin) {
+      "llmProviderApiKey",
+      "admin",
+    );
+    if (!isLlmProviderApiKeyAdmin) {
       throw new ApiError(
         403,
-        "Only admins can modify organization-wide API keys",
+        "Only llmProviderApiKey admins can modify organization-wide API keys",
       );
     }
     return;
@@ -737,7 +755,7 @@ function getChatApiKeySecretName({
   teamId,
   userId,
 }: {
-  scope: "personal" | "team" | "org_wide";
+  scope: ResourceVisibilityScope;
   teamId: string | null;
   userId: string | null;
 }): string {
@@ -747,7 +765,7 @@ function getChatApiKeySecretName({
   if (scope === "team") {
     return `chatapikey-team-${teamId}`;
   }
-  return `chatapikey-org_wide`;
+  return `chatapikey-org`;
 }
 
 /**
@@ -763,4 +781,4 @@ export function validateProviderAllowed(provider: SupportedProvider): void {
   }
 }
 
-export default chatApiKeysRoutes;
+export default llmProviderApiKeyRoutes;

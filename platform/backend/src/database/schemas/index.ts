@@ -7,12 +7,7 @@ export { default as agentSuggestedPromptsTable } from "./agent-suggested-prompt"
 export { default as agentTeamsTable } from "./agent-team";
 export { default as agentToolsTable } from "./agent-tool";
 export { default as apikeysTable } from "./api-key";
-export { default as apiKeyModelsTable } from "./api-key-model";
 export { default as browserTabStatesTable } from "./browser-tab-state";
-export {
-  type ChatApiKeyScope,
-  default as chatApiKeysTable,
-} from "./chat-api-key";
 export { default as chatopsChannelBindingsTable } from "./chatops-channel-binding";
 export { default as chatopsProcessedMessagesTable } from "./chatops-processed-message";
 export { default as connectorRunsTable } from "./connector-run";
@@ -36,6 +31,8 @@ export { default as labelKeysTable } from "./label-key";
 export { default as labelValuesTable } from "./label-value";
 export { default as limitsTable } from "./limit";
 export { default as limitModelUsageTable } from "./limit-model-usage";
+export { default as llmProviderApiKeysTable } from "./llm-provider-api-key";
+export { default as llmProviderApiKeyModelsTable } from "./llm-provider-api-key-model";
 export { default as mcpCatalogLabelsTable } from "./mcp-catalog-label";
 export { default as mcpCatalogTeamsTable } from "./mcp-catalog-team";
 export { default as mcpHttpSessionsTable } from "./mcp-http-session";
@@ -69,3 +66,4 @@ export { default as usersTable } from "./user";
 export { default as userTokensTable } from "./user-token";
 export { default as verificationsTable } from "./verification";
 export { default as virtualApiKeysTable } from "./virtual-api-key";
+export { default as virtualApiKeyTeamsTable } from "./virtual-api-key-team";

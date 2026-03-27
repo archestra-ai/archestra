@@ -25,7 +25,7 @@ vi.mock("openai", () => {
 });
 
 import db, { schema } from "@/database";
-import { ChatApiKeyModel, OrganizationModel } from "@/models";
+import { LlmProviderApiKeyModel, OrganizationModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import {
   getDefaultOrgEmbeddingConfig,
@@ -48,12 +48,12 @@ describe("resolveEmbeddingConfig", () => {
     const org = await makeOrganization();
     const secretId = await createSecret();
 
-    const chatApiKey = await ChatApiKeyModel.create({
+    const chatApiKey = await LlmProviderApiKeyModel.create({
       organizationId: org.id,
       name: "OpenAI Key",
       provider: "openai",
       secretId,
-      scope: "org_wide",
+      scope: "org",
       userId: null,
       teamId: null,
     });
@@ -88,12 +88,12 @@ describe("resolveEmbeddingConfig", () => {
     const org = await makeOrganization();
     const secretId = await createSecret();
 
-    const chatApiKey = await ChatApiKeyModel.create({
+    const chatApiKey = await LlmProviderApiKeyModel.create({
       organizationId: org.id,
       name: "OpenAI Key",
       provider: "openai",
       secretId,
-      scope: "org_wide",
+      scope: "org",
       userId: null,
       teamId: null,
     });
@@ -112,12 +112,12 @@ describe("resolveEmbeddingConfig", () => {
   }) => {
     const org = await makeOrganization();
 
-    const chatApiKey = await ChatApiKeyModel.create({
+    const chatApiKey = await LlmProviderApiKeyModel.create({
       organizationId: org.id,
       name: "OpenAI Key (no secret)",
       provider: "openai",
       secretId: null,
-      scope: "org_wide",
+      scope: "org",
       userId: null,
       teamId: null,
     });
@@ -141,12 +141,12 @@ describe("resolveEmbeddingConfig", () => {
     const org = await makeOrganization();
     const secretId = await createSecret();
 
-    const chatApiKey = await ChatApiKeyModel.create({
+    const chatApiKey = await LlmProviderApiKeyModel.create({
       organizationId: org.id,
       name: "OpenAI Key",
       provider: "openai",
       secretId,
-      scope: "org_wide",
+      scope: "org",
       userId: null,
       teamId: null,
     });
@@ -179,12 +179,12 @@ describe("resolveRerankerConfig", () => {
     const org = await makeOrganization();
     const secretId = await createSecret();
 
-    const chatApiKey = await ChatApiKeyModel.create({
+    const chatApiKey = await LlmProviderApiKeyModel.create({
       organizationId: org.id,
       name: "Reranker Key",
       provider: "openai",
       secretId,
-      scope: "org_wide",
+      scope: "org",
       userId: null,
       teamId: null,
     });
@@ -224,12 +224,12 @@ describe("resolveRerankerConfig", () => {
     const org = await makeOrganization();
     const secretId = await createSecret();
 
-    const chatApiKey = await ChatApiKeyModel.create({
+    const chatApiKey = await LlmProviderApiKeyModel.create({
       organizationId: org.id,
       name: "Key",
       provider: "openai",
       secretId,
-      scope: "org_wide",
+      scope: "org",
       userId: null,
       teamId: null,
     });
@@ -249,12 +249,12 @@ describe("resolveRerankerConfig", () => {
     const org = await makeOrganization();
     const secretId = await createSecret();
 
-    const chatApiKey = await ChatApiKeyModel.create({
+    const chatApiKey = await LlmProviderApiKeyModel.create({
       organizationId: org.id,
       name: "Key",
       provider: "openai",
       secretId,
-      scope: "org_wide",
+      scope: "org",
       userId: null,
       teamId: null,
     });
@@ -279,12 +279,12 @@ describe("getDefaultOrgEmbeddingConfig", () => {
     const org = await makeOrganization();
     const secretId = await createSecret();
 
-    const chatApiKey = await ChatApiKeyModel.create({
+    const chatApiKey = await LlmProviderApiKeyModel.create({
       organizationId: org.id,
       name: "OpenAI Key",
       provider: "openai",
       secretId,
-      scope: "org_wide",
+      scope: "org",
       userId: null,
       teamId: null,
     });

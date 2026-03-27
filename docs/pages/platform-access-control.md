@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-03-19
+lastUpdated: 2026-03-27
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -39,7 +39,9 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Agents | `read`, `create`, `update`, `delete`, `team-admin` |
 | Agent Triggers | `read`, `create`, `update`, `delete` |
 | LLM Proxies | `read`, `create`, `update`, `delete`, `team-admin` |
-| LLM Providers | `read`, `create`, `update`, `delete` |
+| LLM Provider API Keys | `read`, `create`, `update`, `delete` |
+| LLM Virtual Keys | `read`, `create`, `update`, `delete` |
+| LLM Models | `read`, `update` |
 | LLM Limits | `read`, `create`, `update`, `delete` |
 | Optimization Rules | `read`, `create`, `update`, `delete` |
 | LLM Costs | `read` |
@@ -73,7 +75,9 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 |----------|--------|
 | Agents | `read`, `create`, `update`, `delete` |
 | LLM Proxies | `read`, `create`, `update`, `delete` |
-| LLM Providers | `read` |
+| LLM Provider API Keys | `read` |
+| LLM Virtual Keys | `read` |
+| LLM Models | `read` |
 | MCP Gateways | `read`, `create`, `update`, `delete` |
 | Tools & Policies | `read`, `create`, `update`, `delete` |
 | MCP Registry | `read` |
@@ -141,10 +145,13 @@ The following table lists all available permissions that can be assigned to cust
 | `llmLimit:create` | Create new usage limits |
 | `llmLimit:update` | Modify existing usage limits |
 | `llmLimit:delete` | Remove usage limits |
-| `llmProvider:read` | View LLM provider API keys, virtual keys, and models |
-| `llmProvider:create` | Add new LLM provider API keys or virtual keys |
-| `llmProvider:update` | Modify LLM provider configuration and model pricing |
-| `llmProvider:delete` | Remove LLM provider API keys or virtual keys |
+| `llmModel:read` | View synced LLM models and capabilities |
+| `llmModel:update` | Modify LLM model pricing and modality settings |
+| `llmProviderApiKey:read` | View LLM provider API keys |
+| `llmProviderApiKey:create` | Add new LLM provider API keys |
+| `llmProviderApiKey:update` | Modify LLM provider API key configuration and visibility |
+| `llmProviderApiKey:delete` | Remove LLM provider API keys |
+| `llmProviderApiKey:admin` | Manage all LLM provider API keys, including org-wide keys |
 | `llmProxy:read` | View and list LLM proxies |
 | `llmProxy:create` | Create new LLM proxies |
 | `llmProxy:update` | Modify LLM proxy configuration |
@@ -153,6 +160,11 @@ The following table lists all available permissions that can be assigned to cust
 | `llmProxy:admin` | Full administrative control over all LLM proxies, bypassing team restrictions |
 | `llmSettings:read` | View LLM settings (compression, cleanup interval) |
 | `llmSettings:update` | Modify LLM settings |
+| `llmVirtualKey:read` | View LLM virtual keys |
+| `llmVirtualKey:create` | Create LLM virtual keys |
+| `llmVirtualKey:update` | Modify LLM virtual keys and their visibility |
+| `llmVirtualKey:delete` | Delete LLM virtual keys |
+| `llmVirtualKey:admin` | Manage all LLM virtual keys and view every scope |
 | `log:read` | View LLM proxy and MCP tool call logs |
 | `mcpGateway:read` | View and list MCP gateways |
 | `mcpGateway:create` | Create new MCP gateways |

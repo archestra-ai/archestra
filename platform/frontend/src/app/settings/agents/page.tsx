@@ -3,8 +3,8 @@
 import type { archestraApiTypes } from "@shared";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { PROVIDER_CONFIG } from "@/components/chat-api-key-form";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
+import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
 import {
   LlmProviderApiKeyOptionLabel,
   LlmProviderApiKeySelectItems,
@@ -26,9 +26,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useOrgScopedAgents } from "@/lib/agent.query";
-import { useChatModels } from "@/lib/chat/chat-models.query";
-import { useAvailableChatApiKeys } from "@/lib/chat/chat-settings.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useLlmModels } from "@/lib/llm-models.query";
+import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import {
   useOrganization,
@@ -61,7 +61,7 @@ export default function AgentSettingsPage() {
   const { getToolName } = useArchestraMcpIdentity();
   const appName = useAppName();
   const { data: organization } = useOrganization();
-  const { data: apiKeys } = useAvailableChatApiKeys();
+  const { data: apiKeys } = useAvailableLlmProviderApiKeys();
   const { data: orgAgents } = useOrgScopedAgents();
 
   const [selectedApiKeyId, setSelectedApiKeyId] = useState<string>("");
@@ -80,7 +80,7 @@ export default function AgentSettingsPage() {
     fileUploads: "enabled" as FileUploadsEnabled,
   });
 
-  const { data: allModels, isPending: modelsLoading } = useChatModels({
+  const { data: allModels, isPending: modelsLoading } = useLlmModels({
     apiKeyId: selectedApiKeyId || undefined,
   });
 

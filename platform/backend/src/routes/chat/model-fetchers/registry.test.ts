@@ -62,13 +62,13 @@ describe("provider fetcher registry", () => {
     makeUser,
     makeMember,
     makeSecret,
-    makeChatApiKey,
+    makeLlmProviderApiKey,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id);
     const secret = await makeSecret({ secret: { apiKey: "test-key" } });
-    await makeChatApiKey(org.id, secret.id, { provider: "deepseek" });
+    await makeLlmProviderApiKey(org.id, secret.id, { provider: "deepseek" });
 
     mockFetch.mockResolvedValueOnce({
       ok: true,
@@ -191,13 +191,13 @@ describe("provider fetcher registry", () => {
     makeUser,
     makeMember,
     makeSecret,
-    makeChatApiKey,
+    makeLlmProviderApiKey,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id);
     const secret = await makeSecret({ secret: { apiKey: "test-key" } });
-    await makeChatApiKey(org.id, secret.id, { provider: "groq" });
+    await makeLlmProviderApiKey(org.id, secret.id, { provider: "groq" });
 
     mockFetch.mockResolvedValueOnce({
       ok: false,

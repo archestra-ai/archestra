@@ -238,16 +238,16 @@ export const RouteId = {
   GetConversationShare: "getConversationShare",
   GetSharedConversation: "getSharedConversation",
   ForkSharedConversation: "forkSharedConversation",
-  GetChatModels: "getChatModels",
-  SyncChatModels: "syncChatModels",
+  GetLlmModels: "getLlmModels",
+  SyncLlmModels: "syncLlmModels",
 
-  // Chat API Key Routes
-  GetChatApiKeys: "getChatApiKeys",
-  GetAvailableChatApiKeys: "getAvailableChatApiKeys",
-  CreateChatApiKey: "createChatApiKey",
-  GetChatApiKey: "getChatApiKey",
-  UpdateChatApiKey: "updateChatApiKey",
-  DeleteChatApiKey: "deleteChatApiKey",
+  // LLM Provider API Key Routes
+  GetLlmProviderApiKeys: "getLlmProviderApiKeys",
+  GetAvailableLlmProviderApiKeys: "getAvailableLlmProviderApiKeys",
+  CreateLlmProviderApiKey: "createLlmProviderApiKey",
+  GetLlmProviderApiKey: "getLlmProviderApiKey",
+  UpdateLlmProviderApiKey: "updateLlmProviderApiKey",
+  DeleteLlmProviderApiKey: "deleteLlmProviderApiKey",
 
   // User API Key Routes
   GetApiKeys: "getApiKeys",
@@ -259,6 +259,7 @@ export const RouteId = {
   GetVirtualApiKeys: "getVirtualApiKeys",
   GetAllVirtualApiKeys: "getAllVirtualApiKeys",
   CreateVirtualApiKey: "createVirtualApiKey",
+  UpdateVirtualApiKey: "updateVirtualApiKey",
   DeleteVirtualApiKey: "deleteVirtualApiKey",
 
   // Models with API Keys Routes

@@ -19,15 +19,15 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import {
-  ChatApiKeyForm,
-  type ChatApiKeyFormValues,
-  PLACEHOLDER_KEY,
-  PROVIDER_CONFIG,
-} from "@/components/chat-api-key-form";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
+import {
+  LLM_PROVIDER_API_KEY_PLACEHOLDER,
+  LlmProviderApiKeyForm,
+  type LlmProviderApiKeyFormValues,
+  PROVIDER_CONFIG,
+} from "@/components/llm-provider-api-key-form";
 import {
   LlmProviderApiKeyOptionLabel,
   LlmProviderApiKeySelectItems,
@@ -53,12 +53,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useChatModels } from "@/lib/chat/chat-models.query";
-import {
-  useAvailableChatApiKeys,
-  useCreateChatApiKey,
-} from "@/lib/chat/chat-settings.query";
 import { useFeature } from "@/lib/config/config.query";
+import { useLlmModels } from "@/lib/llm-models.query";
+import {
+  useAvailableLlmProviderApiKeys,
+  useCreateLlmProviderApiKey,
+} from "@/lib/llm-provider-api-keys.query";
 import {
   useDropEmbeddingConfig,
   useOrganization,
@@ -67,19 +67,19 @@ import {
 } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
 
-const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
+const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   name: "",
   provider: "openai",
   apiKey: null,
   baseUrl: null,
-  scope: "org_wide",
+  scope: "org",
   teamId: null,
   vaultSecretPath: null,
   vaultSecretKey: null,
   isPrimary: true,
 };
 
-const EMBEDDING_DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
+const EMBEDDING_DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   ...DEFAULT_FORM_VALUES,
 };
 
@@ -96,7 +96,7 @@ function AddApiKeyDialog({
   onOpenChange: (open: boolean) => void;
   forEmbedding?: boolean;
 }) {
-  const createMutation = useCreateChatApiKey();
+  const createMutation = useCreateLlmProviderApiKey();
   const byosEnabled = useFeature("byosEnabled");
   const bedrockIamAuthEnabled = useFeature("bedrockIamAuthEnabled");
   const geminiVertexAiEnabled = useFeature("geminiVertexAiEnabled");
@@ -105,7 +105,7 @@ function AddApiKeyDialog({
     ? EMBEDDING_DEFAULT_FORM_VALUES
     : DEFAULT_FORM_VALUES;
 
-  const form = useForm<ChatApiKeyFormValues>({
+  const form = useForm<LlmProviderApiKeyFormValues>({
     defaultValues: defaults,
   });
 
@@ -117,7 +117,7 @@ function AddApiKeyDialog({
 
   const formValues = form.watch();
   const isValid =
-    formValues.apiKey !== PLACEHOLDER_KEY &&
+    formValues.apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER &&
     formValues.name &&
     (formValues.scope !== "team" || formValues.teamId) &&
     (byosEnabled
@@ -182,7 +182,7 @@ function AddApiKeyDialog({
               </AlertDescription>
             </Alert>
           )}
-          <ChatApiKeyForm
+          <LlmProviderApiKeyForm
             mode="full"
             showConsoleLink={false}
             form={form}
@@ -228,7 +228,7 @@ function ApiKeySelector({
   label: string;
   pulse?: boolean;
 }) {
-  const { data: apiKeys, isPending } = useAvailableChatApiKeys();
+  const { data: apiKeys, isPending } = useAvailableLlmProviderApiKeys();
   const [showAddDialog, setShowAddDialog] = useState(false);
   const prevSelectableCountRef = useRef<number | null>(null);
 
@@ -371,8 +371,8 @@ function RerankerModelSelector({
   selectedKeyId: string | null;
   pulse?: boolean;
 }) {
-  const { data: apiKeys } = useAvailableChatApiKeys();
-  const { data: allModels, isPending: modelsLoading } = useChatModels();
+  const { data: apiKeys } = useAvailableLlmProviderApiKeys();
+  const { data: allModels, isPending: modelsLoading } = useLlmModels();
 
   const selectedProvider = useMemo(() => {
     if (!selectedKeyId || !apiKeys) return null;
@@ -489,7 +489,7 @@ function DropEmbeddingConfigDialog({
 function KnowledgeSettingsContent() {
   const { data: organization, isPending } = useOrganization();
   const { data: apiKeys, isPending: areApiKeysPending } =
-    useAvailableChatApiKeys();
+    useAvailableLlmProviderApiKeys();
   const updateKnowledgeSettings = useUpdateKnowledgeSettings(
     "Knowledge settings updated",
     "Failed to update knowledge settings",

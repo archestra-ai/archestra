@@ -370,8 +370,10 @@ class ModelModel {
           notInArray(
             schema.modelsTable.id,
             db
-              .selectDistinct({ modelId: schema.apiKeyModelsTable.modelId })
-              .from(schema.apiKeyModelsTable),
+              .selectDistinct({
+                modelId: schema.llmProviderApiKeyModelsTable.modelId,
+              })
+              .from(schema.llmProviderApiKeyModelsTable),
           ),
         ),
       )

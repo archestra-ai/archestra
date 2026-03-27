@@ -15,8 +15,8 @@ import config from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
-  ApiKeyModelModel,
-  ChatApiKeyModel,
+  LlmProviderApiKeyModel,
+  LlmProviderApiKeyModelLinkModel,
   McpServerModel,
   TeamModel,
   UserModel,
@@ -491,7 +491,7 @@ async function cleanupBrowserTab(params: {
  * Priority chain:
  * 1. Agent has llmApiKeyId with llmModel → use the model with provider from the key
  * 2. Agent has llmApiKeyId but no llmModel → use best model for that key
- * 3. Find best model across all available API keys (org_wide > team > personal)
+ * 3. Find best model across all available API keys (org > team > personal)
  * 4. Fallback → use config defaults
  */
 async function resolveModelForAgent(params: {
@@ -503,7 +503,9 @@ async function resolveModelForAgent(params: {
 
   // Priority 1 & 2: Agent has a configured API key
   if (agent.llmApiKeyId) {
-    const agentApiKey = await ChatApiKeyModel.findById(agent.llmApiKeyId);
+    const agentApiKey = await LlmProviderApiKeyModel.findById(
+      agent.llmApiKeyId,
+    );
     if (agentApiKey) {
       const provider = agentApiKey.provider as SupportedProvider;
 
@@ -522,7 +524,9 @@ async function resolveModelForAgent(params: {
       }
 
       // Priority 2: Key without model — use best model for that key
-      const bestModel = await ApiKeyModelModel.getBestModel(agent.llmApiKeyId);
+      const bestModel = await LlmProviderApiKeyModelLinkModel.getBestModel(
+        agent.llmApiKeyId,
+      );
       if (bestModel) {
         logger.debug(
           {
@@ -540,19 +544,19 @@ async function resolveModelForAgent(params: {
 
   // Priority 3: Find best model across all available API keys
   const userTeamIds = await TeamModel.getUserTeamIds(userId);
-  const availableKeys = await ChatApiKeyModel.getAvailableKeysForUser(
+  const availableKeys = await LlmProviderApiKeyModel.getAvailableKeysForUser(
     organizationId,
     userId,
     userTeamIds,
   );
 
   if (availableKeys.length > 0) {
-    const scopePriority = { org_wide: 0, team: 1, personal: 2 } as const;
+    const scopePriority = { org: 0, team: 1, personal: 2 } as const;
 
     const keyModels = await Promise.all(
       availableKeys.map(async (key) => ({
         apiKey: key,
-        model: await ApiKeyModelModel.getBestModel(key.id),
+        model: await LlmProviderApiKeyModelLinkModel.getBestModel(key.id),
       })),
     );
 

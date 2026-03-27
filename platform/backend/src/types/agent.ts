@@ -15,6 +15,10 @@ import { schema } from "@/database";
 import { SuggestedPromptInputSchema } from "./agent-suggested-prompt";
 import { AgentLabelWithDetailsSchema } from "./label";
 import { SelectToolSchema } from "./tool";
+import {
+  type ResourceVisibilityScope,
+  ResourceVisibilityScopeSchema,
+} from "./visibility";
 
 /**
  * Agent type:
@@ -31,10 +35,9 @@ export const AgentTypeSchema = z.enum([
 ]);
 export type AgentType = z.infer<typeof AgentTypeSchema>;
 
-export const AgentScopeSchema = z.enum(["personal", "team", "org"]);
-export type AgentScope = z.infer<typeof AgentScopeSchema>;
+export const AgentScopeSchema = ResourceVisibilityScopeSchema;
+export type AgentScope = ResourceVisibilityScope;
 
-/** Scope filter for API queries — includes "built_in" as a virtual scope for filtering */
 export const AgentScopeFilterSchema = z.enum([
   "personal",
   "team",

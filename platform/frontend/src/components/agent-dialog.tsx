@@ -123,13 +123,13 @@ import {
 } from "@/lib/agent-tools.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useChatProfileMcpTools } from "@/lib/chat/chat.query";
-import { useModelsByProvider } from "@/lib/chat/chat-models.query";
-import { useAvailableChatApiKeys } from "@/lib/chat/chat-settings.query";
 import config from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useConnectors } from "@/lib/knowledge/connector.query";
 import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
+import { useLlmModelsByProvider } from "@/lib/llm-models.query";
+import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { cn } from "@/lib/utils";
 import {
   getDescriptionPlaceholder,
@@ -536,10 +536,10 @@ export function AgentDialog({
   });
   const connectors = connectorsData ?? [];
   const agentLlmApiKeyId = agent?.llmApiKeyId;
-  const { data: availableApiKeys = [] } = useAvailableChatApiKeys({
+  const { data: availableApiKeys = [] } = useAvailableLlmProviderApiKeys({
     includeKeyId: agentLlmApiKeyId ?? undefined,
   });
-  const { modelsByProvider } = useModelsByProvider();
+  const { modelsByProvider } = useLlmModelsByProvider();
 
   // Fetch fresh agent data when dialog opens
   const { data: freshAgent, refetch: refetchAgent } = useProfile(agent?.id);
@@ -711,7 +711,7 @@ export function AgentDialog({
   }, [open, agentId, currentDelegationIds]);
 
   // LLM Configuration: computed values and bidirectional auto-linking
-  // (same reactive pattern as prompt input: ChatApiKeySelector + onProviderChange)
+  // (same reactive pattern as prompt input: LlmProviderApiKeySelector + onProviderChange)
   const selectedApiKey = useMemo(
     () => availableApiKeys.find((k) => k.id === llmApiKeyId),
     [availableApiKeys, llmApiKeyId],
@@ -742,7 +742,7 @@ export function AgentDialog({
   const lastAutoSelectedProviderRef = useRef<string | null>(null);
 
   // Reactive Model → Key: auto-select key when provider changes
-  // (mirrors ChatApiKeySelector's auto-select useEffect in prompt input)
+  // (mirrors LlmProviderApiKeySelector's auto-select useEffect in prompt input)
   useEffect(() => {
     // Don't auto-select if no model/provider is set
     if (!currentLlmProvider) {
@@ -759,8 +759,8 @@ export function AgentDialog({
     // Only auto-select when the provider actually changed (not when user cleared the key)
     if (lastAutoSelectedProviderRef.current === currentLlmProvider) return;
 
-    // Auto-select best key for this provider (personal > team > org_wide)
-    const scopePriority = { personal: 0, team: 1, org_wide: 2 } as const;
+    // Auto-select best key for this provider (personal > team > org)
+    const scopePriority = { personal: 0, team: 1, org: 2 } as const;
     const providerKeys = availableApiKeys
       .filter((k) => k.provider === currentLlmProvider)
       .sort(
@@ -1614,7 +1614,7 @@ export function AgentDialog({
                   <div className="space-y-2">
                     <h3 className="text-sm font-semibold">LLM Configuration</h3>
                     <p className="text-sm text-muted-foreground">
-                      {selectedApiKey && selectedApiKey.scope !== "org_wide"
+                      {selectedApiKey && selectedApiKey.scope !== "org"
                         ? "Selected key will be available to everyone who has access to this agent."
                         : null}
                     </p>
@@ -1703,7 +1703,7 @@ export function AgentDialog({
                                           {apiKey.scope === "team" && (
                                             <Users className="h-3 w-3 shrink-0" />
                                           )}
-                                          {apiKey.scope === "org_wide" && (
+                                          {apiKey.scope === "org" && (
                                             <Building2 className="h-3 w-3 shrink-0" />
                                           )}
                                           <span className="truncate">

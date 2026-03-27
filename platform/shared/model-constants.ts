@@ -227,7 +227,7 @@ export const MODEL_MARKER_PATTERNS: Record<
  * Fast models for each provider, used as fallback for title generation and other quick operations.
  * These are optimized for speed and cost rather than capability.
  *
- * Primary resolution uses ApiKeyModelModel.getFastestModel() from the database.
+ * Primary resolution uses LlmProviderApiKeyModelLinkModel.getFastestModel() from the database.
  * This map serves as a fallback when no database result is available.
  */
 export const FAST_MODELS: Record<SupportedProvider, string> = {

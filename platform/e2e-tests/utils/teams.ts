@@ -7,10 +7,7 @@ function getTeamRow(page: Page, teamName: string): Locator {
   });
 }
 
-async function searchForTeam(
-  page: Page,
-  teamName: string,
-): Promise<void> {
+async function searchForTeam(page: Page, teamName: string): Promise<void> {
   const searchInput = page.getByPlaceholder(/Search teams/i);
   await expect(searchInput).toBeVisible({ timeout: 10_000 });
   await searchInput.fill(teamName);

@@ -2,7 +2,7 @@ import { E2eTestId } from "@shared";
 import { ADMIN_EMAIL, ADMIN_PASSWORD, UI_BASE_URL } from "../../consts";
 import { expect, test } from "../../fixtures";
 import {
-  createChatApiKey,
+  createLlmProviderApiKey,
   expectChatReady,
   loginViaApi,
   sendChatMessage,
@@ -67,7 +67,7 @@ test.describe("Quickstart", { tag: "@quickstart" }, () => {
         });
 
       if (quickstartState === "onboarding") {
-        await createChatApiKey(page, {
+        await createLlmProviderApiKey(page, {
           name: "Quickstart Key",
           apiKey: "sk-quickstart-test",
           providerOptionName: "OpenAI OpenAI",

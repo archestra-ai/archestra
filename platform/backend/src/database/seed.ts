@@ -19,8 +19,8 @@ import db, { schema } from "@/database";
 import logger from "@/logging";
 import {
   AgentModel,
-  ChatApiKeyModel,
   InternalMcpCatalogModel,
+  LlmProviderApiKeyModel,
   McpHttpSessionModel,
   MemberModel,
   OrganizationModel,
@@ -262,10 +262,10 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
     }
 
     // Check if API key already exists for this provider
-    const existing = await ChatApiKeyModel.findByScope(
+    const existing = await LlmProviderApiKeyModel.findByScope(
       org.id,
       provider,
-      "org_wide",
+      "org",
     );
 
     if (existing) {
@@ -281,12 +281,12 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
     );
 
     // Create the API key
-    const apiKey = await ChatApiKeyModel.create({
+    const apiKey = await LlmProviderApiKeyModel.create({
       organizationId: org.id,
       name: getProviderDisplayName(provider),
       provider: provider,
       secretId: secret.id,
-      scope: "org_wide",
+      scope: "org",
       userId: null,
       teamId: null,
     });

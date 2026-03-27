@@ -1,13 +1,13 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CreateChatApiKeyDialog } from "./create-chat-api-key-dialog";
+import { CreateLlmProviderApiKeyDialog } from "./create-llm-provider-api-key-dialog";
 
 const mutateAsync = vi.fn();
 
-vi.mock("@/components/chat-api-key-form", () => ({
-  PLACEHOLDER_KEY: "••••••••••••••••",
-  ChatApiKeyForm: ({
+vi.mock("@/components/llm-provider-api-key-form", () => ({
+  LLM_PROVIDER_API_KEY_PLACEHOLDER: "••••••••••••••••",
+  LlmProviderApiKeyForm: ({
     form,
   }: {
     form: { register: (name: string) => Record<string, unknown> };
@@ -21,9 +21,9 @@ vi.mock("@/components/chat-api-key-form", () => ({
   ),
 }));
 
-vi.mock("@/lib/chat/chat-settings.query", () => ({
-  useChatApiKeys: () => ({ data: [] }),
-  useCreateChatApiKey: () => ({
+vi.mock("@/lib/llm-provider-api-keys.query", () => ({
+  useLlmProviderApiKeys: () => ({ data: [] }),
+  useCreateLlmProviderApiKey: () => ({
     mutateAsync,
     isPending: false,
   }),
@@ -33,7 +33,7 @@ vi.mock("@/lib/config/config.query", () => ({
   useFeature: () => false,
 }));
 
-describe("CreateChatApiKeyDialog", () => {
+describe("CreateLlmProviderApiKeyDialog", () => {
   beforeEach(() => {
     mutateAsync.mockReset();
     mutateAsync.mockResolvedValue({});
@@ -45,7 +45,7 @@ describe("CreateChatApiKeyDialog", () => {
     const onSuccess = vi.fn();
 
     render(
-      <CreateChatApiKeyDialog
+      <CreateLlmProviderApiKeyDialog
         open
         onOpenChange={onOpenChange}
         onSuccess={onSuccess}

@@ -4,7 +4,7 @@ import {
   modelsDevClient,
 } from "@/clients/models-dev-client";
 import logger from "@/logging";
-import { ApiKeyModelModel, ModelModel } from "@/models";
+import { LlmProviderApiKeyModelLinkModel, ModelModel } from "@/models";
 import { modelFetchers } from "@/routes/chat/model-fetchers";
 import type {
   CreateModel,
@@ -56,7 +56,11 @@ class ModelSyncService {
       if (providerModels.length === 0) {
         logger.info({ provider, apiKeyId }, "No models returned from provider");
         // Clear any existing links since no models are available
-        await ApiKeyModelModel.syncModelsForApiKey(apiKeyId, [], provider);
+        await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+          apiKeyId,
+          [],
+          provider,
+        );
         return 0;
       }
 
@@ -92,7 +96,7 @@ class ModelSyncService {
         id: m.id,
         modelId: m.modelId,
       }));
-      await ApiKeyModelModel.syncModelsForApiKey(
+      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
         apiKeyId,
         modelsWithIds,
         provider,

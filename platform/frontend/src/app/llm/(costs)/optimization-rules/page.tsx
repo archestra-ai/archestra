@@ -28,8 +28,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useModelsWithApiKeys } from "@/lib/chat/chat-models.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { useModelsWithApiKeys } from "@/lib/llm-models.query";
 import type { OptimizationRule } from "@/lib/optimization-rule.query";
 import {
   useCreateOptimizationRule,

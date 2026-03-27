@@ -8,7 +8,7 @@ import {
 } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp, Globe, Plus, User, Users } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -29,17 +29,11 @@ import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
+import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
   useDeleteProfile,
@@ -93,103 +87,6 @@ function SortIcon({
       <span className="mt-[-4px]">{downArrow}</span>
     </div>
   );
-}
-
-function VisibilityBadge({
-  scope,
-  teams,
-  authorId,
-  authorName,
-  currentUserId,
-}: {
-  scope: string | undefined;
-  teams: Array<{ id: string; name: string }> | undefined;
-  authorId: string | null | undefined;
-  authorName: string | null | undefined;
-  currentUserId: string | undefined;
-}) {
-  const MAX_TEAMS_TO_SHOW = 3;
-  const MAX_BADGE_TEXT_LENGTH = 15;
-
-  if (scope === "org") {
-    return (
-      <Badge variant="secondary" className="text-xs gap-1">
-        <Globe className="h-3 w-3" />
-        Organization
-      </Badge>
-    );
-  }
-
-  if (scope === "personal") {
-    const displayName =
-      currentUserId && authorId === currentUserId ? "Me" : authorName;
-    if (!displayName) return <span className="text-muted-foreground">-</span>;
-    return (
-      <Badge
-        variant="secondary"
-        className="inline-flex max-w-[180px] items-center gap-1 overflow-hidden text-xs"
-      >
-        <User className="h-3 w-3 shrink-0" />
-        <span className="min-w-0 flex-1 truncate">
-          {truncateBadgeText(displayName, MAX_BADGE_TEXT_LENGTH)}
-        </span>
-      </Badge>
-    );
-  }
-
-  // scope === "team" or undefined
-  const hasTeams = teams && teams.length > 0;
-
-  if (!hasTeams) {
-    return <span className="text-muted-foreground">-</span>;
-  }
-
-  const visibleTeams = teams.slice(0, MAX_TEAMS_TO_SHOW);
-  const remainingTeams = teams.slice(MAX_TEAMS_TO_SHOW);
-
-  return (
-    <div className="flex min-w-0 flex-wrap items-center gap-1">
-      {visibleTeams.map((team) => (
-        <Badge
-          key={team.id}
-          variant="secondary"
-          className="inline-flex max-w-[180px] items-center gap-1 overflow-hidden text-xs"
-        >
-          <Users className="h-3 w-3 shrink-0" />
-          <span className="min-w-0 flex-1 truncate">
-            {truncateBadgeText(team.name, MAX_BADGE_TEXT_LENGTH)}
-          </span>
-        </Badge>
-      ))}
-      {remainingTeams.length > 0 && (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="text-xs text-muted-foreground cursor-help">
-                +{remainingTeams.length} more
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>
-              <div className="flex flex-col gap-1">
-                {remainingTeams.map((team) => (
-                  <div key={team.id} className="text-xs">
-                    {team.name}
-                  </div>
-                ))}
-              </div>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      )}
-    </div>
-  );
-  function truncateBadgeText(text: string, maxLength: number) {
-    if (text.length <= maxLength) {
-      return text;
-    }
-
-    return `${text.slice(0, maxLength)}...`;
-  }
 }
 
 function Agents({ initialData }: { initialData?: AgentsInitialData }) {
@@ -477,7 +374,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             header: "Accessible to",
             enableSorting: false,
             cell: ({ row }: { row: { original: AgentData } }) => (
-              <VisibilityBadge
+              <ResourceVisibilityBadge
                 scope={row.original.scope}
                 teams={row.original.teams}
                 authorId={row.original.authorId}

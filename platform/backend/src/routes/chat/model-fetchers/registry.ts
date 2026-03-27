@@ -3,7 +3,7 @@ import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config, { getProviderEnvApiKey } from "@/config";
 import logger from "@/logging";
-import { ChatApiKeyModel } from "@/models";
+import { LlmProviderApiKeyModel } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { fetchBedrockModelsViaIam } from "./bedrock";
 import { fetchGeminiModelsViaVertexAi } from "./gemini";
@@ -92,7 +92,7 @@ async function getProviderApiKey(params: {
 }): Promise<string | null> {
   const { provider, organizationId, userId, userTeamIds } = params;
 
-  const apiKey = await ChatApiKeyModel.getCurrentApiKey({
+  const apiKey = await LlmProviderApiKeyModel.getCurrentApiKey({
     organizationId,
     userId,
     userTeamIds,

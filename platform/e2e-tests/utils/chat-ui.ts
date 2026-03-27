@@ -8,6 +8,8 @@ interface RuntimeChatModel {
   displayName: string;
 }
 
+const AVAILABLE_LLM_MODELS_ROUTE = "/api/llm-models/available";
+
 export async function goToChat(
   page: Page,
   options?: { agentId?: string },
@@ -42,8 +44,9 @@ export async function getRuntimeModelForProvider(
   page: Page,
   providerName: string,
 ): Promise<RuntimeChatModel | null> {
-  return page.evaluate(async (provider) => {
-    const response = await fetch("/api/chat/models", {
+  return page.evaluate(async ({ provider, route }) => {
+    const query = new URLSearchParams({ provider });
+    const response = await fetch(`${route}?${query.toString()}`, {
       credentials: "include",
     });
 
@@ -55,7 +58,7 @@ export async function getRuntimeModelForProvider(
 
     const models = (await response.json()) as RuntimeChatModel[];
     return models.find((entry) => entry.provider === provider) ?? null;
-  }, providerName);
+  }, { provider: providerName, route: AVAILABLE_LLM_MODELS_ROUTE });
 }
 
 export async function selectApiKeyForProvider(

@@ -3,7 +3,7 @@ import { DEFAULT_PROVIDER_BASE_URLS, getEmbeddingDimensions } from "@shared";
 import OpenAI from "openai";
 import { createDirectLLMModel, type LLMModel } from "@/clients/llm-client";
 import logger from "@/logging";
-import { ChatApiKeyModel, OrganizationModel } from "@/models";
+import { LlmProviderApiKeyModel, OrganizationModel } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 
 interface EmbeddingConfig {
@@ -113,7 +113,7 @@ export async function resolveApiKeyFromChatApiKey(
   baseUrl: string | null;
   provider: SupportedProvider;
 } | null> {
-  const chatApiKey = await ChatApiKeyModel.findById(chatApiKeyId);
+  const chatApiKey = await LlmProviderApiKeyModel.findById(chatApiKeyId);
   if (!chatApiKey) return null;
 
   // Fall back to the provider's default base URL when none is configured on the key

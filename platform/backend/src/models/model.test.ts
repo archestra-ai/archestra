@@ -1,5 +1,5 @@
 import { describe, expect, test } from "@/test";
-import ApiKeyModelModel from "./api-key-model";
+import LlmProviderApiKeyModelLinkModel from "./llm-provider-api-key-model";
 import ModelModel from "./model";
 
 describe("ModelModel", () => {
@@ -563,7 +563,7 @@ describe("ModelModel", () => {
     test("deletes models without API key links that are not from LLM Proxy", async ({
       makeOrganization,
       makeSecret,
-      makeChatApiKey,
+      makeLlmProviderApiKey,
     }) => {
       const org = await makeOrganization();
 
@@ -592,10 +592,10 @@ describe("ModelModel", () => {
 
       // Create an API key and link the model
       const secret = await makeSecret({ secret: { apiKey: "test-key" } });
-      const apiKey = await makeChatApiKey(org.id, secret.id, {
+      const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
         provider: "openai",
       });
-      await ApiKeyModelModel.syncModelsForApiKey(
+      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
         apiKey.id,
         [{ id: linkedModel.id, modelId: linkedModel.modelId }],
         "openai",

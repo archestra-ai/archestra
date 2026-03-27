@@ -4,35 +4,35 @@ import { PROVIDERS_WITH_OPTIONAL_API_KEY } from "@shared";
 import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
-import {
-  ChatApiKeyForm,
-  type ChatApiKeyFormValues,
-  PLACEHOLDER_KEY,
-} from "@/components/chat-api-key-form";
 import { FormDialog } from "@/components/form-dialog";
+import {
+  LLM_PROVIDER_API_KEY_PLACEHOLDER,
+  LlmProviderApiKeyForm,
+  type LlmProviderApiKeyFormValues,
+} from "@/components/llm-provider-api-key-form";
 import { Button } from "@/components/ui/button";
 import {
   DialogBody,
   DialogForm,
   DialogStickyFooter,
 } from "@/components/ui/dialog";
-import {
-  useChatApiKeys,
-  useCreateChatApiKey,
-} from "@/lib/chat/chat-settings.query";
 import { useFeature } from "@/lib/config/config.query";
+import {
+  useCreateLlmProviderApiKey,
+  useLlmProviderApiKeys,
+} from "@/lib/llm-provider-api-keys.query";
 
-export type CreateChatApiKeyDialogProps = {
+export type CreateLlmProviderApiKeyDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
   description: string;
-  defaultValues?: Partial<ChatApiKeyFormValues>;
+  defaultValues?: Partial<LlmProviderApiKeyFormValues>;
   showConsoleLink?: boolean;
   onSuccess?: () => void;
 };
 
-export function CreateChatApiKeyDialog({
+export function CreateLlmProviderApiKeyDialog({
   open,
   onOpenChange,
   title,
@@ -40,14 +40,14 @@ export function CreateChatApiKeyDialog({
   defaultValues,
   showConsoleLink = false,
   onSuccess,
-}: CreateChatApiKeyDialogProps) {
-  const createMutation = useCreateChatApiKey();
-  const { data: existingKeys = [] } = useChatApiKeys({ enabled: open });
+}: CreateLlmProviderApiKeyDialogProps) {
+  const createMutation = useCreateLlmProviderApiKey();
+  const { data: existingKeys = [] } = useLlmProviderApiKeys({ enabled: open });
   const byosEnabled = useFeature("byosEnabled");
   const bedrockIamAuthEnabled = useFeature("bedrockIamAuthEnabled");
   const geminiVertexAiEnabled = useFeature("geminiVertexAiEnabled");
 
-  const form = useForm<ChatApiKeyFormValues>({
+  const form = useForm<LlmProviderApiKeyFormValues>({
     defaultValues: getDefaultFormValues(defaultValues),
   });
 
@@ -102,7 +102,7 @@ export function CreateChatApiKeyDialog({
         className="flex min-h-0 flex-1 flex-col"
       >
         <DialogBody>
-          <ChatApiKeyForm
+          <LlmProviderApiKeyForm
             mode="full"
             showConsoleLink={showConsoleLink}
             form={form}
@@ -133,8 +133,8 @@ export function CreateChatApiKeyDialog({
 }
 
 function getDefaultFormValues(
-  defaultValues?: Partial<ChatApiKeyFormValues>,
-): ChatApiKeyFormValues {
+  defaultValues?: Partial<LlmProviderApiKeyFormValues>,
+): LlmProviderApiKeyFormValues {
   return {
     name: "",
     provider: "anthropic",
@@ -151,12 +151,12 @@ function getDefaultFormValues(
 
 function getIsCreateFormValid(params: {
   byosEnabled: boolean;
-  values: ChatApiKeyFormValues;
+  values: LlmProviderApiKeyFormValues;
 }) {
   const { byosEnabled, values } = params;
 
   return Boolean(
-    values.apiKey !== PLACEHOLDER_KEY &&
+    values.apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER &&
       values.name &&
       (values.scope !== "team" || values.teamId) &&
       (byosEnabled

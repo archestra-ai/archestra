@@ -1260,6 +1260,42 @@ export type AnthropicMessagesRequestInput = {
             };
             cache_control?: unknown;
         } | {
+            type: 'document';
+            source: {
+                type: 'base64';
+                media_type: 'application/pdf';
+                data: string;
+            } | {
+                type: 'text';
+                media_type: 'text/plain';
+                data: string;
+            } | {
+                type: 'url';
+                url: string;
+            } | {
+                type: 'content';
+                content: string | Array<{
+                    text: string;
+                    type: 'text';
+                    cache_control?: unknown;
+                    citations?: Array<unknown> | unknown;
+                } | {
+                    type: 'image';
+                    source: {
+                        type: 'base64';
+                        media_type: string;
+                        data: string;
+                    };
+                    cache_control?: unknown;
+                }>;
+            };
+            title?: string | unknown;
+            context?: string | unknown;
+            citations?: {
+                enabled: boolean;
+            } | unknown;
+            cache_control?: unknown;
+        } | {
             id: string;
             input: unknown;
             name: string;
@@ -1281,6 +1317,42 @@ export type AnthropicMessagesRequestInput = {
                     media_type: string;
                     data: string;
                 };
+                cache_control?: unknown;
+            } | {
+                type: 'document';
+                source: {
+                    type: 'base64';
+                    media_type: 'application/pdf';
+                    data: string;
+                } | {
+                    type: 'text';
+                    media_type: 'text/plain';
+                    data: string;
+                } | {
+                    type: 'url';
+                    url: string;
+                } | {
+                    type: 'content';
+                    content: string | Array<{
+                        text: string;
+                        type: 'text';
+                        cache_control?: unknown;
+                        citations?: Array<unknown> | unknown;
+                    } | {
+                        type: 'image';
+                        source: {
+                            type: 'base64';
+                            media_type: string;
+                            data: string;
+                        };
+                        cache_control?: unknown;
+                    }>;
+                };
+                title?: string | unknown;
+                context?: string | unknown;
+                citations?: {
+                    enabled: boolean;
+                } | unknown;
                 cache_control?: unknown;
             }>;
             is_error?: boolean;
@@ -6426,6 +6498,42 @@ export type AnthropicMessagesRequest = {
             };
             cache_control?: unknown;
         } | {
+            type: 'document';
+            source: {
+                type: 'base64';
+                media_type: 'application/pdf';
+                data: string;
+            } | {
+                type: 'text';
+                media_type: 'text/plain';
+                data: string;
+            } | {
+                type: 'url';
+                url: string;
+            } | {
+                type: 'content';
+                content: string | Array<{
+                    text: string;
+                    type: 'text';
+                    cache_control?: unknown;
+                    citations?: Array<unknown> | unknown;
+                } | {
+                    type: 'image';
+                    source: {
+                        type: 'base64';
+                        media_type: string;
+                        data: string;
+                    };
+                    cache_control?: unknown;
+                }>;
+            };
+            title?: string | unknown;
+            context?: string | unknown;
+            citations?: {
+                enabled: boolean;
+            } | unknown;
+            cache_control?: unknown;
+        } | {
             id: string;
             input: unknown;
             name: string;
@@ -6447,6 +6555,42 @@ export type AnthropicMessagesRequest = {
                     media_type: string;
                     data: string;
                 };
+                cache_control?: unknown;
+            } | {
+                type: 'document';
+                source: {
+                    type: 'base64';
+                    media_type: 'application/pdf';
+                    data: string;
+                } | {
+                    type: 'text';
+                    media_type: 'text/plain';
+                    data: string;
+                } | {
+                    type: 'url';
+                    url: string;
+                } | {
+                    type: 'content';
+                    content: string | Array<{
+                        text: string;
+                        type: 'text';
+                        cache_control?: unknown;
+                        citations?: Array<unknown> | unknown;
+                    } | {
+                        type: 'image';
+                        source: {
+                            type: 'base64';
+                            media_type: string;
+                            data: string;
+                        };
+                        cache_control?: unknown;
+                    }>;
+                };
+                title?: string | unknown;
+                context?: string | unknown;
+                citations?: {
+                    enabled: boolean;
+                } | unknown;
                 cache_control?: unknown;
             }>;
             is_error?: boolean;
@@ -16513,961 +16657,6 @@ export type CerebrasChatCompletionsWithAgentResponses = {
 
 export type CerebrasChatCompletionsWithAgentResponse = CerebrasChatCompletionsWithAgentResponses[keyof CerebrasChatCompletionsWithAgentResponses];
 
-export type GetChatApiKeysData = {
-    body?: never;
-    path?: never;
-    query?: {
-        search?: string;
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
-    };
-    url: '/api/chat-api-keys';
-};
-
-export type GetChatApiKeysErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetChatApiKeysError = GetChatApiKeysErrors[keyof GetChatApiKeysErrors];
-
-export type GetChatApiKeysResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        organizationId: string;
-        name: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
-        secretId: string | null;
-        scope: 'personal' | 'team' | 'org_wide';
-        userId: string | null;
-        teamId: string | null;
-        baseUrl: string | null;
-        isSystem: boolean;
-        isPrimary: boolean;
-        createdAt: string;
-        updatedAt: string;
-        teamName?: string | null;
-        userName?: string | null;
-        vaultSecretPath?: string | null;
-        vaultSecretKey?: string | null;
-        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
-        bestModelId?: string | null;
-        isAgentKey?: boolean;
-    }>;
-};
-
-export type GetChatApiKeysResponse = GetChatApiKeysResponses[keyof GetChatApiKeysResponses];
-
-export type CreateChatApiKeyData = {
-    body: {
-        name: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
-        apiKey?: string;
-        baseUrl?: string | null;
-        scope?: 'personal' | 'team' | 'org_wide';
-        teamId?: string;
-        isPrimary?: boolean;
-        vaultSecretPath?: string;
-        vaultSecretKey?: string;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/chat-api-keys';
-};
-
-export type CreateChatApiKeyErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type CreateChatApiKeyError = CreateChatApiKeyErrors[keyof CreateChatApiKeyErrors];
-
-export type CreateChatApiKeyResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        organizationId: string;
-        name: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
-        secretId: string | null;
-        scope: 'personal' | 'team' | 'org_wide';
-        userId: string | null;
-        teamId: string | null;
-        baseUrl: string | null;
-        isSystem: boolean;
-        isPrimary: boolean;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type CreateChatApiKeyResponse = CreateChatApiKeyResponses[keyof CreateChatApiKeyResponses];
-
-export type GetAvailableChatApiKeysData = {
-    body?: never;
-    path?: never;
-    query?: {
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
-        includeKeyId?: string;
-    };
-    url: '/api/chat-api-keys/available';
-};
-
-export type GetAvailableChatApiKeysErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetAvailableChatApiKeysError = GetAvailableChatApiKeysErrors[keyof GetAvailableChatApiKeysErrors];
-
-export type GetAvailableChatApiKeysResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        organizationId: string;
-        name: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
-        secretId: string | null;
-        scope: 'personal' | 'team' | 'org_wide';
-        userId: string | null;
-        teamId: string | null;
-        baseUrl: string | null;
-        isSystem: boolean;
-        isPrimary: boolean;
-        createdAt: string;
-        updatedAt: string;
-        teamName?: string | null;
-        userName?: string | null;
-        vaultSecretPath?: string | null;
-        vaultSecretKey?: string | null;
-        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
-        bestModelId?: string | null;
-        isAgentKey?: boolean;
-    }>;
-};
-
-export type GetAvailableChatApiKeysResponse = GetAvailableChatApiKeysResponses[keyof GetAvailableChatApiKeysResponses];
-
-export type DeleteChatApiKeyData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/chat-api-keys/{id}';
-};
-
-export type DeleteChatApiKeyErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type DeleteChatApiKeyError = DeleteChatApiKeyErrors[keyof DeleteChatApiKeyErrors];
-
-export type DeleteChatApiKeyResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteChatApiKeyResponse = DeleteChatApiKeyResponses[keyof DeleteChatApiKeyResponses];
-
-export type GetChatApiKeyData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/chat-api-keys/{id}';
-};
-
-export type GetChatApiKeyErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetChatApiKeyError = GetChatApiKeyErrors[keyof GetChatApiKeyErrors];
-
-export type GetChatApiKeyResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        organizationId: string;
-        name: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
-        secretId: string | null;
-        scope: 'personal' | 'team' | 'org_wide';
-        userId: string | null;
-        teamId: string | null;
-        baseUrl: string | null;
-        isSystem: boolean;
-        isPrimary: boolean;
-        createdAt: string;
-        updatedAt: string;
-        teamName?: string | null;
-        userName?: string | null;
-        vaultSecretPath?: string | null;
-        vaultSecretKey?: string | null;
-        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
-        bestModelId?: string | null;
-        isAgentKey?: boolean;
-    };
-};
-
-export type GetChatApiKeyResponse = GetChatApiKeyResponses[keyof GetChatApiKeyResponses];
-
-export type UpdateChatApiKeyData = {
-    body: {
-        name?: string;
-        apiKey?: string;
-        baseUrl?: string | null;
-        scope?: 'personal' | 'team' | 'org_wide';
-        teamId?: string | null;
-        isPrimary?: boolean;
-        vaultSecretPath?: string;
-        vaultSecretKey?: string;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/chat-api-keys/{id}';
-};
-
-export type UpdateChatApiKeyErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type UpdateChatApiKeyError = UpdateChatApiKeyErrors[keyof UpdateChatApiKeyErrors];
-
-export type UpdateChatApiKeyResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        organizationId: string;
-        name: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
-        secretId: string | null;
-        scope: 'personal' | 'team' | 'org_wide';
-        userId: string | null;
-        teamId: string | null;
-        baseUrl: string | null;
-        isSystem: boolean;
-        isPrimary: boolean;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type UpdateChatApiKeyResponse = UpdateChatApiKeyResponses[keyof UpdateChatApiKeyResponses];
-
-export type GetChatModelsData = {
-    body?: never;
-    path?: never;
-    query?: {
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
-        apiKeyId?: string;
-    };
-    url: '/api/chat/models';
-};
-
-export type GetChatModelsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetChatModelsError = GetChatModelsErrors[keyof GetChatModelsErrors];
-
-export type GetChatModelsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        displayName: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
-        createdAt?: string;
-        capabilities?: {
-            contextLength: number | null;
-            inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
-            outputModalities: Array<'text' | 'image' | 'audio'> | null;
-            supportsToolCalling: boolean | null;
-            pricePerMillionInput: string | null;
-            pricePerMillionOutput: string | null;
-            isCustomPrice: boolean;
-            priceSource: 'custom' | 'models_dev' | 'default';
-        };
-        isBest?: boolean;
-        isFastest?: boolean;
-    }>;
-};
-
-export type GetChatModelsResponse = GetChatModelsResponses[keyof GetChatModelsResponses];
-
-export type SyncChatModelsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/chat/models/sync';
-};
-
-export type SyncChatModelsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type SyncChatModelsError = SyncChatModelsErrors[keyof SyncChatModelsErrors];
-
-export type SyncChatModelsResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type SyncChatModelsResponse = SyncChatModelsResponses[keyof SyncChatModelsResponses];
-
-export type GetModelsWithApiKeysData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/models';
-};
-
-export type GetModelsWithApiKeysErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetModelsWithApiKeysError = GetModelsWithApiKeysErrors[keyof GetModelsWithApiKeysErrors];
-
-export type GetModelsWithApiKeysResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        externalId: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
-        modelId: string;
-        description: string | null;
-        contextLength: number | null;
-        inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
-        outputModalities: Array<'text' | 'image' | 'audio'> | null;
-        supportsToolCalling: boolean | null;
-        promptPricePerToken: string | null;
-        completionPricePerToken: string | null;
-        customPricePerMillionInput: string | null;
-        customPricePerMillionOutput: string | null;
-        ignored: boolean;
-        discoveredViaLlmProxy: boolean;
-        lastSyncedAt: string;
-        createdAt: string;
-        updatedAt: string;
-        isFastest: boolean;
-        isBest: boolean;
-        apiKeys: Array<{
-            id: string;
-            name: string;
-            provider: string;
-            scope: string;
-            isSystem: boolean;
-        }>;
-        pricePerMillionInput: string | null;
-        pricePerMillionOutput: string | null;
-        isCustomPrice: boolean;
-        priceSource: 'custom' | 'models_dev' | 'default';
-    }>;
-};
-
-export type GetModelsWithApiKeysResponse = GetModelsWithApiKeysResponses[keyof GetModelsWithApiKeysResponses];
-
-export type UpdateModelData = {
-    body: {
-        customPricePerMillionInput?: string | null;
-        customPricePerMillionOutput?: string | null;
-        ignored?: boolean;
-        inputModalities?: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
-        outputModalities?: Array<'text' | 'image' | 'audio'> | null;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/models/{id}';
-};
-
-export type UpdateModelErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type UpdateModelError = UpdateModelErrors[keyof UpdateModelErrors];
-
-export type UpdateModelResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        externalId: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
-        modelId: string;
-        description: string | null;
-        contextLength: number | null;
-        inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
-        outputModalities: Array<'text' | 'image' | 'audio'> | null;
-        supportsToolCalling: boolean | null;
-        promptPricePerToken: string | null;
-        completionPricePerToken: string | null;
-        customPricePerMillionInput: string | null;
-        customPricePerMillionOutput: string | null;
-        ignored: boolean;
-        discoveredViaLlmProxy: boolean;
-        lastSyncedAt: string;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type UpdateModelResponse = UpdateModelResponses[keyof UpdateModelResponses];
-
 export type StreamChatData = {
     body: {
         id: string;
@@ -18199,460 +17388,6 @@ export type GetChatAgentMcpToolsResponses = {
 
 export type GetChatAgentMcpToolsResponse = GetChatAgentMcpToolsResponses[keyof GetChatAgentMcpToolsResponses];
 
-export type GenerateChatConversationTitleData = {
-    body: {
-        /**
-         * Force regeneration even if title already exists (for manual regeneration)
-         */
-        regenerate?: boolean;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/chat/conversations/{id}/generate-title';
-};
-
-export type GenerateChatConversationTitleErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GenerateChatConversationTitleError = GenerateChatConversationTitleErrors[keyof GenerateChatConversationTitleErrors];
-
-export type GenerateChatConversationTitleResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        userId: string;
-        organizationId: string;
-        agentId: string | null;
-        chatApiKeyId: string | null;
-        title: string | null;
-        selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
-        hasCustomToolSelection: boolean;
-        todoList: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
-        artifact: string | null;
-        pinnedAt: string | null;
-        createdAt: string;
-        updatedAt: string;
-        agent: {
-            id: string;
-            name: string;
-            systemPrompt: string | null;
-            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
-            llmApiKeyId: string | null;
-        } | null;
-        messages: Array<unknown>;
-    };
-};
-
-export type GenerateChatConversationTitleResponse = GenerateChatConversationTitleResponses[keyof GenerateChatConversationTitleResponses];
-
-export type UpdateChatMessageData = {
-    body: {
-        partIndex: number;
-        text: string;
-        deleteSubsequentMessages?: boolean;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/chat/messages/{id}';
-};
-
-export type UpdateChatMessageErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type UpdateChatMessageError = UpdateChatMessageErrors[keyof UpdateChatMessageErrors];
-
-export type UpdateChatMessageResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        userId: string;
-        organizationId: string;
-        agentId: string | null;
-        chatApiKeyId: string | null;
-        title: string | null;
-        selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
-        hasCustomToolSelection: boolean;
-        todoList: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
-        artifact: string | null;
-        pinnedAt: string | null;
-        createdAt: string;
-        updatedAt: string;
-        agent: {
-            id: string;
-            name: string;
-            systemPrompt: string | null;
-            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
-            llmApiKeyId: string | null;
-        } | null;
-        messages: Array<unknown>;
-    };
-};
-
-export type UpdateChatMessageResponse = UpdateChatMessageResponses[keyof UpdateChatMessageResponses];
-
-export type DeleteConversationEnabledToolsData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/chat/conversations/{id}/enabled-tools';
-};
-
-export type DeleteConversationEnabledToolsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type DeleteConversationEnabledToolsError = DeleteConversationEnabledToolsErrors[keyof DeleteConversationEnabledToolsErrors];
-
-export type DeleteConversationEnabledToolsResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteConversationEnabledToolsResponse = DeleteConversationEnabledToolsResponses[keyof DeleteConversationEnabledToolsResponses];
-
-export type GetConversationEnabledToolsData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/chat/conversations/{id}/enabled-tools';
-};
-
-export type GetConversationEnabledToolsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetConversationEnabledToolsError = GetConversationEnabledToolsErrors[keyof GetConversationEnabledToolsErrors];
-
-export type GetConversationEnabledToolsResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        hasCustomSelection: boolean;
-        enabledToolIds: Array<string>;
-    };
-};
-
-export type GetConversationEnabledToolsResponse = GetConversationEnabledToolsResponses[keyof GetConversationEnabledToolsResponses];
-
-export type UpdateConversationEnabledToolsData = {
-    body: {
-        toolIds: Array<string>;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/chat/conversations/{id}/enabled-tools';
-};
-
-export type UpdateConversationEnabledToolsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type UpdateConversationEnabledToolsError = UpdateConversationEnabledToolsErrors[keyof UpdateConversationEnabledToolsErrors];
-
-export type UpdateConversationEnabledToolsResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        hasCustomSelection: boolean;
-        enabledToolIds: Array<string>;
-    };
-};
-
-export type UpdateConversationEnabledToolsResponse = UpdateConversationEnabledToolsResponses[keyof UpdateConversationEnabledToolsResponses];
-
 export type UnshareConversationData = {
     body?: never;
     path: {
@@ -19108,6 +17843,460 @@ export type ForkSharedConversationResponses = {
 };
 
 export type ForkSharedConversationResponse = ForkSharedConversationResponses[keyof ForkSharedConversationResponses];
+
+export type GenerateChatConversationTitleData = {
+    body: {
+        /**
+         * Force regeneration even if title already exists (for manual regeneration)
+         */
+        regenerate?: boolean;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/generate-title';
+};
+
+export type GenerateChatConversationTitleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GenerateChatConversationTitleError = GenerateChatConversationTitleErrors[keyof GenerateChatConversationTitleErrors];
+
+export type GenerateChatConversationTitleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        userId: string;
+        organizationId: string;
+        agentId: string | null;
+        chatApiKeyId: string | null;
+        title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        hasCustomToolSelection: boolean;
+        todoList: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        artifact: string | null;
+        pinnedAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+            systemPrompt: string | null;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            llmApiKeyId: string | null;
+        } | null;
+        messages: Array<unknown>;
+    };
+};
+
+export type GenerateChatConversationTitleResponse = GenerateChatConversationTitleResponses[keyof GenerateChatConversationTitleResponses];
+
+export type UpdateChatMessageData = {
+    body: {
+        partIndex: number;
+        text: string;
+        deleteSubsequentMessages?: boolean;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/messages/{id}';
+};
+
+export type UpdateChatMessageErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateChatMessageError = UpdateChatMessageErrors[keyof UpdateChatMessageErrors];
+
+export type UpdateChatMessageResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        userId: string;
+        organizationId: string;
+        agentId: string | null;
+        chatApiKeyId: string | null;
+        title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        hasCustomToolSelection: boolean;
+        todoList: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        artifact: string | null;
+        pinnedAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+            systemPrompt: string | null;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            llmApiKeyId: string | null;
+        } | null;
+        messages: Array<unknown>;
+    };
+};
+
+export type UpdateChatMessageResponse = UpdateChatMessageResponses[keyof UpdateChatMessageResponses];
+
+export type DeleteConversationEnabledToolsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/enabled-tools';
+};
+
+export type DeleteConversationEnabledToolsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteConversationEnabledToolsError = DeleteConversationEnabledToolsErrors[keyof DeleteConversationEnabledToolsErrors];
+
+export type DeleteConversationEnabledToolsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteConversationEnabledToolsResponse = DeleteConversationEnabledToolsResponses[keyof DeleteConversationEnabledToolsResponses];
+
+export type GetConversationEnabledToolsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/enabled-tools';
+};
+
+export type GetConversationEnabledToolsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetConversationEnabledToolsError = GetConversationEnabledToolsErrors[keyof GetConversationEnabledToolsErrors];
+
+export type GetConversationEnabledToolsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        hasCustomSelection: boolean;
+        enabledToolIds: Array<string>;
+    };
+};
+
+export type GetConversationEnabledToolsResponse = GetConversationEnabledToolsResponses[keyof GetConversationEnabledToolsResponses];
+
+export type UpdateConversationEnabledToolsData = {
+    body: {
+        toolIds: Array<string>;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/enabled-tools';
+};
+
+export type UpdateConversationEnabledToolsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateConversationEnabledToolsError = UpdateConversationEnabledToolsErrors[keyof UpdateConversationEnabledToolsErrors];
+
+export type UpdateConversationEnabledToolsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        hasCustomSelection: boolean;
+        enabledToolIds: Array<string>;
+    };
+};
+
+export type UpdateConversationEnabledToolsResponse = UpdateConversationEnabledToolsResponses[keyof UpdateConversationEnabledToolsResponses];
 
 export type PostApiWebhooksChatopsMsTeamsData = {
     body: unknown;
@@ -28163,6 +27352,961 @@ export type UpdateLimitResponses = {
 
 export type UpdateLimitResponse = UpdateLimitResponses[keyof UpdateLimitResponses];
 
+export type GetLlmModelsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        apiKeyId?: string;
+    };
+    url: '/api/llm-models/available';
+};
+
+export type GetLlmModelsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetLlmModelsError = GetLlmModelsErrors[keyof GetLlmModelsErrors];
+
+export type GetLlmModelsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        displayName: string;
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        createdAt?: string;
+        capabilities?: {
+            contextLength: number | null;
+            inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
+            outputModalities: Array<'text' | 'image' | 'audio'> | null;
+            supportsToolCalling: boolean | null;
+            pricePerMillionInput: string | null;
+            pricePerMillionOutput: string | null;
+            isCustomPrice: boolean;
+            priceSource: 'custom' | 'models_dev' | 'default';
+        };
+        isBest?: boolean;
+        isFastest?: boolean;
+    }>;
+};
+
+export type GetLlmModelsResponse = GetLlmModelsResponses[keyof GetLlmModelsResponses];
+
+export type SyncLlmModelsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/llm-models/sync';
+};
+
+export type SyncLlmModelsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type SyncLlmModelsError = SyncLlmModelsErrors[keyof SyncLlmModelsErrors];
+
+export type SyncLlmModelsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type SyncLlmModelsResponse = SyncLlmModelsResponses[keyof SyncLlmModelsResponses];
+
+export type GetModelsWithApiKeysData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/llm-models';
+};
+
+export type GetModelsWithApiKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetModelsWithApiKeysError = GetModelsWithApiKeysErrors[keyof GetModelsWithApiKeysErrors];
+
+export type GetModelsWithApiKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        externalId: string;
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        modelId: string;
+        description: string | null;
+        contextLength: number | null;
+        inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
+        outputModalities: Array<'text' | 'image' | 'audio'> | null;
+        supportsToolCalling: boolean | null;
+        promptPricePerToken: string | null;
+        completionPricePerToken: string | null;
+        customPricePerMillionInput: string | null;
+        customPricePerMillionOutput: string | null;
+        ignored: boolean;
+        discoveredViaLlmProxy: boolean;
+        lastSyncedAt: string;
+        createdAt: string;
+        updatedAt: string;
+        isFastest: boolean;
+        isBest: boolean;
+        apiKeys: Array<{
+            id: string;
+            name: string;
+            provider: string;
+            scope: string;
+            isSystem: boolean;
+        }>;
+        pricePerMillionInput: string | null;
+        pricePerMillionOutput: string | null;
+        isCustomPrice: boolean;
+        priceSource: 'custom' | 'models_dev' | 'default';
+    }>;
+};
+
+export type GetModelsWithApiKeysResponse = GetModelsWithApiKeysResponses[keyof GetModelsWithApiKeysResponses];
+
+export type UpdateModelData = {
+    body: {
+        customPricePerMillionInput?: string | null;
+        customPricePerMillionOutput?: string | null;
+        ignored?: boolean;
+        inputModalities?: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
+        outputModalities?: Array<'text' | 'image' | 'audio'> | null;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/llm-models/{id}';
+};
+
+export type UpdateModelErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateModelError = UpdateModelErrors[keyof UpdateModelErrors];
+
+export type UpdateModelResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        externalId: string;
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        modelId: string;
+        description: string | null;
+        contextLength: number | null;
+        inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
+        outputModalities: Array<'text' | 'image' | 'audio'> | null;
+        supportsToolCalling: boolean | null;
+        promptPricePerToken: string | null;
+        completionPricePerToken: string | null;
+        customPricePerMillionInput: string | null;
+        customPricePerMillionOutput: string | null;
+        ignored: boolean;
+        discoveredViaLlmProxy: boolean;
+        lastSyncedAt: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateModelResponse = UpdateModelResponses[keyof UpdateModelResponses];
+
+export type GetLlmProviderApiKeysData = {
+    body?: never;
+    path?: never;
+    query?: {
+        search?: string;
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+    };
+    url: '/api/llm-provider-api-keys';
+};
+
+export type GetLlmProviderApiKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetLlmProviderApiKeysError = GetLlmProviderApiKeysErrors[keyof GetLlmProviderApiKeysErrors];
+
+export type GetLlmProviderApiKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        name: string;
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        secretId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        userId: string | null;
+        teamId: string | null;
+        baseUrl: string | null;
+        isSystem: boolean;
+        isPrimary: boolean;
+        createdAt: string;
+        updatedAt: string;
+        teamName?: string | null;
+        userName?: string | null;
+        vaultSecretPath?: string | null;
+        vaultSecretKey?: string | null;
+        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+        bestModelId?: string | null;
+        isAgentKey?: boolean;
+    }>;
+};
+
+export type GetLlmProviderApiKeysResponse = GetLlmProviderApiKeysResponses[keyof GetLlmProviderApiKeysResponses];
+
+export type CreateLlmProviderApiKeyData = {
+    body: {
+        name: string;
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        apiKey?: string;
+        baseUrl?: string | null;
+        scope?: 'personal' | 'team' | 'org';
+        teamId?: string;
+        isPrimary?: boolean;
+        vaultSecretPath?: string;
+        vaultSecretKey?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/llm-provider-api-keys';
+};
+
+export type CreateLlmProviderApiKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CreateLlmProviderApiKeyError = CreateLlmProviderApiKeyErrors[keyof CreateLlmProviderApiKeyErrors];
+
+export type CreateLlmProviderApiKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        secretId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        userId: string | null;
+        teamId: string | null;
+        baseUrl: string | null;
+        isSystem: boolean;
+        isPrimary: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateLlmProviderApiKeyResponse = CreateLlmProviderApiKeyResponses[keyof CreateLlmProviderApiKeyResponses];
+
+export type GetAvailableLlmProviderApiKeysData = {
+    body?: never;
+    path?: never;
+    query?: {
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        includeKeyId?: string;
+    };
+    url: '/api/llm-provider-api-keys/available';
+};
+
+export type GetAvailableLlmProviderApiKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetAvailableLlmProviderApiKeysError = GetAvailableLlmProviderApiKeysErrors[keyof GetAvailableLlmProviderApiKeysErrors];
+
+export type GetAvailableLlmProviderApiKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        name: string;
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        secretId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        userId: string | null;
+        teamId: string | null;
+        baseUrl: string | null;
+        isSystem: boolean;
+        isPrimary: boolean;
+        createdAt: string;
+        updatedAt: string;
+        teamName?: string | null;
+        userName?: string | null;
+        vaultSecretPath?: string | null;
+        vaultSecretKey?: string | null;
+        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+        bestModelId?: string | null;
+        isAgentKey?: boolean;
+    }>;
+};
+
+export type GetAvailableLlmProviderApiKeysResponse = GetAvailableLlmProviderApiKeysResponses[keyof GetAvailableLlmProviderApiKeysResponses];
+
+export type DeleteLlmProviderApiKeyData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/llm-provider-api-keys/{id}';
+};
+
+export type DeleteLlmProviderApiKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteLlmProviderApiKeyError = DeleteLlmProviderApiKeyErrors[keyof DeleteLlmProviderApiKeyErrors];
+
+export type DeleteLlmProviderApiKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteLlmProviderApiKeyResponse = DeleteLlmProviderApiKeyResponses[keyof DeleteLlmProviderApiKeyResponses];
+
+export type GetLlmProviderApiKeyData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/llm-provider-api-keys/{id}';
+};
+
+export type GetLlmProviderApiKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetLlmProviderApiKeyError = GetLlmProviderApiKeyErrors[keyof GetLlmProviderApiKeyErrors];
+
+export type GetLlmProviderApiKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        secretId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        userId: string | null;
+        teamId: string | null;
+        baseUrl: string | null;
+        isSystem: boolean;
+        isPrimary: boolean;
+        createdAt: string;
+        updatedAt: string;
+        teamName?: string | null;
+        userName?: string | null;
+        vaultSecretPath?: string | null;
+        vaultSecretKey?: string | null;
+        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+        bestModelId?: string | null;
+        isAgentKey?: boolean;
+    };
+};
+
+export type GetLlmProviderApiKeyResponse = GetLlmProviderApiKeyResponses[keyof GetLlmProviderApiKeyResponses];
+
+export type UpdateLlmProviderApiKeyData = {
+    body: {
+        name?: string;
+        apiKey?: string;
+        baseUrl?: string | null;
+        scope?: 'personal' | 'team' | 'org';
+        teamId?: string | null;
+        isPrimary?: boolean;
+        vaultSecretPath?: string;
+        vaultSecretKey?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/llm-provider-api-keys/{id}';
+};
+
+export type UpdateLlmProviderApiKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateLlmProviderApiKeyError = UpdateLlmProviderApiKeyErrors[keyof UpdateLlmProviderApiKeyErrors];
+
+export type UpdateLlmProviderApiKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        secretId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        userId: string | null;
+        teamId: string | null;
+        baseUrl: string | null;
+        isSystem: boolean;
+        isPrimary: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateLlmProviderApiKeyResponse = UpdateLlmProviderApiKeyResponses[keyof UpdateLlmProviderApiKeyResponses];
+
 export type McpGatewayGetData = {
     body?: never;
     path: {
@@ -37089,7 +37233,7 @@ export type GetAllVirtualApiKeysData = {
         search?: string;
         chatApiKeyId?: string;
     };
-    url: '/api/virtual-api-keys';
+    url: '/api/llm-virtual-keys';
 };
 
 export type GetAllVirtualApiKeysErrors = {
@@ -37162,12 +37306,19 @@ export type GetAllVirtualApiKeysResponses = {
             name: string;
             secretId: string;
             tokenStart: string;
+            scope: 'personal' | 'team' | 'org';
+            authorId: string | null;
             expiresAt: string | null;
             createdAt: string;
             lastUsedAt: string | null;
             parentKeyName: string;
             parentKeyProvider: string;
             parentKeyBaseUrl: string | null;
+            teams: Array<{
+                id: string;
+                name: string;
+            }>;
+            authorName: string | null;
         }>;
         pagination: {
             currentPage: number;
@@ -37188,7 +37339,7 @@ export type GetVirtualApiKeysData = {
         chatApiKeyId: string;
     };
     query?: never;
-    url: '/api/chat-api-keys/{chatApiKeyId}/virtual-keys';
+    url: '/api/llm-provider-api-keys/{chatApiKeyId}/virtual-keys';
 };
 
 export type GetVirtualApiKeysErrors = {
@@ -37260,6 +37411,8 @@ export type GetVirtualApiKeysResponses = {
         name: string;
         secretId: string;
         tokenStart: string;
+        scope: 'personal' | 'team' | 'org';
+        authorId: string | null;
         expiresAt: string | null;
         createdAt: string;
         lastUsedAt: string | null;
@@ -37272,12 +37425,14 @@ export type CreateVirtualApiKeyData = {
     body: {
         name: string;
         expiresAt?: unknown;
+        scope?: 'personal' | 'team' | 'org';
+        teams?: Array<string>;
     };
     path: {
         chatApiKeyId: string;
     };
     query?: never;
-    url: '/api/chat-api-keys/{chatApiKeyId}/virtual-keys';
+    url: '/api/llm-provider-api-keys/{chatApiKeyId}/virtual-keys';
 };
 
 export type CreateVirtualApiKeyErrors = {
@@ -37349,10 +37504,17 @@ export type CreateVirtualApiKeyResponses = {
         name: string;
         secretId: string;
         tokenStart: string;
+        scope: 'personal' | 'team' | 'org';
+        authorId: string | null;
         expiresAt: string | null;
         createdAt: string;
         lastUsedAt: string | null;
         value: string;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        authorName: string | null;
     };
 };
 
@@ -37365,7 +37527,7 @@ export type DeleteVirtualApiKeyData = {
         id: string;
     };
     query?: never;
-    url: '/api/chat-api-keys/{chatApiKeyId}/virtual-keys/{id}';
+    url: '/api/llm-provider-api-keys/{chatApiKeyId}/virtual-keys/{id}';
 };
 
 export type DeleteVirtualApiKeyErrors = {
@@ -37437,6 +37599,105 @@ export type DeleteVirtualApiKeyResponses = {
 };
 
 export type DeleteVirtualApiKeyResponse = DeleteVirtualApiKeyResponses[keyof DeleteVirtualApiKeyResponses];
+
+export type UpdateVirtualApiKeyData = {
+    body: {
+        name: string;
+        expiresAt?: unknown;
+        scope?: 'personal' | 'team' | 'org';
+        teams?: Array<string>;
+    };
+    path: {
+        chatApiKeyId: string;
+        id: string;
+    };
+    query?: never;
+    url: '/api/llm-provider-api-keys/{chatApiKeyId}/virtual-keys/{id}';
+};
+
+export type UpdateVirtualApiKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateVirtualApiKeyError = UpdateVirtualApiKeyErrors[keyof UpdateVirtualApiKeyErrors];
+
+export type UpdateVirtualApiKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        chatApiKeyId: string;
+        name: string;
+        secretId: string;
+        tokenStart: string;
+        scope: 'personal' | 'team' | 'org';
+        authorId: string | null;
+        expiresAt: string | null;
+        createdAt: string;
+        lastUsedAt: string | null;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        authorName: string | null;
+    };
+};
+
+export type UpdateVirtualApiKeyResponse = UpdateVirtualApiKeyResponses[keyof UpdateVirtualApiKeyResponses];
 
 export type VllmChatCompletionsWithDefaultAgentData = {
     body: VllmChatCompletionRequestInput;

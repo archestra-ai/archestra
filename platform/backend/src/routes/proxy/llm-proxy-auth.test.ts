@@ -68,13 +68,13 @@ describe("validateVirtualApiKey", () => {
   test("throws 401 for expired key", async ({
     makeOrganization,
     makeSecret,
-    makeChatApiKey,
+    makeLlmProviderApiKey,
   }) => {
     const org = await makeOrganization();
     const secret = await makeSecret({
       secret: { apiKey: "sk-real-provider-key" },
     });
-    const chatApiKey = await makeChatApiKey(org.id, secret.id, {
+    const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id, {
       provider: "openai",
     });
 
@@ -92,13 +92,13 @@ describe("validateVirtualApiKey", () => {
   test("throws 400 for provider mismatch", async ({
     makeOrganization,
     makeSecret,
-    makeChatApiKey,
+    makeLlmProviderApiKey,
   }) => {
     const org = await makeOrganization();
     const secret = await makeSecret({
       secret: { apiKey: "sk-real-provider-key" },
     });
-    const chatApiKey = await makeChatApiKey(org.id, secret.id, {
+    const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id, {
       provider: "openai",
     });
 
@@ -115,13 +115,13 @@ describe("validateVirtualApiKey", () => {
   test("returns resolved API key and baseUrl on success", async ({
     makeOrganization,
     makeSecret,
-    makeChatApiKey,
+    makeLlmProviderApiKey,
   }) => {
     const org = await makeOrganization();
     const secret = await makeSecret({
       secret: { apiKey: "sk-real-provider-key" },
     });
-    const chatApiKey = await makeChatApiKey(org.id, secret.id, {
+    const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id, {
       provider: "openai",
     });
 
@@ -138,19 +138,19 @@ describe("validateVirtualApiKey", () => {
   test("returns baseUrl when chat API key has one configured", async ({
     makeOrganization,
     makeSecret,
-    makeChatApiKey,
+    makeLlmProviderApiKey,
   }) => {
     const org = await makeOrganization();
     const secret = await makeSecret({
       secret: { apiKey: "sk-real-key" },
     });
-    const chatApiKey = await makeChatApiKey(org.id, secret.id, {
+    const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id, {
       provider: "openai",
     });
 
     // Update the chat API key with a baseUrl
-    const { ChatApiKeyModel } = await import("@/models");
-    await ChatApiKeyModel.update(chatApiKey.id, {
+    const { LlmProviderApiKeyModel } = await import("@/models");
+    await LlmProviderApiKeyModel.update(chatApiKey.id, {
       baseUrl: "https://custom-openai.example.com/v1",
     });
 
@@ -199,10 +199,10 @@ describe("validateVirtualApiKey", () => {
   test("returns undefined apiKey for system key (no secret) without throwing", async ({
     makeOrganization,
   }) => {
-    const { ChatApiKeyModel } = await import("@/models");
+    const { LlmProviderApiKeyModel } = await import("@/models");
     const org = await makeOrganization();
 
-    const systemKey = await ChatApiKeyModel.createSystemKey({
+    const systemKey = await LlmProviderApiKeyModel.createSystemKey({
       organizationId: org.id,
       name: "Vertex AI",
       provider: "gemini",
@@ -356,7 +356,7 @@ describe("attemptJwksAuth", () => {
     makeAgent,
     makeIdentityProvider,
     makeSecret,
-    makeChatApiKey,
+    makeLlmProviderApiKey,
     makeUser,
     makeMember,
   }) => {
@@ -373,7 +373,7 @@ describe("attemptJwksAuth", () => {
     const secret = await makeSecret({
       secret: { apiKey: "sk-provider-key" },
     });
-    await makeChatApiKey(org.id, secret.id, { provider: "openai" });
+    await makeLlmProviderApiKey(org.id, secret.id, { provider: "openai" });
 
     // Mock successful JWKS validation
     const gatewayUtils = await import("@/routes/mcp-gateway.utils");

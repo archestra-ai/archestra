@@ -40,9 +40,10 @@ import { extractAndIngestDocuments } from "@/knowledge-base";
 import logger from "@/logging";
 import {
   AgentModel,
-  ChatApiKeyModel,
   ConversationEnabledToolModel,
   ConversationModel,
+  ConversationShareModel,
+  LlmProviderApiKeyModel,
   MessageModel,
   TeamModel,
 } from "@/models";
@@ -56,11 +57,13 @@ import {
 import {
   ApiError,
   type ChatMessage,
+  type ChatMessagePart,
   constructResponseSchema,
   DeleteObjectResponseSchema,
   ErrorResponsesSchema,
   InsertConversationSchema,
   SelectConversationSchema,
+  SelectConversationShareSchema,
   type UpdateConversation,
   UpdateConversationSchema,
   UuidIdSchema,
@@ -295,12 +298,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const normalizedMessagesForLLM = normalizeChatMessages(
             messages as ChatMessage[],
           );
+          const providerPreparedMessages = prepareMessagesForProvider({
+            messages: normalizedMessagesForLLM,
+            provider,
+          });
 
           // Stream with AI SDK
           // Build streamText config conditionally
           // Cast to UIMessage[] - ChatMessage is structurally compatible at runtime
           const modelMessages = await convertToModelMessages(
-            normalizedMessagesForLLM as unknown as Omit<UIMessage, "id">[],
+            providerPreparedMessages as unknown as Omit<UIMessage, "id">[],
           );
 
           // Perplexity does NOT support tool calling - it has built-in web search instead
@@ -1110,6 +1117,195 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.get(
+    "/api/chat/conversations/:id/share",
+    {
+      schema: {
+        operationId: RouteId.GetConversationShare,
+        description: "Get share status for a conversation",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(
+          SelectConversationShareSchema.nullable(),
+        ),
+      },
+    },
+    async ({ params: { id }, user, organizationId }) => {
+      const conversation = await ConversationModel.findById({
+        id,
+        userId: user.id,
+        organizationId,
+      });
+      if (!conversation) {
+        throw new ApiError(404, "Conversation not found");
+      }
+
+      return ConversationShareModel.findByConversationId({
+        conversationId: id,
+        organizationId,
+      });
+    },
+  );
+
+  fastify.post(
+    "/api/chat/conversations/:id/share",
+    {
+      schema: {
+        operationId: RouteId.ShareConversation,
+        description: "Share a conversation with your organization",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        body: z.object({
+          visibility: z.enum(["organization"]),
+        }),
+        response: constructResponseSchema(SelectConversationShareSchema),
+      },
+    },
+    async ({ params: { id }, body: { visibility }, user, organizationId }) => {
+      const conversation = await ConversationModel.findById({
+        id,
+        userId: user.id,
+        organizationId,
+      });
+      if (!conversation) {
+        throw new ApiError(404, "Conversation not found");
+      }
+
+      const existing = await ConversationShareModel.findByConversationId({
+        conversationId: id,
+        organizationId,
+      });
+      if (existing) {
+        return existing;
+      }
+
+      return ConversationShareModel.create({
+        conversationId: id,
+        organizationId,
+        createdByUserId: user.id,
+        visibility,
+      });
+    },
+  );
+
+  fastify.delete(
+    "/api/chat/conversations/:id/share",
+    {
+      schema: {
+        operationId: RouteId.UnshareConversation,
+        description: "Revoke sharing of a conversation",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async ({ params: { id }, user, organizationId }) => {
+      const deleted = await ConversationShareModel.delete({
+        conversationId: id,
+        organizationId,
+        userId: user.id,
+      });
+
+      if (!deleted) {
+        throw new ApiError(404, "Share not found");
+      }
+
+      return { success: true };
+    },
+  );
+
+  fastify.get(
+    "/api/chat/shared/:shareId",
+    {
+      schema: {
+        operationId: RouteId.GetSharedConversation,
+        description: "Get a shared conversation by share ID",
+        tags: ["Chat"],
+        params: z.object({ shareId: UuidIdSchema }),
+        response: constructResponseSchema(
+          SelectConversationSchema.extend({
+            sharedByUserId: z.string(),
+          }),
+        ),
+      },
+    },
+    async ({ params: { shareId }, organizationId }) => {
+      const conversation = await ConversationShareModel.getSharedConversation({
+        shareId,
+        organizationId,
+      });
+
+      if (!conversation) {
+        throw new ApiError(404, "Shared conversation not found");
+      }
+
+      return conversation;
+    },
+  );
+
+  fastify.post(
+    "/api/chat/shared/:shareId/fork",
+    {
+      schema: {
+        operationId: RouteId.ForkSharedConversation,
+        description:
+          "Create a new conversation from a shared conversation's messages",
+        tags: ["Chat"],
+        params: z.object({ shareId: UuidIdSchema }),
+        body: z.object({
+          agentId: z.string().uuid(),
+        }),
+        response: constructResponseSchema(SelectConversationSchema),
+      },
+    },
+    async ({
+      params: { shareId },
+      body: { agentId },
+      user,
+      organizationId,
+    }) => {
+      const sharedConversation =
+        await ConversationShareModel.getSharedConversation({
+          shareId,
+          organizationId,
+        });
+
+      if (!sharedConversation) {
+        throw new ApiError(404, "Shared conversation not found");
+      }
+
+      const newConversation = await ConversationModel.create({
+        userId: user.id,
+        organizationId,
+        agentId,
+        selectedModel: sharedConversation.selectedModel,
+      });
+
+      if (sharedConversation.messages.length > 0) {
+        const messagesToCopy = sharedConversation.messages.map(
+          (message: { role: string; content: unknown }) => ({
+            conversationId: newConversation.id,
+            role: message.role,
+            content: message,
+          }),
+        );
+        await MessageModel.bulkCreate(messagesToCopy);
+      }
+
+      const result = await ConversationModel.findById({
+        id: newConversation.id,
+        userId: user.id,
+        organizationId,
+      });
+
+      if (!result) {
+        throw new ApiError(500, "Failed to create forked conversation");
+      }
+
+      return result;
+    },
+  );
+
   fastify.post(
     "/api/chat/conversations/:id/generate-title",
     {
@@ -1696,6 +1892,82 @@ async function persistNewMessages(
   }
 }
 
+function prepareMessagesForProvider(params: {
+  messages: ChatMessage[];
+  provider: SupportedProvider;
+}): ChatMessage[] {
+  const { messages, provider } = params;
+
+  if (provider !== "anthropic") {
+    return messages;
+  }
+
+  return messages.map((message) => {
+    if (!message.parts?.length) {
+      return message;
+    }
+
+    let changed = false;
+    const parts = message.parts.map((part) => {
+      const normalizedPart = normalizeAnthropicFilePart(part);
+      if (normalizedPart !== part) {
+        changed = true;
+      }
+      return normalizedPart;
+    });
+
+    return changed
+      ? {
+          ...message,
+          parts,
+        }
+      : message;
+  });
+}
+
+function normalizeAnthropicFilePart(part: ChatMessagePart): ChatMessagePart {
+  if (
+    part.type !== "file" ||
+    typeof part.mediaType !== "string" ||
+    !isAnthropicTextDocumentMimeType(part.mediaType)
+  ) {
+    return part;
+  }
+
+  return {
+    ...part,
+    mediaType: "text/plain",
+    url: normalizeDataUrlMediaType({
+      url: typeof part.url === "string" ? part.url : undefined,
+      fromMediaType: part.mediaType,
+      toMediaType: "text/plain",
+    }),
+  };
+}
+
+function isAnthropicTextDocumentMimeType(mediaType: string): boolean {
+  return (
+    mediaType === "text/csv" ||
+    mediaType === "text/markdown" ||
+    mediaType === "application/csv" ||
+    mediaType === "application/vnd.ms-excel"
+  );
+}
+
+function normalizeDataUrlMediaType(params: {
+  url: string | undefined;
+  fromMediaType: string;
+  toMediaType: string;
+}): string | undefined {
+  const { url, fromMediaType, toMediaType } = params;
+
+  if (!url?.startsWith(`data:${fromMediaType};`)) {
+    return url;
+  }
+
+  return url.replace(`data:${fromMediaType};`, `data:${toMediaType};`);
+}
+
 /**
  * Listens for HTTP connection close and checks the distributed cache to determine
  * whether the close was caused by the stop button (abort) or by navigating away (ignore).
@@ -1776,7 +2048,7 @@ async function validateChatApiKeyAccess(
   userId: string,
   organizationId: string,
 ): Promise<void> {
-  const apiKey = await ChatApiKeyModel.findById(chatApiKeyId);
+  const apiKey = await LlmProviderApiKeyModel.findById(chatApiKeyId);
   if (!apiKey || apiKey.organizationId !== organizationId) {
     throw new ApiError(404, "Chat API key not found");
   }
@@ -1784,7 +2056,7 @@ async function validateChatApiKeyAccess(
   // Verify user has access to the API key based on scope
   const userTeamIds = await TeamModel.getUserTeamIds(userId);
   const canAccessKey =
-    apiKey.scope === "org_wide" ||
+    apiKey.scope === "org" ||
     (apiKey.scope === "personal" && apiKey.userId === userId) ||
     (apiKey.scope === "team" &&
       apiKey.teamId &&
@@ -1794,5 +2066,9 @@ async function validateChatApiKeyAccess(
     throw new ApiError(403, "You do not have access to this API key");
   }
 }
+
+export const __test = {
+  prepareMessagesForProvider,
+};
 
 export default chatRoutes;

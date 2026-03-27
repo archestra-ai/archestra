@@ -8,7 +8,11 @@ import {
 } from "@/clients/llm-client";
 import config, { getProviderEnvApiKey } from "@/config";
 import logger from "@/logging";
-import { AgentModel, ApiKeyModelModel, ChatApiKeyModel } from "@/models";
+import {
+  AgentModel,
+  LlmProviderApiKeyModel,
+  LlmProviderApiKeyModelLinkModel,
+} from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { renderSystemPrompt } from "@/templating";
 import type {
@@ -265,9 +269,11 @@ async function resolveBuiltInAgentSelection(params: {
   const { agent, organizationId, userId } = params;
 
   if (agent.llmApiKeyId) {
-    const apiKey = await ChatApiKeyModel.findById(agent.llmApiKeyId);
+    const apiKey = await LlmProviderApiKeyModel.findById(agent.llmApiKeyId);
     if (apiKey) {
-      const bestModel = await ApiKeyModelModel.getBestModel(apiKey.id);
+      const bestModel = await LlmProviderApiKeyModelLinkModel.getBestModel(
+        apiKey.id,
+      );
       const secretValue = apiKey.secretId
         ? await getSecretValueForLlmProviderApiKey(apiKey.secretId)
         : undefined;

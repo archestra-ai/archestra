@@ -1,17 +1,17 @@
 import { describe, expect, test } from "@/test";
-import { SelectChatApiKeySchema } from "@/types";
-import ChatApiKeyModel from "./chat-api-key";
+import { SelectLlmProviderApiKeySchema } from "@/types";
+import LlmProviderApiKeyModel from "./llm-provider-api-key";
 
-describe("ChatApiKeyModel", () => {
+describe("LlmProviderApiKeyModel", () => {
   describe("create", () => {
-    test("can create a personal chat API key", async ({
+    test("can create a personal LLM provider API key", async ({
       makeOrganization,
       makeUser,
     }) => {
       const org = await makeOrganization();
       const user = await makeUser();
 
-      const apiKey = await ChatApiKeyModel.create({
+      const apiKey = await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "My Personal Key",
         provider: "anthropic",
@@ -29,7 +29,7 @@ describe("ChatApiKeyModel", () => {
       expect(apiKey.teamId).toBeNull();
     });
 
-    test("can create a team chat API key", async ({
+    test("can create a team LLM provider API key", async ({
       makeOrganization,
       makeUser,
       makeTeam,
@@ -38,7 +38,7 @@ describe("ChatApiKeyModel", () => {
       const user = await makeUser();
       const team = await makeTeam(org.id, user.id, { name: "Test Team" });
 
-      const apiKey = await ChatApiKeyModel.create({
+      const apiKey = await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Team Key",
         provider: "anthropic",
@@ -51,19 +51,19 @@ describe("ChatApiKeyModel", () => {
       expect(apiKey.userId).toBeNull();
     });
 
-    test("can create an org-wide chat API key", async ({
+    test("can create an org-wide LLM provider API key", async ({
       makeOrganization,
     }) => {
       const org = await makeOrganization();
 
-      const apiKey = await ChatApiKeyModel.create({
+      const apiKey = await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Org Wide Key",
         provider: "anthropic",
-        scope: "org_wide",
+        scope: "org",
       });
 
-      expect(apiKey.scope).toBe("org_wide");
+      expect(apiKey.scope).toBe("org");
       expect(apiKey.userId).toBeNull();
       expect(apiKey.teamId).toBeNull();
     });
@@ -75,7 +75,7 @@ describe("ChatApiKeyModel", () => {
       const org = await makeOrganization();
       const user = await makeUser();
 
-      const key1 = await ChatApiKeyModel.create({
+      const key1 = await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Personal Key 1",
         provider: "anthropic",
@@ -83,7 +83,7 @@ describe("ChatApiKeyModel", () => {
         userId: user.id,
       });
 
-      const key2 = await ChatApiKeyModel.create({
+      const key2 = await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Personal Key 2",
         provider: "anthropic",
@@ -103,7 +103,7 @@ describe("ChatApiKeyModel", () => {
       const org = await makeOrganization();
       const user = await makeUser();
 
-      const key = await ChatApiKeyModel.create({
+      const key = await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Primary Key",
         provider: "anthropic",
@@ -122,7 +122,7 @@ describe("ChatApiKeyModel", () => {
       const org = await makeOrganization();
       const user = await makeUser();
 
-      const anthropicKey = await ChatApiKeyModel.create({
+      const anthropicKey = await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Anthropic Key",
         provider: "anthropic",
@@ -130,7 +130,7 @@ describe("ChatApiKeyModel", () => {
         userId: user.id,
       });
 
-      const openaiKey = await ChatApiKeyModel.create({
+      const openaiKey = await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "OpenAI Key",
         provider: "openai",
@@ -150,7 +150,7 @@ describe("ChatApiKeyModel", () => {
       const user = await makeUser();
 
       // Key without baseUrl should have null
-      const keyWithoutBaseUrl = await ChatApiKeyModel.create({
+      const keyWithoutBaseUrl = await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "No BaseUrl Key",
         provider: "anthropic",
@@ -160,7 +160,7 @@ describe("ChatApiKeyModel", () => {
       expect(keyWithoutBaseUrl.baseUrl).toBeNull();
 
       // Key with baseUrl should store it
-      const keyWithBaseUrl = await ChatApiKeyModel.create({
+      const keyWithBaseUrl = await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Custom BaseUrl Key",
         provider: "openai",
@@ -171,19 +171,19 @@ describe("ChatApiKeyModel", () => {
       expect(keyWithBaseUrl.baseUrl).toBe("https://custom-api.example.com");
 
       // Verify via findById that nullable baseUrl round-trips correctly
-      const found = await ChatApiKeyModel.findById(keyWithoutBaseUrl.id);
+      const found = await LlmProviderApiKeyModel.findById(keyWithoutBaseUrl.id);
       expect(found?.baseUrl).toBeNull();
     });
   });
 
   describe("findById", () => {
-    test("can find a chat API key by ID", async ({
+    test("can find an LLM provider API key by ID", async ({
       makeOrganization,
       makeUser,
     }) => {
       const org = await makeOrganization();
       const user = await makeUser();
-      const created = await ChatApiKeyModel.create({
+      const created = await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Test Key",
         provider: "anthropic",
@@ -191,7 +191,7 @@ describe("ChatApiKeyModel", () => {
         userId: user.id,
       });
 
-      const found = await ChatApiKeyModel.findById(created.id);
+      const found = await LlmProviderApiKeyModel.findById(created.id);
 
       expect(found).toBeDefined();
       expect(found?.id).toBe(created.id);
@@ -199,7 +199,7 @@ describe("ChatApiKeyModel", () => {
     });
 
     test("returns null for non-existent ID", async () => {
-      const found = await ChatApiKeyModel.findById(
+      const found = await LlmProviderApiKeyModel.findById(
         "00000000-0000-0000-0000-000000000000",
       );
       expect(found).toBeNull();
@@ -207,28 +207,28 @@ describe("ChatApiKeyModel", () => {
   });
 
   describe("findByOrganizationId", () => {
-    test("can find all chat API keys for an organization", async ({
+    test("can find all LLM provider API keys for an organization", async ({
       makeOrganization,
       makeUser,
     }) => {
       const org = await makeOrganization();
       const user = await makeUser();
 
-      await ChatApiKeyModel.create({
+      await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Key 1",
         provider: "anthropic",
         scope: "personal",
         userId: user.id,
       });
-      await ChatApiKeyModel.create({
+      await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Key 2",
         provider: "openai",
-        scope: "org_wide",
+        scope: "org",
       });
 
-      const keys = await ChatApiKeyModel.findByOrganizationId(org.id);
+      const keys = await LlmProviderApiKeyModel.findByOrganizationId(org.id);
 
       expect(keys).toHaveLength(2);
       expect(keys.map((k) => k.name)).toContain("Key 1");
@@ -240,17 +240,17 @@ describe("ChatApiKeyModel", () => {
     test("can find org-wide key by scope", async ({ makeOrganization }) => {
       const org = await makeOrganization();
 
-      const orgWideKey = await ChatApiKeyModel.create({
+      const orgWideKey = await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Org Wide Key",
         provider: "anthropic",
-        scope: "org_wide",
+        scope: "org",
       });
 
-      const found = await ChatApiKeyModel.findByScope(
+      const found = await LlmProviderApiKeyModel.findByScope(
         org.id,
         "anthropic",
-        "org_wide",
+        "org",
       );
 
       expect(found).toBeDefined();
@@ -262,10 +262,10 @@ describe("ChatApiKeyModel", () => {
     }) => {
       const org = await makeOrganization();
 
-      const found = await ChatApiKeyModel.findByScope(
+      const found = await LlmProviderApiKeyModel.findByScope(
         org.id,
         "anthropic",
-        "org_wide",
+        "org",
       );
 
       expect(found).toBeNull();
@@ -279,7 +279,7 @@ describe("ChatApiKeyModel", () => {
     }) => {
       const org = await makeOrganization();
       const user = await makeUser();
-      const apiKey = await ChatApiKeyModel.create({
+      const apiKey = await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Original Name",
         provider: "anthropic",
@@ -287,7 +287,7 @@ describe("ChatApiKeyModel", () => {
         userId: user.id,
       });
 
-      const updated = await ChatApiKeyModel.update(apiKey.id, {
+      const updated = await LlmProviderApiKeyModel.update(apiKey.id, {
         name: "Updated Name",
       });
 
@@ -303,7 +303,7 @@ describe("ChatApiKeyModel", () => {
     }) => {
       const org = await makeOrganization();
       const user = await makeUser();
-      const apiKey = await ChatApiKeyModel.create({
+      const apiKey = await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "To Delete",
         provider: "anthropic",
@@ -311,8 +311,8 @@ describe("ChatApiKeyModel", () => {
         userId: user.id,
       });
 
-      const deleted = await ChatApiKeyModel.delete(apiKey.id);
-      const found = await ChatApiKeyModel.findById(apiKey.id);
+      const deleted = await LlmProviderApiKeyModel.delete(apiKey.id);
+      const found = await LlmProviderApiKeyModel.findById(apiKey.id);
 
       expect(deleted).toBe(true);
       expect(found).toBeNull();
@@ -328,14 +328,14 @@ describe("ChatApiKeyModel", () => {
       const user1 = await makeUser({ email: "user1@test.com" });
       const user2 = await makeUser({ email: "user2@test.com" });
 
-      await ChatApiKeyModel.create({
+      await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "User1 Personal Key",
         provider: "anthropic",
         scope: "personal",
         userId: user1.id,
       });
-      await ChatApiKeyModel.create({
+      await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "User2 Personal Key",
         provider: "anthropic",
@@ -343,7 +343,7 @@ describe("ChatApiKeyModel", () => {
         userId: user2.id,
       });
 
-      const visibleToUser1 = await ChatApiKeyModel.getVisibleKeys(
+      const visibleToUser1 = await LlmProviderApiKeyModel.getVisibleKeys(
         org.id,
         user1.id,
         [],
@@ -363,7 +363,7 @@ describe("ChatApiKeyModel", () => {
       const user = await makeUser();
       const team = await makeTeam(org.id, user.id, { name: "Test Team" });
 
-      await ChatApiKeyModel.create({
+      await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Team Key",
         provider: "anthropic",
@@ -371,7 +371,7 @@ describe("ChatApiKeyModel", () => {
         teamId: team.id,
       });
 
-      const visible = await ChatApiKeyModel.getVisibleKeys(
+      const visible = await LlmProviderApiKeyModel.getVisibleKeys(
         org.id,
         user.id,
         [team.id],
@@ -386,14 +386,14 @@ describe("ChatApiKeyModel", () => {
       const org = await makeOrganization();
       const user = await makeUser();
 
-      await ChatApiKeyModel.create({
+      await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Org Wide Key",
         provider: "anthropic",
-        scope: "org_wide",
+        scope: "org",
       });
 
-      const visible = await ChatApiKeyModel.getVisibleKeys(
+      const visible = await LlmProviderApiKeyModel.getVisibleKeys(
         org.id,
         user.id,
         [],
@@ -412,28 +412,28 @@ describe("ChatApiKeyModel", () => {
       const admin = await makeUser({ email: "admin@test.com" });
       const user = await makeUser({ email: "user@test.com" });
 
-      await ChatApiKeyModel.create({
+      await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Admin Personal Key",
         provider: "anthropic",
         scope: "personal",
         userId: admin.id,
       });
-      await ChatApiKeyModel.create({
+      await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "User Personal Key",
         provider: "anthropic",
         scope: "personal",
         userId: user.id,
       });
-      await ChatApiKeyModel.create({
+      await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Org Wide Key",
         provider: "openai",
-        scope: "org_wide",
+        scope: "org",
       });
 
-      const visible = await ChatApiKeyModel.getVisibleKeys(
+      const visible = await LlmProviderApiKeyModel.getVisibleKeys(
         org.id,
         admin.id,
         [],
@@ -454,14 +454,14 @@ describe("ChatApiKeyModel", () => {
       const org = await makeOrganization();
       const user = await makeUser();
 
-      await ChatApiKeyModel.create({
+      await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Primary Anthropic Key",
         provider: "anthropic",
         scope: "personal",
         userId: user.id,
       });
-      await ChatApiKeyModel.create({
+      await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "OpenAI Backup",
         provider: "openai",
@@ -469,7 +469,7 @@ describe("ChatApiKeyModel", () => {
         userId: user.id,
       });
 
-      const visible = await ChatApiKeyModel.getVisibleKeys(
+      const visible = await LlmProviderApiKeyModel.getVisibleKeys(
         org.id,
         user.id,
         [],
@@ -482,6 +482,42 @@ describe("ChatApiKeyModel", () => {
 
       expect(visible).toHaveLength(1);
       expect(visible[0].name).toBe("Primary Anthropic Key");
+    });
+
+    test("treats LIKE wildcard characters in search as literals", async ({
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+
+      await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "Primary%Key",
+        provider: "anthropic",
+        scope: "personal",
+        userId: user.id,
+      });
+      await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "Primary Alpha Key",
+        provider: "anthropic",
+        scope: "personal",
+        userId: user.id,
+      });
+
+      const visible = await LlmProviderApiKeyModel.getVisibleKeys(
+        org.id,
+        user.id,
+        [],
+        false,
+        {
+          search: "%",
+        },
+      );
+
+      expect(visible).toHaveLength(1);
+      expect(visible[0].name).toBe("Primary%Key");
     });
   });
 
@@ -496,7 +532,7 @@ describe("ChatApiKeyModel", () => {
       const secret1 = await makeSecret();
       const secret2 = await makeSecret();
 
-      const personalKey = await ChatApiKeyModel.create({
+      const personalKey = await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Personal Key",
         provider: "anthropic",
@@ -504,15 +540,15 @@ describe("ChatApiKeyModel", () => {
         userId: user.id,
         secretId: secret1.id,
       });
-      await ChatApiKeyModel.create({
+      await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Org Wide Key",
         provider: "anthropic",
-        scope: "org_wide",
+        scope: "org",
         secretId: secret2.id,
       });
 
-      const resolved = await ChatApiKeyModel.getCurrentApiKey({
+      const resolved = await LlmProviderApiKeyModel.getCurrentApiKey({
         organizationId: org.id,
         userId: user.id,
         userTeamIds: [],
@@ -535,7 +571,7 @@ describe("ChatApiKeyModel", () => {
       const secret1 = await makeSecret();
       const secret2 = await makeSecret();
 
-      const teamKey = await ChatApiKeyModel.create({
+      const teamKey = await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Team Key",
         provider: "anthropic",
@@ -543,15 +579,15 @@ describe("ChatApiKeyModel", () => {
         teamId: team.id,
         secretId: secret1.id,
       });
-      await ChatApiKeyModel.create({
+      await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Org Wide Key",
         provider: "anthropic",
-        scope: "org_wide",
+        scope: "org",
         secretId: secret2.id,
       });
 
-      const resolved = await ChatApiKeyModel.getCurrentApiKey({
+      const resolved = await LlmProviderApiKeyModel.getCurrentApiKey({
         organizationId: org.id,
         userId: user.id,
         userTeamIds: [team.id],
@@ -571,15 +607,15 @@ describe("ChatApiKeyModel", () => {
       const user = await makeUser();
       const secret = await makeSecret();
 
-      const orgWideKey = await ChatApiKeyModel.create({
+      const orgWideKey = await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Org Wide Key",
         provider: "anthropic",
-        scope: "org_wide",
+        scope: "org",
         secretId: secret.id,
       });
 
-      const resolved = await ChatApiKeyModel.getCurrentApiKey({
+      const resolved = await LlmProviderApiKeyModel.getCurrentApiKey({
         organizationId: org.id,
         userId: user.id,
         userTeamIds: [],
@@ -603,7 +639,7 @@ describe("ChatApiKeyModel", () => {
       const secret2 = await makeSecret();
       const agent = await makeAgent({ name: "Test Agent", teams: [] });
 
-      await ChatApiKeyModel.create({
+      await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Personal Key",
         provider: "anthropic",
@@ -611,11 +647,11 @@ describe("ChatApiKeyModel", () => {
         userId: user.id,
         secretId: secret1.id,
       });
-      const conversationKey = await ChatApiKeyModel.create({
+      const conversationKey = await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Org Wide Key",
         provider: "anthropic",
-        scope: "org_wide",
+        scope: "org",
         secretId: secret2.id,
       });
 
@@ -626,7 +662,7 @@ describe("ChatApiKeyModel", () => {
         chatApiKeyId: conversationKey.id,
       });
 
-      const resolved = await ChatApiKeyModel.getCurrentApiKey({
+      const resolved = await LlmProviderApiKeyModel.getCurrentApiKey({
         organizationId: org.id,
         userId: user.id,
         userTeamIds: [],
@@ -644,7 +680,7 @@ describe("ChatApiKeyModel", () => {
       const org = await makeOrganization();
       const user = await makeUser();
 
-      const resolved = await ChatApiKeyModel.getCurrentApiKey({
+      const resolved = await LlmProviderApiKeyModel.getCurrentApiKey({
         organizationId: org.id,
         userId: user.id,
         userTeamIds: [],
@@ -666,26 +702,26 @@ describe("ChatApiKeyModel", () => {
       const secret2 = await makeSecret();
 
       // Create an older key (not primary)
-      await ChatApiKeyModel.create({
+      await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Older Key",
         provider: "anthropic",
-        scope: "org_wide",
+        scope: "org",
         secretId: secret1.id,
         isPrimary: false,
       });
 
       // Create a newer key marked as primary
-      const primaryKey = await ChatApiKeyModel.create({
+      const primaryKey = await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Primary Key",
         provider: "anthropic",
-        scope: "org_wide",
+        scope: "org",
         secretId: secret2.id,
         isPrimary: true,
       });
 
-      const resolved = await ChatApiKeyModel.getCurrentApiKey({
+      const resolved = await LlmProviderApiKeyModel.getCurrentApiKey({
         organizationId: org.id,
         userId: user.id,
         userTeamIds: [],
@@ -707,23 +743,23 @@ describe("ChatApiKeyModel", () => {
       const secret2 = await makeSecret();
 
       // Create two keys, neither is primary — oldest should win
-      const olderKey = await ChatApiKeyModel.create({
+      const olderKey = await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Older Key",
         provider: "anthropic",
-        scope: "org_wide",
+        scope: "org",
         secretId: secret1.id,
       });
 
-      await ChatApiKeyModel.create({
+      await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Newer Key",
         provider: "anthropic",
-        scope: "org_wide",
+        scope: "org",
         secretId: secret2.id,
       });
 
-      const resolved = await ChatApiKeyModel.getCurrentApiKey({
+      const resolved = await LlmProviderApiKeyModel.getCurrentApiKey({
         organizationId: org.id,
         userId: user.id,
         userTeamIds: [],
@@ -741,14 +777,14 @@ describe("ChatApiKeyModel", () => {
     }) => {
       const org = await makeOrganization();
 
-      await ChatApiKeyModel.create({
+      await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Test Key",
         provider: "anthropic",
-        scope: "org_wide",
+        scope: "org",
       });
 
-      const hasKeys = await ChatApiKeyModel.hasAnyApiKey(org.id);
+      const hasKeys = await LlmProviderApiKeyModel.hasAnyApiKey(org.id);
 
       expect(hasKeys).toBe(true);
     });
@@ -758,7 +794,7 @@ describe("ChatApiKeyModel", () => {
     }) => {
       const org = await makeOrganization();
 
-      const hasKeys = await ChatApiKeyModel.hasAnyApiKey(org.id);
+      const hasKeys = await LlmProviderApiKeyModel.hasAnyApiKey(org.id);
 
       expect(hasKeys).toBe(false);
     });
@@ -772,19 +808,19 @@ describe("ChatApiKeyModel", () => {
       const org = await makeOrganization();
       const secret = await makeSecret();
 
-      await ChatApiKeyModel.create({
+      await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Anthropic Key",
         provider: "anthropic",
-        scope: "org_wide",
+        scope: "org",
         secretId: secret.id,
       });
 
-      const hasAnthropic = await ChatApiKeyModel.hasConfiguredApiKey(
+      const hasAnthropic = await LlmProviderApiKeyModel.hasConfiguredApiKey(
         org.id,
         "anthropic",
       );
-      const hasOpenai = await ChatApiKeyModel.hasConfiguredApiKey(
+      const hasOpenai = await LlmProviderApiKeyModel.hasConfiguredApiKey(
         org.id,
         "openai",
       );
@@ -794,7 +830,7 @@ describe("ChatApiKeyModel", () => {
     });
   });
 
-  describe("SelectChatApiKeySchema", () => {
+  describe("SelectLlmProviderApiKeySchema", () => {
     test("accepts null baseUrl without validation error", async ({
       makeOrganization,
       makeUser,
@@ -802,7 +838,7 @@ describe("ChatApiKeyModel", () => {
       const org = await makeOrganization();
       const user = await makeUser();
 
-      const key = await ChatApiKeyModel.create({
+      const key = await LlmProviderApiKeyModel.create({
         organizationId: org.id,
         name: "Test Key",
         provider: "anthropic",
@@ -811,7 +847,7 @@ describe("ChatApiKeyModel", () => {
       });
 
       // This would throw if baseUrl is not marked as nullable in the schema
-      const result = SelectChatApiKeySchema.safeParse(key);
+      const result = SelectLlmProviderApiKeySchema.safeParse(key);
       expect(result.success).toBe(true);
     });
   });

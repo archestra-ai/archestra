@@ -13,33 +13,27 @@ import { useMemo } from "react";
 import { toast } from "sonner";
 import { handleApiError } from "@/lib/utils";
 
-const { getChatModels, getModelsWithApiKeys, updateModel } = archestraApiSdk;
-type ChatModelsQuery = NonNullable<
-  archestraApiTypes.GetChatModelsData["query"]
->;
-type ChatModelsParams = Partial<ChatModelsQuery>;
+const { getLlmModels, getModelsWithApiKeys, updateModel, syncLlmModels } =
+  archestraApiSdk;
+type LlmModelsQuery = NonNullable<archestraApiTypes.GetLlmModelsData["query"]>;
+type LlmModelsParams = Partial<LlmModelsQuery>;
 
-/**
- * Chat model type from the API response.
- * Uses the generated API types for type safety.
- */
-export type ChatModel = archestraApiTypes.GetChatModelsResponses["200"][number];
-
-/**
- * Model capabilities type extracted from ChatModel.
- */
-export type ModelCapabilities = NonNullable<ChatModel["capabilities"]>;
+export type LlmModel = archestraApiTypes.GetLlmModelsResponses["200"][number];
+export type ModelCapabilities = NonNullable<LlmModel["capabilities"]>;
+export type ModelWithApiKeys =
+  archestraApiTypes.GetModelsWithApiKeysResponses["200"][number];
+export type LinkedApiKey = ModelWithApiKeys["apiKeys"][number];
 
 /**
  * Fetch available chat models from all configured providers.
  * When apiKeyId is provided, only returns models linked to that specific key.
  */
-export function useChatModels(params?: ChatModelsParams) {
+export function useLlmModels(params?: LlmModelsParams) {
   const apiKeyId = params?.apiKeyId;
   return useQuery({
-    queryKey: ["chat-models", apiKeyId ?? null],
-    queryFn: async (): Promise<ChatModel[]> => {
-      const { data, error } = await getChatModels({
+    queryKey: ["llm-models", apiKeyId ?? null],
+    queryFn: async (): Promise<LlmModel[]> => {
+      const { data, error } = await getLlmModels({
         query: apiKeyId ? { apiKeyId } : undefined,
       });
       if (error) {
@@ -59,12 +53,12 @@ export function useChatModels(params?: ChatModelsParams) {
  * Returns models grouped by provider with loading/error states.
  * When apiKeyId is provided, only returns models linked to that specific key.
  */
-export function useModelsByProvider(params?: ChatModelsParams) {
-  const query = useChatModels(params);
+export function useLlmModelsByProvider(params?: LlmModelsParams) {
+  const query = useLlmModels(params);
 
   // Memoize to prevent creating new object reference on every render
   const modelsByProvider = useMemo(() => {
-    if (!query.data) return {} as Record<SupportedProvider, ChatModel[]>;
+    if (!query.data) return {} as Record<SupportedProvider, LlmModel[]>;
     return query.data.reduce(
       (acc, model) => {
         if (!acc[model.provider]) {
@@ -73,7 +67,7 @@ export function useModelsByProvider(params?: ChatModelsParams) {
         acc[model.provider].push(model);
         return acc;
       },
-      {} as Record<SupportedProvider, ChatModel[]>,
+      {} as Record<SupportedProvider, LlmModel[]>,
     );
   }, [query.data]);
 
@@ -84,21 +78,6 @@ export function useModelsByProvider(params?: ChatModelsParams) {
   };
 }
 
-/**
- * Model with API keys type from the API response.
- */
-export type ModelWithApiKeys =
-  archestraApiTypes.GetModelsWithApiKeysResponses["200"][number];
-
-/**
- * Linked API key type extracted from ModelWithApiKeys.
- */
-export type LinkedApiKey = ModelWithApiKeys["apiKeys"][number];
-
-/**
- * Fetch all models with their linked API keys.
- * Used for the settings page models table.
- */
 export function useModelsWithApiKeys() {
   return useQuery({
     queryKey: ["models-with-api-keys"],
@@ -137,10 +116,30 @@ export function useUpdateModel() {
     onSuccess: () => {
       toast.success("Model updated");
       queryClient.invalidateQueries({ queryKey: ["models-with-api-keys"] });
-      queryClient.invalidateQueries({ queryKey: ["chat-models"] });
+      queryClient.invalidateQueries({ queryKey: ["llm-models"] });
     },
     onError: () => {
       toast.error("Failed to update model");
+    },
+  });
+}
+
+export function useSyncLlmModels() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data: responseData, error } = await syncLlmModels();
+      if (error) {
+        handleApiError(error);
+        throw error;
+      }
+      return responseData;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      toast.success("Models synced");
+      queryClient.invalidateQueries({ queryKey: ["llm-models"] });
+      queryClient.invalidateQueries({ queryKey: ["models-with-api-keys"] });
     },
   });
 }

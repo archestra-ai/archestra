@@ -114,6 +114,35 @@ describe("VirtualApiKeyModel", () => {
     expect(keys).toHaveLength(0);
   });
 
+  test("findByChatApiKeyId: respects organization boundary for access-controlled lookups", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeUser,
+  }) => {
+    const orgA = await makeOrganization();
+    const orgB = await makeOrganization();
+    const user = await makeUser();
+    const secret = await makeSecret({ secret: { apiKey: "sk-key" } });
+    const chatApiKey = await makeLlmProviderApiKey(orgB.id, secret.id);
+
+    await VirtualApiKeyModel.create({
+      chatApiKeyId: chatApiKey.id,
+      name: "Other Org Key",
+      scope: "org",
+    });
+
+    const keys = await VirtualApiKeyModel.findByChatApiKeyId({
+      chatApiKeyId: chatApiKey.id,
+      organizationId: orgA.id,
+      userId: user.id,
+      userTeamIds: [],
+      isAdmin: true,
+    });
+
+    expect(keys).toEqual([]);
+  });
+
   // =========================================================================
   // findById
   // =========================================================================

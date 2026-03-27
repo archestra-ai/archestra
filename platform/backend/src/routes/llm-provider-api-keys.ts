@@ -585,6 +585,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // secret manager would be orphaned without explicit cleanup.
       const virtualKeys = await VirtualApiKeyModel.findByChatApiKeyId({
         chatApiKeyId: params.id,
+        organizationId,
         userId: user.id,
         userTeamIds: await TeamModel.getUserTeamIds(user.id),
         isAdmin: true,

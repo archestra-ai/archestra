@@ -275,7 +275,7 @@ describe("ArchestraPromptInput", () => {
         screen.getByTestId(E2eTestId.ChatFileUploadButton),
       ).toBeInTheDocument();
       expect(screen.getByTestId("tooltip-content")).toHaveTextContent(
-        "Supports: text files, CSVs",
+        "Supports: chat prompts, .txt, .csv, and .md uploads",
       );
     });
 

@@ -99,9 +99,8 @@ class VirtualApiKeyModel {
       "VirtualApiKeyModel.create: virtual key created",
     );
 
-    const [{ teams, authorName }] = await Promise.all([
-      VirtualApiKeyModel.getVisibilityMetadata([virtualKey.id]),
-    ]);
+    const { teams, authorName } =
+      await VirtualApiKeyModel.getVisibilityMetadata([virtualKey.id]);
 
     return {
       virtualKey,
@@ -167,6 +166,7 @@ class VirtualApiKeyModel {
     params:
       | {
           chatApiKeyId: string;
+          organizationId: string;
           userId: string;
           userTeamIds: string[];
           isAdmin: boolean;
@@ -182,7 +182,7 @@ class VirtualApiKeyModel {
     }
 
     const accessibleIds = await VirtualApiKeyModel.getAccessibleIds({
-      organizationId: null,
+      organizationId: params.organizationId,
       userId: params.userId,
       userTeamIds: params.userTeamIds,
       isAdmin: params.isAdmin,

@@ -1929,7 +1929,7 @@ function normalizeAnthropicFilePart(part: ChatMessagePart): ChatMessagePart {
   if (
     part.type !== "file" ||
     typeof part.mediaType !== "string" ||
-    !isAnthropicCsvMimeType(part.mediaType)
+    !isAnthropicTextDocumentMimeType(part.mediaType)
   ) {
     return part;
   }
@@ -1945,7 +1945,7 @@ function normalizeAnthropicFilePart(part: ChatMessagePart): ChatMessagePart {
   };
 }
 
-function isAnthropicCsvMimeType(mediaType: string): boolean {
+function isAnthropicTextDocumentMimeType(mediaType: string): boolean {
   return (
     mediaType === "text/csv" ||
     mediaType === "text/markdown" ||

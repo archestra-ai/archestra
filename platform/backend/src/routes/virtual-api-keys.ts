@@ -101,6 +101,7 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const virtualKeys = await VirtualApiKeyModel.findByChatApiKeyId({
         chatApiKeyId: params.chatApiKeyId,
+        organizationId,
         userId: user.id,
         userTeamIds,
         isAdmin: isVirtualKeyAdmin,

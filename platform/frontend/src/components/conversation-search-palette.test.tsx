@@ -29,6 +29,14 @@ vi.mock("@/lib/auth/auth.hook", () => ({
   useIsAuthenticated: () => true,
 }));
 
+vi.mock("@/lib/auth/auth.query", () => ({
+  useHasPermissions: () => ({
+    data: true,
+    isPending: false,
+    isLoading: false,
+  }),
+}));
+
 vi.mock("@/lib/chat/chat-utils", () => ({
   getConversationDisplayTitle: (title: string | null) =>
     title ?? "Untitled chat",

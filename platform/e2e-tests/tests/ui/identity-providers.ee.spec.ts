@@ -9,7 +9,13 @@ import {
   SSO_DOMAIN,
   UI_BASE_URL,
 } from "../../consts";
-import { type Browser, expect, type Page, test } from "../../fixtures";
+import {
+  type APIResponse,
+  type Browser,
+  expect,
+  type Page,
+  test,
+} from "../../fixtures";
 import {
   clickButton,
   clickTeamActionButton,
@@ -136,23 +142,112 @@ async function fillOidcProviderForm(
   await page.getByLabel("JWKS Endpoint").fill(KEYCLOAK_OIDC.jwksEndpoint);
 }
 
-async function configureTeamSyncForGroups(page: Page): Promise<void> {
-  const groupsTemplateInput = page.getByLabel("Groups Handlebars Template");
+async function createOidcProviderViaApi(
+  page: Page,
+  providerName: string,
+): Promise<void> {
+  const response = await page.request.post(
+    `${UI_BASE_URL}/api/identity-providers`,
+    {
+      data: {
+        providerId: providerName,
+        issuer: KEYCLOAK_OIDC.issuer,
+        domain: SSO_DOMAIN,
+        oidcConfig: {
+          issuer: KEYCLOAK_OIDC.issuer,
+          pkce: true,
+          enableRpInitiatedLogout: true,
+          clientId: KEYCLOAK_OIDC.clientId,
+          clientSecret: KEYCLOAK_OIDC.clientSecret,
+          discoveryEndpoint: KEYCLOAK_OIDC.discoveryEndpoint,
+          authorizationEndpoint: KEYCLOAK_OIDC.authorizationEndpoint,
+          tokenEndpoint: KEYCLOAK_OIDC.tokenEndpoint,
+          jwksEndpoint: KEYCLOAK_OIDC.jwksEndpoint,
+          scopes: ["openid", "email", "profile"],
+          mapping: {
+            id: "sub",
+            email: "email",
+            name: "name",
+          },
+          overrideUserInfo: true,
+        },
+        teamSyncConfig: {
+          enabled: true,
+          groupsExpression: "{{#each groups}}{{this}},{{/each}}",
+        },
+      },
+    },
+  );
 
-  if (!(await groupsTemplateInput.isVisible().catch(() => false))) {
-    await page
-      .getByRole("button", { name: /Team Sync Configuration \(Optional\)/i })
-      .click();
+  await expectApiResponseOk(response, "create identity provider");
+
+  const createdProvider = (await response.json()) as {
+    providerId: string;
+    teamSyncConfig?: {
+      enabled?: boolean;
+      groupsExpression?: string;
+    };
+  };
+
+  expect(createdProvider.providerId).toBe(providerName);
+  expect(createdProvider.teamSyncConfig?.enabled).toBe(true);
+  expect(createdProvider.teamSyncConfig?.groupsExpression).toBe(
+    "{{#each groups}}{{this}},{{/each}}",
+  );
+}
+
+async function deleteProviderByProviderIdViaApi(
+  page: Page,
+  providerName: string,
+): Promise<void> {
+  const providersResponse = await page.request.get(
+    `${UI_BASE_URL}/api/identity-providers`,
+  );
+  await expectApiResponseOk(providersResponse, "list identity providers");
+
+  const providers = (await providersResponse.json()) as Array<{
+    id: string;
+    providerId: string;
+  }>;
+
+  const provider = providers.find((item) => item.providerId === providerName);
+  if (!provider) {
+    return;
   }
 
-  const enableTeamSyncCheckbox = page.getByLabel("Enable Team Sync");
-  await expect(enableTeamSyncCheckbox).toBeVisible({ timeout: 10_000 });
-  if (!(await enableTeamSyncCheckbox.isChecked())) {
-    await enableTeamSyncCheckbox.click();
-  }
+  const deleteResponse = await page.request.delete(
+    `${UI_BASE_URL}/api/identity-providers/${provider.id}`,
+  );
+  await expectApiResponseOk(deleteResponse, "delete identity provider");
+}
 
-  await expect(groupsTemplateInput).toBeVisible({ timeout: 10_000 });
-  await groupsTemplateInput.fill("{{#each groups}}{{this}},{{/each}}");
+async function expectApiResponseOk(
+  response: APIResponse,
+  action: string,
+): Promise<void> {
+  const bodyText = await response.text();
+  expect(
+    response.ok(),
+    `${action} failed with ${response.status()}: ${bodyText}`,
+  ).toBe(true);
+}
+
+async function getTeamIdByNameViaApi(
+  page: Page,
+  teamName: string,
+): Promise<string> {
+  const response = await page.request.get(
+    `${UI_BASE_URL}/api/teams?limit=10&offset=0&name=${encodeURIComponent(teamName)}`,
+  );
+  await expectApiResponseOk(response, "list teams");
+
+  const body = (await response.json()) as {
+    data: Array<{ id: string; name: string }>;
+  };
+  const team = body.data.find((item) => item.name === teamName);
+
+  expect(team, `Expected team "${teamName}" to exist`).toBeDefined();
+  return team!.id;
 }
 
 function getRoleMappingRuleRow(page: Page, index: number) {
@@ -392,16 +487,10 @@ test.describe("Identity Provider Team Sync E2E", () => {
 
     // STEP 1: Authenticate and create OIDC provider
     await ensureAdminAuthenticated(page);
-    await goToPage(page, "/settings/identity-providers");
-    await page.waitForLoadState("domcontentloaded");
-    await deleteExistingProviderIfExists(page, "Generic OIDC");
-    await fillOidcProviderForm(page, providerName);
-    await configureTeamSyncForGroups(page);
-    await page.getByTestId(E2eTestId.IdentityProviderCreateButton).click();
-    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+    await deleteProviderByProviderIdViaApi(page, providerName);
+    await createOidcProviderViaApi(page, providerName);
 
     // STEP 2: Navigate to teams page and create a team
-    // Re-authenticate in case session was invalidated during identity provider creation
     await ensureAdminAuthenticated(page);
     await goToPage(page, "/settings/teams");
     await page.waitForLoadState("domcontentloaded");
@@ -454,80 +543,37 @@ test.describe("Identity Provider Team Sync E2E", () => {
 
     try {
       // STEP 5: Verify user was automatically added to the team
-      // Team sync is an async background operation during SSO callback
-      // Give it a moment to complete before navigating
-      await ssoPage.waitForTimeout(2000);
+      // Re-authenticate the admin page before polling. In CI, the SSO flow can
+      // invalidate or age out the pre-existing admin session used for cleanup
+      // and verification.
+      await ensureAdminAuthenticated(page);
+      const teamId = await getTeamIdByNameViaApi(page, teamName);
 
-      // Navigate to teams page
-      await ssoPage.goto(`${UI_BASE_URL}/settings/teams`);
-      await ssoPage.waitForLoadState("domcontentloaded");
-
-      // Poll until the teams API shows the synced member.
-      // The row count in the table can lag behind the underlying membership update.
+      // Poll the teams API until the synced membership row exists. This is a
+      // more direct assertion than reopening the members dialog and lets us
+      // verify the actual SSO-synced row shape.
       await expect(async () => {
-        // Force a fresh page load by navigating away and back
-        await ssoPage.goto(`${UI_BASE_URL}/`);
-        await ssoPage.waitForLoadState("domcontentloaded");
-        await ssoPage.goto(`${UI_BASE_URL}/settings/teams`);
-        await ssoPage.waitForLoadState("domcontentloaded");
+        const response = await page.request.get(
+          `${UI_BASE_URL}/api/teams/${teamId}/members`,
+        );
+        await expectApiResponseOk(response, "get team members");
 
-        const memberEmails = await ssoPage.evaluate(async (targetTeamName) => {
-          const response = await fetch("/api/teams?limit=100&offset=0", {
-            credentials: "include",
-            cache: "no-store",
-          });
+        const members = (await response.json()) as Array<{
+          email: string;
+          syncedFromSso: boolean;
+        }>;
 
-          if (!response.ok) {
-            throw new Error(`Failed to fetch teams: ${response.status}`);
-          }
-
-          const teamsPayload = await response.json();
-          const syncedTeam = teamsPayload?.data?.find(
-            (team: { id: string; name: string }) => team.name === targetTeamName,
-          );
-
-          if (!syncedTeam?.id) {
-            throw new Error(`Team not found: ${targetTeamName}`);
-          }
-
-          const membersResponse = await fetch(`/api/teams/${syncedTeam.id}/members`, {
-            credentials: "include",
-            cache: "no-store",
-          });
-
-          if (!membersResponse.ok) {
-            throw new Error(`Failed to fetch team members: ${membersResponse.status}`);
-          }
-
-          const membersPayload = await membersResponse.json();
-          return membersPayload.map(
-            (member: { email?: string | null }) => member.email,
-          );
-        }, teamName);
-
-        if (!memberEmails.includes(ADMIN_EMAIL)) {
-          throw new Error(
-            `Team membership not synced yet, got: ${memberEmails.join(", ") || "no members"}`,
-          );
-        }
+        const syncedMember = members.find(
+          (member) => member.email === ADMIN_EMAIL,
+        );
+        expect(
+          syncedMember,
+          `Expected ${ADMIN_EMAIL} to appear in synced members for ${teamName}`,
+        ).toBeDefined();
+        expect(syncedMember?.syncedFromSso).toBe(true);
       }).toPass({ timeout: 120_000, intervals: [3000, 5000, 7000, 10000] });
 
-      // Verify the SSO user is in the team members list by opening the dialog
-      // Open manage members dialog
-      await clickTeamActionButton({
-        page: ssoPage,
-        teamName,
-        actionName: "Manage Members",
-      });
-      await ssoPage.getByRole("dialog").waitFor({ state: "visible" });
-
-      // The email should now be visible since the member was synced
-      const emailLocator = ssoPage
-        .getByRole("dialog")
-        .getByText(new RegExp(ADMIN_EMAIL, "i"));
-      await expect(emailLocator).toBeVisible({ timeout: 10000 });
-
-      // Success! The SSO user was automatically synced to the team
+      // Success! The SSO user was automatically synced to the team.
     } finally {
       await ssoContext.close();
     }
@@ -538,11 +584,7 @@ test.describe("Identity Provider Team Sync E2E", () => {
     await page.waitForLoadState("domcontentloaded");
     await deleteTeamByName(page, teamName);
 
-    // Delete the identity provider
-    await goToPage(page, "/settings/identity-providers");
-    await page.waitForLoadState("domcontentloaded");
-    await openIdentityProviderDialog(page, "Generic OIDC");
-    await deleteProviderViaDialog(page);
+    await deleteProviderByProviderIdViaApi(page, providerName);
   });
 });
 

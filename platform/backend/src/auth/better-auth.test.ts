@@ -1,6 +1,7 @@
 import type { HookEndpointContext } from "@better-auth/core";
 import { APIError } from "better-auth";
 import { vi } from "vitest";
+import { cacheManager } from "@/cache-manager";
 import type * as originalConfigModule from "@/config";
 import { MemberModel, TeamModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
@@ -50,6 +51,7 @@ function createMockContext(overrides: {
   path: string;
   method: string;
   body?: Record<string, unknown>;
+  requestUrl?: string;
   context?: {
     newSession?: {
       user: { id: string; email: string };
@@ -61,6 +63,9 @@ function createMockContext(overrides: {
     path: overrides.path,
     method: overrides.method,
     body: overrides.body ?? {},
+    request: overrides.requestUrl
+      ? new Request(overrides.requestUrl)
+      : undefined,
     context: overrides.context,
   } as HookEndpointContext;
 }
@@ -446,6 +451,32 @@ describe("handleAfterHook", () => {
       await expect(handleAfterHook(ctx)).resolves.toBeUndefined();
     });
 
+    test("should handle normalized SSO callback path when request URL contains /api/auth prefix", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "member" });
+
+      const ctx = createMockContext({
+        path: "/sso/callback/:providerId",
+        method: "GET",
+        requestUrl:
+          "http://localhost:3000/api/auth/sso/callback/keycloak?code=test",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: "test-session-id", activeOrganizationId: null },
+          },
+        },
+      });
+
+      await expect(handleAfterHook(ctx)).resolves.toBeUndefined();
+    });
+
     test("should handle user without any memberships", async ({ makeUser }) => {
       const user = await makeUser();
 
@@ -789,6 +820,115 @@ describe("handleAfterHook", () => {
       await expect(handleAfterHook(ctx)).resolves.not.toThrow();
 
       // Restore original value
+      setEnterpriseLicense(originalEnterpriseValue);
+    });
+
+    test("uses cached IdP groups when the account idToken is not available yet", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeTeam,
+      makeAccount,
+      makeIdentityProvider,
+    }) => {
+      setEnterpriseLicense(true);
+
+      const user = await makeUser({ email: "cached-sso-user@example.com" });
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "member" });
+      const team = await makeTeam(org.id, user.id, { name: "Cached SSO Team" });
+
+      await makeIdentityProvider(org.id, { providerId: "keycloak-cached" });
+
+      await makeAccount(user.id, {
+        providerId: "keycloak-cached",
+        idToken: null,
+      });
+
+      await TeamModel.addExternalGroup(team.id, "engineering");
+      vi.spyOn(cacheManager, "getAndDelete").mockResolvedValue({
+        groups: ["engineering"],
+        organizationId: org.id,
+      });
+
+      const ctx = createMockContext({
+        path: "/sso/callback/keycloak-cached",
+        method: "GET",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: "test-session-id", activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      await handleAfterHook(ctx);
+
+      const isInTeam = await TeamModel.isUserInTeam(team.id, user.id);
+      expect(isInTeam).toBe(true);
+
+      setEnterpriseLicense(originalEnterpriseValue);
+    });
+
+    test("uses the callback provider account when multiple SSO accounts exist", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeTeam,
+      makeAccount,
+      makeIdentityProvider,
+    }) => {
+      setEnterpriseLicense(true);
+
+      const user = await makeUser({ email: "multi-sso-user@example.com" });
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "member" });
+      const team = await makeTeam(org.id, user.id, {
+        name: "Multi Provider SSO Team",
+      });
+
+      await makeIdentityProvider(org.id, { providerId: "keycloak-target" });
+      await makeIdentityProvider(org.id, { providerId: "keycloak-stale" });
+
+      await makeAccount(user.id, {
+        providerId: "keycloak-stale",
+        idToken: createMockIdToken({
+          sub: user.id,
+          email: user.email,
+          groups: ["wrong-group"],
+        }),
+      });
+      await makeAccount(user.id, {
+        providerId: "keycloak-target",
+        idToken: createMockIdToken({
+          sub: user.id,
+          email: user.email,
+          groups: ["engineering"],
+        }),
+      });
+
+      await TeamModel.addExternalGroup(team.id, "engineering");
+
+      const ctx = createMockContext({
+        path: "/sso/callback/:providerId",
+        method: "GET",
+        requestUrl:
+          "http://localhost:3000/api/auth/sso/callback/keycloak-target?code=test",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: "test-session-id", activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      await handleAfterHook(ctx);
+
+      const isInTeam = await TeamModel.isUserInTeam(team.id, user.id);
+      expect(isInTeam).toBe(true);
+
       setEnterpriseLicense(originalEnterpriseValue);
     });
 
@@ -1449,6 +1589,79 @@ describe("handleAfterHook", () => {
       await expect(handleAfterHook(ctx)).resolves.not.toThrow();
 
       // Verify user role was updated to admin
+      const member = await MemberModel.getByUserId(user.id, org.id);
+      expect(member?.role).toBe("admin");
+    });
+
+    test("uses the callback provider account for role sync when multiple SSO accounts exist", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeAccount,
+      makeIdentityProvider,
+    }) => {
+      const user = await makeUser({ email: "role-multi-sso@example.com" });
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "member" });
+
+      await makeIdentityProvider(org.id, {
+        providerId: "keycloak-role-target",
+        roleMapping: {
+          defaultRole: "member",
+          rules: [
+            {
+              expression: '{{#includes groups "admins"}}true{{/includes}}',
+              role: "admin",
+            },
+          ],
+        } as unknown as Record<string, unknown>,
+      });
+      await makeIdentityProvider(org.id, {
+        providerId: "keycloak-role-stale",
+        roleMapping: {
+          defaultRole: "member",
+          rules: [
+            {
+              expression: '{{#includes groups "wrong-group"}}true{{/includes}}',
+              role: "admin",
+            },
+          ],
+        } as unknown as Record<string, unknown>,
+      });
+
+      await makeAccount(user.id, {
+        providerId: "keycloak-role-stale",
+        idToken: createMockIdToken({
+          sub: user.id,
+          email: user.email,
+          groups: ["wrong-group"],
+        }),
+      });
+      await makeAccount(user.id, {
+        providerId: "keycloak-role-target",
+        idToken: createMockIdToken({
+          sub: user.id,
+          email: user.email,
+          groups: ["admins"],
+        }),
+      });
+
+      const ctx = createMockContext({
+        path: "/sso/callback/:providerId",
+        method: "GET",
+        requestUrl:
+          "http://localhost:3000/api/auth/sso/callback/keycloak-role-target?code=test",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: "test-session-id", activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      await handleAfterHook(ctx);
+
       const member = await MemberModel.getByUserId(user.id, org.id);
       expect(member?.role).toBe("admin");
     });

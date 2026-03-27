@@ -1,6 +1,5 @@
 import { archestraApiSdk } from "@shared";
 import {
-  ADMIN_EMAIL,
   DEFAULT_TEAM_NAME,
   E2eTestId,
   EDITOR_EMAIL,
@@ -8,7 +7,7 @@ import {
   MARKETING_TEAM_NAME,
   MEMBER_EMAIL,
 } from "../../consts";
-import { expect, goToPage, test } from "../../fixtures";
+import { test } from "../../fixtures";
 import {
   addCustomSelfHostedCatalogItem,
   assignCatalogCredentialToGateway,
@@ -166,7 +165,7 @@ test("Verify tool calling using dynamic credentials", async ({
   }
 
   // Then we remove ALL personal credentials and verify it uses team credentials as second priority
-  await goToPage(adminPage, "/mcp/registry");
+  await goToMcpRegistry(adminPage);
   await openManageCredentialsDialog(adminPage, CATALOG_ITEM_NAME);
   await adminPage
     .getByTestId(`${E2eTestId.RevokeCredentialButton}-personal`)
@@ -188,7 +187,7 @@ test("Verify tool calling using dynamic credentials", async ({
     {
       // Only Editor is in Engineering team, so this deterministically uses the Engineering team credential
       tokenToUse: "engineering-team",
-      expectedResult: "Engineering-team-credential",
+      expectedResult: `${ENGINEERING_TEAM_NAME}-team-credential`,
     },
   ] as const;
   for (const { expectedResult, tokenToUse } of MATRIX_C) {

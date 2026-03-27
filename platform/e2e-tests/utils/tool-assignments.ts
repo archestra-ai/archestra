@@ -8,7 +8,6 @@ import {
   getAssignmentComboboxSearchInputTestId,
 } from "@shared";
 import { goToPage } from "../fixtures";
-import { clickButton } from "./dialogs";
 
 type AssignmentTarget = {
   page: Page;
@@ -18,7 +17,7 @@ type AssignmentTarget = {
   dialogTitle: "Edit Agent" | "Edit MCP Gateway";
 };
 
-export async function openAgentCatalogToolAssignment(params: {
+async function openAgentCatalogToolAssignment(params: {
   page: Page;
   agentName: string;
   catalogItemName: string;

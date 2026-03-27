@@ -33,6 +33,11 @@ keycloak:
     type: NodePort
     port: 8080
     nodePort: 30081
+  # Public hostname/issuer URL advertised by Keycloak.
+  # Local dev uses the NodePort forwarded to the host. CI overrides this to the
+  # in-cluster service URL so server-side OIDC flows from the backend pod work.
+  hostnameUrl: "http://localhost:30081"
+  hostnameBackchannelDynamic: true
   # Resource limits for CI environment
   # Keycloak 26 (Java) needs ~1.5GB+ for JVM + realm import; 1024Mi causes OOMKill
   resources:
@@ -168,4 +173,3 @@ vault:
       data:
         dburl: "postgresql://archestra:vault_e2e_custom_pw@archestra-platform-postgresql:5432/archestra_dev"
         dummy_var: "hello-from-vault"
-

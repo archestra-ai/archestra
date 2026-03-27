@@ -65,22 +65,30 @@ export async function addCustomSelfHostedCatalogItem({
     }
     if (envVars.vaultSecret) {
       await createDialog.getByText("Set Secret").click();
-      await createDialog
+      const externalSecretDialog = page.getByRole("dialog", {
+        name: /Set external secret/i,
+      });
+      await expect(externalSecretDialog).toBeVisible({ timeout: 15_000 });
+      await externalSecretDialog
         .getByTestId(E2eTestId.ExternalSecretSelectorTeamTrigger)
         .click();
       await page
         .getByRole("option", { name: envVars.vaultSecret.teamName })
         .click();
-      await createDialog
+      await externalSecretDialog
         .getByTestId(E2eTestId.ExternalSecretSelectorSecretTrigger)
         .click();
-      await page.getByText(envVars.vaultSecret.name).click();
-      await createDialog
+      await page
+        .getByRole("option", { name: envVars.vaultSecret.name })
+        .click();
+      await externalSecretDialog
         .getByTestId(E2eTestId.ExternalSecretSelectorSecretTriggerKey)
         .click();
       await page.getByRole("option", { name: envVars.vaultSecret.key }).click();
-      await createDialog.getByRole("button", { name: "Confirm" }).click();
-      await page.waitForTimeout(2_000);
+      await externalSecretDialog
+        .getByRole("button", { name: "Confirm" })
+        .click();
+      await expect(externalSecretDialog).not.toBeVisible({ timeout: 15_000 });
     }
   }
   if (scope && scope !== "personal") {

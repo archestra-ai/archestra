@@ -45,7 +45,7 @@ describe("SidebarWarnings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    // Default: no session, no warnings, has org update permission
+    // Default: no session, no warnings, has both org and agent settings update permission
     mockUseSession.mockReturnValue({ data: null });
     mockUseDefaultCredentialsEnabled.mockReturnValue({
       data: false,
@@ -53,7 +53,15 @@ describe("SidebarWarnings", () => {
     });
     mockUseFeature.mockReturnValue("strict");
     mockUseDisableBasicAuth.mockReturnValue(false);
-    mockUseHasPermissions.mockReturnValue({ data: true });
+    mockUseHasPermissions.mockImplementation((permissions) => {
+      if ("organization" in (permissions as Record<string, unknown>)) {
+        return { data: true };
+      }
+      if ("agentSettings" in (permissions as Record<string, unknown>)) {
+        return { data: true };
+      }
+      return { data: false };
+    });
   });
 
   it("renders nothing when there are no warnings", () => {
@@ -198,7 +206,7 @@ describe("SidebarWarnings", () => {
   });
 
   describe("permission gating", () => {
-    it("hides default credentials warning when user lacks agentSettings:update permission", () => {
+    it("hides default credentials warning when user lacks organization:update permission", () => {
       mockUseSession.mockReturnValue({
         data: { user: { email: "admin@example.com" } },
       });
@@ -206,7 +214,15 @@ describe("SidebarWarnings", () => {
         data: true,
         isLoading: false,
       });
-      mockUseHasPermissions.mockReturnValue({ data: false });
+      mockUseHasPermissions.mockImplementation((permissions) => {
+        if ("organization" in (permissions as Record<string, unknown>)) {
+          return { data: false };
+        }
+        if ("agentSettings" in (permissions as Record<string, unknown>)) {
+          return { data: true };
+        }
+        return { data: false };
+      });
 
       const { container } = render(<SidebarWarnings />);
       expect(
@@ -220,7 +236,15 @@ describe("SidebarWarnings", () => {
         data: { user: { email: "other@example.com" } },
       });
       mockUseFeature.mockReturnValue("permissive");
-      mockUseHasPermissions.mockReturnValue({ data: false });
+      mockUseHasPermissions.mockImplementation((permissions) => {
+        if ("organization" in (permissions as Record<string, unknown>)) {
+          return { data: true };
+        }
+        if ("agentSettings" in (permissions as Record<string, unknown>)) {
+          return { data: false };
+        }
+        return { data: false };
+      });
 
       const { container } = render(<SidebarWarnings />);
       expect(screen.queryByText(/Security engine off/)).not.toBeInTheDocument();
@@ -236,7 +260,7 @@ describe("SidebarWarnings", () => {
         isLoading: false,
       });
       mockUseFeature.mockReturnValue("permissive");
-      mockUseHasPermissions.mockReturnValue({ data: false });
+      mockUseHasPermissions.mockImplementation(() => ({ data: false }));
 
       const { container } = render(<SidebarWarnings />);
       expect(container.firstChild).toBeNull();

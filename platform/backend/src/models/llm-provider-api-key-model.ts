@@ -16,15 +16,17 @@ class LlmProviderApiKeyModelLinkModel {
     apiKeyId: string,
     modelIds: string[],
   ): Promise<void> {
-    if (modelIds.length === 0) {
+    const uniqueModelIds = Array.from(new Set(modelIds));
+
+    if (uniqueModelIds.length === 0) {
       return;
     }
 
     // Use batch size to avoid PostgreSQL parameter limits
     const BATCH_SIZE = 500;
 
-    for (let i = 0; i < modelIds.length; i += BATCH_SIZE) {
-      const batch = modelIds.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < uniqueModelIds.length; i += BATCH_SIZE) {
+      const batch = uniqueModelIds.slice(i, i + BATCH_SIZE);
       const values = batch.map((modelId) => ({
         apiKeyId,
         modelId,
@@ -92,6 +94,10 @@ class LlmProviderApiKeyModelLinkModel {
     models: Array<{ id: string; modelId: string }>,
     provider: SupportedProvider,
   ): Promise<void> {
+    const uniqueModels = Array.from(
+      new Map(models.map((model) => [model.id, model])).values(),
+    );
+
     await db.transaction(async (tx) => {
       // Delete existing links for this API key
       await tx
@@ -99,11 +105,11 @@ class LlmProviderApiKeyModelLinkModel {
         .where(eq(schema.llmProviderApiKeyModelsTable.apiKeyId, apiKeyId));
 
       // Insert new links
-      if (models.length > 0) {
+      if (uniqueModels.length > 0) {
         // Detect fastest and best models using pattern matching
         // Patterns are checked in order (first pattern = highest priority)
         const patterns = MODEL_MARKER_PATTERNS[provider];
-        const sorted = [...models].sort((a, b) =>
+        const sorted = [...uniqueModels].sort((a, b) =>
           a.modelId.localeCompare(b.modelId),
         );
 
@@ -118,7 +124,7 @@ class LlmProviderApiKeyModelLinkModel {
         );
 
         // Build values with markers
-        const values = models.map((model) => ({
+        const values = uniqueModels.map((model) => ({
           apiKeyId,
           modelId: model.id,
           isFastest: model.id === fastestModel?.id,

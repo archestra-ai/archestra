@@ -1499,6 +1499,49 @@ class AgentModel {
       "Created personal default chat agent",
     );
   }
+
+  /**
+   * Find all internal agents that have a schedule configured.
+   */
+  static async findAllScheduled(): Promise<Agent[]> {
+    const agents = await db
+      .select()
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.agentType, "agent"),
+          eq(schema.agentsTable.scheduleEnabled, true),
+          sql`${schema.agentsTable.schedule} IS NOT NULL`,
+        ),
+      );
+
+    const agentIds = agents.map((a) => a.id);
+    if (agentIds.length === 0) return [];
+
+    const [teamsMap, labelsMap] = await Promise.all([
+      AgentTeamModel.getTeamDetailsForAgents(agentIds),
+      AgentLabelModel.getLabelsForAgents(agentIds),
+    ]);
+
+    const populatedAgents: Agent[] = agents.map((agent) => ({
+      ...agent,
+      tools: [],
+      teams: teamsMap.get(agent.id) || [],
+      labels: labelsMap.get(agent.id) || [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+      suggestedPrompts: [],
+    }));
+
+    await Promise.all([
+      AgentModel.populateAuthorNames(populatedAgents),
+      AgentModel.populateKnowledgeBaseIds(populatedAgents),
+      AgentModel.populateConnectorIds(populatedAgents),
+      AgentModel.populateSuggestedPrompts(populatedAgents),
+    ]);
+
+    return populatedAgents;
+  }
 }
 
 export default AgentModel;

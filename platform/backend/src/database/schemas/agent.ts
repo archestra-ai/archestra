@@ -82,6 +82,18 @@ const agentsTable = pgTable(
     /** Model ID for LLM calls */
     llmModel: text("llm_model"),
 
+    // Scheduling (only used when agentType = 'agent')
+    /** Whether scheduled execution is enabled for this agent */
+    scheduleEnabled: boolean("schedule_enabled")
+      .notNull()
+      .default(false),
+    /** Cron schedule for periodic agent execution */
+    schedule: text("schedule"),
+    /** Message to send to the agent when the schedule triggers */
+    scheduledMessage: text("scheduled_message"),
+    /** Last time the agent was triggered by its schedule */
+    lastScheduledRunAt: timestamp("last_scheduled_run_at", { mode: "date" }),
+
     /** Optional Identity Provider for JWKS-based JWT validation on MCP Gateway requests */
     identityProviderId: text("identity_provider_id").references(
       () => identityProvidersTable.id,

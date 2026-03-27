@@ -598,6 +598,10 @@ export function AgentDialog({
     useState(false);
   const [dualLlmMaxRounds, setDualLlmMaxRounds] = useState("5");
 
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [schedule, setSchedule] = useState("0 */6 * * *");
+  const [scheduledMessage, setScheduledMessage] = useState("");
+
   // Determine type-specific visibility based on agentType prop
   const isInternalAgent = agentType === "agent";
   const isBuiltIn = !!agent?.builtIn;
@@ -656,6 +660,9 @@ export function AgentDialog({
         setIncomingEmailAllowedDomain(
           agentData.incomingEmailAllowedDomain || "",
         );
+        setScheduleEnabled(agentData.scheduleEnabled);
+        setSchedule(agentData.schedule || "0 */6 * * *");
+        setScheduledMessage(agentData.scheduledMessage || "");
         setAutoConfigureOnToolAssignment(
           agentData.builtInAgentConfig?.name ===
             BUILT_IN_AGENT_IDS.POLICY_CONFIG
@@ -689,6 +696,9 @@ export function AgentDialog({
         setIncomingEmailEnabled(false);
         setIncomingEmailSecurityMode("private");
         setIncomingEmailAllowedDomain("");
+        setScheduleEnabled(false);
+        setSchedule("0 */6 * * *");
+        setScheduledMessage("");
         setAutoConfigureOnToolAssignment(false);
         setDualLlmMaxRounds("5");
       }
@@ -891,6 +901,17 @@ export function AgentDialog({
           }
         : {};
 
+      // Build scheduling settings for internal agents
+      const schedulingSettings = isInternalAgent
+        ? {
+            scheduleEnabled,
+            schedule: scheduleEnabled ? schedule.trim() || null : null,
+            scheduledMessage: scheduleEnabled
+              ? scheduledMessage.trim() || null
+              : null,
+          }
+        : {};
+
       if (agent && isBuiltIn) {
         const builtInAgentConfig = isPolicyConfigBuiltIn
           ? {
@@ -950,6 +971,7 @@ export function AgentDialog({
             scope,
             ...(showSecurity && { considerContextUntrusted }),
             ...emailSettings,
+            ...schedulingSettings,
           },
         });
         savedAgentId = updated?.id ?? agent.id;
@@ -983,6 +1005,7 @@ export function AgentDialog({
           scope,
           ...(showSecurity && { considerContextUntrusted }),
           ...emailSettings,
+          ...schedulingSettings,
         });
         if (!created) return;
         savedAgentId = created?.id ?? "";
@@ -1038,6 +1061,9 @@ export function AgentDialog({
     incomingEmailEnabled,
     incomingEmailSecurityMode,
     incomingEmailAllowedDomain,
+    scheduleEnabled,
+    schedule,
+    scheduledMessage,
     identityProviderId,
     knowledgeBaseIds,
     connectorIds,
@@ -1977,6 +2003,75 @@ export function AgentDialog({
                               </div>
                             </div>
                           )}
+
+                          {/* Schedule */}
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div className="space-y-0.5">
+                                <label
+                                  htmlFor="schedule-enabled"
+                                  className="text-sm cursor-pointer"
+                                >
+                                  Schedule
+                                </label>
+                                <p className="text-xs text-muted-foreground">
+                                  Automatically run this agent on a recurring
+                                  schedule
+                                </p>
+                              </div>
+                              <Switch
+                                id="schedule-enabled"
+                                checked={scheduleEnabled}
+                                onCheckedChange={setScheduleEnabled}
+                              />
+                            </div>
+
+                            {scheduleEnabled && (
+                              <div className="space-y-4 pt-2 border-t">
+                                <div className="space-y-2">
+                                  <Label
+                                    htmlFor="agent-schedule"
+                                    className="text-sm"
+                                  >
+                                    Schedule (Cron)
+                                  </Label>
+                                  <Input
+                                    id="agent-schedule"
+                                    placeholder="0 */6 * * *"
+                                    value={schedule || ""}
+                                    onChange={(e) =>
+                                      setSchedule(e.target.value)
+                                    }
+                                  />
+                                  <p className="text-xs text-muted-foreground">
+                                    Standard cron expression (e.g. 0 * * * * for
+                                    every hour)
+                                  </p>
+                                </div>
+                                <div className="space-y-2">
+                                  <Label
+                                    htmlFor="scheduled-message"
+                                    className="text-sm"
+                                  >
+                                    Message to Agent
+                                  </Label>
+                                  <Textarea
+                                    id="scheduled-message"
+                                    placeholder="e.g. Please summarize the recent alerts"
+                                    value={scheduledMessage || ""}
+                                    onChange={(e) =>
+                                      setScheduledMessage(e.target.value)
+                                    }
+                                    className="min-h-[60px]"
+                                  />
+                                  <p className="text-xs text-muted-foreground">
+                                    The message that will be sent to the agent
+                                    when the schedule triggers
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )}
 

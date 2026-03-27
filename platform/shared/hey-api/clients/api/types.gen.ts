@@ -10640,6 +10640,9 @@ export type CreateAgentData = {
         incomingEmailEnabled?: boolean;
         incomingEmailSecurityMode?: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain?: string | null;
+        scheduleEnabled?: boolean;
+        schedule?: string | null;
+        scheduledMessage?: string | null;
         llmApiKeyId?: string | null;
         llmModel?: string | null;
         identityProviderId?: string | null;
@@ -11546,6 +11549,9 @@ export type UpdateAgentData = {
         incomingEmailEnabled?: boolean;
         incomingEmailSecurityMode?: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain?: string | null;
+        scheduleEnabled?: boolean;
+        schedule?: string | null;
+        scheduledMessage?: string | null;
         llmApiKeyId?: string | null;
         llmModel?: string | null;
         identityProviderId?: string | null;

@@ -860,10 +860,13 @@ export function AgentDialog({
     // Save any unsaved label before submitting
     const updatedLabels = agentLabelsRef.current?.saveUnsavedLabel() || labels;
 
-    // Filter out incomplete suggested prompts (empty title or prompt)
-    const validSuggestedPrompts = suggestedPrompts.filter(
-      (sp) => sp.summaryTitle.trim() && sp.prompt.trim(),
-    );
+    // Filter out entries with no title; if prompt is empty, use the title as the prompt
+    const validSuggestedPrompts = suggestedPrompts
+      .filter((sp) => sp.summaryTitle.trim())
+      .map((sp) => ({
+        summaryTitle: sp.summaryTitle.trim(),
+        prompt: sp.prompt.trim() || sp.summaryTitle.trim(),
+      }));
     const normalizedDescription = shouldShowDescriptionField({
       agentType,
       isBuiltIn,

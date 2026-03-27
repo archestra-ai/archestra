@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
 import { createContext, useContext, useRef, useState } from "react";
-import { CopyButton } from "@/components/copy-button";
+import { CodeBlock, CodeBlockCopyButton } from "./code-block";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,7 +20,6 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
-import { CodeBlock } from "./code-block";
 
 export type ToolProps = ComponentProps<typeof Collapsible>;
 
@@ -207,7 +206,7 @@ export const ToolInput = ({ className, input, ...props }: ToolInputProps) => {
         <CollapsibleContent className="data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in">
           <div className="rounded-md bg-muted/50 mt-2">
             <CodeBlock code={serializedInput} language="json">
-              <CopyButton text={serializedInput} />
+              <CodeBlockCopyButton />
             </CodeBlock>
           </div>
         </CollapsibleContent>
@@ -336,7 +335,7 @@ export const ToolOutput = ({
     Output = (
       <div className="relative group">
         <CodeBlock code={displayCode} language="json">
-          <CopyButton text={copyText} />
+          <CodeBlockCopyButton />
         </CodeBlock>
         {isLarge && (
           <div

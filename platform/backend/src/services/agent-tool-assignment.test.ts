@@ -155,7 +155,7 @@ describe("validateAssignment late-bound precedence", () => {
       code: "validation_error",
       error: {
         message:
-          "Credential source or dynamic team credential is required for remote MCP server tools",
+          "Credential source or non-static credential resolution is required for remote MCP server tools",
         type: "validation_error",
       },
     });
@@ -240,5 +240,48 @@ describe("assignToolToAgent", () => {
       );
 
     expect(assignment?.credentialSourceMcpServerId).toBe(secondServer.id);
+  });
+
+  test("persists enterprise-managed mode and config", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const agent = await makeAgent();
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const tool = await makeTool({
+      name: "enterprise-managed-tool",
+      catalogId: catalog.id,
+    });
+
+    const enterpriseManagedConfig = {
+      resourceIdentifier: "github-managed-connection",
+      requestedCredentialType: "bearer_token" as const,
+    };
+
+    const createResult = await assignToolToAgent({
+      agentId: agent.id,
+      toolId: tool.id,
+      credentialResolutionMode: "enterprise_managed",
+      enterpriseManagedConfig,
+    });
+
+    expect(createResult).toBeNull();
+
+    const [assignment] = await db
+      .select()
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agent.id),
+          eq(schema.agentToolsTable.toolId, tool.id),
+        ),
+      );
+
+    expect(assignment?.credentialResolutionMode).toBe("enterprise_managed");
+    expect(assignment?.enterpriseManagedConfig).toEqual(
+      enterpriseManagedConfig,
+    );
+    expect(assignment?.useDynamicTeamCredential).toBe(false);
   });
 });

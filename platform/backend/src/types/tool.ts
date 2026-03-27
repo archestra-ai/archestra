@@ -5,6 +5,10 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import {
+  CredentialResolutionModeSchema,
+  EnterpriseManagedCredentialConfigSchema,
+} from "@/types/enterprise-managed-credentials";
 
 import { OpenAi } from "./llm-providers";
 
@@ -64,6 +68,8 @@ export const ToolAssignmentSchema = z.object({
   executionSourceMcpServerId: z.string().nullable(),
   executionOwnerEmail: z.string().nullable(),
   useDynamicTeamCredential: z.boolean(),
+  credentialResolutionMode: CredentialResolutionModeSchema,
+  enterpriseManagedConfig: EnterpriseManagedCredentialConfigSchema.nullable(),
 });
 
 // Tool with embedded assignments schema

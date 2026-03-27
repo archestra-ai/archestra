@@ -45,6 +45,7 @@ import {
 } from "@/models";
 import { refreshOAuthToken } from "@/routes/oauth";
 import { secretManager } from "@/secrets-manager";
+import { resolveEnterpriseTransportCredential } from "@/services/enterprise-credential-broker";
 import type {
   CommonMcpToolDefinition,
   CommonToolCall,
@@ -292,6 +293,28 @@ class McpClient {
       return targetMcpServerIdResult.error;
     }
     const { targetMcpServerId, mcpServerName } = targetMcpServerIdResult;
+    const enterpriseTransportCredential =
+      tool.credentialResolutionMode === "enterprise_managed"
+        ? await resolveEnterpriseTransportCredential({
+            agentId,
+            tokenAuth,
+            enterpriseManagedConfig: tool.enterpriseManagedConfig,
+          })
+        : null;
+
+    if (
+      tool.credentialResolutionMode === "enterprise_managed" &&
+      !enterpriseTransportCredential
+    ) {
+      return this.createErrorResult(
+        toolCall,
+        agentId,
+        "Enterprise-managed credentials are enabled for this tool, but Archestra could not resolve a usable enterprise assertion for the current user.",
+        mcpServerName,
+        authInfo,
+      );
+    }
+
     const secretsResult = await this.getSecretsForMcpServer({
       targetMcpServerId: targetMcpServerId,
       toolCall,
@@ -559,6 +582,7 @@ class McpClient {
             secrets,
             connectionKey,
             tokenAuth,
+            enterpriseTransportCredential ?? undefined,
           ),
         secrets,
       );
@@ -583,6 +607,7 @@ class McpClient {
               transportKind,
               connectionKey,
               tokenAuth,
+              enterpriseTransportCredential ?? undefined,
             ),
           secrets,
         ),
@@ -904,7 +929,7 @@ class McpClient {
       "Determining target MCP server ID for catalog item",
     );
     // Static credential case: use pre-configured execution source
-    if (!tool.useDynamicTeamCredential) {
+    if (tool.credentialResolutionMode === "static") {
       if (
         catalogItem.serverType === "local" &&
         !tool.executionSourceMcpServerId
@@ -957,6 +982,42 @@ class McpClient {
       return {
         targetMcpServerId,
         mcpServerName: mcpServer?.name || fallbackName,
+      };
+    }
+
+    if (tool.credentialResolutionMode === "enterprise_managed") {
+      const explicitTargetMcpServerId =
+        catalogItem.serverType === "local"
+          ? tool.executionSourceMcpServerId
+          : tool.credentialSourceMcpServerId;
+      if (explicitTargetMcpServerId) {
+        const mcpServer = await McpServerModel.findById(
+          explicitTargetMcpServerId,
+        );
+        return {
+          targetMcpServerId: explicitTargetMcpServerId,
+          mcpServerName: mcpServer?.name || fallbackName,
+        };
+      }
+
+      const allServers = await McpServerModel.findByCatalogId(
+        tool.catalogId ?? "",
+      );
+      const resolvedServer = allServers[0];
+      if (!resolvedServer) {
+        return {
+          error: await this.createErrorResult(
+            toolCall,
+            agentId,
+            "Enterprise-managed credentials are configured, but no MCP server installation is available for this catalog.",
+            fallbackName,
+          ),
+        };
+      }
+
+      return {
+        targetMcpServerId: resolvedServer.id,
+        mcpServerName: resolvedServer.name,
       };
     }
 
@@ -1138,6 +1199,10 @@ class McpClient {
     transportKind: TransportKind,
     connectionKey?: string,
     tokenAuth?: TokenAuthContext,
+    enterpriseTransportCredential?: {
+      headerName: string;
+      headerValue: string;
+    },
   ): Promise<Transport> {
     if (transportKind === "http") {
       if (catalogItem.serverType === "local") {
@@ -1191,7 +1256,10 @@ class McpClient {
         }
 
         const localHeaders: Record<string, string> = {};
-        if (tokenAuth?.isExternalIdp && tokenAuth.rawToken) {
+        if (enterpriseTransportCredential) {
+          localHeaders[enterpriseTransportCredential.headerName] =
+            enterpriseTransportCredential.headerValue;
+        } else if (tokenAuth?.isExternalIdp && tokenAuth.rawToken) {
           localHeaders.Authorization = `Bearer ${tokenAuth.rawToken}`;
         } else if (secrets.access_token) {
           localHeaders.Authorization = `Bearer ${secrets.access_token}`;
@@ -1211,7 +1279,10 @@ class McpClient {
         }
 
         const headers: Record<string, string> = {};
-        if (tokenAuth?.isExternalIdp && tokenAuth.rawToken) {
+        if (enterpriseTransportCredential) {
+          headers[enterpriseTransportCredential.headerName] =
+            enterpriseTransportCredential.headerValue;
+        } else if (tokenAuth?.isExternalIdp && tokenAuth.rawToken) {
           // Propagate external IdP JWT to the underlying MCP server
           headers.Authorization = `Bearer ${tokenAuth.rawToken}`;
         } else if (secrets.access_token) {
@@ -1232,6 +1303,11 @@ class McpClient {
     if (transportKind === "stdio") {
       if (catalogItem.serverType !== "local") {
         throw new Error("Stdio transport is only supported for local servers");
+      }
+      if (enterpriseTransportCredential) {
+        throw new Error(
+          "Enterprise-managed credentials require an HTTP-based MCP transport. Stdio transport is not supported.",
+        );
       }
 
       // Stdio transport - use K8s attach!
@@ -1269,6 +1345,10 @@ class McpClient {
     secrets: Record<string, unknown>,
     connectionKey?: string,
     tokenAuth?: TokenAuthContext,
+    enterpriseTransportCredential?: {
+      headerName: string;
+      headerValue: string;
+    },
   ): Promise<Transport> {
     const transportKind = await this.getTransportKind(
       catalogItem,
@@ -1281,6 +1361,7 @@ class McpClient {
       transportKind,
       connectionKey,
       tokenAuth,
+      enterpriseTransportCredential,
     );
   }
 

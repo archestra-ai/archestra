@@ -1409,6 +1409,38 @@ describe("AgentToolModel.bulkCreate", () => {
     expect(rows[0].credentialSourceMcpServerId).toBe(server.id);
     expect(rows[0].useDynamicTeamCredential).toBe(true);
   });
+
+  test("persists enterprise-managed credential config on bulk-created rows", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const agent = await makeAgent();
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const tool = await makeTool({
+      name: "bulk-enterprise-managed",
+      catalogId: catalog.id,
+    });
+
+    const enterpriseManagedConfig = {
+      resourceIdentifier: "github-managed-connection",
+      requestedCredentialType: "bearer_token" as const,
+    };
+
+    const rows = await AgentToolModel.bulkCreate([
+      {
+        agentId: agent.id,
+        toolId: tool.id,
+        credentialResolutionMode: "enterprise_managed",
+        enterpriseManagedConfig,
+      },
+    ]);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].credentialResolutionMode).toBe("enterprise_managed");
+    expect(rows[0].enterpriseManagedConfig).toEqual(enterpriseManagedConfig);
+    expect(rows[0].useDynamicTeamCredential).toBe(false);
+  });
 });
 
 describe("AgentToolModel.create", () => {

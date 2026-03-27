@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   MCP_CATALOG_INSTALL_PATH,
   MCP_CATALOG_REAUTH_QUERY_PARAM,
@@ -5,6 +6,7 @@ import {
 } from "@shared";
 import { vi } from "vitest";
 import config from "@/config";
+import db, { schema } from "@/database";
 import {
   AgentModel,
   AgentToolModel,
@@ -903,6 +905,116 @@ describe("McpClient", () => {
         expect(result?.content).toEqual([
           { type: "text", text: result?.error },
         ]);
+      });
+    });
+
+    describe("Enterprise-managed credentials", () => {
+      test("injects the brokered managed credential into the outgoing MCP request", async ({
+        makeIdentityProvider,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const organization = await makeOrganization();
+        const user = await makeUser({ email: "managed-mcp@example.com" });
+        const identityProvider = await makeIdentityProvider(organization.id, {
+          providerId: "okta-managed-mcp",
+          issuer: "https://example.okta.com",
+          oidcConfig: {
+            clientId: "web-client-id",
+            tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+            enterpriseManagedCredentials: {
+              providerType: "okta",
+              clientId: "ai-agent-client-id",
+              tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+              tokenEndpointAuthentication: "client_secret_post",
+              clientSecret: "ai-agent-client-secret",
+            },
+          },
+        });
+
+        await AgentModel.update(agentId, {
+          organizationId: organization.id,
+          identityProviderId: identityProvider.id,
+        });
+
+        await McpServerModel.update(mcpServerId, { secretId: null });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__managed_tool",
+          description: "Managed credential tool",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "enterprise_managed",
+          enterpriseManagedConfig: {
+            requestedCredentialType: "secret",
+            resourceIdentifier: "orn:okta:pam:github-secret",
+            tokenInjectionMode: "authorization_bearer",
+            responseFieldPath: "token",
+          },
+        });
+
+        await db.insert(schema.accountsTable).values({
+          id: randomUUID(),
+          accountId: "acct-managed",
+          providerId: identityProvider.providerId,
+          userId: user.id,
+          idToken: "user-id-token",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              issued_token_type: "urn:okta:params:oauth:token-type:secret",
+              secret: { token: "ghu_managed_token" },
+              expires_in: 300,
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        );
+
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Managed result" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCall(
+          {
+            id: "call_enterprise_managed",
+            name: "github-mcp-server__managed_tool",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: "session-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+          },
+          { conversationId: "enterprise-managed-conv" },
+        );
+
+        expect(result.isError).toBe(false);
+
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        const [, options] =
+          vi.mocked(StreamableHTTPClientTransport).mock.calls.at(-1) ?? [];
+        const headers =
+          options?.requestInit?.headers instanceof Headers
+            ? options.requestInit.headers
+            : new Headers(options?.requestInit?.headers);
+        expect(headers.get("Authorization")).toBe("Bearer ghu_managed_token");
+
+        fetchMock.mockRestore();
       });
     });
 

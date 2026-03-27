@@ -1,4 +1,16 @@
-import { boolean, pgTable, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uuid,
+} from "drizzle-orm/pg-core";
+import type {
+  CredentialResolutionMode,
+  EnterpriseManagedCredentialConfig,
+} from "@/types";
 import agentsTable from "./agent";
 import mcpServerTable from "./mcp-server";
 import toolsTable from "./tool";
@@ -27,6 +39,13 @@ const agentToolsTable = pgTable(
     useDynamicTeamCredential: boolean("use_dynamic_team_credential")
       .notNull()
       .default(false),
+    credentialResolutionMode: text("credential_resolution_mode")
+      .$type<CredentialResolutionMode>()
+      .notNull()
+      .default("static"),
+    enterpriseManagedConfig: jsonb(
+      "enterprise_managed_config",
+    ).$type<EnterpriseManagedCredentialConfig>(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

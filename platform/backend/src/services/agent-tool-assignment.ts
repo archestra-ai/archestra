@@ -7,7 +7,12 @@ import {
   ToolModel,
   UserModel,
 } from "@/models";
-import type { InternalMcpCatalog, Tool } from "@/types";
+import type {
+  CredentialResolutionMode,
+  EnterpriseManagedCredentialConfig,
+  InternalMcpCatalog,
+  Tool,
+} from "@/types";
 
 export type AgentToolAssignmentError = {
   code: "not_found" | "validation_error";
@@ -43,6 +48,8 @@ export interface AgentToolAssignmentRequest {
    * for backwards compatibility with older callers.
    */
   useDynamicTeamCredential?: boolean;
+  credentialResolutionMode?: CredentialResolutionMode;
+  enterpriseManagedConfig?: EnterpriseManagedCredentialConfig | null;
   /**
    * Explicit remote MCP installation to use as the credential source.
    * Use this only when you want to pin the tool to credentials from one
@@ -62,11 +69,13 @@ export interface AgentToolAssignmentRequest {
 export async function assignToolToAgent(
   params: AgentToolAssignmentRequest,
 ): Promise<AgentToolAssignmentError | "duplicate" | "updated" | null> {
-  const resolveAtCallTime = normalizeResolveAtCallTime(params);
+  const credentialResolutionMode = normalizeCredentialResolutionMode(params);
   const validationError = await validateAssignment({
     agentId: params.agentId,
     toolId: params.toolId,
-    resolveAtCallTime,
+    resolveAtCallTime: credentialResolutionMode === "dynamic",
+    credentialResolutionMode,
+    enterpriseManagedConfig: params.enterpriseManagedConfig,
     credentialSourceMcpServerId: params.credentialSourceMcpServerId,
     executionSourceMcpServerId: params.executionSourceMcpServerId,
     preFetchedData: params.preFetchedData,
@@ -81,7 +90,9 @@ export async function assignToolToAgent(
     params.toolId,
     params.credentialSourceMcpServerId,
     params.executionSourceMcpServerId,
-    resolveAtCallTime,
+    credentialResolutionMode === "dynamic",
+    credentialResolutionMode,
+    params.enterpriseManagedConfig,
   );
 
   if (result.status === "unchanged") {
@@ -101,14 +112,12 @@ export async function validateAssignment(
   const {
     agentId,
     toolId,
-    resolveAtCallTime: requestedResolveAtCallTime,
-    useDynamicTeamCredential,
     credentialSourceMcpServerId,
     executionSourceMcpServerId,
+    enterpriseManagedConfig,
     preFetchedData,
   } = params;
-  const resolveAtCallTime =
-    requestedResolveAtCallTime ?? useDynamicTeamCredential ?? false;
+  const credentialResolutionMode = normalizeCredentialResolutionMode(params);
 
   const agentExists = preFetchedData?.existingAgentIds
     ? preFetchedData.existingAgentIds.has(agentId)
@@ -143,10 +152,19 @@ export async function validateAssignment(
     credentialSourceMcpServerId,
     executionSourceMcpServerId,
     preFetchedData,
-    resolveAtCallTime,
+    credentialResolutionMode,
   });
   if (catalogValidationError) {
     return catalogValidationError;
+  }
+
+  const enterpriseManagedValidationError =
+    validateEnterpriseManagedConfiguration({
+      credentialResolutionMode,
+      enterpriseManagedConfig,
+    });
+  if (enterpriseManagedValidationError) {
+    return enterpriseManagedValidationError;
   }
 
   if (credentialSourceMcpServerId) {
@@ -186,15 +204,18 @@ async function validateCatalogRequirements(params: {
   credentialSourceMcpServerId?: string | null;
   executionSourceMcpServerId?: string | null;
   preFetchedData?: Partial<AgentToolAssignmentPrefetchedData>;
-  resolveAtCallTime?: boolean;
+  credentialResolutionMode: CredentialResolutionMode;
 }): Promise<AgentToolAssignmentError | null> {
   const {
     tool,
     credentialSourceMcpServerId,
     executionSourceMcpServerId,
     preFetchedData,
-    resolveAtCallTime,
+    credentialResolutionMode,
   } = params;
+  const usesLateBoundResolution =
+    credentialResolutionMode === "dynamic" ||
+    credentialResolutionMode === "enterprise_managed";
 
   if (!tool.catalogId) {
     return null;
@@ -207,12 +228,12 @@ async function validateCatalogRequirements(params: {
       });
 
   if (catalogItem?.serverType === "local") {
-    if (!executionSourceMcpServerId && !resolveAtCallTime) {
+    if (!executionSourceMcpServerId && !usesLateBoundResolution) {
       return {
         code: "validation_error",
         error: {
           message:
-            "Execution source installation or dynamic team credential is required for local MCP server tools",
+            "Execution source installation or non-static credential resolution is required for local MCP server tools",
           type: "validation_error",
         },
       };
@@ -220,12 +241,12 @@ async function validateCatalogRequirements(params: {
   }
 
   if (catalogItem?.serverType === "remote") {
-    if (!credentialSourceMcpServerId && !resolveAtCallTime) {
+    if (!credentialSourceMcpServerId && !usesLateBoundResolution) {
       return {
         code: "validation_error",
         error: {
           message:
-            "Credential source or dynamic team credential is required for remote MCP server tools",
+            "Credential source or non-static credential resolution is required for remote MCP server tools",
           type: "validation_error",
         },
       };
@@ -240,6 +261,53 @@ function normalizeResolveAtCallTime(params: {
   useDynamicTeamCredential?: boolean;
 }) {
   return params.resolveAtCallTime ?? params.useDynamicTeamCredential ?? false;
+}
+
+function normalizeCredentialResolutionMode(params: {
+  resolveAtCallTime?: boolean;
+  useDynamicTeamCredential?: boolean;
+  credentialResolutionMode?: CredentialResolutionMode;
+}) {
+  if (params.credentialResolutionMode) {
+    return params.credentialResolutionMode;
+  }
+
+  return normalizeResolveAtCallTime(params) ? "dynamic" : "static";
+}
+
+function validateEnterpriseManagedConfiguration(params: {
+  credentialResolutionMode: CredentialResolutionMode;
+  enterpriseManagedConfig?: EnterpriseManagedCredentialConfig | null;
+}): AgentToolAssignmentError | null {
+  const { credentialResolutionMode, enterpriseManagedConfig } = params;
+
+  if (credentialResolutionMode !== "enterprise_managed") {
+    if (enterpriseManagedConfig) {
+      return {
+        code: "validation_error",
+        error: {
+          message:
+            "Enterprise-managed config can only be set when credential resolution mode is enterprise_managed",
+          type: "validation_error",
+        },
+      };
+    }
+
+    return null;
+  }
+
+  if (!enterpriseManagedConfig) {
+    return {
+      code: "validation_error",
+      error: {
+        message:
+          "Enterprise-managed config is required when credential resolution mode is enterprise_managed",
+        type: "validation_error",
+      },
+    };
+  }
+
+  return null;
 }
 
 export async function validateCredentialSource(params: {

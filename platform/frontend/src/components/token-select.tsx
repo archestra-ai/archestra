@@ -17,6 +17,7 @@ import { LoadingSpinner } from "./loading";
 
 // Special value for dynamic team credential option
 export const DYNAMIC_CREDENTIAL_VALUE = "__dynamic__";
+export const ENTERPRISE_MANAGED_CREDENTIAL_VALUE = "__enterprise_managed__";
 
 interface TokenSelectProps {
   value?: string | null;
@@ -124,6 +125,17 @@ export function TokenSelect({
           <div className="flex items-center gap-1">
             <Zap className="h-3! w-3! text-amber-500" />
             <span className="text-xs font-medium">Resolve at call time</span>
+          </div>
+        </SelectItem>
+        <SelectItem
+          value={ENTERPRISE_MANAGED_CREDENTIAL_VALUE}
+          className="cursor-pointer"
+        >
+          <div className="flex items-center gap-1">
+            <Zap className="h-3! w-3! text-sky-500" />
+            <span className="text-xs font-medium">
+              Enterprise-managed credentials
+            </span>
           </div>
         </SelectItem>
       </SelectContent>

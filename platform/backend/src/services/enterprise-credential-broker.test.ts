@@ -1,0 +1,159 @@
+import { randomUUID } from "node:crypto";
+import { vi } from "vitest";
+import db, { schema } from "@/database";
+import { describe, expect, test } from "@/test";
+import { resolveEnterpriseTransportCredential } from "./enterprise-credential-broker";
+
+describe("resolveEnterpriseTransportCredential", () => {
+  test("exchanges a session IdP token for a managed secret and builds an authorization header", async ({
+    makeAgent,
+    makeIdentityProvider,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser({ email: "enterprise-managed@example.com" });
+    const identityProvider = await makeIdentityProvider(organization.id, {
+      providerId: "okta-enterprise",
+      issuer: "https://example.okta.com",
+      oidcConfig: {
+        clientId: "web-client-id",
+        tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+        enterpriseManagedCredentials: {
+          providerType: "okta",
+          clientId: "ai-agent-client-id",
+          tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+          tokenEndpointAuthentication: "client_secret_post",
+          clientSecret: "ai-agent-client-secret",
+        },
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      identityProviderId: identityProvider.id,
+    });
+
+    await db.insert(schema.accountsTable).values({
+      id: randomUUID(),
+      accountId: "acct-1",
+      providerId: identityProvider.providerId,
+      userId: user.id,
+      idToken: "user-id-token",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          issued_token_type: "urn:okta:params:oauth:token-type:secret",
+          secret: { token: "ghu_managed_token" },
+          expires_in: 300,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const result = await resolveEnterpriseTransportCredential({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: "session-token",
+        teamId: null,
+        isOrganizationToken: false,
+        userId: user.id,
+      },
+      enterpriseManagedConfig: {
+        requestedCredentialType: "secret",
+        resourceIdentifier: "orn:okta:pam:github-secret",
+        tokenInjectionMode: "authorization_bearer",
+        responseFieldPath: "token",
+      },
+    });
+
+    expect(result).toEqual({
+      headerName: "Authorization",
+      headerValue: "Bearer ghu_managed_token",
+      expiresInSeconds: 300,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://example.okta.com/oauth2/v1/token",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining(
+          "requested_token_type=urn%3Aokta%3Aparams%3Aoauth%3Atoken-type%3Asecret",
+        ),
+      }),
+    );
+
+    fetchMock.mockRestore();
+  });
+
+  test("uses the caller-provided external IdP token when available", async ({
+    makeAgent,
+    makeIdentityProvider,
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const identityProvider = await makeIdentityProvider(organization.id, {
+      providerId: "okta-external",
+      issuer: "https://example.okta.com",
+      oidcConfig: {
+        clientId: "web-client-id",
+        tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+        enterpriseManagedCredentials: {
+          providerType: "okta",
+          clientId: "ai-agent-client-id",
+          tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+          tokenEndpointAuthentication: "client_secret_post",
+          clientSecret: "ai-agent-client-secret",
+        },
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      identityProviderId: identityProvider.id,
+    });
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          access_token: "id-jag-value",
+          issued_token_type: "urn:ietf:params:oauth:token-type:id-jag",
+          expires_in: 300,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const result = await resolveEnterpriseTransportCredential({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: "external-token",
+        teamId: null,
+        isOrganizationToken: false,
+        userId: "user-1",
+        isExternalIdp: true,
+        rawToken: "external-id-token",
+      },
+      enterpriseManagedConfig: {
+        requestedCredentialType: "id_jag",
+        resourceIdentifier: "mcp-resource:gateway-1",
+        tokenInjectionMode: "raw_authorization",
+      },
+    });
+
+    expect(result).toEqual({
+      headerName: "Authorization",
+      headerValue: "id-jag-value",
+      expiresInSeconds: 300,
+    });
+
+    const [, requestInit] = fetchMock.mock.calls[0] ?? [];
+    expect(String(requestInit?.body)).toContain(
+      "subject_token=external-id-token",
+    );
+
+    fetchMock.mockRestore();
+  });
+});

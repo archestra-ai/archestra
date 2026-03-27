@@ -1,6 +1,10 @@
 import { validateAssignment } from "@/services/agent-tool-assignment";
 import { describe, expect, test } from "@/test";
-import type { InternalMcpCatalog, Tool } from "@/types";
+import type {
+  EnterpriseManagedCredentialConfig,
+  InternalMcpCatalog,
+  Tool,
+} from "@/types";
 
 /**
  * Build a minimal Tool object for test maps.
@@ -47,6 +51,13 @@ function emptyPreFetchedData() {
       string,
       { id: string; ownerId: string | null; catalogId: string | null }
     >(),
+  };
+}
+
+function fakeEnterpriseManagedConfig(): EnterpriseManagedCredentialConfig {
+  return {
+    resourceIdentifier: "github-managed-connection",
+    requestedCredentialType: "bearer_token",
   };
 }
 
@@ -111,7 +122,7 @@ describe("validateAssignment", () => {
     expect(result?.error.message).toContain("missing-tool");
   });
 
-  test("returns 400 for local server tool without execution source or dynamic credential", async () => {
+  test("returns 400 for local server tool without execution source or late-bound credential resolution", async () => {
     const catalogId = "catalog-local";
     const tool = fakeTool({ id: "tool-1", catalogId });
     const catalog = fakeCatalog({ id: catalogId, serverType: "local" });
@@ -193,7 +204,31 @@ describe("validateAssignment", () => {
     expect(result).toBeNull();
   });
 
-  test("returns 400 for remote server tool without credential source or dynamic credential", async () => {
+  test("allows local server tool with enterprise-managed credential resolution", async () => {
+    const catalogId = "catalog-local";
+    const tool = fakeTool({ id: "tool-1", catalogId });
+    const catalog = fakeCatalog({ id: catalogId, serverType: "local" });
+
+    const data = {
+      ...emptyPreFetchedData(),
+      existingAgentIds: new Set(["agent-1"]),
+      toolsMap: new Map([[tool.id, tool]]),
+      catalogItemsMap: new Map([[catalogId, catalog]]),
+    };
+
+    const result = await validateAssignment({
+      agentId: "agent-1",
+      toolId: tool.id,
+      credentialResolutionMode: "enterprise_managed",
+      enterpriseManagedConfig: fakeEnterpriseManagedConfig(),
+      credentialSourceMcpServerId: null,
+      executionSourceMcpServerId: null,
+      preFetchedData: data,
+    });
+    expect(result).toBeNull();
+  });
+
+  test("returns 400 for remote server tool without credential source or late-bound credential resolution", async () => {
     const catalogId = "catalog-remote";
     const tool = fakeTool({ id: "tool-1", catalogId });
     const catalog = fakeCatalog({ id: catalogId, serverType: "remote" });
@@ -277,5 +312,89 @@ describe("validateAssignment", () => {
       preFetchedData: data,
     });
     expect(result).toBeNull();
+  });
+
+  test("allows remote server tool with enterprise-managed credential resolution", async () => {
+    const catalogId = "catalog-remote";
+    const tool = fakeTool({ id: "tool-1", catalogId });
+    const catalog = fakeCatalog({ id: catalogId, serverType: "remote" });
+
+    const data = {
+      ...emptyPreFetchedData(),
+      existingAgentIds: new Set(["agent-1"]),
+      toolsMap: new Map([[tool.id, tool]]),
+      catalogItemsMap: new Map([[catalogId, catalog]]),
+    };
+
+    const result = await validateAssignment({
+      agentId: "agent-1",
+      toolId: tool.id,
+      credentialResolutionMode: "enterprise_managed",
+      enterpriseManagedConfig: fakeEnterpriseManagedConfig(),
+      credentialSourceMcpServerId: null,
+      executionSourceMcpServerId: null,
+      preFetchedData: data,
+    });
+    expect(result).toBeNull();
+  });
+
+  test("requires enterprise-managed config when enterprise-managed mode is selected", async () => {
+    const catalogId = "catalog-remote";
+    const tool = fakeTool({ id: "tool-1", catalogId });
+    const catalog = fakeCatalog({ id: catalogId, serverType: "remote" });
+
+    const data = {
+      ...emptyPreFetchedData(),
+      existingAgentIds: new Set(["agent-1"]),
+      toolsMap: new Map([[tool.id, tool]]),
+      catalogItemsMap: new Map([[catalogId, catalog]]),
+    };
+
+    const result = await validateAssignment({
+      agentId: "agent-1",
+      toolId: tool.id,
+      credentialResolutionMode: "enterprise_managed",
+      credentialSourceMcpServerId: null,
+      executionSourceMcpServerId: null,
+      preFetchedData: data,
+    });
+
+    expect(result).toEqual({
+      code: "validation_error",
+      error: {
+        message:
+          "Enterprise-managed config is required when credential resolution mode is enterprise_managed",
+        type: "validation_error",
+      },
+    });
+  });
+
+  test("rejects enterprise-managed config on non-enterprise modes", async () => {
+    const tool = fakeTool({ id: "tool-1" });
+
+    const data = {
+      ...emptyPreFetchedData(),
+      existingAgentIds: new Set(["agent-1"]),
+      toolsMap: new Map([[tool.id, tool]]),
+    };
+
+    const result = await validateAssignment({
+      agentId: "agent-1",
+      toolId: tool.id,
+      credentialResolutionMode: "static",
+      enterpriseManagedConfig: fakeEnterpriseManagedConfig(),
+      credentialSourceMcpServerId: null,
+      executionSourceMcpServerId: null,
+      preFetchedData: data,
+    });
+
+    expect(result).toEqual({
+      code: "validation_error",
+      error: {
+        message:
+          "Enterprise-managed config can only be set when credential resolution mode is enterprise_managed",
+        type: "validation_error",
+      },
+    });
   });
 });

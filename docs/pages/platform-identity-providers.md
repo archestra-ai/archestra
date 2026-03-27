@@ -1,9 +1,9 @@
 ---
 title: "Identity Providers"
 category: Administration
-description: "Configure Identity Providers for SSO authentication and MCP Gateway JWKS validation"
+description: "Configure Identity Providers for SSO authentication, MCP Gateway JWKS validation, and enterprise-managed credential brokerage"
 order: 2
-lastUpdated: 2025-02-12
+lastUpdated: 2026-03-27
 ---
 
 <!--
@@ -20,10 +20,11 @@ This document covers Identity Provider configuration for Archestra Platform. Inc
 
 ![Identity Providers Overview](/docs/automated_screenshots/platform-identity-providers_sso-providers-overview.png)
 
-Archestra supports Identity Provider (IdP) configuration for two purposes:
+Archestra supports Identity Provider (IdP) configuration for three purposes:
 
 1. **Single Sign-On (SSO)** — Users authenticate with their existing IdP credentials using OpenID Connect (OIDC) or SAML 2.0
 2. **MCP Gateway JWKS Authentication** — External MCP clients authenticate using JWTs issued by configured IdPs, validated via JWKS. See [MCP Authentication - External IdP JWKS](/docs/mcp-authentication#external-idp-jwks) for details.
+3. **Enterprise-Managed Credentials** — Tool assignments can ask the IdP to broker a downstream credential for the authenticated user at tool-call time.
 
 > **Enterprise feature:** Please reach out to sales@archestra.ai for instructions about how to enable the feature.
 
@@ -102,6 +103,7 @@ Okta is an enterprise identity management platform. To configure Okta SSO:
 
 - Disable **DPoP** (Demonstrating Proof of Possession) in your Okta application settings. Archestra does not support DPoP.
 - The issuer URL is automatically set to `https://your-domain.okta.com`
+- For enterprise-managed credentials, register an AI agent in Okta and copy its broker client configuration into the **Enterprise-Managed Credentials** section of the OIDC provider form. See [Okta's AI agent token exchange guide](https://developer.okta.com/docs/guides/ai-agent-token-exchange/authserver/main/).
 
 ### Google
 
@@ -200,6 +202,20 @@ Optional configuration:
 - **Scopes**: Additional OAuth scopes (default: `openid`, `email`, `profile`)
 - **PKCE**: Enable if your provider requires it
 - **Enable RP-Initiated Logout**: Sends the `post_logout_redirect_uri` parameter during sign-out. This is enabled by default and can be turned off for providers that reject RP-initiated logout requests
+
+### Enterprise-Managed Credential Settings
+
+OIDC providers include an optional **Enterprise-Managed Credentials** section. Use it when the IdP can broker resource credentials on behalf of the authenticated user.
+
+The key fields are:
+
+- **Broker Client ID**: The AI agent or broker client that Archestra uses for token exchange
+- **Broker Token Endpoint**: Usually the IdP token endpoint used for RFC 8693 token exchange
+- **Broker Client Authentication**: `private_key_jwt`, `client_secret_post`, or `client_secret_basic`
+- **Broker Private Key PEM / Key ID**: Used for `private_key_jwt`
+- **Subject Token Type**: Usually `id_token`
+
+These settings do not change the SSO login flow. They are only used when a tool assignment selects **Enterprise-managed credentials** as its upstream credential strategy.
 
 ### Generic SAML
 

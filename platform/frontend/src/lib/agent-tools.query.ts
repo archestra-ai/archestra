@@ -112,6 +112,8 @@ export function useAssignTool() {
       credentialSourceMcpServerId,
       executionSourceMcpServerId,
       useDynamicTeamCredential,
+      credentialResolutionMode,
+      enterpriseManagedConfig,
       skipInvalidation,
     }: {
       agentId: string;
@@ -119,18 +121,24 @@ export function useAssignTool() {
       credentialSourceMcpServerId?: string | null;
       executionSourceMcpServerId?: string | null;
       useDynamicTeamCredential?: boolean;
+      credentialResolutionMode?: "static" | "dynamic" | "enterprise_managed";
+      enterpriseManagedConfig?: Record<string, unknown> | null;
       skipInvalidation?: boolean;
     }) => {
       const body =
         credentialSourceMcpServerId ||
         executionSourceMcpServerId ||
-        useDynamicTeamCredential !== undefined
+        useDynamicTeamCredential !== undefined ||
+        credentialResolutionMode ||
+        enterpriseManagedConfig
           ? {
               credentialSourceMcpServerId:
                 credentialSourceMcpServerId || undefined,
               executionSourceMcpServerId:
                 executionSourceMcpServerId || undefined,
               useDynamicTeamCredential,
+              credentialResolutionMode,
+              enterpriseManagedConfig,
             }
           : null;
 

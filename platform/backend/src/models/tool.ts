@@ -912,6 +912,9 @@ class ToolModel {
           schema.agentToolsTable.executionSourceMcpServerId,
         useDynamicTeamCredential:
           schema.agentToolsTable.useDynamicTeamCredential,
+        credentialResolutionMode:
+          schema.agentToolsTable.credentialResolutionMode,
+        enterpriseManagedConfig: schema.agentToolsTable.enterpriseManagedConfig,
         catalogId: schema.toolsTable.catalogId,
         catalogName: schema.internalMcpCatalogTable.name,
       })
@@ -958,6 +961,9 @@ class ToolModel {
           schema.agentToolsTable.executionSourceMcpServerId,
         useDynamicTeamCredential:
           schema.agentToolsTable.useDynamicTeamCredential,
+        credentialResolutionMode:
+          schema.agentToolsTable.credentialResolutionMode,
+        enterpriseManagedConfig: schema.agentToolsTable.enterpriseManagedConfig,
         catalogId: schema.toolsTable.catalogId,
         catalogName: schema.internalMcpCatalogTable.name,
       })
@@ -1967,6 +1973,9 @@ class ToolModel {
         executionOwnerEmail: executionOwnerAlias.email,
         useDynamicTeamCredential:
           schema.agentToolsTable.useDynamicTeamCredential,
+        credentialResolutionMode:
+          schema.agentToolsTable.credentialResolutionMode,
+        enterpriseManagedConfig: schema.agentToolsTable.enterpriseManagedConfig,
       })
       .from(schema.agentToolsTable)
       .innerJoin(
@@ -2008,6 +2017,8 @@ class ToolModel {
         executionSourceMcpServerId: string | null;
         executionOwnerEmail: string | null;
         useDynamicTeamCredential: boolean;
+        credentialResolutionMode: "static" | "dynamic" | "enterprise_managed";
+        enterpriseManagedConfig: Record<string, unknown> | null;
       }>
     >();
 
@@ -2040,6 +2051,8 @@ class ToolModel {
           ? assignment.executionOwnerEmail
           : null,
         useDynamicTeamCredential: assignment.useDynamicTeamCredential,
+        credentialResolutionMode: assignment.credentialResolutionMode,
+        enterpriseManagedConfig: assignment.enterpriseManagedConfig,
       });
       assignmentsByToolId.set(assignment.toolId, existing);
     }

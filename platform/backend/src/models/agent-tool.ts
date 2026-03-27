@@ -31,6 +31,8 @@ import type {
   AgentTool,
   AgentToolFilters,
   AgentToolSortBy,
+  CredentialResolutionMode,
+  EnterpriseManagedCredentialConfig,
   InsertAgentTool,
   SortDirection,
   UpdateAgentTool,
@@ -273,7 +275,11 @@ class AgentToolModel {
     options?: Partial<
       Pick<
         InsertAgentTool,
-        "credentialSourceMcpServerId" | "executionSourceMcpServerId"
+        | "credentialSourceMcpServerId"
+        | "executionSourceMcpServerId"
+        | "useDynamicTeamCredential"
+        | "credentialResolutionMode"
+        | "enterpriseManagedConfig"
       >
     >,
     organizationId?: string,
@@ -312,6 +318,8 @@ class AgentToolModel {
       credentialSourceMcpServerId?: string | null;
       executionSourceMcpServerId?: string | null;
       useDynamicTeamCredential?: boolean;
+      credentialResolutionMode?: CredentialResolutionMode;
+      enterpriseManagedConfig?: EnterpriseManagedCredentialConfig | null;
     }>,
     organizationId?: string,
   ) {
@@ -631,7 +639,20 @@ class AgentToolModel {
     credentialSourceMcpServerId?: string | null,
     executionSourceMcpServerId?: string | null,
     useDynamicTeamCredential?: boolean,
+    credentialResolutionMode?: CredentialResolutionMode,
+    enterpriseManagedConfig?: EnterpriseManagedCredentialConfig | null,
   ): Promise<{ status: "created" | "updated" | "unchanged" }> {
+    const normalizedMode = normalizeCredentialResolutionMode({
+      credentialResolutionMode,
+      useDynamicTeamCredential,
+    });
+    const normalizedDynamicFlag =
+      useDynamicTeamCredential ?? normalizedMode === "dynamic";
+    const normalizedEnterpriseManagedConfig =
+      normalizedMode === "enterprise_managed"
+        ? (enterpriseManagedConfig ?? null)
+        : null;
+
     // Check if assignment already exists
     const [existing] = await db
       .select()
@@ -652,6 +673,8 @@ class AgentToolModel {
           | "credentialSourceMcpServerId"
           | "executionSourceMcpServerId"
           | "useDynamicTeamCredential"
+          | "credentialResolutionMode"
+          | "enterpriseManagedConfig"
         >
       > = {};
 
@@ -663,9 +686,9 @@ class AgentToolModel {
         options.executionSourceMcpServerId = executionSourceMcpServerId;
       }
 
-      if (useDynamicTeamCredential !== undefined) {
-        options.useDynamicTeamCredential = useDynamicTeamCredential;
-      }
+      options.useDynamicTeamCredential = normalizedDynamicFlag;
+      options.credentialResolutionMode = normalizedMode;
+      options.enterpriseManagedConfig = normalizedEnterpriseManagedConfig;
 
       await AgentToolModel.create(agentId, toolId, options);
       return { status: "created" };
@@ -677,8 +700,10 @@ class AgentToolModel {
         (credentialSourceMcpServerId ?? null) ||
       existing.executionSourceMcpServerId !==
         (executionSourceMcpServerId ?? null) ||
-      (useDynamicTeamCredential !== undefined &&
-        existing.useDynamicTeamCredential !== useDynamicTeamCredential);
+      existing.useDynamicTeamCredential !== normalizedDynamicFlag ||
+      existing.credentialResolutionMode !== normalizedMode ||
+      JSON.stringify(existing.enterpriseManagedConfig ?? null) !==
+        JSON.stringify(normalizedEnterpriseManagedConfig);
 
     if (needsUpdate) {
       // Update credentials
@@ -688,6 +713,8 @@ class AgentToolModel {
           | "credentialSourceMcpServerId"
           | "executionSourceMcpServerId"
           | "useDynamicTeamCredential"
+          | "credentialResolutionMode"
+          | "enterpriseManagedConfig"
         >
       > = {};
 
@@ -697,9 +724,9 @@ class AgentToolModel {
       updateData.executionSourceMcpServerId =
         executionSourceMcpServerId ?? null;
 
-      if (useDynamicTeamCredential !== undefined) {
-        updateData.useDynamicTeamCredential = useDynamicTeamCredential;
-      }
+      updateData.useDynamicTeamCredential = normalizedDynamicFlag;
+      updateData.credentialResolutionMode = normalizedMode;
+      updateData.enterpriseManagedConfig = normalizedEnterpriseManagedConfig;
 
       await AgentToolModel.update(existing.id, updateData);
       return { status: "updated" };
@@ -720,6 +747,8 @@ class AgentToolModel {
       credentialSourceMcpServerId?: string | null;
       executionSourceMcpServerId?: string | null;
       useDynamicTeamCredential?: boolean;
+      credentialResolutionMode?: CredentialResolutionMode;
+      enterpriseManagedConfig?: EnterpriseManagedCredentialConfig | null;
     }>,
     organizationId?: string,
   ): Promise<
@@ -755,6 +784,8 @@ class AgentToolModel {
       credentialSourceMcpServerId?: string | null;
       executionSourceMcpServerId?: string | null;
       useDynamicTeamCredential?: boolean;
+      credentialResolutionMode?: CredentialResolutionMode;
+      enterpriseManagedConfig?: EnterpriseManagedCredentialConfig | null;
     }> = [];
     const results: Array<{
       agentId: string;
@@ -781,9 +812,12 @@ class AgentToolModel {
             (assignment.credentialSourceMcpServerId ?? null) ||
           existingRow.executionSourceMcpServerId !==
             (assignment.executionSourceMcpServerId ?? null) ||
-          (assignment.useDynamicTeamCredential !== undefined &&
-            existingRow.useDynamicTeamCredential !==
-              assignment.useDynamicTeamCredential);
+          existingRow.useDynamicTeamCredential !==
+            normalizeDynamicTeamCredentialFlag(assignment) ||
+          existingRow.credentialResolutionMode !==
+            normalizeCredentialResolutionMode(assignment) ||
+          JSON.stringify(existingRow.enterpriseManagedConfig ?? null) !==
+            JSON.stringify(normalizeEnterpriseManagedConfig(assignment));
 
         if (needsUpdate) {
           const updateData: Partial<
@@ -792,17 +826,21 @@ class AgentToolModel {
               | "credentialSourceMcpServerId"
               | "executionSourceMcpServerId"
               | "useDynamicTeamCredential"
+              | "credentialResolutionMode"
+              | "enterpriseManagedConfig"
             >
           > = {
             credentialSourceMcpServerId:
               assignment.credentialSourceMcpServerId ?? null,
             executionSourceMcpServerId:
               assignment.executionSourceMcpServerId ?? null,
+            useDynamicTeamCredential:
+              normalizeDynamicTeamCredentialFlag(assignment),
+            credentialResolutionMode:
+              normalizeCredentialResolutionMode(assignment),
+            enterpriseManagedConfig:
+              normalizeEnterpriseManagedConfig(assignment),
           };
-          if (assignment.useDynamicTeamCredential !== undefined) {
-            updateData.useDynamicTeamCredential =
-              assignment.useDynamicTeamCredential;
-          }
           await AgentToolModel.update(existingRow.id, updateData);
           results.push({
             agentId: assignment.agentId,
@@ -831,9 +869,9 @@ class AgentToolModel {
           ...(a.executionSourceMcpServerId
             ? { executionSourceMcpServerId: a.executionSourceMcpServerId }
             : {}),
-          ...(a.useDynamicTeamCredential !== undefined
-            ? { useDynamicTeamCredential: a.useDynamicTeamCredential }
-            : {}),
+          useDynamicTeamCredential: normalizeDynamicTeamCredentialFlag(a),
+          credentialResolutionMode: normalizeCredentialResolutionMode(a),
+          enterpriseManagedConfig: normalizeEnterpriseManagedConfig(a),
         })),
         organizationId,
       );
@@ -850,6 +888,8 @@ class AgentToolModel {
         | "credentialSourceMcpServerId"
         | "executionSourceMcpServerId"
         | "useDynamicTeamCredential"
+        | "credentialResolutionMode"
+        | "enterpriseManagedConfig"
       >
     >,
   ) {
@@ -1236,3 +1276,38 @@ class AgentToolModel {
 }
 
 export default AgentToolModel;
+
+function normalizeCredentialResolutionMode(params: {
+  credentialResolutionMode?: CredentialResolutionMode;
+  useDynamicTeamCredential?: boolean;
+}) {
+  if (params.credentialResolutionMode) {
+    return params.credentialResolutionMode;
+  }
+
+  return params.useDynamicTeamCredential ? "dynamic" : "static";
+}
+
+function normalizeDynamicTeamCredentialFlag(params: {
+  credentialResolutionMode?: CredentialResolutionMode;
+  useDynamicTeamCredential?: boolean;
+}) {
+  if (params.credentialResolutionMode === "enterprise_managed") {
+    return false;
+  }
+
+  if (params.credentialResolutionMode === "dynamic") {
+    return true;
+  }
+
+  return params.useDynamicTeamCredential ?? false;
+}
+
+function normalizeEnterpriseManagedConfig(params: {
+  credentialResolutionMode?: CredentialResolutionMode;
+  enterpriseManagedConfig?: EnterpriseManagedCredentialConfig | null;
+}) {
+  return params.credentialResolutionMode === "enterprise_managed"
+    ? (params.enterpriseManagedConfig ?? null)
+    : null;
+}

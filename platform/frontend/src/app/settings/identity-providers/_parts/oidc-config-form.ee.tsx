@@ -17,7 +17,15 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
 import { RoleMappingForm } from "./role-mapping-form.ee";
 import { TeamSyncConfigForm } from "./team-sync-config-form.ee";
 
@@ -250,6 +258,234 @@ export function OidcConfigForm({
               </FormControl>
               <FormDescription>
                 Override the JWKS endpoint if not using discovery.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <Separator />
+
+        <div>
+          <h4 className="text-md font-medium mb-4">
+            Enterprise-Managed Credentials
+          </h4>
+          <p className="text-sm text-muted-foreground mb-4">
+            Configure how this identity provider authenticates to the enterprise
+            broker when a tool assignment uses enterprise-managed credentials.
+          </p>
+        </div>
+
+        <FormField
+          control={form.control}
+          name="oidcConfig.enterpriseManagedCredentials.providerType"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Provider Type</FormLabel>
+              <Select
+                value={field.value ?? "okta"}
+                onValueChange={field.onChange}
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="okta">Okta</SelectItem>
+                  <SelectItem value="generic_oidc">Generic OIDC</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormDescription>
+                Select the enterprise broker implementation used for managed
+                credential exchange.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="oidcConfig.enterpriseManagedCredentials.clientId"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Broker Client ID</FormLabel>
+              <FormControl>
+                <Input placeholder="AI agent client ID" {...field} />
+              </FormControl>
+              <FormDescription>
+                Optional override for the client ID used when Archestra calls
+                the enterprise token exchange endpoint.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="oidcConfig.enterpriseManagedCredentials.tokenEndpoint"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Broker Token Endpoint</FormLabel>
+              <FormControl>
+                <Input
+                  placeholder="https://your-okta-domain/oauth2/v1/token"
+                  {...field}
+                />
+              </FormControl>
+              <FormDescription>
+                Optional override for the token exchange endpoint used for
+                enterprise-managed credentials.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="oidcConfig.enterpriseManagedCredentials.tokenEndpointAuthentication"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Broker Client Authentication</FormLabel>
+              <Select
+                value={field.value ?? "private_key_jwt"}
+                onValueChange={field.onChange}
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="private_key_jwt">
+                    Private key JWT
+                  </SelectItem>
+                  <SelectItem value="client_secret_post">
+                    Client secret POST
+                  </SelectItem>
+                  <SelectItem value="client_secret_basic">
+                    Client secret Basic
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <FormDescription>
+                Okta AI agent registrations typically use private key JWT.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="oidcConfig.enterpriseManagedCredentials.clientSecret"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Broker Client Secret</FormLabel>
+              <FormControl>
+                <Input type="password" placeholder="Optional" {...field} />
+              </FormControl>
+              <FormDescription>
+                Only used when the broker token endpoint authenticates with a
+                client secret.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="oidcConfig.enterpriseManagedCredentials.privateKeyId"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Broker Key ID</FormLabel>
+              <FormControl>
+                <Input placeholder="kid" {...field} />
+              </FormControl>
+              <FormDescription>
+                Key ID used when signing private key JWT client assertions.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="oidcConfig.enterpriseManagedCredentials.clientAssertionAudience"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Client Assertion Audience</FormLabel>
+              <FormControl>
+                <Input
+                  placeholder="Defaults to the broker token endpoint"
+                  {...field}
+                />
+              </FormControl>
+              <FormDescription>
+                Optional audience override for private key JWT client
+                assertions.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="oidcConfig.enterpriseManagedCredentials.subjectTokenType"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Subject Token Type</FormLabel>
+              <Select
+                value={
+                  field.value ?? "urn:ietf:params:oauth:token-type:id_token"
+                }
+                onValueChange={field.onChange}
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="urn:ietf:params:oauth:token-type:id_token">
+                    ID token
+                  </SelectItem>
+                  <SelectItem value="urn:ietf:params:oauth:token-type:jwt">
+                    Generic JWT
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <FormDescription>
+                Most enterprise SSO flows should use the ID token as the subject
+                token for managed credential exchange.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="oidcConfig.enterpriseManagedCredentials.privateKeyPem"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Broker Private Key PEM</FormLabel>
+              <FormControl>
+                <Textarea
+                  placeholder="-----BEGIN PRIVATE KEY-----"
+                  className="min-h-32 font-mono text-xs"
+                  {...field}
+                />
+              </FormControl>
+              <FormDescription>
+                Paste the AI agent registration private key used to sign client
+                assertions.
               </FormDescription>
               <FormMessage />
             </FormItem>

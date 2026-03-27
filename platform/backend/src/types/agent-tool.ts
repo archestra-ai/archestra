@@ -5,10 +5,20 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import {
+  CredentialResolutionModeSchema,
+  EnterpriseManagedCredentialConfigSchema,
+} from "@/types/enterprise-managed-credentials";
 import { UuidIdSchema } from "./api";
 import { ToolParametersContentSchema } from "./tool";
 
-export const SelectAgentToolSchema = createSelectSchema(schema.agentToolsTable)
+export const SelectAgentToolSchema = createSelectSchema(
+  schema.agentToolsTable,
+  {
+    credentialResolutionMode: CredentialResolutionModeSchema,
+    enterpriseManagedConfig: EnterpriseManagedCredentialConfigSchema.nullable(),
+  },
+)
   .omit({
     agentId: true,
     toolId: true,
@@ -29,12 +39,27 @@ export const SelectAgentToolSchema = createSelectSchema(schema.agentToolsTable)
     }),
   });
 
-export const InsertAgentToolSchema = createInsertSchema(schema.agentToolsTable);
-export const UpdateAgentToolSchema = createUpdateSchema(schema.agentToolsTable);
+export const InsertAgentToolSchema = createInsertSchema(
+  schema.agentToolsTable,
+  {
+    credentialResolutionMode: CredentialResolutionModeSchema,
+    enterpriseManagedConfig: EnterpriseManagedCredentialConfigSchema.nullable(),
+  },
+);
+export const UpdateAgentToolSchema = createUpdateSchema(
+  schema.agentToolsTable,
+  {
+    credentialResolutionMode: CredentialResolutionModeSchema,
+    enterpriseManagedConfig: EnterpriseManagedCredentialConfigSchema.nullable(),
+  },
+);
 export const AgentToolAssignmentInputSchema = z.object({
   toolId: UuidIdSchema,
   resolveAtCallTime: z.boolean().optional(),
   useDynamicTeamCredential: z.boolean().optional(),
+  credentialResolutionMode: CredentialResolutionModeSchema.optional(),
+  enterpriseManagedConfig:
+    EnterpriseManagedCredentialConfigSchema.nullable().optional(),
   credentialSourceMcpServerId: UuidIdSchema.nullable().optional(),
   executionSourceMcpServerId: UuidIdSchema.nullable().optional(),
 });
@@ -82,6 +107,10 @@ export type McpToolAssignment = {
   credentialSourceMcpServerId: string | null;
   executionSourceMcpServerId: string | null;
   useDynamicTeamCredential: boolean;
+  credentialResolutionMode: z.infer<typeof CredentialResolutionModeSchema>;
+  enterpriseManagedConfig: z.infer<
+    typeof EnterpriseManagedCredentialConfigSchema
+  > | null;
   catalogId: string | null;
   catalogName: string | null;
 };

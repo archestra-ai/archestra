@@ -168,9 +168,37 @@ export const IdentityProviderOidcConfigSchema = z
     overrideUserInfo: z.boolean().optional(),
     tokenEndpoint: z.string().optional(),
     tokenEndpointAuthentication: z
-      .enum(["client_secret_post", "client_secret_basic"])
+      .enum([
+        "client_secret_post",
+        "client_secret_basic",
+        "private_key_jwt",
+      ])
       .optional(),
     jwksEndpoint: z.string().optional(),
+    enterpriseManagedCredentials: z
+      .object({
+        providerType: z.enum(["generic_oidc", "okta"]).optional(),
+        clientId: z.string().optional(),
+        clientSecret: z.string().optional(),
+        tokenEndpoint: z.string().optional(),
+        tokenEndpointAuthentication: z
+          .enum([
+            "client_secret_post",
+            "client_secret_basic",
+            "private_key_jwt",
+          ])
+          .optional(),
+        privateKeyPem: z.string().optional(),
+        privateKeyId: z.string().optional(),
+        clientAssertionAudience: z.string().optional(),
+        subjectTokenType: z
+          .enum([
+            "urn:ietf:params:oauth:token-type:id_token",
+            "urn:ietf:params:oauth:token-type:jwt",
+          ])
+          .optional(),
+      })
+      .optional(),
     mapping: z
       .object({
         id: z.string().optional(),

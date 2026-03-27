@@ -293,6 +293,7 @@ export function OidcConfigForm({
                 </FormControl>
                 <SelectContent>
                   <SelectItem value="okta">Okta</SelectItem>
+                  <SelectItem value="keycloak">Keycloak</SelectItem>
                   <SelectItem value="generic_oidc">Generic OIDC</SelectItem>
                 </SelectContent>
               </Select>
@@ -453,6 +454,9 @@ export function OidcConfigForm({
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
+                  <SelectItem value="urn:ietf:params:oauth:token-type:access_token">
+                    Access token
+                  </SelectItem>
                   <SelectItem value="urn:ietf:params:oauth:token-type:id_token">
                     ID token
                   </SelectItem>

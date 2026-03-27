@@ -20,19 +20,23 @@ wiremock:
 keycloak:
   enabled: true
   image:
-    registry: quay.io
-    repository: keycloak/keycloak
-    tag: "26.0"
+    registry: europe-west1-docker.pkg.dev
+    repository: friendly-path-465518-r6/archestra-public/keycloak
+    tag: "pr46048-5afbf42"
     pullPolicy: IfNotPresent
   # Admin credentials for e2e testing
   auth:
     adminUser: admin
     adminPassword: admin
+  features:
+    - jwt-authorization-grant
+    - identity-assertion-jwt
   # Service configuration
   service:
     type: NodePort
     port: 8080
     nodePort: 30081
+  healthPort: 9000
   # Public hostname/issuer URL advertised by Keycloak.
   # Local dev uses the NodePort forwarded to the host. CI overrides this to the
   # in-cluster service URL so server-side OIDC flows from the backend pod work.
@@ -55,6 +59,10 @@ keycloak:
   # Readiness probe
   readinessProbe:
     initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+  startupProbe:
+    failureThreshold: 30
     periodSeconds: 10
     timeoutSeconds: 5
   # Groups for role mapping tests

@@ -38488,7 +38488,7 @@ export type GetIdentityProvidersResponses = {
             tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
             jwksEndpoint?: string;
             enterpriseManagedCredentials?: {
-                providerType?: 'generic_oidc' | 'okta';
+                providerType?: 'generic_oidc' | 'okta' | 'keycloak';
                 clientId?: string;
                 clientSecret?: string;
                 tokenEndpoint?: string;
@@ -38496,7 +38496,7 @@ export type GetIdentityProvidersResponses = {
                 privateKeyPem?: string;
                 privateKeyId?: string;
                 clientAssertionAudience?: string;
-                subjectTokenType?: 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+                subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
             };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
@@ -38615,7 +38615,7 @@ export type CreateIdentityProviderData = {
             tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
             jwksEndpoint?: string;
             enterpriseManagedCredentials?: {
-                providerType?: 'generic_oidc' | 'okta';
+                providerType?: 'generic_oidc' | 'okta' | 'keycloak';
                 clientId?: string;
                 clientSecret?: string;
                 tokenEndpoint?: string;
@@ -38623,7 +38623,7 @@ export type CreateIdentityProviderData = {
                 privateKeyPem?: string;
                 privateKeyId?: string;
                 clientAssertionAudience?: string;
-                subjectTokenType?: 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+                subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
             };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
@@ -38805,7 +38805,7 @@ export type CreateIdentityProviderResponses = {
             tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
             jwksEndpoint?: string;
             enterpriseManagedCredentials?: {
-                providerType?: 'generic_oidc' | 'okta';
+                providerType?: 'generic_oidc' | 'okta' | 'keycloak';
                 clientId?: string;
                 clientSecret?: string;
                 tokenEndpoint?: string;
@@ -38813,7 +38813,7 @@ export type CreateIdentityProviderResponses = {
                 privateKeyPem?: string;
                 privateKeyId?: string;
                 clientAssertionAudience?: string;
-                subjectTokenType?: 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+                subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
             };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
@@ -39160,7 +39160,7 @@ export type GetIdentityProviderResponses = {
             tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
             jwksEndpoint?: string;
             enterpriseManagedCredentials?: {
-                providerType?: 'generic_oidc' | 'okta';
+                providerType?: 'generic_oidc' | 'okta' | 'keycloak';
                 clientId?: string;
                 clientSecret?: string;
                 tokenEndpoint?: string;
@@ -39168,7 +39168,7 @@ export type GetIdentityProviderResponses = {
                 privateKeyPem?: string;
                 privateKeyId?: string;
                 clientAssertionAudience?: string;
-                subjectTokenType?: 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+                subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
             };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
@@ -39287,7 +39287,7 @@ export type UpdateIdentityProviderData = {
             tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
             jwksEndpoint?: string;
             enterpriseManagedCredentials?: {
-                providerType?: 'generic_oidc' | 'okta';
+                providerType?: 'generic_oidc' | 'okta' | 'keycloak';
                 clientId?: string;
                 clientSecret?: string;
                 tokenEndpoint?: string;
@@ -39295,7 +39295,7 @@ export type UpdateIdentityProviderData = {
                 privateKeyPem?: string;
                 privateKeyId?: string;
                 clientAssertionAudience?: string;
-                subjectTokenType?: 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+                subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
             };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
@@ -39478,7 +39478,7 @@ export type UpdateIdentityProviderResponses = {
             tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
             jwksEndpoint?: string;
             enterpriseManagedCredentials?: {
-                providerType?: 'generic_oidc' | 'okta';
+                providerType?: 'generic_oidc' | 'okta' | 'keycloak';
                 clientId?: string;
                 clientSecret?: string;
                 tokenEndpoint?: string;
@@ -39486,7 +39486,7 @@ export type UpdateIdentityProviderResponses = {
                 privateKeyPem?: string;
                 privateKeyId?: string;
                 clientAssertionAudience?: string;
-                subjectTokenType?: 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+                subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
             };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3

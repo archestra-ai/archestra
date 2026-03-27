@@ -5,8 +5,9 @@ import {
 import type { EnterpriseManagedCredentialConfig } from "@/types";
 import {
   type EnterpriseManagedCredentialResult,
-  oktaEnterpriseCredentialProvider,
-} from "./okta";
+  keycloakEnterpriseCredentialExchangeAdapter,
+} from "./keycloak";
+import { oktaEnterpriseCredentialExchangeAdapter } from "./okta";
 
 export interface EnterpriseCredentialExchangeParams {
   identityProvider: ExternalIdentityProviderConfig;
@@ -14,7 +15,7 @@ export interface EnterpriseCredentialExchangeParams {
   enterpriseManagedConfig: EnterpriseManagedCredentialConfig;
 }
 
-export interface EnterpriseCredentialProvider {
+export interface EnterpriseCredentialExchangeAdapter {
   exchangeCredential(
     params: EnterpriseCredentialExchangeParams,
   ): Promise<EnterpriseManagedCredentialResult>;
@@ -32,19 +33,23 @@ export async function exchangeEnterpriseManagedCredential(params: {
     throw new Error("Enterprise identity provider not found");
   }
 
-  const provider = getEnterpriseCredentialProvider(identityProvider);
-  return provider.exchangeCredential({
+  const adapter = getEnterpriseCredentialExchangeAdapter(identityProvider);
+  return adapter.exchangeCredential({
     identityProvider,
     assertion: params.assertion,
     enterpriseManagedConfig: params.enterpriseManagedConfig,
   });
 }
 
-function getEnterpriseCredentialProvider(
+function getEnterpriseCredentialExchangeAdapter(
   identityProvider: ExternalIdentityProviderConfig,
-): EnterpriseCredentialProvider {
+): EnterpriseCredentialExchangeAdapter {
   if (isOktaIdentityProvider(identityProvider)) {
-    return oktaEnterpriseCredentialProvider;
+    return oktaEnterpriseCredentialExchangeAdapter;
+  }
+
+  if (isKeycloakIdentityProvider(identityProvider)) {
+    return keycloakEnterpriseCredentialExchangeAdapter;
   }
 
   throw new Error(
@@ -62,4 +67,16 @@ function isOktaIdentityProvider(
   }
 
   return identityProvider.issuer.includes(".okta.com");
+}
+
+function isKeycloakIdentityProvider(
+  identityProvider: ExternalIdentityProviderConfig,
+): boolean {
+  const configuredProviderType =
+    identityProvider.oidcConfig?.enterpriseManagedCredentials?.providerType;
+  if (configuredProviderType === "keycloak") {
+    return true;
+  }
+
+  return identityProvider.issuer.includes("/realms/");
 }

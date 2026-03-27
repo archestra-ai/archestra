@@ -145,7 +145,7 @@ Credentials are configured when you install a server from the [MCP Catalog](/doc
 
 - **Static secrets**: API keys or personal access tokens that are set once at install time and used for all requests.
 - **OAuth tokens**: Obtained by running an OAuth flow against the upstream provider during installation. Archestra stores both the access token and refresh token.
-- **Enterprise-managed credentials**: Retrieved at tool-call time from an attached enterprise IdP such as Okta when the IdP can broker a downstream credential for the requested resource.
+- **Enterprise-managed credentials**: Retrieved at tool-call time from an attached enterprise IdP such as Okta or Keycloak when the IdP can mint or broker a downstream credential for the requested resource.
 
 How credentials are delivered to the upstream server depends on the server type. For **passthrough** (remote) servers, Archestra sends the credential as an `Authorization: Bearer` header over HTTP. For **hosted** (local) servers running in Kubernetes, the gateway connects via stdio transport within the cluster and no auth headers are needed.
 
@@ -194,6 +194,11 @@ In Archestra, this is configured at the **tool assignment** level:
 - set the managed resource identifier from the IdP
 - choose the requested credential type (`secret`, `bearer token`, `service account`, or `ID-JAG`)
 - choose how the returned credential should be injected into the downstream MCP request
+
+Provider differences:
+
+- **Okta** can be used when the IdP returns resource-specific managed credentials such as secrets, bearer tokens, service accounts, or ID-JAG.
+- **Keycloak** can be used when the IdP returns a downstream bearer token through token exchange. In that setup, the managed resource identifier maps to the target audience/client used for the exchange.
 
 This model works best for remote MCP servers or local MCP servers using HTTP transport. Local stdio servers do not have a per-request header channel, so enterprise-managed injection is not supported for stdio.
 

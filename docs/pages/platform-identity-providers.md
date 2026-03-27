@@ -213,7 +213,7 @@ The key fields are:
 - **Broker Token Endpoint**: Usually the IdP token endpoint used for RFC 8693 token exchange
 - **Broker Client Authentication**: `private_key_jwt`, `client_secret_post`, or `client_secret_basic`
 - **Broker Private Key PEM / Key ID**: Used for `private_key_jwt`
-- **Subject Token Type**: Usually `id_token`
+- **Subject Token Type**: Usually `id_token` for Okta-style exchanges, or `access_token` for Keycloak token exchange
 
 These settings do not change the SSO login flow. They are only used when a tool assignment selects **Enterprise-managed credentials** as its upstream credential strategy.
 

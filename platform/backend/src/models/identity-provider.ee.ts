@@ -1,6 +1,6 @@
 import type { SSOOptions } from "@better-auth/sso";
 import type { IdpRoleMappingConfig } from "@shared";
-import { MEMBER_ROLE_NAME, SSO_TRUSTED_PROVIDER_IDS } from "@shared";
+import { IDENTITY_TRUSTED_PROVIDER_IDS, MEMBER_ROLE_NAME } from "@shared";
 import { APIError } from "better-auth";
 import { and, eq } from "drizzle-orm";
 import { jwtDecode } from "jwt-decode";
@@ -445,7 +445,7 @@ class IdentityProviderModel {
         error instanceof Error &&
         error.message.includes("Database not initialized")
       ) {
-        return [...SSO_TRUSTED_PROVIDER_IDS];
+        return [...IDENTITY_TRUSTED_PROVIDER_IDS];
       }
 
       throw error;
@@ -453,7 +453,7 @@ class IdentityProviderModel {
 
     return [
       ...new Set([
-        ...SSO_TRUSTED_PROVIDER_IDS,
+        ...IDENTITY_TRUSTED_PROVIDER_IDS,
         ...configuredProviderIds
           .map(({ providerId }) => providerId)
           .filter((providerId) => providerId.length > 0)

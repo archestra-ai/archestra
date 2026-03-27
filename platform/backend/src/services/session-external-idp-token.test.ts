@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import { resolveSessionExternalIdpToken } from "./session-external-idp-token";
 
@@ -76,6 +78,58 @@ describe("resolveSessionExternalIdpToken", () => {
     });
 
     expect(result).toBeNull();
+  });
+
+  test("uses the stored access token when the identity provider is configured for access_token subject exchange", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeIdentityProvider,
+    makeAgent,
+    makeAccount,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "member" });
+
+    const identityProvider = await makeIdentityProvider(org.id, {
+      providerId: "keycloak-enterprise",
+      issuer: "http://localhost:30081/realms/archestra",
+      oidcConfig: {
+        clientId: "archestra-oidc",
+        enterpriseManagedCredentials: {
+          providerType: "keycloak",
+          subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+        },
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      identityProviderId: identityProvider.id,
+    });
+
+    await db.insert(schema.accountsTable).values({
+      id: randomUUID(),
+      accountId: "acct-keycloak-enterprise",
+      providerId: "keycloak-enterprise",
+      userId: user.id,
+      accessToken: "keycloak-access-token",
+      accessTokenExpiresAt: new Date(Date.now() + 3600_000),
+      idToken: createJwt({ exp: futureExpSeconds() }),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const result = await resolveSessionExternalIdpToken({
+      agentId: agent.id,
+      userId: user.id,
+    });
+
+    expect(result).toEqual({
+      identityProviderId: identityProvider.id,
+      providerId: "keycloak-enterprise",
+      rawToken: "keycloak-access-token",
+    });
   });
 });
 

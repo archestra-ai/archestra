@@ -1,9 +1,9 @@
-import { describe, expect, test } from 'vitest';
-import { z } from 'zod';
-import { renderSchemaRows } from './codegen-archestra-mcp-server-docs';
+import { describe, expect, test } from "vitest";
+import { z } from "zod";
+import { renderSchemaRows } from "./codegen-archestra-mcp-server-docs";
 
-describe('codegen-archestra-mcp-server-docs', () => {
-  test('renders nullable nested enterprise-managed config fields', () => {
+describe("codegen-archestra-mcp-server-docs", () => {
+  test("renders nullable nested enterprise-managed config fields", () => {
     const schema = z.toJSONSchema(
       z.object({
         assignments: z.array(
@@ -11,9 +11,9 @@ describe('codegen-archestra-mcp-server-docs', () => {
             enterpriseManagedConfig: z
               .object({
                 requestedCredentialType: z.enum([
-                  'id_jag',
-                  'bearer_token',
-                  'secret',
+                  "id_jag",
+                  "bearer_token",
+                  "secret",
                 ]),
                 responseFieldPath: z.string().optional(),
               })
@@ -27,7 +27,7 @@ describe('codegen-archestra-mcp-server-docs', () => {
           }),
         ),
       }),
-      { io: 'input' },
+      { io: "input" },
     );
 
     const rows = renderSchemaRows(schema as never);
@@ -35,16 +35,16 @@ describe('codegen-archestra-mcp-server-docs', () => {
     expect(rows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          name: '`assignments[].enterpriseManagedConfig`',
-          type: '`object \\| null`',
+          name: "`assignments[].enterpriseManagedConfig`",
+          type: "`object \\| null`",
         }),
         expect.objectContaining({
-          name: '`assignments[].enterpriseManagedConfig.requestedCredentialType`',
+          name: "`assignments[].enterpriseManagedConfig.requestedCredentialType`",
           type: '`"id_jag" \\| "bearer_token" \\| "secret"`',
         }),
         expect.objectContaining({
-          name: '`assignments[].credentialSourceMcpServerId`',
-          type: '`string \\| null`',
+          name: "`assignments[].credentialSourceMcpServerId`",
+          type: "`string \\| null`",
         }),
       ]),
     );

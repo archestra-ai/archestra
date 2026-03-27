@@ -156,4 +156,89 @@ describe("resolveEnterpriseTransportCredential", () => {
 
     fetchMock.mockRestore();
   });
+
+  test("exchanges a Keycloak session access token for a brokered downstream bearer token", async ({
+    makeAgent,
+    makeIdentityProvider,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser({ email: "keycloak-broker@example.com" });
+    const identityProvider = await makeIdentityProvider(organization.id, {
+      providerId: "keycloak-broker",
+      issuer: "http://localhost:30081/realms/archestra",
+      oidcConfig: {
+        clientId: "archestra-oidc",
+        clientSecret: "archestra-oidc-secret",
+        tokenEndpoint:
+          "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+        enterpriseManagedCredentials: {
+          providerType: "keycloak",
+          clientId: "archestra-oidc",
+          clientSecret: "archestra-oidc-secret",
+          tokenEndpoint:
+            "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+          tokenEndpointAuthentication: "client_secret_post",
+          subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+        },
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      identityProviderId: identityProvider.id,
+    });
+
+    await db.insert(schema.accountsTable).values({
+      id: randomUUID(),
+      accountId: "acct-keycloak",
+      providerId: identityProvider.providerId,
+      userId: user.id,
+      accessToken: "keycloak-session-access-token",
+      accessTokenExpiresAt: new Date(Date.now() + 300_000),
+      idToken: "keycloak-session-id-token",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          access_token: "github-mock-access-token",
+          issued_token_type: "urn:ietf:params:oauth:token-type:access_token",
+          expires_in: 300,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const result = await resolveEnterpriseTransportCredential({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: "session-token",
+        teamId: null,
+        isOrganizationToken: false,
+        userId: user.id,
+      },
+      enterpriseManagedConfig: {
+        requestedCredentialType: "bearer_token",
+        resourceIdentifier: "archestra-oidc",
+        tokenInjectionMode: "authorization_bearer",
+      },
+    });
+
+    expect(result).toEqual({
+      headerName: "Authorization",
+      headerValue: "Bearer github-mock-access-token",
+      expiresInSeconds: 300,
+    });
+
+    const [, requestInit] = fetchMock.mock.calls[0] ?? [];
+    expect(String(requestInit?.body)).toContain(
+      "subject_token=keycloak-session-access-token",
+    );
+    expect(String(requestInit?.body)).toContain("audience=archestra-oidc");
+
+    fetchMock.mockRestore();
+  });
 });

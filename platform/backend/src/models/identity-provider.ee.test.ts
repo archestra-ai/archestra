@@ -1,5 +1,5 @@
 import type { IdpRoleMappingConfig } from "@shared";
-import { MEMBER_ROLE_NAME, SSO_TRUSTED_PROVIDER_IDS } from "@shared";
+import { IDENTITY_TRUSTED_PROVIDER_IDS, MEMBER_ROLE_NAME } from "@shared";
 import { APIError } from "better-auth";
 import { vi } from "vitest";
 import { retrieveIdpGroups } from "@/auth/idp-team-sync-cache.ee";
@@ -127,7 +127,7 @@ describe("IdentityProviderModel", () => {
     test("returns built-in trusted providers when no custom identity providers exist", async () => {
       await expect(
         IdentityProviderModel.getTrustedAccountLinkingProviderIds(),
-      ).resolves.toEqual([...SSO_TRUSTED_PROVIDER_IDS]);
+      ).resolves.toEqual([...IDENTITY_TRUSTED_PROVIDER_IDS]);
     });
 
     test("includes configured generic OIDC and SAML provider IDs", async ({
@@ -148,7 +148,7 @@ describe("IdentityProviderModel", () => {
       await expect(
         IdentityProviderModel.getTrustedAccountLinkingProviderIds(),
       ).resolves.toEqual([
-        ...SSO_TRUSTED_PROVIDER_IDS,
+        ...IDENTITY_TRUSTED_PROVIDER_IDS,
         "custom-oidc",
         "custom-saml",
       ]);
@@ -164,7 +164,7 @@ describe("IdentityProviderModel", () => {
 
       await expect(
         IdentityProviderModel.getTrustedAccountLinkingProviderIds(),
-      ).resolves.toEqual([...SSO_TRUSTED_PROVIDER_IDS]);
+      ).resolves.toEqual([...IDENTITY_TRUSTED_PROVIDER_IDS]);
     });
 
     test("returns the built-in trusted providers before database initialization", async () => {
@@ -194,7 +194,7 @@ describe("IdentityProviderModel", () => {
 
       await expect(
         IsolatedIdentityProviderModel.getTrustedAccountLinkingProviderIds(),
-      ).resolves.toEqual([...SSO_TRUSTED_PROVIDER_IDS]);
+      ).resolves.toEqual([...IDENTITY_TRUSTED_PROVIDER_IDS]);
 
       vi.doUnmock("@/database");
     });

@@ -29,17 +29,23 @@ export async function resolveSessionExternalIdpToken(params: {
     params.userId,
     identityProvider.providerId,
   );
-  if (!account?.idToken) {
+  const tokenPreference = resolveSubjectTokenPreference(identityProvider);
+  const rawToken =
+    tokenPreference === "access_token"
+      ? account?.accessToken
+      : account?.idToken;
+  if (!rawToken) {
     return null;
   }
 
-  if (isJwtExpired(account.idToken)) {
+  if (isStoredSubjectTokenExpired({ account, tokenPreference, rawToken })) {
     logger.info(
       {
         agentId: params.agentId,
         userId: params.userId,
         identityProviderId: identityProvider.id,
         providerId: identityProvider.providerId,
+        tokenPreference,
       },
       "Session external IdP token is expired; falling back to internal gateway auth",
     );
@@ -49,7 +55,7 @@ export async function resolveSessionExternalIdpToken(params: {
   return {
     identityProviderId: identityProvider.id,
     providerId: identityProvider.providerId,
-    rawToken: account.idToken,
+    rawToken,
   };
 }
 
@@ -67,4 +73,45 @@ function isJwtExpired(token: string): boolean {
   } catch {
     return false;
   }
+}
+
+function resolveSubjectTokenPreference(identityProvider: {
+  oidcConfig?: {
+    enterpriseManagedCredentials?: {
+      subjectTokenType?: string;
+      providerType?: string;
+    };
+  } | null;
+}): "access_token" | "id_token" {
+  const subjectTokenType =
+    identityProvider.oidcConfig?.enterpriseManagedCredentials?.subjectTokenType;
+  if (subjectTokenType === "urn:ietf:params:oauth:token-type:access_token") {
+    return "access_token";
+  }
+
+  if (
+    identityProvider.oidcConfig?.enterpriseManagedCredentials?.providerType ===
+    "keycloak"
+  ) {
+    return "access_token";
+  }
+
+  return "id_token";
+}
+
+function isStoredSubjectTokenExpired(params: {
+  account: {
+    accessTokenExpiresAt: Date | null;
+  };
+  tokenPreference: "access_token" | "id_token";
+  rawToken: string;
+}): boolean {
+  if (params.tokenPreference === "access_token") {
+    if (params.account.accessTokenExpiresAt) {
+      return params.account.accessTokenExpiresAt <= new Date();
+    }
+    return false;
+  }
+
+  return isJwtExpired(params.rawToken);
 }

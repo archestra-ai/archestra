@@ -4,8 +4,8 @@ import logger from "@/logging";
 import { discoverOidcTokenEndpoint } from "@/services/external-idp-oidc";
 import type { EnterpriseManagedCredentialType } from "@/types";
 import type {
+  EnterpriseCredentialExchangeAdapter,
   EnterpriseCredentialExchangeParams,
-  EnterpriseCredentialProvider,
 } from "./index";
 
 const TOKEN_EXCHANGE_GRANT_TYPE =
@@ -27,7 +27,9 @@ export type EnterpriseManagedCredentialResult = {
   issuedTokenType: string | null;
 };
 
-class OktaEnterpriseCredentialProvider implements EnterpriseCredentialProvider {
+class OktaEnterpriseCredentialExchangeAdapter
+  implements EnterpriseCredentialExchangeAdapter
+{
   async exchangeCredential(
     params: EnterpriseCredentialExchangeParams,
   ): Promise<EnterpriseManagedCredentialResult> {
@@ -195,8 +197,8 @@ class OktaEnterpriseCredentialProvider implements EnterpriseCredentialProvider {
   }
 }
 
-export const oktaEnterpriseCredentialProvider =
-  new OktaEnterpriseCredentialProvider();
+export const oktaEnterpriseCredentialExchangeAdapter =
+  new OktaEnterpriseCredentialExchangeAdapter();
 
 async function buildClientAssertion(params: {
   clientId: string;

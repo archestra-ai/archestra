@@ -142918,7 +142918,8 @@
                                 "type": "string",
                                 "enum": [
                                   "generic_oidc",
-                                  "okta"
+                                  "okta",
+                                  "keycloak"
                                 ]
                               },
                               "clientId": {
@@ -142950,6 +142951,7 @@
                               "subjectTokenType": {
                                 "type": "string",
                                 "enum": [
+                                  "urn:ietf:params:oauth:token-type:access_token",
                                   "urn:ietf:params:oauth:token-type:id_token",
                                   "urn:ietf:params:oauth:token-type:jwt"
                                 ]
@@ -143536,7 +143538,8 @@
                             "type": "string",
                             "enum": [
                               "generic_oidc",
-                              "okta"
+                              "okta",
+                              "keycloak"
                             ]
                           },
                           "clientId": {
@@ -143568,6 +143571,7 @@
                           "subjectTokenType": {
                             "type": "string",
                             "enum": [
+                              "urn:ietf:params:oauth:token-type:access_token",
                               "urn:ietf:params:oauth:token-type:id_token",
                               "urn:ietf:params:oauth:token-type:jwt"
                             ]
@@ -143913,7 +143917,8 @@
                               "type": "string",
                               "enum": [
                                 "generic_oidc",
-                                "okta"
+                                "okta",
+                                "keycloak"
                               ]
                             },
                             "clientId": {
@@ -143945,6 +143950,7 @@
                             "subjectTokenType": {
                               "type": "string",
                               "enum": [
+                                "urn:ietf:params:oauth:token-type:access_token",
                                 "urn:ietf:params:oauth:token-type:id_token",
                                 "urn:ietf:params:oauth:token-type:jwt"
                               ]
@@ -144792,7 +144798,8 @@
                               "type": "string",
                               "enum": [
                                 "generic_oidc",
-                                "okta"
+                                "okta",
+                                "keycloak"
                               ]
                             },
                             "clientId": {
@@ -144824,6 +144831,7 @@
                             "subjectTokenType": {
                               "type": "string",
                               "enum": [
+                                "urn:ietf:params:oauth:token-type:access_token",
                                 "urn:ietf:params:oauth:token-type:id_token",
                                 "urn:ietf:params:oauth:token-type:jwt"
                               ]
@@ -145409,7 +145417,8 @@
                             "type": "string",
                             "enum": [
                               "generic_oidc",
-                              "okta"
+                              "okta",
+                              "keycloak"
                             ]
                           },
                           "clientId": {
@@ -145441,6 +145450,7 @@
                           "subjectTokenType": {
                             "type": "string",
                             "enum": [
+                              "urn:ietf:params:oauth:token-type:access_token",
                               "urn:ietf:params:oauth:token-type:id_token",
                               "urn:ietf:params:oauth:token-type:jwt"
                             ]
@@ -145787,7 +145797,8 @@
                               "type": "string",
                               "enum": [
                                 "generic_oidc",
-                                "okta"
+                                "okta",
+                                "keycloak"
                               ]
                             },
                             "clientId": {
@@ -145819,6 +145830,7 @@
                             "subjectTokenType": {
                               "type": "string",
                               "enum": [
+                                "urn:ietf:params:oauth:token-type:access_token",
                                 "urn:ietf:params:oauth:token-type:id_token",
                                 "urn:ietf:params:oauth:token-type:jwt"
                               ]

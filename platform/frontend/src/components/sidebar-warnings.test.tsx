@@ -206,7 +206,7 @@ describe("SidebarWarnings", () => {
   });
 
   describe("permission gating", () => {
-    it("hides default credentials warning when user lacks agentSettings:update permission", () => {
+    it("hides default credentials warning when user lacks organization:update permission", () => {
       mockUseSession.mockReturnValue({
         data: { user: { email: "admin@example.com" } },
       });

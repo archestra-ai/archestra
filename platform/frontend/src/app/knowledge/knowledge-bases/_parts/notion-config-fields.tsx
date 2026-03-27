@@ -74,7 +74,15 @@ export function NotionConfigFields({
                 type="number"
                 placeholder="100"
                 {...field}
-                onChange={(e) => field.onChange(Number(e.target.value))}
+                onChange={(e) => {
+                  const { value } = e.target;
+                  if (value === "") {
+                    field.onChange(undefined);
+                    return;
+                  }
+                  const parsed = Number(value);
+                  field.onChange(Number.isNaN(parsed) ? undefined : parsed);
+                }}
               />
             </FormControl>
             <FormDescription>

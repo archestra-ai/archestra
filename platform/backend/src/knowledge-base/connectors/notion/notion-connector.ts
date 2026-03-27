@@ -84,14 +84,6 @@ export class NotionConnector extends BaseConnector {
         searchBody.start_cursor = nextCursor;
       }
 
-      // Filter by lastSyncedAt if present
-      if (checkpoint.lastSyncedAt) {
-        searchBody.filter = {
-          value: "page",
-          property: "object",
-        };
-      }
-
       // If databaseIds or pageIds are specified, we use the specific fetch logic instead of search
       const hasFilters = (config.databaseIds && config.databaseIds.length > 0) || (config.pageIds && config.pageIds.length > 0);
       

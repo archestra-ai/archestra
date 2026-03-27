@@ -45,6 +45,13 @@ import MemberModel from "./member";
 import ToolModel from "./tool";
 
 class AgentModel {
+  static async findAllWithScheduleEnabled(): Promise<Agent[]> {
+    return await db
+      .select()
+      .from(schema.agentsTable)
+      .where(eq(schema.agentsTable.scheduleEnabled, true));
+  }
+
   static async findBasicByOrganizationIdAndIds(params: {
     organizationId: string;
     agentIds: string[];

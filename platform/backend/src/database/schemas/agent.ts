@@ -103,6 +103,16 @@ const agentsTable = pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
+
+    // Schedule configuration
+    /** Cron expression or interval for the agent trigger */
+    scheduleExpression: text("schedule_expression"),
+    /** Whether the schedule trigger is enabled */
+    scheduleEnabled: boolean("schedule_enabled").notNull().default(false),
+    /** Last time the agent was triggered by a schedule */
+    lastScheduledRunAt: timestamp("last_scheduled_run_at", { mode: "date" }),
+    /** Optional message to be sent to the agent during a scheduled trigger */
+    scheduledMessage: text("scheduled_message"),
   },
   (table) => [
     index("agents_organization_id_idx").on(table.organizationId),

@@ -164,6 +164,10 @@ export const SelectAgentSchema = createSelectSchema(
     .array(SuggestedPromptInputSchema)
     .max(MAX_SUGGESTED_PROMPTS)
     .default([]),
+  scheduleExpression: z.string().nullable().optional(),
+  scheduleEnabled: z.boolean().default(false),
+  lastScheduledRunAt: z.date().nullable().optional(),
+  scheduledMessage: z.string().nullable().optional(),
 });
 
 // Base schema without refinement - can be used with .partial()
@@ -183,6 +187,10 @@ export const InsertAgentSchemaBase = createInsertSchema(
       .array(SuggestedPromptInputSchema)
       .max(MAX_SUGGESTED_PROMPTS)
       .optional(),
+    scheduleExpression: z.string().nullable().optional(),
+    scheduleEnabled: z.boolean().optional(),
+    lastScheduledRunAt: z.date().nullable().optional(),
+    scheduledMessage: z.string().nullable().optional(),
   })
   .omit({
     id: true,
@@ -211,6 +219,10 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
       .array(SuggestedPromptInputSchema)
       .max(MAX_SUGGESTED_PROMPTS)
       .optional(),
+    scheduleExpression: z.string().nullable().optional(),
+    scheduleEnabled: z.boolean().optional(),
+    lastScheduledRunAt: z.date().nullable().optional(),
+    scheduledMessage: z.string().nullable().optional(),
   })
   .omit({
     id: true,

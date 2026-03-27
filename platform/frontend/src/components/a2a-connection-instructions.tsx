@@ -175,9 +175,10 @@ curl -X GET "${agentCardUrl}" \\
             paddingRight: "3.5rem",
           }}
         >
-          <div className="rounded-md border bg-background/95 p-1 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
+          <div className="overflow-hidden rounded-md border bg-background/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
             <CodeBlockCopyButton
               title="Copy A2A endpoint URL"
+              className="rounded-none"
               onCopy={() => toast.success("A2A endpoint URL copied")}
               onError={() => toast.error("Failed to copy A2A endpoint URL")}
             />
@@ -202,9 +203,10 @@ curl -X GET "${agentCardUrl}" \\
             paddingRight: "3.5rem",
           }}
         >
-          <div className="rounded-md border bg-background/95 p-1 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
+          <div className="overflow-hidden rounded-md border bg-background/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
             <CodeBlockCopyButton
               title="Copy chat deep link"
+              className="rounded-none"
               onCopy={() => toast.success("Chat deep link copied")}
               onError={() => toast.error("Failed to copy chat deep link")}
             />

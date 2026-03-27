@@ -24,14 +24,18 @@ export function SidebarWarningsAccordion() {
     useDefaultCredentialsEnabled();
   const globalToolPolicy = useFeature("globalToolPolicy");
   const { data: canUpdateOrg } = useHasPermissions({
+    organization: ["update"],
+  });
+  const { data: canUpdateAgentSettings } = useHasPermissions({
     agentSettings: ["update"],
   });
 
   const isPermissive = globalToolPolicy === "permissive";
 
-  const showSecurityEngineWarning = !!session && canUpdateOrg && isPermissive;
+  const showSecurityEngineWarning =
+    !!session && canUpdateAgentSettings === true && isPermissive;
   const showDefaultCredsWarning =
-    canUpdateOrg &&
+    canUpdateOrg === true &&
     !isLoadingCreds &&
     defaultCredentialsEnabled !== undefined &&
     defaultCredentialsEnabled &&

@@ -350,6 +350,16 @@ export const RouteId = {
   DeleteIncomingEmailSubscription: "deleteIncomingEmailSubscription",
   GetAgentEmailAddress: "getAgentEmailAddress",
 
+  // Agent Schedule Trigger Routes
+  GetAgentScheduleTriggers: "getAgentScheduleTriggers",
+  GetAgentScheduleTrigger: "getAgentScheduleTrigger",
+  CreateAgentScheduleTrigger: "createAgentScheduleTrigger",
+  UpdateAgentScheduleTrigger: "updateAgentScheduleTrigger",
+  DeleteAgentScheduleTrigger: "deleteAgentScheduleTrigger",
+  EnableAgentScheduleTrigger: "enableAgentScheduleTrigger",
+  DisableAgentScheduleTrigger: "disableAgentScheduleTrigger",
+  ManualTriggerAgentSchedule: "manualTriggerAgentSchedule",
+
   // ChatOps Routes
   GetChatOpsStatus: "getChatOpsStatus",
   ListChatOpsBindings: "listChatOpsBindings",

@@ -882,6 +882,32 @@ export const requiredEndpointPermissionsMap: Partial<
     secret: ["read"],
   },
 
+  // Agent Schedule Trigger Routes
+  [RouteId.GetAgentScheduleTriggers]: {
+    agentTrigger: ["read"],
+  },
+  [RouteId.GetAgentScheduleTrigger]: {
+    agentTrigger: ["read"],
+  },
+  [RouteId.CreateAgentScheduleTrigger]: {
+    agentTrigger: ["create"],
+  },
+  [RouteId.UpdateAgentScheduleTrigger]: {
+    agentTrigger: ["update"],
+  },
+  [RouteId.DeleteAgentScheduleTrigger]: {
+    agentTrigger: ["delete"],
+  },
+  [RouteId.EnableAgentScheduleTrigger]: {
+    agentTrigger: ["update"],
+  },
+  [RouteId.DisableAgentScheduleTrigger]: {
+    agentTrigger: ["update"],
+  },
+  [RouteId.ManualTriggerAgentSchedule]: {
+    agentTrigger: ["update"],
+  },
+
   // Incoming Email Routes
   [RouteId.GetIncomingEmailStatus]: {
     agentTrigger: ["read"],
@@ -976,6 +1002,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/agents/triggers/slack": { agentTrigger: ["read"] },
   "/agents/triggers/ms-teams": { agentTrigger: ["read"] },
   "/agents/triggers/email": { agentTrigger: ["read"] },
+  "/agents/triggers/schedule": { agentTrigger: ["read"] },
 
   // LLM
   "/llm/proxies": { llmProxy: ["read"] },

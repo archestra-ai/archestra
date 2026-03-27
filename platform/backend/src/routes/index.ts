@@ -18,6 +18,7 @@ import zhipuaiProxyRoutesV2 from "./proxy/routesv2/zhipuai";
 export { default as browserStreamRoutes } from "@/features/browser-stream/routes/browser-stream.routes";
 export { default as a2aRoutes } from "./a2a";
 export { default as agentRoutes } from "./agent";
+export { default as agentScheduleTriggerRoutes } from "./agent-schedule-trigger";
 export { default as agentToolRoutes } from "./agent-tool";
 export { default as apiKeyRoutes } from "./api-key";
 export { default as authRoutes } from "./auth";

@@ -3,11 +3,11 @@ import logger from "@/logging";
 import { AgentModel } from "@/models";
 
 export async function handleAgentRun(payload: Record<string, unknown>): Promise<void> {
-  const agentId = payload.agentId as string;
-  if (!agentId) {
+  const rawAgentId = payload.agentId;
+  if (typeof rawAgentId !== "string" || rawAgentId.length === 0) {
     throw new Error("agentId is required for agent_run task");
   }
-
+  const agentId = rawAgentId;
   const agent = await AgentModel.findById(agentId);
   if (!agent) {
     logger.error({ agentId }, "Agent not found for scheduled run");

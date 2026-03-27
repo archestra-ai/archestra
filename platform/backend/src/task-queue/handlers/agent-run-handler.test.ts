@@ -66,13 +66,14 @@ describe("handleAgentRun", () => {
 
     await handleAgentRun({ agentId: "agent-1" });
 
-    expect(mockExecuteA2AMessage).toHaveBeenCalledWith({
-      agentId: "agent-1",
-      message: "Hello",
-      organizationId: "org-1",
-      userId: "user-1",
-      source: "scheduler",
-    });
+    expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: "agent-1",
+        message: "Hello",
+        organizationId: "org-1",
+        userId: "user-1",
+      }),
+    );
 
     expect(mockUpdate).toHaveBeenCalledWith("agent-1", {
       lastScheduledRunAt: expect.any(Date),

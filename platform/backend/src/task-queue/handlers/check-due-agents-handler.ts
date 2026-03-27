@@ -1,6 +1,6 @@
 import { Cron } from "croner";
 import logger from "@/logging";
-import { AgentModel, TaskModel } from "@/models";
+import { AgentModel } from "@/models";
 import { taskQueueService } from "@/task-queue";
 
 export async function handleCheckDueAgents(): Promise<void> {

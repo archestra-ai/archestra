@@ -86,37 +86,6 @@ const CONNECTOR_OPTIONS: {
   },
 ];
 
-// ... (in handleSelectType)
-    const defaultConfigs: Record<ConnectorType, Record<string, unknown>> = {
-      jira: { type, isCloud: true },
-      confluence: { type, isCloud: true },
-      github: { type, githubUrl: "https://api.github.com" },
-      gitlab: { type, gitlabUrl: "https://gitlab.com" },
-      servicenow: { type, syncDataForLastMonths: 6 },
-      notion: { type },
-    };
-    form.setValue("config", defaultConfigs[type]);
-// ... (in Advanced section)
-                    {connectorType === "gitlab" && (
-                      <GitlabConfigFields form={form} hideUrl />
-                    )}
-                    {connectorType === "notion" && (
-                      <NotionConfigFields form={form} />
-                    )}
-                    {connectorType === "servicenow" && (
-// ... (in getUrlConfig)
-function getUrlConfig(type: ConnectorType): {
-  fieldName: string;
-  label: string;
-  placeholder: string;
-  description: string;
-} | null {
-  switch (type) {
-    case "notion":
-      return null;
-    case "jira":
-// ... (rest of getUrlConfig calls should check for null)
-
 interface CreateConnectorFormValues {
   name: string;
   description: string;

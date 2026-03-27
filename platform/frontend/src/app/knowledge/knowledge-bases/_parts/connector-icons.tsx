@@ -1,5 +1,5 @@
 import type { archestraApiTypes } from "@shared";
-import { Github, StickyNote } from "lucide-react";
+import { Github } from "lucide-react";
 import type { ReactNode } from "react";
 
 type ConnectorType =
@@ -18,10 +18,6 @@ const CONNECTOR_ICON_MAP: Partial<Record<ConnectorType, ConnectorIcon>> = {
   },
   gitlab: { kind: "img", src: "/icons/gitlab.png" },
   servicenow: { kind: "img", src: "/icons/servicenow.png" },
-  notion: {
-    kind: "element",
-    render: (className) => <StickyNote className={className} />,
-  },
 };
 
 export function hasConnectorIcon(type: string): boolean {

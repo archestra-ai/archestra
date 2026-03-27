@@ -41,7 +41,6 @@ import { ConnectorTypeIcon } from "./connector-icons";
 import { GithubConfigFields } from "./github-config-fields";
 import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
-import { NotionConfigFields } from "./notion-config-fields";
 import { SchedulePicker } from "./schedule-picker";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
 import { transformConfigArrayFields } from "./transform-config-array-fields";
@@ -63,11 +62,6 @@ const CONNECTOR_OPTIONS: {
     type: "confluence",
     label: CONNECTOR_TYPE_LABELS.confluence,
     description: "Sync pages and spaces from Confluence",
-  },
-  {
-    type: "notion",
-    label: CONNECTOR_TYPE_LABELS.notion,
-    description: "Sync pages and databases from Notion",
   },
   {
     type: "github",
@@ -134,7 +128,6 @@ export function CreateConnectorDialog({
       github: { type, githubUrl: "https://api.github.com" },
       gitlab: { type, gitlabUrl: "https://gitlab.com" },
       servicenow: { type, syncDataForLastMonths: 6 },
-      notion: { type },
     };
     form.setValue("config", defaultConfigs[type]);
     setStep("configure");
@@ -506,9 +499,6 @@ export function CreateConnectorDialog({
                     {connectorType === "gitlab" && (
                       <GitlabConfigFields form={form} hideUrl />
                     )}
-                    {connectorType === "notion" && (
-                      <NotionConfigFields form={form} />
-                    )}
                     {connectorType === "servicenow" && (
                       <ServiceNowConfigFields form={form} hideUrl />
                     )}
@@ -541,8 +531,6 @@ function getUrlConfig(type: ConnectorType): {
   description: string;
 } | null {
   switch (type) {
-    case "notion":
-      return null;
     case "jira":
       return {
         fieldName: "config.jiraBaseUrl",

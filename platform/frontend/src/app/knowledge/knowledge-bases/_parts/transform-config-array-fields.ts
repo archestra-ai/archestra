@@ -9,7 +9,6 @@ export function transformConfigArrayFields(
     "repos",
     "spaceKeys",
     "pageIds",
-    "databaseIds",
     "labelsToSkip",
     "commentEmailBlacklist",
     "states",

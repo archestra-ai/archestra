@@ -28,7 +28,6 @@ import { ConnectorTypeIcon } from "./connector-icons";
 import { GithubConfigFields } from "./github-config-fields";
 import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
-import { NotionConfigFields } from "./notion-config-fields";
 import { SchedulePicker } from "./schedule-picker";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
 import { transformConfigArrayFields } from "./transform-config-array-fields";
@@ -219,28 +218,26 @@ export function EditConnectorDialog({
             )}
           />
 
-          {urlConfig && (
-            <FormField
-              control={form.control}
-              // biome-ignore lint/suspicious/noExplicitAny: dynamic field name for connector-specific URL
-              name={urlConfig.fieldName as any}
-              rules={{ required: `${urlConfig.label} is required` }}
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{urlConfig.label}</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder={urlConfig.placeholder}
-                      {...field}
-                      value={(field.value as string) ?? ""}
-                    />
-                  </FormControl>
-                  <FormDescription>{urlConfig.description}</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
+          <FormField
+            control={form.control}
+            // biome-ignore lint/suspicious/noExplicitAny: dynamic field name for connector-specific URL
+            name={urlConfig.fieldName as any}
+            rules={{ required: `${urlConfig.label} is required` }}
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{urlConfig.label}</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder={urlConfig.placeholder}
+                    {...field}
+                    value={(field.value as string) ?? ""}
+                  />
+                </FormControl>
+                <FormDescription>{urlConfig.description}</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
           {(connectorType === "jira" || connectorType === "confluence") && (
             <FormField
@@ -364,9 +361,6 @@ export function EditConnectorDialog({
               {connectorType === "gitlab" && (
                 <GitlabConfigFields form={form} hideUrl />
               )}
-              {connectorType === "notion" && (
-                <NotionConfigFields form={form} />
-              )}
               {connectorType === "servicenow" && (
                 <ServiceNowConfigFields form={form} hideUrl />
               )}
@@ -380,19 +374,16 @@ export function EditConnectorDialog({
 
 type ConnectorType =
   archestraApiTypes.CreateConnectorData["body"]["connectorType"];
-
 function getEditUrlConfig(type: ConnectorType): {
   fieldName: string;
   label: string;
   placeholder: string;
   description: string;
   typeLabel: string;
-} | null {
+} {
   switch (type) {
-    case "notion":
-      return null;
     case "jira":
-      return {
+
         fieldName: "config.jiraBaseUrl",
         label: "URL",
         placeholder: "https://your-domain.atlassian.net",

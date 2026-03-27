@@ -1,15 +1,15 @@
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   type ArchestraToolShortName,
   DEFAULT_ARCHESTRA_TOOL_NAMES,
   getArchestraToolShortName,
-} from "@shared";
-import { getArchestraMcpTools } from "@/archestra-mcp-server";
-import { toolShortNames as knowledgeManagementToolShortNames } from "@/archestra-mcp-server/knowledge-management";
-import { TOOL_PERMISSIONS } from "@/archestra-mcp-server/rbac";
-import logger from "@/logging";
+} from '@shared';
+import { getArchestraMcpTools } from '@/archestra-mcp-server';
+import { toolShortNames as knowledgeManagementToolShortNames } from '@/archestra-mcp-server/knowledge-management';
+import { TOOL_PERMISSIONS } from '@/archestra-mcp-server/rbac';
+import logger from '@/logging';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -19,16 +19,16 @@ type ToolPermissionDisplay = string;
 // === Tool group definitions ===
 
 enum ToolGroup {
-  Identity = "Identity",
-  Agents = "Agents",
-  LLMProxies = "LLM Proxies",
-  MCPGateways = "MCP Gateways",
-  MCPServers = "MCP Servers",
-  Limits = "Limits",
-  Policies = "Policies",
-  ToolAssignment = "Tool Assignment",
-  KnowledgeManagement = "Knowledge Management",
-  Chat = "Chat",
+  Identity = 'Identity',
+  Agents = 'Agents',
+  LLMProxies = 'LLM Proxies',
+  MCPGateways = 'MCP Gateways',
+  MCPServers = 'MCP Servers',
+  Limits = 'Limits',
+  Policies = 'Policies',
+  ToolAssignment = 'Tool Assignment',
+  KnowledgeManagement = 'Knowledge Management',
+  Chat = 'Chat',
 }
 
 const groupOrder: Record<ToolGroup, number> = {
@@ -126,11 +126,11 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
 // === Script entry point ===
 
 async function main() {
-  logger.info("Generating Archestra MCP Server documentation...");
+  logger.info('Generating Archestra MCP Server documentation...');
 
   const docsFilePath = path.join(
     __dirname,
-    "../../../../docs/pages/platform-archestra-mcp-server.md",
+    '../../../../docs/pages/platform-archestra-mcp-server.md',
   );
 
   const docsDir = path.dirname(docsFilePath);
@@ -140,7 +140,7 @@ async function main() {
 
   let existingContent: string | null = null;
   if (fs.existsSync(docsFilePath)) {
-    existingContent = fs.readFileSync(docsFilePath, "utf-8");
+    existingContent = fs.readFileSync(docsFilePath, 'utf-8');
   }
 
   const markdownContent = generateMarkdownContent(existingContent);
@@ -157,7 +157,7 @@ async function main() {
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((error) => {
-    logger.error({ error }, "Error generating documentation");
+    logger.error({ error }, 'Error generating documentation');
     process.exit(1);
   });
 }
@@ -208,7 +208,7 @@ function generateMarkdownBody(): string {
     if (!group) {
       throw new Error(
         `Tool "${shortName}" has no group mapping in toolGroups. ` +
-          "Add it to the toolGroups record in codegen-archestra-mcp-server-docs.ts",
+          'Add it to the toolGroups record in codegen-archestra-mcp-server-docs.ts',
       );
     }
 
@@ -217,7 +217,7 @@ function generateMarkdownBody(): string {
     }
     grouped.get(group)?.push({
       shortName: typedShortName,
-      description: truncateDescription(tool.description ?? ""),
+      description: truncateDescription(tool.description ?? ''),
       requiredPermission: formatToolPermission(typedShortName),
       inputSchema: tool.inputSchema as JsonSchema,
       outputSchema: tool.outputSchema as JsonSchema | undefined,
@@ -233,8 +233,8 @@ function generateMarkdownBody(): string {
   const referenceSections: string[] = [];
   for (const [group, groupTools] of sortedGroups) {
     let section = `### ${group}\n\n`;
-    section += "| Tool | Description | Required RBAC Permission |\n";
-    section += "|------|-------------|--------------------------|\n";
+    section += '| Tool | Description | Required RBAC Permission |\n';
+    section += '|------|-------------|--------------------------|\n';
 
     for (const tool of groupTools) {
       section += `| \`${tool.shortName}\` | ${escapeTableCell(tool.description)} | ${escapeTableCell(tool.requiredPermission)} |\n`;
@@ -258,9 +258,9 @@ function generateMarkdownBody(): string {
 
   const preInstalledList = preInstalledShortNames
     .map((n) => formatToolLink(n))
-    .join(", ");
+    .join(', ');
   const queryKnowledgeSourcesPermission = formatToolPermission(
-    "query_knowledge_sources",
+    'query_knowledge_sources',
   );
 
   return `
@@ -273,7 +273,7 @@ The Archestra MCP Server is a built-in MCP server that ships with the platform a
 
 Most tools require explicit assignment to Agents or MCP Gateways before they can be used. The following tools are pre-installed on all new agents by default: ${preInstalledList}.
 
-Additionally, ${formatToolLink("query_knowledge_sources")} is automatically assigned to Agents and MCP Gateways that have at least one [knowledge base](/platform-knowledge-bases) or [knowledge connector](/platform-knowledge-connectors) attached. To use it, the user must have ${queryKnowledgeSourcesPermission}.
+Additionally, ${formatToolLink('query_knowledge_sources')} is automatically assigned to Agents and MCP Gateways that have at least one [knowledge base](/platform-knowledge-bases) or [knowledge connector](/platform-knowledge-connectors) attached. To use it, the user must have ${queryKnowledgeSourcesPermission}.
 
 All Archestra tools are prefixed with \`archestra__\` and are always trusted — they bypass tool invocation and trusted data policies.
 
@@ -281,15 +281,15 @@ All Archestra tools are prefixed with \`archestra__\` and are always trusted —
 
 Archestra tools are **trusted**, meaning they bypass [tool invocation policies](/platform-tool-invocation-policies) and [trusted data policies](/platform-trusted-data-policies) — the tool will always execute without policy evaluation.
 
-However, **RBAC (role-based access control) is still enforced**. Every tool is mapped to a required permission (resource + action). The \`tools/list\` endpoint dynamically filters tools so users only see tools they have permission to use. For example, a user without \`knowledgeBase:create\` permission will not see ${formatToolLink("create_knowledge_base")} in their tool list and cannot execute it.
+However, **RBAC (role-based access control) is still enforced**. Every tool is mapped to a required permission (resource + action). The \`tools/list\` endpoint dynamically filters tools so users only see tools they have permission to use. For example, a user without \`knowledgeBase:create\` permission will not see ${formatToolLink('create_knowledge_base')} in their tool list and cannot execute it.
 
 ## Tools Reference
 
-${referenceSections.join("\n")}`;
+${referenceSections.join('\n')}`;
 }
 
 function extractBodyFromMarkdown(content: string): string {
-  const frontmatterEnd = content.indexOf("---", 4);
+  const frontmatterEnd = content.indexOf('---', 4);
   if (frontmatterEnd === -1) return content;
   return content.slice(frontmatterEnd + 3).trim();
 }
@@ -311,17 +311,17 @@ function generateMarkdownContent(existingContent: string | null): string {
     if (existingBody === newBody.trim() && existingLastUpdated) {
       lastUpdated = existingLastUpdated;
     } else {
-      lastUpdated = new Date().toISOString().split("T")[0];
+      lastUpdated = new Date().toISOString().split('T')[0];
     }
   } else {
-    lastUpdated = new Date().toISOString().split("T")[0];
+    lastUpdated = new Date().toISOString().split('T')[0];
   }
 
   return `${generateFrontmatter(lastUpdated)}${newBody}`;
 }
 
 function truncateDescription(description: string): string {
-  let cleaned = description.replace(/\s*IMPORTANT:.*$/s, "").trim();
+  let cleaned = description.replace(/\s*IMPORTANT:.*$/s, '').trim();
 
   const sentenceMatch = cleaned.match(/^(.*?\.)(?:\s|$)/);
   if (sentenceMatch) {
@@ -336,7 +336,7 @@ function truncateDescription(description: string): string {
 }
 
 function escapeTableCell(text: string): string {
-  return text.replace(/\|/g, "\\|");
+  return text.replace(/\|/g, '\\|');
 }
 
 export function formatToolPermission(
@@ -344,7 +344,7 @@ export function formatToolPermission(
 ): ToolPermissionDisplay {
   const permission = TOOL_PERMISSIONS[toolShortName];
   if (!permission) {
-    return "None (no additional RBAC permission required)";
+    return 'None (no additional RBAC permission required)';
   }
 
   return `\`${permission.resource}:${permission.action}\``;
@@ -369,6 +369,8 @@ interface JsonSchema {
   required?: string[];
   description?: string;
   enum?: string[];
+  anyOf?: JsonSchema[];
+  oneOf?: JsonSchema[];
 }
 
 function renderToolSchemas(
@@ -382,26 +384,26 @@ function renderToolSchemas(
 
   const inputRows = renderSchemaRows(inputSchema);
   if (inputRows.length === 0) {
-    md += "This tool takes no arguments.\n\n";
+    md += 'This tool takes no arguments.\n\n';
   } else {
-    md += "##### Input\n\n";
-    md += "| Parameter | Type | Required | Description |\n";
-    md += "|-----------|------|----------|-------------|\n";
+    md += '##### Input\n\n';
+    md += '| Parameter | Type | Required | Description |\n';
+    md += '|-----------|------|----------|-------------|\n';
     for (const row of inputRows) {
       md += `| ${row.name} | ${row.type} | ${row.required} | ${escapeTableCell(row.description)} |\n`;
     }
-    md += "\n";
+    md += '\n';
   }
 
   if (outputSchema) {
     const outputRows = renderSchemaRows(outputSchema);
     if (outputRows.length === 0) {
       md +=
-        "##### Output\n\nThis tool returns structured output with no documented fields.\n";
+        '##### Output\n\nThis tool returns structured output with no documented fields.\n';
     } else {
-      md += "##### Output\n\n";
-      md += "| Field | Type | Required | Description |\n";
-      md += "|-------|------|----------|-------------|\n";
+      md += '##### Output\n\n';
+      md += '| Field | Type | Required | Description |\n';
+      md += '|-------|------|----------|-------------|\n';
       for (const row of outputRows) {
         md += `| ${row.name} | ${row.type} | ${row.required} | ${escapeTableCell(row.description)} |\n`;
       }
@@ -411,27 +413,25 @@ function renderToolSchemas(
   return md;
 }
 
-function renderSchemaRows(
+export function renderSchemaRows(
   schema: JsonSchema,
-  rootPrefix = "",
+  rootPrefix = '',
 ): { name: string; type: string; required: string; description: string }[] {
-  if (schema.type === "object" && schema.properties) {
+  const objectSchema = getObjectSchema(schema);
+  if (objectSchema?.properties) {
     return renderProperties(
-      schema.properties,
-      new Set(schema.required ?? []),
+      objectSchema.properties,
+      new Set(objectSchema.required ?? []),
       rootPrefix,
     );
   }
 
-  if (
-    schema.type === "array" &&
-    schema.items?.type === "object" &&
-    schema.items.properties
-  ) {
+  const arrayItemObjectSchema = getObjectSchema(schema.items);
+  if (schema.type === 'array' && arrayItemObjectSchema?.properties) {
     return renderProperties(
-      schema.items.properties,
-      new Set(schema.items.required ?? []),
-      rootPrefix ? `${rootPrefix}[]` : "[]",
+      arrayItemObjectSchema.properties,
+      new Set(arrayItemObjectSchema.required ?? []),
+      rootPrefix ? `${rootPrefix}[]` : '[]',
     );
   }
 
@@ -441,7 +441,7 @@ function renderSchemaRows(
 function renderProperties(
   properties: Record<string, JsonSchema>,
   requiredSet: Set<string>,
-  prefix = "",
+  prefix = '',
 ): { name: string; type: string; required: string; description: string }[] {
   const rows: {
     name: string;
@@ -454,33 +454,35 @@ function renderProperties(
     const qualifiedName = prefix ? `${prefix}.${key}` : key;
     const isRequired = requiredSet.has(key);
     const typeStr = formatType(prop);
-    const desc = prop.description ?? "";
+    const desc = prop.description ?? '';
 
     rows.push({
       name: `\`${qualifiedName}\``,
       type: `\`${typeStr}\``,
-      required: isRequired ? "Yes" : "No",
+      required: isRequired ? 'Yes' : 'No',
       description: desc,
     });
 
     // Recurse into nested object properties
-    if (prop.type === "object" && prop.properties) {
-      const nestedRequired = new Set(prop.required ?? []);
+    const nestedObjectSchema = getObjectSchema(prop);
+    if (nestedObjectSchema?.properties) {
+      const nestedRequired = new Set(nestedObjectSchema.required ?? []);
       rows.push(
-        ...renderProperties(prop.properties, nestedRequired, qualifiedName),
+        ...renderProperties(
+          nestedObjectSchema.properties,
+          nestedRequired,
+          qualifiedName,
+        ),
       );
     }
 
     // Recurse into array item properties
-    if (
-      prop.type === "array" &&
-      prop.items?.type === "object" &&
-      prop.items.properties
-    ) {
-      const itemRequired = new Set(prop.items.required ?? []);
+    const itemObjectSchema = getObjectSchema(prop.items);
+    if (prop.type === 'array' && itemObjectSchema?.properties) {
+      const itemRequired = new Set(itemObjectSchema.required ?? []);
       rows.push(
         ...renderProperties(
-          prop.items.properties,
+          itemObjectSchema.properties,
           itemRequired,
           `${qualifiedName}[]`,
         ),
@@ -491,20 +493,44 @@ function renderProperties(
   return rows;
 }
 
-function formatType(schema: JsonSchema): string {
+export function formatType(schema: JsonSchema): string {
   if (schema.enum) {
-    return schema.enum.map((v) => `"${v}"`).join(" \\| ");
+    return schema.enum.map((v) => `"${v}"`).join(' \\| ');
   }
 
-  if (schema.type === "array") {
+  const variants = getUnionVariants(schema);
+  if (variants) {
+    return variants.map(formatType).join(' \\| ');
+  }
+
+  if (schema.type === 'array') {
     if (schema.items) {
-      if (schema.items.type === "object") {
-        return "object[]";
+      if (getObjectSchema(schema.items)) {
+        return 'object[]';
       }
-      return `${schema.items.type ?? "any"}[]`;
+      return `${schema.items.type ?? 'any'}[]`;
     }
-    return "array";
+    return 'array';
   }
 
-  return schema.type ?? "any";
+  return schema.type ?? 'any';
+}
+
+function getObjectSchema(schema?: JsonSchema): JsonSchema | undefined {
+  if (!schema) {
+    return undefined;
+  }
+
+  if (schema.type === 'object' && schema.properties) {
+    return schema;
+  }
+
+  return getUnionVariants(schema)?.find(
+    (variant) => variant.type === 'object' && variant.properties,
+  );
+}
+
+function getUnionVariants(schema: JsonSchema): JsonSchema[] | undefined {
+  const variants = schema.anyOf ?? schema.oneOf;
+  return variants && variants.length > 0 ? variants : undefined;
 }

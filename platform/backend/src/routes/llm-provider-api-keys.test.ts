@@ -50,7 +50,7 @@ describe("validateProviderAllowed", () => {
   });
 });
 
-describe("GET /api/chat-api-keys/available", () => {
+describe("GET /api/llm-provider-api-keys/available", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
   let user: User;

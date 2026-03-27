@@ -1,4 +1,5 @@
 import {
+  index,
   pgTable,
   primaryKey,
   text,
@@ -21,6 +22,7 @@ const virtualApiKeyTeamsTable = pgTable(
   },
   (table) => ({
     pk: primaryKey({ columns: [table.virtualApiKeyId, table.teamId] }),
+    teamIdIdx: index("idx_virtual_api_key_team_team_id").on(table.teamId),
   }),
 );
 

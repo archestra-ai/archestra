@@ -1,6 +1,6 @@
 {
-  "id": "089b7891-267c-4bf6-83a3-aec3f029f419",
-  "prevId": "98d07e57-90aa-4e24-9ece-c72dd787d69f",
+  "id": "53bfdc99-3e62-4055-9685-b6841a9f35ae",
+  "prevId": "089b7891-267c-4bf6-83a3-aec3f029f419",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -7608,7 +7608,23 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "idx_virtual_api_key_team_team_id": {
+          "name": "idx_virtual_api_key_team_team_id",
+          "columns": [
+            {
+              "expression": "team_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "virtual_api_key_team_virtual_api_key_id_virtual_api_keys_id_fk": {
           "name": "virtual_api_key_team_virtual_api_key_id_virtual_api_keys_id_fk",

@@ -205,7 +205,7 @@ export function getMediaType(file: FileLikeWithMediaType): string {
  * @example
  * // Model that only supports text
  * getAcceptedFileTypes(["text"])
- * // Returns: undefined (no file uploads)
+ * // Returns: "text/plain,text/csv"
  *
  * @example
  * // Model with full multimodal support
@@ -230,7 +230,7 @@ export function getAcceptedFileTypes(
     }
   }
 
-  // If no MIME types were collected (e.g., only "text" modality), return undefined
+  // If no MIME types were collected, return undefined.
   if (mimeTypes.size === 0) {
     return undefined;
   }

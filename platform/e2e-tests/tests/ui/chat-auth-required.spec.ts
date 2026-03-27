@@ -1,7 +1,7 @@
 import { E2eTestId, MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import { MARKETING_TEAM_NAME, WIREMOCK_INTERNAL_URL } from "../../consts";
 import { expect, test } from "../../fixtures";
-import { getTeamByName } from "../api/fixtures";
+import { getTeamByName, LLM_PROVIDER_API_KEYS_ROUTE } from "../api/fixtures";
 import { makeApiRequest } from "../api/mcp-gateway-utils";
 
 /**
@@ -99,7 +99,7 @@ test.describe("Chat - Auth Required Tool", () => {
     const chatApiKeyResponse = await makeApiRequest({
       request,
       method: "post",
-      urlSuffix: "/api/chat-api-keys",
+      urlSuffix: LLM_PROVIDER_API_KEYS_ROUTE,
       data: {
         name: "Auth UI Test Anthropic Key",
         provider: "anthropic",
@@ -157,7 +157,7 @@ test.describe("Chat - Auth Required Tool", () => {
       await makeApiRequest({
         request,
         method: "delete",
-        urlSuffix: `/api/chat-api-keys/${chatApiKeyId}`,
+        urlSuffix: `/api/llm-provider-api-keys/${chatApiKeyId}`,
         ignoreStatusCheck: true,
       }).catch(() => {});
     }

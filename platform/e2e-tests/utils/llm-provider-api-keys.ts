@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import { E2eTestId } from "@shared";
 import { expect, goToPage } from "../fixtures";
+import { LLM_PROVIDER_API_KEYS_ROUTE } from "../tests/api/fixtures";
 import { clickButton, expandTablePagination } from "./dialogs";
 
 export async function goToLlmProviderApiKeysPage(page: Page): Promise<void> {
@@ -95,7 +96,7 @@ async function getParentKeyOptionNameForProvider(
 ): Promise<string> {
   return page.evaluate(async (targetProvider) => {
     const response = await fetch(
-      `/api/chat-api-keys?provider=${encodeURIComponent(targetProvider)}`,
+      `${LLM_PROVIDER_API_KEYS_ROUTE}?provider=${encodeURIComponent(targetProvider)}`,
       {
         credentials: "include",
       },

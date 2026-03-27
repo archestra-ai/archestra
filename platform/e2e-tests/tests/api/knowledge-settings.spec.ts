@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures";
+import { expect, LLM_PROVIDER_API_KEYS_ROUTE, test } from "./fixtures";
 
 test.describe("Knowledge Settings API", () => {
   // Run serially since tests modify shared organization settings
@@ -56,7 +56,7 @@ test.describe("Knowledge Settings API", () => {
     const createKeyResponse = await makeApiRequest({
       request,
       method: "post",
-      urlSuffix: "/api/chat-api-keys",
+      urlSuffix: LLM_PROVIDER_API_KEYS_ROUTE,
       data: {
         name: "Embedding Lock Test Key",
         provider: "openai",
@@ -101,7 +101,7 @@ test.describe("Knowledge Settings API", () => {
     await makeApiRequest({
       request,
       method: "delete",
-      urlSuffix: `/api/chat-api-keys/${chatApiKey.id}`,
+      urlSuffix: `/api/llm-provider-api-keys/${chatApiKey.id}`,
     });
   });
 
@@ -114,7 +114,7 @@ test.describe("Knowledge Settings API", () => {
     const createKeyResponse = await makeApiRequest({
       request,
       method: "post",
-      urlSuffix: "/api/chat-api-keys",
+      urlSuffix: LLM_PROVIDER_API_KEYS_ROUTE,
       data: {
         name: "Embedding Delete Protection Key",
         provider: "openai",
@@ -133,7 +133,7 @@ test.describe("Knowledge Settings API", () => {
     const deleteResponse = await makeApiRequest({
       request,
       method: "delete",
-      urlSuffix: `/api/chat-api-keys/${chatApiKey.id}`,
+      urlSuffix: `/api/llm-provider-api-keys/${chatApiKey.id}`,
       ignoreStatusCheck: true,
     });
     expect(deleteResponse.status()).toBe(400);
@@ -151,7 +151,7 @@ test.describe("Knowledge Settings API", () => {
     await makeApiRequest({
       request,
       method: "delete",
-      urlSuffix: `/api/chat-api-keys/${chatApiKey.id}`,
+      urlSuffix: `/api/llm-provider-api-keys/${chatApiKey.id}`,
     });
   });
 
@@ -164,7 +164,7 @@ test.describe("Knowledge Settings API", () => {
     const createKeyResponse = await makeApiRequest({
       request,
       method: "post",
-      urlSuffix: "/api/chat-api-keys",
+      urlSuffix: LLM_PROVIDER_API_KEYS_ROUTE,
       data: {
         name: "Reranker Delete Protection Key",
         provider: "openai",
@@ -183,7 +183,7 @@ test.describe("Knowledge Settings API", () => {
     const deleteResponse = await makeApiRequest({
       request,
       method: "delete",
-      urlSuffix: `/api/chat-api-keys/${chatApiKey.id}`,
+      urlSuffix: `/api/llm-provider-api-keys/${chatApiKey.id}`,
       ignoreStatusCheck: true,
     });
     expect(deleteResponse.status()).toBe(400);
@@ -198,7 +198,7 @@ test.describe("Knowledge Settings API", () => {
     await makeApiRequest({
       request,
       method: "delete",
-      urlSuffix: `/api/chat-api-keys/${chatApiKey.id}`,
+      urlSuffix: `/api/llm-provider-api-keys/${chatApiKey.id}`,
     });
   });
 
@@ -210,7 +210,7 @@ test.describe("Knowledge Settings API", () => {
     const createKeyResponse = await makeApiRequest({
       request,
       method: "post",
-      urlSuffix: "/api/chat-api-keys",
+      urlSuffix: LLM_PROVIDER_API_KEYS_ROUTE,
       data: {
         name: "Anthropic Key For Embedding Test",
         provider: "anthropic",
@@ -239,7 +239,7 @@ test.describe("Knowledge Settings API", () => {
     await makeApiRequest({
       request,
       method: "delete",
-      urlSuffix: `/api/chat-api-keys/${chatApiKey.id}`,
+      urlSuffix: `/api/llm-provider-api-keys/${chatApiKey.id}`,
     });
   });
 

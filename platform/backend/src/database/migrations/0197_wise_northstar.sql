@@ -13,6 +13,8 @@ ALTER TABLE "virtual_api_keys" ADD CONSTRAINT "virtual_api_keys_author_id_user_i
 CREATE INDEX "idx_virtual_api_key_scope" ON "virtual_api_keys" USING btree ("scope");--> statement-breakpoint
 CREATE INDEX "idx_virtual_api_key_author_id" ON "virtual_api_keys" USING btree ("author_id");
 --> statement-breakpoint
+CREATE INDEX "idx_virtual_api_key_team_team_id" ON "virtual_api_key_team" USING btree ("team_id");
+--> statement-breakpoint
 UPDATE "chat_api_keys"
 SET "scope" = 'org'
 WHERE "scope" = 'org_wide';--> statement-breakpoint

@@ -225,7 +225,7 @@ test.describe("Virtual API Keys - CRUD API", () => {
       const listResp = await makeApiRequest({
         request,
         method: "get",
-        urlSuffix: "/api/virtual-api-keys?limit=50&offset=0",
+        urlSuffix: "/api/llm-virtual-keys?limit=50&offset=0",
       });
       const result = (await listResp.json()) as {
         data: Array<{

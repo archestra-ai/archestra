@@ -94,9 +94,9 @@ async function getParentKeyOptionNameForProvider(
   page: Page,
   provider: string,
 ): Promise<string> {
-  return page.evaluate(async (targetProvider) => {
+  return page.evaluate(async ({ targetProvider, route }) => {
     const response = await fetch(
-      `${LLM_PROVIDER_API_KEYS_ROUTE}?provider=${encodeURIComponent(targetProvider)}`,
+      `${route}?provider=${encodeURIComponent(targetProvider)}`,
       {
         credentials: "include",
       },
@@ -118,5 +118,5 @@ async function getParentKeyOptionNameForProvider(
     }
 
     return matchingKey.name;
-  }, provider);
+  }, { targetProvider: provider, route: LLM_PROVIDER_API_KEYS_ROUTE });
 }

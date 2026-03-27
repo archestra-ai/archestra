@@ -276,9 +276,8 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
         "openai",
       );
 
-      const linkedModels = await LlmProviderApiKeyModelLinkModel.getModelsForApiKey(
-        apiKey.id,
-      );
+      const linkedModels =
+        await LlmProviderApiKeyModelLinkModel.getModelsForApiKey(apiKey.id);
 
       expect(linkedModels).toHaveLength(1);
       expect(linkedModels[0].id).toBe(model.id);

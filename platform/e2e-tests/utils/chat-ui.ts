@@ -44,14 +44,11 @@ export async function getRuntimeModelForProvider(
   page: Page,
   providerName: string,
 ): Promise<RuntimeChatModel | null> {
-  return page.evaluate(async (provider) => {
+  return page.evaluate(async ({ provider, route }) => {
     const query = new URLSearchParams({ provider });
-    const response = await fetch(
-      `${AVAILABLE_LLM_MODELS_ROUTE}?${query.toString()}`,
-      {
-        credentials: "include",
-      },
-    );
+    const response = await fetch(`${route}?${query.toString()}`, {
+      credentials: "include",
+    });
 
     if (!response.ok) {
       throw new Error(
@@ -61,7 +58,7 @@ export async function getRuntimeModelForProvider(
 
     const models = (await response.json()) as RuntimeChatModel[];
     return models.find((entry) => entry.provider === provider) ?? null;
-  }, providerName);
+  }, { provider: providerName, route: AVAILABLE_LLM_MODELS_ROUTE });
 }
 
 export async function selectApiKeyForProvider(

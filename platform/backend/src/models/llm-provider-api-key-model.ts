@@ -135,7 +135,19 @@ class LlmProviderApiKeyModelLinkModel {
         const BATCH_SIZE = 500;
         for (let i = 0; i < values.length; i += BATCH_SIZE) {
           const batch = values.slice(i, i + BATCH_SIZE);
-          await tx.insert(schema.llmProviderApiKeyModelsTable).values(batch);
+          await tx
+            .insert(schema.llmProviderApiKeyModelsTable)
+            .values(batch)
+            .onConflictDoUpdate({
+              target: [
+                schema.llmProviderApiKeyModelsTable.apiKeyId,
+                schema.llmProviderApiKeyModelsTable.modelId,
+              ],
+              set: {
+                isFastest: sql`excluded.is_fastest`,
+                isBest: sql`excluded.is_best`,
+              },
+            });
         }
       }
     });

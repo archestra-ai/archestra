@@ -483,6 +483,42 @@ describe("LlmProviderApiKeyModel", () => {
       expect(visible).toHaveLength(1);
       expect(visible[0].name).toBe("Primary Anthropic Key");
     });
+
+    test("treats LIKE wildcard characters in search as literals", async ({
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+
+      await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "Primary%Key",
+        provider: "anthropic",
+        scope: "personal",
+        userId: user.id,
+      });
+      await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "Primary Alpha Key",
+        provider: "anthropic",
+        scope: "personal",
+        userId: user.id,
+      });
+
+      const visible = await LlmProviderApiKeyModel.getVisibleKeys(
+        org.id,
+        user.id,
+        [],
+        false,
+        {
+          search: "%",
+        },
+      );
+
+      expect(visible).toHaveLength(1);
+      expect(visible[0].name).toBe("Primary%Key");
+    });
   });
 
   describe("resolveApiKey", () => {

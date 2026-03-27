@@ -326,6 +326,38 @@ describe("VirtualApiKeyModel", () => {
     expect(result.pagination.total).toBe(1);
   });
 
+  test("findAllByOrganization: treats LIKE wildcard characters in search as literals", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
+    const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      name: "Parent Key",
+      provider: "anthropic",
+    });
+
+    await VirtualApiKeyModel.create({
+      chatApiKeyId: chatApiKey.id,
+      name: "Virtual%Key",
+    });
+    await VirtualApiKeyModel.create({
+      chatApiKeyId: chatApiKey.id,
+      name: "Virtual Alpha Key",
+    });
+
+    const result = await VirtualApiKeyModel.findAllByOrganization({
+      organizationId: org.id,
+      pagination: { limit: 20, offset: 0 },
+      search: "%",
+    });
+
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0].name).toBe("Virtual%Key");
+    expect(result.pagination.total).toBe(1);
+  });
+
   test("findAllByOrganization: applies scope visibility for non-admin users", async ({
     makeOrganization,
     makeSecret,

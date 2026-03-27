@@ -341,7 +341,10 @@ class VirtualApiKeyModel {
 
     if (search) {
       whereConditions.push(
-        ilike(schema.virtualApiKeysTable.name, `%${search.trim()}%`),
+        ilike(
+          schema.virtualApiKeysTable.name,
+          `%${escapeLikePattern(search.trim())}%`,
+        ),
       );
     }
 
@@ -640,6 +643,10 @@ class VirtualApiKeyModel {
       authorName: authorNameByVirtualApiKeyId,
     };
   }
+}
+
+function escapeLikePattern(value: string): string {
+  return value.replace(/[%_\\]/g, "\\$&");
 }
 
 export default VirtualApiKeyModel;

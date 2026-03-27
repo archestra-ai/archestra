@@ -131,7 +131,7 @@ class LlmProviderApiKeyModel {
       conditions.push(
         ilike(
           schema.llmProviderApiKeysTable.name,
-          `%${filters.search.trim()}%`,
+          `%${escapeLikePattern(filters.search.trim())}%`,
         ),
       );
     }
@@ -687,6 +687,10 @@ class LlmProviderApiKeyModel {
       .from(schema.llmProviderApiKeysTable);
     return new Set(rows.map((r) => r.provider));
   }
+}
+
+function escapeLikePattern(value: string): string {
+  return value.replace(/[%_\\]/g, "\\$&");
 }
 
 /**

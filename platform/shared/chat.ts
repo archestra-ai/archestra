@@ -66,6 +66,11 @@ export const ModelOutputModalitySchema = z.enum(["text", "image", "audio"]);
 
 export type ModelInputModality = z.infer<typeof ModelInputModalitySchema>;
 export type ModelOutputModality = z.infer<typeof ModelOutputModalitySchema>;
+export type ModalityOption<T extends string> = {
+  value: T;
+  label: string;
+  description: string;
+};
 export type SupportedChatUploadMimeType =
   | "application/csv"
   | "application/json"
@@ -87,6 +92,7 @@ export type SupportedChatUploadMimeType =
   | "image/webp"
   | "image/x-icon"
   | "text/csv"
+  | "text/markdown"
   | "text/plain"
   | "video/avi"
   | "video/mp4"
@@ -110,6 +116,7 @@ const MODALITY_TO_MIME_TYPES: Record<
   // Text-capable models can accept plain text and CSV documents.
   text: [
     "text/plain",
+    "text/markdown",
     "text/csv",
     "application/csv",
     "application/vnd.ms-excel",
@@ -138,7 +145,7 @@ const MODALITY_TO_MIME_TYPES: Record<
 };
 
 const MODALITY_TO_FILE_TYPE_DESCRIPTION: Record<ModelInputModality, string> = {
-  text: "text files, CSVs",
+  text: "chat prompts, .txt, .csv, and .md uploads",
   image: "images",
   audio: "audio",
   video: "video",
@@ -149,6 +156,63 @@ type FileLikeWithMediaType = {
   name: string;
   type: string;
 };
+
+const INPUT_MODALITY_OPTION_MAP: Record<
+  ModelInputModality,
+  ModalityOption<ModelInputModality>
+> = {
+  text: {
+    value: "text",
+    label: "Text",
+    description: "Chat prompts, .txt, .csv, and .md uploads",
+  },
+  image: {
+    value: "image",
+    label: "Image",
+    description: "Image file uploads",
+  },
+  audio: {
+    value: "audio",
+    label: "Audio",
+    description: "Audio file uploads",
+  },
+  video: {
+    value: "video",
+    label: "Video",
+    description: "Video file uploads",
+  },
+  pdf: {
+    value: "pdf",
+    label: "PDF",
+    description: "PDF file uploads",
+  },
+};
+
+const OUTPUT_MODALITY_OPTION_MAP: Record<
+  ModelOutputModality,
+  ModalityOption<ModelOutputModality>
+> = {
+  text: {
+    value: "text",
+    label: "Text",
+    description: "Standard text responses",
+  },
+  image: {
+    value: "image",
+    label: "Image",
+    description: "Generated image responses",
+  },
+  audio: {
+    value: "audio",
+    label: "Audio",
+    description: "Generated audio responses",
+  },
+};
+
+export const INPUT_MODALITY_OPTIONS = Object.values(INPUT_MODALITY_OPTION_MAP);
+export const OUTPUT_MODALITY_OPTIONS = Object.values(
+  OUTPUT_MODALITY_OPTION_MAP,
+);
 
 /**
  * Get MIME type from a file-like object, with fallback to extension-based
@@ -180,6 +244,7 @@ export function getMediaType(file: FileLikeWithMediaType): string {
     avi: "video/avi",
     pdf: "application/pdf",
     csv: "text/csv",
+    md: "text/markdown",
     txt: "text/plain",
     json: "application/json",
     xml: "application/xml",

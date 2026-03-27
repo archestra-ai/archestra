@@ -60,10 +60,7 @@ import { useFeature } from "@/lib/config/config.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useTeams } from "@/lib/teams/team.query";
-import {
-  formatRelativeTime,
-  formatRelativeTimeFromNow,
-} from "@/lib/utils/date-time";
+import { formatRelativeTime } from "@/lib/utils/date-time";
 import {
   useAllVirtualApiKeys,
   useCreateVirtualApiKey,
@@ -177,15 +174,6 @@ export default function VirtualKeysPage() {
             </div>
           );
         },
-      },
-      {
-        accessorKey: "createdAt",
-        header: "Created",
-        cell: ({ row }) => (
-          <span className="text-sm text-muted-foreground">
-            {formatRelativeTimeFromNow(row.original.createdAt)}
-          </span>
-        ),
       },
       {
         accessorKey: "expiresAt",

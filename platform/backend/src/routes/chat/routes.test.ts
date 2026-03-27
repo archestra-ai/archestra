@@ -63,6 +63,32 @@ describe("prepareMessagesForProvider", () => {
     });
   });
 
+  it("normalizes markdown files to text/plain for anthropic", () => {
+    const messages = __test.prepareMessagesForProvider({
+      provider: "anthropic",
+      messages: [
+        {
+          role: "user",
+          parts: [
+            {
+              type: "file",
+              mediaType: "text/markdown",
+              filename: "README.md",
+              url: "data:text/markdown;base64,IyBUaXRsZQ==",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(messages[0].parts?.[0]).toMatchObject({
+      type: "file",
+      mediaType: "text/plain",
+      filename: "README.md",
+      url: "data:text/plain;base64,IyBUaXRsZQ==",
+    });
+  });
+
   it("leaves non-anthropic file parts unchanged", () => {
     const message = {
       role: "user" as const,

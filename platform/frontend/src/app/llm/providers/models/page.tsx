@@ -1,6 +1,11 @@
 "use client";
 
-import type { ModelInputModality, ModelOutputModality } from "@shared";
+import {
+  INPUT_MODALITY_OPTIONS,
+  type ModelInputModality,
+  type ModelOutputModality,
+  OUTPUT_MODALITY_OPTIONS,
+} from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   AlertCircle,
@@ -51,7 +56,6 @@ import {
 } from "@/lib/llm-models.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useSetProviderAction } from "../layout";
-import { INPUT_MODALITY_OPTIONS, OUTPUT_MODALITY_OPTIONS } from "./modalities";
 
 export default function ModelsPage() {
   const { data: models = [], isPending, refetch } = useModelsWithApiKeys();
@@ -669,7 +673,6 @@ function ModalitySelectField<T extends string>(params: {
         items={options.map((option) => ({
           value: option.value,
           label: option.label,
-          description: option.description,
           content: (
             <span className="block min-w-0">
               <span className="block text-sm font-medium">{option.label}</span>

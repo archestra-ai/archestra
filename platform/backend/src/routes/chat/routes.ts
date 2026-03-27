@@ -1948,6 +1948,7 @@ function normalizeAnthropicFilePart(part: ChatMessagePart): ChatMessagePart {
 function isAnthropicCsvMimeType(mediaType: string): boolean {
   return (
     mediaType === "text/csv" ||
+    mediaType === "text/markdown" ||
     mediaType === "application/csv" ||
     mediaType === "application/vnd.ms-excel"
   );

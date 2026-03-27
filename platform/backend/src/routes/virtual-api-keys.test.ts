@@ -187,4 +187,37 @@ describe("virtualApiKeysRoutes", () => {
       },
     });
   });
+
+  test("POST /api/llm-provider-api-keys/:id/virtual-keys allows llmVirtualKey admins to assign any team", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+    makeTeam,
+    makeUser,
+  }) => {
+    mockUserHasPermission.mockResolvedValue(true);
+
+    const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
+    const parentKey = await makeLlmProviderApiKey(organizationId, secret.id);
+    const otherOwner = await makeUser();
+    const otherTeam = await makeTeam(organizationId, otherOwner.id, {
+      name: "Other Team",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/llm-provider-api-keys/${parentKey.id}/virtual-keys`,
+      payload: {
+        name: "Team Key",
+        scope: "team",
+        teams: [otherTeam.id],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      name: "Team Key",
+      scope: "team",
+      teams: [expect.objectContaining({ id: otherTeam.id })],
+    });
+  });
 });

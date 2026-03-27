@@ -66,8 +66,11 @@ export function ChatSidebarSection() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const isAuthenticated = useIsAuthenticated();
+  const { data: canReadConversation } = useHasPermissions({
+    chat: ["read"],
+  });
   const { data: conversations = [], isLoading } = useConversations({
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && canReadConversation === true,
   });
   const updateConversationMutation = useUpdateConversation();
   const deleteConversationMutation = useDeleteConversation();

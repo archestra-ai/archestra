@@ -136,13 +136,17 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, "Expiration date must be in the future");
       }
 
-      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+      const [userTeamIds, isVirtualKeyAdmin] = await Promise.all([
+        TeamModel.getUserTeamIds(user.id),
+        userHasPermission(user.id, organizationId, "llmVirtualKey", "admin"),
+      ]);
       await validateVirtualKeyScope({
         scope: body.scope,
         teamIds: body.teams,
         userId: user.id,
         organizationId,
         userTeamIds,
+        isAdmin: isVirtualKeyAdmin,
       });
 
       const count = await VirtualApiKeyModel.countByChatApiKeyId(
@@ -202,7 +206,10 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, "Expiration date must be in the future");
       }
 
-      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+      const [userTeamIds, isVirtualKeyAdmin] = await Promise.all([
+        TeamModel.getUserTeamIds(user.id),
+        userHasPermission(user.id, organizationId, "llmVirtualKey", "admin"),
+      ]);
       await requireVirtualKeyModifyPermission({
         virtualKey: accessContext,
         userId: user.id,
@@ -215,6 +222,7 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         userTeamIds,
+        isAdmin: isVirtualKeyAdmin,
       });
 
       const updatedVirtualKey = await VirtualApiKeyModel.update({
@@ -290,8 +298,10 @@ async function validateVirtualKeyScope(params: {
   userId: string;
   organizationId: string;
   userTeamIds: string[];
+  isAdmin: boolean;
 }): Promise<void> {
-  const { scope, teamIds, userId, organizationId, userTeamIds } = params;
+  const { scope, teamIds, userId, organizationId, userTeamIds, isAdmin } =
+    params;
 
   if (scope !== "team" && teamIds.length > 0) {
     throw new ApiError(400, "Teams can only be assigned to team-scoped keys");
@@ -302,12 +312,6 @@ async function validateVirtualKeyScope(params: {
   }
 
   if (scope === "org") {
-    const isAdmin = await userHasPermission(
-      userId,
-      organizationId,
-      "llmVirtualKey",
-      "admin",
-    );
     if (!isAdmin) {
       throw new ApiError(
         403,
@@ -322,6 +326,10 @@ async function validateVirtualKeyScope(params: {
     const teams = await TeamModel.findByIds(uniqueTeamIds);
     if (teams.length !== uniqueTeamIds.length) {
       throw new ApiError(400, "One or more selected teams do not exist");
+    }
+
+    if (isAdmin) {
+      return;
     }
 
     const userTeamIdSet = new Set(userTeamIds);

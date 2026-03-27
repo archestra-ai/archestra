@@ -1502,10 +1502,32 @@ class AgentModel {
 
   /**
    * Find all internal agents that have a schedule configured.
+   * Returns a lightweight summary for the scheduler.
    */
-  static async findAllScheduled(): Promise<Agent[]> {
-    const agents = await db
-      .select()
+  static async findAllScheduled(): Promise<
+    Array<
+      Pick<
+        Agent,
+        | "id"
+        | "name"
+        | "schedule"
+        | "scheduledMessage"
+        | "lastScheduledRunAt"
+        | "organizationId"
+        | "authorId"
+      >
+    >
+  > {
+    return db
+      .select({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+        schedule: schema.agentsTable.schedule,
+        scheduledMessage: schema.agentsTable.scheduledMessage,
+        lastScheduledRunAt: schema.agentsTable.lastScheduledRunAt,
+        organizationId: schema.agentsTable.organizationId,
+        authorId: schema.agentsTable.authorId,
+      })
       .from(schema.agentsTable)
       .where(
         and(
@@ -1514,33 +1536,6 @@ class AgentModel {
           sql`${schema.agentsTable.schedule} IS NOT NULL`,
         ),
       );
-
-    const agentIds = agents.map((a) => a.id);
-    if (agentIds.length === 0) return [];
-
-    const [teamsMap, labelsMap] = await Promise.all([
-      AgentTeamModel.getTeamDetailsForAgents(agentIds),
-      AgentLabelModel.getLabelsForAgents(agentIds),
-    ]);
-
-    const populatedAgents: Agent[] = agents.map((agent) => ({
-      ...agent,
-      tools: [],
-      teams: teamsMap.get(agent.id) || [],
-      labels: labelsMap.get(agent.id) || [],
-      knowledgeBaseIds: [],
-      connectorIds: [],
-      suggestedPrompts: [],
-    }));
-
-    await Promise.all([
-      AgentModel.populateAuthorNames(populatedAgents),
-      AgentModel.populateKnowledgeBaseIds(populatedAgents),
-      AgentModel.populateConnectorIds(populatedAgents),
-      AgentModel.populateSuggestedPrompts(populatedAgents),
-    ]);
-
-    return populatedAgents;
   }
 }
 

@@ -134,6 +134,7 @@ export function CreateConnectorDialog({
       github: { type, githubUrl: "https://api.github.com" },
       gitlab: { type, gitlabUrl: "https://gitlab.com" },
       servicenow: { type, syncDataForLastMonths: 6 },
+      notion: { type },
     };
     form.setValue("config", defaultConfigs[type]);
     setStep("configure");
@@ -505,6 +506,9 @@ export function CreateConnectorDialog({
                     {connectorType === "gitlab" && (
                       <GitlabConfigFields form={form} hideUrl />
                     )}
+                    {connectorType === "notion" && (
+                      <NotionConfigFields form={form} />
+                    )}
                     {connectorType === "servicenow" && (
                       <ServiceNowConfigFields form={form} hideUrl />
                     )}
@@ -575,5 +579,7 @@ function getUrlConfig(type: ConnectorType): {
         placeholder: "https://your-instance.service-now.com",
         description: "Your ServiceNow instance URL.",
       };
+    default:
+      return null;
   }
 }

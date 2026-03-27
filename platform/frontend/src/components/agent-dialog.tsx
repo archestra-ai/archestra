@@ -2153,7 +2153,8 @@ export function AgentDialog({
                 createAgent.isPending ||
                 updateAgent.isPending ||
                 requiresTeamSelection ||
-                (!isAdmin && scope === "team" && hasNoAvailableTeams)
+                (!isAdmin && scope === "team" && hasNoAvailableTeams) ||
+                (scheduleEnabled && !schedule?.trim())
               }
             >
               {(createAgent.isPending || updateAgent.isPending) && (

@@ -1537,6 +1537,17 @@ class AgentModel {
         ),
       );
   }
+
+  /**
+   * Type-safe helper to update only the lastScheduledRunAt field.
+   * Used by the scheduler to avoid unsafe casts on the generic update schema.
+   */
+  static async updateLastScheduledRunAt(id: string, date: Date): Promise<void> {
+    await db
+      .update(schema.agentsTable)
+      .set({ lastScheduledRunAt: date })
+      .where(eq(schema.agentsTable.id, id));
+  }
 }
 
 export default AgentModel;

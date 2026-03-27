@@ -310,6 +310,7 @@ export function CreateConnectorDialog({
                 {urlConfig && (
                   <FormField
                     control={form.control}
+                    // biome-ignore lint/suspicious/noExplicitAny: dynamic field name for connector-specific URL
                     name={urlConfig.fieldName as any}
                     rules={{ required: `${urlConfig.label} is required` }}
                     render={({ field }) => (

@@ -31,13 +31,6 @@ export async function handleAgentRun(payload: Record<string, unknown>): Promise<
       userId: agent.authorId || "system", // Use authorId if available, fallback to system
     });
 
-    await AgentModel.update(
-      agent.id,
-      {
-        lastScheduledRunAt: new Date(),
-      } as unknown as Parameters<typeof AgentModel.update>[1],
-    );
-
     logger.info({ agentId, agentName: agent.name }, "Scheduled agent run completed successfully");
   } catch (error) {
     logger.error(
@@ -49,5 +42,8 @@ export async function handleAgentRun(payload: Record<string, unknown>): Promise<
       "Scheduled agent run failed",
     );
     throw error;
+  } finally {
+    // Always update lastScheduledRunAt to prevent infinite loops on failure
+    await AgentModel.updateLastScheduledRunAt(agent.id, new Date());
   }
 }

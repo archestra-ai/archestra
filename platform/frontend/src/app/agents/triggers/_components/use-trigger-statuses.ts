@@ -1,4 +1,5 @@
 import { useChatApiKeys } from "@/lib/chat/chat-settings.query";
+import { useAgentScheduleTriggers } from "@/lib/chatops/agent-schedule-trigger.query";
 import { useChatOpsStatus } from "@/lib/chatops/chatops.query";
 import { useIncomingEmailStatus } from "@/lib/chatops/incoming-email.query";
 import config from "@/lib/config/config";
@@ -12,6 +13,8 @@ export function useTriggerStatuses() {
     useIncomingEmailStatus();
   const { data: chatApiKeys = [], isLoading: apiKeysLoading } =
     useChatApiKeys();
+  const { data: scheduleTriggers = [], isLoading: scheduleLoading } =
+    useAgentScheduleTriggers();
 
   const hasLlmKey = chatApiKeys.length > 0;
   const ngrokDomain = configData?.features.ngrokDomain;
@@ -35,10 +38,13 @@ export function useTriggerStatuses() {
   const emailActive =
     !!configData?.features.incomingEmail?.enabled && !!emailStatus?.isActive;
 
+  const scheduleActive = scheduleTriggers.some((t) => t.enabled);
+
   const triggers = [
     { active: msTeamsActive, href: "/agents/triggers/ms-teams" },
     { active: slackActive, href: "/agents/triggers/slack" },
     { active: emailActive, href: "/agents/triggers/email" },
+    { active: scheduleActive, href: "/agents/triggers/schedule" },
   ] as const;
   const firstActiveHref =
     triggers.find((t) => t.active)?.href ?? triggers[0].href;
@@ -47,8 +53,13 @@ export function useTriggerStatuses() {
     msTeams: msTeamsActive,
     slack: slackActive,
     email: emailActive,
+    schedule: scheduleActive,
     firstActiveHref,
     isLoading:
-      chatOpsLoading || featuresLoading || emailLoading || apiKeysLoading,
+      chatOpsLoading ||
+      featuresLoading ||
+      emailLoading ||
+      apiKeysLoading ||
+      scheduleLoading,
   };
 }

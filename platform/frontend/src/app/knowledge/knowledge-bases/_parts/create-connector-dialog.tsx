@@ -42,6 +42,7 @@ import { GithubConfigFields } from "./github-config-fields";
 import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
 import { SchedulePicker } from "./schedule-picker";
+import { NotionConfigFields } from "./notion-config-fields";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
 import { transformConfigArrayFields } from "./transform-config-array-fields";
 
@@ -77,6 +78,11 @@ const CONNECTOR_OPTIONS: {
     type: "servicenow",
     label: "ServiceNow",
     description: "Sync incidents from ServiceNow",
+  },
+  {
+    type: "notion",
+    label: CONNECTOR_TYPE_LABELS.notion,
+    description: "Sync pages and databases from Notion",
   },
 ];
 
@@ -128,6 +134,7 @@ export function CreateConnectorDialog({
       github: { type, githubUrl: "https://api.github.com" },
       gitlab: { type, gitlabUrl: "https://gitlab.com" },
       servicenow: { type, syncDataForLastMonths: 6 },
+      notion: { type, notionApiUrl: "https://api.notion.com" },
     };
     form.setValue("config", defaultConfigs[type]);
     setStep("configure");
@@ -446,18 +453,22 @@ export function CreateConnectorDialog({
                         : "API token or personal access token is required"
                       : connectorType === "servicenow"
                         ? "Password is required"
-                        : "Personal access token is required",
+                        : connectorType === "notion"
+                          ? "Integration token is required"
+                          : "Personal access token is required",
                   }}
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
                         {connectorType === "servicenow"
                           ? "Password"
-                          : needsEmail
-                            ? emailRequired
-                              ? "API Token"
-                              : "API Token / Personal Access Token"
-                            : "Personal Access Token"}
+                          : connectorType === "notion"
+                            ? "Integration Token"
+                            : needsEmail
+                              ? emailRequired
+                                ? "API Token"
+                                : "API Token / Personal Access Token"
+                              : "Personal Access Token"}
                       </FormLabel>
                       <FormControl>
                         <Input
@@ -465,11 +476,13 @@ export function CreateConnectorDialog({
                           placeholder={
                             connectorType === "servicenow"
                               ? "Your ServiceNow password"
-                              : needsEmail
-                                ? emailRequired
-                                  ? "Your API token"
-                                  : "Your API token or personal access token"
-                                : "Your personal access token"
+                              : connectorType === "notion"
+                                ? "Your Notion integration token (secret_...)"
+                                : needsEmail
+                                  ? emailRequired
+                                    ? "Your API token"
+                                    : "Your API token or personal access token"
+                                  : "Your personal access token"
                           }
                           {...field}
                         />
@@ -500,6 +513,9 @@ export function CreateConnectorDialog({
                     )}
                     {connectorType === "servicenow" && (
                       <ServiceNowConfigFields form={form} hideUrl />
+                    )}
+                    {connectorType === "notion" && (
+                      <NotionConfigFields form={form} hideUrl />
                     )}
                   </CollapsibleContent>
                 </Collapsible>
@@ -565,6 +581,14 @@ function getUrlConfig(type: ConnectorType): {
         label: "Instance URL",
         placeholder: "https://your-instance.service-now.com",
         description: "Your ServiceNow instance URL.",
+      };
+    case "notion":
+      return {
+        fieldName: "config.notionApiUrl",
+        label: "Notion API URL",
+        placeholder: "https://api.notion.com",
+        description:
+          "The Notion API endpoint. Use https://api.notion.com for Notion SaaS.",
       };
   }
 }

@@ -77,6 +77,8 @@ export const CONNECTOR_TYPE_LABELS: Record<string, string> = {
   confluence: "Confluence",
   github: "GitHub",
   gitlab: "GitLab",
+  servicenow: "ServiceNow",
+  notion: "Notion",
 };
 
 const CONNECTOR_PLACEHOLDER_DEPARTMENTS = [

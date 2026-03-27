@@ -29,6 +29,7 @@ import { GithubConfigFields } from "./github-config-fields";
 import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
 import { SchedulePicker } from "./schedule-picker";
+import { NotionConfigFields } from "./notion-config-fields";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
 import { transformConfigArrayFields } from "./transform-config-array-fields";
 
@@ -363,6 +364,9 @@ export function EditConnectorDialog({
               {connectorType === "servicenow" && (
                 <ServiceNowConfigFields form={form} hideUrl />
               )}
+              {connectorType === "notion" && (
+                <NotionConfigFields form={form} hideUrl />
+              )}
             </CollapsibleContent>
           </Collapsible>
         </div>
@@ -422,6 +426,15 @@ function getEditUrlConfig(type: ConnectorType): {
         placeholder: "https://your-instance.service-now.com",
         description: "Your ServiceNow instance URL.",
         typeLabel: "ServiceNow",
+      };
+    case "notion":
+      return {
+        fieldName: "config.notionApiUrl",
+        label: "Notion API URL",
+        placeholder: "https://api.notion.com",
+        description:
+          "The Notion API endpoint. Use https://api.notion.com for Notion SaaS.",
+        typeLabel: "Notion",
       };
     default:
       return {

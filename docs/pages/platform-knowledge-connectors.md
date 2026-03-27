@@ -96,6 +96,21 @@ Ingests records from ServiceNow instances via the Table API. HTML descriptions a
 
 Authentication supports both basic auth (username + password) and OAuth bearer tokens. When using basic auth, provide the username in the Email field and the password in the API Token field. For OAuth, leave the Email field empty and provide the bearer token. Incidents are synced by default; enable additional entity types in the advanced configuration. States and assignment group filters apply to all entity types except business applications. Incremental sync uses the `sys_created_on` field to fetch only records created since the last run.
 
+## Notion
+
+Ingests page content from Notion workspaces. Block content is recursively extracted (up to 3 levels deep) and converted to Markdown.
+
+| Field          | Description                                                                     |
+| -------------- | ------------------------------------------------------------------------------- |
+| Notion API URL | The Notion API endpoint (default: `https://api.notion.com`)                     |
+| Database IDs   | Comma-separated Notion database IDs to sync (optional)                          |
+| Page IDs       | Comma-separated specific page IDs to sync (optional)                            |
+| Batch Size     | Pages per batch (default: 50)                                                   |
+
+When neither Database IDs nor Page IDs are specified, the connector performs a full workspace search and syncs all accessible pages.
+
+Authentication uses a [Notion integration token](https://developers.notion.com/docs/create-a-notion-integration). Create an internal integration in your Notion workspace settings, then share the relevant pages or databases with the integration. Provide the integration token in the API Token field. Incremental sync uses `last_edited_time` to fetch only pages modified since the last run.
+
 ## Managing Connectors
 
 Connectors can be managed from either the **Connectors** page or a knowledge base's detail page. After creation you can:

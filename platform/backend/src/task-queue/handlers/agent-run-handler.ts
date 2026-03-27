@@ -32,9 +32,12 @@ export async function handleAgentRun(payload: Record<string, unknown>): Promise<
       source: "scheduler" as any, // Add scheduler source
     });
 
-    await AgentModel.update(agent.id, {
-      lastScheduledRunAt: new Date(),
-    });
+    await AgentModel.update(
+      agent.id,
+      {
+        lastScheduledRunAt: new Date(),
+      } as any,
+    );
 
     logger.info({ agentId, agentName: agent.name }, "Scheduled agent run completed successfully");
   } catch (error) {

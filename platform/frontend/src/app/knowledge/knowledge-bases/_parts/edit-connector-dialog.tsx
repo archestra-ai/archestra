@@ -243,7 +243,7 @@ export function EditConnectorDialog({
 
 // ... (in Advanced section)
               {connectorType === "gitlab" && (
-                <GithubConfigFields form={form} hideUrl />
+                <GitlabConfigFields form={form} hideUrl />
               )}
               {connectorType === "notion" && (
                 <NotionConfigFields form={form} />

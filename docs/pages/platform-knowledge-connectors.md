@@ -86,8 +86,8 @@ Ingests page and database content from Notion. Content is converted from blocks 
 | ------------ | --------------------------------------------------------------------------- |
 | Database IDs | Comma-separated specific database IDs to sync (optional)                    |
 | Page IDs     | Comma-separated specific page IDs to sync (optional)                        |
-| Batch Size   | Pages/Databases per batch (default: 100)                                    |
 
+The Notion connector currently uses a fixed batch size of 100 items per sync request; this is not configurable in the UI.
 Authentication uses a [Notion Integration Token](https://www.notion.so/my-integrations) (Internal Integration Secret). For the connector to access your content, you must explicitly "Share" the desired pages or databases with your integration. Incremental sync uses the `last_edited_time` timestamp.
 
 ## ServiceNow

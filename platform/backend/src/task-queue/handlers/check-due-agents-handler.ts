@@ -14,20 +14,23 @@ export async function handleCheckDueAgents(): Promise<void> {
       const nextRun = cron.nextRun(agent.lastScheduledRunAt ?? new Date(0));
 
       if (nextRun && nextRun <= new Date()) {
-        // Note: We enqueue directly here. The previous use of
-        // TaskModel.hasPendingOrProcessing was connector-specific and did
-        // not correctly deduplicate agent_run tasks by agentId.
-        await taskQueueService.enqueue({
-          taskType: "agent_run",
-          payload: { agentId: agent.id },
-        });
-        logger.info(
-          {
-            agentId: agent.id,
-            agentName: agent.name,
-          },
-          "Enqueued scheduled agent run",
+        const exists = await TaskModel.hasPendingOrProcessingForAgent(
+          "agent_run",
+          agent.id,
         );
+        if (!exists) {
+          await taskQueueService.enqueue({
+            taskType: "agent_run",
+            payload: { agentId: agent.id },
+          });
+          logger.info(
+            {
+              agentId: agent.id,
+              agentName: agent.name,
+            },
+            "Enqueued scheduled agent run",
+          );
+        }
       }
     } catch (error) {
       logger.warn(

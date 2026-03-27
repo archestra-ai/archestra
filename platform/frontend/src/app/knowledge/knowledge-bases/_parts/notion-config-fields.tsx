@@ -62,6 +62,28 @@ export function NotionConfigFields({
           </FormItem>
         )}
       />
+
+      <FormField
+        control={form.control}
+        name={`${prefix}.batchSize`}
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Batch Size</FormLabel>
+            <FormControl>
+              <Input
+                type="number"
+                placeholder="100"
+                {...field}
+                onChange={(e) => field.onChange(Number(e.target.value))}
+              />
+            </FormControl>
+            <FormDescription>
+              Number of pages/databases to process per batch (default: 100).
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
     </div>
   );
 }

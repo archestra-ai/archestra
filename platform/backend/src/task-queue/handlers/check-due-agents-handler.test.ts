@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 const mockFindAllScheduled = vi.hoisted(() => vi.fn().mockResolvedValue([]));
-const mockHasPendingOrProcessing = vi.hoisted(() =>
+const mockHasPendingOrProcessingForAgent = vi.hoisted(() =>
   vi.fn().mockResolvedValue(false),
 );
 vi.mock("@/models", () => ({
   AgentModel: {
     findAllScheduled: mockFindAllScheduled,
   },
-  TaskModel: { hasPendingOrProcessing: mockHasPendingOrProcessing },
+  TaskModel: { hasPendingOrProcessingForAgent: mockHasPendingOrProcessingForAgent },
 }));
 
 const mockEnqueue = vi.hoisted(() => vi.fn().mockResolvedValue("task-id"));
@@ -50,7 +50,7 @@ describe("handleCheckDueAgents", () => {
         lastScheduledRunAt: pastDate,
       },
     ]);
-    mockHasPendingOrProcessing.mockResolvedValue(false);
+    mockHasPendingOrProcessingForAgent.mockResolvedValue(false);
 
     await handleCheckDueAgents();
 
@@ -70,7 +70,7 @@ describe("handleCheckDueAgents", () => {
         lastScheduledRunAt: pastDate,
       },
     ]);
-    mockHasPendingOrProcessing.mockResolvedValue(true);
+    mockHasPendingOrProcessingForAgent.mockResolvedValue(true);
 
     await handleCheckDueAgents();
 
@@ -92,7 +92,7 @@ describe("handleCheckDueAgents", () => {
         lastScheduledRunAt: null,
       },
     ]);
-    mockHasPendingOrProcessing.mockResolvedValue(false);
+    mockHasPendingOrProcessingForAgent.mockResolvedValue(false);
 
     await handleCheckDueAgents();
 

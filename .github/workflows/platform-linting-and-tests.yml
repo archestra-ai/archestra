@@ -310,28 +310,30 @@ jobs:
             shard: ""
             extra_args: ""
             artifact: blob-report-api
-          # UI tests - sharded across 3 parallel jobs
+          # UI tests - sharded across 2 parallel jobs
           # Tests tagged @firefox/@webkit/@quickstart are excluded here:
           # - @firefox/@webkit run in dedicated sequential jobs
           # - @quickstart runs in the dedicated Quickstart job (needs a fresh env with no API keys)
-          - name: UI 1/3
+          - name: UI 1/2
             runner: blacksmith-16vcpu-ubuntu-2404
-            projects: chromium --project=identity-providers
-            shard: "--shard=1/3"
+            projects: chromium
+            shard: "--shard=1/2"
             extra_args: "--grep-invert '@firefox|@webkit|@quickstart'"
             artifact: blob-report-ui-1
-          - name: UI 2/3
+          - name: UI 2/2
             runner: blacksmith-16vcpu-ubuntu-2404
-            projects: chromium --project=identity-providers
-            shard: "--shard=2/3"
+            projects: chromium
+            shard: "--shard=2/2"
             extra_args: "--grep-invert '@firefox|@webkit|@quickstart'"
             artifact: blob-report-ui-2
-          - name: UI 3/3
+          # Identity provider tests manipulate shared SSO backend state and are
+          # more reliable when isolated from the generic Chromium shards.
+          - name: UI Identity Providers
             runner: blacksmith-16vcpu-ubuntu-2404
-            projects: chromium --project=identity-providers
-            shard: "--shard=3/3"
-            extra_args: "--grep-invert '@firefox|@webkit|@quickstart'"
-            artifact: blob-report-ui-3
+            projects: identity-providers
+            shard: ""
+            extra_args: "--workers=1"
+            artifact: blob-report-ui-identity-providers
           # Firefox tests - run sequentially to avoid race conditions on shared backend state
           - name: UI Firefox
             runner: blacksmith-16vcpu-ubuntu-2404

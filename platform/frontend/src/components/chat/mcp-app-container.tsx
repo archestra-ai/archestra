@@ -384,7 +384,7 @@ function McpAppContainer({
       ref={containerRef}
       className={cn(
         "will-change-auto origin-center transition-all duration-400 ease-[cubic-bezier(0.23,1,0.32,1)]",
-        isFullscreen ? "fixed z-[100] bg-background flex flex-col" : "p-4 pt-0",
+        isFullscreen ? "fixed z-[100] bg-background flex flex-col" : "",
         isFullscreen && !bounds
           ? "opacity-0 scale-95 pointer-events-none"
           : "opacity-100 scale-100",
@@ -438,13 +438,13 @@ function McpAppContainer({
         style={{
           maxHeight: isFullscreen
             ? `${bounds?.height || 1000}px`
-            : `${size?.height || 150}px`,
+            : `${Math.min(size?.height || 150, 500)}px`,
         }}
         className={cn(
           "transition-[max-height] duration-400 ease-[cubic-bezier(0.23,1,0.32,1)]",
           isFullscreen
             ? "flex-1 overflow-hidden [&_iframe]:!w-full [&_iframe]:!h-full [&_iframe]:!min-h-0 [&_iframe]:!max-h-none [&_div]:!h-full"
-            : "shadow-xs border border-border/50 rounded-lg [&_iframe]:!w-full overflow-y-hidden [&_div]:!max-h-none",
+            : "max-w-[80%] shadow-xs border border-border/50 rounded-lg [&_iframe]:!w-full overflow-y-hidden [&_div]:!max-h-none",
         )}
       >
         {children}

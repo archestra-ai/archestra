@@ -13,7 +13,7 @@ export async function goToMcpRegistry(page: Page): Promise<void> {
   await page.waitForLoadState("domcontentloaded");
 }
 
-export async function filterMcpRegistryByName(
+async function filterMcpRegistryByName(
   page: Page,
   catalogItemName: string,
 ): Promise<void> {
@@ -76,7 +76,7 @@ export async function installMcpServer(page: Page): Promise<void> {
   await page.waitForLoadState("domcontentloaded");
 }
 
-export async function selectTeamCredentialType(
+async function selectTeamCredentialType(
   page: Page,
   teamName: string,
 ): Promise<void> {
@@ -129,7 +129,7 @@ export async function waitForMcpServerToolsDiscovered(
     .toMatchObject({ state: "ready" });
 }
 
-export async function openCatalogItemConnectDialog(
+async function openCatalogItemConnectDialog(
   page: Page,
   catalogItemName: string,
   options?: { timeoutMs?: number },
@@ -149,6 +149,8 @@ export async function installLocalCatalogItem(params: {
   catalogItemName: string;
   envValues?: Record<string, string>;
   expectDialog?: boolean;
+  vaultSecretName?: string;
+  vaultSecretKey?: string;
   timeoutMs?: number;
 }): Promise<void> {
   await openCatalogItemConnectDialog(params.page, params.catalogItemName, {
@@ -171,6 +173,10 @@ export async function installLocalCatalogItem(params: {
 
   await waitForInstallDialog(params.page, { timeoutMs: params.timeoutMs });
 
+  await maybeSelectVaultSecret(params.page, {
+    secretName: params.vaultSecretName,
+    secretKey: params.vaultSecretKey,
+  });
   await fillInstallDialogEnvValues(params.page, params.envValues);
 
   await installMcpServer(params.page);
@@ -178,7 +184,7 @@ export async function installLocalCatalogItem(params: {
   await waitForMcpServerToolsDiscovered(params.page, params.catalogItemName);
 }
 
-export async function installTeamCatalogItemConnection(params: {
+async function installTeamCatalogItemConnection(params: {
   page: Page;
   catalogItemName: string;
   teamName: string;
@@ -261,6 +267,9 @@ async function fillInstallDialogEnvValues(
 ): Promise<void> {
   for (const [key, value] of Object.entries(envValues ?? {})) {
     const input = page.getByRole("textbox", { name: key });
+    if (!(await input.isVisible().catch(() => false))) {
+      continue;
+    }
     await expect(input).toBeEnabled({ timeout: 15_000 });
     await input.fill(value);
   }
@@ -277,6 +286,51 @@ async function maybeWaitForInstallDialog(
     return true;
   } catch {
     return false;
+  }
+}
+
+async function maybeSelectVaultSecret(
+  page: Page,
+  params?: {
+    secretName?: string;
+    secretKey?: string;
+  },
+): Promise<void> {
+  const folderTrigger = page.getByRole("combobox").filter({
+    has: page.getByText("-- Select Vault folder --"),
+  });
+
+  if (!(await folderTrigger.isVisible().catch(() => false))) {
+    return;
+  }
+
+  await folderTrigger.click();
+  const vaultFolderOption = page.getByRole("option").first();
+  await expect(vaultFolderOption).toBeVisible({ timeout: 15_000 });
+  await vaultFolderOption.click();
+
+  const secretTrigger = page.getByTestId(
+    E2eTestId.InlineVaultSecretSelectorSecretTrigger,
+  );
+  if (!(await secretTrigger.isVisible().catch(() => false))) {
+    return;
+  }
+  await secretTrigger.click();
+  if (params?.secretName) {
+    await page.getByRole("option", { name: params.secretName }).click();
+  } else {
+    await page.getByRole("option").nth(1).click();
+  }
+
+  const secretKeyTrigger = page.getByTestId(
+    E2eTestId.InlineVaultSecretSelectorSecretTriggerKey,
+  );
+  await expect(secretKeyTrigger).toBeVisible({ timeout: 15_000 });
+  await secretKeyTrigger.click();
+  if (params?.secretKey) {
+    await page.getByRole("option", { name: params.secretKey }).click();
+  } else {
+    await page.getByRole("option").nth(1).click();
   }
 }
 

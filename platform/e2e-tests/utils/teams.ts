@@ -1,13 +1,13 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 import { clickButton } from "./dialogs";
 
-export function getTeamRow(page: Page, teamName: string): Locator {
+function getTeamRow(page: Page, teamName: string): Locator {
   return page.getByRole("row", {
     name: new RegExp(teamName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"),
   });
 }
 
-export async function searchForTeam(
+async function searchForTeam(
   page: Page,
   teamName: string,
 ): Promise<void> {
@@ -16,7 +16,7 @@ export async function searchForTeam(
   await searchInput.fill(teamName);
 }
 
-export async function getVisibleTeamRow(
+async function getVisibleTeamRow(
   page: Page,
   teamName: string,
 ): Promise<Locator> {

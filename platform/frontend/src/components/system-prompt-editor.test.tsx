@@ -1,10 +1,13 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockGetFrontendDocsUrl = vi.fn();
 
 vi.mock("@/components/editor", () => ({
-  Editor: () => <div data-testid="editor" />,
+  Editor: (props: { height?: string }) => (
+    <div data-testid="editor" data-height={props.height} />
+  ),
 }));
 
 vi.mock("@/lib/docs/docs", () => ({
@@ -42,5 +45,31 @@ describe("SystemPromptEditor", () => {
       screen.queryByRole("link", { name: "docs" }),
     ).not.toBeInTheDocument();
     expect(screen.getByText(/templating\./)).toBeInTheDocument();
+  });
+
+  it("expands and collapses the shared editor height", async () => {
+    mockGetFrontendDocsUrl.mockReturnValue(null);
+    const user = userEvent.setup();
+
+    render(<SystemPromptEditor value="" onChange={vi.fn()} height="120px" />);
+
+    expect(screen.getByTestId("editor")).toHaveAttribute(
+      "data-height",
+      "120px",
+    );
+
+    await user.click(screen.getByRole("button", { name: /Expand/i }));
+
+    expect(screen.getByTestId("editor")).toHaveAttribute(
+      "data-height",
+      "420px",
+    );
+
+    await user.click(screen.getByRole("button", { name: /Collapse/i }));
+
+    expect(screen.getByTestId("editor")).toHaveAttribute(
+      "data-height",
+      "120px",
+    );
   });
 });

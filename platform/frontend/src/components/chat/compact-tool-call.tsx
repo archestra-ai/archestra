@@ -136,7 +136,7 @@ export function CompactToolGroup({
   const expandedTool = tools.find((t) => t.key === expandedKey);
 
   return (
-    <div className="mb-4">
+    <div className="mb-1">
       <div className="flex flex-wrap gap-1.5 items-center">
         {tools.map((tool) => {
           const iconInfo = toolIconMap?.get(tool.toolName);

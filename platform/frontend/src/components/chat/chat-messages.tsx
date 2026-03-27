@@ -13,7 +13,7 @@ import {
   TOOL_TODO_WRITE_SHORT_NAME,
 } from "@shared";
 import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
-import { CheckCircleIcon, ClockIcon } from "lucide-react";
+import { BotIcon, CheckCircleIcon, ClockIcon } from "lucide-react";
 import {
   Fragment,
   memo,
@@ -44,6 +44,13 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
+import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useProfileToolsWithIds } from "@/lib/chat/chat.query";
 import { useUpdateChatMessage } from "@/lib/chat/chat-message.query";
@@ -71,10 +78,11 @@ import {
   identifyCompactToolGroups,
 } from "./chat-messages.utils";
 import {
+  getCompactToolState,
   getToolErrorText,
   getToolHeaderState,
 } from "./chat-tools-display.utils";
-import { CompactToolGroup } from "./compact-tool-call";
+import { CompactToolGroup, type ToolIconMap } from "./compact-tool-call";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
 import { ExpiredAuthTool } from "./expired-auth-tool";
@@ -369,6 +377,9 @@ export function ChatMessages({
                     identifyCompactToolGroups(message.parts, {
                       nonCompactToolNames,
                       getToolShortName,
+                      mcpAppToolCallIds: new Set(
+                        Object.keys(earlyToolUiStarts),
+                      ),
                     });
                   const partKeyTracker = new Map<string, number>();
                   return message.parts?.map((part, i) => {
@@ -784,6 +795,7 @@ export function ChatMessages({
                               orchestrator.triggerReauthByCatalogIdAndServerId
                             }
                             getToolShortName={getToolShortName}
+                            toolIconMap={toolIconMap}
                             earlyToolUiData={
                               part.toolCallId
                                 ? earlyToolUiStarts[part.toolCallId]
@@ -861,6 +873,7 @@ export function ChatMessages({
                                 orchestrator.triggerReauthByCatalogIdAndServerId
                               }
                               getToolShortName={getToolShortName}
+                              toolIconMap={toolIconMap}
                               onSendMessage={(text) =>
                                 session?.sendMessage({
                                   role: "user",
@@ -922,6 +935,7 @@ export function ChatMessages({
                                 orchestrator.triggerReauthByCatalogIdAndServerId
                               }
                               getToolShortName={getToolShortName}
+                              toolIconMap={toolIconMap}
                               earlyToolUiData={
                                 tcId ? earlyToolUiStarts[tcId] : undefined
                               }
@@ -978,6 +992,7 @@ export function ChatMessages({
               onInstallMcp={orchestrator.triggerInstallByCatalogId}
               onReauthMcp={orchestrator.triggerReauthByCatalogIdAndServerId}
               getToolShortName={getToolShortName}
+              toolIconMap={toolIconMap}
             />
           ))}
           {(status === "submitted" ||
@@ -1095,6 +1110,7 @@ const MessageTool = memo(
     getToolShortName,
     onSendMessage,
     earlyToolUiData,
+    toolIconMap,
   }: {
     part: ToolUIPart | DynamicToolUIPart;
     toolResultPart: ToolUIPart | DynamicToolUIPart | null;
@@ -1111,6 +1127,7 @@ const MessageTool = memo(
     onReauthMcp?: (catalogId: string, serverId: string) => void;
     getToolShortName: (toolName: string) => ArchestraToolShortName | null;
     onSendMessage?: (text: string) => void;
+    toolIconMap?: ToolIconMap;
     earlyToolUiData?: {
       uiResourceUri: string;
       html?: string;
@@ -1143,11 +1160,7 @@ const MessageTool = memo(
         (toolResultPart && Boolean(toolResultPart.output)) ||
         (!toolResultPart && Boolean(part.output)),
     );
-    const shouldDefaultOpen =
-      !!uiResourceUri ||
-      !!earlyToolUiData?.html ||
-      !!earlyToolUiData?.uiResourceUri ||
-      isApprovalRequested;
+    const shouldDefaultOpen = isApprovalRequested;
 
     // Hooks must be called before any early returns
     const [isOpen, setIsOpen] = useState(shouldDefaultOpen);
@@ -1298,6 +1311,105 @@ const MessageTool = memo(
       <ToolErrorLogsButton toolName={toolName} />
     ) : null;
 
+    // MCP App tools: compact circle + canvas below (no collapsible wrapper)
+    if (uiResourceUri && !isApprovalRequested && !errorText) {
+      const compactState = getCompactToolState({ part, toolResultPart });
+      const shortName = toolName.includes("__")
+        ? toolName.split("__").pop()?.replace(/_/g, " ")
+        : toolName.replace(/_/g, " ");
+      const iconInfo = toolIconMap?.get(toolName);
+
+      return (
+        <div className="mb-1">
+          <div className="flex items-center gap-1.5">
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenChange(!isOpen)}
+                    className={cn(
+                      "relative inline-flex items-center justify-center size-8 rounded-full border transition-all hover:bg-accent hover:border-accent-foreground/20",
+                      isOpen &&
+                        "bg-accent border-accent-foreground/20 ring-2 ring-primary/20",
+                      !isOpen && "bg-background",
+                    )}
+                  >
+                    {iconInfo?.icon || iconInfo?.catalogId ? (
+                      <McpCatalogIcon
+                        icon={iconInfo.icon}
+                        catalogId={iconInfo.catalogId}
+                        size={16}
+                      />
+                    ) : (
+                      <BotIcon className="size-3.5 text-muted-foreground" />
+                    )}
+                    <span
+                      className={cn(
+                        "absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background",
+                        compactState === "completed" && "bg-green-500",
+                        compactState === "running" &&
+                          "bg-blue-500 animate-pulse",
+                        compactState === "error" && "bg-destructive",
+                      )}
+                    />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  {shortName}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+          {isOpen && (
+            <div className="mt-2">
+              <Tool defaultOpen={true}>
+                <ToolHeader
+                  type={`tool-${toolName}`}
+                  state={getHeaderState({
+                    state: part.state || "input-available",
+                    toolResultPart,
+                    errorText,
+                  })}
+                  isCollapsible={!!hasInput}
+                />
+                <ToolContent>
+                  {hasInput ? <ToolInput input={part.input} /> : null}
+                  {toolResultPart && (
+                    <ToolOutput
+                      label="Result"
+                      output={mcpOutput?.content ?? toolResultPart.output}
+                    />
+                  )}
+                </ToolContent>
+              </Tool>
+            </div>
+          )}
+          {agentId && (
+            <div className="mt-3">
+              <McpAppSection
+                uiResourceUri={uiResourceUri}
+                agentId={agentId}
+                toolName={toolName}
+                toolInput={part.input as Record<string, unknown>}
+                rawOutput={mcpOutput}
+                preloadedResource={
+                  earlyToolUiData?.html
+                    ? {
+                        html: earlyToolUiData.html,
+                        csp: earlyToolUiData.csp,
+                        permissions: earlyToolUiData.permissions,
+                      }
+                    : undefined
+                }
+                onSendMessage={onSendMessage}
+              />
+            </div>
+          )}
+        </div>
+      );
+    }
+
     const isExpandable =
       hasContent && (canExpandToolCalls || isApprovalRequested);
 
@@ -1419,7 +1531,8 @@ const MessageTool = memo(
     prev.toolResultPart?.state === next.toolResultPart?.state &&
     prev.earlyToolUiData?.uiResourceUri ===
       next.earlyToolUiData?.uiResourceUri &&
-    !!prev.earlyToolUiData?.html === !!next.earlyToolUiData?.html,
+    !!prev.earlyToolUiData?.html === !!next.earlyToolUiData?.html &&
+    prev.toolIconMap === next.toolIconMap,
 );
 
 const getHeaderState = ({

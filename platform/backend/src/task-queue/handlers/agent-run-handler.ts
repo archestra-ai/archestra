@@ -29,7 +29,6 @@ export async function handleAgentRun(payload: Record<string, unknown>): Promise<
       message,
       organizationId: agent.organizationId,
       userId: agent.authorId || "system", // Use authorId if available, fallback to system
-      source: "scheduler" as any, // Add scheduler source
     });
 
     await AgentModel.update(

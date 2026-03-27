@@ -92,6 +92,7 @@ export class NotionConnector extends BaseConnector {
         // Initial filter-based fetch
         if (config.databaseIds) {
           for (const dbId of config.databaseIds) {
+            await this.rateLimit();
             try {
               const res = await this.fetchNotion(`/v1/databases/${dbId}`, params.credentials.apiToken);
               if (res.ok) itemsToProcess.push(await res.json());
@@ -102,6 +103,7 @@ export class NotionConnector extends BaseConnector {
         }
         if (config.pageIds) {
           for (const pageId of config.pageIds) {
+            await this.rateLimit();
             try {
               const res = await this.fetchNotion(`/v1/pages/${pageId}`, params.credentials.apiToken);
               if (res.ok) itemsToProcess.push(await res.json());

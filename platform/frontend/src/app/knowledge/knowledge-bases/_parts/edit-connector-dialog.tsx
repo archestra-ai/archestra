@@ -33,6 +33,7 @@ import { SchedulePicker } from "./schedule-picker";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
 import { transformConfigArrayFields } from "./transform-config-array-fields";
 
+
 type ConnectorItem = Pick<
   archestraApiTypes.GetConnectorsResponses["200"]["data"][number],
   | "id"
@@ -241,15 +242,6 @@ export function EditConnectorDialog({
             />
           )}
 
-// ... (in Advanced section)
-              {connectorType === "gitlab" && (
-                <GitlabConfigFields form={form} hideUrl />
-              )}
-              {connectorType === "notion" && (
-                <NotionConfigFields form={form} />
-              )}
-              {connectorType === "servicenow" && (
-
           {(connectorType === "jira" || connectorType === "confluence") && (
             <FormField
               control={form.control}
@@ -372,6 +364,9 @@ export function EditConnectorDialog({
               {connectorType === "gitlab" && (
                 <GitlabConfigFields form={form} hideUrl />
               )}
+              {connectorType === "notion" && (
+                <NotionConfigFields form={form} />
+              )}
               {connectorType === "servicenow" && (
                 <ServiceNowConfigFields form={form} hideUrl />
               )}
@@ -392,8 +387,10 @@ function getEditUrlConfig(type: ConnectorType): {
   placeholder: string;
   description: string;
   typeLabel: string;
-} {
+} | null {
   switch (type) {
+    case "notion":
+      return null;
     case "jira":
       return {
         fieldName: "config.jiraBaseUrl",

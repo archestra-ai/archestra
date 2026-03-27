@@ -35,7 +35,7 @@ export async function handleAgentRun(payload: Record<string, unknown>): Promise<
       agent.id,
       {
         lastScheduledRunAt: new Date(),
-      } as any,
+      } as unknown as Parameters<typeof AgentModel.update>[1],
     );
 
     logger.info({ agentId, agentName: agent.name }, "Scheduled agent run completed successfully");

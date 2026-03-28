@@ -96,6 +96,24 @@ Ingests records from ServiceNow instances via the Table API. HTML descriptions a
 
 Authentication supports both basic auth (username + password) and OAuth bearer tokens. When using basic auth, provide the username in the Email field and the password in the API Token field. For OAuth, leave the Email field empty and provide the bearer token. Incidents are synced by default; enable additional entity types in the advanced configuration. States and assignment group filters apply to all entity types except business applications. Incremental sync uses the `sys_created_on` field to fetch only records created since the last run.
 
+## Notion
+
+Ingests page content from Notion workspaces via the official REST API. Block content is fetched recursively (up to 3 levels deep) and converted to Markdown.
+
+| Field          | Description                                                                                      |
+| -------------- | ------------------------------------------------------------------------------------------------ |
+| Database IDs   | Comma-separated Notion database IDs to restrict sync scope (optional -- leave blank for all)     |
+| Page IDs       | Comma-separated specific page IDs to sync (optional -- overrides Database IDs when set)          |
+
+Authentication uses a Notion [internal integration token](https://www.notion.so/help/create-integrations-with-the-notion-api) (`secret_...`). Create an integration at [notion.so/my-integrations](https://www.notion.so/my-integrations), then share the desired pages/databases with the integration. No instance URL is needed -- Notion is cloud-only.
+
+Three sync modes are supported:
+1. **Full workspace** -- omit both fields to discover all pages accessible to the integration via the `/search` API
+2. **Database filter** -- set Database IDs to query specific databases
+3. **Page filter** -- set Page IDs to fetch only those pages directly
+
+Incremental sync uses the `last_edited_time` timestamp to skip pages unchanged since the last run.
+
 ## Managing Connectors
 
 Connectors can be managed from either the **Connectors** page or a knowledge base's detail page. After creation you can:

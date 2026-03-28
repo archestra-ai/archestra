@@ -1,6 +1,10 @@
 "use client";
 
-import { type archestraApiTypes, getConnectorNamePlaceholder } from "@shared";
+import {
+  type archestraApiTypes,
+  CONNECTOR_TYPE_LABELS,
+  getConnectorNamePlaceholder,
+} from "@shared";
 import { ChevronDown } from "lucide-react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
@@ -28,6 +32,7 @@ import { ConnectorTypeIcon } from "./connector-icons";
 import { GithubConfigFields } from "./github-config-fields";
 import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
+import { NotionConfigFields } from "./notion-config-fields";
 import { SchedulePicker } from "./schedule-picker";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
 import { transformConfigArrayFields } from "./transform-config-array-fields";
@@ -131,7 +136,7 @@ export function EditConnectorDialog({
           <div className="flex h-7 w-7 items-center justify-center rounded-md bg-muted">
             <ConnectorTypeIcon type={connectorType} className="h-4 w-4" />
           </div>
-          Edit {urlConfig.typeLabel} Connector
+          Edit {urlConfig?.typeLabel ?? CONNECTOR_TYPE_LABELS[connectorType] ?? connectorType} Connector
         </span>
       }
       description="Update the settings for this connector."
@@ -217,26 +222,28 @@ export function EditConnectorDialog({
             )}
           />
 
-          <FormField
-            control={form.control}
-            // biome-ignore lint/suspicious/noExplicitAny: dynamic field name for connector-specific URL
-            name={urlConfig.fieldName as any}
-            rules={{ required: `${urlConfig.label} is required` }}
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{urlConfig.label}</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder={urlConfig.placeholder}
-                    {...field}
-                    value={(field.value as string) ?? ""}
-                  />
-                </FormControl>
-                <FormDescription>{urlConfig.description}</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          {urlConfig && (
+            <FormField
+              control={form.control}
+              // biome-ignore lint/suspicious/noExplicitAny: dynamic field name for connector-specific URL
+              name={urlConfig.fieldName as any}
+              rules={{ required: `${urlConfig.label} is required` }}
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{urlConfig.label}</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder={urlConfig.placeholder}
+                      {...field}
+                      value={(field.value as string) ?? ""}
+                    />
+                  </FormControl>
+                  <FormDescription>{urlConfig.description}</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
 
           {(connectorType === "jira" || connectorType === "confluence") && (
             <FormField
@@ -314,21 +321,25 @@ export function EditConnectorDialog({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>
-                  {connectorType === "servicenow"
-                    ? "Password"
-                    : needsEmail
-                      ? emailRequired
-                        ? "API Token"
-                        : "API Token / Personal Access Token"
-                      : "Personal Access Token"}
+                  {connectorType === "notion"
+                    ? "Integration Token"
+                    : connectorType === "servicenow"
+                      ? "Password"
+                      : needsEmail
+                        ? emailRequired
+                          ? "API Token"
+                          : "API Token / Personal Access Token"
+                        : "Personal Access Token"}
                 </FormLabel>
                 <FormControl>
                   <Input
                     type="password"
                     placeholder={
-                      connectorType === "servicenow"
-                        ? "Leave empty to keep existing password"
-                        : "Leave empty to keep existing token"
+                      connectorType === "notion"
+                        ? "Leave empty to keep existing token"
+                        : connectorType === "servicenow"
+                          ? "Leave empty to keep existing password"
+                          : "Leave empty to keep existing token"
                     }
                     {...field}
                   />
@@ -363,6 +374,9 @@ export function EditConnectorDialog({
               {connectorType === "servicenow" && (
                 <ServiceNowConfigFields form={form} hideUrl />
               )}
+              {connectorType === "notion" && (
+                <NotionConfigFields form={form} />
+              )}
             </CollapsibleContent>
           </Collapsible>
         </div>
@@ -374,13 +388,15 @@ export function EditConnectorDialog({
 type ConnectorType =
   archestraApiTypes.CreateConnectorData["body"]["connectorType"];
 
-function getEditUrlConfig(type: ConnectorType): {
+type EditUrlConfig = {
   fieldName: string;
   label: string;
   placeholder: string;
   description: string;
   typeLabel: string;
-} {
+} | null;
+
+function getEditUrlConfig(type: ConnectorType): EditUrlConfig {
   switch (type) {
     case "jira":
       return {
@@ -423,6 +439,9 @@ function getEditUrlConfig(type: ConnectorType): {
         description: "Your ServiceNow instance URL.",
         typeLabel: "ServiceNow",
       };
+    case "notion":
+      // Notion is cloud-only — no instance URL needed.
+      return null;
     default:
       return {
         fieldName: "config.url",

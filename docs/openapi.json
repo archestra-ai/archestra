@@ -93213,6 +93213,12 @@
                                       "enum": [
                                         "servicenow"
                                       ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "notion"
+                                      ]
                                     }
                                   ]
                                 }
@@ -95092,6 +95098,12 @@
                   "enum": [
                     "servicenow"
                   ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "notion"
+                  ]
                 }
               ]
             },
@@ -95158,6 +95170,12 @@
                                 "type": "string",
                                 "enum": [
                                   "servicenow"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "notion"
                                 ]
                               }
                             ]
@@ -95380,6 +95398,33 @@
                                 "required": [
                                   "type",
                                   "instanceUrl"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "notion"
+                                    ]
+                                  },
+                                  "databaseIds": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "pageIds": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "type"
                                 ],
                                 "additionalProperties": false
                               }
@@ -95823,6 +95868,12 @@
                         "enum": [
                           "servicenow"
                         ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "notion"
+                        ]
                       }
                     ]
                   },
@@ -96051,6 +96102,33 @@
                           "type",
                           "instanceUrl"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "notion"
+                            ]
+                          },
+                          "databaseIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "pageIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false
                       }
                     ]
                   },
@@ -96144,6 +96222,12 @@
                           "type": "string",
                           "enum": [
                             "servicenow"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "notion"
                           ]
                         }
                       ]
@@ -96366,6 +96450,33 @@
                           "required": [
                             "type",
                             "instanceUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "notion"
+                              ]
+                            },
+                            "databaseIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "pageIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "type"
                           ],
                           "additionalProperties": false
                         }
@@ -96757,6 +96868,12 @@
                           "enum": [
                             "servicenow"
                           ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "notion"
+                          ]
                         }
                       ]
                     },
@@ -96978,6 +97095,33 @@
                           "required": [
                             "type",
                             "instanceUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "notion"
+                              ]
+                            },
+                            "databaseIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "pageIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "type"
                           ],
                           "additionalProperties": false
                         }
@@ -97547,6 +97691,33 @@
                           "type",
                           "instanceUrl"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "notion"
+                            ]
+                          },
+                          "databaseIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "pageIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false
                       }
                     ]
                   },
@@ -97638,6 +97809,12 @@
                           "type": "string",
                           "enum": [
                             "servicenow"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "notion"
                           ]
                         }
                       ]
@@ -97860,6 +98037,33 @@
                           "required": [
                             "type",
                             "instanceUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "notion"
+                              ]
+                            },
+                            "databaseIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "pageIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "type"
                           ],
                           "additionalProperties": false
                         }

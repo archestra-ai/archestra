@@ -7,6 +7,7 @@ const CONFLUENCE = z.literal("confluence");
 const GITHUB = z.literal("github");
 const GITLAB = z.literal("gitlab");
 const SERVICENOW = z.literal("servicenow");
+const NOTION = z.literal("notion");
 
 export const ConnectorTypeSchema = z.union([
   JIRA,
@@ -14,6 +15,7 @@ export const ConnectorTypeSchema = z.union([
   GITHUB,
   GITLAB,
   SERVICENOW,
+  NOTION,
 ]);
 export type ConnectorType = z.infer<typeof ConnectorTypeSchema>;
 
@@ -153,6 +155,23 @@ export const ServiceNowCheckpointSchema = z.object({
 });
 export type ServiceNowCheckpoint = z.infer<typeof ServiceNowCheckpointSchema>;
 
+// ===== Notion Config & Checkpoint =====
+
+export const NotionConfigSchema = z.object({
+  type: NOTION,
+  /** Restrict sync to specific Notion database IDs (optional — omit to sync all accessible pages). */
+  databaseIds: z.array(z.string()).optional(),
+  /** Sync only specific page IDs (optional — takes precedence over databaseIds when set). */
+  pageIds: z.array(z.string()).optional(),
+});
+export type NotionConfig = z.infer<typeof NotionConfigSchema>;
+
+export const NotionCheckpointSchema = z.object({
+  type: NOTION,
+  lastSyncedAt: z.string().optional(),
+});
+export type NotionCheckpoint = z.infer<typeof NotionCheckpointSchema>;
+
 // ===== Discriminated Unions =====
 
 export const ConnectorConfigSchema = z.discriminatedUnion("type", [
@@ -161,6 +180,7 @@ export const ConnectorConfigSchema = z.discriminatedUnion("type", [
   GithubConfigSchema,
   GitlabConfigSchema,
   ServiceNowConfigSchema,
+  NotionConfigSchema,
 ]);
 export type ConnectorConfig = z.infer<typeof ConnectorConfigSchema>;
 
@@ -170,6 +190,7 @@ export const ConnectorCheckpointSchema = z.discriminatedUnion("type", [
   GithubCheckpointSchema,
   GitlabCheckpointSchema,
   ServiceNowCheckpointSchema,
+  NotionCheckpointSchema,
 ]);
 export type ConnectorCheckpoint = z.infer<typeof ConnectorCheckpointSchema>;
 

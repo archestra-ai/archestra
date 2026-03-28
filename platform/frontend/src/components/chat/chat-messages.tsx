@@ -57,16 +57,16 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useProfileToolsWithIds } from "@/lib/chat/chat.query";
 import { useUpdateChatMessage } from "@/lib/chat/chat-message.query";
 import { useGlobalChat } from "@/lib/chat/global-chat.context";
-import { hasThinkingTags, parseThinkingTags } from "@/lib/chat/parse-thinking";
-import type { ModelSource } from "@/lib/chat/use-chat-preferences";
-import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import {
   extractCatalogIdFromInstallUrl,
   extractIdsFromReauthUrl,
   parseAuthRequired,
   parseExpiredAuth,
   parsePolicyDenied,
-} from "@/lib/interactions/llmProviders/common";
+} from "@/lib/chat/mcp-error-ui";
+import { hasThinkingTags, parseThinkingTags } from "@/lib/chat/parse-thinking";
+import type { ModelSource } from "@/lib/chat/use-chat-preferences";
+import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpInstallOrchestrator } from "@/lib/mcp/mcp-install-orchestrator.hook";
@@ -1370,10 +1370,7 @@ const MessageTool = memo(
     }
 
     if (authToolBody) {
-      const shortName = parseFullToolName(toolName).toolName.replace(
-        /_/g,
-        " ",
-      );
+      const shortName = parseFullToolName(toolName).toolName.replace(/_/g, " ");
       const iconInfo = toolIconMap?.get(toolName);
 
       return (
@@ -1414,10 +1411,7 @@ const MessageTool = memo(
     // MCP App tools: compact circle + canvas below (no collapsible wrapper)
     if (uiResourceUri && !isApprovalRequested && !errorText) {
       const compactState = getCompactToolState({ part, toolResultPart });
-      const shortName = parseFullToolName(toolName).toolName.replace(
-        /_/g,
-        " ",
-      );
+      const shortName = parseFullToolName(toolName).toolName.replace(/_/g, " ");
       const iconInfo = toolIconMap?.get(toolName);
 
       return (
@@ -1598,7 +1592,7 @@ const MessageTool = memo(
                 }
                 onSendMessage={onSendMessage}
               />
-          )}
+            )}
           {/* Show error output even when UI resource is present - errors take priority */}
           {!authToolBody && errorText && uiResourceUri && toolResultPart && (
             <ToolOutput label="Error" output={output} errorText={errorText} />
@@ -1615,12 +1609,12 @@ const MessageTool = memo(
             !uiResourceUri &&
             !toolResultPart &&
             Boolean(part.output) && (
-            <ToolOutput
-              label={errorText ? "Error" : "Result"}
-              output={output}
-              errorText={errorText}
-            />
-          )}
+              <ToolOutput
+                label={errorText ? "Error" : "Result"}
+                output={output}
+                errorText={errorText}
+              />
+            )}
         </ToolContent>
       </Tool>
     );

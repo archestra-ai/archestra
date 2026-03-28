@@ -1,3 +1,4 @@
+import { buildArchestraToolRefusalMetadata } from "@shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import logger from "@/logging";
 import {
@@ -142,10 +143,11 @@ export const evaluatePolicies = async (
       (tc) => tc.toolCallName === toolCallName,
     )?.toolInput;
 
-    const archestraMetadata = `
-<archestra-tool-name>${toolCallName}</archestra-tool-name>
-<archestra-tool-arguments>${JSON.stringify(toolInput)}</archestra-tool-arguments>
-<archestra-tool-reason>${reason}</archestra-tool-reason>`;
+    const archestraMetadata = buildArchestraToolRefusalMetadata({
+      toolName: toolCallName,
+      toolArguments: JSON.stringify(toolInput),
+      reason,
+    });
 
     const contentMessage = `
 I tried to invoke the ${toolCallName} tool with the following arguments: ${JSON.stringify(toolInput)}.

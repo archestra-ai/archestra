@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseArchestraToolRefusal } from "./tool-refusal";
 
 export const McpToolErrorTypeSchema = z.enum([
   "auth_required",
@@ -128,14 +129,15 @@ function extractMcpToolErrorRecursive(
 function parsePolicyDeniedMcpToolError(
   input: string,
 ): PolicyDeniedMcpToolError | null {
+  const tagged = parseArchestraToolRefusal(input);
   const toolName =
-    input.match(/<archestra-tool-name>(.*?)<\/archestra-tool-name>/)?.[1] ??
+    tagged.toolName ??
     input.match(/invoke[d]?\s+(?:the\s+)?(.+?)\s+tool/i)?.[1];
   const toolArgs =
-    input.match(/<archestra-tool-arguments>(.*?)<\/archestra-tool-arguments>/)?.[1] ??
+    tagged.toolArguments ??
     input.match(/tool with the following arguments:\s*(\{[\s\S]*?\})/i)?.[1];
   const reason =
-    input.match(/<archestra-tool-reason>(.*?)<\/archestra-tool-reason>/)?.[1] ??
+    tagged.reason ??
     input.match(/(?:denied|blocked)[\s\S]*?:\s*([\s\S]+)/i)?.[1]?.trim();
 
   if (!toolName || !reason) {

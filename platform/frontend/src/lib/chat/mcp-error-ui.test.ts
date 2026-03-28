@@ -5,7 +5,7 @@ import {
   parseAuthRequired,
   parseExpiredAuth,
   parsePolicyDenied,
-} from "./common";
+} from "./mcp-error-ui";
 
 describe("parsePolicyDenied", () => {
   it("parses a plain-text policy denial with tool name, args, and reason", () => {

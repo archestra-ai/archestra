@@ -452,7 +452,7 @@ describe("ChatMessages", () => {
           },
           {
             type: "text",
-            text: "Your authentication for \"id-jag test\" is expired or invalid. Please re-authenticate by visiting this URL: http://localhost:3000/mcp/registry?reauth=cat_abc&server=srv_xyz",
+            text: 'Your authentication for "id-jag test" is expired or invalid. Please re-authenticate by visiting this URL: http://localhost:3000/mcp/registry?reauth=cat_abc&server=srv_xyz',
           },
         ],
       },

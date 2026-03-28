@@ -421,6 +421,18 @@ describe("McpClient", () => {
           isError: true,
           error: expect.stringContaining("No HTTP endpoint URL found"),
           name: "local-streamable-http-server__test_tool",
+          _meta: {
+            archestraError: {
+              type: "generic",
+              message: expect.stringContaining("No HTTP endpoint URL found"),
+            },
+          },
+          structuredContent: {
+            archestraError: {
+              type: "generic",
+              message: expect.stringContaining("No HTTP endpoint URL found"),
+            },
+          },
         });
       });
 
@@ -769,6 +781,19 @@ describe("McpClient", () => {
         expect(result?.content).toEqual([
           { type: "text", text: result?.error },
         ]);
+        expect(result?._meta).toMatchObject({
+          archestraError: {
+            type: "auth_required",
+            catalogId: dynCatalog.id,
+            catalogName: "jira-mcp-server",
+            installUrl: `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?install=${dynCatalog.id}`,
+          },
+        });
+        expect(result?.structuredContent).toMatchObject({
+          archestraError: {
+            type: "auth_required",
+          },
+        });
       });
 
       test("returns install URL with team context when team token has no server", async ({
@@ -1098,6 +1123,15 @@ describe("McpClient", () => {
         expect(result?.error).toContain(
           "Once you have re-authenticated, retry this tool call.",
         );
+        expect(result?._meta).toMatchObject({
+          archestraError: {
+            type: "auth_expired",
+            catalogId: oauthCatalog.id,
+            catalogName: "github-oauth-server",
+            serverId: mcpServer.id,
+            reauthUrl: `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${oauthCatalog.id}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${mcpServer.id}`,
+          },
+        });
       });
 
       test("returns expired-auth message with manage URL when tool call throws StreamableHTTPError 401 on OAuth server", async ({

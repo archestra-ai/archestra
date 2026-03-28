@@ -123,4 +123,117 @@ describe("AccountModel", () => {
       expect(found).toBeUndefined();
     });
   });
+
+  describe("getLatestSsoAccountWithAccessTokenByUserId", () => {
+    test("returns the most recently updated account that has an access token", async ({
+      makeUser,
+      makeAccount,
+    }) => {
+      const user = await makeUser();
+      const older = await makeAccount(user.id, {
+        providerId: "okta",
+        accessToken: "older-access-token",
+      });
+      const noToken = await makeAccount(user.id, {
+        providerId: "github",
+        accessToken: null,
+      });
+      const latest = await makeAccount(user.id, {
+        providerId: "keycloak",
+        accessToken: "latest-access-token",
+      });
+
+      await db
+        .update(schema.accountsTable)
+        .set({ updatedAt: new Date("2026-01-01T00:00:00.000Z") })
+        .where(eq(schema.accountsTable.id, older.id));
+      await db
+        .update(schema.accountsTable)
+        .set({ updatedAt: new Date("2026-01-01T00:00:01.000Z") })
+        .where(eq(schema.accountsTable.id, noToken.id));
+      await db
+        .update(schema.accountsTable)
+        .set({ updatedAt: new Date("2026-01-01T00:00:02.000Z") })
+        .where(eq(schema.accountsTable.id, latest.id));
+
+      const found =
+        await AccountModel.getLatestSsoAccountWithAccessTokenByUserId(user.id);
+
+      expect(found?.id).toBe(latest.id);
+      expect(found?.providerId).toBe("keycloak");
+      expect(found?.accessToken).toBe("latest-access-token");
+    });
+
+    test("returns undefined when the user has no account with an access token", async ({
+      makeUser,
+      makeAccount,
+    }) => {
+      const user = await makeUser();
+      await makeAccount(user.id, {
+        providerId: "okta",
+        accessToken: null,
+      });
+
+      const found =
+        await AccountModel.getLatestSsoAccountWithAccessTokenByUserId(user.id);
+
+      expect(found).toBeUndefined();
+    });
+  });
+
+  describe("updateTokens", () => {
+    test("updates access token and optional token fields", async ({
+      makeUser,
+      makeAccount,
+    }) => {
+      const user = await makeUser();
+      const account = await makeAccount(user.id, {
+        providerId: "okta",
+        accessToken: "old-access-token",
+        refreshToken: "old-refresh-token",
+        idToken: "old-id-token",
+      });
+
+      const updated = await AccountModel.updateTokens({
+        id: account.id,
+        accessToken: "new-access-token",
+        refreshToken: "new-refresh-token",
+        idToken: "new-id-token",
+        accessTokenExpiresAt: new Date("2026-02-01T00:00:00.000Z"),
+        refreshTokenExpiresAt: new Date("2026-03-01T00:00:00.000Z"),
+      });
+
+      expect(updated?.accessToken).toBe("new-access-token");
+      expect(updated?.refreshToken).toBe("new-refresh-token");
+      expect(updated?.idToken).toBe("new-id-token");
+      expect(updated?.accessTokenExpiresAt).toEqual(
+        new Date("2026-02-01T00:00:00.000Z"),
+      );
+      expect(updated?.refreshTokenExpiresAt).toEqual(
+        new Date("2026-03-01T00:00:00.000Z"),
+      );
+    });
+
+    test("preserves optional token fields when they are omitted", async ({
+      makeUser,
+      makeAccount,
+    }) => {
+      const user = await makeUser();
+      const account = await makeAccount(user.id, {
+        providerId: "okta",
+        accessToken: "old-access-token",
+        refreshToken: "existing-refresh-token",
+        idToken: "existing-id-token",
+      });
+
+      const updated = await AccountModel.updateTokens({
+        id: account.id,
+        accessToken: "new-access-token",
+      });
+
+      expect(updated?.accessToken).toBe("new-access-token");
+      expect(updated?.refreshToken).toBe("existing-refresh-token");
+      expect(updated?.idToken).toBe("existing-id-token");
+    });
+  });
 });

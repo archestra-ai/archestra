@@ -1,5 +1,6 @@
 import {
   type archestraApiTypes,
+  extractMcpToolError,
   MCP_CATALOG_INSTALL_QUERY_PARAM,
   MCP_CATALOG_REAUTH_QUERY_PARAM,
   MCP_CATALOG_SERVER_QUERY_PARAM,
@@ -86,54 +87,18 @@ export function parseRefusalMessage(refusal: string): RefusalInfo {
  * }
  */
 export function parsePolicyDenied(text: string): PolicyDeniedPart | null {
-  // Unwrap AI SDK error format: {originalError: {message: "..."}}
-  let actualText = text;
-  try {
-    const parsed = JSON.parse(text);
-    if (parsed.originalError?.message) {
-      actualText = parsed.originalError.message;
-    } else if (parsed.message) {
-      actualText = parsed.message;
-    }
-  } catch {
-    // Not JSON, use as-is
-  }
-
-  // Check for policy denial keywords
-  if (typeof actualText !== "string") return null;
-  const lowerText = actualText.toLowerCase();
-  const hasKeywords =
-    lowerText.includes("denied") &&
-    lowerText.includes("tool") &&
-    lowerText.includes("invocation") &&
-    lowerText.includes("policy");
-
-  if (!hasKeywords) {
+  const policyDenied = extractMcpToolError(text);
+  if (policyDenied?.type !== "policy_denied") {
     return null;
   }
 
-  // Extract tool name and JSON arguments
-  const match = actualText.match(
-    /invoke[d]?\s+(?:the\s+)?(.+?)\s+tool[\s\S]*?(\{[\s\S]*?\})[\s\S]*?(?:denied|blocked)[\s\S]*?:\s*([\s\S]+)/i,
-  );
-  if (match) {
-    const [, toolName, argsStr, reason] = match;
-    let input: Record<string, unknown> = {};
-    try {
-      input = JSON.parse(argsStr);
-    } catch {
-      // Keep empty if parsing fails
-    }
-    return {
-      type: `tool-${toolName}`,
-      toolCallId: "",
-      state: "output-denied",
-      input,
-      errorText: JSON.stringify({ reason: reason.trim() }),
-    };
-  }
-
-  return null;
+  return {
+    type: `tool-${policyDenied.toolName}`,
+    toolCallId: "",
+    state: "output-denied",
+    input: policyDenied.input,
+    errorText: JSON.stringify({ reason: policyDenied.reason }),
+  };
 }
 
 export interface AuthRequiredResult {
@@ -186,15 +151,22 @@ export function parseExpiredAuth(errorText: string): ExpiredAuthResult | null {
     /* not JSON, use raw text */
   }
 
-  if (!message.includes("Expired or invalid authentication for")) return null;
+  if (
+    !message.includes("Expired or invalid authentication for") &&
+    !message.includes("Your credentials have expired")
+  ) {
+    return null;
+  }
 
   const nameMatch = message.match(
     /Expired or invalid authentication for "([^"]+)"/,
   );
-  const urlMatch = message.match(/visit(?:\s+this\s+URL)?:\s*(https?:\/\/\S+)/);
-  if (!nameMatch || !urlMatch) return null;
+  const urlMatch = message.match(
+    /(?:To\s+re-authenticate,\s*)?(?:Please\s+visit|visit)(?:\s+this\s+URL)?[:\s]+(https?:\/\/\S+)/i,
+  );
+  if (!urlMatch) return null;
 
-  return { catalogName: nameMatch[1], reauthUrl: urlMatch[1] };
+  return { catalogName: nameMatch?.[1] ?? "", reauthUrl: urlMatch[1] };
 }
 
 /**

@@ -24,10 +24,13 @@ import type {
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import {
+  type AuthExpiredMcpToolError,
+  type AuthRequiredMcpToolError,
   MCP_CATALOG_INSTALL_PATH,
   MCP_CATALOG_INSTALL_QUERY_PARAM,
   MCP_CATALOG_REAUTH_QUERY_PARAM,
   MCP_CATALOG_SERVER_QUERY_PARAM,
+  type McpToolError,
   parseFullToolName,
 } from "@shared";
 import QuickLRU from "quick-lru";
@@ -536,30 +539,34 @@ class McpClient {
           const catalogDisplayName = tool.catalogName || tool.catalogId;
           // Credentials exist but failed → "expired/invalid" message with manage link
           if (targetMcpServerId) {
+            const authError = this.buildExpiredAuthMessage(
+              catalogDisplayName,
+              tool.catalogId,
+              targetMcpServerId,
+              tokenAuth,
+            );
             return await this.createErrorResult(
               toolCall,
               agentId,
-              this.buildExpiredAuthMessage(
-                catalogDisplayName,
-                tool.catalogId,
-                targetMcpServerId,
-                tokenAuth,
-              ),
+              authError.message,
               mcpServerName,
               authInfo,
+              authError,
             );
           }
           // No server resolved → "auth required" message with install link
+          const authError = this.buildAuthRequiredMessage(
+            catalogDisplayName,
+            tool.catalogId,
+            tokenAuth,
+          );
           return await this.createErrorResult(
             toolCall,
             agentId,
-            this.buildAuthRequiredMessage(
-              catalogDisplayName,
-              tool.catalogId,
-              tokenAuth,
-            ),
+            authError.message,
             mcpServerName,
             authInfo,
+            authError,
           );
         }
 
@@ -1154,16 +1161,19 @@ class McpClient {
 
     // No server found - return an actionable error with install link
     const catalogDisplayName = tool.catalogName || tool.catalogId;
+    const authError = this.buildAuthRequiredMessage(
+      catalogDisplayName,
+      tool.catalogId,
+      tokenAuth,
+    );
     return {
       error: await this.createErrorResult(
         toolCall,
         agentId,
-        this.buildAuthRequiredMessage(
-          catalogDisplayName,
-          tool.catalogId,
-          tokenAuth,
-        ),
+        authError.message,
         fallbackName,
+        undefined,
+        authError,
       ),
     };
   }
@@ -1422,13 +1432,25 @@ class McpClient {
       userId?: string;
       authMethod?: MCPGatewayAuthMethod;
     },
+    structuredError?: McpToolError,
   ): Promise<CommonToolResult> {
+    const normalizedError: McpToolError = structuredError ?? {
+      type: "generic",
+      message: error,
+    };
+
     const errorResult: CommonToolResult = {
       id: toolCall.id,
       name: toolCall.name,
       content: [{ type: "text", text: error }],
       isError: true,
       error,
+      _meta: {
+        archestraError: normalizedError,
+      },
+      structuredContent: {
+        archestraError: normalizedError,
+      },
     };
 
     await this.persistToolCall(
@@ -1601,16 +1623,19 @@ class McpClient {
 
       if (isRetryAuthError && toolCatalogId) {
         const catalogDisplayName = toolCatalogName || toolCatalogId;
+        const authError = this.buildExpiredAuthMessage(
+          catalogDisplayName,
+          toolCatalogId,
+          targetMcpServerId,
+          tokenAuth,
+        );
         return await this.createErrorResult(
           toolCall,
           agentId,
-          this.buildExpiredAuthMessage(
-            catalogDisplayName,
-            toolCatalogId,
-            targetMcpServerId,
-            tokenAuth,
-          ),
+          authError.message,
           mcpServerName,
+          undefined,
+          authError,
         );
       }
 
@@ -1631,17 +1656,23 @@ class McpClient {
     catalogDisplayName: string,
     catalogId: string,
     tokenAuth?: TokenAuthContext,
-  ): string {
+  ): AuthRequiredMcpToolError {
     const context = this.formatAuthContext(tokenAuth);
     const installUrl = `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_INSTALL_QUERY_PARAM}=${catalogId}`;
-    return formatActionableAuthError({
-      title: `Authentication required for "${catalogDisplayName}"`,
-      detail: `No credentials were found for your account (${context}).`,
-      actionLabel: "set up your credentials",
-      url: installUrl,
-      postAction:
-        "Once you have completed authentication, retry this tool call.",
-    });
+    return {
+      type: "auth_required",
+      message: formatActionableAuthError({
+        title: `Authentication required for "${catalogDisplayName}"`,
+        detail: `No credentials were found for your account (${context}).`,
+        actionLabel: "set up your credentials",
+        url: installUrl,
+        postAction:
+          "Once you have completed authentication, retry this tool call.",
+      }),
+      catalogId,
+      catalogName: catalogDisplayName,
+      installUrl,
+    };
   }
 
   /**
@@ -1653,16 +1684,23 @@ class McpClient {
     catalogId: string,
     mcpServerId: string,
     tokenAuth?: TokenAuthContext,
-  ): string {
+  ): AuthExpiredMcpToolError {
     const context = this.formatAuthContext(tokenAuth);
     const reauthUrl = `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${catalogId}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${mcpServerId}`;
-    return formatActionableAuthError({
-      title: `Expired or invalid authentication for "${catalogDisplayName}"`,
-      detail: `Your credentials (${context}) failed authentication. Please re-authenticate to continue using this tool.`,
-      actionLabel: "re-authenticate",
-      url: reauthUrl,
-      postAction: "Once you have re-authenticated, retry this tool call.",
-    });
+    return {
+      type: "auth_expired",
+      message: formatActionableAuthError({
+        title: `Expired or invalid authentication for "${catalogDisplayName}"`,
+        detail: `Your credentials (${context}) failed authentication. Please re-authenticate to continue using this tool.`,
+        actionLabel: "re-authenticate",
+        url: reauthUrl,
+        postAction: "Once you have re-authenticated, retry this tool call.",
+      }),
+      catalogId,
+      catalogName: catalogDisplayName,
+      serverId: mcpServerId,
+      reauthUrl,
+    };
   }
 
   private formatAuthContext(tokenAuth?: TokenAuthContext): string {

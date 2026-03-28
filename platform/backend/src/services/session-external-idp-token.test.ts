@@ -86,7 +86,6 @@ describe("resolveSessionExternalIdpToken", () => {
     makeMember,
     makeIdentityProvider,
     makeAgent,
-    makeAccount,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();

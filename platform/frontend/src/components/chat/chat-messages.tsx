@@ -1,6 +1,7 @@
 import type { UIMessage } from "@ai-sdk/react";
 import {
   type ArchestraToolShortName,
+  extractMcpToolError,
   SWAP_AGENT_FAILED_POKE_TEXT,
   SWAP_AGENT_POKE_PREFIX,
   SWAP_AGENT_POKE_TEXT,
@@ -455,6 +456,20 @@ export function ChatMessages({
 
                         // Use editable component for assistant messages
                         if (message.role === "assistant") {
+                          const authToolPart = renderAssistantAuthPart({
+                            text: part.text,
+                            toolName: "authentication",
+                            onInstallMcp:
+                              orchestrator.triggerInstallByCatalogId,
+                            onReauthMcp:
+                              orchestrator.triggerReauthByCatalogIdAndServerId,
+                          });
+                          if (authToolPart) {
+                            return (
+                              <Fragment key={partKey}>{authToolPart}</Fragment>
+                            );
+                          }
+
                           // Only show actions if this is the last assistant message in sequence
                           // AND this is the last text part in the message
                           const isLastAssistantInSequence =
@@ -1190,6 +1205,41 @@ const MessageTool = memo(
 
     // OpenAI sends policy denials as tool errors (see case "text" above for Anthropic path)
     if (errorText) {
+      const structuredMcpError = extractMcpToolError(rawOutput);
+      if (structuredMcpError?.type === "auth_expired") {
+        return (
+          <ExpiredAuthTool
+            toolName={toolName}
+            catalogName={structuredMcpError.catalogName}
+            reauthUrl={structuredMcpError.reauthUrl}
+            onReauth={
+              onReauthMcp
+                ? () =>
+                    onReauthMcp(
+                      structuredMcpError.catalogId,
+                      structuredMcpError.serverId,
+                    )
+                : undefined
+            }
+          />
+        );
+      }
+
+      if (structuredMcpError?.type === "auth_required") {
+        return (
+          <AuthRequiredTool
+            toolName={toolName}
+            catalogName={structuredMcpError.catalogName}
+            installUrl={structuredMcpError.installUrl}
+            onInstall={
+              onInstallMcp
+                ? () => onInstallMcp(structuredMcpError.catalogId)
+                : undefined
+            }
+          />
+        );
+      }
+
       const policyDenied = parsePolicyDenied(errorText);
       if (policyDenied) {
         return (
@@ -1642,6 +1692,49 @@ function getRenderedToolName(
 
   if (part.type.startsWith("tool-")) {
     return part.type.replace("tool-", "");
+  }
+
+  return null;
+}
+
+function renderAssistantAuthPart(params: {
+  text: string;
+  toolName: string;
+  onInstallMcp?: (catalogId: string) => void;
+  onReauthMcp?: (catalogId: string, serverId: string) => void;
+}) {
+  const { text, toolName, onInstallMcp, onReauthMcp } = params;
+
+  const expiredAuth = parseExpiredAuth(text);
+  if (expiredAuth) {
+    const ids = extractIdsFromReauthUrl(expiredAuth.reauthUrl);
+    return (
+      <ExpiredAuthTool
+        toolName={toolName}
+        catalogName={expiredAuth.catalogName}
+        reauthUrl={expiredAuth.reauthUrl}
+        onReauth={
+          onReauthMcp && ids.catalogId && ids.serverId
+            ? () => onReauthMcp(ids.catalogId as string, ids.serverId as string)
+            : undefined
+        }
+      />
+    );
+  }
+
+  const authRequired = parseAuthRequired(text);
+  if (authRequired) {
+    const catalogId = extractCatalogIdFromInstallUrl(authRequired.installUrl);
+    return (
+      <AuthRequiredTool
+        toolName={toolName}
+        catalogName={authRequired.catalogName}
+        installUrl={authRequired.installUrl}
+        onInstall={
+          onInstallMcp && catalogId ? () => onInstallMcp(catalogId) : undefined
+        }
+      />
+    );
   }
 
   return null;

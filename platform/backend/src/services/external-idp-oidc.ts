@@ -51,6 +51,33 @@ export async function findExternalIdentityProviderById(
   };
 }
 
+export async function findExternalIdentityProviderByProviderId(
+  providerId: string,
+): Promise<ExternalIdentityProviderConfig | null> {
+  const [provider] = await db
+    .select({
+      id: dbSchema.identityProvidersTable.id,
+      providerId: dbSchema.identityProvidersTable.providerId,
+      issuer: dbSchema.identityProvidersTable.issuer,
+      oidcConfig: dbSchema.identityProvidersTable.oidcConfig,
+    })
+    .from(dbSchema.identityProvidersTable)
+    .where(eq(dbSchema.identityProvidersTable.providerId, providerId));
+
+  if (!provider) {
+    return null;
+  }
+
+  return {
+    id: provider.id,
+    providerId: provider.providerId,
+    issuer: provider.issuer,
+    oidcConfig: parseJsonField<ExternalIdentityProviderOidcConfig>(
+      provider.oidcConfig,
+    ),
+  };
+}
+
 export async function discoverOidcJwksUrl(
   issuerUrl: string,
 ): Promise<string | null> {

@@ -9,6 +9,7 @@ import mcpClient, {
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import {
+  AccountModel,
   AgentToolModel,
   InternalMcpCatalogModel,
   McpServerModel,
@@ -16,6 +17,10 @@ import {
   ToolModel,
 } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
+import {
+  discoverOidcTokenEndpoint,
+  findExternalIdentityProviderByProviderId,
+} from "@/services/external-idp-oidc";
 import { autoReinstallServer } from "@/services/mcp-reinstall";
 import {
   ApiError,
@@ -648,13 +653,21 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
-        // For non-local servers, fetch tools synchronously during installation
-        const tools = await McpServerModel.getToolsFromServer(mcpServer);
-
         // Catalog item must exist for remote servers
         if (!catalogItem) {
           throw new ApiError(400, "Catalog item not found for remote server");
         }
+
+        // For non-local servers, fetch tools synchronously during installation.
+        // If discovery fails with auth and this is a personal install, retry once
+        // with the current user's linked IdP access token.
+        const tools = await connectAndGetToolsForInstallation({
+          catalogItem,
+          mcpServerId: mcpServer.id,
+          secretId: mcpServer.secretId ?? undefined,
+          userId: user.id,
+          allowCurrentUserTokenFallback: !mcpServer.teamId,
+        });
 
         // Persist tools in the database with source='mcp_server' and mcpServerId
         // Note: For remote servers, mcpServer.name doesn't include userId, so we can use it directly
@@ -764,7 +777,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
       }
-
       // Check mcpServer create permission (required for re-authentication)
       const { success: hasMcpServerCreatePermission } = await hasPermission(
         { mcpServerInstallation: ["create"] },
@@ -866,13 +878,15 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           // Validate connection for remote servers before committing the swap
           if (catalogItem?.serverType === "remote") {
-            const { isValid, errorMessage } =
-              await McpServerModel.validateConnection(
-                mcpServer.name,
-                mcpServer.catalogId ?? undefined,
-                newSecretId,
-              );
-            if (!isValid) {
+            try {
+              await connectAndGetToolsForInstallation({
+                catalogItem,
+                mcpServerId: "validation",
+                secretId: newSecretId,
+                userId: user.id,
+                allowCurrentUserTokenFallback: !mcpServer.teamId,
+              });
+            } catch (error) {
               // Clean up the newly created secret
               try {
                 await secretManager().deleteSecret(newSecretId);
@@ -881,8 +895,9 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               }
               throw new ApiError(
                 400,
-                errorMessage ||
-                  "Failed to connect to MCP server with provided credentials",
+                error instanceof Error
+                  ? error.message
+                  : "Failed to connect to MCP server with provided credentials",
               );
             }
           }
@@ -1497,3 +1512,253 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default mcpServerRoutes;
+
+// =============================================================================
+// Internal helpers
+// =============================================================================
+
+async function connectAndGetToolsForInstallation(params: {
+  catalogItem: Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>;
+  mcpServerId: string;
+  secretId?: string;
+  userId: string;
+  allowCurrentUserTokenFallback: boolean;
+}) {
+  const { catalogItem } = params;
+  if (!catalogItem) {
+    throw new Error("Catalog item not found");
+  }
+
+  const secrets = await getSecretValues(params.secretId);
+
+  try {
+    return await mcpClient.connectAndGetTools({
+      catalogItem,
+      mcpServerId: params.mcpServerId,
+      secrets,
+    });
+  } catch (error) {
+    if (
+      !params.allowCurrentUserTokenFallback ||
+      !isInstallDiscoveryAuthError(error)
+    ) {
+      throw error;
+    }
+
+    const accessToken = await getCurrentIdentityProviderAccessToken(
+      params.userId,
+    );
+    if (!accessToken || secrets.access_token === accessToken) {
+      throw error;
+    }
+
+    logger.info(
+      {
+        catalogId: catalogItem.id,
+        mcpServerId: params.mcpServerId,
+        userId: params.userId,
+      },
+      "Retrying MCP install-time tool discovery with the current user's identity-provider access token",
+    );
+
+    return await mcpClient.connectAndGetTools({
+      catalogItem,
+      mcpServerId: params.mcpServerId,
+      secrets: {
+        ...secrets,
+        access_token: accessToken,
+      },
+    });
+  }
+}
+
+async function getCurrentIdentityProviderAccessToken(
+  userId: string,
+): Promise<string | undefined> {
+  const account =
+    await AccountModel.getLatestSsoAccountWithAccessTokenByUserId(userId);
+  if (!account?.accessToken) {
+    return undefined;
+  }
+
+  const isAccessTokenExpired =
+    !!account.accessTokenExpiresAt &&
+    account.accessTokenExpiresAt <= new Date();
+  if (!isAccessTokenExpired) {
+    return account.accessToken;
+  }
+
+  return await refreshLinkedIdentityProviderAccessToken({
+    account: {
+      id: account.id,
+      providerId: account.providerId,
+      refreshToken: account.refreshToken,
+      refreshTokenExpiresAt: account.refreshTokenExpiresAt,
+    },
+  });
+}
+
+async function getSecretValues(
+  secretId?: string,
+): Promise<Record<string, unknown>> {
+  if (!secretId) {
+    return {};
+  }
+
+  const secretRecord = await secretManager().getSecret(secretId);
+  return secretRecord?.secret ?? {};
+}
+
+function isInstallDiscoveryAuthError(error: unknown): boolean {
+  if (
+    error instanceof Error &&
+    "code" in error &&
+    (error as { code?: number }).code !== undefined
+  ) {
+    const code = (error as { code?: number }).code;
+    if (code === 401 || code === 403) {
+      return true;
+    }
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("401") ||
+    lower.includes("403") ||
+    lower.includes("unauthorized") ||
+    lower.includes("forbidden") ||
+    lower.includes("authentication failed") ||
+    lower.includes("authentication required") ||
+    lower.includes("invalid authorization header") ||
+    lower.includes("invalid token") ||
+    lower.includes("access denied") ||
+    lower.includes("invalid credentials")
+  );
+}
+
+async function refreshLinkedIdentityProviderAccessToken(params: {
+  account: {
+    id: string;
+    providerId: string;
+    refreshToken: string | null;
+    refreshTokenExpiresAt: Date | null;
+  };
+}): Promise<string | undefined> {
+  if (!params.account.refreshToken) {
+    return undefined;
+  }
+
+  if (
+    params.account.refreshTokenExpiresAt &&
+    params.account.refreshTokenExpiresAt <= new Date()
+  ) {
+    return undefined;
+  }
+
+  const identityProvider = await findExternalIdentityProviderByProviderId(
+    params.account.providerId,
+  );
+  if (!identityProvider?.oidcConfig?.clientId) {
+    return undefined;
+  }
+
+  const tokenEndpoint =
+    identityProvider.oidcConfig.tokenEndpoint ??
+    (await discoverOidcTokenEndpoint(identityProvider.issuer));
+  if (!tokenEndpoint) {
+    return undefined;
+  }
+
+  const authMethod =
+    identityProvider.oidcConfig.tokenEndpointAuthentication ??
+    "client_secret_post";
+  if (
+    authMethod === "private_key_jwt" ||
+    (authMethod !== "client_secret_post" &&
+      authMethod !== "client_secret_basic")
+  ) {
+    logger.warn(
+      {
+        providerId: params.account.providerId,
+        authMethod,
+      },
+      "Skipping linked identity-provider token refresh because the token endpoint authentication method is not supported for install-time fallback",
+    );
+    return undefined;
+  }
+
+  const headers = new Headers({
+    Accept: "application/json",
+    "Content-Type": "application/x-www-form-urlencoded",
+  });
+  const body = new URLSearchParams({
+    grant_type: "refresh_token",
+    refresh_token: params.account.refreshToken,
+  });
+
+  if (authMethod === "client_secret_basic") {
+    const clientSecret = identityProvider.oidcConfig.clientSecret;
+    if (!clientSecret) {
+      return undefined;
+    }
+    const basicAuth = Buffer.from(
+      `${identityProvider.oidcConfig.clientId}:${clientSecret}`,
+    ).toString("base64");
+    headers.set("Authorization", `Basic ${basicAuth}`);
+  } else {
+    body.set("client_id", identityProvider.oidcConfig.clientId);
+    if (identityProvider.oidcConfig.clientSecret) {
+      body.set("client_secret", identityProvider.oidcConfig.clientSecret);
+    }
+  }
+
+  const response = await fetch(tokenEndpoint, {
+    method: "POST",
+    headers,
+    body,
+  });
+  if (!response.ok) {
+    logger.warn(
+      {
+        providerId: params.account.providerId,
+        status: response.status,
+      },
+      "Linked identity-provider token refresh failed",
+    );
+    return undefined;
+  }
+
+  const tokenData = (await response.json()) as {
+    access_token?: string;
+    refresh_token?: string;
+    id_token?: string;
+    expires_in?: number;
+    refresh_expires_in?: number;
+  };
+  if (!tokenData.access_token) {
+    return undefined;
+  }
+
+  await AccountModel.updateTokens({
+    id: params.account.id,
+    accessToken: tokenData.access_token,
+    refreshToken: tokenData.refresh_token ?? params.account.refreshToken,
+    idToken: tokenData.id_token,
+    accessTokenExpiresAt:
+      tokenData.expires_in !== undefined
+        ? new Date(Date.now() + tokenData.expires_in * 1000)
+        : undefined,
+    refreshTokenExpiresAt:
+      tokenData.refresh_expires_in !== undefined
+        ? new Date(Date.now() + tokenData.refresh_expires_in * 1000)
+        : undefined,
+  });
+
+  logger.info(
+    { providerId: params.account.providerId },
+    "Refreshed linked identity-provider access token for MCP install-time discovery",
+  );
+
+  return tokenData.access_token;
+}

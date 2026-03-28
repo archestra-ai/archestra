@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNotNull } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
 import logger from "@/logging";
 
@@ -70,6 +70,71 @@ class AccountModel {
       "AccountModel.getLatestSsoAccountByUserIdAndProviderId: completed",
     );
     return account;
+  }
+
+  /**
+   * Get the most recently updated linked identity account for a user that has
+   * a stored access token. Used for install-time MCP tool discovery when the
+   * user explicitly opts into reusing their current identity-provider token.
+   */
+  static async getLatestSsoAccountWithAccessTokenByUserId(userId: string) {
+    logger.debug(
+      { userId },
+      "AccountModel.getLatestSsoAccountWithAccessTokenByUserId: fetching account",
+    );
+    const [account] = await db
+      .select()
+      .from(schema.accountsTable)
+      .where(
+        and(
+          eq(schema.accountsTable.userId, userId),
+          isNotNull(schema.accountsTable.accessToken),
+        ),
+      )
+      .orderBy(desc(schema.accountsTable.updatedAt))
+      .limit(1);
+    logger.debug(
+      { userId, found: !!account },
+      "AccountModel.getLatestSsoAccountWithAccessTokenByUserId: completed",
+    );
+    return account;
+  }
+
+  static async updateTokens(params: {
+    id: string;
+    accessToken: string;
+    refreshToken?: string | null;
+    idToken?: string | null;
+    accessTokenExpiresAt?: Date | null;
+    refreshTokenExpiresAt?: Date | null;
+  }) {
+    logger.debug(
+      { accountId: params.id },
+      "AccountModel.updateTokens: updating account tokens",
+    );
+    const [account] = await db
+      .update(schema.accountsTable)
+      .set({
+        accessToken: params.accessToken,
+        ...(params.refreshToken !== undefined && {
+          refreshToken: params.refreshToken,
+        }),
+        ...(params.idToken !== undefined && { idToken: params.idToken }),
+        ...(params.accessTokenExpiresAt !== undefined && {
+          accessTokenExpiresAt: params.accessTokenExpiresAt,
+        }),
+        ...(params.refreshTokenExpiresAt !== undefined && {
+          refreshTokenExpiresAt: params.refreshTokenExpiresAt,
+        }),
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.accountsTable.id, params.id))
+      .returning();
+    logger.debug(
+      { accountId: params.id, updated: !!account },
+      "AccountModel.updateTokens: completed",
+    );
+    return account ?? null;
   }
 
   /**

@@ -18,6 +18,7 @@ export * from "./knowledge-base";
 export * from "./labels";
 export * from "./mcp-orchestrator";
 export * from "./mcp-server-config";
+export * from "./mcp-tool-error";
 export * from "./model-constants";
 export * from "./oauth";
 export * from "./organization-appearance";

@@ -1,5 +1,6 @@
 import {
   type ArchestraToolShortName,
+  extractMcpToolError,
   TOOL_SWAP_AGENT_SHORT_NAME,
   TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME,
   TOOL_TODO_WRITE_SHORT_NAME,
@@ -60,16 +61,6 @@ export function getCurrentEnabledToolIds({
   return baseIds;
 }
 
-export function tryToExtractErrorFromOutput(output: unknown) {
-  try {
-    if (typeof output !== "string") return undefined;
-    const json = JSON.parse(output);
-    return typeof json.error === "string" ? json.error : undefined;
-  } catch (_error) {
-    return undefined;
-  }
-}
-
 export function getToolErrorText({
   part,
   toolResultPart,
@@ -78,8 +69,8 @@ export function getToolErrorText({
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
 }): string | undefined {
   const outputError = toolResultPart
-    ? tryToExtractErrorFromOutput(toolResultPart.output)
-    : tryToExtractErrorFromOutput(part.output);
+    ? extractMcpToolError(toolResultPart.output)?.message
+    : extractMcpToolError(part.output)?.message;
 
   return toolResultPart
     ? (toolResultPart.errorText ?? outputError)
@@ -140,7 +131,17 @@ export function isCompactEligible(params: {
   }
 
   const errorText = getToolErrorText({ part, toolResultPart });
+  const structuredError = extractMcpToolError(
+    toolResultPart?.output ?? part.output,
+  );
   if (errorText) {
+    if (
+      structuredError?.type === "auth_required" ||
+      structuredError?.type === "auth_expired"
+    ) {
+      return false;
+    }
+
     if (
       parsePolicyDenied(errorText) ||
       parseExpiredAuth(errorText) ||

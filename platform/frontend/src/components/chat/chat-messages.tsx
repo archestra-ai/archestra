@@ -2,6 +2,7 @@ import type { UIMessage } from "@ai-sdk/react";
 import {
   type ArchestraToolShortName,
   extractMcpToolError,
+  parseFullToolName,
   SWAP_AGENT_FAILED_POKE_TEXT,
   SWAP_AGENT_POKE_PREFIX,
   SWAP_AGENT_POKE_TEXT,
@@ -456,6 +457,13 @@ export function ChatMessages({
 
                         // Use editable component for assistant messages
                         if (message.role === "assistant") {
+                          if (
+                            hasMessageAuthToolError(message) &&
+                            isAuthInstructionText(part.text)
+                          ) {
+                            return null;
+                          }
+
                           const authToolPart = renderAssistantAuthPart({
                             text: part.text,
                             toolName: "authentication",
@@ -465,6 +473,9 @@ export function ChatMessages({
                               orchestrator.triggerReauthByCatalogIdAndServerId,
                           });
                           if (authToolPart) {
+                            if (hasMessageAuthToolError(message)) {
+                              return null;
+                            }
                             return (
                               <Fragment key={partKey}>{authToolPart}</Fragment>
                             );
@@ -1203,11 +1214,13 @@ const MessageTool = memo(
       [shouldDefaultOpen],
     );
 
+    const structuredMcpError = extractMcpToolError(rawOutput);
+    let authToolBody: React.ReactNode = null;
+
     // OpenAI sends policy denials as tool errors (see case "text" above for Anthropic path)
     if (errorText) {
-      const structuredMcpError = extractMcpToolError(rawOutput);
       if (structuredMcpError?.type === "auth_expired") {
-        return (
+        authToolBody = (
           <ExpiredAuthTool
             toolName={toolName}
             catalogName={structuredMcpError.catalogName}
@@ -1226,7 +1239,7 @@ const MessageTool = memo(
       }
 
       if (structuredMcpError?.type === "auth_required") {
-        return (
+        authToolBody = (
           <AuthRequiredTool
             toolName={toolName}
             catalogName={structuredMcpError.catalogName}
@@ -1253,9 +1266,9 @@ const MessageTool = memo(
       }
 
       const expiredAuth = parseExpiredAuth(errorText);
-      if (expiredAuth) {
+      if (expiredAuth && !authToolBody) {
         const ids = extractIdsFromReauthUrl(expiredAuth.reauthUrl);
-        return (
+        authToolBody = (
           <ExpiredAuthTool
             toolName={toolName}
             catalogName={expiredAuth.catalogName}
@@ -1271,11 +1284,11 @@ const MessageTool = memo(
       }
 
       const authRequired = parseAuthRequired(errorText);
-      if (authRequired) {
+      if (authRequired && !authToolBody) {
         const catalogId = extractCatalogIdFromInstallUrl(
           authRequired.installUrl,
         );
-        return (
+        authToolBody = (
           <AuthRequiredTool
             toolName={toolName}
             catalogName={authRequired.catalogName}
@@ -1292,11 +1305,11 @@ const MessageTool = memo(
 
     // Also check tool output for auth-related patterns (tool errors returned as
     // successful results to avoid crashing the AI SDK stream still need the UI)
-    if (typeof rawOutput === "string") {
+    if (typeof rawOutput === "string" && !authToolBody) {
       const expiredAuth = parseExpiredAuth(rawOutput);
       if (expiredAuth) {
         const ids = extractIdsFromReauthUrl(expiredAuth.reauthUrl);
-        return (
+        authToolBody = (
           <ExpiredAuthTool
             toolName={toolName}
             catalogName={expiredAuth.catalogName}
@@ -1312,11 +1325,11 @@ const MessageTool = memo(
       }
 
       const authRequired = parseAuthRequired(rawOutput);
-      if (authRequired) {
+      if (authRequired && !authToolBody) {
         const catalogId = extractCatalogIdFromInstallUrl(
           authRequired.installUrl,
         );
-        return (
+        authToolBody = (
           <AuthRequiredTool
             toolName={toolName}
             catalogName={authRequired.catalogName}
@@ -1356,6 +1369,43 @@ const MessageTool = memo(
       );
     }
 
+    if (authToolBody) {
+      const shortName = parseFullToolName(toolName).toolName.replace(
+        /_/g,
+        " ",
+      );
+      const iconInfo = toolIconMap?.get(toolName);
+
+      return (
+        <div className="mb-1">
+          <div className="flex items-center gap-1.5">
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="relative inline-flex size-8 items-center justify-center rounded-full border bg-background">
+                    {iconInfo?.icon || iconInfo?.catalogId ? (
+                      <McpCatalogIcon
+                        icon={iconInfo.icon}
+                        catalogId={iconInfo.catalogId}
+                        size={16}
+                      />
+                    ) : (
+                      <BotIcon className="size-3.5 text-muted-foreground" />
+                    )}
+                    <span className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background bg-destructive" />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  {shortName} (error)
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+          {authToolBody}
+        </div>
+      );
+    }
+
     // Show logs button for failed tool calls
     const logsButton = errorText ? (
       <ToolErrorLogsButton toolName={toolName} />
@@ -1364,9 +1414,10 @@ const MessageTool = memo(
     // MCP App tools: compact circle + canvas below (no collapsible wrapper)
     if (uiResourceUri && !isApprovalRequested && !errorText) {
       const compactState = getCompactToolState({ part, toolResultPart });
-      const shortName = toolName.includes("__")
-        ? toolName.split("__").pop()?.replace(/_/g, " ")
-        : toolName.replace(/_/g, " ");
+      const shortName = parseFullToolName(toolName).toolName.replace(
+        /_/g,
+        " ",
+      );
       const iconInfo = toolIconMap?.get(toolName);
 
       return (
@@ -1518,7 +1569,10 @@ const MessageTool = memo(
                 ]}
               />
             )}
-          {errorText ? <ToolErrorDetails errorText={errorText} /> : null}
+          {errorText && !authToolBody ? (
+            <ToolErrorDetails errorText={errorText} />
+          ) : null}
+          {authToolBody}
 
           {/* Standard MCP Apps flow: tool definition has _meta.ui.resourceUri → AppBridge + AppFrame */}
           {!isApprovalRequested &&
@@ -1544,20 +1598,23 @@ const MessageTool = memo(
                 }
                 onSendMessage={onSendMessage}
               />
-            )}
+          )}
           {/* Show error output even when UI resource is present - errors take priority */}
-          {errorText && uiResourceUri && toolResultPart && (
+          {!authToolBody && errorText && uiResourceUri && toolResultPart && (
             <ToolOutput label="Error" output={output} errorText={errorText} />
           )}
           {/* Show text output when NOT rendering a UI resource */}
-          {!uiResourceUri && toolResultPart && (
+          {!authToolBody && !uiResourceUri && toolResultPart && (
             <ToolOutput
               label={errorText ? "Error" : "Result"}
               output={output}
               errorText={errorText}
             />
           )}
-          {!uiResourceUri && !toolResultPart && Boolean(part.output) && (
+          {!authToolBody &&
+            !uiResourceUri &&
+            !toolResultPart &&
+            Boolean(part.output) && (
             <ToolOutput
               label={errorText ? "Error" : "Result"}
               output={output}
@@ -1738,6 +1795,37 @@ function renderAssistantAuthPart(params: {
   }
 
   return null;
+}
+
+function hasMessageAuthToolError(message: UIMessage): boolean {
+  for (const part of message.parts ?? []) {
+    if (!isToolPart(part)) continue;
+    const error = extractMcpToolError(part.output);
+    if (error?.type === "auth_required" || error?.type === "auth_expired") {
+      return true;
+    }
+
+    const errorText = getToolErrorText({ part, toolResultPart: null });
+    if (errorText) {
+      if (parseAuthRequired(errorText) || parseExpiredAuth(errorText)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function isAuthInstructionText(text: string): boolean {
+  if (parseAuthRequired(text) || parseExpiredAuth(text)) {
+    return true;
+  }
+
+  return (
+    /(authentication|credentials)/i.test(text) &&
+    /(install=|reauth=|re-authenticate|set up your credentials|visiting this url|visit this url)/i.test(
+      text,
+    )
+  );
 }
 
 function getSwapToolShortName(params: {

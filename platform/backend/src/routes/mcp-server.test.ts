@@ -529,7 +529,6 @@ describe("mcp server inspect route", () => {
       name: "Remote Reauth Server",
       serverType: "remote",
       serverUrl: "http://localhost:30082/mcp",
-      authType: "custom",
     });
     const mcpServer = await makeMcpServer({
       ownerId: user.id,

@@ -495,7 +495,16 @@ async function makeInvitation(
 async function makeAccount(
   userId: string,
   overrides: Partial<
-    Pick<InsertAccount, "accountId" | "providerId" | "accessToken" | "idToken">
+    Pick<
+      InsertAccount,
+      | "accountId"
+      | "providerId"
+      | "accessToken"
+      | "refreshToken"
+      | "idToken"
+      | "accessTokenExpiresAt"
+      | "refreshTokenExpiresAt"
+    >
   > = {},
 ) {
   const [account] = await db

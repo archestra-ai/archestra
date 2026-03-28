@@ -391,11 +391,44 @@ describe("executeMcpTool error handling", () => {
     vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce(
       mockResult({
         content: [{ type: "text", text: "Auth required: install the server" }],
+        _meta: {
+          archestraError: {
+            type: "auth_required",
+            message: "Auth required: install the server",
+            catalogId: "cat_123",
+            catalogName: "jwks demo",
+            installUrl: "http://localhost:3000/mcp/registry?install=cat_123",
+          },
+        },
+        structuredContent: {
+          archestraError: {
+            type: "auth_required",
+            message: "Auth required: install the server",
+            catalogId: "cat_123",
+            catalogName: "jwks demo",
+            installUrl: "http://localhost:3000/mcp/registry?install=cat_123",
+          },
+        },
       }),
     );
 
     const result = await chatClient.__test.executeMcpTool(baseCtx);
     expect(result.content).toBe("Auth required: install the server");
+    expect(result._meta).toMatchObject({
+      archestraError: expect.objectContaining({
+        type: "auth_required",
+        catalogId: "cat_123",
+      }),
+    });
+    expect(result.structuredContent).toMatchObject({
+      archestraError: expect.objectContaining({
+        type: "auth_required",
+        catalogId: "cat_123",
+      }),
+    });
+    expect(result.rawContent).toEqual([
+      { type: "text", text: "Auth required: install the server" },
+    ]);
   });
 
   test("joins multiple text content items with newline", async () => {
@@ -441,6 +474,62 @@ describe("executeMcpTool error handling", () => {
 
     const result = await chatClient.__test.executeMcpTool(baseCtx);
     expect(result.content).toBe("Tool execution failed");
+  });
+
+  test("preserves structured error metadata for auth-expired tool errors", async () => {
+    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce(
+      mockResult({
+        content: [
+          {
+            type: "text",
+            text: 'Expired or invalid authentication for "id-jag test".',
+          },
+        ],
+        _meta: {
+          archestraError: {
+            type: "auth_expired",
+            message: 'Expired or invalid authentication for "id-jag test".',
+            catalogId: "cat_abc",
+            catalogName: "id-jag test",
+            serverId: "srv_xyz",
+            reauthUrl:
+              "http://localhost:3000/mcp/registry?reauth=cat_abc&server=srv_xyz",
+          },
+        },
+        structuredContent: {
+          archestraError: {
+            type: "auth_expired",
+            message: 'Expired or invalid authentication for "id-jag test".',
+            catalogId: "cat_abc",
+            catalogName: "id-jag test",
+            serverId: "srv_xyz",
+            reauthUrl:
+              "http://localhost:3000/mcp/registry?reauth=cat_abc&server=srv_xyz",
+          },
+        },
+      }),
+    );
+
+    const result = await chatClient.__test.executeMcpTool(baseCtx);
+
+    expect(result._meta).toMatchObject({
+      archestraError: expect.objectContaining({
+        type: "auth_expired",
+        serverId: "srv_xyz",
+      }),
+    });
+    expect(result.structuredContent).toMatchObject({
+      archestraError: expect.objectContaining({
+        type: "auth_expired",
+        serverId: "srv_xyz",
+      }),
+    });
+    expect(result.rawContent).toEqual([
+      {
+        type: "text",
+        text: 'Expired or invalid authentication for "id-jag test".',
+      },
+    ]);
   });
 });
 

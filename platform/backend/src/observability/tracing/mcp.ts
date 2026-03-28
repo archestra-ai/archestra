@@ -1,3 +1,4 @@
+import { parseFullToolName } from "@shared";
 import { context, type Span, SpanStatusCode, trace } from "@opentelemetry/api";
 import config from "@/config";
 import { SESSION_ID_KEY } from "@/observability/request-context";
@@ -143,10 +144,7 @@ export function recordBlockedToolSpans(params: {
   }
 
   for (const toolName of params.toolCallNames) {
-    // Extract MCP server name from tool name convention: "servername__toolname"
-    const separatorIndex = toolName.indexOf("__");
-    const mcpServerName =
-      separatorIndex > 0 ? toolName.substring(0, separatorIndex) : "unknown";
+    const mcpServerName = parseFullToolName(toolName).serverName ?? "unknown";
 
     const span = tracer.startSpan(
       `execute_tool ${toolName}`,

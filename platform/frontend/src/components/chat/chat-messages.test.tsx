@@ -419,5 +419,58 @@ describe("ChatMessages", () => {
     expect(
       screen.getByRole("button", { name: "expired-auth:id-jag test" }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByText("tool-id-jag_test__get_server_info"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("suppresses duplicate assistant auth text when the same message already has a tool auth error", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-id-jag_test__get_server_info",
+            toolCallId: "call-1",
+            state: "output-available",
+            output: {
+              isError: true,
+              _meta: {
+                archestraError: {
+                  type: "auth_expired",
+                  message:
+                    'Expired or invalid authentication for "id-jag test".',
+                  catalogId: "cat_abc",
+                  catalogName: "id-jag test",
+                  serverId: "srv_xyz",
+                  reauthUrl:
+                    "http://localhost:3000/mcp/registry?reauth=cat_abc&server=srv_xyz",
+                },
+              },
+            },
+          },
+          {
+            type: "text",
+            text: "Your authentication for \"id-jag test\" is expired or invalid. Please re-authenticate by visiting this URL: http://localhost:3000/mcp/registry?reauth=cat_abc&server=srv_xyz",
+          },
+        ],
+      },
+    ] as unknown as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(
+      screen.getAllByRole("button", { name: "expired-auth:id-jag test" }),
+    ).toHaveLength(1);
+    expect(
+      screen.queryByText(/Please re-authenticate by visiting this URL/i),
+    ).not.toBeInTheDocument();
   });
 });

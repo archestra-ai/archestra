@@ -1437,6 +1437,11 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
       .join("\n");
     return {
       content: extractedError || result.error || "Tool execution failed",
+      _meta: result._meta,
+      structuredContent: result.structuredContent,
+      rawContent: Array.isArray(result.content)
+        ? (result.content as ContentBlock[])
+        : undefined,
     };
   }
 

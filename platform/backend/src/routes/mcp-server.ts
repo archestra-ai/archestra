@@ -673,7 +673,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Note: For remote servers, mcpServer.name doesn't include userId, so we can use it directly
         const toolsToCreate = tools.map((tool) => ({
           name: ToolModel.slugifyName(mcpServer.name, tool.name),
-          description: tool.description,
+          description: tool.description ?? null,
           parameters: tool.inputSchema,
           meta: { _meta: tool._meta, annotations: tool.annotations },
           catalogId: catalogItem.id,

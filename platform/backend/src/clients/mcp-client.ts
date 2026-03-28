@@ -30,6 +30,7 @@ import {
   MCP_CATALOG_INSTALL_QUERY_PARAM,
   MCP_CATALOG_REAUTH_QUERY_PARAM,
   MCP_CATALOG_SERVER_QUERY_PARAM,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
   type McpToolError,
   parseFullToolName,
 } from "@shared";
@@ -369,7 +370,7 @@ class McpClient {
         }
 
         if (targetToolName === toolCall.name) {
-          // Neither prefix matched (e.g. server name contains "__" separator).
+          // Neither prefix matched (e.g. server name contains MCP_SERVER_TOOL_NAME_SEPARATOR separator).
           // Fall back to parseFullToolName which uses lastIndexOf to split correctly.
           targetToolName = parseFullToolName(toolCall.name).toolName;
         }
@@ -785,11 +786,14 @@ class McpClient {
       agentId,
     );
 
-    // Fallback: if the name has no server prefix (no "__"), try finding a tool
+    // Fallback: if the name has no server prefix (no MCP_SERVER_TOOL_NAME_SEPARATOR), try finding a tool
     // that ends with "__<name>". This handles MCP App iframes calling oncalltool
     // with the raw tool name (e.g. "refresh-stats" instead of "system__refresh-stats"),
     // which happens when third-party hosts render MCP Apps.
-    if (mcpTools.length === 0 && !toolCall.name.includes("__")) {
+    if (
+      mcpTools.length === 0 &&
+      !toolCall.name.includes(MCP_SERVER_TOOL_NAME_SEPARATOR)
+    ) {
       mcpTools = await ToolModel.getMcpToolsAssignedToAgentBySuffix(
         toolCall.name,
         agentId,

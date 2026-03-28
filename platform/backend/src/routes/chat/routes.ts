@@ -320,6 +320,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ...(supportsToolCalling && { tools: mcpTools }),
             stopWhen: buildChatStopConditions(),
             abortSignal: chatAbortController.signal,
+            // Disable the AI SDK's built-in retry logic so that error
+            // classification and retry decisions are handled exclusively by
+            // the frontend (see global-chat.context.tsx MAX_AUTO_RETRIES).
+            // Without this, a provider connection error (e.g. Ollama down)
+            // triggers AI SDK retries (default: 2) AND frontend retries,
+            // multiplying the number of requests and causing an apparent
+            // endless retry loop.
+            maxRetries: 0,
             onFinish: async ({ usage, finishReason }) => {
               removeAbortListeners();
               logger.info(

@@ -39,26 +39,27 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 const SESSION_CLEANUP_TIMEOUT = 10 * 60 * 1000; // 10 min
 const MAX_AUTO_RETRIES = 2;
 const AUTO_RETRY_DELAY_MS = 1500;
-/** Network-level errors that never reach the backend */
-const RETRYABLE_CLIENT_ERRORS = [
-  "Failed to fetch",
-  "NetworkError",
-  "No output generated",
-  "network",
-];
+/**
+ * Network-level error strings that indicate a pure client-side failure
+ * (i.e., the request never reached the backend at all).
+ * Keep this list narrow and exact to avoid matching structured backend
+ * error messages that contain substrings like "network" (e.g. "network_error").
+ */
+const RETRYABLE_CLIENT_ERRORS = ["Failed to fetch"];
 
 function isRetryableError(error: Error): boolean {
   const msg = error.message;
-  // Check client-side patterns
-  if (RETRYABLE_CLIENT_ERRORS.some((p) => msg.includes(p))) return true;
-  // Check structured backend error
+  // First, try to parse a structured backend ChatErrorResponse.
+  // This takes priority to avoid false-positive string matches on payloads
+  // that contain words like "network" or "server" as part of an error code.
   try {
     const parsed = JSON.parse(msg);
     if (isChatErrorResponse(parsed)) return parsed.isRetryable;
   } catch {
-    // not JSON
+    // not JSON — fall through to client-side string checks
   }
-  return false;
+  // Only retry pure client-side transport failures that never reached the backend.
+  return RETRYABLE_CLIENT_ERRORS.some((p) => msg.includes(p));
 }
 
 interface ChatSession {

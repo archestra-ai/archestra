@@ -33,5 +33,22 @@ export function transformConfigArrayFields(
       .filter((n) => !Number.isNaN(n));
   }
 
+  // Notion nested array fields
+  if (
+    result.notion &&
+    typeof result.notion === "object" &&
+    !Array.isArray(result.notion)
+  ) {
+    const notion = result.notion as Record<string, unknown>;
+    const notionArrayFields = ["databaseIds", "pageIds"] as const;
+    for (const key of notionArrayFields) {
+      if (typeof notion[key] === "string") {
+        const value = notion[key] as string;
+        notion[key] = value.split(",").map((s) => s.trim()).filter(Boolean);
+      }
+    }
+    result.notion = notion;
+  }
+
   return result;
 }

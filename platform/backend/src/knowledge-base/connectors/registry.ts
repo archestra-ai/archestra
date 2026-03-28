@@ -3,6 +3,7 @@ import { ConfluenceConnector } from "./confluence/confluence-connector";
 import { GithubConnector } from "./github/github-connector";
 import { GitlabConnector } from "./gitlab/gitlab-connector";
 import { JiraConnector } from "./jira/jira-connector";
+import { NotionConnector } from "./notion/notion-connector";
 import { ServiceNowConnector } from "./servicenow/servicenow-connector";
 
 const connectorRegistry: Record<ConnectorType, () => Connector> = {
@@ -11,6 +12,7 @@ const connectorRegistry: Record<ConnectorType, () => Connector> = {
   github: () => new GithubConnector(),
   gitlab: () => new GitlabConnector(),
   servicenow: () => new ServiceNowConnector(),
+  notion: () => new NotionConnector(),
 };
 
 export function getConnector(type: string): Connector {

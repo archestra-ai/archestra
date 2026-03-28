@@ -96,6 +96,17 @@ Ingests records from ServiceNow instances via the Table API. HTML descriptions a
 
 Authentication supports both basic auth (username + password) and OAuth bearer tokens. When using basic auth, provide the username in the Email field and the password in the API Token field. For OAuth, leave the Email field empty and provide the bearer token. Incidents are synced by default; enable additional entity types in the advanced configuration. States and assignment group filters apply to all entity types except business applications. Incremental sync uses the `sys_created_on` field to fetch only records created since the last run.
 
+## Notion
+
+Ingests pages and databases from Notion workspaces via the official Notion REST API. Page content is fetched recursively up to 3 block levels deep and converted to Markdown (headings, bullets, quotes, code blocks, etc.).
+
+| Field       | Description                                                                                                      |
+| ----------- | ---------------------------------------------------------------------------------------------------------------- |
+| Database IDs | Comma-separated Notion database IDs to restrict sync to specific databases (optional -- leave blank for full workspace sync) |
+| Page IDs    | Comma-separated specific page IDs to sync (optional)                                                             |
+
+Authentication uses a [Notion Integration Token](https://www.notion.so/my-integrations) (`secret_...`). No instance URL is required -- Notion is cloud-only. Incremental sync uses `last_edited_time` timestamps.
+
 ## Managing Connectors
 
 Connectors can be managed from either the **Connectors** page or a knowledge base's detail page. After creation you can:

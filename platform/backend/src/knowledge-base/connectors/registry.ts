@@ -1,36 +1,35 @@
-import { KnowledgeConnectorConfig } from "../../types/knowledge-connector";
-import { KnowledgeConnectorBase } from "./base-connector";
-import { JiraConnector } from "./jira/jira-connector";
-import { ConfluenceConnector } from "./confluence/confluence-connector";
-import { GitHubConnector } from "./github/github-connector";
-import { GitLabConnector } from "./gitlab/gitlab-connector";
-import { ServiceNowConnector } from "./servicenow/servicenow-connector";
-import { NotionConnector } from "./notion/notion-connector";
+import type { KnowledgeConnectorBase } from "../../types/knowledge-connector.js";
+import { NotionConnector } from "./notion/notion-connector.js";
+
+// Import other connectors here as they are added
+// import { JiraConnector } from "./jira/jira-connector.js";
+// import { ConfluenceConnector } from "./confluence/confluence-connector.js";
+// import { GitHubConnector } from "./github/github-connector.js";
+// import { GitLabConnector } from "./gitlab/gitlab-connector.js";
+// import { ServiceNowConnector } from "./servicenow/servicenow-connector.js";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyConnector = KnowledgeConnectorBase<any, any>;
 
-export function createConnector(
-  config: KnowledgeConnectorConfig
-): AnyConnector {
-  switch (config.type) {
-    case "jira":
-      return new JiraConnector(config);
-    case "confluence":
-      return new ConfluenceConnector(config);
-    case "github":
-      return new GitHubConnector(config);
-    case "gitlab":
-      return new GitLabConnector(config);
-    case "servicenow":
-      return new ServiceNowConnector(config);
-    case "notion":
-      return new NotionConnector(config);
-    default: {
-      const _exhaustive: never = config;
-      throw new Error(
-        `Unknown connector type: ${(_exhaustive as KnowledgeConnectorConfig).type}`
-      );
-    }
+const connectors: Record<string, AnyConnector> = {
+  notion: new NotionConnector(),
+  // jira: new JiraConnector(),
+  // confluence: new ConfluenceConnector(),
+  // github: new GitHubConnector(),
+  // gitlab: new GitLabConnector(),
+  // servicenow: new ServiceNowConnector(),
+};
+
+export function getConnector(type: string): AnyConnector {
+  const connector = connectors[type];
+  if (!connector) {
+    throw new Error(`No knowledge connector registered for type: "${type}"`);
   }
+  return connector;
 }
+
+export function listConnectorTypes(): string[] {
+  return Object.keys(connectors);
+}
+
+export { connectors };

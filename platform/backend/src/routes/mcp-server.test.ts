@@ -109,6 +109,49 @@ describe("mcp server inspect route", () => {
     });
   });
 
+  test("persists enterprise-managed config on installed MCP servers", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Managed Remote",
+      serverType: "remote",
+      serverUrl: "http://localhost:30082/mcp",
+    });
+
+    connectAndGetToolsMock.mockResolvedValueOnce([
+      {
+        name: "get-server-info",
+        description: "Returns server details",
+        inputSchema: { type: "object", properties: {} },
+      },
+    ]);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: "Managed Remote",
+        catalogId: catalog.id,
+        enterpriseManagedConfig: {
+          requestedCredentialType: "secret",
+          resourceIdentifier: "orn:okta:pam:github-secret",
+          tokenInjectionMode: "authorization_bearer",
+          responseFieldPath: "token",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      enterpriseManagedConfig: {
+        requestedCredentialType: "secret",
+        resourceIdentifier: "orn:okta:pam:github-secret",
+        tokenInjectionMode: "authorization_bearer",
+        responseFieldPath: "token",
+      },
+    });
+  });
+
   test("returns 500 when protected remote MCP server installation still lacks usable auth after automatic fallback", async ({
     makeInternalMcpCatalog,
   }) => {

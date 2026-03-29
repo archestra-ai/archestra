@@ -4,7 +4,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import db, { schema as dbSchema } from "@/database";
-import { JWT_BEARER_GRANT_TYPE } from "@/services/enterprise-managed-authorization";
+import { JWT_BEARER_GRANT_TYPE } from "@/services/identity-providers/enterprise-managed/authorization";
 import { UuidIdSchema } from "@/types";
 
 /**

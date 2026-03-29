@@ -9,7 +9,7 @@ import {
   ToolModel,
   UserTokenModel,
 } from "@/models";
-import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/enterprise-managed-authorization";
+import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import type { JwksValidationResult } from "@/services/jwks-validator";
 import { describe, expect, test } from "@/test";
 

@@ -268,13 +268,13 @@ async function makeAgentTool(
   agentId: string,
   toolId: string,
   overrides: Partial<
-    Pick<
-      AgentTool,
-      "credentialSourceMcpServerId" | "executionSourceMcpServerId"
-    >
+    Pick<AgentTool, "mcpServerId" | "credentialResolutionMode">
   > = {},
 ) {
-  return await AgentToolModel.create(agentId, toolId, overrides);
+  return await AgentToolModel.create(agentId, toolId, {
+    mcpServerId: overrides.mcpServerId,
+    credentialResolutionMode: overrides.credentialResolutionMode,
+  });
 }
 
 /**

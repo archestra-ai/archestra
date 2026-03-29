@@ -55,7 +55,7 @@ import {
   ATTR_MCP_IS_ERROR_RESULT,
   startActiveMcpSpan,
 } from "@/observability/tracing";
-import { resolveSessionExternalIdpToken } from "@/services/session-external-idp-token";
+import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import type { AgentType, GlobalToolPolicy } from "@/types";
 
 /**

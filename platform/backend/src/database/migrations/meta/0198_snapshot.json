@@ -1,5 +1,5 @@
 {
-  "id": "b59766bf-2f3c-4161-9c8d-517789741c4b",
+  "id": "a546cc34-9113-476f-904d-50f943151563",
   "prevId": "53bfdc99-3e62-4055-9685-b6841a9f35ae",
   "version": "7",
   "dialect": "postgresql",
@@ -571,24 +571,11 @@
           "primaryKey": false,
           "notNull": true
         },
-        "credential_source_mcp_server_id": {
-          "name": "credential_source_mcp_server_id",
+        "mcp_server_id": {
+          "name": "mcp_server_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
-        },
-        "execution_source_mcp_server_id": {
-          "name": "execution_source_mcp_server_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "use_dynamic_team_credential": {
-          "name": "use_dynamic_team_credential",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         },
         "credential_resolution_mode": {
           "name": "credential_resolution_mode",
@@ -596,12 +583,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'static'"
-        },
-        "enterprise_managed_config": {
-          "name": "enterprise_managed_config",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -646,25 +627,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "agent_tools_credential_source_mcp_server_id_mcp_server_id_fk": {
-          "name": "agent_tools_credential_source_mcp_server_id_mcp_server_id_fk",
+        "agent_tools_mcp_server_id_mcp_server_id_fk": {
+          "name": "agent_tools_mcp_server_id_mcp_server_id_fk",
           "tableFrom": "agent_tools",
           "tableTo": "mcp_server",
           "columnsFrom": [
-            "credential_source_mcp_server_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "agent_tools_execution_source_mcp_server_id_mcp_server_id_fk": {
-          "name": "agent_tools_execution_source_mcp_server_id_mcp_server_id_fk",
-          "tableFrom": "agent_tools",
-          "tableTo": "mcp_server",
-          "columnsFrom": [
-            "execution_source_mcp_server_id"
+            "mcp_server_id"
           ],
           "columnsTo": [
             "id"
@@ -4558,6 +4526,12 @@
         "oauth_refresh_failed_at": {
           "name": "oauth_refresh_failed_at",
           "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "enterprise_managed_config": {
+          "name": "enterprise_managed_config",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },

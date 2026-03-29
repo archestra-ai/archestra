@@ -174,10 +174,10 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool1.id, {
-          credentialSourceMcpServerId: mcpServerId,
+          mcpServerId: mcpServerId,
         });
         await AgentToolModel.create(agentId, tool2.id, {
-          credentialSourceMcpServerId: mcpServerId,
+          mcpServerId: mcpServerId,
         });
 
         mockCallTool
@@ -254,7 +254,7 @@ describe("McpClient", () => {
           });
 
           await AgentToolModel.create(agentId, tool.id, {
-            credentialSourceMcpServerId: mcpServerId,
+            mcpServerId: mcpServerId,
           });
 
           mockCallTool.mockResolvedValueOnce({
@@ -342,7 +342,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          executionSourceMcpServerId: localMcpServerId,
+          mcpServerId: localMcpServerId,
         });
 
         // Mock runtime manager responses
@@ -393,7 +393,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          executionSourceMcpServerId: localMcpServerId,
+          mcpServerId: localMcpServerId,
         });
 
         // Mock runtime manager responses - no endpoint URL
@@ -446,7 +446,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          executionSourceMcpServerId: localMcpServerId,
+          mcpServerId: localMcpServerId,
         });
 
         // Mock runtime manager to indicate stdio transport (not HTTP)
@@ -520,7 +520,7 @@ describe("McpClient", () => {
           });
 
           await AgentToolModel.create(agentId, tool.id, {
-            executionSourceMcpServerId: localMcpServerId,
+            mcpServerId: localMcpServerId,
           });
 
           mockUsesStreamableHttp.mockResolvedValue(false);
@@ -569,7 +569,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          executionSourceMcpServerId: localMcpServerId,
+          mcpServerId: localMcpServerId,
         });
 
         // Mock runtime manager responses
@@ -623,7 +623,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          executionSourceMcpServerId: localMcpServerId,
+          mcpServerId: localMcpServerId,
         });
 
         mockUsesStreamableHttp.mockResolvedValue(true);
@@ -665,7 +665,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          executionSourceMcpServerId: localMcpServerId,
+          mcpServerId: localMcpServerId,
         });
 
         mockUsesStreamableHttp.mockResolvedValue(true);
@@ -744,9 +744,8 @@ describe("McpClient", () => {
         await AgentToolModel.createOrUpdateCredentials(
           agentId,
           tool.id,
-          null, // no credentialSourceMcpServerId
-          null, // no executionSourceMcpServerId
-          true, // useDynamicTeamCredential
+          null,
+          "dynamic",
         );
 
         const toolCall = {
@@ -825,8 +824,7 @@ describe("McpClient", () => {
           agentId,
           tool.id,
           null,
-          null,
-          true,
+          "dynamic",
         );
 
         const toolCall = {
@@ -899,8 +897,7 @@ describe("McpClient", () => {
           agentId,
           tool.id,
           null,
-          null,
-          true,
+          "dynamic",
         );
 
         const toolCall = {
@@ -973,6 +970,9 @@ describe("McpClient", () => {
 
         await AgentToolModel.create(agentId, tool.id, {
           credentialResolutionMode: "enterprise_managed",
+        });
+
+        await McpServerModel.update(mcpServerId, {
           enterpriseManagedConfig: {
             requestedCredentialType: "secret",
             resourceIdentifier: "orn:okta:pam:github-secret",
@@ -1089,7 +1089,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServer.id,
+          mcpServerId: mcpServer.id,
         });
 
         // Mock callTool to throw UnauthorizedError
@@ -1177,7 +1177,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServer.id,
+          mcpServerId: mcpServer.id,
         });
 
         // Mock callTool to throw StreamableHTTPError with 401
@@ -1246,7 +1246,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServer.id,
+          mcpServerId: mcpServer.id,
         });
 
         const { UnauthorizedError } = await import(
@@ -1313,7 +1313,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServer.id,
+          mcpServerId: mcpServer.id,
         });
 
         // Mock callTool to throw StreamableHTTPError with non-401 code but auth message
@@ -1400,7 +1400,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServer.id,
+          mcpServerId: mcpServer.id,
         });
 
         const { UnauthorizedError } = await import(
@@ -1495,7 +1495,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          executionSourceMcpServerId: localMcpServerId,
+          mcpServerId: localMcpServerId,
         });
 
         mockUsesStreamableHttp.mockResolvedValue(true);
@@ -1542,7 +1542,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          executionSourceMcpServerId: localMcpServerId,
+          mcpServerId: localMcpServerId,
         });
 
         mockUsesStreamableHttp.mockResolvedValue(true);
@@ -1599,7 +1599,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          executionSourceMcpServerId: localMcpServerId,
+          mcpServerId: localMcpServerId,
         });
 
         mockUsesStreamableHttp.mockResolvedValue(true);
@@ -1651,7 +1651,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          executionSourceMcpServerId: localMcpServerId,
+          mcpServerId: localMcpServerId,
         });
 
         mockUsesStreamableHttp.mockResolvedValue(true);
@@ -1718,7 +1718,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServerId,
+          mcpServerId: mcpServerId,
         });
 
         // Remote server reports tool with camelCase name
@@ -1758,7 +1758,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServerId,
+          mcpServerId: mcpServerId,
         });
 
         // Remote server reports tool with PascalCase name
@@ -1794,7 +1794,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServerId,
+          mcpServerId: mcpServerId,
         });
 
         // listTools throws an error
@@ -1829,7 +1829,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServerId,
+          mcpServerId: mcpServerId,
         });
 
         // Server returns tools, but not the one we're looking for
@@ -1866,7 +1866,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServerId,
+          mcpServerId: mcpServerId,
         });
 
         // Server also uses lowercase (snake_case)
@@ -1905,7 +1905,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServerId,
+          mcpServerId: mcpServerId,
         });
 
         mockCallTool.mockResolvedValueOnce({
@@ -1952,7 +1952,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServerId,
+          mcpServerId: mcpServerId,
         });
 
         const toolMeta = { ui: { resourceUri: "mcp://widget/stats" } };
@@ -1983,7 +1983,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServerId,
+          mcpServerId: mcpServerId,
         });
 
         const structured = { dashboard: { widgets: ["chart", "table"] } };

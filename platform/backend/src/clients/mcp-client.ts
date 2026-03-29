@@ -49,7 +49,7 @@ import {
 } from "@/models";
 import { refreshOAuthToken } from "@/routes/oauth";
 import { secretManager } from "@/secrets-manager";
-import { resolveEnterpriseTransportCredential } from "@/services/enterprise-credential-broker";
+import { resolveEnterpriseTransportCredential } from "@/services/identity-providers/enterprise-managed/broker";
 import type {
   CommonMcpToolDefinition,
   CommonToolCall,
@@ -297,12 +297,27 @@ class McpClient {
       return targetMcpServerIdResult.error;
     }
     const { targetMcpServerId, mcpServerName } = targetMcpServerIdResult;
+    const targetMcpServer = await McpServerModel.findById(targetMcpServerId);
+    const effectiveEnterpriseManagedConfig =
+      targetMcpServer?.enterpriseManagedConfig ?? null;
+    if (
+      tool.credentialResolutionMode === "enterprise_managed" &&
+      !effectiveEnterpriseManagedConfig
+    ) {
+      return this.createErrorResult(
+        toolCall,
+        agentId,
+        "Enterprise-managed credentials are enabled for this tool, but the selected MCP server installation does not have enterprise-managed credential settings configured.",
+        mcpServerName,
+        authInfo,
+      );
+    }
     const enterpriseTransportCredential =
       tool.credentialResolutionMode === "enterprise_managed"
         ? await resolveEnterpriseTransportCredential({
             agentId,
             tokenAuth,
-            enterpriseManagedConfig: tool.enterpriseManagedConfig,
+            enterpriseManagedConfig: effectiveEnterpriseManagedConfig,
           })
         : null;
 
@@ -939,68 +954,35 @@ class McpClient {
       },
       "Determining target MCP server ID for catalog item",
     );
-    // Static credential case: use pre-configured execution source
+    // Static credential case: use the pre-configured MCP server installation.
     if (tool.credentialResolutionMode === "static") {
-      if (
-        catalogItem.serverType === "local" &&
-        !tool.executionSourceMcpServerId
-      ) {
+      if (!tool.mcpServerId) {
         return {
           error: await this.createErrorResult(
             toolCall,
             agentId,
-            "Execution source is required for local MCP server tools when dynamic team credential is disabled.",
+            "An MCP server installation is required for statically assigned MCP tools.",
             fallbackName,
           ),
         };
       }
-      if (
-        catalogItem.serverType === "remote" &&
-        !tool.credentialSourceMcpServerId
-      ) {
-        return {
-          error: await this.createErrorResult(
-            toolCall,
-            agentId,
-            "Credential source is required for remote MCP server tools when dynamic team credential is disabled.",
-            fallbackName,
-          ),
-        };
-      }
-      const targetMcpServerId =
-        catalogItem.serverType === "local"
-          ? tool.executionSourceMcpServerId
-          : tool.credentialSourceMcpServerId;
-      if (!targetMcpServerId) {
-        return {
-          error: await this.createErrorResult(
-            toolCall,
-            agentId,
-            "Couldn't find execution or credential source for MCP server when dynamic team credential is disabled.",
-            fallbackName,
-          ),
-        };
-      }
-      const mcpServer = await McpServerModel.findById(targetMcpServerId);
+      const mcpServer = await McpServerModel.findById(tool.mcpServerId);
       logger.info(
         {
           toolName: toolCall.name,
           catalogItem: catalogItem,
-          targetMcpServerId,
+          targetMcpServerId: tool.mcpServerId,
         },
         "Determined target MCP server ID for catalog item",
       );
       return {
-        targetMcpServerId,
+        targetMcpServerId: tool.mcpServerId,
         mcpServerName: mcpServer?.name || fallbackName,
       };
     }
 
     if (tool.credentialResolutionMode === "enterprise_managed") {
-      const explicitTargetMcpServerId =
-        catalogItem.serverType === "local"
-          ? tool.executionSourceMcpServerId
-          : tool.credentialSourceMcpServerId;
+      const explicitTargetMcpServerId = tool.mcpServerId;
       if (explicitTargetMcpServerId) {
         const mcpServer = await McpServerModel.findById(
           explicitTargetMcpServerId,

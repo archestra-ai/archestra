@@ -16,7 +16,7 @@ vi.mock("@/services/jwks-validator", () => ({
   },
 }));
 
-vi.mock("@/services/external-idp-oidc", () => ({
+vi.mock("@/services/identity-providers/oidc", () => ({
   findExternalIdentityProviderById: (...args: unknown[]) =>
     mockFindExternalIdentityProviderById(...args),
   discoverOidcJwksUrl: (...args: unknown[]) => mockDiscoverOidcJwksUrl(...args),
@@ -26,7 +26,7 @@ const {
   MCP_RESOURCE_REFERENCE_PREFIX,
   OAUTH_ID_JAG_TYP,
   exchangeIdentityAssertionForAccessToken,
-} = await import("./enterprise-managed-authorization");
+} = await import("./authorization");
 
 describe("exchangeIdentityAssertionForAccessToken", () => {
   test("returns invalid_scope when assertion does not include mcp scope", async ({

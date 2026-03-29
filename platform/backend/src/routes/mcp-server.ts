@@ -20,12 +20,13 @@ import { isByosEnabled, secretManager } from "@/secrets-manager";
 import {
   discoverOidcTokenEndpoint,
   findExternalIdentityProviderByProviderId,
-} from "@/services/external-idp-oidc";
+} from "@/services/identity-providers/oidc";
 import { autoReinstallServer } from "@/services/mcp-reinstall";
 import {
   ApiError,
   constructResponseSchema,
   DeleteObjectResponseSchema,
+  EnterpriseManagedCredentialConfigSchema,
   InsertMcpServerSchema,
   type InternalMcpCatalogServerType,
   LocalMcpServerInstallationStatusSchema,
@@ -587,14 +588,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 const createdTools =
                   await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
 
-                // If agentIds were provided, create agent-tool assignments with executionSourceMcpServerId
+                // If agentIds were provided, create agent-tool assignments pinned to this installation.
                 if (agentIds && agentIds.length > 0) {
                   const toolIds = createdTools.map((t) => t.id);
                   await AgentToolModel.bulkCreateForAgentsAndTools(
                     agentIds,
                     toolIds,
                     {
-                      executionSourceMcpServerId: mcpServer.id,
+                      mcpServerId: mcpServer.id,
                     },
                   );
                 }
@@ -683,13 +684,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const createdTools =
           await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
 
-        // If agentIds were provided, create agent-tool assignments
-        // Note: Remote servers don't use executionSourceMcpServerId (they route via HTTP)
-        // but need credentialSourceMcpServerId to resolve credentials at call time
+        // If agentIds were provided, create agent-tool assignments pinned to this installation.
         if (agentIds && agentIds.length > 0) {
           const toolIds = createdTools.map((t) => t.id);
           await AgentToolModel.bulkCreateForAgentsAndTools(agentIds, toolIds, {
-            credentialSourceMcpServerId: mcpServer.id,
+            mcpServerId: mcpServer.id,
           });
         }
 
@@ -742,6 +741,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userConfigValues: z.record(z.string(), z.string()).optional(),
           environmentValues: z.record(z.string(), z.string()).optional(),
           isByosVault: z.boolean().optional(),
+          enterpriseManagedConfig:
+            EnterpriseManagedCredentialConfigSchema.nullable().optional(),
         }),
         response: constructResponseSchema(SelectMcpServerSchema),
       },
@@ -755,6 +756,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userConfigValues,
           environmentValues,
           isByosVault,
+          enterpriseManagedConfig,
         },
         user,
         headers,
@@ -966,6 +968,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         secretId: newSecretId,
         oauthRefreshError: null,
         oauthRefreshFailedAt: null,
+        enterpriseManagedConfig:
+          enterpriseManagedConfig === undefined
+            ? mcpServer.enterpriseManagedConfig
+            : enterpriseManagedConfig,
       });
 
       // For local servers, trigger pod restart to pick up new credentials
@@ -1297,12 +1303,19 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           isByosVault: z.boolean().optional(),
           // Kubernetes service account override
           serviceAccount: z.string().optional(),
+          enterpriseManagedConfig:
+            EnterpriseManagedCredentialConfigSchema.nullable().optional(),
         }),
         response: constructResponseSchema(SelectMcpServerSchema),
       },
     },
     async ({ params: { id }, body, user, headers }, reply) => {
-      const { environmentValues, isByosVault, serviceAccount } = body;
+      const {
+        environmentValues,
+        isByosVault,
+        serviceAccount,
+        enterpriseManagedConfig,
+      } = body;
 
       // Get the existing MCP server
       const mcpServer = await McpServerModel.findById(id, user.id);
@@ -1469,6 +1482,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await McpServerModel.update(id, {
         localInstallationStatus: "pending",
         localInstallationError: null,
+        enterpriseManagedConfig:
+          enterpriseManagedConfig === undefined
+            ? mcpServer.enterpriseManagedConfig
+            : enterpriseManagedConfig,
       });
 
       // Refetch the server with updated status

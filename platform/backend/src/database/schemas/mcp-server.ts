@@ -1,5 +1,6 @@
 import {
   boolean,
+  jsonb,
   pgEnum,
   pgTable,
   text,
@@ -7,6 +8,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type {
+  EnterpriseManagedCredentialConfig,
   InternalMcpCatalogServerType,
   LocalMcpServerInstallationStatus,
 } from "@/types";
@@ -51,6 +53,9 @@ const mcpServerTable = pgTable("mcp_server", {
   localInstallationError: text("local_installation_error"),
   oauthRefreshError: oauthRefreshErrorEnum("oauth_refresh_error"),
   oauthRefreshFailedAt: timestamp("oauth_refresh_failed_at", { mode: "date" }),
+  enterpriseManagedConfig: jsonb(
+    "enterprise_managed_config",
+  ).$type<EnterpriseManagedCredentialConfig>(),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })
     .notNull()

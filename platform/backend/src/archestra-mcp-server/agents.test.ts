@@ -132,7 +132,7 @@ describe("agent tool execution", () => {
         ),
       );
     expect(assignment).toBeDefined();
-    expect(assignment.useDynamicTeamCredential).toBe(true);
+    expect(assignment.credentialResolutionMode).toBe("dynamic");
   });
 
   test("create_agent reports invalid remote toolAssignments without credentials", async ({
@@ -203,7 +203,7 @@ describe("agent tool execution", () => {
         ),
       );
     expect(assignment).toBeDefined();
-    expect(assignment.useDynamicTeamCredential).toBe(true);
+    expect(assignment.credentialResolutionMode).toBe("dynamic");
   });
 
   test("edit_agent replaces assigned knowledge bases and connectors", async ({
@@ -308,7 +308,7 @@ describe("agent tool execution", () => {
         ),
       );
     expect(assignment).toBeDefined();
-    expect(assignment.useDynamicTeamCredential).toBe(true);
+    expect(assignment.credentialResolutionMode).toBe("dynamic");
   });
 
   test("get_agent requires id or name", async () => {

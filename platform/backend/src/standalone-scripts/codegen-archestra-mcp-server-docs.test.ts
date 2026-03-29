@@ -19,11 +19,7 @@ describe("codegen-archestra-mcp-server-docs", () => {
               })
               .nullable()
               .optional(),
-            credentialSourceMcpServerId: z
-              .string()
-              .uuid()
-              .nullable()
-              .optional(),
+            mcpServerId: z.string().uuid().nullable().optional(),
           }),
         ),
       }),
@@ -43,7 +39,7 @@ describe("codegen-archestra-mcp-server-docs", () => {
           type: '`"id_jag" \\| "bearer_token" \\| "secret"`',
         }),
         expect.objectContaining({
-          name: "`assignments[].credentialSourceMcpServerId`",
+          name: "`assignments[].mcpServerId`",
           type: "`string \\| null`",
         }),
       ]),

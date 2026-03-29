@@ -3,6 +3,10 @@
 import type { archestraApiTypes } from "@shared";
 import { AlertTriangle, Info, ShieldCheck, User } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
+import {
+  type EnterpriseManagedConfigInput,
+  EnterpriseManagedCredentialFields,
+} from "@/components/enterprise-managed-credential-fields";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -51,6 +55,7 @@ export interface RemoteServerInstallResult {
   teamId?: string | null;
   /** Whether metadata contains BYOS vault references in path#key format */
   isByosVault?: boolean;
+  enterpriseManagedConfig?: EnterpriseManagedConfigInput | null;
 }
 
 interface RemoteServerInstallDialogProps {
@@ -68,6 +73,7 @@ interface RemoteServerInstallDialogProps {
   preselectedTeamId?: string | null;
   /** When true, only personal installation is allowed */
   personalOnly?: boolean;
+  initialEnterpriseManagedConfig?: EnterpriseManagedConfigInput | null;
 }
 
 export function RemoteServerInstallDialog({
@@ -79,8 +85,13 @@ export function RemoteServerInstallDialog({
   isReauth = false,
   preselectedTeamId,
   personalOnly = false,
+  initialEnterpriseManagedConfig = null,
 }: RemoteServerInstallDialogProps) {
   const [configValues, setConfigValues] = useState<Record<string, string>>({});
+  const [enterpriseManagedConfig, setEnterpriseManagedConfig] =
+    useState<EnterpriseManagedConfigInput | null>(
+      initialEnterpriseManagedConfig,
+    );
 
   // Team selection state
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
@@ -127,6 +138,11 @@ export function RemoteServerInstallDialog({
     }
     setVaultSecrets({});
   }, [credentialType, selectedTeamId]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setEnterpriseManagedConfig(initialEnterpriseManagedConfig);
+  }, [initialEnterpriseManagedConfig, isOpen]);
 
   const handleVaultTeamChange = (teamId: string) => {
     setVaultTeamId(teamId);
@@ -177,6 +193,7 @@ export function RemoteServerInstallDialog({
         metadata,
         teamId: selectedTeamId,
         isByosVault: useVaultSecrets,
+        enterpriseManagedConfig,
       });
       resetForm();
       onClose();
@@ -191,6 +208,7 @@ export function RemoteServerInstallDialog({
     setCredentialType("personal");
     setVaultTeamId(null);
     setVaultSecrets({});
+    setEnterpriseManagedConfig(initialEnterpriseManagedConfig);
   };
 
   const handleClose = () => {
@@ -303,6 +321,22 @@ export function RemoteServerInstallDialog({
         preselectedTeamId={preselectedTeamId}
         personalOnly={personalOnly}
       />
+
+      <div className="space-y-2 rounded-md border p-3">
+        <div>
+          <Label className="text-sm font-medium">
+            Enterprise-Managed Credentials
+          </Label>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Optional. Configure this connection once so agent tool assignments
+            can inherit the enterprise-managed credential exchange settings.
+          </p>
+        </div>
+        <EnterpriseManagedCredentialFields
+          value={enterpriseManagedConfig}
+          onChange={setEnterpriseManagedConfig}
+        />
+      </div>
 
       {useVaultSecrets && credentialType === "personal" && (
         <div className="space-y-2">

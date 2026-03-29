@@ -11,7 +11,7 @@ import { beforeEach, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { TeamTokenModel } from "@/models";
 import ToolModel from "@/models/tool";
-import { resolveSessionExternalIdpToken } from "@/services/session-external-idp-token";
+import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import { describe, expect, test } from "@/test";
 import * as chatClient from "./chat-mcp-client";
 import { mcpToolToModelOutput } from "./chat-mcp-client";
@@ -51,7 +51,7 @@ vi.mock("@/features/browser-stream/services/browser-stream.feature", () => ({
   },
 }));
 
-vi.mock("@/services/session-external-idp-token", () => ({
+vi.mock("@/services/identity-providers/session-token", () => ({
   resolveSessionExternalIdpToken: vi.fn(),
 }));
 

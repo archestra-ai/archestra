@@ -125,13 +125,8 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { agentId, toolId } = request.params;
-      const {
-        credentialSourceMcpServerId,
-        executionSourceMcpServerId,
-        useDynamicTeamCredential,
-        credentialResolutionMode,
-        enterpriseManagedConfig,
-      } = request.body || {};
+      const { mcpServerId, resolveAtCallTime, credentialResolutionMode } =
+        request.body || {};
 
       // Check agent-type-specific modify permission based on scope
       const agent = await AgentModel.findById(agentId);
@@ -159,11 +154,9 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const result = await assignToolToAgent({
         agentId,
         toolId,
-        credentialSourceMcpServerId,
-        executionSourceMcpServerId,
-        useDynamicTeamCredential,
+        mcpServerId,
+        resolveAtCallTime,
         credentialResolutionMode,
-        enterpriseManagedConfig,
       });
 
       if (result && result !== "duplicate" && result !== "updated") {
@@ -269,13 +262,12 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ? await InternalMcpCatalogModel.getByIds(uniqueCatalogIds)
           : new Map<string, InternalMcpCatalog>();
 
-      // Batch fetch unique MCP server IDs for credential/execution source validation
+      // Batch fetch unique MCP server IDs for static assignment validation
       const uniqueMcpServerIds = [
         ...new Set(
-          [
-            ...assignments.map((a) => a.credentialSourceMcpServerId),
-            ...assignments.map((a) => a.executionSourceMcpServerId),
-          ].filter((id): id is string => id != null),
+          assignments
+            .map((a) => a.mcpServerId)
+            .filter((id): id is string => id != null),
         ),
       ];
       const mcpServersBasicMap = new Map<string, PrefetchedMcpServer>();
@@ -302,12 +294,10 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const validationError = await validateAssignment({
           agentId: assignment.agentId,
           toolId: assignment.toolId,
-          credentialSourceMcpServerId: assignment.credentialSourceMcpServerId,
-          executionSourceMcpServerId: assignment.executionSourceMcpServerId,
+          mcpServerId: assignment.mcpServerId,
           preFetchedData,
-          useDynamicTeamCredential: assignment.useDynamicTeamCredential,
+          resolveAtCallTime: assignment.resolveAtCallTime,
           credentialResolutionMode: assignment.credentialResolutionMode,
-          enterpriseManagedConfig: assignment.enterpriseManagedConfig,
         });
         if (validationError) {
           failed.push({
@@ -535,23 +525,14 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: UuidIdSchema,
         }),
         body: UpdateAgentToolSchema.pick({
-          credentialSourceMcpServerId: true,
-          executionSourceMcpServerId: true,
-          useDynamicTeamCredential: true,
+          mcpServerId: true,
           credentialResolutionMode: true,
-          enterpriseManagedConfig: true,
         }).partial(),
         response: constructResponseSchema(UpdateAgentToolSchema),
       },
     },
     async ({ params: { id }, body, user, organizationId }, reply) => {
-      const {
-        credentialSourceMcpServerId,
-        executionSourceMcpServerId,
-        useDynamicTeamCredential,
-        credentialResolutionMode,
-        enterpriseManagedConfig,
-      } = body;
+      const { mcpServerId, credentialResolutionMode } = body;
 
       // Fetch the agent-tool relationship (needed for permission check and validation)
       const agentToolForValidation = await AgentToolModel.findById(id);
@@ -590,22 +571,10 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const validationError = await validateAssignment({
         agentId: agentToolForValidation.agent.id,
         toolId: agentToolForValidation.tool.id,
-        credentialSourceMcpServerId:
-          credentialSourceMcpServerId ??
-          agentToolForValidation.credentialSourceMcpServerId,
-        executionSourceMcpServerId:
-          executionSourceMcpServerId ??
-          agentToolForValidation.executionSourceMcpServerId,
-        useDynamicTeamCredential:
-          useDynamicTeamCredential ??
-          agentToolForValidation.useDynamicTeamCredential,
+        mcpServerId: mcpServerId ?? agentToolForValidation.mcpServerId,
         credentialResolutionMode:
           credentialResolutionMode ??
           agentToolForValidation.credentialResolutionMode,
-        enterpriseManagedConfig:
-          enterpriseManagedConfig === undefined
-            ? agentToolForValidation.enterpriseManagedConfig
-            : enterpriseManagedConfig,
       });
 
       if (validationError) {
@@ -615,7 +584,10 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      const agentTool = await AgentToolModel.update(id, body);
+      const agentTool = await AgentToolModel.update(id, {
+        mcpServerId,
+        credentialResolutionMode,
+      });
 
       if (!agentTool) {
         throw new ApiError(

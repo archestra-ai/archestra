@@ -269,8 +269,8 @@ describe("tool assignment with late-bound resolution", () => {
           eq(schema.agentToolsTable.toolId, tool.id),
         ),
       );
-    expect(agentTool.useDynamicTeamCredential).toBe(true);
-    expect(agentTool.credentialSourceMcpServerId).toBeNull();
+    expect(agentTool.credentialResolutionMode).toBe("dynamic");
+    expect(agentTool.mcpServerId).toBeNull();
   });
 
   test("assigns local tool with resolveAtCallTime=true", async ({
@@ -313,8 +313,8 @@ describe("tool assignment with late-bound resolution", () => {
           eq(schema.agentToolsTable.toolId, tool.id),
         ),
       );
-    expect(agentTool.useDynamicTeamCredential).toBe(true);
-    expect(agentTool.executionSourceMcpServerId).toBeNull();
+    expect(agentTool.credentialResolutionMode).toBe("dynamic");
+    expect(agentTool.mcpServerId).toBeNull();
   });
 
   test("remote tool without credential source or late-bound resolution fails", async ({
@@ -412,7 +412,7 @@ describe("tool assignment with late-bound resolution", () => {
           eq(schema.agentToolsTable.toolId, tool.id),
         ),
       );
-    expect(agentTool.useDynamicTeamCredential).toBe(true);
+    expect(agentTool.credentialResolutionMode).toBe("dynamic");
   });
 
   test("reassigning with resolveAtCallTime updates existing assignment", async ({
@@ -445,7 +445,7 @@ describe("tool assignment with late-bound resolution", () => {
           eq(schema.agentToolsTable.toolId, tool.id),
         ),
       );
-    expect(initial.useDynamicTeamCredential).toBe(false);
+    expect(initial.credentialResolutionMode).toBe("static");
 
     // Reassign with late-bound resolution
     const result = await executeArchestraTool(
@@ -475,6 +475,6 @@ describe("tool assignment with late-bound resolution", () => {
           eq(schema.agentToolsTable.toolId, tool.id),
         ),
       );
-    expect(updated.useDynamicTeamCredential).toBe(true);
+    expect(updated.credentialResolutionMode).toBe("dynamic");
   });
 });

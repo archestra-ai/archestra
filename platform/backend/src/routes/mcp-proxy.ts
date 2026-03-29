@@ -8,7 +8,7 @@ import { z } from "zod";
 import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import { AgentModel, ToolModel } from "@/models";
-import { resolveSessionExternalIdpToken } from "@/services/session-external-idp-token";
+import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import { type Agent, ApiError, UuidIdSchema } from "@/types";
 import {
   createAgentServer,

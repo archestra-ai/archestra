@@ -5,7 +5,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { parseTrustProxy } from "@/config";
-import { JWT_BEARER_GRANT_TYPE } from "@/services/enterprise-managed-authorization";
+import { JWT_BEARER_GRANT_TYPE } from "@/services/identity-providers/enterprise-managed/authorization";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import oauthServerRoutes from "./oauth-server";
 

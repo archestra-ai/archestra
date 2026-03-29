@@ -1301,6 +1301,6 @@ async function assignDiscoveredToolsToAgents(params: {
   }
 
   await AgentToolModel.bulkCreateForAgentsAndTools(agentIds, toolIds, {
-    executionSourceMcpServerId: mcpServerId,
+    mcpServerId,
   });
 }

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
-import { resolveEnterpriseTransportCredential } from "./enterprise-credential-broker";
+import { resolveEnterpriseTransportCredential } from "./broker";
 
 describe("resolveEnterpriseTransportCredential", () => {
   test("exchanges a session IdP token for a managed secret and builds an authorization header", async ({

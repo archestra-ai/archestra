@@ -1,7 +1,7 @@
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import logger from "@/logging";
-import { resolveEnterpriseAssertion } from "@/services/enterprise-assertion-resolver";
-import { exchangeEnterpriseManagedCredential } from "@/services/enterprise-credential-exchange-adapters";
+import { resolveEnterpriseAssertion } from "@/services/identity-providers/enterprise-managed/assertion-resolver";
+import { exchangeEnterpriseManagedCredential } from "@/services/identity-providers/enterprise-managed/exchange-adapters";
 import type { EnterpriseManagedCredentialConfig } from "@/types";
 
 export type ResolvedEnterpriseTransportCredential = {

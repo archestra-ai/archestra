@@ -53,10 +53,6 @@ import {
   sortCatalogItems,
 } from "./agent-tools-editor.utils";
 import { CatalogDocsLink } from "./catalog-docs-link";
-import {
-  type EnterpriseManagedConfigInput,
-  EnterpriseManagedCredentialFields,
-} from "./enterprise-managed-credential-fields";
 import { McpCatalogIcon } from "./mcp-catalog-icon";
 import {
   DYNAMIC_CREDENTIAL_VALUE,
@@ -75,7 +71,6 @@ type CatalogTool =
 interface PendingCatalogChanges {
   selectedToolIds: Set<string>;
   credentialSourceId: string | null;
-  enterpriseManagedConfig?: EnterpriseManagedConfigInput | null;
   catalogItem: InternalMcpCatalogItem;
   /** When true, all tools should be selected once they load */
   selectAll?: boolean;
@@ -279,7 +274,7 @@ const AgentToolsEditorContent = forwardRef<
           hasChanges = true;
         }
 
-        const isLocal = changes.catalogItem.serverType === "local";
+        const _isLocal = changes.catalogItem.serverType === "local";
 
         // Remove and add tools in parallel (skip invalidation, will do it once at the end)
         const useDynamicCredential =
@@ -300,30 +295,16 @@ const AgentToolsEditorContent = forwardRef<
             assignTool.mutateAsync({
               agentId: targetAgentId,
               toolId,
-              // When using dynamic credentials, omit server IDs — they are mutually
-              // exclusive with useDynamicTeamCredential. Otherwise, set the appropriate
-              // field based on whether the server is local (execution) or remote (credential).
-              credentialSourceMcpServerId:
-                !isLocal &&
-                !useDynamicCredential &&
-                !useEnterpriseManagedCredential
+              mcpServerId:
+                !useDynamicCredential && !useEnterpriseManagedCredential
                   ? changes.credentialSourceId
                   : undefined,
-              executionSourceMcpServerId:
-                isLocal &&
-                !useDynamicCredential &&
-                !useEnterpriseManagedCredential
-                  ? changes.credentialSourceId
-                  : undefined,
-              useDynamicTeamCredential: useDynamicCredential,
+              resolveAtCallTime: useDynamicCredential,
               credentialResolutionMode: useEnterpriseManagedCredential
                 ? "enterprise_managed"
                 : useDynamicCredential
                   ? "dynamic"
                   : "static",
-              enterpriseManagedConfig: useEnterpriseManagedCredential
-                ? changes.enterpriseManagedConfig
-                : null,
               skipInvalidation: true,
             }),
           ),
@@ -339,45 +320,25 @@ const AgentToolsEditorContent = forwardRef<
           changes.selectedToolIds.has(at.tool.id),
         );
         for (const agentTool of toKeep) {
-          const currentCred = agentTool.useDynamicTeamCredential
-            ? DYNAMIC_CREDENTIAL_VALUE
-            : agentTool.credentialResolutionMode === "enterprise_managed"
-              ? ENTERPRISE_MANAGED_CREDENTIAL_VALUE
-              : (agentTool.credentialSourceMcpServerId ??
-                agentTool.executionSourceMcpServerId ??
-                null);
-          const currentEnterpriseManagedConfig =
-            (agentTool.enterpriseManagedConfig as EnterpriseManagedConfigInput | null) ??
-            null;
-          if (
-            currentCred !== changes.credentialSourceId ||
-            JSON.stringify(currentEnterpriseManagedConfig) !==
-              JSON.stringify(changes.enterpriseManagedConfig ?? null)
-          ) {
+          const currentCred =
+            agentTool.credentialResolutionMode === "dynamic"
+              ? DYNAMIC_CREDENTIAL_VALUE
+              : agentTool.credentialResolutionMode === "enterprise_managed"
+                ? ENTERPRISE_MANAGED_CREDENTIAL_VALUE
+                : (agentTool.mcpServerId ?? null);
+          if (currentCred !== changes.credentialSourceId) {
             hasChanges = true;
             await patchTool.mutateAsync({
               id: agentTool.id,
-              credentialSourceMcpServerId:
-                !isLocal &&
-                !useDynamicCredential &&
-                !useEnterpriseManagedCredential
+              mcpServerId:
+                !useDynamicCredential && !useEnterpriseManagedCredential
                   ? (changes.credentialSourceId ?? undefined)
                   : null,
-              executionSourceMcpServerId:
-                isLocal &&
-                !useDynamicCredential &&
-                !useEnterpriseManagedCredential
-                  ? (changes.credentialSourceId ?? undefined)
-                  : null,
-              useDynamicTeamCredential: useDynamicCredential,
               credentialResolutionMode: useEnterpriseManagedCredential
                 ? "enterprise_managed"
                 : useDynamicCredential
                   ? "dynamic"
                   : "static",
-              enterpriseManagedConfig: useEnterpriseManagedCredential
-                ? changes.enterpriseManagedConfig
-                : null,
               skipInvalidation: true,
             });
           }
@@ -429,7 +390,6 @@ const AgentToolsEditorContent = forwardRef<
         registerPendingChanges(catalogId, {
           selectedToolIds: new Set(),
           credentialSourceId: pending?.credentialSourceId ?? null,
-          enterpriseManagedConfig: pending?.enterpriseManagedConfig ?? null,
           catalogItem: catalog,
           selectAll: false,
           isActive: false,
@@ -448,7 +408,6 @@ const AgentToolsEditorContent = forwardRef<
         registerPendingChanges(catalogId, {
           selectedToolIds: allToolIds,
           credentialSourceId: pending?.credentialSourceId ?? defaultCredential,
-          enterpriseManagedConfig: pending?.enterpriseManagedConfig ?? null,
           catalogItem: catalog,
           selectAll: true,
           isActive: true,
@@ -698,20 +657,13 @@ function McpServerPill({
   });
   const mcpServers = credentials?.[catalogItem.id] ?? [];
 
-  // Resolve which credential to show as selected in the dropdown. Dynamic credentials
-  // store no server ID, so we must check the flag first to avoid falling through to a
-  // static server and misrepresenting the saved state.
-  const currentCredentialSource = assignedTools[0]?.useDynamicTeamCredential
-    ? DYNAMIC_CREDENTIAL_VALUE
-    : assignedTools[0]?.credentialResolutionMode === "enterprise_managed"
-      ? ENTERPRISE_MANAGED_CREDENTIAL_VALUE
-      : (assignedTools[0]?.credentialSourceMcpServerId ??
-        assignedTools[0]?.executionSourceMcpServerId ??
-        mcpServers[0]?.id ??
-        null);
-  const currentEnterpriseManagedConfig =
-    (assignedTools[0]
-      ?.enterpriseManagedConfig as EnterpriseManagedConfigInput | null) ?? null;
+  const currentCredentialSource =
+    assignedTools[0]?.credentialResolutionMode === "dynamic"
+      ? DYNAMIC_CREDENTIAL_VALUE
+      : assignedTools[0]?.credentialResolutionMode === "enterprise_managed"
+        ? ENTERPRISE_MANAGED_CREDENTIAL_VALUE
+        : (assignedTools[0]?.mcpServerId ?? mcpServers[0]?.id ?? null);
+  const _currentEnterpriseManagedConfig = null;
 
   // Currently assigned tool IDs - use sorted string for stable comparison
   const currentAssignedToolIds = useMemo(
@@ -727,11 +679,6 @@ function McpServerPill({
   const [selectedCredential, setSelectedCredential] = useState<string | null>(
     initialPendingChanges?.credentialSourceId ?? currentCredentialSource,
   );
-  const [enterpriseManagedConfig, setEnterpriseManagedConfig] =
-    useState<EnterpriseManagedConfigInput | null>(
-      initialPendingChanges?.enterpriseManagedConfig ??
-        currentEnterpriseManagedConfig,
-    );
   const [selectedToolIds, setSelectedToolIds] = useState<Set<string>>(
     initialPendingChanges?.selectedToolIds ?? new Set(currentAssignedToolIds),
   );
@@ -746,7 +693,6 @@ function McpServerPill({
     if (currentAssignedToolIdsKey === prevAssignedToolIdsKeyRef.current) return;
     prevAssignedToolIdsKeyRef.current = currentAssignedToolIdsKey;
     setSelectedCredential(currentCredentialSource);
-    setEnterpriseManagedConfig(currentEnterpriseManagedConfig);
     const ids = currentAssignedToolIdsKey
       ? currentAssignedToolIdsKey.split(",")
       : [];
@@ -777,17 +723,10 @@ function McpServerPill({
     onPendingChanges(catalogItem.id, {
       selectedToolIds,
       credentialSourceId: selectedCredential,
-      enterpriseManagedConfig,
       catalogItem,
       isActive: true,
     });
-  }, [
-    selectedToolIds,
-    selectedCredential,
-    enterpriseManagedConfig,
-    catalogItem,
-    onPendingChanges,
-  ]);
+  }, [selectedToolIds, selectedCredential, catalogItem, onPendingChanges]);
 
   // Check if there are pending changes for this catalog
   const hasPendingChanges = useMemo(() => {
@@ -795,20 +734,8 @@ function McpServerPill({
     for (const id of selectedToolIds) {
       if (!currentAssignedToolIds.has(id)) return true;
     }
-    if (selectedCredential === ENTERPRISE_MANAGED_CREDENTIAL_VALUE) {
-      return (
-        JSON.stringify(currentEnterpriseManagedConfig) !==
-        JSON.stringify(enterpriseManagedConfig ?? null)
-      );
-    }
     return false;
-  }, [
-    selectedToolIds,
-    currentAssignedToolIds,
-    selectedCredential,
-    currentEnterpriseManagedConfig,
-    enterpriseManagedConfig,
-  ]);
+  }, [selectedToolIds, currentAssignedToolIds]);
 
   // Don't show MCP server if no credentials are available (except for builtin servers)
   if (catalogItem.serverType !== "builtin" && mcpServers.length === 0) {
@@ -921,12 +848,6 @@ function McpServerPill({
               onValueChange={setSelectedCredential}
               shouldSetDefaultValue={false}
             />
-            {selectedCredential === ENTERPRISE_MANAGED_CREDENTIAL_VALUE && (
-              <EnterpriseManagedCredentialFields
-                value={enterpriseManagedConfig}
-                onChange={setEnterpriseManagedConfig}
-              />
-            )}
           </div>
         )}
 

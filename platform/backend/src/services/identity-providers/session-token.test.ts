@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
-import { resolveSessionExternalIdpToken } from "./session-external-idp-token";
+import { resolveSessionExternalIdpToken } from "./session-token";
 
 describe("resolveSessionExternalIdpToken", () => {
   test("returns the matching session IdP token for the gateway", async ({

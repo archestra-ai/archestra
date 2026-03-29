@@ -11,7 +11,7 @@ import {
 import {
   discoverOidcJwksUrl,
   findExternalIdentityProviderById,
-} from "@/services/external-idp-oidc";
+} from "@/services/identity-providers/oidc";
 import { jwksValidator } from "@/services/jwks-validator";
 
 export const JWT_BEARER_GRANT_TYPE =

@@ -12195,26 +12195,8 @@ export type GetAllAgentToolsResponses = {
     200: {
         data: Array<{
             id: string;
-            credentialSourceMcpServerId: string | null;
-            executionSourceMcpServerId: string | null;
-            useDynamicTeamCredential: boolean;
+            mcpServerId: string | null;
             credentialResolutionMode: 'static' | 'dynamic' | 'enterprise_managed';
-            enterpriseManagedConfig: {
-                identityProviderId?: string;
-                resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
-                resourceIdentifier?: string;
-                requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
-                scopes?: Array<string>;
-                audience?: string;
-                clientIdOverride?: string;
-                tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
-                headerName?: string;
-                envVarName?: string;
-                bodyFieldName?: string;
-                responseFieldPath?: string;
-                fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
-                cacheTtlSeconds?: number;
-            } | null;
             createdAt: string;
             updatedAt: string;
             agent: {
@@ -12341,26 +12323,8 @@ export type UnassignToolFromAgentResponse = UnassignToolFromAgentResponses[keyof
 export type AssignToolToAgentData = {
     body: {
         resolveAtCallTime?: boolean;
-        useDynamicTeamCredential?: boolean;
         credentialResolutionMode?: 'static' | 'dynamic' | 'enterprise_managed';
-        enterpriseManagedConfig?: {
-            identityProviderId?: string;
-            resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
-            resourceIdentifier?: string;
-            requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
-            scopes?: Array<string>;
-            audience?: string;
-            clientIdOverride?: string;
-            tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
-            headerName?: string;
-            envVarName?: string;
-            bodyFieldName?: string;
-            responseFieldPath?: string;
-            fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
-            cacheTtlSeconds?: number;
-        } | null;
-        credentialSourceMcpServerId?: string | null;
-        executionSourceMcpServerId?: string | null;
+        mcpServerId?: string | null;
     } | null;
     path: {
         agentId: string;
@@ -12445,26 +12409,8 @@ export type BulkAssignToolsData = {
         assignments: Array<{
             toolId: string;
             resolveAtCallTime?: boolean;
-            useDynamicTeamCredential?: boolean;
             credentialResolutionMode?: 'static' | 'dynamic' | 'enterprise_managed';
-            enterpriseManagedConfig?: {
-                identityProviderId?: string;
-                resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
-                resourceIdentifier?: string;
-                requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
-                scopes?: Array<string>;
-                audience?: string;
-                clientIdOverride?: string;
-                tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
-                headerName?: string;
-                envVarName?: string;
-                bodyFieldName?: string;
-                responseFieldPath?: string;
-                fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
-                cacheTtlSeconds?: number;
-            } | null;
-            credentialSourceMcpServerId?: string | null;
-            executionSourceMcpServerId?: string | null;
+            mcpServerId?: string | null;
             agentId: string;
         }>;
     };
@@ -12754,26 +12700,8 @@ export type GetAgentToolsResponse = GetAgentToolsResponses[keyof GetAgentToolsRe
 
 export type UpdateAgentToolData = {
     body: {
-        credentialSourceMcpServerId?: string | null;
-        executionSourceMcpServerId?: string | null;
-        useDynamicTeamCredential?: boolean;
+        mcpServerId?: string | null;
         credentialResolutionMode?: 'static' | 'dynamic' | 'enterprise_managed';
-        enterpriseManagedConfig?: {
-            identityProviderId?: string;
-            resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
-            resourceIdentifier?: string;
-            requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
-            scopes?: Array<string>;
-            audience?: string;
-            clientIdOverride?: string;
-            tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
-            headerName?: string;
-            envVarName?: string;
-            bodyFieldName?: string;
-            responseFieldPath?: string;
-            fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
-            cacheTtlSeconds?: number;
-        } | null;
     };
     path: {
         id: string;
@@ -12849,26 +12777,8 @@ export type UpdateAgentToolResponses = {
         id?: string;
         agentId?: string;
         toolId?: string;
-        credentialSourceMcpServerId?: string | null;
-        executionSourceMcpServerId?: string | null;
-        useDynamicTeamCredential?: boolean;
+        mcpServerId?: string | null;
         credentialResolutionMode: 'static' | 'dynamic' | 'enterprise_managed';
-        enterpriseManagedConfig: {
-            identityProviderId?: string;
-            resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
-            resourceIdentifier?: string;
-            requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
-            scopes?: Array<string>;
-            audience?: string;
-            clientIdOverride?: string;
-            tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
-            headerName?: string;
-            envVarName?: string;
-            bodyFieldName?: string;
-            responseFieldPath?: string;
-            fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
-            cacheTtlSeconds?: number;
-        } | null;
         createdAt?: string;
         updatedAt?: string;
     };
@@ -30000,6 +29910,22 @@ export type GetMcpServersResponses = {
         localInstallationError: string | null;
         oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
         oauthRefreshFailedAt: string | null;
+        enterpriseManagedConfig: {
+            identityProviderId?: string;
+            resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
+            resourceIdentifier?: string;
+            requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
+            scopes?: Array<string>;
+            audience?: string;
+            clientIdOverride?: string;
+            tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
+            headerName?: string;
+            envVarName?: string;
+            bodyFieldName?: string;
+            responseFieldPath?: string;
+            fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
+            cacheTtlSeconds?: number;
+        } | null;
         createdAt: string;
         updatedAt: string;
         ownerEmail?: string | null;
@@ -30033,6 +29959,22 @@ export type InstallMcpServerData = {
         localInstallationError?: string | null;
         oauthRefreshError?: 'refresh_failed' | 'no_refresh_token';
         oauthRefreshFailedAt?: unknown;
+        enterpriseManagedConfig?: {
+            identityProviderId?: string;
+            resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
+            resourceIdentifier?: string;
+            requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
+            scopes?: Array<string>;
+            audience?: string;
+            clientIdOverride?: string;
+            tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
+            headerName?: string;
+            envVarName?: string;
+            bodyFieldName?: string;
+            responseFieldPath?: string;
+            fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
+            cacheTtlSeconds?: number;
+        } | null;
         userId?: string;
         userConfigValues?: {
             [key: string]: string;
@@ -30126,6 +30068,22 @@ export type InstallMcpServerResponses = {
         localInstallationError: string | null;
         oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
         oauthRefreshFailedAt: string | null;
+        enterpriseManagedConfig: {
+            identityProviderId?: string;
+            resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
+            resourceIdentifier?: string;
+            requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
+            scopes?: Array<string>;
+            audience?: string;
+            clientIdOverride?: string;
+            tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
+            headerName?: string;
+            envVarName?: string;
+            bodyFieldName?: string;
+            responseFieldPath?: string;
+            fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
+            cacheTtlSeconds?: number;
+        } | null;
         createdAt: string;
         updatedAt: string;
         ownerEmail?: string | null;
@@ -30311,6 +30269,22 @@ export type GetMcpServerResponses = {
         localInstallationError: string | null;
         oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
         oauthRefreshFailedAt: string | null;
+        enterpriseManagedConfig: {
+            identityProviderId?: string;
+            resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
+            resourceIdentifier?: string;
+            requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
+            scopes?: Array<string>;
+            audience?: string;
+            clientIdOverride?: string;
+            tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
+            headerName?: string;
+            envVarName?: string;
+            bodyFieldName?: string;
+            responseFieldPath?: string;
+            fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
+            cacheTtlSeconds?: number;
+        } | null;
         createdAt: string;
         updatedAt: string;
         ownerEmail?: string | null;
@@ -30343,6 +30317,22 @@ export type ReauthenticateMcpServerData = {
             [key: string]: string;
         };
         isByosVault?: boolean;
+        enterpriseManagedConfig?: {
+            identityProviderId?: string;
+            resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
+            resourceIdentifier?: string;
+            requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
+            scopes?: Array<string>;
+            audience?: string;
+            clientIdOverride?: string;
+            tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
+            headerName?: string;
+            envVarName?: string;
+            bodyFieldName?: string;
+            responseFieldPath?: string;
+            fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
+            cacheTtlSeconds?: number;
+        } | null;
     };
     path: {
         id: string;
@@ -30427,6 +30417,22 @@ export type ReauthenticateMcpServerResponses = {
         localInstallationError: string | null;
         oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
         oauthRefreshFailedAt: string | null;
+        enterpriseManagedConfig: {
+            identityProviderId?: string;
+            resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
+            resourceIdentifier?: string;
+            requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
+            scopes?: Array<string>;
+            audience?: string;
+            clientIdOverride?: string;
+            tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
+            headerName?: string;
+            envVarName?: string;
+            bodyFieldName?: string;
+            responseFieldPath?: string;
+            fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
+            cacheTtlSeconds?: number;
+        } | null;
         createdAt: string;
         updatedAt: string;
         ownerEmail?: string | null;
@@ -30710,6 +30716,22 @@ export type ReinstallMcpServerData = {
         };
         isByosVault?: boolean;
         serviceAccount?: string;
+        enterpriseManagedConfig?: {
+            identityProviderId?: string;
+            resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
+            resourceIdentifier?: string;
+            requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
+            scopes?: Array<string>;
+            audience?: string;
+            clientIdOverride?: string;
+            tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
+            headerName?: string;
+            envVarName?: string;
+            bodyFieldName?: string;
+            responseFieldPath?: string;
+            fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
+            cacheTtlSeconds?: number;
+        } | null;
     };
     path: {
         id: string;
@@ -30794,6 +30816,22 @@ export type ReinstallMcpServerResponses = {
         localInstallationError: string | null;
         oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
         oauthRefreshFailedAt: string | null;
+        enterpriseManagedConfig: {
+            identityProviderId?: string;
+            resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
+            resourceIdentifier?: string;
+            requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
+            scopes?: Array<string>;
+            audience?: string;
+            clientIdOverride?: string;
+            tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
+            headerName?: string;
+            envVarName?: string;
+            bodyFieldName?: string;
+            responseFieldPath?: string;
+            fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
+            cacheTtlSeconds?: number;
+        } | null;
         createdAt: string;
         updatedAt: string;
         ownerEmail?: string | null;
@@ -36893,28 +36931,10 @@ export type GetToolsWithAssignmentsResponses = {
                     id: string;
                     name: string;
                 };
-                credentialSourceMcpServerId: string | null;
+                mcpServerId: string | null;
                 credentialOwnerEmail: string | null;
-                executionSourceMcpServerId: string | null;
                 executionOwnerEmail: string | null;
-                useDynamicTeamCredential: boolean;
                 credentialResolutionMode: 'static' | 'dynamic' | 'enterprise_managed';
-                enterpriseManagedConfig: {
-                    identityProviderId?: string;
-                    resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
-                    resourceIdentifier?: string;
-                    requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
-                    scopes?: Array<string>;
-                    audience?: string;
-                    clientIdOverride?: string;
-                    tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
-                    headerName?: string;
-                    envVarName?: string;
-                    bodyFieldName?: string;
-                    responseFieldPath?: string;
-                    fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
-                    cacheTtlSeconds?: number;
-                } | null;
             }>;
         }>;
         pagination: {

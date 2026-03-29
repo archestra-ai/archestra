@@ -1,5 +1,5 @@
 import logger from "@/logging";
-import { discoverOidcTokenEndpoint } from "@/services/external-idp-oidc";
+import { discoverOidcTokenEndpoint } from "@/services/identity-providers/oidc";
 import type { EnterpriseManagedCredentialType } from "@/types";
 import type {
   EnterpriseCredentialExchangeAdapter,

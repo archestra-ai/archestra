@@ -1,8 +1,8 @@
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import logger from "@/logging";
 import { AgentModel } from "@/models";
-import { findExternalIdentityProviderById } from "@/services/external-idp-oidc";
-import { resolveSessionExternalIdpToken } from "@/services/session-external-idp-token";
+import { findExternalIdentityProviderById } from "@/services/identity-providers/oidc";
+import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 
 export interface EnterpriseAssertionResolution {
   assertion: string;

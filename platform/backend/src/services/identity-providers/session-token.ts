@@ -1,7 +1,7 @@
 import { jwtDecode } from "jwt-decode";
 import logger from "@/logging";
 import { AccountModel, AgentModel } from "@/models";
-import { findExternalIdentityProviderById } from "@/services/external-idp-oidc";
+import { findExternalIdentityProviderById } from "@/services/identity-providers/oidc";
 
 export interface SessionExternalIdpToken {
   identityProviderId: string;

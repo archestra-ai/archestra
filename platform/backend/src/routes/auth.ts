@@ -16,7 +16,7 @@ import {
 import {
   exchangeIdentityAssertionForAccessToken,
   JWT_BEARER_GRANT_TYPE,
-} from "@/services/enterprise-managed-authorization";
+} from "@/services/identity-providers/enterprise-managed/authorization";
 import { ApiError, constructResponseSchema } from "@/types";
 
 const authRoutes: FastifyPluginAsyncZod = async (fastify) => {

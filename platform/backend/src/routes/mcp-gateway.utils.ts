@@ -50,11 +50,11 @@ import {
   ATTR_MCP_IS_ERROR_RESULT,
   startActiveMcpSpan,
 } from "@/observability/tracing";
-import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/enterprise-managed-authorization";
+import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import {
   discoverOidcJwksUrl,
   findExternalIdentityProviderById,
-} from "@/services/external-idp-oidc";
+} from "@/services/identity-providers/oidc";
 import { jwksValidator } from "@/services/jwks-validator";
 import {
   type AgentAccessContext,

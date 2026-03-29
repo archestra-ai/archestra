@@ -9,7 +9,6 @@ import {
 } from "@/models";
 import type {
   CredentialResolutionMode,
-  EnterpriseManagedCredentialConfig,
   InternalMcpCatalog,
   Tool,
 } from "@/types";
@@ -42,26 +41,9 @@ export interface AgentToolAssignmentRequest {
    * When true, resolve credentials and execution target at tool call time.
    */
   resolveAtCallTime?: boolean;
-  /**
-   * Legacy alias for late-bound assignment mode.
-   * Keep using `resolveAtCallTime` in new MCP-facing code; this alias remains
-   * for backwards compatibility with older callers.
-   */
-  useDynamicTeamCredential?: boolean;
   credentialResolutionMode?: CredentialResolutionMode;
-  enterpriseManagedConfig?: EnterpriseManagedCredentialConfig | null;
-  /**
-   * Explicit remote MCP installation to use as the credential source.
-   * Use this only when you want to pin the tool to credentials from one
-   * specific installed MCP server instead of resolving credentials at call time.
-   */
-  credentialSourceMcpServerId?: string | null;
-  /**
-   * Explicit local MCP installation to use as the execution target.
-   * Use this only when you want to force a local MCP tool to run on one
-   * specific installed MCP server instead of resolving execution at call time.
-   */
-  executionSourceMcpServerId?: string | null;
+  /** Static assignments pin the tool to one installed MCP server. */
+  mcpServerId?: string | null;
   /** Optional prefetched lookup data used to avoid N+1 validation queries. */
   preFetchedData?: Partial<AgentToolAssignmentPrefetchedData>;
 }
@@ -75,9 +57,7 @@ export async function assignToolToAgent(
     toolId: params.toolId,
     resolveAtCallTime: credentialResolutionMode === "dynamic",
     credentialResolutionMode,
-    enterpriseManagedConfig: params.enterpriseManagedConfig,
-    credentialSourceMcpServerId: params.credentialSourceMcpServerId,
-    executionSourceMcpServerId: params.executionSourceMcpServerId,
+    mcpServerId: params.mcpServerId,
     preFetchedData: params.preFetchedData,
   });
 
@@ -88,11 +68,8 @@ export async function assignToolToAgent(
   const result = await AgentToolModel.createOrUpdateCredentials(
     params.agentId,
     params.toolId,
-    params.credentialSourceMcpServerId,
-    params.executionSourceMcpServerId,
-    credentialResolutionMode === "dynamic",
+    params.mcpServerId,
     credentialResolutionMode,
-    params.enterpriseManagedConfig,
   );
 
   if (result.status === "unchanged") {
@@ -109,14 +86,8 @@ export async function assignToolToAgent(
 export async function validateAssignment(
   params: AgentToolAssignmentRequest,
 ): Promise<AgentToolAssignmentError | null> {
-  const {
-    agentId,
-    toolId,
-    credentialSourceMcpServerId,
-    executionSourceMcpServerId,
-    enterpriseManagedConfig,
-    preFetchedData,
-  } = params;
+  const { agentId, toolId, preFetchedData } = params;
+  const mcpServerId = params.mcpServerId;
   const credentialResolutionMode = normalizeCredentialResolutionMode(params);
 
   const agentExists = preFetchedData?.existingAgentIds
@@ -149,8 +120,7 @@ export async function validateAssignment(
 
   const catalogValidationError = await validateCatalogRequirements({
     tool,
-    credentialSourceMcpServerId,
-    executionSourceMcpServerId,
+    mcpServerId,
     preFetchedData,
     credentialResolutionMode,
   });
@@ -158,37 +128,13 @@ export async function validateAssignment(
     return catalogValidationError;
   }
 
-  const enterpriseManagedValidationError =
-    validateEnterpriseManagedConfiguration({
-      credentialResolutionMode,
-      enterpriseManagedConfig,
-    });
-  if (enterpriseManagedValidationError) {
-    return enterpriseManagedValidationError;
-  }
-
-  if (credentialSourceMcpServerId) {
-    const preFetchedServer = preFetchedData?.mcpServersBasicMap?.get(
-      credentialSourceMcpServerId,
-    );
-    const validationError = await validateCredentialSource({
+  if (mcpServerId) {
+    const preFetchedServer =
+      preFetchedData?.mcpServersBasicMap?.get(mcpServerId);
+    const validationError = await validateAssignedMcpServer({
       agentId,
-      credentialSourceMcpServerId,
-      preFetchedServer,
-    });
-    if (validationError) {
-      return validationError;
-    }
-  }
-
-  if (executionSourceMcpServerId) {
-    const preFetchedServer = preFetchedData?.mcpServersBasicMap?.get(
-      executionSourceMcpServerId,
-    );
-    const validationError = await validateExecutionSource({
-      toolId,
-      preFetchedTool: tool,
-      executionSourceMcpServerId,
+      mcpServerId,
+      tool,
       preFetchedServer,
     });
     if (validationError) {
@@ -201,18 +147,12 @@ export async function validateAssignment(
 
 async function validateCatalogRequirements(params: {
   tool: Tool;
-  credentialSourceMcpServerId?: string | null;
-  executionSourceMcpServerId?: string | null;
+  mcpServerId?: string | null;
   preFetchedData?: Partial<AgentToolAssignmentPrefetchedData>;
   credentialResolutionMode: CredentialResolutionMode;
 }): Promise<AgentToolAssignmentError | null> {
-  const {
-    tool,
-    credentialSourceMcpServerId,
-    executionSourceMcpServerId,
-    preFetchedData,
-    credentialResolutionMode,
-  } = params;
+  const { tool, mcpServerId, preFetchedData, credentialResolutionMode } =
+    params;
   const usesLateBoundResolution =
     credentialResolutionMode === "dynamic" ||
     credentialResolutionMode === "enterprise_managed";
@@ -228,12 +168,12 @@ async function validateCatalogRequirements(params: {
       });
 
   if (catalogItem?.serverType === "local") {
-    if (!executionSourceMcpServerId && !usesLateBoundResolution) {
+    if (!mcpServerId && !usesLateBoundResolution) {
       return {
         code: "validation_error",
         error: {
           message:
-            "Execution source installation or non-static credential resolution is required for local MCP server tools",
+            "An MCP server installation or non-static credential resolution is required for local MCP server tools",
           type: "validation_error",
         },
       };
@@ -241,12 +181,12 @@ async function validateCatalogRequirements(params: {
   }
 
   if (catalogItem?.serverType === "remote") {
-    if (!credentialSourceMcpServerId && !usesLateBoundResolution) {
+    if (!mcpServerId && !usesLateBoundResolution) {
       return {
         code: "validation_error",
         error: {
           message:
-            "Credential source or non-static credential resolution is required for remote MCP server tools",
+            "An MCP server installation or non-static credential resolution is required for remote MCP server tools",
           type: "validation_error",
         },
       };
@@ -256,52 +196,110 @@ async function validateCatalogRequirements(params: {
   return null;
 }
 
-function normalizeResolveAtCallTime(params: {
-  resolveAtCallTime?: boolean;
-  useDynamicTeamCredential?: boolean;
-}) {
-  return params.resolveAtCallTime ?? params.useDynamicTeamCredential ?? false;
+function _normalizeResolveAtCallTime(params: { resolveAtCallTime?: boolean }) {
+  return params.resolveAtCallTime ?? false;
 }
 
 function normalizeCredentialResolutionMode(params: {
   resolveAtCallTime?: boolean;
-  useDynamicTeamCredential?: boolean;
   credentialResolutionMode?: CredentialResolutionMode;
 }) {
   if (params.credentialResolutionMode) {
     return params.credentialResolutionMode;
   }
 
-  return normalizeResolveAtCallTime(params) ? "dynamic" : "static";
+  return (params.resolveAtCallTime ?? false) ? "dynamic" : "static";
 }
 
-function validateEnterpriseManagedConfiguration(params: {
-  credentialResolutionMode: CredentialResolutionMode;
-  enterpriseManagedConfig?: EnterpriseManagedCredentialConfig | null;
-}): AgentToolAssignmentError | null {
-  const { credentialResolutionMode, enterpriseManagedConfig } = params;
-
-  if (credentialResolutionMode !== "enterprise_managed") {
-    if (enterpriseManagedConfig) {
-      return {
-        code: "validation_error",
-        error: {
-          message:
-            "Enterprise-managed config can only be set when credential resolution mode is enterprise_managed",
-          type: "validation_error",
-        },
-      };
-    }
-
-    return null;
+export async function validateCredentialSource(params: {
+  agentId: string;
+  mcpServerId: string;
+  tool?: Tool;
+  toolId?: string;
+  preFetchedServer?:
+    | (Pick<PrefetchedMcpServer, "id" | "catalogId"> &
+        Partial<Pick<PrefetchedMcpServer, "ownerId">>)
+    | null;
+}) {
+  const tool =
+    params.tool ??
+    (params.toolId ? await ToolModel.findById(params.toolId) : null);
+  if (!tool) {
+    return {
+      code: "not_found" as const,
+      error: {
+        message: `Tool with ID ${params.toolId} not found`,
+        type: "not_found",
+      },
+    };
   }
 
-  if (!enterpriseManagedConfig) {
+  const result = await validateAssignedMcpServer({
+    agentId: params.agentId,
+    mcpServerId: params.mcpServerId,
+    tool,
+    preFetchedServer: params.preFetchedServer
+      ? {
+          ...params.preFetchedServer,
+          ownerId: params.preFetchedServer.ownerId ?? null,
+        }
+      : params.preFetchedServer,
+  });
+
+  if (
+    result?.code === "validation_error" &&
+    result.error.message ===
+      "The MCP server owner must be a member of a team that this agent is assigned to"
+  ) {
     return {
-      code: "validation_error",
+      code: "validation_error" as const,
       error: {
         message:
-          "Enterprise-managed config is required when credential resolution mode is enterprise_managed",
+          "The credential owner must be a member of a team that this agent is assigned to",
+        type: "validation_error",
+      },
+    };
+  }
+
+  return result;
+}
+
+export async function validateExecutionSource(params: {
+  agentId?: string;
+  mcpServerId: string;
+  tool?: Tool;
+  toolId?: string;
+  preFetchedTool?: Tool;
+  preFetchedServer?:
+    | (Pick<PrefetchedMcpServer, "id" | "catalogId"> &
+        Partial<Pick<PrefetchedMcpServer, "ownerId">>)
+    | null;
+}) {
+  const tool =
+    params.tool ??
+    params.preFetchedTool ??
+    (params.toolId ? await ToolModel.findById(params.toolId) : null);
+  if (!tool) {
+    return {
+      code: "not_found" as const,
+      error: {
+        message: `Tool with ID ${params.toolId} not found`,
+        type: "not_found",
+      },
+    };
+  }
+
+  const catalogId =
+    params.preFetchedServer?.catalogId ??
+    (await McpServerModel.findById(params.mcpServerId))?.catalogId ??
+    null;
+
+  if (tool.catalogId && catalogId !== tool.catalogId) {
+    return {
+      code: "validation_error" as const,
+      error: {
+        message:
+          "Execution source MCP server must come from the same catalog item as the tool",
         type: "validation_error",
       },
     };
@@ -310,24 +308,39 @@ function validateEnterpriseManagedConfiguration(params: {
   return null;
 }
 
-export async function validateCredentialSource(params: {
+export async function validateAssignedMcpServer(params: {
   agentId: string;
-  credentialSourceMcpServerId: string;
-  preFetchedServer?: Pick<PrefetchedMcpServer, "id" | "ownerId"> | null;
+  mcpServerId: string;
+  tool: Tool;
+  preFetchedServer?: Pick<
+    PrefetchedMcpServer,
+    "id" | "ownerId" | "catalogId"
+  > | null;
 }): Promise<AgentToolAssignmentError | null> {
-  const { agentId, credentialSourceMcpServerId, preFetchedServer } = params;
+  const { agentId, mcpServerId, tool, preFetchedServer } = params;
 
   const mcpServer =
     preFetchedServer !== undefined
       ? preFetchedServer
-      : await McpServerModel.findById(credentialSourceMcpServerId);
+      : await McpServerModel.findById(mcpServerId);
 
   if (!mcpServer) {
     return {
       code: "not_found",
       error: {
-        message: `MCP server with ID ${credentialSourceMcpServerId} not found`,
+        message: `MCP server with ID ${mcpServerId} not found`,
         type: "not_found",
+      },
+    };
+  }
+
+  if (tool.catalogId && mcpServer.catalogId !== tool.catalogId) {
+    return {
+      code: "validation_error",
+      error: {
+        message:
+          "Assigned MCP server must come from the same catalog item as the tool",
+        type: "validation_error",
       },
     };
   }
@@ -336,13 +349,7 @@ export async function validateCredentialSource(params: {
     ? await UserModel.getById(mcpServer.ownerId)
     : null;
   if (!owner) {
-    return {
-      code: "validation_error",
-      error: {
-        message: "Personal token owner not found",
-        type: "validation_error",
-      },
-    };
+    return null;
   }
 
   const hasAccess = await AgentTeamModel.userHasAgentAccess(
@@ -357,71 +364,6 @@ export async function validateCredentialSource(params: {
       error: {
         message:
           "The credential owner must be a member of a team that this agent is assigned to",
-        type: "validation_error",
-      },
-    };
-  }
-
-  return null;
-}
-
-export async function validateExecutionSource(params: {
-  toolId: string;
-  executionSourceMcpServerId: string;
-  preFetchedTool?: Tool | null;
-  preFetchedServer?: Pick<PrefetchedMcpServer, "id" | "catalogId"> | null;
-}): Promise<AgentToolAssignmentError | null> {
-  const {
-    toolId,
-    executionSourceMcpServerId,
-    preFetchedTool,
-    preFetchedServer,
-  } = params;
-
-  const mcpServer =
-    preFetchedServer !== undefined
-      ? preFetchedServer
-      : await McpServerModel.findById(executionSourceMcpServerId);
-  if (!mcpServer) {
-    return {
-      code: "not_found",
-      error: {
-        message: `MCP server with ID ${executionSourceMcpServerId} not found`,
-        type: "not_found",
-      },
-    };
-  }
-
-  const tool =
-    preFetchedTool !== undefined
-      ? preFetchedTool
-      : await ToolModel.findById(toolId);
-  if (!tool) {
-    return {
-      code: "not_found",
-      error: {
-        message: `Tool with ID ${toolId} not found`,
-        type: "not_found",
-      },
-    };
-  }
-
-  if (!tool.catalogId) {
-    return {
-      code: "validation_error",
-      error: {
-        message: "Only MCP server tools can use an execution source",
-        type: "validation_error",
-      },
-    };
-  }
-
-  if (mcpServer.catalogId !== tool.catalogId) {
-    return {
-      code: "validation_error",
-      error: {
-        message:
-          "Execution source MCP server must come from the same catalog item as the tool",
         type: "validation_error",
       },
     };

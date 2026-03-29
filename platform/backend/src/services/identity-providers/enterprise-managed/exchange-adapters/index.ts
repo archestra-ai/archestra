@@ -1,7 +1,7 @@
 import {
   type ExternalIdentityProviderConfig,
   findExternalIdentityProviderById,
-} from "@/services/external-idp-oidc";
+} from "@/services/identity-providers/oidc";
 import type { EnterpriseManagedCredentialConfig } from "@/types";
 import {
   type EnterpriseManagedCredentialResult,

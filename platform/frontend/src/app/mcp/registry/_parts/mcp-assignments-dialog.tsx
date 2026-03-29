@@ -5,10 +5,6 @@ import { Bot, Loader2, Pencil, X } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ToolChecklist } from "@/components/agent-tools-editor";
-import {
-  type EnterpriseManagedConfigInput,
-  EnterpriseManagedCredentialFields,
-} from "@/components/enterprise-managed-credential-fields";
 import { StandardDialog } from "@/components/standard-dialog";
 import {
   DYNAMIC_CREDENTIAL_VALUE,
@@ -49,7 +45,6 @@ type Profile = archestraApiTypes.GetAllAgentsResponses["200"][number];
 interface PendingChanges {
   selectedToolIds: Set<string>;
   credentialId: string | null;
-  enterpriseManagedConfig?: EnterpriseManagedConfigInput | null;
 }
 
 interface McpAssignmentsDialogProps {
@@ -101,7 +96,7 @@ export function McpAssignmentsDialog({
   const mcpServers = credentials?.[catalogId] ?? [];
 
   // Determine if this is a local server
-  const isLocalServer = mcpServers[0]?.serverType === "local";
+  const _isLocalServer = mcpServers[0]?.serverType === "local";
 
   // Group assignments by profile
   const assignmentsByProfile = useMemo(() => {
@@ -110,7 +105,6 @@ export function McpAssignmentsDialog({
       {
         tools: AgentTool[];
         credentialId: string | null;
-        enterpriseManagedConfig: EnterpriseManagedConfigInput | null;
       }
     >();
 
@@ -119,16 +113,12 @@ export function McpAssignmentsDialog({
       if (!map.has(profileId)) {
         map.set(profileId, {
           tools: [],
-          credentialId: at.useDynamicTeamCredential
-            ? DYNAMIC_CREDENTIAL_VALUE
-            : at.credentialResolutionMode === "enterprise_managed"
-              ? ENTERPRISE_MANAGED_CREDENTIAL_VALUE
-              : (at.credentialSourceMcpServerId ??
-                at.executionSourceMcpServerId ??
-                null),
-          enterpriseManagedConfig:
-            (at.enterpriseManagedConfig as EnterpriseManagedConfigInput | null) ??
-            null,
+          credentialId:
+            at.credentialResolutionMode === "dynamic"
+              ? DYNAMIC_CREDENTIAL_VALUE
+              : at.credentialResolutionMode === "enterprise_managed"
+                ? ENTERPRISE_MANAGED_CREDENTIAL_VALUE
+                : (at.mcpServerId ?? null),
         });
       }
       map.get(profileId)?.tools.push(at);
@@ -175,13 +165,6 @@ export function McpAssignmentsDialog({
 
       // Check credential changes (only if there are existing assignments)
       if (currentIds.size > 0 && changes.credentialId !== currentCredential) {
-        return true;
-      }
-      if (
-        changes.credentialId === ENTERPRISE_MANAGED_CREDENTIAL_VALUE &&
-        JSON.stringify(changes.enterpriseManagedConfig ?? null) !==
-          JSON.stringify(current?.enterpriseManagedConfig ?? null)
-      ) {
         return true;
       }
     }
@@ -239,23 +222,12 @@ export function McpAssignmentsDialog({
           const assignments = toAdd.map((toolId) => ({
             agentId: profileId,
             toolId,
-            credentialSourceMcpServerId:
-              !isLocalServer &&
-              !useDynamicCredential &&
-              !useEnterpriseManagedCredential
+            mcpServerId:
+              !useDynamicCredential && !useEnterpriseManagedCredential
                 ? changes.credentialId
                 : null,
-            executionSourceMcpServerId:
-              isLocalServer &&
-              !useDynamicCredential &&
-              !useEnterpriseManagedCredential
-                ? changes.credentialId
-                : null,
-            useDynamicTeamCredential: useDynamicCredential,
+            resolveAtCallTime: useDynamicCredential,
             credentialResolutionMode,
-            enterpriseManagedConfig: useEnterpriseManagedCredential
-              ? changes.enterpriseManagedConfig
-              : null,
           }));
 
           await bulkAssign.mutateAsync({ assignments, skipInvalidation: true });
@@ -274,23 +246,11 @@ export function McpAssignmentsDialog({
           for (const at of toolsToUpdate) {
             await patchTool.mutateAsync({
               id: at.id,
-              credentialSourceMcpServerId:
-                !isLocalServer &&
-                !useDynamicCredential &&
-                !useEnterpriseManagedCredential
+              mcpServerId:
+                !useDynamicCredential && !useEnterpriseManagedCredential
                   ? changes.credentialId
                   : null,
-              executionSourceMcpServerId:
-                isLocalServer &&
-                !useDynamicCredential &&
-                !useEnterpriseManagedCredential
-                  ? changes.credentialId
-                  : null,
-              useDynamicTeamCredential: useDynamicCredential,
               credentialResolutionMode,
-              enterpriseManagedConfig: useEnterpriseManagedCredential
-                ? changes.enterpriseManagedConfig
-                : null,
               skipInvalidation: true,
             });
           }
@@ -363,10 +323,6 @@ export function McpAssignmentsDialog({
           selectedToolIds: new Set(),
           credentialId:
             pending?.credentialId ?? assignment?.credentialId ?? null,
-          enterpriseManagedConfig:
-            pending?.enterpriseManagedConfig ??
-            assignment?.enterpriseManagedConfig ??
-            null,
         });
       } else {
         // Toggle ON: pre-select all tools with default credential
@@ -379,10 +335,6 @@ export function McpAssignmentsDialog({
         updatePendingChanges(profileId, {
           selectedToolIds: allToolIds,
           credentialId: defaultCredential,
-          enterpriseManagedConfig:
-            pending?.enterpriseManagedConfig ??
-            assignment?.enterpriseManagedConfig ??
-            null,
         });
       }
     },
@@ -494,9 +446,6 @@ export function McpAssignmentsDialog({
                       catalogId={catalogId}
                       isBuiltin={isBuiltin}
                       currentCredentialId={assignment?.credentialId ?? null}
-                      currentEnterpriseManagedConfig={
-                        assignment?.enterpriseManagedConfig ?? null
-                      }
                       pendingChanges={pending}
                       onPendingChanges={updatePendingChanges}
                       onRemove={handleProfileToggle}
@@ -539,9 +488,6 @@ export function McpAssignmentsDialog({
                       catalogId={catalogId}
                       isBuiltin={isBuiltin}
                       currentCredentialId={assignment?.credentialId ?? null}
-                      currentEnterpriseManagedConfig={
-                        assignment?.enterpriseManagedConfig ?? null
-                      }
                       pendingChanges={pending}
                       onPendingChanges={updatePendingChanges}
                       onRemove={handleProfileToggle}
@@ -576,7 +522,6 @@ interface ProfileAssignmentPillProps {
   catalogId: string;
   isBuiltin: boolean;
   currentCredentialId: string | null;
-  currentEnterpriseManagedConfig?: EnterpriseManagedConfigInput | null;
   pendingChanges?: PendingChanges;
   onPendingChanges: (profileId: string, changes: PendingChanges) => void;
   /** Called when the user clicks the remove button on the pill */
@@ -591,7 +536,6 @@ function ProfileAssignmentPill({
   catalogId,
   isBuiltin,
   currentCredentialId,
-  currentEnterpriseManagedConfig,
   pendingChanges,
   onPendingChanges,
   onRemove,
@@ -609,9 +553,6 @@ function ProfileAssignmentPill({
   );
 
   const credentialId = pendingChanges?.credentialId ?? currentCredentialId;
-  const enterpriseManagedConfig =
-    pendingChanges?.enterpriseManagedConfig ?? currentEnterpriseManagedConfig;
-
   // Fetch credentials for this catalog
   const credentials = useMcpServersGroupedByCatalog({ catalogId });
   const mcpServers = credentials?.[catalogId] ?? [];
@@ -629,20 +570,12 @@ function ProfileAssignmentPill({
     if (assignedTools.length > 0 && credentialId !== currentCredentialId) {
       return true;
     }
-    if (credentialId === ENTERPRISE_MANAGED_CREDENTIAL_VALUE) {
-      return (
-        JSON.stringify(enterpriseManagedConfig ?? null) !==
-        JSON.stringify(currentEnterpriseManagedConfig ?? null)
-      );
-    }
     return false;
   }, [
     selectedToolIds,
     currentAssignedIds,
     credentialId,
     currentCredentialId,
-    enterpriseManagedConfig,
-    currentEnterpriseManagedConfig,
     assignedTools.length,
   ]);
 
@@ -650,7 +583,6 @@ function ProfileAssignmentPill({
     onPendingChanges(profile.id, {
       selectedToolIds: newSelectedIds,
       credentialId: credentialId,
-      enterpriseManagedConfig,
     });
     setChangedInSession(true);
   };
@@ -659,7 +591,6 @@ function ProfileAssignmentPill({
     onPendingChanges(profile.id, {
       selectedToolIds: selectedToolIds,
       credentialId: newCredentialId,
-      enterpriseManagedConfig,
     });
   };
 
@@ -752,18 +683,6 @@ function ProfileAssignmentPill({
               onValueChange={handleCredentialChange}
               shouldSetDefaultValue={hasNoAssignments && !pendingChanges}
             />
-            {credentialId === ENTERPRISE_MANAGED_CREDENTIAL_VALUE && (
-              <EnterpriseManagedCredentialFields
-                value={enterpriseManagedConfig}
-                onChange={(value) =>
-                  onPendingChanges(profile.id, {
-                    selectedToolIds,
-                    credentialId,
-                    enterpriseManagedConfig: value,
-                  })
-                }
-              />
-            )}
           </div>
         )}
 

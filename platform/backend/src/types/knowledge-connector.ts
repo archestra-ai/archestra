@@ -1,243 +1,159 @@
 import { z } from "zod";
 
-// ===== Connector Type =====
+// ---------------------------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------------------------
 
-const JIRA = z.literal("jira");
-const CONFLUENCE = z.literal("confluence");
-const GITHUB = z.literal("github");
-const GITLAB = z.literal("gitlab");
-const SERVICENOW = z.literal("servicenow");
-
-export const ConnectorTypeSchema = z.union([
-  JIRA,
-  CONFLUENCE,
-  GITHUB,
-  GITLAB,
-  SERVICENOW,
-]);
-export type ConnectorType = z.infer<typeof ConnectorTypeSchema>;
-
-// ===== Connector Sync Status =====
-
-export const ConnectorSyncStatusSchema = z.enum([
-  "running",
-  "success",
-  "completed_with_errors",
-  "failed",
-  "partial",
-]);
-export type ConnectorSyncStatus = z.infer<typeof ConnectorSyncStatusSchema>;
-
-// ===== Connector Credentials =====
-
-export const ConnectorCredentialsSchema = z.object({
-  email: z.string().optional(),
-  apiToken: z.string(),
+const BaseCheckpointSchema = z.object({
+  lastSyncedAt: z.string().datetime().nullable().optional(),
 });
-export type ConnectorCredentials = z.infer<typeof ConnectorCredentialsSchema>;
 
-// ===== Shared =====
-
-/** Use for any connector URL field — prepends https:// if no protocol and normalizes trailing slashes at parse time. */
-const connectorUrlSchema = z
-  .string()
-  .transform(ensureProtocol)
-  .transform(stripTrailingSlashes);
-
-// ===== Jira Config & Checkpoint =====
+// ---------------------------------------------------------------------------
+// Jira
+// ---------------------------------------------------------------------------
 
 export const JiraConfigSchema = z.object({
-  type: JIRA,
-  jiraBaseUrl: connectorUrlSchema,
-  isCloud: z.boolean(),
-  projectKey: z.string().optional(),
-  jqlQuery: z.string().optional(),
-  commentEmailBlacklist: z.array(z.string()).optional(),
-  labelsToSkip: z.array(z.string()).optional(),
+  type: z.literal("jira"),
+  credentials: z.object({
+    instanceUrl: z.string().url(),
+    email: z.string().email(),
+    apiToken: z.string().min(1),
+  }),
+  projectKeys: z.array(z.string()).optional(),
 });
-export type JiraConfig = z.infer<typeof JiraConfigSchema>;
 
-export const JiraCheckpointSchema = z.object({
-  type: JIRA,
-  lastSyncedAt: z.string().optional(),
-  lastIssueKey: z.string().optional(),
-  /** Raw Jira timestamp with timezone offset (e.g. "2026-03-09T11:05:52.774-0400") for correct JQL date formatting. */
-  lastRawUpdatedAt: z.string().optional(),
-});
+export const JiraCheckpointSchema = BaseCheckpointSchema;
+
+export type JiraConfig = z.infer<typeof JiraConfigSchema>;
 export type JiraCheckpoint = z.infer<typeof JiraCheckpointSchema>;
 
-// ===== Confluence Config & Checkpoint =====
+// ---------------------------------------------------------------------------
+// Confluence
+// ---------------------------------------------------------------------------
 
 export const ConfluenceConfigSchema = z.object({
-  type: CONFLUENCE,
-  confluenceUrl: connectorUrlSchema,
-  isCloud: z.boolean(),
+  type: z.literal("confluence"),
+  credentials: z.object({
+    instanceUrl: z.string().url(),
+    email: z.string().email(),
+    apiToken: z.string().min(1),
+  }),
   spaceKeys: z.array(z.string()).optional(),
-  pageIds: z.array(z.string()).optional(),
-  cqlQuery: z.string().optional(),
-  labelsToSkip: z.array(z.string()).optional(),
-  batchSize: z.number().optional(),
 });
-export type ConfluenceConfig = z.infer<typeof ConfluenceConfigSchema>;
 
-export const ConfluenceCheckpointSchema = z.object({
-  type: CONFLUENCE,
-  lastSyncedAt: z.string().optional(),
-  lastPageId: z.string().optional(),
-  /** Raw Confluence timestamp with timezone offset for correct CQL date formatting. */
-  lastRawModifiedAt: z.string().optional(),
-});
+export const ConfluenceCheckpointSchema = BaseCheckpointSchema;
+
+export type ConfluenceConfig = z.infer<typeof ConfluenceConfigSchema>;
 export type ConfluenceCheckpoint = z.infer<typeof ConfluenceCheckpointSchema>;
 
-// ===== GitHub Config & Checkpoint =====
+// ---------------------------------------------------------------------------
+// GitHub
+// ---------------------------------------------------------------------------
 
-export const GithubConfigSchema = z.object({
-  type: GITHUB,
-  githubUrl: connectorUrlSchema,
-  owner: z.string(),
-  repos: z.array(z.string()).optional(),
-  includeIssues: z.boolean().optional(),
-  includePullRequests: z.boolean().optional(),
-  includeMarkdownFiles: z.boolean().optional(),
-  labelsToSkip: z.array(z.string()).optional(),
+export const GitHubConfigSchema = z.object({
+  type: z.literal("github"),
+  credentials: z.object({
+    accessToken: z.string().min(1),
+  }),
+  repositories: z.array(z.string()).optional(),
+  organization: z.string().optional(),
 });
-export type GithubConfig = z.infer<typeof GithubConfigSchema>;
 
-export const GithubCheckpointSchema = z.object({
-  type: GITHUB,
-  lastSyncedAt: z.string().optional(),
+export const GitHubCheckpointSchema = BaseCheckpointSchema;
+
+export type GitHubConfig = z.infer<typeof GitHubConfigSchema>;
+export type GitHubCheckpoint = z.infer<typeof GitHubCheckpointSchema>;
+
+// ---------------------------------------------------------------------------
+// GitLab
+// ---------------------------------------------------------------------------
+
+export const GitLabConfigSchema = z.object({
+  type: z.literal("gitlab"),
+  credentials: z.object({
+    instanceUrl: z.string().url().optional().default("https://gitlab.com"),
+    accessToken: z.string().min(1),
+  }),
+  projectIds: z.array(z.union([z.string(), z.number()])).optional(),
+  groupIds: z.array(z.union([z.string(), z.number()])).optional(),
 });
-export type GithubCheckpoint = z.infer<typeof GithubCheckpointSchema>;
 
-// ===== GitLab Config & Checkpoint =====
+export const GitLabCheckpointSchema = BaseCheckpointSchema;
 
-export const GitlabConfigSchema = z.object({
-  type: GITLAB,
-  gitlabUrl: connectorUrlSchema,
-  projectIds: z.array(z.number()).optional(),
-  groupId: z.string().optional(),
-  includeIssues: z.boolean().optional(),
-  includeMergeRequests: z.boolean().optional(),
-  includeMarkdownFiles: z.boolean().optional(),
-  labelsToSkip: z.array(z.string()).optional(),
-});
-export type GitlabConfig = z.infer<typeof GitlabConfigSchema>;
+export type GitLabConfig = z.infer<typeof GitLabConfigSchema>;
+export type GitLabCheckpoint = z.infer<typeof GitLabCheckpointSchema>;
 
-export const GitlabCheckpointSchema = z.object({
-  type: GITLAB,
-  lastSyncedAt: z.string().optional(),
-});
-export type GitlabCheckpoint = z.infer<typeof GitlabCheckpointSchema>;
-
-// ===== ServiceNow Config & Checkpoint =====
+// ---------------------------------------------------------------------------
+// ServiceNow
+// ---------------------------------------------------------------------------
 
 export const ServiceNowConfigSchema = z.object({
-  type: SERVICENOW,
-  instanceUrl: connectorUrlSchema,
-  includeIncidents: z.boolean().optional(),
-  includeChanges: z.boolean().optional(),
-  includeChangeRequests: z.boolean().optional(),
-  includeProblems: z.boolean().optional(),
-  includeBusinessApps: z.boolean().optional(),
-  states: z.array(z.string()).optional(),
-  assignmentGroups: z.array(z.string()).optional(),
-  batchSize: z.number().optional(),
-  syncDataForLastMonths: z.number().min(1).max(12).optional(),
+  type: z.literal("servicenow"),
+  credentials: z.object({
+    instanceUrl: z.string().url(),
+    username: z.string().min(1),
+    password: z.string().min(1),
+  }),
+  tables: z.array(z.string()).optional(),
 });
-export type ServiceNowConfig = z.infer<typeof ServiceNowConfigSchema>;
 
-export const ServiceNowCheckpointSchema = z.object({
-  type: SERVICENOW,
-  lastSyncedAt: z.string().optional(),
-  lastOffset: z.number().optional(),
-});
+export const ServiceNowCheckpointSchema = BaseCheckpointSchema;
+
+export type ServiceNowConfig = z.infer<typeof ServiceNowConfigSchema>;
 export type ServiceNowCheckpoint = z.infer<typeof ServiceNowCheckpointSchema>;
 
-// ===== Discriminated Unions =====
+// ---------------------------------------------------------------------------
+// Notion
+// ---------------------------------------------------------------------------
 
-export const ConnectorConfigSchema = z.discriminatedUnion("type", [
+export const NotionConfigSchema = z.object({
+  type: z.literal("notion"),
+  credentials: z.object({
+    integrationToken: z
+      .string()
+      .min(1)
+      .refine(
+        (v) => v.startsWith("secret_") || v.startsWith("ntn_"),
+        "Integration Token must start with 'secret_' or 'ntn_'"
+      ),
+  }),
+  /** Restrict sync to specific Notion database IDs */
+  databaseIds: z.array(z.string()).optional(),
+  /** Restrict sync to specific Notion page IDs */
+  pageIds: z.array(z.string()).optional(),
+});
+
+export const NotionCheckpointSchema = BaseCheckpointSchema;
+
+export type NotionConfig = z.infer<typeof NotionConfigSchema>;
+export type NotionCheckpoint = z.infer<typeof NotionCheckpointSchema>;
+
+// ---------------------------------------------------------------------------
+// Discriminated union — add new connectors here
+// ---------------------------------------------------------------------------
+
+export const KnowledgeConnectorConfigSchema = z.discriminatedUnion("type", [
   JiraConfigSchema,
   ConfluenceConfigSchema,
-  GithubConfigSchema,
-  GitlabConfigSchema,
+  GitHubConfigSchema,
+  GitLabConfigSchema,
   ServiceNowConfigSchema,
+  NotionConfigSchema,
 ]);
-export type ConnectorConfig = z.infer<typeof ConnectorConfigSchema>;
 
-export const ConnectorCheckpointSchema = z.discriminatedUnion("type", [
+export type KnowledgeConnectorConfig = z.infer<
+  typeof KnowledgeConnectorConfigSchema
+>;
+
+export const KnowledgeConnectorCheckpointSchema = z.union([
   JiraCheckpointSchema,
   ConfluenceCheckpointSchema,
-  GithubCheckpointSchema,
-  GitlabCheckpointSchema,
+  GitHubCheckpointSchema,
+  GitLabCheckpointSchema,
   ServiceNowCheckpointSchema,
+  NotionCheckpointSchema,
 ]);
-export type ConnectorCheckpoint = z.infer<typeof ConnectorCheckpointSchema>;
 
-// ===== Sync Types =====
-
-export interface ConnectorDocument {
-  id: string;
-  title: string;
-  content: string;
-  sourceUrl?: string;
-  metadata: Record<string, unknown>;
-  updatedAt?: Date;
-  /** Access control permissions extracted from the source system */
-  permissions?: {
-    users?: string[];
-    groups?: string[];
-    isPublic?: boolean;
-  };
-}
-
-export interface ConnectorItemFailure {
-  itemId: string | number;
-  resource: string;
-  error: string;
-}
-
-export interface ConnectorSyncBatch {
-  documents: ConnectorDocument[];
-  failures?: ConnectorItemFailure[];
-  checkpoint: ConnectorCheckpoint;
-  hasMore: boolean;
-}
-
-// ===== Internal helpers =====
-
-function ensureProtocol(url: string): string {
-  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) return url;
-  return `https://${url}`;
-}
-
-function stripTrailingSlashes(url: string): string {
-  return url.replace(/\/+$/, "");
-}
-
-export interface Connector {
-  type: ConnectorType;
-
-  validateConfig(
-    config: Record<string, unknown>,
-  ): Promise<{ valid: boolean; error?: string }>;
-
-  testConnection(params: {
-    config: Record<string, unknown>;
-    credentials: ConnectorCredentials;
-  }): Promise<{ success: boolean; error?: string }>;
-
-  /** Estimate the total number of items to sync (for progress display). Returns null if unknown. */
-  estimateTotalItems(params: {
-    config: Record<string, unknown>;
-    credentials: ConnectorCredentials;
-    checkpoint: Record<string, unknown> | null;
-  }): Promise<number | null>;
-
-  sync(params: {
-    config: Record<string, unknown>;
-    credentials: ConnectorCredentials;
-    checkpoint: Record<string, unknown> | null;
-    startTime?: Date;
-    endTime?: Date;
-  }): AsyncGenerator<ConnectorSyncBatch>;
-}
+export type KnowledgeConnectorCheckpoint = z.infer<
+  typeof KnowledgeConnectorCheckpointSchema
+>;

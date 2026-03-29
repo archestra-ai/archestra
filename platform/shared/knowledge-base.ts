@@ -1,6 +1,5 @@
 /**
- * Shared constants for the knowledge base module.
- * Used by both frontend and backend.
+ * Shared knowledge-base constants used by both frontend and backend.
  */
 
 export const KNOWLEDGE_CONNECTOR_LABELS: Record<string, string> = {
@@ -13,7 +12,3 @@ export const KNOWLEDGE_CONNECTOR_LABELS: Record<string, string> = {
 };
 
 export type KnowledgeConnectorType = keyof typeof KNOWLEDGE_CONNECTOR_LABELS;
-
-export const KNOWLEDGE_CONNECTOR_TYPES = Object.keys(
-  KNOWLEDGE_CONNECTOR_LABELS
-) as KnowledgeConnectorType[];

@@ -1,222 +1,260 @@
 /**
- * Utility helpers for cron expression parsing and next-run computation.
- * Uses a lightweight, dependency-free approach to avoid adding heavy libraries.
+ * Cron parsing and next-run computation utilities for the "agent-scheduler" module.
+ *
+ * Supported syntax: standard 5-field POSIX cron (minute hour dom month dow).
  */
 
-interface CronField {
+// ---------------------------------------------------------------------------
+// Field definitions
+// ---------------------------------------------------------------------------
+
+interface FieldDef {
   min: number;
   max: number;
-  values: number[] | null; // null means "any / *"
+  name: string;
 }
 
-function parseField(raw: string, min: number, max: number): number[] | null {
-  if (raw === "*") return null;
+const FIELDS: FieldDef[] = [
+  { min: 0, max: 59, name: "minute" },
+  { min: 0, max: 23, name: "hour" },
+  { min: 1, max: 31, name: "day-of-month" },
+  { min: 1, max: 12, name: "month" },
+  { min: 0, max: 6,  name: "day-of-week" },
+];
 
+// ---------------------------------------------------------------------------
+// Field parser
+// ---------------------------------------------------------------------------
+
+/**
+ * Expand a single cron field token into the set of matching integers within
+ * [fieldMin, fieldMax].
+ *
+ * Returns `null` when the token contains a non-numeric value, a value outside
+ * [fieldMin, fieldMax], an invalid step/range, or any other malformed syntax.
+ * This prevents NaN from entering value sets and avoids incorrect validation
+ * results or non-terminating behavior in getNextCronDate.
+ */
+function parseField(
+  token: string,
+  fieldMin: number,
+  fieldMax: number
+): Set<number> | null {
   const values = new Set<number>();
 
-  for (const part of raw.split(",")) {
-    // Range with optional step: e.g. "1-5/2"
-    const stepMatch = part.match(/^(.+)\/(\d+)$/);
+  for (const part of token.split(",")) {
+    // Wildcard
+    if (part === "*") {
+      for (let v = fieldMin; v <= fieldMax; v++) values.add(v);
+      continue;
+    }
+
+    // Step: */step  or  start/step  or  start-end/step
+    const stepMatch = part.match(/^(\*|\d+(?:-\d+)?)\/(\d+)$/);
     if (stepMatch) {
-      const [, rangePart, stepStr] = stepMatch;
-      const step = parseInt(stepStr, 10);
-      let rangeMin = min;
-      let rangeMax = max;
-      if (rangePart !== "*") {
-        const dashIdx = rangePart.indexOf("-");
-        if (dashIdx !== -1) {
-          rangeMin = parseInt(rangePart.slice(0, dashIdx), 10);
-          rangeMax = parseInt(rangePart.slice(dashIdx + 1), 10);
+      const stepVal = parseInt(stepMatch[2], 10);
+      // Reject NaN, zero, or negative step values
+      if (isNaN(stepVal) || stepVal <= 0) return null;
+
+      let rangeMin = fieldMin;
+      let rangeMax = fieldMax;
+
+      if (stepMatch[1] !== "*") {
+        const dashParts = stepMatch[1].split("-");
+        if (dashParts.length === 2) {
+          rangeMin = parseInt(dashParts[0], 10);
+          rangeMax = parseInt(dashParts[1], 10);
         } else {
-          rangeMin = parseInt(rangePart, 10);
-          rangeMax = max;
+          rangeMin = parseInt(stepMatch[1], 10);
+          rangeMax = fieldMax;
+        }
+
+        if (
+          isNaN(rangeMin) ||
+          isNaN(rangeMax) ||
+          rangeMin < fieldMin ||
+          rangeMax > fieldMax ||
+          rangeMin > rangeMax
+        ) {
+          return null;
         }
       }
-      for (let i = rangeMin; i <= rangeMax; i += step) {
-        values.add(i);
+
+      for (let v = rangeMin; v <= rangeMax; v += stepVal) values.add(v);
+      continue;
+    }
+
+    // Range: start-end
+    const rangeMatch = part.match(/^(\d+)-(\d+)$/);
+    if (rangeMatch) {
+      const lo = parseInt(rangeMatch[1], 10);
+      const hi = parseInt(rangeMatch[2], 10);
+
+      // Reject NaN and out-of-range bounds
+      if (
+        isNaN(lo) ||
+        isNaN(hi) ||
+        lo < fieldMin ||
+        hi > fieldMax ||
+        lo > hi
+      ) {
+        return null;
       }
+
+      for (let v = lo; v <= hi; v++) values.add(v);
       continue;
     }
 
-    // Plain range: "1-5"
-    const dashIdx = part.indexOf("-");
-    if (dashIdx !== -1) {
-      const lo = parseInt(part.slice(0, dashIdx), 10);
-      const hi = parseInt(part.slice(dashIdx + 1), 10);
-      for (let i = lo; i <= hi; i++) values.add(i);
-      continue;
-    }
+    // Single integer value — must be purely numeric and within range
+    if (!/^\d+$/.test(part)) return null;
+    const num = parseInt(part, 10);
 
-    // Plain number
-    values.add(parseInt(part, 10));
+    if (isNaN(num) || num < fieldMin || num > fieldMax) return null;
+    values.add(num);
   }
 
-  return Array.from(values).sort((a, b) => a - b);
+  // An empty set means no values matched (e.g. empty string after split)
+  if (values.size === 0) return null;
+  return values;
+}
+
+// ---------------------------------------------------------------------------
+// Cron expression parser
+// ---------------------------------------------------------------------------
+
+export interface ParsedCron {
+  minutes: Set<number>;
+  hours: Set<number>;
+  daysOfMonth: Set<number>;
+  months: Set<number>;
+  daysOfWeek: Set<number>;
 }
 
 /**
- * Parse a standard 5-field cron expression.
- * Returns { minute, hour, dom, month, dow } each as sorted number[] or null (wildcard).
+ * Parse a 5-field cron expression into its constituent value sets.
+ *
+ * Returns `null` for any malformed, non-numeric, or out-of-range expression so
+ * that callers can reject invalid triggers before persisting them.
  */
-export function parseCronExpression(expression: string): {
-  minute: number[] | null;
-  hour: number[] | null;
-  dom: number[] | null;
-  month: number[] | null;
-  dow: number[] | null;
-} {
-  const parts = expression.trim().split(/\s+/);
-  if (parts.length !== 5) {
-    throw new Error(
-      `Invalid cron expression "${expression}": expected 5 fields, got ${parts.length}`
-    );
+export function parseCronExpression(expr: string): ParsedCron | null {
+  const fields = expr.trim().split(/\s+/);
+  if (fields.length !== 5) return null;
+
+  const results: Set<number>[] = [];
+  for (let i = 0; i < 5; i++) {
+    const parsed = parseField(fields[i], FIELDS[i].min, FIELDS[i].max);
+    if (parsed === null) return null;
+    results.push(parsed);
   }
-  const [minuteStr, hourStr, domStr, monthStr, dowStr] = parts;
+
   return {
-    minute: parseField(minuteStr, 0, 59),
-    hour: parseField(hourStr, 0, 23),
-    dom: parseField(domStr, 1, 31),
-    month: parseField(monthStr, 1, 12),
-    dow: parseField(dowStr, 0, 6),
+    minutes: results[0],
+    hours: results[1],
+    daysOfMonth: results[2],
+    months: results[3],
+    daysOfWeek: results[4],
   };
 }
 
-function nextValue(
-  values: number[] | null,
-  current: number,
-  min: number,
-  max: number
-): { value: number; wrapped: boolean } {
-  if (values === null) {
-    return { value: current, wrapped: false };
-  }
-  for (const v of values) {
-    if (v >= current) return { value: v, wrapped: false };
-  }
-  return { value: values[0], wrapped: true };
-}
+// ---------------------------------------------------------------------------
+// Next-run computation
+// ---------------------------------------------------------------------------
 
 /**
- * Compute the next Date at which the cron expression fires after `after`.
- * Returns null if no occurrence is found within 4 years.
+ * Compute the next Date at which a cron expression fires after `after`.
+ *
+ * Returns `null` when:
+ *  - the expression cannot be parsed (invalid syntax / out-of-range values), OR
+ *  - no matching time exists within a 4-year look-ahead window.
+ *
+ * Callers must treat `null` as an invalid/unsatisfiable trigger and must not
+ * schedule or persist it.
  */
-export function getNextCronDate(expression: string, after: Date): Date | null {
-  const { minute, hour, dom, month, dow } = parseCronExpression(expression);
+export function getNextCronDate(expr: string, after: Date = new Date()): Date | null {
+  const parsed = parseCronExpression(expr);
+  if (!parsed) return null;
 
-  // Start 1 minute after `after`
-  const d = new Date(after.getTime() + 60_000);
-  d.setSeconds(0, 0);
+  const { minutes, hours, daysOfMonth, months, daysOfWeek } = parsed;
 
-  const deadline = new Date(after.getTime() + 4 * 365 * 24 * 60 * 60 * 1000);
+  // Start one minute after `after` to avoid re-firing at the current minute.
+  const cursor = new Date(after);
+  cursor.setSeconds(0, 0);
+  cursor.setMinutes(cursor.getMinutes() + 1);
 
-  // Safety limit iterations
-  for (let iterations = 0; iterations < 525_600 * 4; iterations++) {
-    if (d > deadline) return null;
+  const limitDate = new Date(after);
+  limitDate.setFullYear(limitDate.getFullYear() + 4);
 
-    // Check month (1-based)
-    const curMonth = d.getMonth() + 1;
-    const nextMonth = nextValue(month, curMonth, 1, 12);
-    if (nextMonth.wrapped) {
-      d.setFullYear(d.getFullYear() + 1);
-      d.setMonth(0, 1);
-      d.setHours(0, 0, 0, 0);
-      continue;
-    }
-    if (nextMonth.value !== curMonth) {
-      d.setMonth(nextMonth.value - 1, 1);
-      d.setHours(0, 0, 0, 0);
+  while (cursor < limitDate) {
+    // Month check (cron: 1-based; JS Date: 0-based)
+    if (!months.has(cursor.getMonth() + 1)) {
+      cursor.setDate(1);
+      cursor.setHours(0, 0, 0, 0);
+      cursor.setMonth(cursor.getMonth() + 1);
       continue;
     }
 
-    // Check day-of-month and day-of-week
-    const curDom = d.getDate();
-    const curDow = d.getDay(); // 0=Sun
-
-    const domOk = dom === null || dom.includes(curDom);
-    const dowOk = dow === null || dow.includes(curDow);
-
-    // If both are wildcards, both must match (i.e., always true)
-    // If only one is specified, it acts as a restriction
-    const dayOk = domOk && dowOk;
-
-    if (!dayOk) {
-      d.setDate(d.getDate() + 1);
-      d.setHours(0, 0, 0, 0);
+    // Day-of-month and day-of-week check
+    if (!daysOfMonth.has(cursor.getDate()) || !daysOfWeek.has(cursor.getDay())) {
+      cursor.setDate(cursor.getDate() + 1);
+      cursor.setHours(0, 0, 0, 0);
       continue;
     }
 
-    // Check hour
-    const curHour = d.getHours();
-    const nextHour = nextValue(hour, curHour, 0, 23);
-    if (nextHour.wrapped) {
-      d.setDate(d.getDate() + 1);
-      d.setHours(0, 0, 0, 0);
-      continue;
-    }
-    if (nextHour.value !== curHour) {
-      d.setHours(nextHour.value, 0, 0, 0);
+    // Hour check
+    if (!hours.has(cursor.getHours())) {
+      cursor.setHours(cursor.getHours() + 1, 0, 0, 0);
       continue;
     }
 
-    // Check minute
-    const curMin = d.getMinutes();
-    const nextMin = nextValue(minute, curMin, 0, 59);
-    if (nextMin.wrapped) {
-      d.setHours(d.getHours() + 1, 0, 0, 0);
-      continue;
-    }
-    if (nextMin.value !== curMin) {
-      d.setMinutes(nextMin.value, 0, 0);
+    // Minute check
+    if (!minutes.has(cursor.getMinutes())) {
+      cursor.setMinutes(cursor.getMinutes() + 1, 0, 0);
       continue;
     }
 
-    // All fields matched
-    return new Date(d);
+    return new Date(cursor);
   }
 
+  // No matching time within look-ahead — return null, not the limit date.
   return null;
 }
 
-/**
- * Compute the next Date for an interval trigger.
- */
-export function getNextIntervalDate(
-  intervalMs: number,
-  lastRunAt: Date | null
-): Date {
-  const base = lastRunAt ?? new Date();
-  return new Date(base.getTime() + intervalMs);
-}
+// ---------------------------------------------------------------------------
+// Validation
+// ---------------------------------------------------------------------------
 
 /**
- * Return a human-readable label for a cron expression.
- * Handles common patterns; falls back to the raw expression.
+ * Validate a 5-field cron expression string.
+ *
+ * Returns `{ valid: true }` on success, or `{ valid: false; error: string }`
+ * with a human-readable description of the problem on failure.
+ *
+ * Because parseField now rejects NaN and out-of-range values, this function
+ * will correctly report malformed expressions as invalid rather than silently
+ * accepting them.
  */
-export function cronLabel(expression: string): string {
-  const patterns: Array<[RegExp, string]> = [
-    [/^0 \* \* \* \*$/, "Every hour"],
-    [/^0 0 \* \* \*$/, "Daily at midnight"],
-    [/^0 9 \* \* \*$/, "Daily at 9 AM"],
-    [/^0 9 \* \* 1-5$/, "Weekdays at 9 AM"],
-    [/^0 0 \* \* 1$/, "Weekly on Monday"],
-    [/^0 0 1 \* \*$/, "Monthly on the 1st"],
-    [/^\* \* \* \* \*$/, "Every minute"],
-    [/^0 0 \* \* 0$/, "Weekly on Sunday"],
-  ];
-  for (const [re, label] of patterns) {
-    if (re.test(expression.trim())) return label;
+export function validateCronExpression(
+  expr: string
+): { valid: true } | { valid: false; error: string } {
+  const fields = expr.trim().split(/\s+/);
+  if (fields.length !== 5) {
+    return {
+      valid: false,
+      error: `Expected 5 cron fields (minute hour dom month dow), got ${fields.length}.`,
+    };
   }
-  return expression;
-}
 
-/**
- * Validate a cron expression. Returns an error string or null if valid.
- */
-export function validateCronExpression(expression: string): string | null {
-  try {
-    parseCronExpression(expression);
-    return null;
-  } catch (err) {
-    return err instanceof Error ? err.message : "Invalid cron expression";
+  for (let i = 0; i < 5; i++) {
+    const result = parseField(fields[i], FIELDS[i].min, FIELDS[i].max);
+    if (result === null) {
+      return {
+        valid: false,
+        error:
+          `Invalid ${FIELDS[i].name} field "${fields[i]}". ` +
+          `Allowed range: [${FIELDS[i].min}–${FIELDS[i].max}].`,
+      };
+    }
   }
+
+  return { valid: true };
 }

@@ -1,228 +1,328 @@
-/**
- * Cron / interval utilities for agent schedule triggers.
- */
-
-import type { CronTrigger, IntervalTrigger, ScheduleTrigger } from "./types";
-
-const CRON_FIELD_COUNT = 5;
+import { ScheduleTrigger } from "./types";
 
 /**
- * Very lightweight cron-expression validator.
- * Accepts the standard 5-field "minute hour dom month dow" format.
+ * Cron/interval utility helpers for the agent-schedules module.
+ *
+ * Supported cron syntax: standard 5-field POSIX cron (minute hour dom month dow).
+ * Extended 6-field (with seconds) is NOT supported here.
  */
-export function isValidCronExpression(expression: string): boolean {
-  const fields = expression.trim().split(/\s+/);
-  if (fields.length !== CRON_FIELD_COUNT) return false;
 
-  const ranges: [number, number][] = [
-    [0, 59], // minute
-    [0, 23], // hour
-    [1, 31], // dom
-    [1, 12], // month
-    [0, 7],  // dow (0 and 7 are both Sunday)
-  ];
+// ---------------------------------------------------------------------------
+// Interval helpers
+// ---------------------------------------------------------------------------
 
-  return fields.every((field, i) => isValidCronField(field, ranges[i]));
-}
+/** Milliseconds in a minute */
+const MS_MINUTE = 60_000;
+/** Milliseconds in an hour */
+const MS_HOUR = 3_600_000;
+/** Milliseconds in a day */
+const MS_DAY = 86_400_000;
 
-function isValidCronField(field: string, [min, max]: [number, number]): boolean {
-  if (field === "*") return true;
-
-  // Step values: */5 or 1-5/2
-  if (field.includes("/")) {
-    const [range, step] = field.split("/");
-    const stepNum = parseInt(step, 10);
-    if (isNaN(stepNum) || stepNum < 1) return false;
-    return range === "*" || isValidCronRange(range, min, max);
-  }
-
-  // Lists: 1,2,3
-  if (field.includes(",")) {
-    return field.split(",").every((part) => isValidCronValue(part, min, max));
-  }
-
-  // Ranges: 1-5
-  if (field.includes("-")) {
-    return isValidCronRange(field, min, max);
-  }
-
-  return isValidCronValue(field, min, max);
-}
-
-function isValidCronRange(range: string, min: number, max: number): boolean {
-  const [start, end] = range.split("-").map(Number);
-  return (
-    !isNaN(start) &&
-    !isNaN(end) &&
-    start >= min &&
-    end <= max &&
-    start <= end
-  );
-}
-
-function isValidCronValue(value: string, min: number, max: number): boolean {
-  const num = parseInt(value, 10);
-  return !isNaN(num) && num >= min && num <= max;
-}
-
-/**
- * Convert an IntervalTrigger to milliseconds.
- */
-export function intervalToMs(trigger: IntervalTrigger): number {
-  const { value, unit } = trigger;
+export function intervalToMs(value: number, unit: "minutes" | "hours" | "days"): number {
   switch (unit) {
     case "minutes":
-      return value * 60_000;
+      return value * MS_MINUTE;
     case "hours":
-      return value * 3_600_000;
+      return value * MS_HOUR;
     case "days":
-      return value * 86_400_000;
+      return value * MS_DAY;
+    default:
+      throw new Error(`Unknown interval unit: ${unit}`);
   }
 }
 
+// ---------------------------------------------------------------------------
+// Cron field definitions
+// ---------------------------------------------------------------------------
+
+interface CronFieldDef {
+  min: number;
+  max: number;
+}
+
+const CRON_FIELDS: CronFieldDef[] = [
+  { min: 0, max: 59 }, // minute
+  { min: 0, max: 23 }, // hour
+  { min: 1, max: 31 }, // day-of-month
+  { min: 1, max: 12 }, // month
+  { min: 0, max: 6 },  // day-of-week (0=Sunday, 6=Saturday)
+];
+
+// ---------------------------------------------------------------------------
+// Cron field parser
+// ---------------------------------------------------------------------------
+
 /**
- * Calculate the next execution date for a schedule trigger relative to `from`.
+ * Expand a single cron field token (e.g. "*/5", "1-5", "1,2,3", "*") into the
+ * set of matching integer values within [fieldMin, fieldMax].
  *
- * For interval triggers this is simply `from + intervalMs`.
- * For cron triggers we use a simplified next-tick algorithm.
+ * Returns `null` when the field contains an out-of-range or non-numeric value.
  */
-export function getNextRunDate(trigger: ScheduleTrigger, from: Date = new Date()): Date {
-  if (trigger.type === "interval") {
-    return new Date(from.getTime() + intervalToMs(trigger));
-  }
-  return getNextCronDate(trigger, from);
-}
+function parseField(
+  token: string,
+  fieldMin: number,
+  fieldMax: number
+): Set<number> | null {
+  const values = new Set<number>();
 
-/**
- * Human-readable description of a schedule trigger.
- */
-export function describeTrigger(trigger: ScheduleTrigger): string {
-  if (trigger.type === "interval") {
-    return `Every ${trigger.value} ${trigger.unit}`;
+  for (const part of token.split(",")) {
+    if (part === "*") {
+      for (let v = fieldMin; v <= fieldMax; v++) values.add(v);
+      continue;
+    }
+
+    // Step syntax: */step or start-end/step
+    const stepMatch = part.match(/^(\*|\d+(?:-\d+)?)\/(\d+)$/);
+    if (stepMatch) {
+      const stepVal = parseInt(stepMatch[2], 10);
+      if (isNaN(stepVal) || stepVal <= 0) return null;
+
+      let rangeMin = fieldMin;
+      let rangeMax = fieldMax;
+
+      if (stepMatch[1] !== "*") {
+        const rangeParts = stepMatch[1].split("-");
+        if (rangeParts.length === 2) {
+          rangeMin = parseInt(rangeParts[0], 10);
+          rangeMax = parseInt(rangeParts[1], 10);
+        } else {
+          rangeMin = parseInt(stepMatch[1], 10);
+          rangeMax = fieldMax;
+        }
+        if (
+          isNaN(rangeMin) ||
+          isNaN(rangeMax) ||
+          rangeMin < fieldMin ||
+          rangeMax > fieldMax ||
+          rangeMin > rangeMax
+        ) {
+          return null;
+        }
+      }
+
+      for (let v = rangeMin; v <= rangeMax; v += stepVal) values.add(v);
+      continue;
+    }
+
+    // Range syntax: start-end
+    const rangeMatch = part.match(/^(\d+)-(\d+)$/);
+    if (rangeMatch) {
+      const lo = parseInt(rangeMatch[1], 10);
+      const hi = parseInt(rangeMatch[2], 10);
+      if (
+        isNaN(lo) ||
+        isNaN(hi) ||
+        lo < fieldMin ||
+        hi > fieldMax ||
+        lo > hi
+      ) {
+        return null;
+      }
+      for (let v = lo; v <= hi; v++) values.add(v);
+      continue;
+    }
+
+    // Single numeric value
+    const num = parseInt(part, 10);
+    if (isNaN(num) || num < fieldMin || num > fieldMax) return null;
+    values.add(num);
   }
-  return `Cron: ${trigger.expression}${trigger.timezone ? ` (${trigger.timezone})` : ""}`;
+
+  if (values.size === 0) return null;
+  return values;
 }
 
 // ---------------------------------------------------------------------------
-// Minimal cron "next run" calculator
+// Cron expression parser
+// ---------------------------------------------------------------------------
+
+interface ParsedCron {
+  minutes: Set<number>;
+  hours: Set<number>;
+  daysOfMonth: Set<number>;
+  months: Set<number>;
+  daysOfWeek: Set<number>;
+}
+
+/**
+ * Parse a 5-field cron expression into its constituent value sets.
+ *
+ * Returns `null` for any malformed or out-of-range expression.
+ */
+function parseCronExpression(expr: string): ParsedCron | null {
+  const fields = expr.trim().split(/\s+/);
+  if (fields.length !== 5) return null;
+
+  const results: Set<number>[] = [];
+  for (let i = 0; i < 5; i++) {
+    const parsed = parseField(fields[i], CRON_FIELDS[i].min, CRON_FIELDS[i].max);
+    if (parsed === null) return null;
+    results.push(parsed);
+  }
+
+  return {
+    minutes: results[0],
+    hours: results[1],
+    daysOfMonth: results[2],
+    months: results[3],
+    daysOfWeek: results[4],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Next-run computation
 // ---------------------------------------------------------------------------
 
 /**
- * Find the next date that satisfies a 5-field cron expression.
- * This handles the vast majority of real-world cron schedules.
+ * Compute the next Date at which a cron expression fires after `after`.
+ *
+ * Returns `null` when:
+ *  - the expression is invalid/unparseable, OR
+ *  - no matching time is found within 4 years (e.g. "30 Feb *")
+ *
+ * Callers should treat a `null` return as an invalid/unsatisfiable trigger and
+ * must not persist it with a misleading `nextRunAt`.
  */
-function getNextCronDate(trigger: CronTrigger, from: Date): Date {
-  const tz = trigger.timezone ?? "UTC";
-  const expr = trigger.expression.trim().split(/\s+/);
-  const [minField, hourField, domField, monField, dowField] = expr;
+export function getNextCronDate(expr: string, after: Date = new Date()): Date | null {
+  const parsed = parseCronExpression(expr);
+  if (!parsed) return null;
 
-  // Start one minute after `from`
-  const candidate = new Date(from.getTime() + 60_000);
-  candidate.setSeconds(0, 0);
+  const { minutes, hours, daysOfMonth, months, daysOfWeek } = parsed;
 
-  // Search up to 4 years out to avoid infinite loops on bad expressions
-  const limit = new Date(from.getTime() + 4 * 365 * 24 * 3_600_000);
+  // Advance by one minute to avoid re-firing at the same minute.
+  const cursor = new Date(after);
+  cursor.setSeconds(0, 0);
+  cursor.setMinutes(cursor.getMinutes() + 1);
 
-  while (candidate < limit) {
-    const parts = getDateParts(candidate, tz);
+  const limitDate = new Date(after);
+  limitDate.setFullYear(limitDate.getFullYear() + 4);
 
-    if (!matchesCronField(monField, parts.month, 1, 12)) {
-      // Advance to the 1st of the next month
-      candidate.setMonth(candidate.getMonth() + 1, 1);
-      candidate.setHours(0, 0, 0, 0);
+  while (cursor < limitDate) {
+    // Check month (cron months are 1-based; JS Date months are 0-based)
+    if (!months.has(cursor.getMonth() + 1)) {
+      // Advance to the 1st of the next matching month
+      cursor.setDate(1);
+      cursor.setHours(0, 0, 0, 0);
+      cursor.setMonth(cursor.getMonth() + 1);
       continue;
     }
 
-    if (
-      !matchesCronField(domField, parts.dom, 1, 31) ||
-      !matchesCronField(dowField, parts.dow, 0, 7)
-    ) {
-      candidate.setDate(candidate.getDate() + 1);
-      candidate.setHours(0, 0, 0, 0);
+    // Check day-of-month and day-of-week
+    const domMatch = daysOfMonth.has(cursor.getDate());
+    const dowMatch = daysOfWeek.has(cursor.getDay());
+    if (!domMatch || !dowMatch) {
+      cursor.setDate(cursor.getDate() + 1);
+      cursor.setHours(0, 0, 0, 0);
       continue;
     }
 
-    if (!matchesCronField(hourField, parts.hour, 0, 23)) {
-      candidate.setHours(candidate.getHours() + 1, 0, 0, 0);
+    // Check hour
+    if (!hours.has(cursor.getHours())) {
+      cursor.setHours(cursor.getHours() + 1, 0, 0, 0);
       continue;
     }
 
-    if (!matchesCronField(minField, parts.minute, 0, 59)) {
-      candidate.setMinutes(candidate.getMinutes() + 1, 0, 0);
+    // Check minute
+    if (!minutes.has(cursor.getMinutes())) {
+      cursor.setMinutes(cursor.getMinutes() + 1, 0, 0);
       continue;
     }
 
-    return candidate;
+    // All fields match — this is the next run time.
+    return new Date(cursor);
   }
 
-  return limit;
+  // No matching time found within the look-ahead window — treat as invalid.
+  return null;
 }
 
-interface DateParts {
-  minute: number;
-  hour: number;
-  dom: number;
-  month: number;
-  dow: number;
+// ---------------------------------------------------------------------------
+// Next-run for a generic ScheduleTrigger
+// ---------------------------------------------------------------------------
+
+/**
+ * Compute the next run date for a schedule trigger.
+ *
+ * Returns `null` when the trigger type is unknown, the cron expression is
+ * invalid, or no valid run time exists within the look-ahead window.
+ */
+export function getNextRunDate(trigger: ScheduleTrigger, after?: Date): Date | null {
+  switch (trigger.type) {
+    case "cron": {
+      const next = getNextCronDate(trigger.cronExpression, after);
+      // Explicitly return null rather than a limit date for invalid expressions.
+      return next;
+    }
+    case "interval": {
+      const base = after ?? new Date();
+      const ms = intervalToMs(trigger.intervalValue, trigger.intervalUnit);
+      return new Date(base.getTime() + ms);
+    }
+    default:
+      return null;
+  }
 }
 
-function getDateParts(date: Date, tz: string): DateParts {
-  try {
-    const fmt = new Intl.DateTimeFormat("en-US", {
-      timeZone: tz,
-      minute: "numeric",
-      hour: "numeric",
-      day: "numeric",
-      month: "numeric",
-      weekday: "short",
-      hour12: false,
-    });
-    const parts = Object.fromEntries(
-      fmt.formatToParts(date).map((p) => [p.type, p.value])
-    );
-    const dowMap: Record<string, number> = {
-      Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
-    };
+// ---------------------------------------------------------------------------
+// Validation
+// ---------------------------------------------------------------------------
+
+/** Human-readable description of cron field positions. */
+const FIELD_NAMES = ["minute", "hour", "day-of-month", "month", "day-of-week"];
+
+/**
+ * Validate a cron expression string.
+ *
+ * Returns `{ valid: true }` on success or `{ valid: false, error: string }` on
+ * failure with a descriptive message.
+ */
+export function validateCronExpression(
+  expr: string
+): { valid: true } | { valid: false; error: string } {
+  const fields = expr.trim().split(/\s+/);
+  if (fields.length !== 5) {
     return {
-      minute: parseInt(parts["minute"], 10),
-      hour: parseInt(parts["hour"], 10) % 24,
-      dom: parseInt(parts["day"], 10),
-      month: parseInt(parts["month"], 10),
-      dow: dowMap[parts["weekday"]] ?? 0,
-    };
-  } catch {
-    // Fallback: use UTC
-    return {
-      minute: date.getUTCMinutes(),
-      hour: date.getUTCHours(),
-      dom: date.getUTCDate(),
-      month: date.getUTCMonth() + 1,
-      dow: date.getUTCDay(),
+      valid: false,
+      error: `Expected 5 cron fields (minute hour dom month dow), got ${fields.length}.`,
     };
   }
+
+  for (let i = 0; i < 5; i++) {
+    const result = parseField(fields[i], CRON_FIELDS[i].min, CRON_FIELDS[i].max);
+    if (result === null) {
+      return {
+        valid: false,
+        error: `Invalid ${FIELD_NAMES[i]} field "${fields[i]}". ` +
+          `Expected values in [${CRON_FIELDS[i].min}–${CRON_FIELDS[i].max}].`,
+      };
+    }
+  }
+
+  return { valid: true };
 }
 
-function matchesCronField(field: string, value: number, min: number, max: number): boolean {
-  if (field === "*") return true;
-
-  if (field.includes("/")) {
-    const [range, stepStr] = field.split("/");
-    const step = parseInt(stepStr, 10);
-    const base = range === "*" ? min : parseInt(range.split("-")[0], 10);
-    return (value - base) % step === 0 && value >= base && value <= max;
+/**
+ * Validate an interval trigger's numeric value.
+ */
+export function validateIntervalValue(
+  value: number,
+  unit: "minutes" | "hours" | "days"
+): { valid: true } | { valid: false; error: string } {
+  if (!Number.isInteger(value) || value <= 0) {
+    return {
+      valid: false,
+      error: `Interval value must be a positive integer, got ${value}.`,
+    };
   }
 
-  if (field.includes(",")) {
-    return field.split(",").some((part) => matchesCronField(part, value, min, max));
+  const minimums: Record<string, number> = { minutes: 1, hours: 1, days: 1 };
+  const min = minimums[unit] ?? 1;
+  if (value < min) {
+    return {
+      valid: false,
+      error: `Interval value for unit "${unit}" must be at least ${min}.`,
+    };
   }
 
-  if (field.includes("-")) {
-    const [start, end] = field.split("-").map(Number);
-    return value >= start && value <= end;
-  }
-
-  const num = parseInt(field, 10);
-  // Normalise: day-of-week 7 == 0 (Sunday)
-  if (num === 7 && min === 0 && max === 7) return value === 0;
-  return num === value;
+  return { valid: true };
 }

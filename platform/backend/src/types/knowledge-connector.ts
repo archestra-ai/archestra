@@ -7,6 +7,7 @@ const CONFLUENCE = z.literal("confluence");
 const GITHUB = z.literal("github");
 const GITLAB = z.literal("gitlab");
 const SERVICENOW = z.literal("servicenow");
+const NOTION = z.literal("notion");
 
 export const ConnectorTypeSchema = z.union([
   JIRA,
@@ -14,6 +15,7 @@ export const ConnectorTypeSchema = z.union([
   GITHUB,
   GITLAB,
   SERVICENOW,
+  NOTION,
 ]);
 export type ConnectorType = z.infer<typeof ConnectorTypeSchema>;
 
@@ -153,6 +155,26 @@ export const ServiceNowCheckpointSchema = z.object({
 });
 export type ServiceNowCheckpoint = z.infer<typeof ServiceNowCheckpointSchema>;
 
+// ===== Notion Config & Checkpoint =====
+
+export const NotionConfigSchema = z.object({
+  type: NOTION,
+  /** Specific Notion database IDs to sync. If omitted, syncs all accessible pages. */
+  databaseIds: z.array(z.string()).optional(),
+  /** Explicit page IDs to sync. Takes priority over databaseIds. */
+  pageIds: z.array(z.string()).optional(),
+  /** Pages per sync batch (default: 50). */
+  batchSize: z.number().optional(),
+});
+export type NotionConfig = z.infer<typeof NotionConfigSchema>;
+
+export const NotionCheckpointSchema = z.object({
+  type: NOTION,
+  /** ISO timestamp of the most recently synced page's last_edited_time. */
+  lastSyncedAt: z.string().optional(),
+});
+export type NotionCheckpoint = z.infer<typeof NotionCheckpointSchema>;
+
 // ===== Discriminated Unions =====
 
 export const ConnectorConfigSchema = z.discriminatedUnion("type", [
@@ -161,6 +183,7 @@ export const ConnectorConfigSchema = z.discriminatedUnion("type", [
   GithubConfigSchema,
   GitlabConfigSchema,
   ServiceNowConfigSchema,
+  NotionConfigSchema,
 ]);
 export type ConnectorConfig = z.infer<typeof ConnectorConfigSchema>;
 
@@ -170,6 +193,7 @@ export const ConnectorCheckpointSchema = z.discriminatedUnion("type", [
   GithubCheckpointSchema,
   GitlabCheckpointSchema,
   ServiceNowCheckpointSchema,
+  NotionCheckpointSchema,
 ]);
 export type ConnectorCheckpoint = z.infer<typeof ConnectorCheckpointSchema>;
 

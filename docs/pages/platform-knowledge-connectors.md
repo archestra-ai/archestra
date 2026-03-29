@@ -96,6 +96,26 @@ Ingests records from ServiceNow instances via the Table API. HTML descriptions a
 
 Authentication supports both basic auth (username + password) and OAuth bearer tokens. When using basic auth, provide the username in the Email field and the password in the API Token field. For OAuth, leave the Email field empty and provide the bearer token. Incidents are synced by default; enable additional entity types in the advanced configuration. States and assignment group filters apply to all entity types except business applications. Incremental sync uses the `sys_created_on` field to fetch only records created since the last run.
 
+## Notion
+
+Ingests pages and databases from a Notion workspace using the [Notion REST API](https://developers.notion.com/reference/intro) (no third-party SDK).
+
+| Field        | Description                                                                                                      |
+| ------------ | ---------------------------------------------------------------------------------------------------------------- |
+| Integration Token | A Notion [internal integration token](https://www.notion.so/my-integrations) (`secret_...`)                |
+| Database IDs | Comma-separated Notion database IDs to sync (optional -- leave blank to sync all accessible pages)               |
+| Page IDs     | Comma-separated Notion page IDs to sync explicitly (optional -- takes priority over Database IDs)                |
+
+Authentication uses a Notion [internal integration token](https://www.notion.so/my-integrations). The integration must be shared with any pages or databases you want to sync.
+
+**Sync modes (applied in order of priority):**
+
+1. **Targeted** (`pageIds` provided) — fetches only the listed pages directly via `/pages/{id}`.
+2. **Database-filtered** (`databaseIds` provided) — queries each listed database via `/databases/{id}/query`.
+3. **Full-workspace** (no filter) — discovers all accessible pages via `/search`.
+
+Block content is fetched recursively up to 3 levels deep and converted to Markdown (headings, lists, code blocks, quotes, etc.). Incremental sync uses the `last_edited_time` field to skip pages unchanged since the last run.
+
 ## Managing Connectors
 
 Connectors can be managed from either the **Connectors** page or a knowledge base's detail page. After creation you can:

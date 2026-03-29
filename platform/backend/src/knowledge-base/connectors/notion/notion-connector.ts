@@ -1,393 +1,371 @@
-import type {
-  KnowledgeConnectorSyncResult,
+import { Client } from "@notionhq/client";
+import {
+  BlockObjectResponse,
+  GetPageResponse,
+  ListBlockChildrenResponse,
+  PageObjectResponse,
+  QueryDatabaseResponse,
+  SearchResponse,
+} from "@notionhq/client/build/src/api-endpoints";
+import {
+  ConnectorSyncResult,
   KnowledgeDocument,
-} from "../../../types/knowledge-connector";
-import type { NotionConfig, NotionCheckpoint } from "../../../types/knowledge-connector";
+  NotionConnectorConfig,
+} from "../../types/knowledge-connector";
 
-const NOTION_API_BASE = "https://api.notion.com/v1";
-const NOTION_VERSION = "2022-06-28";
-const MAX_BLOCK_DEPTH = 3;
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
-interface NotionPage {
-  id: string;
-  object: "page" | "database";
-  url: string;
-  last_edited_time: string;
-  created_time: string;
-  properties: Record<string, NotionProperty>;
-  parent: NotionParent;
+function getPlainText(
+  richText: Array<{ plain_text: string }> | undefined
+): string {
+  if (!richText) return "";
+  return richText.map((t) => t.plain_text).join("");
 }
 
-interface NotionParent {
-  type: "database_id" | "page_id" | "workspace" | "block_id";
-  database_id?: string;
-  page_id?: string;
-}
-
-interface NotionProperty {
-  id: string;
-  type: string;
-  title?: Array<{ plain_text: string }>;
-  rich_text?: Array<{ plain_text: string }>;
-  number?: number | null;
-  select?: { name: string } | null;
-  multi_select?: Array<{ name: string }>;
-  date?: { start: string; end: string | null } | null;
-  checkbox?: boolean;
-  url?: string | null;
-  email?: string | null;
-  phone_number?: string | null;
-  formula?: { string?: string; number?: number; boolean?: boolean };
-}
-
-interface NotionBlock {
-  id: string;
-  type: string;
-  has_children: boolean;
-  paragraph?: { rich_text: NotionRichText[] };
-  heading_1?: { rich_text: NotionRichText[] };
-  heading_2?: { rich_text: NotionRichText[] };
-  heading_3?: { rich_text: NotionRichText[] };
-  bulleted_list_item?: { rich_text: NotionRichText[] };
-  numbered_list_item?: { rich_text: NotionRichText[] };
-  to_do?: { rich_text: NotionRichText[]; checked: boolean };
-  toggle?: { rich_text: NotionRichText[] };
-  quote?: { rich_text: NotionRichText[] };
-  callout?: { rich_text: NotionRichText[]; icon?: { emoji?: string } };
-  code?: { rich_text: NotionRichText[]; language: string };
-  divider?: Record<string, never>;
-  table_of_contents?: Record<string, never>;
-  child_page?: { title: string };
-  child_database?: { title: string };
-  image?: { type: "external" | "file"; external?: { url: string }; file?: { url: string } };
-  bookmark?: { url: string; caption: NotionRichText[] };
-  [key: string]: unknown;
-}
-
-interface NotionRichText {
-  plain_text: string;
-  annotations?: {
-    bold?: boolean;
-    italic?: boolean;
-    strikethrough?: boolean;
-    underline?: boolean;
-    code?: boolean;
-  };
-  href?: string | null;
-}
-
-interface NotionSearchResponse {
-  results: NotionPage[];
-  has_more: boolean;
-  next_cursor: string | null;
-}
-
-interface NotionBlockChildrenResponse {
-  results: NotionBlock[];
-  has_more: boolean;
-  next_cursor: string | null;
-}
-
-function richTextToMarkdown(richTexts: NotionRichText[]): string {
-  return richTexts
-    .map((rt) => {
-      let text = rt.plain_text;
-      if (!text) return "";
-      const ann = rt.annotations ?? {};
-      if (ann.code) text = `\`${text}\``;
-      if (ann.bold) text = `**${text}**`;
-      if (ann.italic) text = `_${text}_`;
-      if (ann.strikethrough) text = `~~${text}~~`;
-      if (rt.href) text = `[${text}](${rt.href})`;
-      return text;
-    })
-    .join("");
-}
-
-function blockToMarkdown(block: NotionBlock, depth: number): string {
-  const indent = "  ".repeat(Math.max(0, depth - 1));
-  switch (block.type) {
-    case "paragraph":
-      return block.paragraph ? richTextToMarkdown(block.paragraph.rich_text) + "\n" : "";
-    case "heading_1":
-      return block.heading_1 ? `# ${richTextToMarkdown(block.heading_1.rich_text)}\n` : "";
-    case "heading_2":
-      return block.heading_2 ? `## ${richTextToMarkdown(block.heading_2.rich_text)}\n` : "";
-    case "heading_3":
-      return block.heading_3 ? `### ${richTextToMarkdown(block.heading_3.rich_text)}\n` : "";
-    case "bulleted_list_item":
-      return block.bulleted_list_item
-        ? `${indent}- ${richTextToMarkdown(block.bulleted_list_item.rich_text)}\n`
-        : "";
-    case "numbered_list_item":
-      return block.numbered_list_item
-        ? `${indent}1. ${richTextToMarkdown(block.numbered_list_item.rich_text)}\n`
-        : "";
-    case "to_do":
-      if (!block.to_do) return "";
-      return `${indent}- [${block.to_do.checked ? "x" : " "}] ${richTextToMarkdown(block.to_do.rich_text)}\n`;
-    case "toggle":
-      return block.toggle ? richTextToMarkdown(block.toggle.rich_text) + "\n" : "";
-    case "quote":
-      return block.quote
-        ? `> ${richTextToMarkdown(block.quote.rich_text)}\n`
-        : "";
-    case "callout": {
-      if (!block.callout) return "";
-      const emoji = block.callout.icon?.emoji ?? "💡";
-      return `> ${emoji} ${richTextToMarkdown(block.callout.rich_text)}\n`;
-    }
-    case "code": {
-      if (!block.code) return "";
-      const lang = block.code.language ?? "";
-      const codeText = block.code.rich_text.map((rt) => rt.plain_text).join("");
-      return `\`\`\`${lang}\n${codeText}\n\`\`\`\n`;
-    }
-    case "divider":
-      return "---\n";
-    case "child_page":
-      return block.child_page ? `📄 **${block.child_page.title}**\n` : "";
-    case "child_database":
-      return block.child_database ? `🗄️ **${block.child_database.title}**\n` : "";
-    case "image": {
-      if (!block.image) return "";
-      const url =
-        block.image.type === "external"
-          ? block.image.external?.url
-          : block.image.file?.url;
-      return url ? `![image](${url})\n` : "";
-    }
-    case "bookmark":
-      return block.bookmark ? `[${block.bookmark.url}](${block.bookmark.url})\n` : "";
-    default:
-      return "";
-  }
-}
-
-function extractPageTitle(page: NotionPage): string {
-  // Try to find a title property
-  for (const prop of Object.values(page.properties)) {
-    if (prop.type === "title" && prop.title && prop.title.length > 0) {
-      return prop.title.map((t) => t.plain_text).join("");
+function getPageTitle(page: PageObjectResponse): string {
+  const props = page.properties;
+  for (const key of Object.keys(props)) {
+    const prop = props[key];
+    if (prop.type === "title") {
+      return getPlainText(prop.title);
     }
   }
   return page.id;
 }
 
-export class NotionConnector {
-  private readonly config: NotionConfig;
-  private readonly integrationToken: string;
+// ---------------------------------------------------------------------------
+// Block → Markdown conversion
+// ---------------------------------------------------------------------------
 
-  constructor(config: NotionConfig, integrationToken: string) {
-    this.config = config;
-    this.integrationToken = integrationToken;
+function blockToMarkdown(block: BlockObjectResponse, depth = 0): string {
+  const indent = "  ".repeat(depth);
+  const type = block.type as string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data = (block as any)[type];
+
+  switch (type) {
+    case "paragraph":
+      return `${indent}${getPlainText(data?.rich_text)}\n\n`;
+
+    case "heading_1":
+      return `# ${getPlainText(data?.rich_text)}\n\n`;
+
+    case "heading_2":
+      return `## ${getPlainText(data?.rich_text)}\n\n`;
+
+    case "heading_3":
+      return `### ${getPlainText(data?.rich_text)}\n\n`;
+
+    case "bulleted_list_item":
+      return `${indent}- ${getPlainText(data?.rich_text)}\n`;
+
+    case "numbered_list_item":
+      return `${indent}1. ${getPlainText(data?.rich_text)}\n`;
+
+    case "to_do": {
+      const checked = data?.checked ? "[x]" : "[ ]";
+      return `${indent}- ${checked} ${getPlainText(data?.rich_text)}\n`;
+    }
+
+    case "toggle":
+      return `${indent}> ${getPlainText(data?.rich_text)}\n`;
+
+    case "quote":
+      return `${indent}> ${getPlainText(data?.rich_text)}\n\n`;
+
+    case "callout":
+      return `${indent}> **${getPlainText(data?.rich_text)}**\n\n`;
+
+    case "code": {
+      const lang = data?.language ?? "";
+      const code = getPlainText(data?.rich_text);
+      return `\`\`\`${lang}\n${code}\n\`\`\`\n\n`;
+    }
+
+    case "divider":
+      return `---\n\n`;
+
+    case "image": {
+      const url =
+        data?.type === "external" ? data.external?.url : data?.file?.url;
+      const caption = getPlainText(data?.caption);
+      return `![${caption}](${url ?? ""})\n\n`;
+    }
+
+    case "equation":
+      return `$$${data?.expression ?? ""}$$\n\n`;
+
+    default:
+      return "";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Notion API wrapper
+// ---------------------------------------------------------------------------
+
+class NotionClient {
+  private client: Client;
+
+  constructor(apiKey: string) {
+    this.client = new Client({ auth: apiKey });
   }
 
-  private async fetch<T>(
-    path: string,
-    options: RequestInit = {}
-  ): Promise<T> {
-    const url = `${NOTION_API_BASE}${path}`;
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        Authorization: `Bearer ${this.integrationToken}`,
-        "Notion-Version": NOTION_VERSION,
-        "Content-Type": "application/json",
-        ...(options.headers ?? {}),
-      },
-    });
+  async searchPages(query = ""): Promise<PageObjectResponse[]> {
+    const results: PageObjectResponse[] = [];
+    let cursor: string | undefined;
 
-    if (!response.ok) {
-      const body = await response.text();
-      throw new Error(
-        `Notion API error ${response.status} ${response.statusText}: ${body}`
-      );
-    }
-
-    return response.json() as Promise<T>;
-  }
-
-  async validateConfig(): Promise<void> {
-    if (!this.integrationToken || !this.integrationToken.startsWith("secret_")) {
-      throw new Error(
-        "Invalid Notion Integration Token. It must start with 'secret_'."
-      );
-    }
-  }
-
-  async testConnection(): Promise<{ success: boolean; message: string }> {
-    try {
-      await this.validateConfig();
-      // Test by hitting /users/me
-      await this.fetch("/users/me");
-      return { success: true, message: "Successfully connected to Notion." };
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      return { success: false, message: msg };
-    }
-  }
-
-  private async fetchAllPages(lastSyncedAt?: string): Promise<NotionPage[]> {
-    const { pageIds, databaseIds } = this.config;
-
-    // If specific pageIds are provided, fetch those directly
-    if (pageIds && pageIds.length > 0) {
-      const pages: NotionPage[] = [];
-      for (const pageId of pageIds) {
-        try {
-          const page = await this.fetch<NotionPage>(`/pages/${pageId}`);
-          pages.push(page);
-        } catch {
-          // Skip pages we can't access
-        }
-      }
-      return pages;
-    }
-
-    // If specific databaseIds are provided, query those databases
-    if (databaseIds && databaseIds.length > 0) {
-      const pages: NotionPage[] = [];
-      for (const dbId of databaseIds) {
-        let cursor: string | null = null;
-        do {
-          const body: Record<string, unknown> = {
-            page_size: 100,
-          };
-          if (cursor) body.start_cursor = cursor;
-          if (lastSyncedAt) {
-            body.filter = {
-              timestamp: "last_edited_time",
-              last_edited_time: { on_or_after: lastSyncedAt },
-            };
-          }
-          const resp = await this.fetch<NotionSearchResponse>(
-            `/databases/${dbId}/query`,
-            {
-              method: "POST",
-              body: JSON.stringify(body),
-            }
-          );
-          pages.push(...resp.results);
-          cursor = resp.has_more ? resp.next_cursor : null;
-        } while (cursor);
-      }
-      return pages;
-    }
-
-    // Full workspace sync via /search
-    const pages: NotionPage[] = [];
-    let cursor: string | null = null;
     do {
-      const body: Record<string, unknown> = {
+      const response: SearchResponse = await this.client.search({
+        query,
+        filter: { property: "object", value: "page" },
+        start_cursor: cursor,
         page_size: 100,
-        filter: { value: "page", property: "object" },
-      };
-      if (cursor) body.start_cursor = cursor;
-      if (lastSyncedAt) {
-        // Notion /search doesn't support date filters directly; we'll filter client-side
-      }
-      const resp = await this.fetch<NotionSearchResponse>("/search", {
-        method: "POST",
-        body: JSON.stringify(body),
       });
 
-      for (const page of resp.results) {
-        if (
-          lastSyncedAt &&
-          new Date(page.last_edited_time) <= new Date(lastSyncedAt)
-        ) {
-          continue;
+      for (const result of response.results) {
+        if (result.object === "page") {
+          results.push(result as PageObjectResponse);
         }
-        pages.push(page);
       }
 
-      cursor = resp.has_more ? resp.next_cursor : null;
+      cursor = response.next_cursor ?? undefined;
     } while (cursor);
 
-    return pages;
+    return results;
   }
 
-  private async fetchBlocksAsMarkdown(
-    blockId: string,
-    depth: number
-  ): Promise<string> {
-    if (depth > MAX_BLOCK_DEPTH) return "";
+  async getPage(pageId: string): Promise<GetPageResponse> {
+    return this.client.pages.retrieve({ page_id: pageId });
+  }
 
-    const blocks: NotionBlock[] = [];
-    let cursor: string | null = null;
+  async queryDatabase(databaseId: string): Promise<PageObjectResponse[]> {
+    const results: PageObjectResponse[] = [];
+    let cursor: string | undefined;
+
     do {
-      const path =
-        `/blocks/${blockId}/children?page_size=100` +
-        (cursor ? `&start_cursor=${cursor}` : "");
-      const resp = await this.fetch<NotionBlockChildrenResponse>(path);
-      blocks.push(...resp.results);
-      cursor = resp.has_more ? resp.next_cursor : null;
+      const response: QueryDatabaseResponse =
+        await this.client.databases.query({
+          database_id: databaseId,
+          start_cursor: cursor,
+          page_size: 100,
+        });
+
+      for (const result of response.results) {
+        if (result.object === "page") {
+          results.push(result as PageObjectResponse);
+        }
+      }
+
+      cursor = response.next_cursor ?? undefined;
     } while (cursor);
 
-    const parts: string[] = [];
-    for (const block of blocks) {
-      const line = blockToMarkdown(block, depth);
-      parts.push(line);
-      if (block.has_children && depth < MAX_BLOCK_DEPTH) {
-        const childContent = await this.fetchBlocksAsMarkdown(block.id, depth + 1);
-        if (childContent) parts.push(childContent);
-      }
-    }
-
-    return parts.join("");
+    return results;
   }
 
-  async sync(checkpoint?: NotionCheckpoint): Promise<KnowledgeConnectorSyncResult> {
-    const lastSyncedAt = checkpoint?.lastSyncedAt;
+  async getBlockChildren(blockId: string): Promise<BlockObjectResponse[]> {
+    const results: BlockObjectResponse[] = [];
+    let cursor: string | undefined;
+
+    do {
+      const response: ListBlockChildrenResponse =
+        await this.client.blocks.children.list({
+          block_id: blockId,
+          start_cursor: cursor,
+          page_size: 100,
+        });
+
+      for (const block of response.results) {
+        if ("type" in block) {
+          results.push(block as BlockObjectResponse);
+        }
+      }
+
+      cursor = response.next_cursor ?? undefined;
+    } while (cursor);
+
+    return results;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Recursive block fetcher
+// ---------------------------------------------------------------------------
+
+async function fetchBlocksRecursively(
+  client: NotionClient,
+  blockId: string,
+  depth = 0
+): Promise<{ block: BlockObjectResponse; depth: number }[]> {
+  const blocks = await client.getBlockChildren(blockId);
+  const result: { block: BlockObjectResponse; depth: number }[] = [];
+
+  for (const block of blocks) {
+    result.push({ block, depth });
+    if (block.has_children) {
+      const children = await fetchBlocksRecursively(client, block.id, depth + 1);
+      result.push(...children);
+    }
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Page → KnowledgeDocument
+// ---------------------------------------------------------------------------
+
+async function pageToDocument(
+  client: NotionClient,
+  page: PageObjectResponse
+): Promise<KnowledgeDocument> {
+  const blocks = await fetchBlocksRecursively(client, page.id);
+  const markdown = blocks
+    .map(({ block, depth }) => blockToMarkdown(block, depth))
+    .join("");
+
+  const title = getPageTitle(page);
+  const url = page.url;
+  const lastEditedTime = page.last_edited_time;
+
+  return {
+    id: page.id,
+    title,
+    content: markdown,
+    url,
+    metadata: {
+      source: "notion",
+      pageId: page.id,
+      lastEditedTime,
+    },
+    updatedAt: new Date(lastEditedTime),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// NotionConnector
+// ---------------------------------------------------------------------------
+
+export class NotionConnector {
+  private client: NotionClient;
+
+  constructor(private config: NotionConnectorConfig) {
+    this.client = new NotionClient(config.apiKey);
+  }
+
+  async sync(): Promise<ConnectorSyncResult> {
     const documents: KnowledgeDocument[] = [];
     const errors: string[] = [];
-    const syncedAt = new Date().toISOString();
 
-    let pages: NotionPage[];
     try {
-      pages = await this.fetchAllPages(lastSyncedAt);
+      if (
+        this.config.pageIds &&
+        this.config.pageIds.length > 0
+      ) {
+        // Sync specific pages by ID
+        await this.syncExplicitPages(documents, errors);
+      } else if (
+        this.config.databaseIds &&
+        this.config.databaseIds.length > 0
+      ) {
+        // Sync all pages in specific databases
+        await this.syncDatabases(documents, errors);
+      } else {
+        // Sync all accessible pages
+        await this.syncAllPages(documents, errors);
+      }
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      return {
-        documents: [],
-        errors: [`Failed to list pages: ${msg}`],
-        checkpoint: checkpoint ?? { lastSyncedAt: syncedAt },
-      };
+      const message =
+        error instanceof Error ? error.message : String(error);
+      errors.push(`Notion sync failed: ${message}`);
     }
 
-    for (const page of pages) {
-      try {
-        const title = extractPageTitle(page);
-        const content = await this.fetchBlocksAsMarkdown(page.id, 1);
+    return { documents, errors };
+  }
 
-        documents.push({
-          id: page.id,
-          title,
-          content: content.trim(),
-          url: page.url,
-          sourceType: "notion",
-          createdAt: page.created_time,
-          updatedAt: page.last_edited_time,
-          metadata: {
-            pageId: page.id,
-            parentType: page.parent.type,
-            ...(page.parent.database_id
-              ? { databaseId: page.parent.database_id }
-              : {}),
-            ...(page.parent.page_id ? { parentPageId: page.parent.page_id } : {}),
-          },
-        });
+  private async syncExplicitPages(
+    documents: KnowledgeDocument[],
+    errors: string[]
+  ): Promise<void> {
+    for (const pageId of this.config.pageIds ?? []) {
+      try {
+        const page = (await this.client.getPage(pageId)) as PageObjectResponse;
+        const doc = await pageToDocument(this.client, page);
+        documents.push(doc);
       } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        errors.push(`Failed to sync page ${page.id}: ${msg}`);
+        // Log pages we can't access so partial syncs are visible
+        const message =
+          error instanceof Error ? error.message : String(error);
+        console.warn(
+          `Failed to fetch Notion page with id ${pageId}:`,
+          message
+        );
+        errors.push(`Failed to fetch page ${pageId}: ${message}`);
       }
     }
+  }
 
-    return {
-      documents,
-      errors,
-      checkpoint: { lastSyncedAt: syncedAt },
-    };
+  private async syncDatabases(
+    documents: KnowledgeDocument[],
+    errors: string[]
+  ): Promise<void> {
+    for (const databaseId of this.config.databaseIds ?? []) {
+      try {
+        const pages = await this.client.queryDatabase(databaseId);
+        for (const page of pages) {
+          try {
+            const doc = await pageToDocument(this.client, page);
+            documents.push(doc);
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            console.warn(
+              `Failed to process Notion page ${page.id} from database ${databaseId}:`,
+              message
+            );
+            errors.push(
+              `Failed to process page ${page.id} in database ${databaseId}: ${message}`
+            );
+          }
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : String(error);
+        console.warn(
+          `Failed to query Notion database ${databaseId}:`,
+          message
+        );
+        errors.push(`Failed to query database ${databaseId}: ${message}`);
+      }
+    }
+  }
+
+  private async syncAllPages(
+    documents: KnowledgeDocument[],
+    errors: string[]
+  ): Promise<void> {
+    try {
+      const pages = await this.client.searchPages();
+      for (const page of pages) {
+        try {
+          const doc = await pageToDocument(this.client, page);
+          documents.push(doc);
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          console.warn(
+            `Failed to process Notion page ${page.id}:`,
+            message
+          );
+          errors.push(`Failed to process page ${page.id}: ${message}`);
+        }
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to search Notion pages: ${message}`);
+    }
   }
 }

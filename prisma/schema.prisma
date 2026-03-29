@@ -1,0 +1,35 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Agent {
+  id              String                 @id @default(uuid())
+  name            String
+  schedules       AgentScheduleTrigger[]
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  status          String                 @default("IDLE") // Statuses e.g., IDLE, EXECUTING
+}
+
+model AgentScheduleTrigger {
+  id              String   @id @default(uuid())
+  agentId         String   @map("agent_id")
+  agent           Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  cronExpression  String   @map("cron_expression")
+  timezone        String   @default("UTC")
+  isActive        Boolean  @default(true) @map("is_active")
+  lastRunAt       DateTime? @map("last_run_at")
+  nextRunAt       DateTime @map("next_run_at")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([isActive, nextRunAt])
+}

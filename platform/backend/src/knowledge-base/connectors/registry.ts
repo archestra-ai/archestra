@@ -1,22 +1,36 @@
-import type { Connector, ConnectorType } from "@/types";
-import { ConfluenceConnector } from "./confluence/confluence-connector";
-import { GithubConnector } from "./github/github-connector";
-import { GitlabConnector } from "./gitlab/gitlab-connector";
+import { KnowledgeConnectorConfig } from "../../types/knowledge-connector";
+import { KnowledgeConnectorBase } from "./base-connector";
 import { JiraConnector } from "./jira/jira-connector";
+import { ConfluenceConnector } from "./confluence/confluence-connector";
+import { GitHubConnector } from "./github/github-connector";
+import { GitLabConnector } from "./gitlab/gitlab-connector";
 import { ServiceNowConnector } from "./servicenow/servicenow-connector";
+import { NotionConnector } from "./notion/notion-connector";
 
-const connectorRegistry: Record<ConnectorType, () => Connector> = {
-  jira: () => new JiraConnector(),
-  confluence: () => new ConfluenceConnector(),
-  github: () => new GithubConnector(),
-  gitlab: () => new GitlabConnector(),
-  servicenow: () => new ServiceNowConnector(),
-};
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyConnector = KnowledgeConnectorBase<any, any>;
 
-export function getConnector(type: string): Connector {
-  const factory = connectorRegistry[type as ConnectorType];
-  if (!factory) {
-    throw new Error(`Unknown connector type: ${type}`);
+export function createConnector(
+  config: KnowledgeConnectorConfig
+): AnyConnector {
+  switch (config.type) {
+    case "jira":
+      return new JiraConnector(config);
+    case "confluence":
+      return new ConfluenceConnector(config);
+    case "github":
+      return new GitHubConnector(config);
+    case "gitlab":
+      return new GitLabConnector(config);
+    case "servicenow":
+      return new ServiceNowConnector(config);
+    case "notion":
+      return new NotionConnector(config);
+    default: {
+      const _exhaustive: never = config;
+      throw new Error(
+        `Unknown connector type: ${(_exhaustive as KnowledgeConnectorConfig).type}`
+      );
+    }
   }
-  return factory();
 }

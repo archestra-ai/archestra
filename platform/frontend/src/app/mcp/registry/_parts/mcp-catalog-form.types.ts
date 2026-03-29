@@ -20,6 +20,30 @@ export const oauthConfigSchema = z.object({
     .or(z.literal("")),
 });
 
+const enterpriseManagedConfigSchema = z.object({
+  resourceIdentifier: z.string().optional(),
+  requestedCredentialType: z
+    .enum([
+      "bearer_token",
+      "id_jag",
+      "secret",
+      "service_account",
+      "opaque_json",
+    ])
+    .optional(),
+  tokenInjectionMode: z
+    .enum([
+      "authorization_bearer",
+      "raw_authorization",
+      "header",
+      "env",
+      "body_field",
+    ])
+    .optional(),
+  headerName: z.string().optional(),
+  responseFieldPath: z.string().optional(),
+});
+
 export const formSchema = z
   .object({
     name: z.string().trim().min(1, "Name is required"),
@@ -31,8 +55,17 @@ export const formSchema = z
       .url({ error: "Must be a valid URL" })
       .optional()
       .or(z.literal("")),
-    authMethod: z.enum(["none", "bearer", "raw_token", "oauth"]),
+    authMethod: z.enum([
+      "none",
+      "bearer",
+      "raw_token",
+      "oauth",
+      "enterprise_managed",
+    ]),
     oauthConfig: oauthConfigSchema.optional(),
+    enterpriseManagedConfig: enterpriseManagedConfigSchema
+      .nullable()
+      .optional(),
     localConfig: LocalConfigFormSchema.optional(),
     // Kubernetes Deployment spec YAML (for local servers)
     deploymentSpecYaml: z.string().optional(),

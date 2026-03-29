@@ -86803,6 +86803,86 @@
                         ],
                         "additionalProperties": false
                       },
+                      "enterpriseManagedConfig": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "identityProviderId": {
+                            "type": "string"
+                          },
+                          "resourceType": {
+                            "type": "string",
+                            "enum": [
+                              "mcp",
+                              "oauth_protected_resource",
+                              "secret",
+                              "service_account",
+                              "custom_http"
+                            ]
+                          },
+                          "resourceIdentifier": {
+                            "type": "string"
+                          },
+                          "requestedCredentialType": {
+                            "type": "string",
+                            "enum": [
+                              "id_jag",
+                              "bearer_token",
+                              "secret",
+                              "service_account",
+                              "opaque_json"
+                            ]
+                          },
+                          "scopes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "audience": {
+                            "type": "string"
+                          },
+                          "clientIdOverride": {
+                            "type": "string"
+                          },
+                          "tokenInjectionMode": {
+                            "type": "string",
+                            "enum": [
+                              "authorization_bearer",
+                              "raw_authorization",
+                              "header",
+                              "env",
+                              "body_field"
+                            ]
+                          },
+                          "headerName": {
+                            "type": "string"
+                          },
+                          "envVarName": {
+                            "type": "string"
+                          },
+                          "bodyFieldName": {
+                            "type": "string"
+                          },
+                          "responseFieldPath": {
+                            "type": "string"
+                          },
+                          "fallbackMode": {
+                            "type": "string",
+                            "enum": [
+                              "fail_closed",
+                              "fallback_to_dynamic",
+                              "fallback_to_static"
+                            ]
+                          },
+                          "cacheTtlSeconds": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "additionalProperties": false
+                      },
                       "icon": {
                         "nullable": true,
                         "type": "string"
@@ -86898,6 +86978,7 @@
                       "deploymentSpecYaml",
                       "userConfig",
                       "oauthConfig",
+                      "enterpriseManagedConfig",
                       "icon",
                       "organizationId",
                       "authorId",
@@ -87564,6 +87645,85 @@
                       "supports_resource_metadata"
                     ]
                   },
+                  "enterpriseManagedConfig": {
+                    "nullable": true,
+                    "type": "object",
+                    "properties": {
+                      "identityProviderId": {
+                        "type": "string"
+                      },
+                      "resourceType": {
+                        "type": "string",
+                        "enum": [
+                          "mcp",
+                          "oauth_protected_resource",
+                          "secret",
+                          "service_account",
+                          "custom_http"
+                        ]
+                      },
+                      "resourceIdentifier": {
+                        "type": "string"
+                      },
+                      "requestedCredentialType": {
+                        "type": "string",
+                        "enum": [
+                          "id_jag",
+                          "bearer_token",
+                          "secret",
+                          "service_account",
+                          "opaque_json"
+                        ]
+                      },
+                      "scopes": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "audience": {
+                        "type": "string"
+                      },
+                      "clientIdOverride": {
+                        "type": "string"
+                      },
+                      "tokenInjectionMode": {
+                        "type": "string",
+                        "enum": [
+                          "authorization_bearer",
+                          "raw_authorization",
+                          "header",
+                          "env",
+                          "body_field"
+                        ]
+                      },
+                      "headerName": {
+                        "type": "string"
+                      },
+                      "envVarName": {
+                        "type": "string"
+                      },
+                      "bodyFieldName": {
+                        "type": "string"
+                      },
+                      "responseFieldPath": {
+                        "type": "string"
+                      },
+                      "fallbackMode": {
+                        "type": "string",
+                        "enum": [
+                          "fail_closed",
+                          "fallback_to_dynamic",
+                          "fallback_to_static"
+                        ]
+                      },
+                      "cacheTtlSeconds": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    }
+                  },
                   "icon": {
                     "nullable": true,
                     "type": "string"
@@ -88062,6 +88222,86 @@
                       ],
                       "additionalProperties": false
                     },
+                    "enterpriseManagedConfig": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "identityProviderId": {
+                          "type": "string"
+                        },
+                        "resourceType": {
+                          "type": "string",
+                          "enum": [
+                            "mcp",
+                            "oauth_protected_resource",
+                            "secret",
+                            "service_account",
+                            "custom_http"
+                          ]
+                        },
+                        "resourceIdentifier": {
+                          "type": "string"
+                        },
+                        "requestedCredentialType": {
+                          "type": "string",
+                          "enum": [
+                            "id_jag",
+                            "bearer_token",
+                            "secret",
+                            "service_account",
+                            "opaque_json"
+                          ]
+                        },
+                        "scopes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "audience": {
+                          "type": "string"
+                        },
+                        "clientIdOverride": {
+                          "type": "string"
+                        },
+                        "tokenInjectionMode": {
+                          "type": "string",
+                          "enum": [
+                            "authorization_bearer",
+                            "raw_authorization",
+                            "header",
+                            "env",
+                            "body_field"
+                          ]
+                        },
+                        "headerName": {
+                          "type": "string"
+                        },
+                        "envVarName": {
+                          "type": "string"
+                        },
+                        "bodyFieldName": {
+                          "type": "string"
+                        },
+                        "responseFieldPath": {
+                          "type": "string"
+                        },
+                        "fallbackMode": {
+                          "type": "string",
+                          "enum": [
+                            "fail_closed",
+                            "fallback_to_dynamic",
+                            "fallback_to_static"
+                          ]
+                        },
+                        "cacheTtlSeconds": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "additionalProperties": false
+                    },
                     "icon": {
                       "nullable": true,
                       "type": "string"
@@ -88157,6 +88397,7 @@
                     "deploymentSpecYaml",
                     "userConfig",
                     "oauthConfig",
+                    "enterpriseManagedConfig",
                     "icon",
                     "organizationId",
                     "authorId",
@@ -88848,6 +89089,86 @@
                       ],
                       "additionalProperties": false
                     },
+                    "enterpriseManagedConfig": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "identityProviderId": {
+                          "type": "string"
+                        },
+                        "resourceType": {
+                          "type": "string",
+                          "enum": [
+                            "mcp",
+                            "oauth_protected_resource",
+                            "secret",
+                            "service_account",
+                            "custom_http"
+                          ]
+                        },
+                        "resourceIdentifier": {
+                          "type": "string"
+                        },
+                        "requestedCredentialType": {
+                          "type": "string",
+                          "enum": [
+                            "id_jag",
+                            "bearer_token",
+                            "secret",
+                            "service_account",
+                            "opaque_json"
+                          ]
+                        },
+                        "scopes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "audience": {
+                          "type": "string"
+                        },
+                        "clientIdOverride": {
+                          "type": "string"
+                        },
+                        "tokenInjectionMode": {
+                          "type": "string",
+                          "enum": [
+                            "authorization_bearer",
+                            "raw_authorization",
+                            "header",
+                            "env",
+                            "body_field"
+                          ]
+                        },
+                        "headerName": {
+                          "type": "string"
+                        },
+                        "envVarName": {
+                          "type": "string"
+                        },
+                        "bodyFieldName": {
+                          "type": "string"
+                        },
+                        "responseFieldPath": {
+                          "type": "string"
+                        },
+                        "fallbackMode": {
+                          "type": "string",
+                          "enum": [
+                            "fail_closed",
+                            "fallback_to_dynamic",
+                            "fallback_to_static"
+                          ]
+                        },
+                        "cacheTtlSeconds": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "additionalProperties": false
+                    },
                     "icon": {
                       "nullable": true,
                       "type": "string"
@@ -88943,6 +89264,7 @@
                     "deploymentSpecYaml",
                     "userConfig",
                     "oauthConfig",
+                    "enterpriseManagedConfig",
                     "icon",
                     "organizationId",
                     "authorId",
@@ -89603,6 +89925,85 @@
                       "supports_resource_metadata"
                     ]
                   },
+                  "enterpriseManagedConfig": {
+                    "nullable": true,
+                    "type": "object",
+                    "properties": {
+                      "identityProviderId": {
+                        "type": "string"
+                      },
+                      "resourceType": {
+                        "type": "string",
+                        "enum": [
+                          "mcp",
+                          "oauth_protected_resource",
+                          "secret",
+                          "service_account",
+                          "custom_http"
+                        ]
+                      },
+                      "resourceIdentifier": {
+                        "type": "string"
+                      },
+                      "requestedCredentialType": {
+                        "type": "string",
+                        "enum": [
+                          "id_jag",
+                          "bearer_token",
+                          "secret",
+                          "service_account",
+                          "opaque_json"
+                        ]
+                      },
+                      "scopes": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "audience": {
+                        "type": "string"
+                      },
+                      "clientIdOverride": {
+                        "type": "string"
+                      },
+                      "tokenInjectionMode": {
+                        "type": "string",
+                        "enum": [
+                          "authorization_bearer",
+                          "raw_authorization",
+                          "header",
+                          "env",
+                          "body_field"
+                        ]
+                      },
+                      "headerName": {
+                        "type": "string"
+                      },
+                      "envVarName": {
+                        "type": "string"
+                      },
+                      "bodyFieldName": {
+                        "type": "string"
+                      },
+                      "responseFieldPath": {
+                        "type": "string"
+                      },
+                      "fallbackMode": {
+                        "type": "string",
+                        "enum": [
+                          "fail_closed",
+                          "fallback_to_dynamic",
+                          "fallback_to_static"
+                        ]
+                      },
+                      "cacheTtlSeconds": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    }
+                  },
                   "icon": {
                     "nullable": true,
                     "type": "string"
@@ -90109,6 +90510,86 @@
                       ],
                       "additionalProperties": false
                     },
+                    "enterpriseManagedConfig": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "identityProviderId": {
+                          "type": "string"
+                        },
+                        "resourceType": {
+                          "type": "string",
+                          "enum": [
+                            "mcp",
+                            "oauth_protected_resource",
+                            "secret",
+                            "service_account",
+                            "custom_http"
+                          ]
+                        },
+                        "resourceIdentifier": {
+                          "type": "string"
+                        },
+                        "requestedCredentialType": {
+                          "type": "string",
+                          "enum": [
+                            "id_jag",
+                            "bearer_token",
+                            "secret",
+                            "service_account",
+                            "opaque_json"
+                          ]
+                        },
+                        "scopes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "audience": {
+                          "type": "string"
+                        },
+                        "clientIdOverride": {
+                          "type": "string"
+                        },
+                        "tokenInjectionMode": {
+                          "type": "string",
+                          "enum": [
+                            "authorization_bearer",
+                            "raw_authorization",
+                            "header",
+                            "env",
+                            "body_field"
+                          ]
+                        },
+                        "headerName": {
+                          "type": "string"
+                        },
+                        "envVarName": {
+                          "type": "string"
+                        },
+                        "bodyFieldName": {
+                          "type": "string"
+                        },
+                        "responseFieldPath": {
+                          "type": "string"
+                        },
+                        "fallbackMode": {
+                          "type": "string",
+                          "enum": [
+                            "fail_closed",
+                            "fallback_to_dynamic",
+                            "fallback_to_static"
+                          ]
+                        },
+                        "cacheTtlSeconds": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "additionalProperties": false
+                    },
                     "icon": {
                       "nullable": true,
                       "type": "string"
@@ -90204,6 +90685,7 @@
                     "deploymentSpecYaml",
                     "userConfig",
                     "oauthConfig",
+                    "enterpriseManagedConfig",
                     "icon",
                     "organizationId",
                     "authorId",
@@ -112435,86 +112917,6 @@
                         "type": "string",
                         "format": "date-time"
                       },
-                      "enterpriseManagedConfig": {
-                        "nullable": true,
-                        "type": "object",
-                        "properties": {
-                          "identityProviderId": {
-                            "type": "string"
-                          },
-                          "resourceType": {
-                            "type": "string",
-                            "enum": [
-                              "mcp",
-                              "oauth_protected_resource",
-                              "secret",
-                              "service_account",
-                              "custom_http"
-                            ]
-                          },
-                          "resourceIdentifier": {
-                            "type": "string"
-                          },
-                          "requestedCredentialType": {
-                            "type": "string",
-                            "enum": [
-                              "id_jag",
-                              "bearer_token",
-                              "secret",
-                              "service_account",
-                              "opaque_json"
-                            ]
-                          },
-                          "scopes": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
-                          },
-                          "audience": {
-                            "type": "string"
-                          },
-                          "clientIdOverride": {
-                            "type": "string"
-                          },
-                          "tokenInjectionMode": {
-                            "type": "string",
-                            "enum": [
-                              "authorization_bearer",
-                              "raw_authorization",
-                              "header",
-                              "env",
-                              "body_field"
-                            ]
-                          },
-                          "headerName": {
-                            "type": "string"
-                          },
-                          "envVarName": {
-                            "type": "string"
-                          },
-                          "bodyFieldName": {
-                            "type": "string"
-                          },
-                          "responseFieldPath": {
-                            "type": "string"
-                          },
-                          "fallbackMode": {
-                            "type": "string",
-                            "enum": [
-                              "fail_closed",
-                              "fallback_to_dynamic",
-                              "fallback_to_static"
-                            ]
-                          },
-                          "cacheTtlSeconds": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 9007199254740991
-                          }
-                        },
-                        "additionalProperties": false
-                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -112606,7 +113008,6 @@
                       "localInstallationError",
                       "oauthRefreshError",
                       "oauthRefreshFailedAt",
-                      "enterpriseManagedConfig",
                       "createdAt",
                       "updatedAt"
                     ],
@@ -112896,85 +113297,6 @@
                   "oauthRefreshFailedAt": {
                     "nullable": true
                   },
-                  "enterpriseManagedConfig": {
-                    "nullable": true,
-                    "type": "object",
-                    "properties": {
-                      "identityProviderId": {
-                        "type": "string"
-                      },
-                      "resourceType": {
-                        "type": "string",
-                        "enum": [
-                          "mcp",
-                          "oauth_protected_resource",
-                          "secret",
-                          "service_account",
-                          "custom_http"
-                        ]
-                      },
-                      "resourceIdentifier": {
-                        "type": "string"
-                      },
-                      "requestedCredentialType": {
-                        "type": "string",
-                        "enum": [
-                          "id_jag",
-                          "bearer_token",
-                          "secret",
-                          "service_account",
-                          "opaque_json"
-                        ]
-                      },
-                      "scopes": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
-                      },
-                      "audience": {
-                        "type": "string"
-                      },
-                      "clientIdOverride": {
-                        "type": "string"
-                      },
-                      "tokenInjectionMode": {
-                        "type": "string",
-                        "enum": [
-                          "authorization_bearer",
-                          "raw_authorization",
-                          "header",
-                          "env",
-                          "body_field"
-                        ]
-                      },
-                      "headerName": {
-                        "type": "string"
-                      },
-                      "envVarName": {
-                        "type": "string"
-                      },
-                      "bodyFieldName": {
-                        "type": "string"
-                      },
-                      "responseFieldPath": {
-                        "type": "string"
-                      },
-                      "fallbackMode": {
-                        "type": "string",
-                        "enum": [
-                          "fail_closed",
-                          "fallback_to_dynamic",
-                          "fallback_to_static"
-                        ]
-                      },
-                      "cacheTtlSeconds": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "maximum": 9007199254740991
-                      }
-                    }
-                  },
                   "userId": {
                     "type": "string"
                   },
@@ -113089,86 +113411,6 @@
                       "type": "string",
                       "format": "date-time"
                     },
-                    "enterpriseManagedConfig": {
-                      "nullable": true,
-                      "type": "object",
-                      "properties": {
-                        "identityProviderId": {
-                          "type": "string"
-                        },
-                        "resourceType": {
-                          "type": "string",
-                          "enum": [
-                            "mcp",
-                            "oauth_protected_resource",
-                            "secret",
-                            "service_account",
-                            "custom_http"
-                          ]
-                        },
-                        "resourceIdentifier": {
-                          "type": "string"
-                        },
-                        "requestedCredentialType": {
-                          "type": "string",
-                          "enum": [
-                            "id_jag",
-                            "bearer_token",
-                            "secret",
-                            "service_account",
-                            "opaque_json"
-                          ]
-                        },
-                        "scopes": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        },
-                        "audience": {
-                          "type": "string"
-                        },
-                        "clientIdOverride": {
-                          "type": "string"
-                        },
-                        "tokenInjectionMode": {
-                          "type": "string",
-                          "enum": [
-                            "authorization_bearer",
-                            "raw_authorization",
-                            "header",
-                            "env",
-                            "body_field"
-                          ]
-                        },
-                        "headerName": {
-                          "type": "string"
-                        },
-                        "envVarName": {
-                          "type": "string"
-                        },
-                        "bodyFieldName": {
-                          "type": "string"
-                        },
-                        "responseFieldPath": {
-                          "type": "string"
-                        },
-                        "fallbackMode": {
-                          "type": "string",
-                          "enum": [
-                            "fail_closed",
-                            "fallback_to_dynamic",
-                            "fallback_to_static"
-                          ]
-                        },
-                        "cacheTtlSeconds": {
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 9007199254740991
-                        }
-                      },
-                      "additionalProperties": false
-                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -113260,7 +113502,6 @@
                     "localInstallationError",
                     "oauthRefreshError",
                     "oauthRefreshFailedAt",
-                    "enterpriseManagedConfig",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -113580,86 +113821,6 @@
                       "type": "string",
                       "format": "date-time"
                     },
-                    "enterpriseManagedConfig": {
-                      "nullable": true,
-                      "type": "object",
-                      "properties": {
-                        "identityProviderId": {
-                          "type": "string"
-                        },
-                        "resourceType": {
-                          "type": "string",
-                          "enum": [
-                            "mcp",
-                            "oauth_protected_resource",
-                            "secret",
-                            "service_account",
-                            "custom_http"
-                          ]
-                        },
-                        "resourceIdentifier": {
-                          "type": "string"
-                        },
-                        "requestedCredentialType": {
-                          "type": "string",
-                          "enum": [
-                            "id_jag",
-                            "bearer_token",
-                            "secret",
-                            "service_account",
-                            "opaque_json"
-                          ]
-                        },
-                        "scopes": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        },
-                        "audience": {
-                          "type": "string"
-                        },
-                        "clientIdOverride": {
-                          "type": "string"
-                        },
-                        "tokenInjectionMode": {
-                          "type": "string",
-                          "enum": [
-                            "authorization_bearer",
-                            "raw_authorization",
-                            "header",
-                            "env",
-                            "body_field"
-                          ]
-                        },
-                        "headerName": {
-                          "type": "string"
-                        },
-                        "envVarName": {
-                          "type": "string"
-                        },
-                        "bodyFieldName": {
-                          "type": "string"
-                        },
-                        "responseFieldPath": {
-                          "type": "string"
-                        },
-                        "fallbackMode": {
-                          "type": "string",
-                          "enum": [
-                            "fail_closed",
-                            "fallback_to_dynamic",
-                            "fallback_to_static"
-                          ]
-                        },
-                        "cacheTtlSeconds": {
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 9007199254740991
-                        }
-                      },
-                      "additionalProperties": false
-                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -113751,7 +113912,6 @@
                     "localInstallationError",
                     "oauthRefreshError",
                     "oauthRefreshFailedAt",
-                    "enterpriseManagedConfig",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -114271,85 +114431,6 @@
                   },
                   "isByosVault": {
                     "type": "boolean"
-                  },
-                  "enterpriseManagedConfig": {
-                    "nullable": true,
-                    "type": "object",
-                    "properties": {
-                      "identityProviderId": {
-                        "type": "string"
-                      },
-                      "resourceType": {
-                        "type": "string",
-                        "enum": [
-                          "mcp",
-                          "oauth_protected_resource",
-                          "secret",
-                          "service_account",
-                          "custom_http"
-                        ]
-                      },
-                      "resourceIdentifier": {
-                        "type": "string"
-                      },
-                      "requestedCredentialType": {
-                        "type": "string",
-                        "enum": [
-                          "id_jag",
-                          "bearer_token",
-                          "secret",
-                          "service_account",
-                          "opaque_json"
-                        ]
-                      },
-                      "scopes": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
-                      },
-                      "audience": {
-                        "type": "string"
-                      },
-                      "clientIdOverride": {
-                        "type": "string"
-                      },
-                      "tokenInjectionMode": {
-                        "type": "string",
-                        "enum": [
-                          "authorization_bearer",
-                          "raw_authorization",
-                          "header",
-                          "env",
-                          "body_field"
-                        ]
-                      },
-                      "headerName": {
-                        "type": "string"
-                      },
-                      "envVarName": {
-                        "type": "string"
-                      },
-                      "bodyFieldName": {
-                        "type": "string"
-                      },
-                      "responseFieldPath": {
-                        "type": "string"
-                      },
-                      "fallbackMode": {
-                        "type": "string",
-                        "enum": [
-                          "fail_closed",
-                          "fallback_to_dynamic",
-                          "fallback_to_static"
-                        ]
-                      },
-                      "cacheTtlSeconds": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "maximum": 9007199254740991
-                      }
-                    }
                   }
                 }
               }
@@ -114440,86 +114521,6 @@
                       "nullable": true,
                       "type": "string",
                       "format": "date-time"
-                    },
-                    "enterpriseManagedConfig": {
-                      "nullable": true,
-                      "type": "object",
-                      "properties": {
-                        "identityProviderId": {
-                          "type": "string"
-                        },
-                        "resourceType": {
-                          "type": "string",
-                          "enum": [
-                            "mcp",
-                            "oauth_protected_resource",
-                            "secret",
-                            "service_account",
-                            "custom_http"
-                          ]
-                        },
-                        "resourceIdentifier": {
-                          "type": "string"
-                        },
-                        "requestedCredentialType": {
-                          "type": "string",
-                          "enum": [
-                            "id_jag",
-                            "bearer_token",
-                            "secret",
-                            "service_account",
-                            "opaque_json"
-                          ]
-                        },
-                        "scopes": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        },
-                        "audience": {
-                          "type": "string"
-                        },
-                        "clientIdOverride": {
-                          "type": "string"
-                        },
-                        "tokenInjectionMode": {
-                          "type": "string",
-                          "enum": [
-                            "authorization_bearer",
-                            "raw_authorization",
-                            "header",
-                            "env",
-                            "body_field"
-                          ]
-                        },
-                        "headerName": {
-                          "type": "string"
-                        },
-                        "envVarName": {
-                          "type": "string"
-                        },
-                        "bodyFieldName": {
-                          "type": "string"
-                        },
-                        "responseFieldPath": {
-                          "type": "string"
-                        },
-                        "fallbackMode": {
-                          "type": "string",
-                          "enum": [
-                            "fail_closed",
-                            "fallback_to_dynamic",
-                            "fallback_to_static"
-                          ]
-                        },
-                        "cacheTtlSeconds": {
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 9007199254740991
-                        }
-                      },
-                      "additionalProperties": false
                     },
                     "createdAt": {
                       "type": "string",
@@ -114612,7 +114613,6 @@
                     "localInstallationError",
                     "oauthRefreshError",
                     "oauthRefreshFailedAt",
-                    "enterpriseManagedConfig",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -115718,85 +115718,6 @@
                   },
                   "serviceAccount": {
                     "type": "string"
-                  },
-                  "enterpriseManagedConfig": {
-                    "nullable": true,
-                    "type": "object",
-                    "properties": {
-                      "identityProviderId": {
-                        "type": "string"
-                      },
-                      "resourceType": {
-                        "type": "string",
-                        "enum": [
-                          "mcp",
-                          "oauth_protected_resource",
-                          "secret",
-                          "service_account",
-                          "custom_http"
-                        ]
-                      },
-                      "resourceIdentifier": {
-                        "type": "string"
-                      },
-                      "requestedCredentialType": {
-                        "type": "string",
-                        "enum": [
-                          "id_jag",
-                          "bearer_token",
-                          "secret",
-                          "service_account",
-                          "opaque_json"
-                        ]
-                      },
-                      "scopes": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
-                      },
-                      "audience": {
-                        "type": "string"
-                      },
-                      "clientIdOverride": {
-                        "type": "string"
-                      },
-                      "tokenInjectionMode": {
-                        "type": "string",
-                        "enum": [
-                          "authorization_bearer",
-                          "raw_authorization",
-                          "header",
-                          "env",
-                          "body_field"
-                        ]
-                      },
-                      "headerName": {
-                        "type": "string"
-                      },
-                      "envVarName": {
-                        "type": "string"
-                      },
-                      "bodyFieldName": {
-                        "type": "string"
-                      },
-                      "responseFieldPath": {
-                        "type": "string"
-                      },
-                      "fallbackMode": {
-                        "type": "string",
-                        "enum": [
-                          "fail_closed",
-                          "fallback_to_dynamic",
-                          "fallback_to_static"
-                        ]
-                      },
-                      "cacheTtlSeconds": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "maximum": 9007199254740991
-                      }
-                    }
                   }
                 }
               }
@@ -115887,86 +115808,6 @@
                       "nullable": true,
                       "type": "string",
                       "format": "date-time"
-                    },
-                    "enterpriseManagedConfig": {
-                      "nullable": true,
-                      "type": "object",
-                      "properties": {
-                        "identityProviderId": {
-                          "type": "string"
-                        },
-                        "resourceType": {
-                          "type": "string",
-                          "enum": [
-                            "mcp",
-                            "oauth_protected_resource",
-                            "secret",
-                            "service_account",
-                            "custom_http"
-                          ]
-                        },
-                        "resourceIdentifier": {
-                          "type": "string"
-                        },
-                        "requestedCredentialType": {
-                          "type": "string",
-                          "enum": [
-                            "id_jag",
-                            "bearer_token",
-                            "secret",
-                            "service_account",
-                            "opaque_json"
-                          ]
-                        },
-                        "scopes": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        },
-                        "audience": {
-                          "type": "string"
-                        },
-                        "clientIdOverride": {
-                          "type": "string"
-                        },
-                        "tokenInjectionMode": {
-                          "type": "string",
-                          "enum": [
-                            "authorization_bearer",
-                            "raw_authorization",
-                            "header",
-                            "env",
-                            "body_field"
-                          ]
-                        },
-                        "headerName": {
-                          "type": "string"
-                        },
-                        "envVarName": {
-                          "type": "string"
-                        },
-                        "bodyFieldName": {
-                          "type": "string"
-                        },
-                        "responseFieldPath": {
-                          "type": "string"
-                        },
-                        "fallbackMode": {
-                          "type": "string",
-                          "enum": [
-                            "fail_closed",
-                            "fallback_to_dynamic",
-                            "fallback_to_static"
-                          ]
-                        },
-                        "cacheTtlSeconds": {
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 9007199254740991
-                        }
-                      },
-                      "additionalProperties": false
                     },
                     "createdAt": {
                       "type": "string",
@@ -116059,7 +115900,6 @@
                     "localInstallationError",
                     "oauthRefreshError",
                     "oauthRefreshFailedAt",
-                    "enterpriseManagedConfig",
                     "createdAt",
                     "updatedAt"
                   ],

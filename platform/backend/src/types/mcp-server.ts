@@ -5,7 +5,6 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
-import { EnterpriseManagedCredentialConfigSchema } from "./enterprise-managed-credentials";
 import { InternalMcpCatalogServerTypeSchema } from "./mcp-catalog";
 
 export const LocalMcpServerInstallationStatusSchema = z.enum([
@@ -27,9 +26,6 @@ export type SecretStorageType = z.infer<typeof SecretStorageTypeSchema>;
 
 export const SelectMcpServerSchema = createSelectSchema(
   schema.mcpServersTable,
-  {
-    enterpriseManagedConfig: EnterpriseManagedCredentialConfigSchema.nullable(),
-  },
 ).extend({
   serverType: InternalMcpCatalogServerTypeSchema,
   ownerEmail: z.string().nullable().optional(),
@@ -56,13 +52,7 @@ export const SelectMcpServerSchema = createSelectSchema(
   secretStorageType: SecretStorageTypeSchema.optional(),
 });
 
-export const InsertMcpServerSchema = createInsertSchema(
-  schema.mcpServersTable,
-  {
-    enterpriseManagedConfig:
-      EnterpriseManagedCredentialConfigSchema.nullable().optional(),
-  },
-)
+export const InsertMcpServerSchema = createInsertSchema(schema.mcpServersTable)
   .extend({
     serverType: InternalMcpCatalogServerTypeSchema,
     userId: z.string().optional(), // For personal auth
@@ -76,13 +66,7 @@ export const InsertMcpServerSchema = createInsertSchema(
     updatedAt: true,
   });
 
-export const UpdateMcpServerSchema = createUpdateSchema(
-  schema.mcpServersTable,
-  {
-    enterpriseManagedConfig:
-      EnterpriseManagedCredentialConfigSchema.nullable().optional(),
-  },
-)
+export const UpdateMcpServerSchema = createUpdateSchema(schema.mcpServersTable)
   .omit({
     serverType: true, // serverType should not be updated after creation
   })

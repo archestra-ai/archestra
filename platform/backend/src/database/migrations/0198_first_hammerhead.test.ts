@@ -11,6 +11,24 @@ const migrationSql = fs.readFileSync(
 
 async function createScratchTables() {
   await db.execute(
+    sql.raw(`DROP TABLE IF EXISTS "agent_tools_0198_test" CASCADE;`),
+  );
+  await db.execute(
+    sql.raw(`DROP TABLE IF EXISTS "mcp_server_0198_test" CASCADE;`),
+  );
+  await db.execute(
+    sql.raw(`DROP TABLE IF EXISTS "internal_mcp_catalog_0198_test" CASCADE;`),
+  );
+
+  await db.execute(
+    sql.raw(`
+    CREATE TABLE "internal_mcp_catalog_0198_test" (
+      "id" uuid PRIMARY KEY
+    );
+  `),
+  );
+
+  await db.execute(
     sql.raw(`
     CREATE TABLE "mcp_server_0198_test" (
       "id" uuid PRIMARY KEY
@@ -35,6 +53,7 @@ async function createScratchTables() {
 async function runMigrationOnScratchTables() {
   const rewrittenSql = migrationSql
     .replaceAll('"agent_tools"', '"agent_tools_0198_test"')
+    .replaceAll('"internal_mcp_catalog"', '"internal_mcp_catalog_0198_test"')
     .replaceAll('"mcp_server"', '"mcp_server_0198_test"');
 
   const statements = rewrittenSql
@@ -114,5 +133,23 @@ describe("0198 migration: simplify agent tool server binding", () => {
         credential_resolution_mode: "dynamic",
       },
     ]);
+  });
+
+  test("adds enterprise_managed_config to internal_mcp_catalog", async () => {
+    await createScratchTables();
+    await runMigrationOnScratchTables();
+
+    const columns = await db.execute(
+      sql.raw(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_name = 'internal_mcp_catalog_0198_test'
+      ORDER BY column_name ASC;
+    `),
+    );
+
+    expect(columns.rows).toContainEqual({
+      column_name: "enterprise_managed_config",
+    });
   });
 });

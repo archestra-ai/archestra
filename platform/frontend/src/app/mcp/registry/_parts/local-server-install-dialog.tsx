@@ -14,10 +14,6 @@ import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
-import {
-  type EnterpriseManagedConfigInput,
-  EnterpriseManagedCredentialFields,
-} from "@/components/enterprise-managed-credential-fields";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -79,7 +75,6 @@ export interface LocalServerInstallResult {
   isByosVault?: boolean;
   /** Kubernetes service account for the MCP server pod */
   serviceAccount?: string;
-  enterpriseManagedConfig?: EnterpriseManagedConfigInput | null;
 }
 
 interface LocalServerInstallDialogProps {
@@ -98,7 +93,6 @@ interface LocalServerInstallDialogProps {
   preselectedTeamId?: string | null;
   /** When true, only personal installation is allowed */
   personalOnly?: boolean;
-  initialEnterpriseManagedConfig?: EnterpriseManagedConfigInput | null;
 }
 
 export function LocalServerInstallDialog({
@@ -112,7 +106,6 @@ export function LocalServerInstallDialog({
   isReauth = false,
   preselectedTeamId,
   personalOnly: personalOnlyProp = false,
-  initialEnterpriseManagedConfig = null,
 }: LocalServerInstallDialogProps) {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [credentialType, setCredentialType] = useState<"personal" | "team">(
@@ -122,11 +115,6 @@ export function LocalServerInstallDialog({
   const [serviceAccount, setServiceAccount] = useState<string | undefined>(
     catalogItem?.localConfig?.serviceAccount,
   );
-  const [enterpriseManagedConfig, setEnterpriseManagedConfig] =
-    useState<EnterpriseManagedConfigInput | null>(
-      initialEnterpriseManagedConfig,
-    );
-
   // Extract environment variables that need prompting during installation
   const promptedEnvVars =
     catalogItem?.localConfig?.environment?.filter(
@@ -178,11 +166,6 @@ export function LocalServerInstallDialog({
     }
     setVaultSecrets({});
   }, [credentialType, selectedTeamId]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    setEnterpriseManagedConfig(initialEnterpriseManagedConfig);
-  }, [initialEnterpriseManagedConfig, isOpen]);
 
   const handleVaultTeamChange = (teamId: string) => {
     setVaultTeamId(teamId);
@@ -264,7 +247,6 @@ export function LocalServerInstallDialog({
         useVaultSecrets &&
         (secretEnvVars.length > 0 || secretFileVars.length > 0),
       serviceAccount: serviceAccount || undefined,
-      enterpriseManagedConfig,
     });
 
     // Reset form
@@ -283,7 +265,6 @@ export function LocalServerInstallDialog({
     setVaultTeamId(null);
     setVaultSecrets({});
     setServiceAccount(catalogItem?.localConfig?.serviceAccount);
-    setEnterpriseManagedConfig(initialEnterpriseManagedConfig);
   };
 
   const handleClose = () => {
@@ -399,22 +380,6 @@ export function LocalServerInstallDialog({
         }
         preselectedTeamId={preselectedTeamId}
       />
-
-      <div className="space-y-2 rounded-md border p-3">
-        <div>
-          <Label className="text-sm font-medium">
-            Enterprise-Managed Credentials
-          </Label>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Optional. Configure this connection once so agent tool assignments
-            can inherit the enterprise-managed credential exchange settings.
-          </p>
-        </div>
-        <EnterpriseManagedCredentialFields
-          value={enterpriseManagedConfig}
-          onChange={setEnterpriseManagedConfig}
-        />
-      </div>
 
       {useVaultSecrets && credentialType === "personal" && (
         <div className="space-y-2">

@@ -297,9 +297,9 @@ class McpClient {
       return targetMcpServerIdResult.error;
     }
     const { targetMcpServerId, mcpServerName } = targetMcpServerIdResult;
-    const targetMcpServer = await McpServerModel.findById(targetMcpServerId);
+    const _targetMcpServer = await McpServerModel.findById(targetMcpServerId);
     const effectiveEnterpriseManagedConfig =
-      targetMcpServer?.enterpriseManagedConfig ?? null;
+      catalogItem.enterpriseManagedConfig ?? null;
     if (
       tool.credentialResolutionMode === "enterprise_managed" &&
       !effectiveEnterpriseManagedConfig
@@ -307,7 +307,7 @@ class McpClient {
       return this.createErrorResult(
         toolCall,
         agentId,
-        "Enterprise-managed credentials are enabled for this tool, but the selected MCP server installation does not have enterprise-managed credential settings configured.",
+        "Enterprise-managed credentials are enabled for this tool, but the MCP catalog item does not have enterprise-managed credential settings configured.",
         mcpServerName,
         authInfo,
       );

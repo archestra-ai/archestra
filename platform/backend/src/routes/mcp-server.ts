@@ -26,7 +26,6 @@ import {
   ApiError,
   constructResponseSchema,
   DeleteObjectResponseSchema,
-  EnterpriseManagedCredentialConfigSchema,
   InsertMcpServerSchema,
   type InternalMcpCatalogServerType,
   LocalMcpServerInstallationStatusSchema,
@@ -741,8 +740,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userConfigValues: z.record(z.string(), z.string()).optional(),
           environmentValues: z.record(z.string(), z.string()).optional(),
           isByosVault: z.boolean().optional(),
-          enterpriseManagedConfig:
-            EnterpriseManagedCredentialConfigSchema.nullable().optional(),
         }),
         response: constructResponseSchema(SelectMcpServerSchema),
       },
@@ -756,7 +753,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userConfigValues,
           environmentValues,
           isByosVault,
-          enterpriseManagedConfig,
         },
         user,
         headers,
@@ -968,10 +964,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         secretId: newSecretId,
         oauthRefreshError: null,
         oauthRefreshFailedAt: null,
-        enterpriseManagedConfig:
-          enterpriseManagedConfig === undefined
-            ? mcpServer.enterpriseManagedConfig
-            : enterpriseManagedConfig,
       });
 
       // For local servers, trigger pod restart to pick up new credentials
@@ -1303,19 +1295,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           isByosVault: z.boolean().optional(),
           // Kubernetes service account override
           serviceAccount: z.string().optional(),
-          enterpriseManagedConfig:
-            EnterpriseManagedCredentialConfigSchema.nullable().optional(),
         }),
         response: constructResponseSchema(SelectMcpServerSchema),
       },
     },
     async ({ params: { id }, body, user, headers }, reply) => {
-      const {
-        environmentValues,
-        isByosVault,
-        serviceAccount,
-        enterpriseManagedConfig,
-      } = body;
+      const { environmentValues, isByosVault, serviceAccount } = body;
 
       // Get the existing MCP server
       const mcpServer = await McpServerModel.findById(id, user.id);
@@ -1482,10 +1467,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await McpServerModel.update(id, {
         localInstallationStatus: "pending",
         localInstallationError: null,
-        enterpriseManagedConfig:
-          enterpriseManagedConfig === undefined
-            ? mcpServer.enterpriseManagedConfig
-            : enterpriseManagedConfig,
       });
 
       // Refetch the server with updated status

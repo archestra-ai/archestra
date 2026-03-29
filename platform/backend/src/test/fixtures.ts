@@ -431,6 +431,7 @@ async function makeInternalMcpCatalog(
       | "localConfig"
       | "userConfig"
       | "oauthConfig"
+      | "enterpriseManagedConfig"
       | "scope"
       | "teams"
     >

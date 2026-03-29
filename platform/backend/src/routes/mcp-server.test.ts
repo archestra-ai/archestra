@@ -116,6 +116,12 @@ describe("mcp server inspect route", () => {
       name: "Managed Remote",
       serverType: "remote",
       serverUrl: "http://localhost:30082/mcp",
+      enterpriseManagedConfig: {
+        requestedCredentialType: "secret",
+        resourceIdentifier: "orn:okta:pam:github-secret",
+        tokenInjectionMode: "authorization_bearer",
+        responseFieldPath: "token",
+      },
     });
 
     connectAndGetToolsMock.mockResolvedValueOnce([
@@ -132,24 +138,11 @@ describe("mcp server inspect route", () => {
       payload: {
         name: "Managed Remote",
         catalogId: catalog.id,
-        enterpriseManagedConfig: {
-          requestedCredentialType: "secret",
-          resourceIdentifier: "orn:okta:pam:github-secret",
-          tokenInjectionMode: "authorization_bearer",
-          responseFieldPath: "token",
-        },
       },
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({
-      enterpriseManagedConfig: {
-        requestedCredentialType: "secret",
-        resourceIdentifier: "orn:okta:pam:github-secret",
-        tokenInjectionMode: "authorization_bearer",
-        responseFieldPath: "token",
-      },
-    });
+    expect(response.json()).not.toHaveProperty("enterpriseManagedConfig");
   });
 
   test("returns 500 when protected remote MCP server installation still lacks usable auth after automatic fallback", async ({

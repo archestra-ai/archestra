@@ -2482,6 +2482,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "enterprise_managed_config": {
+          "name": "enterprise_managed_config",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "icon": {
           "name": "icon",
           "type": "text",
@@ -4526,12 +4532,6 @@
         "oauth_refresh_failed_at": {
           "name": "oauth_refresh_failed_at",
           "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "enterprise_managed_config": {
-          "name": "enterprise_managed_config",
-          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },

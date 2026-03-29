@@ -938,6 +938,12 @@ describe("McpClient", () => {
       }) => {
         const organization = await makeOrganization();
         const user = await makeUser({ email: "managed-mcp@example.com" });
+        const managedConfig = {
+          requestedCredentialType: "secret" as const,
+          resourceIdentifier: "orn:okta:pam:github-secret",
+          tokenInjectionMode: "authorization_bearer" as const,
+          responseFieldPath: "token",
+        };
         const identityProvider = await makeIdentityProvider(organization.id, {
           providerId: "okta-managed-mcp",
           issuer: "https://example.okta.com",
@@ -960,6 +966,9 @@ describe("McpClient", () => {
         });
 
         await McpServerModel.update(mcpServerId, { secretId: null });
+        await InternalMcpCatalogModel.update(catalogId, {
+          enterpriseManagedConfig: managedConfig,
+        });
 
         const tool = await ToolModel.createToolIfNotExists({
           name: "github-mcp-server__managed_tool",
@@ -970,15 +979,6 @@ describe("McpClient", () => {
 
         await AgentToolModel.create(agentId, tool.id, {
           credentialResolutionMode: "enterprise_managed",
-        });
-
-        await McpServerModel.update(mcpServerId, {
-          enterpriseManagedConfig: {
-            requestedCredentialType: "secret",
-            resourceIdentifier: "orn:okta:pam:github-secret",
-            tokenInjectionMode: "authorization_bearer",
-            responseFieldPath: "token",
-          },
         });
 
         await db.insert(schema.accountsTable).values({

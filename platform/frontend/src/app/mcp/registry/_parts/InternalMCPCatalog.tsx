@@ -12,7 +12,6 @@ import { Search } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { EnterpriseManagedConfigInput } from "@/components/enterprise-managed-credential-fields";
 import {
   LabelFilterBadges,
   LabelKeyRowBase,
@@ -601,7 +600,6 @@ export function InternalMCPCatalog({
         name: localServerCatalogItem.name,
         environmentValues: installResult.environmentValues,
         isByosVault: installResult.isByosVault,
-        enterpriseManagedConfig: installResult.enterpriseManagedConfig ?? null,
       });
 
       closeDialog("local-install");
@@ -628,8 +626,6 @@ export function InternalMCPCatalog({
           environmentValues: installResult.environmentValues,
           isByosVault: installResult.isByosVault,
           serviceAccount: installResult.serviceAccount,
-          enterpriseManagedConfig:
-            installResult.enterpriseManagedConfig ?? null,
         });
       } finally {
         // Clear installing state whether success or error
@@ -657,7 +653,6 @@ export function InternalMCPCatalog({
       isByosVault: installResult.isByosVault,
       teamId: installResult.teamId ?? undefined,
       serviceAccount: installResult.serviceAccount,
-      enterpriseManagedConfig: installResult.enterpriseManagedConfig ?? null,
       dontShowToast: true,
     });
 
@@ -706,7 +701,6 @@ export function InternalMCPCatalog({
             userConfigValues: result.metadata as Record<string, string>,
           }),
         isByosVault: result.isByosVault,
-        enterpriseManagedConfig: result.enterpriseManagedConfig ?? null,
       });
 
       closeDialog("remote-install");
@@ -726,7 +720,6 @@ export function InternalMCPCatalog({
       }),
       isByosVault: result.isByosVault,
       teamId: result.teamId ?? undefined,
-      enterpriseManagedConfig: result.enterpriseManagedConfig ?? null,
     });
     setInstallingItemId(null);
   };
@@ -1299,11 +1292,6 @@ export function InternalMCPCatalog({
         isReauth={!!reauthServerId}
         preselectedTeamId={preselectedTeamId}
         personalOnly={installPersonalOnly}
-        initialEnterpriseManagedConfig={
-          (installedServers?.find((server) => server.id === reauthServerId)
-            ?.enterpriseManagedConfig as EnterpriseManagedConfigInput | null) ??
-          null
-        }
       />
 
       <OAuthConfirmationDialog
@@ -1378,14 +1366,6 @@ export function InternalMCPCatalog({
           isReauth={!!reauthServerId}
           preselectedTeamId={preselectedTeamId}
           personalOnly={installPersonalOnly}
-          initialEnterpriseManagedConfig={
-            (installedServers?.find(
-              (server) =>
-                server.id === (reauthServerId ?? reinstallServerId ?? ""),
-            )
-              ?.enterpriseManagedConfig as EnterpriseManagedConfigInput | null) ??
-            null
-          }
         />
       )}
 

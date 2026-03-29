@@ -11,6 +11,7 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { EnterpriseManagedCredentialConfigSchema } from "./enterprise-managed-credentials";
 
 export const InternalMcpCatalogServerTypeSchema = z.enum([
   "local",
@@ -96,6 +97,7 @@ export const SelectInternalMcpCatalogSchema = createSelectSchema(
   authFields: z.array(AuthFieldSchema).nullable(),
   userConfig: z.record(z.string(), UserConfigFieldSchema).nullable(),
   oauthConfig: OAuthConfigSchema.nullable(),
+  enterpriseManagedConfig: EnterpriseManagedCredentialConfigSchema.nullable(),
   localConfig: LocalConfigSelectSchema.nullable(),
   // Labels are loaded from the junction table, not from the DB row
   labels: z.array(CatalogLabelSchema).default([]),
@@ -118,6 +120,8 @@ export const InsertInternalMcpCatalogSchema = createInsertSchema(
       .nullable()
       .optional(),
     oauthConfig: OAuthConfigSchema.nullable().optional(),
+    enterpriseManagedConfig:
+      EnterpriseManagedCredentialConfigSchema.nullable().optional(),
     localConfig: LocalConfigSchema.nullable().optional(),
     // Labels are synced separately via McpCatalogLabelModel
     labels: z.array(CatalogLabelSchema).optional(),
@@ -143,6 +147,8 @@ export const UpdateInternalMcpCatalogSchema = createUpdateSchema(
       .nullable()
       .optional(),
     oauthConfig: OAuthConfigSchema.nullable().optional(),
+    enterpriseManagedConfig:
+      EnterpriseManagedCredentialConfigSchema.nullable().optional(),
     localConfig: LocalConfigSchema.nullable().optional(),
     // Labels are synced separately via McpCatalogLabelModel
     labels: z.array(CatalogLabelSchema).optional(),

@@ -1,13 +1,19 @@
 import type {
   KnowledgeConnectorConfig,
-  KnowledgeConnectorSyncResult,
-  KnowledgeDocument,
+  KnowledgeConnectorResult,
+  NotionCheckpoint,
+  NotionConfig,
 } from "../../../types/knowledge-connector";
-import type { NotionConfig, NotionCheckpoint } from "../../../types/knowledge-connector";
 
-const NOTION_API_BASE = "https://api.notion.com/v1";
-const NOTION_VERSION = "2022-06-28";
-const MAX_BLOCK_DEPTH = 3;
+// ---------------------------------------------------------------------------
+// Notion REST API types (minimal surface needed for the connector)
+// ---------------------------------------------------------------------------
+
+interface NotionSearchResponse {
+  results: NotionPage[];
+  next_cursor: string | null;
+  has_more: boolean;
+}
 
 interface NotionPage {
   id: string;
@@ -16,20 +22,20 @@ interface NotionPage {
   last_edited_time: string;
   url: string;
   properties: Record<string, NotionProperty>;
-  parent: NotionParent;
-}
-
-interface NotionParent {
-  type: "database_id" | "page_id" | "workspace" | "block_id";
-  database_id?: string;
-  page_id?: string;
 }
 
 interface NotionProperty {
+  id: string;
   type: string;
   title?: Array<{ plain_text: string }>;
   rich_text?: Array<{ plain_text: string }>;
   [key: string]: unknown;
+}
+
+interface NotionBlocksResponse {
+  results: NotionBlock[];
+  next_cursor: string | null;
+  has_more: boolean;
 }
 
 interface NotionBlock {
@@ -39,383 +45,404 @@ interface NotionBlock {
   [key: string]: unknown;
 }
 
-interface NotionSearchResult {
-  results: NotionPage[];
-  next_cursor: string | null;
-  has_more: boolean;
-}
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
 
-interface NotionBlockChildrenResult {
-  results: NotionBlock[];
-  next_cursor: string | null;
-  has_more: boolean;
-}
+const NOTION_API_BASE = "https://api.notion.com/v1";
+const NOTION_API_VERSION = "2022-06-28";
+const MAX_BLOCK_DEPTH = 3;
+const PAGE_SIZE = 100;
 
-function notionHeaders(token: string): Record<string, string> {
-  return {
-    Authorization: `Bearer ${token}`,
-    "Notion-Version": NOTION_VERSION,
-    "Content-Type": "application/json",
-  };
-}
+// ---------------------------------------------------------------------------
+// Helper — plain HTTP fetch wrapper (no SDK dependency)
+// ---------------------------------------------------------------------------
 
-async function fetchAllPages(
+async function notionFetch<T>(
+  path: string,
   token: string,
-  filter?: { property: "object"; value: "page" | "database" }
-): Promise<NotionPage[]> {
-  const pages: NotionPage[] = [];
-  let startCursor: string | undefined;
-
-  do {
-    const body: Record<string, unknown> = {
-      page_size: 100,
-    };
-    if (filter) {
-      body.filter = filter;
-    }
-    if (startCursor) {
-      body.start_cursor = startCursor;
-    }
-
-    const response = await fetch(`${NOTION_API_BASE}/search`, {
-      method: "POST",
-      headers: notionHeaders(token),
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Notion API error (${response.status}): ${errorText}`);
-    }
-
-    const data = (await response.json()) as NotionSearchResult;
-    pages.push(...data.results);
-    startCursor = data.next_cursor ?? undefined;
-  } while (startCursor);
-
-  return pages;
-}
-
-async function fetchPage(token: string, pageId: string): Promise<NotionPage> {
-  const response = await fetch(`${NOTION_API_BASE}/pages/${pageId}`, {
-    method: "GET",
-    headers: notionHeaders(token),
+  options: RequestInit = {}
+): Promise<T> {
+  const url = `${NOTION_API_BASE}${path}`;
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Notion-Version": NOTION_API_VERSION,
+      "Content-Type": "application/json",
+      ...(options.headers ?? {}),
+    },
   });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Notion API error fetching page ${pageId} (${response.status}): ${errorText}`);
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(
+      `Notion API error ${res.status} for ${path}: ${body}`
+    );
   }
 
-  return (await response.json()) as NotionPage;
+  return res.json() as Promise<T>;
 }
 
-async function fetchBlockChildren(
-  token: string,
-  blockId: string
-): Promise<NotionBlock[]> {
-  const blocks: NotionBlock[] = [];
-  let startCursor: string | undefined;
+// ---------------------------------------------------------------------------
+// Block → Markdown conversion
+// ---------------------------------------------------------------------------
 
-  do {
-    const url = new URL(`${NOTION_API_BASE}/blocks/${blockId}/children`);
-    url.searchParams.set("page_size", "100");
-    if (startCursor) {
-      url.searchParams.set("start_cursor", startCursor);
-    }
-
-    const response = await fetch(url.toString(), {
-      method: "GET",
-      headers: notionHeaders(token),
-    });
-
-    if (!response.ok) {
-      // Block may not have children — return what we have
-      break;
-    }
-
-    const data = (await response.json()) as NotionBlockChildrenResult;
-    blocks.push(...data.results);
-    startCursor = data.next_cursor ?? undefined;
-  } while (startCursor);
-
-  return blocks;
+function richTextToString(
+  richTexts: Array<{ plain_text: string }> | undefined
+): string {
+  return (richTexts ?? []).map((t) => t.plain_text).join("");
 }
 
-function getRichText(richTextArr: Array<{ plain_text: string }> | undefined): string {
-  if (!richTextArr || richTextArr.length === 0) return "";
-  return richTextArr.map((t) => t.plain_text).join("");
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function blockToMarkdown(block: NotionBlock, depth: number): string {
   const indent = "  ".repeat(Math.max(0, depth - 1));
-  const type = block.type;
+  const type = block.type as string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const data = (block as any)[type] as Record<string, unknown> | undefined;
 
   if (!data) return "";
 
-  const richTextArr = data.rich_text as Array<{ plain_text: string }> | undefined;
-  const text = getRichText(richTextArr);
+  const text = richTextToString(
+    data.rich_text as Array<{ plain_text: string }> | undefined
+  );
 
   switch (type) {
     case "paragraph":
-      return `${text}\n\n`;
+      return text ? `${text}\n` : "";
     case "heading_1":
-      return `# ${text}\n\n`;
+      return `# ${text}\n`;
     case "heading_2":
-      return `## ${text}\n\n`;
+      return `## ${text}\n`;
     case "heading_3":
-      return `### ${text}\n\n`;
+      return `### ${text}\n`;
     case "bulleted_list_item":
       return `${indent}- ${text}\n`;
     case "numbered_list_item":
       return `${indent}1. ${text}\n`;
     case "to_do": {
-      const checked = data.checked as boolean | undefined;
-      return `${indent}- [${checked ? "x" : " "}] ${text}\n`;
+      const checked = (data.checked as boolean) ? "x" : " ";
+      return `${indent}- [${checked}] ${text}\n`;
     }
     case "toggle":
       return `${indent}> ${text}\n`;
     case "quote":
-      return `> ${text}\n\n`;
-    case "callout": {
-      const icon = data.icon as { type: string; emoji?: string } | undefined;
-      const emoji = icon?.emoji ?? "💡";
-      return `> ${emoji} ${text}\n\n`;
-    }
+      return `> ${text}\n`;
+    case "callout":
+      return `> ${text}\n`;
     case "code": {
-      const language = (data.language as string | undefined) ?? "";
-      return `\`\`\`${language}\n${text}\n\`\`\`\n\n`;
+      const lang = (data.language as string) ?? "";
+      const codeText = richTextToString(
+        data.rich_text as Array<{ plain_text: string }> | undefined
+      );
+      return `\`\`\`${lang}\n${codeText}\n\`\`\`\n`;
     }
     case "divider":
-      return `---\n\n`;
+      return "---\n";
     case "image": {
-      const imageData = data as Record<string, unknown>;
-      const external = imageData.external as { url: string } | undefined;
-      const file = imageData.file as { url: string } | undefined;
-      const url = external?.url ?? file?.url ?? "";
-      const caption = getRichText(
-        (imageData.caption as Array<{ plain_text: string }> | undefined)
+      const imgData = data as Record<string, unknown>;
+      const urlField =
+        (imgData.external as { url: string } | undefined)?.url ??
+        (imgData.file as { url: string } | undefined)?.url ??
+        "";
+      const caption = richTextToString(
+        imgData.caption as Array<{ plain_text: string }> | undefined
       );
-      return `![${caption}](${url})\n\n`;
-    }
-    case "video":
-    case "file":
-    case "pdf": {
-      const mediaData = data as Record<string, unknown>;
-      const external = mediaData.external as { url: string } | undefined;
-      const file = mediaData.file as { url: string } | undefined;
-      const url = external?.url ?? file?.url ?? "";
-      return url ? `[${type}](${url})\n\n` : "";
+      return `![${caption}](${urlField})\n`;
     }
     case "bookmark": {
-      const url = (data.url as string | undefined) ?? "";
-      const caption = getRichText(
-        (data.caption as Array<{ plain_text: string }> | undefined)
+      const url = (data.url as string) ?? "";
+      const caption = richTextToString(
+        data.caption as Array<{ plain_text: string }> | undefined
       );
-      return `[${caption || url}](${url})\n\n`;
+      return `[${caption || url}](${url})\n`;
     }
-    case "equation": {
-      const expression = (data.expression as string | undefined) ?? "";
-      return `$$${expression}$$\n\n`;
-    }
-    case "table_of_contents":
-      return "";
-    case "breadcrumb":
-      return "";
-    case "column_list":
-    case "column":
-      // Children will be rendered recursively
-      return "";
     default:
-      return text ? `${text}\n\n` : "";
+      return text ? `${text}\n` : "";
   }
 }
 
-async function fetchBlocksRecursive(
-  token: string,
+// ---------------------------------------------------------------------------
+// Fetch and render blocks recursively up to MAX_BLOCK_DEPTH levels
+// ---------------------------------------------------------------------------
+
+async function fetchBlocksAsMarkdown(
   blockId: string,
+  token: string,
   depth: number
 ): Promise<string> {
   if (depth > MAX_BLOCK_DEPTH) return "";
 
-  const blocks = await fetchBlockChildren(token, blockId);
-  let markdown = "";
+  const lines: string[] = [];
+  let cursor: string | undefined;
 
-  for (const block of blocks) {
-    markdown += blockToMarkdown(block, depth);
+  do {
+    const params = new URLSearchParams({
+      page_size: String(PAGE_SIZE),
+    });
+    if (cursor) params.set("start_cursor", cursor);
 
-    if (block.has_children && depth < MAX_BLOCK_DEPTH) {
-      const childMarkdown = await fetchBlocksRecursive(token, block.id, depth + 1);
-      markdown += childMarkdown;
+    const data = await notionFetch<NotionBlocksResponse>(
+      `/blocks/${blockId}/children?${params.toString()}`,
+      token
+    );
+
+    for (const block of data.results) {
+      lines.push(blockToMarkdown(block, depth));
+
+      if (block.has_children && depth < MAX_BLOCK_DEPTH) {
+        const childMd = await fetchBlocksAsMarkdown(block.id, token, depth + 1);
+        if (childMd) lines.push(childMd);
+      }
     }
-  }
 
-  return markdown;
+    cursor = data.next_cursor ?? undefined;
+  } while (cursor);
+
+  return lines.join("");
 }
+
+// ---------------------------------------------------------------------------
+// Extract page title from Notion page properties
+// ---------------------------------------------------------------------------
 
 function extractPageTitle(page: NotionPage): string {
-  // Pages store title in a "title" property; databases may differ
-  for (const [, prop] of Object.entries(page.properties)) {
-    if (prop.type === "title" && prop.title && prop.title.length > 0) {
-      return prop.title.map((t) => t.plain_text).join("");
+  for (const prop of Object.values(page.properties)) {
+    if (prop.type === "title" && Array.isArray(prop.title)) {
+      return prop.title.map((t) => t.plain_text).join("").trim();
     }
   }
-  return "Untitled";
+  return page.id;
 }
 
-async function syncPage(
+// ---------------------------------------------------------------------------
+// Collect all pages accessible to the token via /search
+// ---------------------------------------------------------------------------
+
+async function searchAllPages(
   token: string,
-  page: NotionPage
-): Promise<KnowledgeDocument> {
-  const title = extractPageTitle(page);
-  const content = await fetchBlocksRecursive(token, page.id, 1);
+  lastSyncedAt?: string
+): Promise<NotionPage[]> {
+  const pages: NotionPage[] = [];
+  let cursor: string | undefined;
 
-  return {
-    id: page.id,
-    title,
-    content: content.trim(),
-    url: page.url,
-    metadata: {
-      source: "notion",
-      pageId: page.id,
-      createdTime: page.created_time,
-      lastEditedTime: page.last_edited_time,
-      parentType: page.parent.type,
-      parentId:
-        page.parent.database_id ??
-        page.parent.page_id ??
-        undefined,
-    },
-    updatedAt: new Date(page.last_edited_time),
-  };
+  do {
+    const body: Record<string, unknown> = {
+      filter: { value: "page", property: "object" },
+      page_size: PAGE_SIZE,
+    };
+    if (cursor) body.start_cursor = cursor;
+
+    const data = await notionFetch<NotionSearchResponse>(
+      "/search",
+      token,
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      }
+    );
+
+    for (const result of data.results) {
+      if (
+        !lastSyncedAt ||
+        new Date(result.last_edited_time) > new Date(lastSyncedAt)
+      ) {
+        pages.push(result);
+      }
+    }
+
+    cursor = data.next_cursor ?? undefined;
+  } while (cursor);
+
+  return pages;
 }
+
+// ---------------------------------------------------------------------------
+// Query pages from a specific Notion database
+// ---------------------------------------------------------------------------
+
+async function queryDatabase(
+  databaseId: string,
+  token: string,
+  lastSyncedAt?: string
+): Promise<NotionPage[]> {
+  const pages: NotionPage[] = [];
+  let cursor: string | undefined;
+
+  do {
+    const body: Record<string, unknown> = { page_size: PAGE_SIZE };
+    if (cursor) body.start_cursor = cursor;
+
+    const data = await notionFetch<{ results: NotionPage[]; next_cursor: string | null; has_more: boolean }>(
+      `/databases/${databaseId}/query`,
+      token,
+      { method: "POST", body: JSON.stringify(body) }
+    );
+
+    for (const page of data.results) {
+      if (
+        !lastSyncedAt ||
+        new Date(page.last_edited_time) > new Date(lastSyncedAt)
+      ) {
+        pages.push(page);
+      }
+    }
+
+    cursor = data.next_cursor ?? undefined;
+  } while (cursor);
+
+  return pages;
+}
+
+// ---------------------------------------------------------------------------
+// Fetch a single page object
+// ---------------------------------------------------------------------------
+
+async function fetchPage(pageId: string, token: string): Promise<NotionPage> {
+  return notionFetch<NotionPage>(`/pages/${pageId}`, token);
+}
+
+// ---------------------------------------------------------------------------
+// NotionConnector
+// ---------------------------------------------------------------------------
 
 export class NotionConnector {
-  private readonly token: string;
-  private readonly config: NotionConfig;
-
-  constructor(config: KnowledgeConnectorConfig & { connectorType: "notion" }) {
-    this.token = config.credentials.integrationToken;
-    this.config = config as NotionConfig;
-  }
-
-  async validateConfig(): Promise<void> {
-    if (!this.token || !this.token.startsWith("secret_")) {
-      throw new Error(
-        "Invalid Notion Integration Token. It must start with 'secret_'."
-      );
-    }
-  }
-
-  async testConnection(): Promise<{ success: boolean; message: string }> {
-    try {
-      const response = await fetch(`${NOTION_API_BASE}/users/me`, {
-        method: "GET",
-        headers: notionHeaders(this.token),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        return {
-          success: false,
-          message: `Connection failed (${response.status}): ${errorText}`,
-        };
-      }
-
-      const user = (await response.json()) as { name?: string; type?: string };
-      const name = user.name ?? "Notion Integration";
+  // -------------------------------------------------------------------------
+  // validateConfig
+  // -------------------------------------------------------------------------
+  validateConfig(config: NotionConfig): { valid: boolean; error?: string } {
+    if (!config.integrationToken?.startsWith("secret_")) {
       return {
-        success: true,
-        message: `Connected successfully as "${name}"`,
+        valid: false,
+        error:
+          'integrationToken must be a valid Notion Integration Token starting with "secret_".',
       };
-    } catch (error) {
+    }
+    return { valid: true };
+  }
+
+  // -------------------------------------------------------------------------
+  // testConnection — verifies the token by hitting /users/me
+  // -------------------------------------------------------------------------
+  async testConnection(
+    config: NotionConfig
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      await notionFetch<unknown>("/users/me", config.integrationToken);
+      return { success: true };
+    } catch (err) {
       return {
         success: false,
-        message: `Connection error: ${error instanceof Error ? error.message : String(error)}`,
+        error: err instanceof Error ? err.message : String(err),
       };
     }
   }
 
-  async sync(checkpoint?: NotionCheckpoint): Promise<KnowledgeConnectorSyncResult> {
-    const documents: KnowledgeDocument[] = [];
+  // -------------------------------------------------------------------------
+  // sync — primary entry point
+  // -------------------------------------------------------------------------
+  async sync(
+    config: KnowledgeConnectorConfig & { notion: NotionConfig },
+    checkpoint?: NotionCheckpoint
+  ): Promise<KnowledgeConnectorResult> {
+    const { integrationToken, databaseIds, pageIds } = config.notion;
+    const lastSyncedAt = checkpoint?.lastSyncedAt;
+    const documents: KnowledgeConnectorResult["documents"] = [];
     const errors: string[] = [];
-
-    const lastSyncedAt = checkpoint?.lastSyncedAt
-      ? new Date(checkpoint.lastSyncedAt)
-      : undefined;
+    const syncedAt = new Date().toISOString();
 
     try {
       let pagesToSync: NotionPage[] = [];
 
-      const { pageIds, databaseIds } = this.config;
-
+      // -----------------------------------------------------------------------
+      // 1) Explicit pageIds take precedence when provided
+      // -----------------------------------------------------------------------
       if (pageIds && pageIds.length > 0) {
-        // Targeted sync: fetch only specified pages
-        for (const pageId of pageIds) {
+        for (const pid of pageIds) {
           try {
-            const page = await fetchPage(this.token, pageId);
-            pagesToSync.push(page);
+            const page = await fetchPage(pid, integrationToken);
+            if (
+              !lastSyncedAt ||
+              new Date(page.last_edited_time) > new Date(lastSyncedAt)
+            ) {
+              pagesToSync.push(page);
+            }
           } catch (err) {
             errors.push(
-              `Failed to fetch page ${pageId}: ${err instanceof Error ? err.message : String(err)}`
+              `Failed to fetch page ${pid}: ${err instanceof Error ? err.message : String(err)}`
             );
           }
         }
-      } else if (databaseIds && databaseIds.length > 0) {
-        // Filtered sync: only pages belonging to specific databases
-        const allPages = await fetchAllPages(this.token, {
-          property: "object",
-          value: "page",
-        });
-        pagesToSync = allPages.filter(
-          (page) =>
-            page.parent.type === "database_id" &&
-            page.parent.database_id &&
-            databaseIds.includes(page.parent.database_id)
-        );
-      } else {
-        // Full workspace sync
-        pagesToSync = await fetchAllPages(this.token, {
-          property: "object",
-          value: "page",
-        });
       }
 
-      // Apply incremental checkpoint
-      if (lastSyncedAt) {
-        pagesToSync = pagesToSync.filter(
-          (page) => new Date(page.last_edited_time) > lastSyncedAt
-        );
+      // -----------------------------------------------------------------------
+      // 2) databaseIds — query each database
+      // -----------------------------------------------------------------------
+      if (databaseIds && databaseIds.length > 0) {
+        for (const dbId of databaseIds) {
+          try {
+            const dbPages = await queryDatabase(dbId, integrationToken, lastSyncedAt);
+            pagesToSync.push(...dbPages);
+          } catch (err) {
+            errors.push(
+              `Failed to query database ${dbId}: ${err instanceof Error ? err.message : String(err)}`
+            );
+          }
+        }
       }
 
-      // Sync each page
+      // -----------------------------------------------------------------------
+      // 3) Full-workspace search (when neither pageIds nor databaseIds given)
+      // -----------------------------------------------------------------------
+      if ((!pageIds || pageIds.length === 0) && (!databaseIds || databaseIds.length === 0)) {
+        pagesToSync = await searchAllPages(integrationToken, lastSyncedAt);
+      }
+
+      // -----------------------------------------------------------------------
+      // Deduplicate by page id
+      // -----------------------------------------------------------------------
+      const seen = new Set<string>();
+      pagesToSync = pagesToSync.filter((p) => {
+        if (seen.has(p.id)) return false;
+        seen.add(p.id);
+        return true;
+      });
+
+      // -----------------------------------------------------------------------
+      // Fetch block content and build documents
+      // -----------------------------------------------------------------------
       for (const page of pagesToSync) {
         try {
-          const doc = await syncPage(this.token, page);
-          documents.push(doc);
+          const title = extractPageTitle(page);
+          const content = await fetchBlocksAsMarkdown(page.id, integrationToken, 1);
+
+          documents.push({
+            id: page.id,
+            title,
+            content: content.trim(),
+            url: page.url,
+            createdAt: page.created_time,
+            updatedAt: page.last_edited_time,
+            metadata: {
+              source: "notion",
+              pageId: page.id,
+            },
+          });
         } catch (err) {
           errors.push(
-            `Failed to sync page ${page.id}: ${err instanceof Error ? err.message : String(err)}`
+            `Failed to fetch content for page ${page.id}: ${err instanceof Error ? err.message : String(err)}`
           );
         }
       }
-    } catch (error) {
+    } catch (err) {
       errors.push(
-        `Sync failed: ${error instanceof Error ? error.message : String(error)}`
+        `Notion sync failed: ${err instanceof Error ? err.message : String(err)}`
       );
     }
 
-    const newCheckpoint: NotionCheckpoint = {
-      lastSyncedAt: new Date().toISOString(),
-    };
-
     return {
       documents,
-      checkpoint: newCheckpoint,
       errors,
+      checkpoint: { lastSyncedAt: syncedAt } satisfies NotionCheckpoint,
     };
   }
 }

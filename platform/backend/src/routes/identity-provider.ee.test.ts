@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import { getIdpLogoutUrl } from "./identity-provider.ee";
 
-
 describe("getIdpLogoutUrl", () => {
   const originalFetch = globalThis.fetch;
 

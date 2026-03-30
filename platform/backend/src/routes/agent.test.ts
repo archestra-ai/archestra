@@ -1,9 +1,9 @@
+import { BUILT_IN_AGENT_IDS } from "@shared";
 import { vi } from "vitest";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
-import { BUILT_IN_AGENT_IDS } from "@shared";
 
 vi.mock("@/observability", () => ({
   metrics: {

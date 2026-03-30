@@ -268,8 +268,7 @@ class KnowledgeBaseConnectorModel {
         ),
       )
       .returning({
-        connectorId:
-          schema.knowledgeBaseConnectorAssignmentsTable.connectorId,
+        connectorId: schema.knowledgeBaseConnectorAssignmentsTable.connectorId,
       });
 
     return rows.length > 0;

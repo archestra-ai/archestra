@@ -15,5 +15,5 @@ cd platform/e2e-tests/test-mcp-servers/mcp-server-jwks-keycloak
 make publish
 ```
 
-The deployed e2e Helm chart references the published image configured in [values.yaml](/Users/joeyorlando/coding/archestra/archestra/platform/helm/e2e-tests/values.yaml).
+The deployed e2e Helm chart references the published image configured in [values.yaml](../../../helm/e2e-tests/values.yaml).
 If you change this server and want the Helm deployment to pick it up, rebuild and publish the image, then update the tag in `helm/e2e-tests/values.yaml`.

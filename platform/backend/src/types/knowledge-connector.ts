@@ -1,33 +1,29 @@
 import { z } from "zod";
 
 // ---------------------------------------------------------------------------
-// Shared types
+// Shared primitives
 // ---------------------------------------------------------------------------
 
-export interface KnowledgeDocument {
-  id: string;
-  title: string;
-  content: string;
-  url: string;
-  createdAt: string;
-  updatedAt: string;
-  metadata: Record<string, unknown>;
-}
+export const KnowledgeDocumentSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  content: z.string(),
+  url: z.string().optional(),
+  metadata: z.record(z.unknown()).optional(),
+  updatedAt: z.date().optional(),
+});
 
-export interface SyncResult<TCheckpoint> {
-  checkpoint: TCheckpoint;
-  documentsProcessed: number;
-  errors: string[];
-}
+export type KnowledgeDocument = z.infer<typeof KnowledgeDocumentSchema>;
 
-export interface KnowledgeConnector<TConfig, TCheckpoint> {
-  validateConfig(): Promise<void>;
-  testConnection(): Promise<void>;
-  sync(
-    checkpoint: TCheckpoint | null,
-    onDocument: (doc: KnowledgeDocument) => Promise<void>
-  ): Promise<SyncResult<TCheckpoint>>;
-}
+export const KnowledgeConnectorSyncResultSchema = z.object({
+  documents: z.array(KnowledgeDocumentSchema),
+  checkpoint: z.record(z.unknown()).optional(),
+  errors: z.array(z.string()).optional(),
+});
+
+export type KnowledgeConnectorSyncResult = z.infer<
+  typeof KnowledgeConnectorSyncResultSchema
+>;
 
 // ---------------------------------------------------------------------------
 // Jira
@@ -36,20 +32,21 @@ export interface KnowledgeConnector<TConfig, TCheckpoint> {
 export const JiraCredentialsSchema = z.object({
   instanceUrl: z.string().url(),
   email: z.string().email(),
-  apiToken: z.string().min(1),
+  apiToken: z.string(),
 });
 
 export const JiraConfigSchema = z.object({
-  type: z.literal("jira"),
+  connectorType: z.literal("jira"),
   credentials: JiraCredentialsSchema,
   projectKeys: z.array(z.string()).optional(),
 });
 
+export type JiraConfig = z.infer<typeof JiraConfigSchema>;
+
 export const JiraCheckpointSchema = z.object({
-  lastSyncedAt: z.string().datetime(),
+  lastSyncedAt: z.string().optional(),
 });
 
-export type JiraConfig = z.infer<typeof JiraConfigSchema>;
 export type JiraCheckpoint = z.infer<typeof JiraCheckpointSchema>;
 
 // ---------------------------------------------------------------------------
@@ -59,20 +56,21 @@ export type JiraCheckpoint = z.infer<typeof JiraCheckpointSchema>;
 export const ConfluenceCredentialsSchema = z.object({
   instanceUrl: z.string().url(),
   email: z.string().email(),
-  apiToken: z.string().min(1),
+  apiToken: z.string(),
 });
 
 export const ConfluenceConfigSchema = z.object({
-  type: z.literal("confluence"),
+  connectorType: z.literal("confluence"),
   credentials: ConfluenceCredentialsSchema,
   spaceKeys: z.array(z.string()).optional(),
 });
 
+export type ConfluenceConfig = z.infer<typeof ConfluenceConfigSchema>;
+
 export const ConfluenceCheckpointSchema = z.object({
-  lastSyncedAt: z.string().datetime(),
+  lastSyncedAt: z.string().optional(),
 });
 
-export type ConfluenceConfig = z.infer<typeof ConfluenceConfigSchema>;
 export type ConfluenceCheckpoint = z.infer<typeof ConfluenceCheckpointSchema>;
 
 // ---------------------------------------------------------------------------
@@ -80,21 +78,23 @@ export type ConfluenceCheckpoint = z.infer<typeof ConfluenceCheckpointSchema>;
 // ---------------------------------------------------------------------------
 
 export const GitHubCredentialsSchema = z.object({
-  personalAccessToken: z.string().min(1),
+  accessToken: z.string(),
 });
 
 export const GitHubConfigSchema = z.object({
-  type: z.literal("github"),
+  connectorType: z.literal("github"),
   credentials: GitHubCredentialsSchema,
   repositories: z.array(z.string()).optional(),
   organization: z.string().optional(),
 });
 
+export type GitHubConfig = z.infer<typeof GitHubConfigSchema>;
+
 export const GitHubCheckpointSchema = z.object({
-  lastSyncedAt: z.string().datetime(),
+  lastSyncedAt: z.string().optional(),
+  cursors: z.record(z.string()).optional(),
 });
 
-export type GitHubConfig = z.infer<typeof GitHubConfigSchema>;
 export type GitHubCheckpoint = z.infer<typeof GitHubCheckpointSchema>;
 
 // ---------------------------------------------------------------------------
@@ -103,21 +103,22 @@ export type GitHubCheckpoint = z.infer<typeof GitHubCheckpointSchema>;
 
 export const GitLabCredentialsSchema = z.object({
   instanceUrl: z.string().url(),
-  personalAccessToken: z.string().min(1),
+  accessToken: z.string(),
 });
 
 export const GitLabConfigSchema = z.object({
-  type: z.literal("gitlab"),
+  connectorType: z.literal("gitlab"),
   credentials: GitLabCredentialsSchema,
-  projectIds: z.array(z.string()).optional(),
   groupId: z.string().optional(),
-});
-
-export const GitLabCheckpointSchema = z.object({
-  lastSyncedAt: z.string().datetime(),
+  projectIds: z.array(z.string()).optional(),
 });
 
 export type GitLabConfig = z.infer<typeof GitLabConfigSchema>;
+
+export const GitLabCheckpointSchema = z.object({
+  lastSyncedAt: z.string().optional(),
+});
+
 export type GitLabCheckpoint = z.infer<typeof GitLabCheckpointSchema>;
 
 // ---------------------------------------------------------------------------
@@ -126,21 +127,22 @@ export type GitLabCheckpoint = z.infer<typeof GitLabCheckpointSchema>;
 
 export const ServiceNowCredentialsSchema = z.object({
   instanceUrl: z.string().url(),
-  username: z.string().min(1),
-  password: z.string().min(1),
+  username: z.string(),
+  password: z.string(),
 });
 
 export const ServiceNowConfigSchema = z.object({
-  type: z.literal("servicenow"),
+  connectorType: z.literal("servicenow"),
   credentials: ServiceNowCredentialsSchema,
   tables: z.array(z.string()).optional(),
 });
 
+export type ServiceNowConfig = z.infer<typeof ServiceNowConfigSchema>;
+
 export const ServiceNowCheckpointSchema = z.object({
-  lastSyncedAt: z.string().datetime(),
+  lastSyncedAt: z.string().optional(),
 });
 
-export type ServiceNowConfig = z.infer<typeof ServiceNowConfigSchema>;
 export type ServiceNowCheckpoint = z.infer<typeof ServiceNowCheckpointSchema>;
 
 // ---------------------------------------------------------------------------
@@ -150,41 +152,58 @@ export type ServiceNowCheckpoint = z.infer<typeof ServiceNowCheckpointSchema>;
 export const NotionCredentialsSchema = z.object({
   integrationToken: z
     .string()
-    .min(1)
+    .min(1, "Integration token is required")
     .refine((v) => v.startsWith("secret_"), {
-      message: "Notion integration token must start with 'secret_'",
+      message: "Notion Integration Token must start with 'secret_'",
     }),
 });
 
 export const NotionConfigSchema = z.object({
-  type: z.literal("notion"),
+  connectorType: z.literal("notion"),
   credentials: NotionCredentialsSchema,
-  /** Restrict sync to specific Notion database IDs */
+  /** Restrict sync to pages belonging to these database IDs */
   databaseIds: z.array(z.string()).optional(),
-  /** Restrict sync to specific Notion page IDs */
+  /** Sync only these specific page IDs */
   pageIds: z.array(z.string()).optional(),
 });
 
+export type NotionConfig = z.infer<typeof NotionConfigSchema>;
+
 export const NotionCheckpointSchema = z.object({
-  lastSyncedAt: z.string().datetime(),
+  lastSyncedAt: z.string().optional(),
 });
 
-export type NotionConfig = z.infer<typeof NotionConfigSchema>;
 export type NotionCheckpoint = z.infer<typeof NotionCheckpointSchema>;
 
 // ---------------------------------------------------------------------------
-// Discriminated union of all connector configs
+// Discriminated union — add every connector type here
 // ---------------------------------------------------------------------------
 
-export const KnowledgeConnectorConfigSchema = z.discriminatedUnion("type", [
-  JiraConfigSchema,
-  ConfluenceConfigSchema,
-  GitHubConfigSchema,
-  GitLabConfigSchema,
-  ServiceNowConfigSchema,
-  NotionConfigSchema,
+export const KnowledgeConnectorConfigSchema = z.discriminatedUnion(
+  "connectorType",
+  [
+    JiraConfigSchema,
+    ConfluenceConfigSchema,
+    GitHubConfigSchema,
+    GitLabConfigSchema,
+    ServiceNowConfigSchema,
+    NotionConfigSchema,
+  ]
+);
+
+export type KnowledgeConnectorConfig = z.infer<
+  typeof KnowledgeConnectorConfigSchema
+>;
+
+export const KnowledgeConnectorCheckpointSchema = z.union([
+  JiraCheckpointSchema,
+  ConfluenceCheckpointSchema,
+  GitHubCheckpointSchema,
+  GitLabCheckpointSchema,
+  ServiceNowCheckpointSchema,
+  NotionCheckpointSchema,
 ]);
 
-export type KnowledgeConnectorConfig = z.infer<typeof KnowledgeConnectorConfigSchema>;
-
-export type KnowledgeConnectorType = KnowledgeConnectorConfig["type"];
+export type KnowledgeConnectorCheckpoint = z.infer<
+  typeof KnowledgeConnectorCheckpointSchema
+>;

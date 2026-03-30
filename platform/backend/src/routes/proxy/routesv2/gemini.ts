@@ -16,8 +16,8 @@ import {
   geminiAdapterFactory,
 } from "../adapterV2/gemini";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
-import { handleLLMProxy } from "../llm-proxy-handler";
 import { validateVirtualApiKey } from "../llm-proxy-auth";
+import { handleLLMProxy } from "../llm-proxy-handler";
 
 /**
  * NOTE: Gemini uses colon-literals in their routes. For fastify, double colon is used to escape the colon-literal in
@@ -249,8 +249,7 @@ function createGeminiProxyPreHandler() {
       reply.code(400).send({
         error: {
           code: 400,
-          message:
-            "generateContent requests should use the dedicated endpoint",
+          message: "generateContent requests should use the dedicated endpoint",
           status: "INVALID_ARGUMENT",
         },
       });
@@ -281,10 +280,7 @@ async function resolveGeminiVirtualQueryKey(request: FastifyRequest) {
     const resolved = await validateVirtualApiKey(keyValue, "gemini");
     if (!resolved.apiKey) return;
 
-    request.raw.url = url.replace(
-      `key=${keyValue}`,
-      `key=${resolved.apiKey}`,
-    );
+    request.raw.url = url.replace(`key=${keyValue}`, `key=${resolved.apiKey}`);
 
     logger.info(
       { method: request.method, url: request.url },

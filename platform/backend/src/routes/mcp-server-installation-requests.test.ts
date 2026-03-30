@@ -44,9 +44,8 @@ describe("MCP server installation request routes", () => {
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
       (request as typeof request & { user: unknown }).user = user;
-      (
-        request as typeof request & { organizationId: string }
-      ).organizationId = organizationId;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
     });
 
     const { default: routes } = await import(
@@ -95,9 +94,7 @@ describe("MCP server installation request routes", () => {
       expect(response.statusCode).toBe(200);
       const requests = response.json();
       expect(Array.isArray(requests)).toBe(true);
-      const found = requests.find(
-        (r: { id: string }) => r.id === created.id,
-      );
+      const found = requests.find((r: { id: string }) => r.id === created.id);
       expect(found).toBeDefined();
       expect(found.status).toBe("pending");
     });
@@ -367,9 +364,7 @@ describe("MCP server installation request routes", () => {
       const body = declineResponse.json();
       expect(body.id).toBe(created.id);
       expect(body.status).toBe("declined");
-      expect(body.adminResponse).toBe(
-        "Does not meet security requirements",
-      );
+      expect(body.adminResponse).toBe("Does not meet security requirements");
       expect(body.reviewedBy).toBeDefined();
       expect(body.reviewedAt).toBeDefined();
     });

@@ -33,8 +33,9 @@ vi.mock("@/secrets-manager", async (importOriginal) => {
     secretManager: vi.fn().mockReturnValue({
       createSecret: vi
         .fn()
-        .mockImplementation(async (secret: Record<string, unknown>, name: string) =>
-          SecretModel.create({ name, secret }),
+        .mockImplementation(
+          async (secret: Record<string, unknown>, name: string) =>
+            SecretModel.create({ name, secret }),
         ),
       updateSecret: vi.fn(),
       deleteSecret: vi.fn(),
@@ -49,8 +50,8 @@ vi.mock("@/services/model-sync", () => ({
   },
 }));
 
-import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { hasPermission, userHasPermission } from "@/auth";
+import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { validateProviderAllowed } from "./llm-provider-api-keys";
 
 const mockIsVertexAiEnabled = vi.mocked(isVertexAiEnabled);

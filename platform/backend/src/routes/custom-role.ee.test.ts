@@ -351,15 +351,9 @@ describe("custom role routes", () => {
     expect(Array.isArray(roles)).toBe(true);
     expect(roles.length).toBeGreaterThanOrEqual(3);
 
-    const adminRole = roles.find(
-      (r: { name: string }) => r.name === "admin",
-    );
-    const editorRole = roles.find(
-      (r: { name: string }) => r.name === "editor",
-    );
-    const memberRole = roles.find(
-      (r: { name: string }) => r.name === "member",
-    );
+    const adminRole = roles.find((r: { name: string }) => r.name === "admin");
+    const editorRole = roles.find((r: { name: string }) => r.name === "editor");
+    const memberRole = roles.find((r: { name: string }) => r.name === "member");
 
     expect(adminRole).toBeDefined();
     expect(adminRole.predefined).toBe(true);
@@ -386,9 +380,7 @@ describe("custom role routes", () => {
     expect(response.statusCode).toBe(200);
     const body = response.json();
     const roles = body.data;
-    const found = roles.find(
-      (r: { id: string }) => r.id === customRole.id,
-    );
+    const found = roles.find((r: { id: string }) => r.id === customRole.id);
     expect(found).toBeDefined();
     expect(found.name).toBe("Viewer");
     expect(found.predefined).toBe(false);
@@ -680,7 +672,7 @@ describe("custom role routes", () => {
     expect(deleteResponse.json()).toEqual({ success: true });
 
     // Verify role is now 404
-    const getResponse = await app.inject({
+    const _getResponse = await app.inject({
       method: "GET",
       url: `/api/roles/${existingRole.id}`,
     });
@@ -738,9 +730,7 @@ describe("custom role routes", () => {
     expect(listResponse.statusCode).toBe(200);
     const roles = listResponse.json().data;
     expect(roles.length).toBeGreaterThanOrEqual(3);
-    const adminRole = roles.find(
-      (r: { name: string }) => r.name === "admin",
-    );
+    const adminRole = roles.find((r: { name: string }) => r.name === "admin");
     expect(adminRole).toBeDefined();
     expect(adminRole.predefined).toBe(true);
 

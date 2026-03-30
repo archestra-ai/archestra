@@ -1,5 +1,5 @@
-import { vi } from "vitest";
 import { ADMIN_ROLE_NAME, BUILT_IN_AGENT_IDS } from "@shared";
+import { vi } from "vitest";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -37,9 +37,8 @@ describe("agent type permission isolation (routes)", () => {
     const instance = createFastifyInstance();
     instance.addHook("onRequest", async (request) => {
       (request as typeof request & { user: unknown }).user = user;
-      (
-        request as typeof request & { organizationId: string }
-      ).organizationId = organizationId;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
     });
 
     const { default: agentRoutes } = await import("./agent");

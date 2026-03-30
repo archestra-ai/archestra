@@ -75,10 +75,10 @@ describe("team routes", () => {
 
   describe("team visibility by role", () => {
     test("admin sees all teams in the organization", async ({ makeTeam }) => {
-      const teamA = await makeTeam(organizationId, adminUser.id, {
+      const _teamA = await makeTeam(organizationId, adminUser.id, {
         name: "Engineering",
       });
-      const teamB = await makeTeam(organizationId, adminUser.id, {
+      const _teamB = await makeTeam(organizationId, adminUser.id, {
         name: "Marketing",
       });
 
@@ -106,7 +106,7 @@ describe("team routes", () => {
       const teamA = await makeTeam(organizationId, adminUser.id, {
         name: "Visible Team",
       });
-      const teamB = await makeTeam(organizationId, adminUser.id, {
+      const _teamB = await makeTeam(organizationId, adminUser.id, {
         name: "Hidden Team",
       });
 
@@ -184,9 +184,7 @@ describe("team routes", () => {
       await memberApp.close();
     });
 
-    test("admin can get any team in the organization", async ({
-      makeTeam,
-    }) => {
+    test("admin can get any team in the organization", async ({ makeTeam }) => {
       const team = await makeTeam(organizationId, adminUser.id, {
         name: "Any Team",
       });
@@ -596,9 +594,7 @@ describe("team routes", () => {
       expect(listResponse.json()).toEqual([]);
     });
 
-    test("prevents duplicate external group mappings", async ({
-      makeTeam,
-    }) => {
+    test("prevents duplicate external group mappings", async ({ makeTeam }) => {
       const team = await makeTeam(organizationId, adminUser.id);
 
       await app.inject({
@@ -619,9 +615,7 @@ describe("team routes", () => {
       );
     });
 
-    test("normalizes group identifiers to lowercase", async ({
-      makeTeam,
-    }) => {
+    test("normalizes group identifiers to lowercase", async ({ makeTeam }) => {
       const team = await makeTeam(organizationId, adminUser.id);
 
       const response = await app.inject({

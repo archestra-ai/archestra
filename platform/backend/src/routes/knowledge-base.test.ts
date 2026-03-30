@@ -977,30 +977,30 @@ describe("knowledge base permission configuration", () => {
     const { RouteId } = await import("@shared");
 
     // Read routes require knowledgeBase:read
-    expect(
-      requiredEndpointPermissionsMap[RouteId.GetKnowledgeBases],
-    ).toEqual({ knowledgeBase: ["read"] });
-    expect(
-      requiredEndpointPermissionsMap[RouteId.GetKnowledgeBase],
-    ).toEqual({ knowledgeBase: ["read"] });
+    expect(requiredEndpointPermissionsMap[RouteId.GetKnowledgeBases]).toEqual({
+      knowledgeBase: ["read"],
+    });
+    expect(requiredEndpointPermissionsMap[RouteId.GetKnowledgeBase]).toEqual({
+      knowledgeBase: ["read"],
+    });
     expect(
       requiredEndpointPermissionsMap[RouteId.GetKnowledgeBaseHealth],
     ).toEqual({ knowledgeBase: ["read"] });
 
     // Create route requires knowledgeBase:create
-    expect(
-      requiredEndpointPermissionsMap[RouteId.CreateKnowledgeBase],
-    ).toEqual({ knowledgeBase: ["create"] });
+    expect(requiredEndpointPermissionsMap[RouteId.CreateKnowledgeBase]).toEqual(
+      { knowledgeBase: ["create"] },
+    );
 
     // Update route requires knowledgeBase:update
-    expect(
-      requiredEndpointPermissionsMap[RouteId.UpdateKnowledgeBase],
-    ).toEqual({ knowledgeBase: ["update"] });
+    expect(requiredEndpointPermissionsMap[RouteId.UpdateKnowledgeBase]).toEqual(
+      { knowledgeBase: ["update"] },
+    );
 
     // Delete route requires knowledgeBase:delete
-    expect(
-      requiredEndpointPermissionsMap[RouteId.DeleteKnowledgeBase],
-    ).toEqual({ knowledgeBase: ["delete"] });
+    expect(requiredEndpointPermissionsMap[RouteId.DeleteKnowledgeBase]).toEqual(
+      { knowledgeBase: ["delete"] },
+    );
 
     // Connector read routes require knowledgeBase:read
     expect(requiredEndpointPermissionsMap[RouteId.GetConnectors]).toEqual({
@@ -1009,28 +1009,29 @@ describe("knowledge base permission configuration", () => {
     expect(requiredEndpointPermissionsMap[RouteId.GetConnector]).toEqual({
       knowledgeBase: ["read"],
     });
-    expect(
-      requiredEndpointPermissionsMap[RouteId.GetConnectorRuns],
-    ).toEqual({ knowledgeBase: ["read"] });
-    expect(requiredEndpointPermissionsMap[RouteId.GetConnectorRun]).toEqual(
-      { knowledgeBase: ["read"] },
-    );
+    expect(requiredEndpointPermissionsMap[RouteId.GetConnectorRuns]).toEqual({
+      knowledgeBase: ["read"],
+    });
+    expect(requiredEndpointPermissionsMap[RouteId.GetConnectorRun]).toEqual({
+      knowledgeBase: ["read"],
+    });
 
     // Connector write routes require knowledgeBase:create/update/delete
-    expect(
-      requiredEndpointPermissionsMap[RouteId.CreateConnector],
-    ).toEqual({ knowledgeBase: ["create"] });
-    expect(
-      requiredEndpointPermissionsMap[RouteId.UpdateConnector],
-    ).toEqual({ knowledgeBase: ["update"] });
-    expect(
-      requiredEndpointPermissionsMap[RouteId.DeleteConnector],
-    ).toEqual({ knowledgeBase: ["delete"] });
+    expect(requiredEndpointPermissionsMap[RouteId.CreateConnector]).toEqual({
+      knowledgeBase: ["create"],
+    });
+    expect(requiredEndpointPermissionsMap[RouteId.UpdateConnector]).toEqual({
+      knowledgeBase: ["update"],
+    });
+    expect(requiredEndpointPermissionsMap[RouteId.DeleteConnector]).toEqual({
+      knowledgeBase: ["delete"],
+    });
   });
 
   test("member cannot have create, update, or delete access to knowledge base routes", async () => {
-    const { memberPermissions, requiredEndpointPermissionsMap } =
-      await import("@shared/access-control");
+    const { memberPermissions, requiredEndpointPermissionsMap } = await import(
+      "@shared/access-control"
+    );
     const { RouteId } = await import("@shared");
 
     const memberKbActions = memberPermissions.knowledgeBase;

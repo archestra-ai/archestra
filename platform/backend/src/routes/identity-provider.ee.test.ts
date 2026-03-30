@@ -353,9 +353,7 @@ describe("identity provider routes", () => {
       expect(data).toHaveLength(0);
     });
 
-    test("returns array of providers", async ({
-      makeIdentityProvider,
-    }) => {
+    test("returns array of providers", async ({ makeIdentityProvider }) => {
       await makeIdentityProvider(organizationId, {
         providerId: "route-test-provider",
         oidcConfig: {
@@ -408,8 +406,7 @@ describe("identity provider routes", () => {
       expect(data.length).toBeGreaterThanOrEqual(1);
 
       const provider = data.find(
-        (p: { providerId: string }) =>
-          p.providerId === "public-test-provider",
+        (p: { providerId: string }) => p.providerId === "public-test-provider",
       );
       expect(provider).toBeDefined();
       expect(provider).toHaveProperty("id");
@@ -441,9 +438,7 @@ describe("identity provider routes", () => {
       expect(response.statusCode).toBe(404);
     });
 
-    test("returns provider by id", async ({
-      makeIdentityProvider,
-    }) => {
+    test("returns provider by id", async ({ makeIdentityProvider }) => {
       const idp = await makeIdentityProvider(organizationId, {
         providerId: "get-by-id-provider",
         oidcConfig: {

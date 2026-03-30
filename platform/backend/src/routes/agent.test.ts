@@ -26,9 +26,8 @@ describe("agent routes", () => {
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
       (request as typeof request & { user: unknown }).user = user;
-      (
-        request as typeof request & { organizationId: string }
-      ).organizationId = organizationId;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
     });
 
     const { default: agentRoutes } = await import("./agent");
@@ -236,7 +235,6 @@ describe("agent routes", () => {
       });
 
       if (deleteResponse.statusCode !== 200) {
-        console.log("DELETE failed:", deleteResponse.statusCode, deleteResponse.body);
       }
       expect(deleteResponse.statusCode).toBe(200);
       const body = deleteResponse.json();

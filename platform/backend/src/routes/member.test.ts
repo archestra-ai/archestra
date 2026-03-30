@@ -122,9 +122,8 @@ describe("GET /api/organization/members/:idOrEmail", () => {
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
       (request as typeof request & { user: unknown }).user = user;
-      (
-        request as typeof request & { organizationId: string }
-      ).organizationId = organizationId;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
     });
 
     const { default: organizationRoutes } = await import("./organization");

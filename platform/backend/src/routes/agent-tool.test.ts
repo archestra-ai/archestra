@@ -1,7 +1,7 @@
 import { ADMIN_ROLE_NAME } from "@shared";
-import { validateAssignment } from "@/services/agent-tool-assignment";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import { validateAssignment } from "@/services/agent-tool-assignment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { InternalMcpCatalog, Tool, User } from "@/types";
 
@@ -298,9 +298,8 @@ describe("GET /api/agent-tools", () => {
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
       (request as typeof request & { user: unknown }).user = user;
-      (
-        request as typeof request & { organizationId: string }
-      ).organizationId = organizationId;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
     });
 
     const { default: agentToolRoutes } = await import("./agent-tool");
@@ -338,11 +337,7 @@ describe("GET /api/agent-tools", () => {
     expect(body.pagination).toHaveProperty("hasPrev");
   });
 
-  test("filters by agentId", async ({
-    makeAgent,
-    makeTool,
-    makeAgentTool,
-  }) => {
+  test("filters by agentId", async ({ makeAgent, makeTool, makeAgentTool }) => {
     const agent1 = await makeAgent({ organizationId });
     const agent2 = await makeAgent({ organizationId });
     const tool1 = await makeTool();

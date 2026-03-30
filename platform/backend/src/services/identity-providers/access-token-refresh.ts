@@ -85,6 +85,7 @@ export async function refreshLinkedIdentityProviderAccessToken(params: {
     method: "POST",
     headers,
     body,
+    signal: AbortSignal.timeout(10_000),
   });
   if (!response.ok) {
     logger.warn(

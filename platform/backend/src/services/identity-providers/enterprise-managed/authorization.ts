@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { OAUTH_SCOPES } from "@shared";
 import { decodeProtectedHeader } from "jose";
 import config from "@/config";
@@ -198,7 +198,10 @@ function validateClientAuthentication(params: {
   if (
     (authMethod === "client_secret_basic" ||
       authMethod === "client_secret_post") &&
-    params.registeredClientSecret === params.clientSecret
+    hasMatchingClientSecret({
+      registeredClientSecret: params.registeredClientSecret,
+      clientSecret: params.clientSecret,
+    })
   ) {
     return null;
   }
@@ -257,6 +260,24 @@ function normalizeAssertionScopes(scope: string | null): string[] {
     .map((item) => item.trim())
     .filter(Boolean)
     .filter((item) => supportedScopes.has(item));
+}
+
+function hasMatchingClientSecret(params: {
+  registeredClientSecret: string | undefined;
+  clientSecret: string | undefined;
+}): boolean {
+  if (!params.registeredClientSecret || !params.clientSecret) {
+    return false;
+  }
+
+  const registeredSecret = Buffer.from(params.registeredClientSecret, "utf8");
+  const providedSecret = Buffer.from(params.clientSecret, "utf8");
+
+  if (registeredSecret.length !== providedSecret.length) {
+    return false;
+  }
+
+  return timingSafeEqual(registeredSecret, providedSecret);
 }
 
 function extractString(

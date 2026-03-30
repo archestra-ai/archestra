@@ -73,4 +73,33 @@ describe("normalizeIdentityProviderFormValues", () => {
 
     expect(normalized.oidcConfig?.enterpriseManagedCredentials).toEqual({});
   });
+
+  it("does not infer Okta from an attacker-controlled issuer substring", () => {
+    const normalized = normalizeIdentityProviderFormValues(
+      makeOidcFormValues({
+        providerId: "generic-oidc",
+        issuer: "https://attacker.example/.okta.com/path",
+        oidcConfig: {
+          issuer: "https://attacker.example/.okta.com/path",
+          pkce: true,
+          clientId: "client-id",
+          clientSecret: "client-secret",
+          discoveryEndpoint:
+            "https://attacker.example/.okta.com/.well-known/openid-configuration",
+          mapping: { id: "sub", email: "email", name: "name" },
+          enterpriseManagedCredentials: {
+            clientId: "exchange-client",
+          },
+        },
+      }),
+    );
+
+    expect(normalized.oidcConfig?.enterpriseManagedCredentials).toEqual(
+      expect.objectContaining({
+        providerType: "generic_oidc",
+        tokenEndpointAuthentication: "private_key_jwt",
+        subjectTokenType: "urn:ietf:params:oauth:token-type:id_token",
+      }),
+    );
+  });
 });

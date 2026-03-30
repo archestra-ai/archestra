@@ -101,6 +101,12 @@ function extractInjectionValue(params: {
   }
 
   const extracted = getValueAtPath(params.value, params.responseFieldPath);
+  if (extracted === undefined) {
+    throw new Error(
+      `Enterprise-managed credential response field '${params.responseFieldPath}' did not resolve to a value`,
+    );
+  }
+
   if (typeof extracted !== "string") {
     throw new Error(
       `Enterprise-managed credential response field '${params.responseFieldPath}' did not resolve to a string`,
@@ -115,10 +121,22 @@ function getValueAtPath(value: Record<string, unknown>, path: string): unknown {
     .split(".")
     .filter(Boolean)
     .reduce<unknown>((current, segment) => {
+      if (isForbiddenPathSegment(segment)) {
+        return undefined;
+      }
+
       if (!current || typeof current !== "object" || Array.isArray(current)) {
         return undefined;
       }
 
       return (current as Record<string, unknown>)[segment];
     }, value);
+}
+
+function isForbiddenPathSegment(segment: string): boolean {
+  return (
+    segment === "__proto__" ||
+    segment === "constructor" ||
+    segment === "prototype"
+  );
 }

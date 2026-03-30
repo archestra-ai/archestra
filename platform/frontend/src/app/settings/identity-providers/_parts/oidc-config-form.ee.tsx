@@ -814,14 +814,14 @@ function inferEnterpriseExchangeType(params: {
   issuer: string;
   providerId: string;
 }): "okta" | "keycloak" | "generic_oidc" {
-  const issuer = params.issuer.toLowerCase();
   const providerId = params.providerId.toLowerCase();
+  const issuerUrl = tryParseUrl(params.issuer);
 
-  if (issuer.includes(".okta.com") || providerId.includes("okta")) {
+  if (issuerUrl?.hostname.endsWith(".okta.com") || providerId.includes("okta")) {
     return "okta";
   }
 
-  if (issuer.includes("/realms/") || providerId.includes("keycloak")) {
+  if (issuerUrl?.pathname.includes("/realms/") || providerId.includes("keycloak")) {
     return "keycloak";
   }
 
@@ -864,5 +864,13 @@ function getSubjectTokenHint(
       return "The detected defaults prefer exchanging the user's access token.";
     default:
       return "Choose the user token type your identity provider expects for token exchange.";
+  }
+}
+
+function tryParseUrl(url: string): URL | null {
+  try {
+    return new URL(url);
+  } catch {
+    return null;
   }
 }

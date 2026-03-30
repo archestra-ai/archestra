@@ -2,18 +2,25 @@ import {
   type ExternalIdentityProviderConfig,
   findExternalIdentityProviderById,
 } from "@/services/identity-providers/oidc";
-import type { EnterpriseManagedCredentialConfig } from "@/types";
-import {
-  type EnterpriseManagedCredentialResult,
-  standardTokenExchangeStrategy,
-} from "./exchange-strategies/standard-token-exchange";
+import type {
+  EnterpriseManagedCredentialConfig,
+  EnterpriseManagedCredentialType,
+} from "@/types";
 import { managedResourceTokenExchangeStrategy } from "./exchange-strategies/managed-resource-token-exchange";
+import { standardTokenExchangeStrategy } from "./exchange-strategies/standard-token-exchange";
 
 export interface EnterpriseCredentialExchangeParams {
   identityProvider: ExternalIdentityProviderConfig;
   assertion: string;
   enterpriseManagedConfig: EnterpriseManagedCredentialConfig;
 }
+
+export type EnterpriseManagedCredentialResult = {
+  credentialType: EnterpriseManagedCredentialType;
+  expiresInSeconds: number | null;
+  value: string | Record<string, unknown>;
+  issuedTokenType: string | null;
+};
 
 export interface EnterpriseCredentialExchangeStrategy {
   exchangeCredential(
@@ -66,7 +73,8 @@ function supportsManagedResourceTokenExchange(
     return true;
   }
 
-  return identityProvider.issuer.includes(".okta.com");
+  const issuerUrl = tryParseIssuerUrl(identityProvider.issuer);
+  return issuerUrl?.hostname.endsWith(".okta.com") ?? false;
 }
 
 function supportsStandardTokenExchange(
@@ -78,5 +86,39 @@ function supportsStandardTokenExchange(
     return true;
   }
 
-  return identityProvider.issuer.includes("/realms/");
+  const issuerUrl = tryParseIssuerUrl(identityProvider.issuer);
+  return issuerUrl?.pathname.includes("/realms/") ?? false;
+}
+
+export function extractProviderErrorMessage(
+  responseBody: Record<string, unknown> | null,
+): string | null {
+  if (!responseBody) {
+    return null;
+  }
+
+  const description = responseBody.error_description;
+  if (typeof description === "string" && description.length > 0) {
+    return description;
+  }
+
+  const errorSummary = responseBody.errorSummary;
+  if (typeof errorSummary === "string" && errorSummary.length > 0) {
+    return errorSummary;
+  }
+
+  const error = responseBody.error;
+  if (typeof error === "string" && error.length > 0) {
+    return error;
+  }
+
+  return null;
+}
+
+function tryParseIssuerUrl(issuer: string): URL | null {
+  try {
+    return new URL(issuer);
+  } catch {
+    return null;
+  }
 }

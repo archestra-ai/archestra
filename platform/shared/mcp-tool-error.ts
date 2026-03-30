@@ -132,13 +132,13 @@ function parsePolicyDeniedMcpToolError(
   const tagged = parseArchestraToolRefusal(input);
   const toolName =
     tagged.toolName ??
-    input.match(/invoke[d]?\s+(?:the\s+)?(.+?)\s+tool/i)?.[1];
+    extractToolNameFromPolicyDeniedMessage(input);
   const toolArgs =
     tagged.toolArguments ??
-    input.match(/tool with the following arguments:\s*(\{[\s\S]*?\})/i)?.[1];
+    extractToolArgumentsFromPolicyDeniedMessage(input);
   const reason =
     tagged.reason ??
-    input.match(/(?:denied|blocked)[\s\S]*?:\s*([\s\S]+)/i)?.[1]?.trim();
+    extractReasonFromPolicyDeniedMessage(input);
 
   if (!toolName || !reason) {
     return null;
@@ -160,4 +160,129 @@ function parsePolicyDeniedMcpToolError(
     input: parsedInput,
     reason,
   };
+}
+
+function extractToolNameFromPolicyDeniedMessage(input: string): string | null {
+  const lowered = input.toLowerCase();
+  const invokedIndex = lowered.indexOf("invoked ");
+  const invokeIndex = lowered.indexOf("invoke ");
+  const startIndex = invokedIndex >= 0 ? invokedIndex : invokeIndex;
+
+  if (startIndex < 0) {
+    return null;
+  }
+
+  let candidate = input.slice(startIndex + (invokedIndex >= 0 ? 8 : 7));
+  if (candidate.toLowerCase().startsWith("the ")) {
+    candidate = candidate.slice(4);
+  }
+
+  const toolIndex = candidate.toLowerCase().indexOf(" tool");
+  if (toolIndex < 0) {
+    return null;
+  }
+
+  const toolName = candidate.slice(0, toolIndex).trim();
+  return toolName.length > 0 ? toolName : null;
+}
+
+function extractToolArgumentsFromPolicyDeniedMessage(
+  input: string,
+): string | null {
+  const marker = "tool with the following arguments:";
+  const lowered = input.toLowerCase();
+  const markerIndex = lowered.indexOf(marker);
+
+  if (markerIndex < 0) {
+    return null;
+  }
+
+  const remainder = input.slice(markerIndex + marker.length).trimStart();
+  if (!remainder.startsWith("{")) {
+    return null;
+  }
+
+  const endIndex = findBalancedJsonObjectEnd(remainder);
+  if (endIndex < 0) {
+    return null;
+  }
+
+  return remainder.slice(0, endIndex + 1).trim();
+}
+
+function extractReasonFromPolicyDeniedMessage(input: string): string | null {
+  const lowered = input.toLowerCase();
+  const deniedIndex = lowered.indexOf("denied");
+  const blockedIndex = lowered.indexOf("blocked");
+  const markerIndex =
+    deniedIndex >= 0
+      ? deniedIndex
+      : blockedIndex >= 0
+        ? blockedIndex
+        : -1;
+
+  if (markerIndex < 0) {
+    return null;
+  }
+
+  const colonIndex = input.indexOf(":", markerIndex);
+  if (colonIndex < 0) {
+    return null;
+  }
+
+  const reason = input.slice(colonIndex + 1).trim();
+  if (!reason) {
+    return null;
+  }
+
+  const nestedColonIndex = reason.indexOf(":");
+  if (nestedColonIndex >= 0) {
+    return reason.slice(nestedColonIndex + 1).trim();
+  }
+
+  return reason;
+}
+
+function findBalancedJsonObjectEnd(input: string): number {
+  let depth = 0;
+  let inString = false;
+  let isEscaped = false;
+
+  for (const [index, char] of Array.from(input).entries()) {
+    if (inString) {
+      if (isEscaped) {
+        isEscaped = false;
+        continue;
+      }
+
+      if (char === "\\") {
+        isEscaped = true;
+        continue;
+      }
+
+      if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === "{") {
+      depth += 1;
+      continue;
+    }
+
+    if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+
+  return -1;
 }

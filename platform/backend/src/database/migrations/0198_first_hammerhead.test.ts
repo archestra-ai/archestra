@@ -152,4 +152,49 @@ describe("0198 migration: simplify agent tool server binding", () => {
       column_name: "enterprise_managed_config",
     });
   });
+
+  test("preserves null static server binding when neither legacy source column was set", async () => {
+    await createScratchTables();
+
+    await db.execute(
+      sql.raw(`
+      INSERT INTO "agent_tools_0198_test" (
+        "id",
+        "agent_id",
+        "tool_id",
+        "credential_source_mcp_server_id",
+        "execution_source_mcp_server_id",
+        "use_dynamic_team_credential"
+      ) VALUES (
+        '10000000-0000-0000-0000-000000000200',
+        '20000000-0000-0000-0000-000000000200',
+        '30000000-0000-0000-0000-000000000200',
+        NULL,
+        NULL,
+        false
+      );
+    `),
+    );
+
+    await runMigrationOnScratchTables();
+
+    const rows = await db.execute(
+      sql.raw(`
+      SELECT
+        "id",
+        "mcp_server_id",
+        "credential_resolution_mode"
+      FROM "agent_tools_0198_test"
+      WHERE "id" = '10000000-0000-0000-0000-000000000200';
+    `),
+    );
+
+    expect(rows.rows).toEqual([
+      {
+        id: "10000000-0000-0000-0000-000000000200",
+        mcp_server_id: null,
+        credential_resolution_mode: "static",
+      },
+    ]);
+  });
 });

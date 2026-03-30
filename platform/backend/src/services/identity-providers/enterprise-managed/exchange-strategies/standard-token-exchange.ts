@@ -1,21 +1,15 @@
 import logger from "@/logging";
 import { discoverOidcTokenEndpoint } from "@/services/identity-providers/oidc";
-import type { EnterpriseManagedCredentialType } from "@/types";
-import type {
-  EnterpriseCredentialExchangeStrategy,
-  EnterpriseCredentialExchangeParams,
+import {
+  type EnterpriseCredentialExchangeParams,
+  type EnterpriseCredentialExchangeStrategy,
+  type EnterpriseManagedCredentialResult,
+  extractProviderErrorMessage,
 } from "../exchange";
 
 const TOKEN_EXCHANGE_GRANT_TYPE =
   "urn:ietf:params:oauth:grant-type:token-exchange";
 const ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token";
-
-export type EnterpriseManagedCredentialResult = {
-  credentialType: EnterpriseManagedCredentialType;
-  expiresInSeconds: number | null;
-  value: string | Record<string, unknown>;
-  issuedTokenType: string | null;
-};
 
 class StandardTokenExchangeStrategy
   implements EnterpriseCredentialExchangeStrategy
@@ -105,9 +99,7 @@ class StandardTokenExchangeStrategy
 
     const accessToken = responseBody.access_token;
     if (typeof accessToken !== "string" || accessToken.length === 0) {
-      throw new Error(
-        "Standard token exchange did not return an access token",
-      );
+      throw new Error("Standard token exchange did not return an access token");
     }
 
     return {
@@ -167,24 +159,4 @@ function buildAuthenticatedHeaders(params: {
   throw new Error(
     "Standard token exchange does not support private_key_jwt in this implementation",
   );
-}
-
-function extractProviderErrorMessage(
-  responseBody: Record<string, unknown> | null,
-): string | null {
-  if (!responseBody) {
-    return null;
-  }
-
-  const description = responseBody.error_description;
-  if (typeof description === "string" && description.length > 0) {
-    return description;
-  }
-
-  const error = responseBody.error;
-  if (typeof error === "string" && error.length > 0) {
-    return error;
-  }
-
-  return null;
 }

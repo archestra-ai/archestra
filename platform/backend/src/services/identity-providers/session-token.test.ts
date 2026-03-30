@@ -211,6 +211,53 @@ describe("resolveSessionExternalIdpToken", () => {
     expect(persistedAccount?.accessToken).toBe("refreshed-access-token");
     expect(persistedAccount?.refreshToken).toBe("refresh-token-456");
   });
+
+  test("treats access tokens without an expiry as unusable for access-token subject exchange", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeIdentityProvider,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "member" });
+
+    const identityProvider = await makeIdentityProvider(org.id, {
+      providerId: "keycloak-no-expiry",
+      issuer: "http://localhost:30081/realms/archestra",
+      oidcConfig: {
+        clientId: "archestra-oidc",
+        enterpriseManagedCredentials: {
+          providerType: "keycloak",
+          subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+        },
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      identityProviderId: identityProvider.id,
+    });
+
+    await db.insert(schema.accountsTable).values({
+      id: randomUUID(),
+      accountId: "acct-keycloak-no-expiry",
+      providerId: "keycloak-no-expiry",
+      userId: user.id,
+      accessToken: "access-token-without-expiry",
+      accessTokenExpiresAt: null,
+      idToken: createJwt({ exp: futureExpSeconds() }),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const result = await resolveSessionExternalIdpToken({
+      agentId: agent.id,
+      userId: user.id,
+    });
+
+    expect(result).toBeNull();
+  });
 });
 
 function createJwt(payload: Record<string, unknown>): string {

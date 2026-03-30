@@ -1047,8 +1047,9 @@ describe("knowledge base permission configuration", () => {
     ];
 
     for (const routeId of writeRoutes) {
-      const required = requiredEndpointPermissionsMap[routeId]!;
-      const requiredActions = required.knowledgeBase!;
+      const required = requiredEndpointPermissionsMap[routeId];
+      expect(required?.knowledgeBase).toBeDefined();
+      const requiredActions = required?.knowledgeBase ?? [];
       const hasAll = requiredActions.every((action: string) =>
         memberKbActions.includes(action as never),
       );
@@ -1067,8 +1068,9 @@ describe("knowledge base permission configuration", () => {
     ];
 
     for (const routeId of readRoutes) {
-      const required = requiredEndpointPermissionsMap[routeId]!;
-      const requiredActions = required.knowledgeBase!;
+      const required = requiredEndpointPermissionsMap[routeId];
+      expect(required?.knowledgeBase).toBeDefined();
+      const requiredActions = required?.knowledgeBase ?? [];
       const hasAll = requiredActions.every((action: string) =>
         memberKbActions.includes(action as never),
       );

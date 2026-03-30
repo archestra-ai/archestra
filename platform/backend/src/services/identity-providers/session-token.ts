@@ -133,7 +133,7 @@ function isStoredSubjectTokenExpired(params: {
     if (params.account.accessTokenExpiresAt) {
       return params.account.accessTokenExpiresAt <= new Date();
     }
-    return false;
+    return true;
   }
 
   return isJwtExpired(params.rawToken);

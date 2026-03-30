@@ -3,9 +3,11 @@ import { importPKCS8, SignJWT } from "jose";
 import logger from "@/logging";
 import { discoverOidcTokenEndpoint } from "@/services/identity-providers/oidc";
 import type { EnterpriseManagedCredentialType } from "@/types";
-import type {
-  EnterpriseCredentialExchangeStrategy,
-  EnterpriseCredentialExchangeParams,
+import {
+  type EnterpriseCredentialExchangeParams,
+  type EnterpriseCredentialExchangeStrategy,
+  type EnterpriseManagedCredentialResult,
+  extractProviderErrorMessage,
 } from "../exchange";
 
 const TOKEN_EXCHANGE_GRANT_TYPE =
@@ -14,18 +16,10 @@ const CLIENT_ASSERTION_TYPE =
   "urn:ietf:params:oauth:client-assertion-type:jwt-bearer";
 const ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token";
 const ID_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:id_token";
-const _JWT_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:jwt";
 const ID_JAG_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:id-jag";
 const OKTA_SECRET_TOKEN_TYPE = "urn:okta:params:oauth:token-type:secret";
 const OKTA_SERVICE_ACCOUNT_TOKEN_TYPE =
   "urn:okta:params:oauth:token-type:service-account";
-
-export type EnterpriseManagedCredentialResult = {
-  credentialType: EnterpriseManagedCredentialType;
-  expiresInSeconds: number | null;
-  value: string | Record<string, unknown>;
-  issuedTokenType: string | null;
-};
 
 class ManagedResourceTokenExchangeStrategy
   implements EnterpriseCredentialExchangeStrategy
@@ -106,7 +100,8 @@ class ManagedResourceTokenExchangeStrategy
       logger.warn(
         {
           status: response.status,
-          body: responseBody,
+          error: responseBody?.error,
+          errorDescription: responseBody?.error_description,
           identityProviderId: params.identityProvider.id,
         },
         "Enterprise-managed managed-resource token exchange failed",
@@ -305,27 +300,6 @@ function normalizeOktaCredentialResponse(params: {
     value: params.responseBody,
     issuedTokenType,
   };
-}
-
-function extractProviderErrorMessage(
-  responseBody: Record<string, unknown> | null,
-): string | null {
-  if (!responseBody) {
-    return null;
-  }
-
-  const description = responseBody.error_description;
-  if (typeof description === "string") {
-    return description;
-  }
-
-  const errorSummary = responseBody.errorSummary;
-  if (typeof errorSummary === "string") {
-    return errorSummary;
-  }
-
-  const error = responseBody.error;
-  return typeof error === "string" ? error : null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

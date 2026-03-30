@@ -56,18 +56,33 @@ function inferEnterpriseExchangeType(params: {
   issuer: string;
   providerId: string;
 }): "okta" | "keycloak" | "generic_oidc" {
-  const issuer = params.issuer.toLowerCase();
   const providerId = params.providerId.toLowerCase();
+  const parsedIssuer = tryParseIssuerUrl(params.issuer);
 
-  if (issuer.includes(".okta.com") || providerId.includes("okta")) {
+  if (
+    (parsedIssuer?.hostname === "okta.com" ||
+      parsedIssuer?.hostname.endsWith(".okta.com")) ||
+    providerId.includes("okta")
+  ) {
     return "okta";
   }
 
-  if (issuer.includes("/realms/") || providerId.includes("keycloak")) {
+  if (
+    parsedIssuer?.pathname.includes("/realms/") ||
+    providerId.includes("keycloak")
+  ) {
     return "keycloak";
   }
 
   return "generic_oidc";
+}
+
+function tryParseIssuerUrl(issuer: string): URL | null {
+  try {
+    return new URL(issuer);
+  } catch {
+    return null;
+  }
 }
 
 function getDefaultTokenEndpointAuthentication(

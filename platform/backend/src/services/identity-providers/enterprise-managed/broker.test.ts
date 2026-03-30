@@ -241,4 +241,76 @@ describe("resolveEnterpriseTransportCredential", () => {
 
     fetchMock.mockRestore();
   });
+
+  test("rejects forbidden prototype segments in responseFieldPath", async ({
+    makeAgent,
+    makeIdentityProvider,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser({ email: "prototype-segment@example.com" });
+    const identityProvider = await makeIdentityProvider(organization.id, {
+      providerId: "okta-prototype-segment",
+      issuer: "https://example.okta.com",
+      oidcConfig: {
+        clientId: "web-client-id",
+        tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+        enterpriseManagedCredentials: {
+          providerType: "okta",
+          clientId: "ai-agent-client-id",
+          tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+          tokenEndpointAuthentication: "client_secret_post",
+          clientSecret: "ai-agent-client-secret",
+        },
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      identityProviderId: identityProvider.id,
+    });
+
+    await db.insert(schema.accountsTable).values({
+      id: randomUUID(),
+      accountId: "acct-prototype",
+      providerId: identityProvider.providerId,
+      userId: user.id,
+      idToken: "user-id-token",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          issued_token_type: "urn:okta:params:oauth:token-type:secret",
+          secret: { token: "ghu_managed_token" },
+          expires_in: 300,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    await expect(
+      resolveEnterpriseTransportCredential({
+        agentId: agent.id,
+        tokenAuth: {
+          tokenId: "session-token",
+          teamId: null,
+          isOrganizationToken: false,
+          userId: user.id,
+        },
+        enterpriseManagedConfig: {
+          requestedCredentialType: "secret",
+          resourceIdentifier: "orn:okta:pam:github-secret",
+          tokenInjectionMode: "authorization_bearer",
+          responseFieldPath: "__proto__.token",
+        },
+      }),
+    ).rejects.toThrow(
+      "Enterprise-managed credential response field '__proto__.token' did not resolve to a value",
+    );
+
+    fetchMock.mockRestore();
+  });
 });

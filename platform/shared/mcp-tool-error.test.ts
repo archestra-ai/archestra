@@ -84,4 +84,20 @@ Tool invocation blocked: untrusted data detected`),
       reason: "Tool invocation blocked: untrusted data detected",
     });
   });
+
+  it("extracts a policy denied error from untagged refusal text", () => {
+    expect(
+      extractMcpToolError(`I tried to invoke the github__delete_branch tool with the following arguments: {"branch":"main"}.
+
+However, I was denied by a tool invocation policy:
+
+Tool invocation blocked: untrusted data detected`),
+    ).toEqual({
+      type: "policy_denied",
+      message: expect.any(String),
+      toolName: "github__delete_branch",
+      input: { branch: "main" },
+      reason: "untrusted data detected",
+    });
+  });
 });

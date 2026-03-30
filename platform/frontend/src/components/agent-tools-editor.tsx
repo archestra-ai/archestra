@@ -54,11 +54,7 @@ import {
 } from "./agent-tools-editor.utils";
 import { CatalogDocsLink } from "./catalog-docs-link";
 import { McpCatalogIcon } from "./mcp-catalog-icon";
-import {
-  DYNAMIC_CREDENTIAL_VALUE,
-  ENTERPRISE_MANAGED_CREDENTIAL_VALUE,
-  TokenSelect,
-} from "./token-select";
+import { DYNAMIC_CREDENTIAL_VALUE, TokenSelect } from "./token-select";
 
 type InternalMcpCatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
@@ -275,13 +271,15 @@ const AgentToolsEditorContent = forwardRef<
         }
 
         const _isLocal = changes.catalogItem.serverType === "local";
+        const prefersEnterpriseManaged =
+          changes.catalogItem.enterpriseManagedConfig != null;
 
         // Remove and add tools in parallel (skip invalidation, will do it once at the end)
         const useDynamicCredential =
           isPlaywrightCatalogItem(changes.catalogItem.id) ||
           changes.credentialSourceId === DYNAMIC_CREDENTIAL_VALUE;
         const useEnterpriseManagedCredential =
-          changes.credentialSourceId === ENTERPRISE_MANAGED_CREDENTIAL_VALUE;
+          prefersEnterpriseManaged && useDynamicCredential;
 
         const results = await Promise.allSettled([
           ...toRemove.map((toolId) =>
@@ -324,7 +322,7 @@ const AgentToolsEditorContent = forwardRef<
             agentTool.credentialResolutionMode === "dynamic"
               ? DYNAMIC_CREDENTIAL_VALUE
               : agentTool.credentialResolutionMode === "enterprise_managed"
-                ? ENTERPRISE_MANAGED_CREDENTIAL_VALUE
+                ? DYNAMIC_CREDENTIAL_VALUE
                 : (agentTool.mcpServerId ?? null);
           if (currentCred !== changes.credentialSourceId) {
             hasChanges = true;
@@ -656,12 +654,13 @@ function McpServerPill({
     catalogId: catalogItem.id,
   });
   const mcpServers = credentials?.[catalogItem.id] ?? [];
+  const prefersEnterpriseManaged = catalogItem.enterpriseManagedConfig != null;
 
   const currentCredentialSource =
     assignedTools[0]?.credentialResolutionMode === "dynamic"
       ? DYNAMIC_CREDENTIAL_VALUE
       : assignedTools[0]?.credentialResolutionMode === "enterprise_managed"
-        ? ENTERPRISE_MANAGED_CREDENTIAL_VALUE
+        ? DYNAMIC_CREDENTIAL_VALUE
         : (assignedTools[0]?.mcpServerId ?? mcpServers[0]?.id ?? null);
   const _currentEnterpriseManagedConfig = null;
 
@@ -842,11 +841,16 @@ function McpServerPill({
         {showCredentialSelector && (
           <div className="p-4 border-b space-y-2 shrink-0">
             <Label className="text-sm font-medium">Connect on behalf of</Label>
+            <p className="text-xs text-muted-foreground">
+              Choose whether this tool uses a fixed server connection or
+              resolves credentials for the current caller at runtime.
+            </p>
             <TokenSelect
               catalogId={catalogItem.id}
               value={selectedCredential}
               onValueChange={setSelectedCredential}
               shouldSetDefaultValue={false}
+              prefersEnterpriseManaged={prefersEnterpriseManaged}
             />
           </div>
         )}

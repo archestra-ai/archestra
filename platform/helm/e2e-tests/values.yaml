@@ -29,6 +29,7 @@ keycloak:
     adminUser: admin
     adminPassword: admin
   features:
+    - token-exchange
     - jwt-authorization-grant
     - identity-assertion-jwt
   # Service configuration
@@ -79,6 +80,8 @@ keycloak:
       password: "password"
       firstName: "Admin"
       lastName: "User"
+      attributes:
+        demo_token_value: "admin_user_token"
       groups:
         - "archestra-admins"
     # Member user - in archestra-users group, should get member role
@@ -87,6 +90,8 @@ keycloak:
       password: "memberpass"
       firstName: "Member"
       lastName: "User"
+      attributes:
+        demo_token_value: "member_user_token"
       groups:
         - "archestra-users"
   # Realm configuration for e2e testing
@@ -99,7 +104,7 @@ mcpServerJwks:
   enabled: true
   image:
     repository: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak
-    tag: "0.0.1"
+    tag: "0.0.3"
     pullPolicy: IfNotPresent
   # JWT audience claim the server expects (must match Keycloak client's audience mapper)
   jwtAudience: "archestra-oidc"

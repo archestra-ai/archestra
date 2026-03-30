@@ -602,4 +602,95 @@ describe("mcp server inspect route", () => {
       oauthRefreshFailedAt: null,
     });
   });
+
+  test("reinstalls a protected remote MCP server using the current identity-provider access token fallback", async ({
+    makeAccount,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Protected Remote Reinstall",
+      serverType: "remote",
+      serverUrl: "http://localhost:30082/mcp",
+    });
+    const mcpServer = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+    await McpServerUserModel.assignUserToMcpServer(mcpServer.id, user.id);
+    await db
+      .update(schema.mcpServersTable)
+      .set({
+        serverType: "remote",
+        localInstallationStatus: "idle",
+      })
+      .where(eq(schema.mcpServersTable.id, mcpServer.id));
+
+    await makeAccount(user.id, {
+      providerId: "keycloak",
+      accessToken: "session-access-token",
+    });
+
+    connectAndGetToolsMock
+      .mockRejectedValueOnce(
+        new Error(
+          'Failed to connect to MCP server Protected Remote Reinstall: Streamable HTTP error: Error POSTing to endpoint: {"error":"Missing or invalid Authorization header"}',
+        ),
+      )
+      .mockResolvedValueOnce([
+        {
+          name: "whoami",
+          description: "Returns the authenticated user",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ]);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${mcpServer.id}/reinstall`,
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const [serverRow] = await db
+        .select()
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.id, mcpServer.id));
+
+      if (serverRow?.localInstallationStatus === "success") {
+        break;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+
+    expect(connectAndGetToolsMock).toHaveBeenCalledTimes(2);
+    expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
+      catalogItem: expect.objectContaining({ id: catalog.id }),
+      mcpServerId: mcpServer.id,
+      secrets: {},
+    });
+    expect(connectAndGetToolsMock.mock.calls[1][0]).toMatchObject({
+      catalogItem: expect.objectContaining({ id: catalog.id }),
+      mcpServerId: mcpServer.id,
+      secrets: { access_token: "session-access-token" },
+    });
+
+    const [updatedServer] = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.id, mcpServer.id));
+    expect(updatedServer?.localInstallationStatus).toBe("success");
+    expect(updatedServer?.localInstallationError).toBeNull();
+
+    const syncedTools = await db
+      .select()
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.catalogId, catalog.id));
+    expect(syncedTools.map((tool) => tool.name)).toContain(
+      "protected_remote_reinstall__whoami",
+    );
+  });
 });

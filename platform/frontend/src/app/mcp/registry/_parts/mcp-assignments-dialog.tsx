@@ -8,7 +8,6 @@ import { ToolChecklist } from "@/components/agent-tools-editor";
 import { StandardDialog } from "@/components/standard-dialog";
 import {
   DYNAMIC_CREDENTIAL_VALUE,
-  ENTERPRISE_MANAGED_CREDENTIAL_VALUE,
   TokenSelect,
 } from "@/components/token-select";
 import {
@@ -31,7 +30,10 @@ import {
   useUnassignTool,
 } from "@/lib/agent-tools.query";
 import { useAllPermissions } from "@/lib/auth/auth.query";
-import { useCatalogTools } from "@/lib/mcp/internal-mcp-catalog.query";
+import {
+  useCatalogTools,
+  useInternalMcpCatalog,
+} from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServersGroupedByCatalog } from "@/lib/mcp/mcp-server.query";
 import { cn } from "@/lib/utils";
 
@@ -65,6 +67,12 @@ export function McpAssignmentsDialog({
   // Fetch all tools for this MCP server
   const { data: allTools = [], isLoading: isLoadingTools } =
     useCatalogTools(catalogId);
+  const { data: catalogItems = [] } = useInternalMcpCatalog();
+  const catalogItem = useMemo(
+    () => catalogItems.find((item) => item.id === catalogId) ?? null,
+    [catalogId, catalogItems],
+  );
+  const prefersEnterpriseManaged = catalogItem?.enterpriseManagedConfig != null;
 
   // Fetch assignments for this server
   const { data: assignedToolsData, isLoading: isLoadingAssignments } =
@@ -117,7 +125,7 @@ export function McpAssignmentsDialog({
             at.credentialResolutionMode === "dynamic"
               ? DYNAMIC_CREDENTIAL_VALUE
               : at.credentialResolutionMode === "enterprise_managed"
-                ? ENTERPRISE_MANAGED_CREDENTIAL_VALUE
+                ? DYNAMIC_CREDENTIAL_VALUE
                 : (at.mcpServerId ?? null),
         });
       }
@@ -193,7 +201,7 @@ export function McpAssignmentsDialog({
           isPlaywrightCatalogItem(catalogId) ||
           changes.credentialId === DYNAMIC_CREDENTIAL_VALUE;
         const useEnterpriseManagedCredential =
-          changes.credentialId === ENTERPRISE_MANAGED_CREDENTIAL_VALUE;
+          catalogItem?.enterpriseManagedConfig != null && useDynamicCredential;
         const credentialResolutionMode:
           | "static"
           | "dynamic"
@@ -330,8 +338,9 @@ export function McpAssignmentsDialog({
         const defaultCredential =
           pending?.credentialId ??
           assignment?.credentialId ??
+          (prefersEnterpriseManaged ? DYNAMIC_CREDENTIAL_VALUE : null) ??
           mcpServers[0]?.id ??
-          null;
+          DYNAMIC_CREDENTIAL_VALUE;
         updatePendingChanges(profileId, {
           selectedToolIds: allToolIds,
           credentialId: defaultCredential,
@@ -343,6 +352,7 @@ export function McpAssignmentsDialog({
       assignmentsByProfile,
       allTools,
       mcpServers,
+      prefersEnterpriseManaged,
       updatePendingChanges,
     ],
   );
@@ -446,6 +456,7 @@ export function McpAssignmentsDialog({
                       catalogId={catalogId}
                       isBuiltin={isBuiltin}
                       currentCredentialId={assignment?.credentialId ?? null}
+                      prefersEnterpriseManaged={prefersEnterpriseManaged}
                       pendingChanges={pending}
                       onPendingChanges={updatePendingChanges}
                       onRemove={handleProfileToggle}
@@ -488,6 +499,7 @@ export function McpAssignmentsDialog({
                       catalogId={catalogId}
                       isBuiltin={isBuiltin}
                       currentCredentialId={assignment?.credentialId ?? null}
+                      prefersEnterpriseManaged={prefersEnterpriseManaged}
                       pendingChanges={pending}
                       onPendingChanges={updatePendingChanges}
                       onRemove={handleProfileToggle}
@@ -522,6 +534,7 @@ interface ProfileAssignmentPillProps {
   catalogId: string;
   isBuiltin: boolean;
   currentCredentialId: string | null;
+  prefersEnterpriseManaged: boolean;
   pendingChanges?: PendingChanges;
   onPendingChanges: (profileId: string, changes: PendingChanges) => void;
   /** Called when the user clicks the remove button on the pill */
@@ -536,6 +549,7 @@ function ProfileAssignmentPill({
   catalogId,
   isBuiltin,
   currentCredentialId,
+  prefersEnterpriseManaged,
   pendingChanges,
   onPendingChanges,
   onRemove,
@@ -677,11 +691,16 @@ function ProfileAssignmentPill({
         {showCredentialSelector && (
           <div className="p-4 border-b space-y-2 shrink-0">
             <Label className="text-sm font-medium">Connect on behalf of</Label>
+            <p className="text-xs text-muted-foreground">
+              Choose whether this tool uses a fixed server connection or
+              resolves credentials for the current caller at runtime.
+            </p>
             <TokenSelect
               catalogId={catalogId}
               value={credentialId}
               onValueChange={handleCredentialChange}
               shouldSetDefaultValue={hasNoAssignments && !pendingChanges}
+              prefersEnterpriseManaged={prefersEnterpriseManaged}
             />
           </div>
         )}

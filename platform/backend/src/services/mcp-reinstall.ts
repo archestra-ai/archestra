@@ -97,6 +97,20 @@ export function requiresNewUserInputForReinstall(
 export async function autoReinstallServer(
   server: McpServer,
   catalogItem: InternalMcpCatalog,
+  options?: {
+    getTools?: (params: {
+      server: McpServer;
+      catalogItem: InternalMcpCatalog;
+    }) => Promise<
+      Array<{
+        name: string;
+        description: string;
+        inputSchema: Record<string, unknown>;
+        _meta?: Record<string, unknown>;
+        annotations?: Record<string, unknown>;
+      }>
+    >;
+  },
 ): Promise<void> {
   logger.info(
     { serverId: server.id, serverName: server.name },
@@ -139,7 +153,12 @@ export async function autoReinstallServer(
   }
 
   // Fetch and sync tools
-  const tools = await McpServerModel.getToolsFromServer(server);
+  const tools = options?.getTools
+    ? await options.getTools({
+        server,
+        catalogItem,
+      })
+    : await McpServerModel.getToolsFromServer(server);
 
   // Use catalog item name for tool naming (consistent with install flow)
   const toolNamePrefix = catalogItem.name;

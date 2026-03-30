@@ -1,6 +1,7 @@
 import { jwtDecode } from "jwt-decode";
 import logger from "@/logging";
 import { AccountModel, AgentModel } from "@/models";
+import { refreshLinkedIdentityProviderAccessToken } from "@/services/identity-providers/access-token-refresh";
 import { findExternalIdentityProviderById } from "@/services/identity-providers/oidc";
 
 export interface SessionExternalIdpToken {
@@ -36,6 +37,28 @@ export async function resolveSessionExternalIdpToken(params: {
       : account?.idToken;
   if (!rawToken) {
     return null;
+  }
+
+  if (isStoredSubjectTokenExpired({ account, tokenPreference, rawToken })) {
+    if (tokenPreference === "access_token") {
+      const refreshedAccessToken =
+        await refreshLinkedIdentityProviderAccessToken({
+          account: {
+            id: account.id,
+            providerId: account.providerId,
+            refreshToken: account.refreshToken,
+            refreshTokenExpiresAt: account.refreshTokenExpiresAt,
+          },
+        });
+
+      if (refreshedAccessToken) {
+        return {
+          identityProviderId: identityProvider.id,
+          providerId: identityProvider.providerId,
+          rawToken: refreshedAccessToken,
+        };
+      }
+    }
   }
 
   if (isStoredSubjectTokenExpired({ account, tokenPreference, rawToken })) {

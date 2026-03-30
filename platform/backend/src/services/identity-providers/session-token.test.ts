@@ -1,9 +1,16 @@
 import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { describe, expect, test } from "@/test";
+import { afterEach, describe, expect, test, vi } from "@/test";
 import { resolveSessionExternalIdpToken } from "./session-token";
 
 describe("resolveSessionExternalIdpToken", () => {
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
   test("returns the matching session IdP token for the gateway", async ({
     makeOrganization,
     makeUser,
@@ -129,6 +136,80 @@ describe("resolveSessionExternalIdpToken", () => {
       providerId: "keycloak-enterprise",
       rawToken: "keycloak-access-token",
     });
+  });
+
+  test("refreshes an expired stored access token when refresh is possible", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeIdentityProvider,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "member" });
+
+    const identityProvider = await makeIdentityProvider(org.id, {
+      providerId: "keycloak-refreshable",
+      issuer: "http://localhost:30081/realms/archestra",
+      oidcConfig: {
+        clientId: "archestra-oidc",
+        clientSecret: "archestra-oidc-secret",
+        tokenEndpoint:
+          "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+        tokenEndpointAuthentication: "client_secret_post",
+        enterpriseManagedCredentials: {
+          providerType: "keycloak",
+          subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+        },
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      identityProviderId: identityProvider.id,
+    });
+
+    await db.insert(schema.accountsTable).values({
+      id: randomUUID(),
+      accountId: "acct-keycloak-refreshable",
+      providerId: "keycloak-refreshable",
+      userId: user.id,
+      accessToken: "expired-access-token",
+      accessTokenExpiresAt: new Date(Date.now() - 60_000),
+      refreshToken: "refresh-token-123",
+      refreshTokenExpiresAt: new Date(Date.now() + 3_600_000),
+      idToken: createJwt({ exp: futureExpSeconds() }),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        access_token: "refreshed-access-token",
+        refresh_token: "refresh-token-456",
+        expires_in: 3600,
+      }),
+    }) as typeof fetch;
+
+    const result = await resolveSessionExternalIdpToken({
+      agentId: agent.id,
+      userId: user.id,
+    });
+
+    expect(result).toEqual({
+      identityProviderId: identityProvider.id,
+      providerId: "keycloak-refreshable",
+      rawToken: "refreshed-access-token",
+    });
+
+    const [persistedAccount] = await db
+      .select()
+      .from(schema.accountsTable)
+      .where(eq(schema.accountsTable.providerId, "keycloak-refreshable"))
+      .limit(1);
+    expect(persistedAccount?.accessToken).toBe("refreshed-access-token");
+    expect(persistedAccount?.refreshToken).toBe("refresh-token-456");
   });
 });
 

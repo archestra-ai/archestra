@@ -1041,6 +1041,92 @@ describe("McpClient", () => {
 
         fetchMock.mockRestore();
       });
+
+      test("returns re-authentication error when no usable enterprise assertion is available", async ({
+        makeIdentityProvider,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const organization = await makeOrganization();
+        const user = await makeUser({
+          email: "missing-enterprise-assertion@example.com",
+        });
+        const identityProvider = await makeIdentityProvider(organization.id, {
+          providerId: "keycloak-managed-mcp",
+          issuer: "http://localhost:30081/realms/archestra",
+          oidcConfig: {
+            clientId: "archestra-oidc",
+            tokenEndpoint:
+              "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+            enterpriseManagedCredentials: {
+              providerType: "keycloak",
+              clientId: "archestra-oidc",
+              clientSecret: "archestra-oidc-secret",
+              tokenEndpoint:
+                "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+              tokenEndpointAuthentication: "client_secret_post",
+              subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+            },
+          },
+        });
+
+        await AgentModel.update(agentId, {
+          organizationId: organization.id,
+          identityProviderId: identityProvider.id,
+        });
+
+        await InternalMcpCatalogModel.update(catalogId, {
+          name: "keycloak protected demo",
+          enterpriseManagedConfig: {
+            identityProviderId: identityProvider.id,
+            requestedCredentialType: "bearer_token",
+            resourceIdentifier: "archestra-oidc",
+            tokenInjectionMode: "authorization_bearer",
+          },
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "keycloak protected demo__whoami",
+          description: "Show the current authenticated user",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "enterprise_managed",
+        });
+
+        const result = await mcpClient.executeToolCall(
+          {
+            id: "call_missing_enterprise_assertion",
+            name: "keycloak protected demo__whoami",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: "session-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+          },
+        );
+
+        expect(result.isError).toBe(true);
+        expect(result.error).toContain(
+          'Expired or invalid authentication for "keycloak protected demo"',
+        );
+        expect(result.error).toContain(
+          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${catalogId}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${mcpServerId}`,
+        );
+        expect(result._meta).toMatchObject({
+          archestraError: {
+            type: "auth_expired",
+            catalogId,
+            catalogName: "keycloak protected demo",
+            serverId: mcpServerId,
+          },
+        });
+      });
     });
 
     describe("Auth error actionable message", () => {

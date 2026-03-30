@@ -133,6 +133,12 @@ data:
       "resetPasswordAllowed": true,
       "editUsernameAllowed": false,
       "bruteForceProtected": false,
+      "accessTokenLifespan": 3600,
+      "accessTokenLifespanForImplicitFlow": 3600,
+      "ssoSessionIdleTimeout": 28800,
+      "ssoSessionMaxLifespan": 28800,
+      "clientSessionIdleTimeout": 28800,
+      "clientSessionMaxLifespan": 28800,
       "groups": [
         {{- $groups := .Values.keycloak.groups | default list }}
         {{- range $index, $group := $groups }}
@@ -190,6 +196,34 @@ data:
                 "access.token.claim": "true",
                 "claim.name": "name",
                 "userinfo.token.claim": "true"
+              }
+            },
+            {
+              "name": "preferred_username",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-usermodel-property-mapper",
+              "consentRequired": false,
+              "config": {
+                "user.attribute": "username",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "claim.name": "preferred_username",
+                "jsonType.label": "String",
+                "userinfo.token.claim": "true"
+              }
+            },
+            {
+              "name": "demo_token_value",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-usermodel-attribute-mapper",
+              "consentRequired": false,
+              "config": {
+                "user.attribute": "demo_token_value",
+                "id.token.claim": "false",
+                "access.token.claim": "true",
+                "claim.name": "demo_token_value",
+                "jsonType.label": "String",
+                "userinfo.token.claim": "false"
               }
             },
             {
@@ -320,6 +354,17 @@ data:
               "temporary": false
             }
           ]
+          {{- if $user.attributes }},
+          "attributes": {
+            {{- $attrs := $user.attributes }}
+            {{- $first := true }}
+            {{- range $key, $value := $attrs }}
+            {{- if not $first }},{{ end }}
+            {{- $first = false }}
+            {{ $key | quote }}: [{{ $value | quote }}]
+            {{- end }}
+          }
+          {{- end }}
           {{- if $user.groups }},
           "groups": [
             {{- range $gindex, $group := $user.groups }}

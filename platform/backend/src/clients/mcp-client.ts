@@ -325,12 +325,20 @@ class McpClient {
       tool.credentialResolutionMode === "enterprise_managed" &&
       !enterpriseTransportCredential
     ) {
+      const authError = this.buildExpiredAuthMessage(
+        catalogItem.name,
+        catalogItem.id,
+        targetMcpServerId,
+        tokenAuth,
+        "Archestra could not resolve a usable identity-provider token for your current session. Re-authenticate to continue using this tool.",
+      );
       return this.createErrorResult(
         toolCall,
         agentId,
-        "Enterprise-managed credentials are enabled for this tool, but Archestra could not resolve a usable enterprise assertion for the current user.",
+        authError.message,
         mcpServerName,
         authInfo,
+        authError,
       );
     }
 
@@ -1670,6 +1678,7 @@ class McpClient {
     catalogId: string,
     mcpServerId: string,
     tokenAuth?: TokenAuthContext,
+    detailOverride?: string,
   ): AuthExpiredMcpToolError {
     const context = this.formatAuthContext(tokenAuth);
     const reauthUrl = `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${catalogId}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${mcpServerId}`;
@@ -1677,7 +1686,9 @@ class McpClient {
       type: "auth_expired",
       message: formatActionableAuthError({
         title: `Expired or invalid authentication for "${catalogDisplayName}"`,
-        detail: `Your credentials (${context}) failed authentication. Please re-authenticate to continue using this tool.`,
+        detail:
+          detailOverride ??
+          `Your credentials (${context}) failed authentication. Please re-authenticate to continue using this tool.`,
         actionLabel: "re-authenticate",
         url: reauthUrl,
         postAction: "Once you have re-authenticated, retry this tool call.",

@@ -1,6 +1,6 @@
 "use client";
 
-import type { IdentityProviderFormValues } from "@shared";
+import { DocsPage, type IdentityProviderFormValues } from "@shared";
 import { ExternalLink, Info, Plus, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useState } from "react";
@@ -38,6 +38,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { RoleMappingForm } from "./role-mapping-form.ee";
 import { TeamSyncConfigForm } from "./team-sync-config-form.ee";
 
@@ -550,6 +551,9 @@ function EnterpriseManagedCredentialsForm(props: {
     inferredEnterpriseExchangeType,
     subjectTokenTypeDefault,
   } = props;
+  const identityProvidersDocsUrl = getFrontendDocsUrl(
+    DocsPage.PlatformIdentityProviders,
+  );
 
   return (
     <div className="space-y-6">
@@ -589,28 +593,66 @@ function EnterpriseManagedCredentialsForm(props: {
             <p className="text-sm text-muted-foreground">
               Archestra detects the exchange format from the issuer URL.
               {getEnterpriseExchangeHint(inferredEnterpriseExchangeType)}
+              {identityProvidersDocsUrl ? (
+                <>
+                  {" "}
+                  <Link
+                    href={identityProvidersDocsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 underline underline-offset-4"
+                  >
+                    Learn more
+                    <ExternalLink className="h-3 w-3" />
+                  </Link>
+                </>
+              ) : null}
             </p>
 
-            <FormField
-              control={form.control}
-              name="oidcConfig.enterpriseManagedCredentials.clientId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Exchange Client ID</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="Client ID used for token exchange"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Optional override. If empty, Archestra uses the main OIDC
-                    client ID above.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <div className="grid gap-4 md:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="oidcConfig.enterpriseManagedCredentials.clientId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Exchange Client ID</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Client ID used for token exchange"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Optional override. If empty, Archestra uses the main OIDC
+                      client ID above.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="oidcConfig.enterpriseManagedCredentials.clientSecret"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Exchange Client Secret</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="password"
+                        placeholder="Optional"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Only used when the exchange endpoint authenticates with a
+                      client secret.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
             <FormField
               control={form.control}
@@ -662,24 +704,6 @@ function EnterpriseManagedCredentialsForm(props: {
                   </Select>
                   <FormDescription>
                     {getAuthenticationHint(inferredEnterpriseExchangeType)}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="oidcConfig.enterpriseManagedCredentials.clientSecret"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Exchange Client Secret</FormLabel>
-                  <FormControl>
-                    <Input type="password" placeholder="Optional" {...field} />
-                  </FormControl>
-                  <FormDescription>
-                    Only used when the exchange endpoint authenticates with a
-                    client secret.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

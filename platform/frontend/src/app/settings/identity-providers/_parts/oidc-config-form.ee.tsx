@@ -587,11 +587,11 @@ function EnterpriseManagedCredentialsForm(props: {
           </AccordionTrigger>
           <AccordionContent className="space-y-4 pt-4">
             <p className="text-sm text-muted-foreground">
-              Leave this empty unless tools assigned to agents or MCP gateways
-              should use enterprise-managed credentials.
+              Leave this empty unless agents or MCP gateways should resolve
+              downstream tool credentials through this identity provider.
             </p>
             <p className="text-sm text-muted-foreground">
-              Archestra detects the exchange format from the issuer URL.
+              Archestra applies sensible exchange defaults from the issuer URL.
               {getEnterpriseExchangeHint(inferredEnterpriseExchangeType)}
               {identityProvidersDocsUrl ? (
                 <>
@@ -833,11 +833,11 @@ function getEnterpriseExchangeHint(
 ): string {
   switch (providerType) {
     case "okta":
-      return " Detected Okta settings. The usual defaults are private key JWT and ID token exchange.";
+      return " The detected defaults prefer private key JWT client authentication and ID token exchange.";
     case "keycloak":
-      return " Detected Keycloak settings. The usual defaults are client secret POST and access token exchange.";
+      return " The detected defaults prefer client secret POST and access token exchange.";
     default:
-      return " For now, Archestra only has built-in exchange adapters for Okta and Keycloak-style flows.";
+      return " Review the client authentication method and subject token type expected by your identity provider.";
   }
 }
 
@@ -846,9 +846,9 @@ function getAuthenticationHint(
 ): string {
   switch (providerType) {
     case "okta":
-      return "Okta commonly uses private key JWT here.";
+      return "Many enterprise exchanges use private key JWT here.";
     case "keycloak":
-      return "Keycloak commonly uses client secret POST here.";
+      return "Many token-exchange flows use client secret POST here.";
     default:
       return "Choose the client authentication method required by your identity provider.";
   }
@@ -859,9 +859,9 @@ function getSubjectTokenHint(
 ): string {
   switch (providerType) {
     case "okta":
-      return "Okta enterprise-managed flows usually exchange the user's ID token.";
+      return "The detected defaults prefer exchanging the user's ID token.";
     case "keycloak":
-      return "Keycloak token exchange usually exchanges the user's access token.";
+      return "The detected defaults prefer exchanging the user's access token.";
     default:
       return "Choose the user token type your identity provider expects for token exchange.";
   }

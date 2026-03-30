@@ -242,6 +242,22 @@ const deleteApiKey = async (request: APIRequestContext, keyId: string) =>
 const createIdentityProvider = async (
   request: APIRequestContext,
   providerId: string,
+  options?: {
+    domain?: string;
+    enterpriseManagedCredentials?: {
+      clientId?: string;
+      clientSecret?: string;
+      tokenEndpoint?: string;
+      tokenEndpointAuthentication?:
+        | "client_secret_post"
+        | "client_secret_basic"
+        | "private_key_jwt";
+      subjectTokenType?:
+        | "urn:ietf:params:oauth:token-type:access_token"
+        | "urn:ietf:params:oauth:token-type:id_token"
+        | "urn:ietf:params:oauth:token-type:jwt";
+    };
+  },
 ): Promise<string> => {
   const response = await makeApiRequest({
     request,
@@ -250,7 +266,7 @@ const createIdentityProvider = async (
     data: {
       providerId,
       issuer: KEYCLOAK_OIDC.issuer,
-      domain: "jwks-test.example.com",
+      domain: options?.domain ?? "jwks-test.example.com",
       oidcConfig: {
         issuer: KEYCLOAK_OIDC.issuer,
         pkce: true,
@@ -258,6 +274,12 @@ const createIdentityProvider = async (
         clientSecret: KEYCLOAK_OIDC.clientSecret,
         discoveryEndpoint: KEYCLOAK_OIDC.discoveryEndpoint,
         jwksEndpoint: KEYCLOAK_OIDC.jwksEndpoint,
+        ...(options?.enterpriseManagedCredentials
+          ? {
+              enterpriseManagedCredentials:
+                options.enterpriseManagedCredentials,
+            }
+          : {}),
       },
     },
   });

@@ -1,6 +1,6 @@
-import { createRemoteJWKSet, jwtVerify } from "jose";
-import type { JWTPayload } from "jose";
 import type { NextFunction, Request, Response } from "express";
+import type { JWTPayload } from "jose";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 
 export interface AuthContext {
   sub: string;
@@ -24,13 +24,16 @@ declare global {
 }
 
 const JWKS_URL = process.env.JWKS_URL;
-const JWT_ISSUER = process.env.JWT_ISSUER!;
+const JWT_ISSUER = process.env.JWT_ISSUER;
 const JWT_AUDIENCE = process.env.JWT_AUDIENCE || "mcp-server";
 const MCP_SERVER_URL = process.env.MCP_SERVER_URL || "http://localhost:3456";
 
 export async function verifyToken(token: string): Promise<AuthContext> {
   if (!JWKS_URL) {
     throw new Error("JWKS_URL is not configured");
+  }
+  if (!JWT_ISSUER) {
+    throw new Error("JWT_ISSUER is not configured");
   }
 
   const jwks = createRemoteJWKSet(new URL(JWKS_URL));
@@ -77,8 +80,12 @@ export function buildAuthContext(
   payload: JWTPayload,
   token: string,
 ): AuthContext {
+  if (!payload.sub) {
+    throw new Error("JWT payload is missing required sub claim");
+  }
+
   return {
-    sub: payload.sub!,
+    sub: payload.sub,
     email: payload.email as string | undefined,
     name: payload.name as string | undefined,
     preferredUsername: payload.preferred_username as string | undefined,

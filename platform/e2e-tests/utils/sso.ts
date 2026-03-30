@@ -1,6 +1,7 @@
 // biome-ignore-all lint/suspicious/noConsole: we use console.log for retry logging in this file
 import type { Page } from "@playwright/test";
 import {
+  KC_MEMBER_USER,
   KC_TEST_USER,
   KEYCLOAK_EXTERNAL_URL,
   KEYCLOAK_OIDC,
@@ -10,6 +11,13 @@ import {
 import { clickButton } from "./dialogs";
 
 export async function getKeycloakJwt(): Promise<string> {
+  return getKeycloakJwtForUser(KC_TEST_USER);
+}
+
+export async function getKeycloakJwtForUser(params: {
+  username: string;
+  password: string;
+}): Promise<string> {
   const tokenUrl = `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`;
 
   const response = await fetchWithRetry(tokenUrl, {
@@ -19,8 +27,8 @@ export async function getKeycloakJwt(): Promise<string> {
       grant_type: "password",
       client_id: KEYCLOAK_OIDC.clientId,
       client_secret: KEYCLOAK_OIDC.clientSecret,
-      username: KC_TEST_USER.username,
-      password: KC_TEST_USER.password,
+      username: params.username,
+      password: params.password,
       scope: "openid",
     }),
   });
@@ -34,6 +42,14 @@ export async function getKeycloakJwt(): Promise<string> {
 
   const data = (await response.json()) as { access_token: string };
   return data.access_token;
+}
+
+export async function getAdminKeycloakJwt(): Promise<string> {
+  return getKeycloakJwtForUser(KC_TEST_USER);
+}
+
+export async function getMemberKeycloakJwt(): Promise<string> {
+  return getKeycloakJwtForUser(KC_MEMBER_USER);
 }
 
 export async function loginViaKeycloak(ssoPage: Page): Promise<boolean> {

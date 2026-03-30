@@ -125,6 +125,13 @@ export const KC_TEST_USER = {
   name: "Admin User",
 };
 
+export const KC_MEMBER_USER = {
+  username: MEMBER_EMAIL.split("@")[0],
+  password: "memberpass",
+  email: MEMBER_EMAIL,
+  name: "Member User",
+};
+
 /** SSO domain - extracted from admin email for account linking */
 export const SSO_DOMAIN = ADMIN_EMAIL.split("@")[1];
 

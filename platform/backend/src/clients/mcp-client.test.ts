@@ -931,6 +931,115 @@ describe("McpClient", () => {
     });
 
     describe("Enterprise-managed credentials", () => {
+      test("uses an external IdP JWT as the exchange assertion when the caller authenticates via external IdP auth", async ({
+        makeIdentityProvider,
+        makeOrganization,
+      }) => {
+        const organization = await makeOrganization();
+        const identityProvider = await makeIdentityProvider(organization.id, {
+          providerId: "enterprise-external-jwt",
+          issuer: "http://localhost:30081/realms/archestra",
+          oidcConfig: {
+            clientId: "archestra-oidc",
+            tokenEndpoint:
+              "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+            enterpriseManagedCredentials: {
+              providerType: "keycloak",
+              clientId: "archestra-oidc",
+              clientSecret: "archestra-oidc-secret",
+              tokenEndpoint:
+                "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+              tokenEndpointAuthentication: "client_secret_post",
+              subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+            },
+          },
+        });
+
+        await AgentModel.update(agentId, {
+          organizationId: organization.id,
+          identityProviderId: identityProvider.id,
+        });
+
+        await McpServerModel.update(mcpServerId, { secretId: null });
+        await InternalMcpCatalogModel.update(catalogId, {
+          name: "enterprise external jwt demo",
+          enterpriseManagedConfig: {
+            identityProviderId: identityProvider.id,
+            requestedCredentialType: "bearer_token",
+            resourceIdentifier: "archestra-oidc",
+            tokenInjectionMode: "authorization_bearer",
+          },
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "enterprise external jwt demo__debug-auth-token",
+          description: "Managed credential tool",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "enterprise_managed",
+        });
+
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              access_token: "exchanged-downstream-token",
+              expires_in: 300,
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        );
+
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Managed result" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCall(
+          {
+            id: "call_enterprise_external_jwt",
+            name: "enterprise external jwt demo__debug-auth-token",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: "external-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: "external-user-id",
+            isExternalIdp: true,
+            rawToken: "external-idp-jwt",
+          },
+        );
+
+        expect(result.isError).toBe(false);
+
+        const [, requestInit] = fetchMock.mock.calls.at(0) ?? [];
+        expect(String(requestInit?.body)).toContain(
+          "subject_token=external-idp-jwt",
+        );
+
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        const [, options] =
+          vi.mocked(StreamableHTTPClientTransport).mock.calls.at(-1) ?? [];
+        const headers =
+          options?.requestInit?.headers instanceof Headers
+            ? options.requestInit.headers
+            : new Headers(options?.requestInit?.headers);
+        expect(headers.get("Authorization")).toBe(
+          "Bearer exchanged-downstream-token",
+        );
+
+        fetchMock.mockRestore();
+      });
+
       test("injects the brokered managed credential into the outgoing MCP request", async ({
         makeIdentityProvider,
         makeOrganization,

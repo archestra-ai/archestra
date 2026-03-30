@@ -3,7 +3,7 @@ title: "Authentication"
 category: MCP
 order: 4
 description: "How authentication works for MCP clients and upstream MCP servers"
-lastUpdated: 2026-03-27
+lastUpdated: 2026-03-30
 ---
 
 <!--
@@ -145,7 +145,7 @@ Credentials are configured when you install a server from the [MCP Catalog](/doc
 
 - **Static secrets**: API keys or personal access tokens that are set once at install time and used for all requests.
 - **OAuth tokens**: Obtained by running an OAuth flow against the upstream provider during installation. Archestra stores both the access token and refresh token.
-- **Enterprise-managed credentials**: Retrieved at tool-call time from an attached enterprise IdP such as Okta or Keycloak when the IdP can mint or broker a downstream credential for the requested resource.
+- **Enterprise-managed credentials**: Retrieved at tool-call time from an attached enterprise IdP when the IdP can mint or broker a downstream credential for the requested resource.
 
 How credentials are delivered to the upstream server depends on the server type. For **passthrough** (remote) servers, Archestra sends the credential as an `Authorization: Bearer` header over HTTP. For **hosted** (local) servers running in Kubernetes, the gateway connects via stdio transport within the cluster and no auth headers are needed.
 
@@ -180,7 +180,7 @@ When dynamic credentials are enabled, Archestra resolves them in priority order:
 
 ### Enterprise-Managed Credentials
 
-Enterprise-managed credentials are an upstream credential strategy. Instead of storing GitHub, Jira, or other downstream credentials inside Archestra, the tool assignment can ask the configured identity provider to broker a credential for the authenticated user at tool-call time.
+Enterprise-managed credentials are an upstream credential strategy. Instead of storing downstream credentials inside Archestra, Archestra asks the configured identity provider for a credential at tool-call time and injects it into the MCP request.
 
 This is different from both gateway JWKS and ID-JAG:
 
@@ -188,19 +188,13 @@ This is different from both gateway JWKS and ID-JAG:
 - **ID-JAG** exchanges an enterprise assertion for an Archestra-issued MCP access token
 - **Enterprise-managed credentials** obtain the credential used for the downstream MCP tool call itself
 
-In Archestra, this is configured at the **tool assignment** level:
+Configuration is split across three places:
 
-- choose `Enterprise-managed credentials` as the credential resolution mode
-- set the managed resource identifier from the IdP
-- choose the requested credential type (`secret`, `bearer token`, `service account`, or `ID-JAG`)
-- choose how the returned credential should be injected into the downstream MCP request
+- **Identity Provider**: how Archestra authenticates to the IdP for credential exchange
+- **MCP catalog item**: what downstream resource should be requested and how the returned credential should be injected
+- **Tool assignment**: choose `Resolve at call time`
 
-Provider differences:
-
-- **Okta** can be used when the IdP returns resource-specific managed credentials such as secrets, bearer tokens, service accounts, or ID-JAG.
-- **Keycloak** can be used when the IdP returns a downstream bearer token through token exchange. In that setup, the managed resource identifier maps to the target audience/client used for the exchange.
-
-This model works best for remote MCP servers or local MCP servers using HTTP transport. Local stdio servers do not have a per-request header channel, so enterprise-managed injection is not supported for stdio.
+This model works best for remote MCP servers and local MCP servers using HTTP transport. Local stdio servers do not support per-request enterprise-managed credential injection.
 
 ### Missing Credentials
 

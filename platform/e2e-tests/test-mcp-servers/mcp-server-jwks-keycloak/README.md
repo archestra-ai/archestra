@@ -11,7 +11,7 @@ It validates bearer tokens against Keycloak JWKS and exposes a small tool set fo
 Build and publish the image used by Helm:
 
 ```bash
-cd platform/helm/e2e-tests/mcp-server-jwks-keycloak
+cd platform/e2e-tests/test-mcp-servers/mcp-server-jwks-keycloak
 make publish
 ```
 

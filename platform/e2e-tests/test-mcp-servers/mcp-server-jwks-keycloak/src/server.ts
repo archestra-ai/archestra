@@ -1,6 +1,6 @@
-import express from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import express from "express";
 import { requireAuth } from "./auth.js";
 import { registerTools } from "./tools.js";
 
@@ -9,8 +9,7 @@ app.use(express.json());
 
 const MCP_SERVER_URL = process.env.MCP_SERVER_URL || "http://localhost:3456";
 const KEYCLOAK_ISSUER_URL =
-  process.env.KEYCLOAK_ISSUER_URL ||
-  "http://localhost:8080/realms/mcp-demo";
+  process.env.KEYCLOAK_ISSUER_URL || "http://localhost:8080/realms/mcp-demo";
 
 app.get("/.well-known/oauth-protected-resource", (_req, res) => {
   res.json({
@@ -26,12 +25,17 @@ app.get("/health", (_req, res) => {
 });
 
 app.post("/mcp", requireAuth, async (req, res) => {
+  if (!req.auth) {
+    res.status(401).json({ error: "Missing authenticated user context" });
+    return;
+  }
+
   const server = new McpServer({
     name: "jwks-demo-server",
     version: "1.1.0",
   });
 
-  registerTools(server, req.auth!);
+  registerTools(server, req.auth);
 
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
@@ -51,9 +55,4 @@ app.delete("/mcp", (_req, res) => {
 });
 
 const PORT = 3456;
-app.listen(PORT, () => {
-  console.log(`MCP server listening on http://localhost:${PORT}`);
-  console.log(`JWKS URL: ${process.env.JWKS_URL}`);
-  console.log(`JWT Issuer: ${process.env.JWT_ISSUER}`);
-  console.log(`JWT Audience: ${process.env.JWT_AUDIENCE}`);
-});
+app.listen(PORT, () => {});

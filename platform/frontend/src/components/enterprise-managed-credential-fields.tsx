@@ -110,7 +110,7 @@ export function EnterpriseManagedCredentialFields({
               resourceIdentifier: event.target.value || undefined,
             })
           }
-          placeholder="orn:okta:... or provider-specific resource identifier"
+          placeholder="Audience, resource ID, or other provider-specific identifier"
         />
       </div>
 

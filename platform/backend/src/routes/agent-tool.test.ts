@@ -1,6 +1,9 @@
+import { ADMIN_ROLE_NAME } from "@shared";
+import type { FastifyInstanceWithZod } from "@/server";
+import { createFastifyInstance } from "@/server";
 import { validateAssignment } from "@/services/agent-tool-assignment";
-import { describe, expect, test } from "@/test";
-import type { InternalMcpCatalog, Tool } from "@/types";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import type { InternalMcpCatalog, Tool, User } from "@/types";
 
 /**
  * Build a minimal Tool object for test maps.
@@ -277,5 +280,138 @@ describe("validateAssignment", () => {
       preFetchedData: data,
     });
     expect(result).toBeNull();
+  });
+});
+
+describe("GET /api/agent-tools", () => {
+  let app: FastifyInstanceWithZod;
+  let user: User;
+  let organizationId: string;
+
+  beforeEach(async ({ makeUser, makeOrganization, makeMember }) => {
+    user = await makeUser();
+    const org = await makeOrganization();
+    organizationId = org.id;
+
+    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (request as typeof request & { user: unknown }).user = user;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
+    });
+
+    const { default: agentToolRoutes } = await import("./agent-tool");
+    await app.register(agentToolRoutes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("returns paginated results by default", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const agent = await makeAgent({ organizationId });
+    const tool = await makeTool();
+    await makeAgentTool(agent.id, tool.id);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/agent-tools?limit=5",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body).toHaveProperty("data");
+    expect(body).toHaveProperty("pagination");
+    expect(Array.isArray(body.data)).toBe(true);
+    expect(body.pagination).toHaveProperty("limit", 5);
+    expect(body.pagination).toHaveProperty("total");
+    expect(body.pagination).toHaveProperty("currentPage");
+    expect(body.pagination).toHaveProperty("totalPages");
+    expect(body.pagination).toHaveProperty("hasNext");
+    expect(body.pagination).toHaveProperty("hasPrev");
+  });
+
+  test("filters by agentId", async ({ makeAgent, makeTool, makeAgentTool }) => {
+    const agent1 = await makeAgent({ organizationId });
+    const agent2 = await makeAgent({ organizationId });
+    const tool1 = await makeTool();
+    const tool2 = await makeTool();
+    await makeAgentTool(agent1.id, tool1.id);
+    await makeAgentTool(agent2.id, tool2.id);
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agent-tools?agentId=${agent1.id}&limit=10`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body).toHaveProperty("data");
+    expect(body).toHaveProperty("pagination");
+    // All returned tools should belong to agent1
+    for (const at of body.data) {
+      expect(at.agent.id).toBe(agent1.id);
+    }
+    expect(body.pagination.limit).toBe(10);
+  });
+
+  test("skipPagination=true returns all results", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+    seedAndAssignArchestraTools,
+  }) => {
+    const agent = await makeAgent({ organizationId });
+    await seedAndAssignArchestraTools(agent.id);
+    const tool = await makeTool();
+    await makeAgentTool(agent.id, tool.id);
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agent-tools?agentId=${agent.id}&skipPagination=true&limit=1`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body).toHaveProperty("data");
+    expect(body).toHaveProperty("pagination");
+    // Even with limit=1, skipPagination should return all tools
+    expect(body.pagination.totalPages).toBe(1);
+    expect(body.pagination.hasNext).toBe(false);
+    expect(body.pagination.total).toBe(body.data.length);
+    // Should have at least the non-archestra tool we created
+    expect(body.data.length).toBeGreaterThan(0);
+  });
+
+  test("excludeArchestraTools filters out archestra tools", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+    seedAndAssignArchestraTools,
+  }) => {
+    const agent = await makeAgent({ organizationId });
+    await seedAndAssignArchestraTools(agent.id);
+    const regularTool = await makeTool({ name: "regular-tool" });
+    await makeAgentTool(agent.id, regularTool.id);
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agent-tools?agentId=${agent.id}&skipPagination=true&excludeArchestraTools=true`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    // No tools should have names starting with "archestra__"
+    for (const at of body.data) {
+      expect(at.tool.name.startsWith("archestra__")).toBe(false);
+    }
+    // Should still include the regular tool
+    expect(body.data.length).toBeGreaterThanOrEqual(1);
   });
 });

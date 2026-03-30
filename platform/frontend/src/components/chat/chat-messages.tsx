@@ -122,7 +122,6 @@ interface ChatMessagesProps {
   agentName?: string;
   selectedModel?: string;
   modelSource?: ModelSource | null;
-  resolveMessageId?: (messageId: string) => string;
 }
 
 // Type guards for tool parts
@@ -161,7 +160,6 @@ export function ChatMessages({
   agentName,
   selectedModel,
   modelSource,
-  resolveMessageId,
 }: ChatMessagesProps) {
   const isStreamingStalled = useStreamingStallDetection(messages, status);
   const { data: authSession } = useSession();
@@ -263,9 +261,8 @@ export function ChatMessages({
     partIndex: number,
     newText: string,
   ) => {
-    const resolvedMessageId = resolveMessageId?.(messageId) ?? messageId;
     const data = await updateChatMessageMutation.mutateAsync({
-      messageId: resolvedMessageId,
+      messageId,
       partIndex,
       text: newText,
     });
@@ -281,9 +278,8 @@ export function ChatMessages({
     partIndex: number,
     newText: string,
   ) => {
-    const resolvedMessageId = resolveMessageId?.(messageId) ?? messageId;
     const data = await updateChatMessageMutation.mutateAsync({
-      messageId: resolvedMessageId,
+      messageId,
       partIndex,
       text: newText,
       deleteSubsequentMessages: true,
@@ -296,7 +292,7 @@ export function ChatMessages({
     // Pass the partIndex so the caller knows which specific part was edited
     if (onUserMessageEdit && data?.messages) {
       const editedMessage = (data.messages as UIMessage[]).find(
-        (m) => m.id === messageId || m.id === resolvedMessageId,
+        (m) => m.id === messageId,
       );
       if (editedMessage) {
         onUserMessageEdit(

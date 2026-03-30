@@ -753,6 +753,40 @@ export default function ChatPage() {
   const setPendingCustomServerToolCall =
     chatSession?.setPendingCustomServerToolCall;
   const tokenUsage = chatSession?.tokenUsage;
+  const messageIdAliasRef = useRef(new Map<string, string>());
+
+  useEffect(() => {
+    if (
+      !conversationId ||
+      !conversation?.messages ||
+      conversation.id !== conversationId
+    ) {
+      messageIdAliasRef.current.clear();
+      return;
+    }
+
+    messageIdAliasRef.current.clear();
+
+    const backendMessages = conversation.messages as UIMessage[];
+    const maxLength = Math.min(messages.length, backendMessages.length);
+
+    for (let idx = 0; idx < maxLength; idx++) {
+      const localMessage = messages[idx];
+      const backendMessage = backendMessages[idx];
+      if (
+        localMessage &&
+        backendMessage &&
+        localMessage.id !== backendMessage.id &&
+        backendMessage.id.includes("-")
+      ) {
+        messageIdAliasRef.current.set(localMessage.id, backendMessage.id);
+      }
+    }
+  }, [conversationId, conversation?.id, conversation?.messages, messages]);
+
+  const resolveMessageId = useCallback((messageId: string): string => {
+    return messageIdAliasRef.current.get(messageId) ?? messageId;
+  }, []);
 
   const {
     conversationAgentId,
@@ -956,63 +990,6 @@ export default function ChatPage() {
     messages.length,
     status,
     queryClient,
-  ]);
-
-  // Merge database UUIDs from backend into local message state
-  // This runs after streaming completes and backend query has fetched
-  useEffect(() => {
-    if (
-      !setMessages ||
-      !conversation?.messages ||
-      conversation.id !== conversationId ||
-      status === "streaming" ||
-      status === "submitted"
-    ) {
-      return;
-    }
-
-    // Only merge IDs if backend has same or more messages than local state
-    if (conversation.messages.length < messages.length) {
-      return;
-    }
-
-    // Check if any message has a non-UUID ID that needs updating
-    const needsIdUpdate = messages.some((localMsg, idx) => {
-      const backendMsg = conversation.messages[idx] as UIMessage | undefined;
-      return (
-        backendMsg &&
-        backendMsg.id !== localMsg.id &&
-        // Check if backend ID looks like a UUID (has dashes)
-        backendMsg.id.includes("-")
-      );
-    });
-
-    if (!needsIdUpdate) {
-      return;
-    }
-
-    // Merge IDs from backend into local messages
-    const mergedMessages = messages.map((localMsg, idx) => {
-      const backendMsg = conversation.messages[idx] as UIMessage | undefined;
-      if (
-        backendMsg &&
-        backendMsg.id !== localMsg.id &&
-        backendMsg.id.includes("-")
-      ) {
-        // Update only the ID, keep everything else from local state
-        return { ...localMsg, id: backendMsg.id };
-      }
-      return localMsg;
-    });
-
-    setMessages(mergedMessages as UIMessage[]);
-  }, [
-    conversationId,
-    conversation?.messages,
-    conversation?.id,
-    messages,
-    setMessages,
-    status,
   ]);
 
   // Auto-focus textarea when status becomes ready (message sent or stream finished)
@@ -1694,6 +1671,7 @@ export default function ChatPage() {
                   agentId={currentProfileId || initialAgentId || undefined}
                   messages={messages}
                   status={status}
+                  resolveMessageId={resolveMessageId}
                   optimisticToolCalls={optimisticToolCalls}
                   isLoadingConversation={isLoadingConversation}
                   onMessagesUpdate={setMessages}

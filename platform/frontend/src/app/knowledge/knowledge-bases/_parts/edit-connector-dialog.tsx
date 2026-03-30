@@ -28,6 +28,7 @@ import { ConnectorTypeIcon } from "./connector-icons";
 import { GithubConfigFields } from "./github-config-fields";
 import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
+import { NotionConfigFields } from "./notion-config-fields";
 import { SchedulePicker } from "./schedule-picker";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
 import { transformConfigArrayFields } from "./transform-config-array-fields";
@@ -91,7 +92,7 @@ export function EditConnectorDialog({
   }, [open, connector, form]);
 
   const connectorType = connector.connectorType;
-  const urlConfig = getEditUrlConfig(connectorType);
+  const { typeLabel, urlFields: urlConfig } = getEditUrlConfig(connectorType);
 
   const needsEmail = connectorType === "jira" || connectorType === "confluence";
   const isCloud = form.watch("config.isCloud") as boolean | undefined;
@@ -131,7 +132,7 @@ export function EditConnectorDialog({
           <div className="flex h-7 w-7 items-center justify-center rounded-md bg-muted">
             <ConnectorTypeIcon type={connectorType} className="h-4 w-4" />
           </div>
-          Edit {urlConfig.typeLabel} Connector
+          Edit {typeLabel} Connector
         </span>
       }
       description="Update the settings for this connector."
@@ -217,26 +218,28 @@ export function EditConnectorDialog({
             )}
           />
 
-          <FormField
-            control={form.control}
-            // biome-ignore lint/suspicious/noExplicitAny: dynamic field name for connector-specific URL
-            name={urlConfig.fieldName as any}
-            rules={{ required: `${urlConfig.label} is required` }}
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{urlConfig.label}</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder={urlConfig.placeholder}
-                    {...field}
-                    value={(field.value as string) ?? ""}
-                  />
-                </FormControl>
-                <FormDescription>{urlConfig.description}</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          {urlConfig && (
+            <FormField
+              control={form.control}
+              // biome-ignore lint/suspicious/noExplicitAny: dynamic field name for connector-specific URL
+              name={urlConfig.fieldName as any}
+              rules={{ required: `${urlConfig.label} is required` }}
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{urlConfig.label}</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder={urlConfig.placeholder}
+                      {...field}
+                      value={(field.value as string) ?? ""}
+                    />
+                  </FormControl>
+                  <FormDescription>{urlConfig.description}</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
 
           {(connectorType === "jira" || connectorType === "confluence") && (
             <FormField
@@ -316,11 +319,13 @@ export function EditConnectorDialog({
                 <FormLabel>
                   {connectorType === "servicenow"
                     ? "Password"
-                    : needsEmail
-                      ? emailRequired
-                        ? "API Token"
-                        : "API Token / Personal Access Token"
-                      : "Personal Access Token"}
+                    : connectorType === "notion"
+                      ? "Integration Token"
+                      : needsEmail
+                        ? emailRequired
+                          ? "API Token"
+                          : "API Token / Personal Access Token"
+                        : "Personal Access Token"}
                 </FormLabel>
                 <FormControl>
                   <Input
@@ -363,6 +368,7 @@ export function EditConnectorDialog({
               {connectorType === "servicenow" && (
                 <ServiceNowConfigFields form={form} hideUrl />
               )}
+              {connectorType === "notion" && <NotionConfigFields form={form} />}
             </CollapsibleContent>
           </Collapsible>
         </div>
@@ -375,61 +381,77 @@ type ConnectorType =
   archestraApiTypes.CreateConnectorData["body"]["connectorType"];
 
 function getEditUrlConfig(type: ConnectorType): {
-  fieldName: string;
-  label: string;
-  placeholder: string;
-  description: string;
   typeLabel: string;
+  urlFields: {
+    fieldName: string;
+    label: string;
+    placeholder: string;
+    description: string;
+  } | null;
 } {
   switch (type) {
     case "jira":
       return {
-        fieldName: "config.jiraBaseUrl",
-        label: "URL",
-        placeholder: "https://your-domain.atlassian.net",
-        description: "Your Jira instance URL.",
         typeLabel: "Jira",
+        urlFields: {
+          fieldName: "config.jiraBaseUrl",
+          label: "URL",
+          placeholder: "https://your-domain.atlassian.net",
+          description: "Your Jira instance URL.",
+        },
       };
     case "confluence":
       return {
-        fieldName: "config.confluenceUrl",
-        label: "URL",
-        placeholder: "https://your-domain.atlassian.net/wiki",
-        description: "Your Confluence instance URL.",
         typeLabel: "Confluence",
+        urlFields: {
+          fieldName: "config.confluenceUrl",
+          label: "URL",
+          placeholder: "https://your-domain.atlassian.net/wiki",
+          description: "Your Confluence instance URL.",
+        },
       };
     case "github":
       return {
-        fieldName: "config.githubUrl",
-        label: "GitHub API URL",
-        placeholder: "https://api.github.com",
-        description:
-          "Use https://api.github.com for GitHub.com, or your GitHub Enterprise API URL.",
         typeLabel: "GitHub",
+        urlFields: {
+          fieldName: "config.githubUrl",
+          label: "GitHub API URL",
+          placeholder: "https://api.github.com",
+          description:
+            "Use https://api.github.com for GitHub.com, or your GitHub Enterprise API URL.",
+        },
       };
     case "gitlab":
       return {
-        fieldName: "config.gitlabUrl",
-        label: "GitLab URL",
-        placeholder: "https://gitlab.com",
-        description: "Use https://gitlab.com or your self-hosted GitLab URL.",
         typeLabel: "GitLab",
+        urlFields: {
+          fieldName: "config.gitlabUrl",
+          label: "GitLab URL",
+          placeholder: "https://gitlab.com",
+          description: "Use https://gitlab.com or your self-hosted GitLab URL.",
+        },
       };
     case "servicenow":
       return {
-        fieldName: "config.instanceUrl",
-        label: "Instance URL",
-        placeholder: "https://your-instance.service-now.com",
-        description: "Your ServiceNow instance URL.",
         typeLabel: "ServiceNow",
+        urlFields: {
+          fieldName: "config.instanceUrl",
+          label: "Instance URL",
+          placeholder: "https://your-instance.service-now.com",
+          description: "Your ServiceNow instance URL.",
+        },
       };
+    case "notion":
+      return { typeLabel: "Notion", urlFields: null };
     default:
       return {
-        fieldName: "config.url",
-        label: "URL",
-        placeholder: "",
-        description: "",
         typeLabel: type,
+        urlFields: {
+          fieldName: "config.url",
+          label: "URL",
+          placeholder: "",
+          description: "",
+        },
       };
   }
 }

@@ -4,9 +4,9 @@ import logger from "@/logging";
 import { discoverOidcTokenEndpoint } from "@/services/identity-providers/oidc";
 import type { EnterpriseManagedCredentialType } from "@/types";
 import type {
-  EnterpriseCredentialExchangeAdapter,
+  EnterpriseCredentialExchangeStrategy,
   EnterpriseCredentialExchangeParams,
-} from "./index";
+} from "../exchange";
 
 const TOKEN_EXCHANGE_GRANT_TYPE =
   "urn:ietf:params:oauth:grant-type:token-exchange";
@@ -27,8 +27,8 @@ export type EnterpriseManagedCredentialResult = {
   issuedTokenType: string | null;
 };
 
-class OktaEnterpriseCredentialExchangeAdapter
-  implements EnterpriseCredentialExchangeAdapter
+class ManagedResourceTokenExchangeStrategy
+  implements EnterpriseCredentialExchangeStrategy
 {
   async exchangeCredential(
     params: EnterpriseCredentialExchangeParams,
@@ -47,7 +47,9 @@ class OktaEnterpriseCredentialExchangeAdapter
       (await discoverOidcTokenEndpoint(params.identityProvider.issuer)) ??
       buildDefaultOktaTokenEndpoint(params.identityProvider.issuer);
     if (!tokenEndpoint) {
-      throw new Error("Unable to determine Okta token exchange endpoint");
+      throw new Error(
+        "Unable to determine managed-resource token exchange endpoint",
+      );
     }
 
     const clientId =
@@ -107,7 +109,7 @@ class OktaEnterpriseCredentialExchangeAdapter
           body: responseBody,
           identityProviderId: params.identityProvider.id,
         },
-        "Okta enterprise-managed credential exchange failed",
+        "Enterprise-managed managed-resource token exchange failed",
       );
       throw new Error(
         extractProviderErrorMessage(responseBody) ??
@@ -197,8 +199,8 @@ class OktaEnterpriseCredentialExchangeAdapter
   }
 }
 
-export const oktaEnterpriseCredentialExchangeAdapter =
-  new OktaEnterpriseCredentialExchangeAdapter();
+export const managedResourceTokenExchangeStrategy =
+  new ManagedResourceTokenExchangeStrategy();
 
 async function buildClientAssertion(params: {
   clientId: string;

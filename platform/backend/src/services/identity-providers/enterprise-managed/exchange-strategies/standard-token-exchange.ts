@@ -2,9 +2,9 @@ import logger from "@/logging";
 import { discoverOidcTokenEndpoint } from "@/services/identity-providers/oidc";
 import type { EnterpriseManagedCredentialType } from "@/types";
 import type {
-  EnterpriseCredentialExchangeAdapter,
+  EnterpriseCredentialExchangeStrategy,
   EnterpriseCredentialExchangeParams,
-} from "./index";
+} from "../exchange";
 
 const TOKEN_EXCHANGE_GRANT_TYPE =
   "urn:ietf:params:oauth:grant-type:token-exchange";
@@ -17,8 +17,8 @@ export type EnterpriseManagedCredentialResult = {
   issuedTokenType: string | null;
 };
 
-class KeycloakEnterpriseCredentialExchangeAdapter
-  implements EnterpriseCredentialExchangeAdapter
+class StandardTokenExchangeStrategy
+  implements EnterpriseCredentialExchangeStrategy
 {
   async exchangeCredential(
     params: EnterpriseCredentialExchangeParams,
@@ -36,7 +36,7 @@ class KeycloakEnterpriseCredentialExchangeAdapter
       params.identityProvider.oidcConfig?.tokenEndpoint ??
       (await discoverOidcTokenEndpoint(params.identityProvider.issuer));
     if (!tokenEndpoint) {
-      throw new Error("Unable to determine Keycloak token exchange endpoint");
+      throw new Error("Unable to determine standard token exchange endpoint");
     }
 
     const clientId =
@@ -95,7 +95,7 @@ class KeycloakEnterpriseCredentialExchangeAdapter
           body: responseBody,
           identityProviderId: params.identityProvider.id,
         },
-        "Keycloak enterprise-managed credential exchange failed",
+        "Enterprise-managed standard token exchange failed",
       );
       throw new Error(
         extractProviderErrorMessage(responseBody) ??
@@ -106,7 +106,7 @@ class KeycloakEnterpriseCredentialExchangeAdapter
     const accessToken = responseBody.access_token;
     if (typeof accessToken !== "string" || accessToken.length === 0) {
       throw new Error(
-        "Keycloak enterprise-managed credential exchange did not return an access token",
+        "Standard token exchange did not return an access token",
       );
     }
 
@@ -125,8 +125,8 @@ class KeycloakEnterpriseCredentialExchangeAdapter
   }
 }
 
-export const keycloakEnterpriseCredentialExchangeAdapter =
-  new KeycloakEnterpriseCredentialExchangeAdapter();
+export const standardTokenExchangeStrategy =
+  new StandardTokenExchangeStrategy();
 
 function buildAuthenticatedHeaders(params: {
   clientId: string;
@@ -165,7 +165,7 @@ function buildAuthenticatedHeaders(params: {
   }
 
   throw new Error(
-    "Keycloak enterprise-managed credential exchange does not support private_key_jwt in this implementation",
+    "Standard token exchange does not support private_key_jwt in this implementation",
   );
 }
 

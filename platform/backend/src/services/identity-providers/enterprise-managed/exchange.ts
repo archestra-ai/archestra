@@ -5,9 +5,9 @@ import {
 import type { EnterpriseManagedCredentialConfig } from "@/types";
 import {
   type EnterpriseManagedCredentialResult,
-  keycloakEnterpriseCredentialExchangeAdapter,
-} from "./keycloak";
-import { oktaEnterpriseCredentialExchangeAdapter } from "./okta";
+  standardTokenExchangeStrategy,
+} from "./exchange-strategies/standard-token-exchange";
+import { managedResourceTokenExchangeStrategy } from "./exchange-strategies/managed-resource-token-exchange";
 
 export interface EnterpriseCredentialExchangeParams {
   identityProvider: ExternalIdentityProviderConfig;
@@ -15,7 +15,7 @@ export interface EnterpriseCredentialExchangeParams {
   enterpriseManagedConfig: EnterpriseManagedCredentialConfig;
 }
 
-export interface EnterpriseCredentialExchangeAdapter {
+export interface EnterpriseCredentialExchangeStrategy {
   exchangeCredential(
     params: EnterpriseCredentialExchangeParams,
   ): Promise<EnterpriseManagedCredentialResult>;
@@ -33,23 +33,23 @@ export async function exchangeEnterpriseManagedCredential(params: {
     throw new Error("Enterprise identity provider not found");
   }
 
-  const adapter = getEnterpriseCredentialExchangeAdapter(identityProvider);
-  return adapter.exchangeCredential({
+  const strategy = getEnterpriseCredentialExchangeStrategy(identityProvider);
+  return strategy.exchangeCredential({
     identityProvider,
     assertion: params.assertion,
     enterpriseManagedConfig: params.enterpriseManagedConfig,
   });
 }
 
-function getEnterpriseCredentialExchangeAdapter(
+function getEnterpriseCredentialExchangeStrategy(
   identityProvider: ExternalIdentityProviderConfig,
-): EnterpriseCredentialExchangeAdapter {
-  if (isOktaIdentityProvider(identityProvider)) {
-    return oktaEnterpriseCredentialExchangeAdapter;
+): EnterpriseCredentialExchangeStrategy {
+  if (supportsManagedResourceTokenExchange(identityProvider)) {
+    return managedResourceTokenExchangeStrategy;
   }
 
-  if (isKeycloakIdentityProvider(identityProvider)) {
-    return keycloakEnterpriseCredentialExchangeAdapter;
+  if (supportsStandardTokenExchange(identityProvider)) {
+    return standardTokenExchangeStrategy;
   }
 
   throw new Error(
@@ -57,7 +57,7 @@ function getEnterpriseCredentialExchangeAdapter(
   );
 }
 
-function isOktaIdentityProvider(
+function supportsManagedResourceTokenExchange(
   identityProvider: ExternalIdentityProviderConfig,
 ): boolean {
   const configuredProviderType =
@@ -69,7 +69,7 @@ function isOktaIdentityProvider(
   return identityProvider.issuer.includes(".okta.com");
 }
 
-function isKeycloakIdentityProvider(
+function supportsStandardTokenExchange(
   identityProvider: ExternalIdentityProviderConfig,
 ): boolean {
   const configuredProviderType =

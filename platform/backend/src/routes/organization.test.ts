@@ -337,11 +337,10 @@ describe("organization routes", () => {
         payload: {
           appName: "Persistence Test",
           footerText: "Persistent Footer",
-          showTwoFactor: true,
-          chatPlaceholders: ["Hello", "World"],
         },
       });
 
+      // GET /appearance-settings returns AppearanceSettingsSchema (subset of fields)
       const response = await app.inject({
         method: "GET",
         url: "/api/organization/appearance-settings",
@@ -351,8 +350,6 @@ describe("organization routes", () => {
       const body = response.json();
       expect(body.appName).toBe("Persistence Test");
       expect(body.footerText).toBe("Persistent Footer");
-      expect(body.showTwoFactor).toBe(true);
-      expect(body.chatPlaceholders).toEqual(["Hello", "World"]);
     });
   });
 });

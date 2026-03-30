@@ -3,6 +3,7 @@ import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
+import { BUILT_IN_AGENT_IDS } from "@shared";
 
 vi.mock("@/observability", () => ({
   metrics: {
@@ -110,7 +111,7 @@ describe("agent routes", () => {
     });
 
     test("should return 404 for non-existent agent", async () => {
-      const fakeId = "00000000-0000-0000-0000-000000000000";
+      const fakeId = crypto.randomUUID();
 
       const response = await app.inject({
         method: "GET",
@@ -341,7 +342,19 @@ describe("agent routes", () => {
       makeAgent,
       seedAndAssignArchestraTools,
     }) => {
-      // Ensure built-in agents exist by seeding archestra tools
+      // Create a built-in agent
+      await makeAgent({
+        name: "Policy Configuration Subagent",
+        organizationId,
+        agentType: "agent",
+        scope: "org",
+        authorId: user.id,
+        builtInAgentConfig: {
+          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+          autoConfigureOnToolAssignment: true,
+        },
+      });
+      // Also create a regular agent with tools
       const agent = await makeAgent({
         name: `Seed Target ${crypto.randomUUID().slice(0, 8)}`,
         organizationId,

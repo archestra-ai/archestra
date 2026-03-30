@@ -610,7 +610,7 @@ describe("agent type permission isolation (routes)", () => {
         agentType: "agent",
         scope: "org",
         name: "Policy Configuration Subagent",
-        builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.POLICY_CONFIG },
+        builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.POLICY_CONFIG, autoConfigureOnToolAssignment: true },
         authorId: adminUser.id,
       });
 

@@ -786,7 +786,7 @@ describe("knowledge base routes", () => {
         name: "Runs KB",
       });
       const connector = await makeKnowledgeBaseConnector(kb.id, organizationId);
-      await makeConnectorRun(connector.id, { status: "completed" });
+      await makeConnectorRun(connector.id, { status: "success" });
       await makeConnectorRun(connector.id, { status: "failed" });
 
       const response = await app.inject({
@@ -821,7 +821,7 @@ describe("knowledge base routes", () => {
       });
       const connector = await makeKnowledgeBaseConnector(kb.id, organizationId);
       const run = await makeConnectorRun(connector.id, {
-        status: "completed",
+        status: "success",
       });
 
       const response = await app.inject({
@@ -833,7 +833,7 @@ describe("knowledge base routes", () => {
       const body = response.json();
       expect(body.id).toBe(run.id);
       expect(body.connectorId).toBe(connector.id);
-      expect(body.status).toBe("completed");
+      expect(body.status).toBe("success");
     });
 
     test("returns 404 for non-existent run", async () => {
@@ -1047,8 +1047,8 @@ describe("knowledge base permission configuration", () => {
     ];
 
     for (const routeId of writeRoutes) {
-      const required = requiredEndpointPermissionsMap[routeId];
-      const requiredActions = required.knowledgeBase;
+      const required = requiredEndpointPermissionsMap[routeId]!;
+      const requiredActions = required.knowledgeBase!;
       const hasAll = requiredActions.every((action: string) =>
         memberKbActions.includes(action as never),
       );
@@ -1067,8 +1067,8 @@ describe("knowledge base permission configuration", () => {
     ];
 
     for (const routeId of readRoutes) {
-      const required = requiredEndpointPermissionsMap[routeId];
-      const requiredActions = required.knowledgeBase;
+      const required = requiredEndpointPermissionsMap[routeId]!;
+      const requiredActions = required.knowledgeBase!;
       const hasAll = requiredActions.every((action: string) =>
         memberKbActions.includes(action as never),
       );

@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, A2A protocol, and trigger configuration
-lastUpdated: 2026-01-25
+lastUpdated: 2026-03-27
 ---
 
 <!--
@@ -19,6 +19,8 @@ Agents in Archestra provide a comprehensive no-code solution for building autono
 - [Incoming Email](/docs/platform-agent-triggers-email)
 - [Slack](/docs/platform-slack)
 - [MS Teams](/docs/platform-ms-teams)
+
+Trigger setup is managed from **Agent Triggers**. Slack, MS Teams, and Incoming Email each have their own setup flow, and Incoming Email also owns the per-agent email invocation settings.
 
 ## A2A (Agent-to-Agent)
 

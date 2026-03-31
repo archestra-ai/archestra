@@ -9,14 +9,12 @@ interface AuthRequiredToolProps {
 }
 
 export function AuthRequiredTool({
-  toolName,
   catalogName,
   installUrl,
   onInstall,
 }: AuthRequiredToolProps) {
   return (
     <AuthErrorTool
-      toolName={toolName}
       title="Authentication Required"
       description={
         <>

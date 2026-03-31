@@ -228,7 +228,7 @@ test.describe("Built-In Agents API", () => {
         method: "post",
         urlSuffix: `/api/agents/${agent.id}/tools/${toolToAssign.id}`,
         data: {
-          credentialSourceMcpServerId: server.id,
+          mcpServerId: server.id,
         },
       });
 

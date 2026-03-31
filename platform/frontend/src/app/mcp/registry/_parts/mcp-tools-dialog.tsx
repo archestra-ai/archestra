@@ -1,6 +1,6 @@
 "use client";
 
-import { E2eTestId, MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
+import { E2eTestId, parseFullToolName } from "@shared";
 import { Search, UserPlus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { StandardDialog } from "@/components/standard-dialog";
@@ -54,25 +54,6 @@ interface McpToolsDialogProps {
   ) => void;
 }
 
-const formatToolName = (toolName: string) => {
-  // Remove the MCP server name prefix from the tool name
-  // For example:
-  // - "huggingface__remote-mcp__hf_doc_fetch" -> "hf_doc_fetch"
-  // - "github_mcp_server__update_pull_request_branch" -> "update_pull_request_branch"
-
-  // Find the last occurrence of "__" and take everything after it
-  const lastDoubleUnderscore = toolName.lastIndexOf(
-    MCP_SERVER_TOOL_NAME_SEPARATOR,
-  );
-
-  if (lastDoubleUnderscore !== -1) {
-    return toolName.substring(lastDoubleUnderscore + 2);
-  }
-
-  // Fallback: if no "__" found, return the original name
-  return toolName;
-};
-
 export function McpToolsDialog({
   open,
   onOpenChange,
@@ -90,7 +71,9 @@ export function McpToolsDialog({
 
     const query = searchQuery.toLowerCase();
     return tools.filter((tool) =>
-      formatToolName(tool.name).toLowerCase().includes(query),
+      (parseFullToolName(tool.name).toolName || tool.name)
+        .toLowerCase()
+        .includes(query),
     );
   }, [tools, searchQuery]);
 
@@ -269,7 +252,7 @@ export function McpToolsDialog({
                     />
                   </TableCell>
                   <TableCell className="font-medium">
-                    {formatToolName(tool.name)}
+                    {parseFullToolName(tool.name).toolName || tool.name}
                   </TableCell>
                   <TableCell className="max-w-md">
                     <span className="line-clamp-2 text-sm text-muted-foreground">

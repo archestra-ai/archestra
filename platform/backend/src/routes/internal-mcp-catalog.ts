@@ -27,8 +27,8 @@ import {
   constructResponseSchema,
   DeleteObjectResponseSchema,
   InsertInternalMcpCatalogSchema,
+  PartialUpdateInternalMcpCatalogSchema,
   SelectInternalMcpCatalogSchema,
-  UpdateInternalMcpCatalogSchema,
   UuidIdSchema,
 } from "@/types";
 
@@ -335,7 +335,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        body: UpdateInternalMcpCatalogSchema.partial().extend({
+        body: PartialUpdateInternalMcpCatalogSchema.extend({
           // BYOS: External Vault path for OAuth client secret
           oauthClientSecretVaultPath: z.string().optional(),
           // BYOS: External Vault key for OAuth client secret

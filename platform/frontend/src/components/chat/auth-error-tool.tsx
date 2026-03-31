@@ -1,10 +1,8 @@
 import { ExternalLink, KeyRound } from "lucide-react";
 import type { ReactNode } from "react";
-import { Tool, ToolContent, ToolHeader } from "@/components/ai-elements/tool";
-import { ToolStatusRow } from "./tool-status-row";
+import { Button } from "@/components/ui/button";
 
 interface AuthErrorToolProps {
-  toolName: string;
   title: string;
   description: ReactNode;
   buttonText: string;
@@ -14,7 +12,6 @@ interface AuthErrorToolProps {
 }
 
 export function AuthErrorTool({
-  toolName,
   title,
   description,
   buttonText,
@@ -22,33 +19,26 @@ export function AuthErrorTool({
   onAction,
 }: AuthErrorToolProps) {
   return (
-    <Tool defaultOpen={true}>
-      <ToolHeader
-        type={`tool-${toolName}`}
-        state="output-error"
-        isCollapsible={true}
-      />
-      <ToolContent>
-        <ToolStatusRow
-          icon={<KeyRound className="mt-0.5 size-4 flex-none text-amber-600" />}
-          title={title}
-          description={description}
-          actions={[
-            onAction
-              ? {
-                  label: buttonText,
-                  onClick: onAction,
-                  variant: "secondary",
-                }
-              : {
-                  label: buttonText,
-                  href: buttonUrl,
-                  variant: "secondary",
-                  icon: <ExternalLink className="size-3.5" />,
-                },
-          ]}
-        />
-      </ToolContent>
-    </Tool>
+    <div className="mt-3 rounded-xl border border-border px-5 py-4">
+      <div className="flex flex-wrap items-start gap-3 text-sm">
+        <KeyRound className="mt-0.5 size-4 flex-none text-amber-600" />
+        <div className="min-w-0 flex-1 text-muted-foreground">
+          <span className="font-medium text-foreground">{title}:</span>{" "}
+          <span>{description}</span>
+        </div>
+        {onAction ? (
+          <Button variant="secondary" size="sm" onClick={onAction}>
+            {buttonText}
+          </Button>
+        ) : (
+          <Button variant="secondary" size="sm" asChild>
+            <a href={buttonUrl} target="_blank" rel="noopener noreferrer">
+              <ExternalLink className="size-3.5" />
+              {buttonText}
+            </a>
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }

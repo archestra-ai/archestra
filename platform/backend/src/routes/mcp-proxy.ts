@@ -8,6 +8,7 @@ import { z } from "zod";
 import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import { AgentModel, ToolModel } from "@/models";
+import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import { type Agent, ApiError, UuidIdSchema } from "@/types";
 import {
   createAgentServer,
@@ -71,6 +72,11 @@ export const mcpProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(403, "Forbidden");
       }
 
+      const externalIdpToken = await resolveSessionExternalIdpToken({
+        agentId,
+        userId,
+      });
+
       // Build a session-scoped TokenAuthContext so audit logs, user context, and
       // organisation-scoped Archestra tools all work the same as token auth.
       const sessionTokenAuth: TokenAuthContext = {
@@ -80,6 +86,10 @@ export const mcpProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         isSessionAuth: true,
         userId,
         organizationId,
+        ...(externalIdpToken && {
+          isExternalIdp: true,
+          rawToken: externalIdpToken.rawToken,
+        }),
       };
 
       // Enforce ui/visibility for tools/call: reject requests from MCP App iframes

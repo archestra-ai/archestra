@@ -5,6 +5,7 @@ import { Maximize2, Minimize2 } from "lucide-react";
 import { useState } from "react";
 
 import { Editor } from "@/components/editor";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Button } from "@/components/ui/button";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import {
@@ -59,14 +60,13 @@ export function SystemPromptEditor({
               <>
                 {" "}
                 — see{" "}
-                <a
+                <ExternalDocsLink
                   href={docsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
                   className="underline hover:text-foreground"
+                  showIcon={false}
                 >
                   docs
-                </a>{" "}
+                </ExternalDocsLink>{" "}
                 for available variables.
               </>
             ) : (

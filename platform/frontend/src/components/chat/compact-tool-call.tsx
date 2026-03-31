@@ -1,6 +1,6 @@
 "use client";
 
-import { ARCHESTRA_MCP_CATALOG_ID } from "@shared";
+import { ARCHESTRA_MCP_CATALOG_ID, parseFullToolName } from "@shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import { BotIcon, CheckCircleIcon, ClockIcon } from "lucide-react";
 import { useState } from "react";
@@ -35,12 +35,6 @@ type CompactToolEntry = {
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
   errorText: string | undefined;
 };
-
-function formatToolName(toolName: string): string {
-  // Remove MCP server prefix (e.g. "server__tool" -> "tool")
-  const parts = toolName.split("__");
-  return parts[parts.length - 1].replace(/_/g, " ");
-}
 
 function CompactCircle({
   toolName,
@@ -93,7 +87,7 @@ function CompactCircle({
           </button>
         </TooltipTrigger>
         <TooltipContent side="top" className="text-xs">
-          {formatToolName(toolName)}
+          {parseFullToolName(toolName).toolName.replace(/_/g, " ")}
           {state === "running"
             ? " (running)"
             : state === "error"

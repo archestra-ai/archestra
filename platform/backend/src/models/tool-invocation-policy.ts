@@ -27,9 +27,9 @@ export type PolicyEvaluationContext = {
 const BLOCK_ALWAYS_REASON =
   "Tool invocation blocked: policy is configured to always block tool call";
 const UNTRUSTED_CONTEXT_REASON =
-  "Tool invocation blocked: context contains untrusted data";
+  "Tool invocation blocked: context contains sensitive data";
 const NO_POLICY_UNTRUSTED_REASON =
-  "Tool invocation blocked: forbidden in untrusted context by default";
+  "Tool invocation blocked: forbidden in sensitive context by default";
 
 class ToolInvocationPolicyModel {
   static async create(

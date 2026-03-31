@@ -7,6 +7,7 @@ import {
 } from "@shared";
 import { ArrowRightIcon, Plus } from "lucide-react";
 import { CodeText } from "@/components/code-text";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
   Accordion,
   AccordionContent,
@@ -61,14 +62,13 @@ function AttributePathExamples() {
           <div className="space-y-4 text-sm">
             <p className="text-muted-foreground">
               Attribute paths use{" "}
-              <a
+              <ExternalDocsLink
                 href="https://lodash.com/docs/4.17.15#get"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:text-foreground"
+                className="text-inherit underline hover:text-foreground"
+                showIcon={false}
               >
                 lodash get syntax
-              </a>{" "}
+              </ExternalDocsLink>{" "}
               to target specific fields in tool responses. You can use{" "}
               <CodeText>*</CodeText> as a wildcard to match all items in an
               array.
@@ -151,7 +151,7 @@ function AttributePathExamples() {
                   </ul>
                   <p className="text-muted-foreground mt-2 italic">
                     Use case: Block emails from external domains or mark
-                    internal emails as trusted
+                    internal emails as safe
                   </p>
                 </div>
               </div>
@@ -250,16 +250,15 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
           <h3 className="text-sm font-semibold mb-1">Tool Result Policies</h3>
           <p className="text-sm text-muted-foreground">
             Tool results impact agent decisions and actions. This policy allows
-            to mark tool results as &ldquo;trusted&rdquo; or
-            &ldquo;untrusted&rdquo; to prevent agent acting on untrusted data.{" "}
-            <a
+            to mark tool results as &ldquo;safe&rdquo; or
+            &ldquo;sensitive&rdquo; to prevent agent acting on sensitive data.{" "}
+            <ExternalDocsLink
               href={getDocsUrl(DocsPage.PlatformDynamicTools)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline hover:text-foreground"
+              className="text-inherit underline hover:text-foreground"
+              showIcon={false}
             >
               Read more about Dynamic Tools.
-            </a>
+            </ExternalDocsLink>
           </p>
           <p className="text-sm text-muted-foreground mt-2"></p>
         </div>

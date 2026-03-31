@@ -10,7 +10,6 @@ import {
   AlertTriangle,
   Building2,
   CheckCircle2,
-  ExternalLink,
   Loader2,
   Pencil,
   Plus,
@@ -24,6 +23,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { FormDialog } from "@/components/form-dialog";
 import {
   LLM_PROVIDER_API_KEY_PLACEHOLDER,
@@ -319,15 +319,12 @@ export default function ApiKeysPage() {
             <span className="text-sm text-muted-foreground">
               Env Vars{" "}
               {docsUrl && (
-                <a
+                <ExternalDocsLink
                   href={`${docsUrl}#using-vertex-ai`}
-                  target="_blank"
-                  rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-primary hover:underline"
                 >
                   Docs
-                  <ExternalLink className="h-3 w-3" />
-                </a>
+                </ExternalDocsLink>
               )}
             </span>
           ) : (

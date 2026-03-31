@@ -28,8 +28,6 @@ import {
   assignToolToAgent,
   type PrefetchedMcpServer,
   validateAssignment,
-  validateCredentialSource,
-  validateExecutionSource,
 } from "@/services/agent-tool-assignment";
 import type { InternalMcpCatalog } from "@/types";
 import {
@@ -127,11 +125,8 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { agentId, toolId } = request.params;
-      const {
-        credentialSourceMcpServerId,
-        executionSourceMcpServerId,
-        useDynamicTeamCredential,
-      } = request.body || {};
+      const { mcpServerId, resolveAtCallTime, credentialResolutionMode } =
+        request.body || {};
 
       // Check agent-type-specific modify permission based on scope
       const agent = await AgentModel.findById(agentId);
@@ -159,9 +154,9 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const result = await assignToolToAgent({
         agentId,
         toolId,
-        credentialSourceMcpServerId,
-        executionSourceMcpServerId,
-        useDynamicTeamCredential,
+        mcpServerId,
+        resolveAtCallTime,
+        credentialResolutionMode,
       });
 
       if (result && result !== "duplicate" && result !== "updated") {
@@ -267,13 +262,12 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ? await InternalMcpCatalogModel.getByIds(uniqueCatalogIds)
           : new Map<string, InternalMcpCatalog>();
 
-      // Batch fetch unique MCP server IDs for credential/execution source validation
+      // Batch fetch unique MCP server IDs for static assignment validation
       const uniqueMcpServerIds = [
         ...new Set(
-          [
-            ...assignments.map((a) => a.credentialSourceMcpServerId),
-            ...assignments.map((a) => a.executionSourceMcpServerId),
-          ].filter((id): id is string => id != null),
+          assignments
+            .map((a) => a.mcpServerId)
+            .filter((id): id is string => id != null),
         ),
       ];
       const mcpServersBasicMap = new Map<string, PrefetchedMcpServer>();
@@ -300,10 +294,10 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const validationError = await validateAssignment({
           agentId: assignment.agentId,
           toolId: assignment.toolId,
-          credentialSourceMcpServerId: assignment.credentialSourceMcpServerId,
-          executionSourceMcpServerId: assignment.executionSourceMcpServerId,
+          mcpServerId: assignment.mcpServerId,
           preFetchedData,
-          useDynamicTeamCredential: assignment.useDynamicTeamCredential,
+          resolveAtCallTime: assignment.resolveAtCallTime,
+          credentialResolutionMode: assignment.credentialResolutionMode,
         });
         if (validationError) {
           failed.push({
@@ -531,19 +525,14 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: UuidIdSchema,
         }),
         body: UpdateAgentToolSchema.pick({
-          credentialSourceMcpServerId: true,
-          executionSourceMcpServerId: true,
-          useDynamicTeamCredential: true,
+          mcpServerId: true,
+          credentialResolutionMode: true,
         }).partial(),
         response: constructResponseSchema(UpdateAgentToolSchema),
       },
     },
     async ({ params: { id }, body, user, organizationId }, reply) => {
-      const {
-        credentialSourceMcpServerId,
-        executionSourceMcpServerId,
-        useDynamicTeamCredential,
-      } = body;
+      const { mcpServerId, credentialResolutionMode } = body;
 
       // Fetch the agent-tool relationship (needed for permission check and validation)
       const agentToolForValidation = await AgentToolModel.findById(id);
@@ -579,73 +568,26 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      // If credentialSourceMcpServerId is being updated, validate it
-      if (credentialSourceMcpServerId && agentToolForValidation) {
-        const validationError = await validateCredentialSource({
-          agentId: agentToolForValidation.agent.id,
-          credentialSourceMcpServerId,
-        });
+      const validationError = await validateAssignment({
+        agentId: agentToolForValidation.agent.id,
+        toolId: agentToolForValidation.tool.id,
+        mcpServerId: mcpServerId ?? agentToolForValidation.mcpServerId,
+        credentialResolutionMode:
+          credentialResolutionMode ??
+          agentToolForValidation.credentialResolutionMode,
+      });
 
-        if (validationError) {
-          throw new ApiError(
-            mapAgentToolAssignmentErrorCodeToHttpStatus(validationError.code),
-            validationError.error.message,
-          );
-        }
-      }
-
-      // If executionSourceMcpServerId is being updated, validate it
-      if (executionSourceMcpServerId && agentToolForValidation) {
-        const validationError = await validateExecutionSource({
-          toolId: agentToolForValidation.tool.id,
-          executionSourceMcpServerId,
-        });
-
-        if (validationError) {
-          throw new ApiError(
-            mapAgentToolAssignmentErrorCodeToHttpStatus(validationError.code),
-            validationError.error.message,
-          );
-        }
-      }
-
-      if (
-        executionSourceMcpServerId === null &&
-        agentToolForValidation &&
-        agentToolForValidation.tool.catalogId
-      ) {
-        // Only need serverType for validation, no secrets needed
-        const catalogItem = await InternalMcpCatalogModel.findById(
-          agentToolForValidation.tool.catalogId,
-          { expandSecrets: false },
+      if (validationError) {
+        throw new ApiError(
+          mapAgentToolAssignmentErrorCodeToHttpStatus(validationError.code),
+          validationError.error.message,
         );
-        // Check if tool is from local server and executionSourceMcpServerId is being set to null
-        // (allowed if useDynamicTeamCredential is being set to true)
-        if (
-          catalogItem?.serverType === "local" &&
-          !executionSourceMcpServerId &&
-          !useDynamicTeamCredential
-        ) {
-          throw new ApiError(
-            400,
-            "Execution source installation or dynamic team credential is required for local MCP server tools",
-          );
-        }
-        // Check if tool is from remote server and credentialSourceMcpServerId is being set to null
-        // (allowed if useDynamicTeamCredential is being set to true)
-        if (
-          catalogItem?.serverType === "remote" &&
-          !credentialSourceMcpServerId &&
-          !useDynamicTeamCredential
-        ) {
-          throw new ApiError(
-            400,
-            "Credential source or dynamic team credential is required for remote MCP server tools",
-          );
-        }
       }
 
-      const agentTool = await AgentToolModel.update(id, body);
+      const agentTool = await AgentToolModel.update(id, {
+        mcpServerId,
+        credentialResolutionMode,
+      });
 
       if (!agentTool) {
         throw new ApiError(

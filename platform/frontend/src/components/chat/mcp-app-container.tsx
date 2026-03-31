@@ -8,6 +8,11 @@ import {
   AppBridge,
   PostMessageTransport,
 } from "@modelcontextprotocol/ext-apps/app-bridge";
+import {
+  buildFullToolName,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
+  parseFullToolName,
+} from "@shared";
 import { useTheme } from "next-themes";
 import type React from "react";
 import { Component, useEffect, useMemo, useRef, useState } from "react";
@@ -299,9 +304,7 @@ export function McpAppSection({
         <McpAppView
           toolResourceUri={uiResourceUri}
           agentId={agentId}
-          serverPrefix={
-            toolName.includes("__") ? toolName.split("__")[0] : toolName
-          }
+          serverPrefix={parseFullToolName(toolName).serverName ?? toolName}
           displayMode={displayMode}
           onDisplayModeChange={setDisplayMode}
           onSizeChange={setSize}
@@ -772,10 +775,9 @@ const McpAppView = function McpAppView({
     appBridge.oncalltool = async (params) => {
       // Always enforce the server prefix — strip any existing prefix to prevent
       // a compromised MCP App from calling tools on a different server.
-      const rawName = params.name.includes("__")
-        ? params.name.split("__").slice(1).join("__")
-        : params.name;
-      const toolName = `${serverPrefix}__${rawName}`;
+      const rawName = parseFullToolName(params.name).toolName;
+      const toolName = buildFullToolName(serverPrefix, rawName);
+
       return mcpProxy("tools/call", {
         name: toolName,
         arguments: params.arguments,
@@ -787,7 +789,7 @@ const McpAppView = function McpAppView({
     // Match the server prefix as a complete segment to prevent a substring
     // bypass (e.g. "evil-stats" matching "stats").
     const prefixPattern = `${serverPrefix}://`;
-    const prefixSeparator = `${serverPrefix}__`;
+    const prefixSeparator = `${serverPrefix}${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
 
     appBridge.onreadresource = async (params) => {
       const uri = (params as { uri?: string }).uri;

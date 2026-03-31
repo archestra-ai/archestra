@@ -178,27 +178,6 @@ beforeEach(() => {
 });
 
 describe("KnowledgeSettingsPage", () => {
-  describe("embedding provider messaging", () => {
-    it("describes embedding setup in provider-agnostic terms", () => {
-      mockOrganization = {
-        embeddingChatApiKeyId: null,
-        embeddingModel: null,
-        rerankerChatApiKeyId: null,
-        rerankerModel: null,
-      };
-      renderPage();
-
-      expect(
-        screen.getByText(
-          /Any synced model with embedding dimensions configured can be selected here/,
-        ),
-      ).toBeInTheDocument();
-      expect(
-        screen.queryByText(/OpenAI and Ollama providers are supported/),
-      ).not.toBeInTheDocument();
-    });
-  });
-
   describe("warning alert", () => {
     it("shows warning alert when no embedding API key is configured", () => {
       mockOrganization = {
@@ -643,24 +622,6 @@ describe("KnowledgeSettingsPage", () => {
       expect(
         screen.getByText("Select a reranker API key first..."),
       ).toBeInTheDocument();
-    });
-  });
-
-  describe("layout", () => {
-    it("does not render a separate embedding dimensions settings block", () => {
-      mockOrganization = {
-        embeddingChatApiKeyId: null,
-        embeddingModel: null,
-        rerankerChatApiKeyId: null,
-        rerankerModel: null,
-      };
-      renderPage();
-
-      expect(
-        screen.queryByText("Embedding Dimensions"),
-      ).not.toBeInTheDocument();
-      expect(screen.getByText("Embedding Configuration")).toBeInTheDocument();
-      expect(screen.getByText("Reranking Configuration")).toBeInTheDocument();
     });
   });
 

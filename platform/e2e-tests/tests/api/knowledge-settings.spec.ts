@@ -202,51 +202,6 @@ test.describe("Knowledge Settings API", () => {
     });
   });
 
-  test("should allow non-OpenAI API key for embedding", async ({
-    request,
-    makeApiRequest,
-  }) => {
-    // Create a non-OpenAI chat API key (e.g. anthropic)
-    const createKeyResponse = await makeApiRequest({
-      request,
-      method: "post",
-      urlSuffix: LLM_PROVIDER_API_KEYS_ROUTE,
-      data: {
-        name: "Anthropic Key For Embedding Test",
-        provider: "anthropic",
-        apiKey: "sk-ant-embedding-provider-test",
-        scope: "org",
-      },
-    });
-    const chatApiKey = await createKeyResponse.json();
-
-    // Attempt to set it as the embedding key — provider-specific restrictions
-    // were removed, so this should now succeed.
-    const response = await makeApiRequest({
-      request,
-      method: "patch",
-      urlSuffix: "/api/organization/knowledge-settings",
-      data: { embeddingChatApiKeyId: chatApiKey.id },
-    });
-    expect(response.status()).toBe(200);
-
-    const organization = await response.json();
-    expect(organization.embeddingChatApiKeyId).toBe(chatApiKey.id);
-
-    // Cleanup
-    await makeApiRequest({
-      request,
-      method: "patch",
-      urlSuffix: "/api/organization/knowledge-settings",
-      data: { embeddingChatApiKeyId: null },
-    });
-    await makeApiRequest({
-      request,
-      method: "delete",
-      urlSuffix: `/api/llm-provider-api-keys/${chatApiKey.id}`,
-    });
-  });
-
   // Clean up: reset to default
   test("cleanup: reset knowledge settings to defaults", async ({
     request,

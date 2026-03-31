@@ -595,6 +595,13 @@ class BedrockResponseAdapter implements LLMResponseAdapter<BedrockResponse> {
   }
 
   getOriginalResponse(): BedrockResponse {
+    // Ensure totalTokens is present — the AWS Bedrock API doesn't return it,
+    // but @ai-sdk/amazon-bedrock requires it in its response schema.
+    if (this.response.usage && this.response.usage.totalTokens == null) {
+      this.response.usage.totalTokens =
+        (this.response.usage.inputTokens ?? 0) +
+        (this.response.usage.outputTokens ?? 0);
+    }
     return this.response;
   }
 

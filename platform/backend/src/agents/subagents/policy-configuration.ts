@@ -212,7 +212,7 @@ export class PolicyConfigurationService {
       // Set loading timestamp to show loading state in UI
       await ToolModel.setAutoConfiguringState(toolId);
 
-      // Create a 10-second timeout promise
+      // Create a 20-second timeout promise
       const timeoutPromise = new Promise<{
         success: false;
         timedOut: true;
@@ -222,9 +222,9 @@ export class PolicyConfigurationService {
           resolve({
             success: false,
             timedOut: true,
-            error: "Auto-configure timed out (>10s)",
+            error: "Auto-configure timed out (>20s)",
           });
-        }, 10000);
+        }, 20000);
       });
 
       // Race between auto-configure and timeout

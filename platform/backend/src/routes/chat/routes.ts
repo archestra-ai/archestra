@@ -432,6 +432,19 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 }
               },
               execute: async ({ writer }) => {
+                // Send heartbeat every 5s to prevent connection drops
+                // during long-running tool executions / subagent calls.
+                const heartbeatInterval = setInterval(() => {
+                  try {
+                    writer.write({
+                      type: "data-heartbeat",
+                      data: { timestamp: Date.now() },
+                    });
+                  } catch {
+                    clearInterval(heartbeatInterval);
+                  }
+                }, 5000);
+
                 // Prefetch all UI resources eagerly before streaming starts
                 // so onChunk can write data-tool-ui-start synchronously.
                 // Even with LRU caching, .then() on a resolved promise runs
@@ -723,6 +736,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     } satisfies TokenUsage,
                   });
                 }
+
+                clearInterval(heartbeatInterval);
               },
             }),
           });

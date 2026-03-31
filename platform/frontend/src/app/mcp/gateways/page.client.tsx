@@ -32,6 +32,7 @@ import {
   ConnectDialogSection,
 } from "@/components/connect-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { PageLayout } from "@/components/page-layout";
@@ -407,14 +408,13 @@ function McpGateways({
             {docsUrl && (
               <>
                 {" "}
-                <a
+                <ExternalDocsLink
                   href={docsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
                   className="underline hover:text-foreground"
+                  showIcon={false}
                 >
                   Read more in the docs
-                </a>
+                </ExternalDocsLink>
               </>
             )}
           </p>

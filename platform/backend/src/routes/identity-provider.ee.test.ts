@@ -1,16 +1,9 @@
-import { afterEach, vi } from "vitest";
-import { describe, expect, test } from "@/test";
+import { vi } from "vitest";
+import type { FastifyInstanceWithZod } from "@/server";
+import { createFastifyInstance } from "@/server";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import type { User } from "@/types";
 import { getIdpLogoutUrl } from "./identity-provider.ee";
-
-// Mock the logger to avoid console output during tests
-vi.mock("@/logging", () => ({
-  default: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
 
 describe("getIdpLogoutUrl", () => {
   const originalFetch = globalThis.fetch;
@@ -304,5 +297,172 @@ describe("getIdpLogoutUrl", () => {
 
     const url = await getIdpLogoutUrl(user.id);
     expect(url).toBeNull();
+  });
+});
+
+describe("identity provider routes", () => {
+  let app: FastifyInstanceWithZod;
+  let user: User;
+  let organizationId: string;
+
+  beforeEach(async ({ makeOrganization, makeUser }) => {
+    user = await makeUser();
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (request as typeof request & { user: unknown }).user = user;
+      (
+        request as typeof request & {
+          organizationId: string;
+        }
+      ).organizationId = organizationId;
+    });
+
+    const { default: identityProviderRoutes } = await import(
+      "./identity-provider.ee"
+    );
+    await app.register(identityProviderRoutes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  describe("GET /api/identity-providers", () => {
+    test("returns empty array when no providers exist", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/identity-providers",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const data = response.json();
+      expect(Array.isArray(data)).toBe(true);
+      expect(data).toHaveLength(0);
+    });
+
+    test("returns array of providers", async ({ makeIdentityProvider }) => {
+      await makeIdentityProvider(organizationId, {
+        providerId: "route-test-provider",
+        oidcConfig: {
+          clientId: "test-client",
+          clientSecret: "test-secret",
+          issuer: "https://idp.example.com",
+          pkce: false,
+          discoveryEndpoint:
+            "https://idp.example.com/.well-known/openid-configuration",
+        },
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/identity-providers",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const data = response.json();
+      expect(Array.isArray(data)).toBe(true);
+      expect(data.length).toBeGreaterThanOrEqual(1);
+      expect(data[0]).toHaveProperty("providerId", "route-test-provider");
+    });
+  });
+
+  describe("GET /api/identity-providers/public", () => {
+    test("returns only id and providerId fields", async ({
+      makeIdentityProvider,
+    }) => {
+      await makeIdentityProvider(organizationId, {
+        providerId: "public-test-provider",
+        oidcConfig: {
+          clientId: "test-client",
+          clientSecret: "test-secret",
+          issuer: "https://idp.example.com",
+          pkce: false,
+          discoveryEndpoint:
+            "https://idp.example.com/.well-known/openid-configuration",
+        },
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/identity-providers/public",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const data = response.json();
+      expect(Array.isArray(data)).toBe(true);
+      expect(data.length).toBeGreaterThanOrEqual(1);
+
+      const provider = data.find(
+        (p: { providerId: string }) => p.providerId === "public-test-provider",
+      );
+      expect(provider).toBeDefined();
+      expect(provider).toHaveProperty("id");
+      expect(provider).toHaveProperty("providerId");
+      expect(provider).not.toHaveProperty("oidcConfig");
+      expect(provider).not.toHaveProperty("samlConfig");
+    });
+
+    test("returns empty array when no providers exist", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/identity-providers/public",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const data = response.json();
+      expect(Array.isArray(data)).toBe(true);
+      expect(data).toHaveLength(0);
+    });
+  });
+
+  describe("GET /api/identity-providers/:id", () => {
+    test("returns 404 for non-existent provider", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/identity-providers/non-existent-id",
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    test("returns provider by id", async ({ makeIdentityProvider }) => {
+      const idp = await makeIdentityProvider(organizationId, {
+        providerId: "get-by-id-provider",
+        oidcConfig: {
+          clientId: "test-client",
+          clientSecret: "test-secret",
+          issuer: "https://idp.example.com",
+          pkce: false,
+          discoveryEndpoint:
+            "https://idp.example.com/.well-known/openid-configuration",
+        },
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/identity-providers/${idp.id}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const data = response.json();
+      expect(data).toHaveProperty("id", idp.id);
+      expect(data).toHaveProperty("providerId", "get-by-id-provider");
+    });
+  });
+
+  describe("GET /api/identity-providers/idp-logout-url", () => {
+    test("returns null url for non-SSO user", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/identity-providers/idp-logout-url",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const data = response.json();
+      expect(data).toEqual({ url: null });
+    });
   });
 });

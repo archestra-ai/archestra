@@ -75,11 +75,31 @@ vi.mock("@/components/chat/policy-denied-tool", () => ({
 }));
 
 vi.mock("@/components/chat/auth-required-tool", () => ({
-  AuthRequiredTool: () => null,
+  AuthRequiredTool: ({
+    catalogName,
+    onInstall,
+  }: {
+    catalogName: string;
+    onInstall?: () => void;
+  }) => (
+    <button type="button" onClick={onInstall}>
+      auth-required:{catalogName}
+    </button>
+  ),
 }));
 
 vi.mock("@/components/chat/expired-auth-tool", () => ({
-  ExpiredAuthTool: () => null,
+  ExpiredAuthTool: ({
+    catalogName,
+    onReauth,
+  }: {
+    catalogName: string;
+    onReauth?: () => void;
+  }) => (
+    <button type="button" onClick={onReauth}>
+      expired-auth:{catalogName}
+    </button>
+  ),
 }));
 
 vi.mock("@/components/chat/todo-write-tool", () => ({
@@ -295,6 +315,162 @@ describe("ChatMessages", () => {
     expect(screen.getByText("todo-write-tool")).toBeInTheDocument();
     expect(
       screen.queryByText("tool-sparky__todo_write"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders assistant expired-auth text as the inline reauth tool UI", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: 'Expired or invalid authentication for "id-jag test".\n\nYour credentials (user: usr_123) failed authentication. Please re-authenticate to continue using this tool.\nTo re-authenticate, visit this URL: http://localhost:3000/mcp/registry?reauth=cat_abc&server=srv_xyz',
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "expired-auth:id-jag test" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/To re-authenticate, visit this URL:/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders assistant auth-required text as the inline install tool UI", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: 'Authentication required for "jwks demo".\n\nNo credentials were found for your account (user: usr_123).\nTo set up your credentials, visit this URL: http://localhost:3000/mcp/registry?install=cat_abc',
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "auth-required:jwks demo" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/To set up your credentials, visit this URL:/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders structured auth-expired tool output as the inline reauth tool UI", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-id-jag_test__get_server_info",
+            toolCallId: "call-1",
+            state: "output-available",
+            output: {
+              isError: true,
+              _meta: {
+                archestraError: {
+                  type: "auth_expired",
+                  message:
+                    'Expired or invalid authentication for "id-jag test".',
+                  catalogId: "cat_abc",
+                  catalogName: "id-jag test",
+                  serverId: "srv_xyz",
+                  reauthUrl:
+                    "http://localhost:3000/mcp/registry?reauth=cat_abc&server=srv_xyz",
+                },
+              },
+            },
+          },
+        ],
+      },
+    ] as unknown as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "expired-auth:id-jag test" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("tool-id-jag_test__get_server_info"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("suppresses duplicate assistant auth text when the same message already has a tool auth error", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-id-jag_test__get_server_info",
+            toolCallId: "call-1",
+            state: "output-available",
+            output: {
+              isError: true,
+              _meta: {
+                archestraError: {
+                  type: "auth_expired",
+                  message:
+                    'Expired or invalid authentication for "id-jag test".',
+                  catalogId: "cat_abc",
+                  catalogName: "id-jag test",
+                  serverId: "srv_xyz",
+                  reauthUrl:
+                    "http://localhost:3000/mcp/registry?reauth=cat_abc&server=srv_xyz",
+                },
+              },
+            },
+          },
+          {
+            type: "text",
+            text: 'Your authentication for "id-jag test" is expired or invalid. Please re-authenticate by visiting this URL: http://localhost:3000/mcp/registry?reauth=cat_abc&server=srv_xyz',
+          },
+        ],
+      },
+    ] as unknown as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(
+      screen.getAllByRole("button", { name: "expired-auth:id-jag test" }),
+    ).toHaveLength(1);
+    expect(
+      screen.queryByText(/Please re-authenticate by visiting this URL/i),
     ).not.toBeInTheDocument();
   });
 });

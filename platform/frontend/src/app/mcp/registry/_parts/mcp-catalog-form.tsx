@@ -21,7 +21,12 @@ import {
   ProfileLabels,
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
+import {
+  type EnterpriseManagedConfigInput,
+  EnterpriseManagedCredentialFields,
+} from "@/components/enterprise-managed-credential-fields";
 import { EnvironmentVariablesFormField } from "@/components/environment-variables-form-field";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -63,7 +68,7 @@ import {
 } from "@/components/visibility-selector";
 import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
+import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
 import { getVisibleDocsUrl } from "@/lib/docs/docs";
 import { useK8sImagePullSecrets } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useGetSecret } from "@/lib/secrets.query";
@@ -121,6 +126,7 @@ export function McpCatalogForm({
   const mcpServerBaseImage = useFeature("mcpServerBaseImage") ?? "";
 
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
+  const isEnterpriseCoreEnabled = useEnterpriseFeature("core");
 
   const form = useForm<McpCatalogFormValues>({
     // biome-ignore lint/suspicious/noExplicitAny: Version mismatch between @hookform/resolvers and Zod
@@ -134,6 +140,7 @@ export function McpCatalogForm({
           serverType: "remote",
           serverUrl: "",
           authMethod: "none",
+          enterpriseManagedConfig: null,
           oauthConfig: {
             client_id: "",
             client_secret: "",
@@ -173,6 +180,13 @@ export function McpCatalogForm({
 
   const authMethod = form.watch("authMethod");
   const currentServerType = form.watch("serverType");
+
+  useEffect(() => {
+    if (!isEnterpriseCoreEnabled && authMethod === "enterprise_managed") {
+      form.setValue("authMethod", "none", { shouldDirty: true });
+      form.setValue("enterpriseManagedConfig", null, { shouldDirty: true });
+    }
+  }, [authMethod, form, isEnterpriseCoreEnabled]);
 
   // BYOS (Bring Your Own Secrets) state for OAuth
   const [oauthVaultTeamId, setOauthVaultTeamId] = useState<string | null>(null);
@@ -711,14 +725,13 @@ export function McpCatalogForm({
                     <FormDescription>
                       {defaultImageDocsUrl ? (
                         <>
-                          <a
+                          <ExternalDocsLink
                             href={defaultImageDocsUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-primary underline hover:no-underline"
+                            className="underline hover:no-underline"
+                            showIcon={false}
                           >
                             Default image
-                          </a>{" "}
+                          </ExternalDocsLink>{" "}
                           includes alpine, npx, mcp[cli]. Use custom for
                           additional packages.
                         </>
@@ -736,14 +749,13 @@ export function McpCatalogForm({
                 <p className="text-sm text-muted-foreground">
                   Kubernetes secrets for pulling container images from private
                   registries.{" "}
-                  <a
+                  <ExternalDocsLink
                     href="https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary underline underline-offset-2 hover:text-primary/80"
+                    className="underline underline-offset-2 hover:text-primary/80"
+                    showIcon={false}
                   >
                     Learn more
-                  </a>
+                  </ExternalDocsLink>
                 </p>
 
                 {imagePullSecretFields.map((field, index) => {
@@ -949,6 +961,20 @@ export function McpCatalogForm({
                             OAuth 2.0 (recommended)
                           </FormLabel>
                         </div>
+                        {isEnterpriseCoreEnabled && (
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem
+                              value="enterprise_managed"
+                              id="auth-enterprise-managed"
+                            />
+                            <FormLabel
+                              htmlFor="auth-enterprise-managed"
+                              className="font-normal cursor-pointer"
+                            >
+                              Enterprise-managed credentials
+                            </FormLabel>
+                          </div>
+                        )}
                       </RadioGroup>
                     </FormControl>
                     <FormMessage />
@@ -1124,6 +1150,46 @@ export function McpCatalogForm({
                   />
                 </div>
               )}
+
+              {isEnterpriseCoreEnabled &&
+                authMethod === "enterprise_managed" && (
+                  <div className="space-y-4 pl-6 border-l-2">
+                    <div className="bg-muted p-4 rounded-lg">
+                      <p className="text-sm text-muted-foreground">
+                        Archestra will request a downstream credential for this
+                        MCP server from the signed-in user&apos;s identity
+                        provider at tool-call time. Installations inherit these
+                        defaults automatically.
+                      </p>
+                    </div>
+
+                    <FormField
+                      control={form.control}
+                      name="enterpriseManagedConfig"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <EnterpriseManagedCredentialFields
+                              value={
+                                (field.value as
+                                  | EnterpriseManagedConfigInput
+                                  | null
+                                  | undefined) ?? null
+                              }
+                              onChange={field.onChange}
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            Configure the managed resource identifier and how
+                            the returned credential should be injected into
+                            requests made to this MCP server.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                )}
             </div>
           )}
 

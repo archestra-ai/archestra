@@ -106,6 +106,14 @@ runs:
         path: /tmp/mcp-oauth-server.tar
         key: mcp-oauth-server-0.0.1-${{ runner.arch }}
 
+    - name: Cache MCP JWKS server image
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
+      id: cache-jwks-image
+      uses: ./.github/actions/github-cache
+      with:
+        path: /tmp/mcp-jwks-server.tar
+        key: mcp-jwks-server-0.0.3-${{ runner.arch }}
+
     - name: Pull MCP example OAuth server image
       if: ${{ inputs.deploy-e2e-dependencies == 'true' && steps.cache-oauth-image.outputs.cache-hit != 'true' }}
       shell: bash
@@ -114,10 +122,23 @@ runs:
         docker pull "${MCP_OAUTH_IMAGE}"
         docker save "${MCP_OAUTH_IMAGE}" > /tmp/mcp-oauth-server.tar
 
+    - name: Pull MCP JWKS server image
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' && steps.cache-jwks-image.outputs.cache-hit != 'true' }}
+      shell: bash
+      run: |
+        MCP_JWKS_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.3"
+        docker pull "${MCP_JWKS_IMAGE}"
+        docker save "${MCP_JWKS_IMAGE}" > /tmp/mcp-jwks-server.tar
+
     - name: Load cached MCP example OAuth server image
       if: ${{ inputs.deploy-e2e-dependencies == 'true' && steps.cache-oauth-image.outputs.cache-hit == 'true' }}
       shell: bash
       run: docker load < /tmp/mcp-oauth-server.tar
+
+    - name: Load cached MCP JWKS server image
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' && steps.cache-jwks-image.outputs.cache-hit == 'true' }}
+      shell: bash
+      run: docker load < /tmp/mcp-jwks-server.tar
 
     - name: Load all images into Kind in parallel
       shell: bash
@@ -141,8 +162,13 @@ runs:
 
         if [ "${DEPLOY_E2E_DEPS}" == "true" ]; then
           MCP_OAUTH_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server:0.0.1"
+          MCP_JWKS_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.3"
           echo "Loading MCP example OAuth server image into Kind..."
           kind load docker-image "${MCP_OAUTH_IMAGE}" --name "${KIND_CLUSTER_NAME}" &
+          PIDS+=($!)
+
+          echo "Loading MCP JWKS server image into Kind..."
+          kind load docker-image "${MCP_JWKS_IMAGE}" --name "${KIND_CLUSTER_NAME}" &
           PIDS+=($!)
         fi
 

@@ -49,3 +49,10 @@ export function parseFullToolName(fullName: string): {
     toolName: fullName.substring(index + MCP_SERVER_TOOL_NAME_SEPARATOR.length),
   };
 }
+
+export function buildFullToolName(
+  serverName: string,
+  toolName: string,
+): string {
+  return `${serverName}__${toolName}`;
+}

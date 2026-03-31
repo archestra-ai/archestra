@@ -1184,7 +1184,7 @@ function AddToolView({
       const tools = await fetchCatalogTools(catalog.id);
       if (tools.length === 0) return;
       const servers = allCredentials?.[catalog.id] ?? [];
-      const isLocal = catalog.serverType === "local";
+      const _isLocal = catalog.serverType === "local";
       const isBuiltin = catalog.serverType === "builtin";
       const credentialId = servers[0]?.id;
       await Promise.all(
@@ -1192,11 +1192,7 @@ function AddToolView({
           assignTool.mutateAsync({
             agentId,
             toolId: tool.id,
-            credentialSourceMcpServerId:
-              !isLocal && !isBuiltin ? (credentialId ?? undefined) : undefined,
-            executionSourceMcpServerId: isLocal
-              ? (credentialId ?? undefined)
-              : undefined,
+            mcpServerId: !isBuiltin ? (credentialId ?? undefined) : undefined,
             skipInvalidation: true,
           }),
         ),
@@ -1462,7 +1458,7 @@ function ConfigureToolView({
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      const isLocal = catalog.serverType === "local";
+      const _isLocal = catalog.serverType === "local";
       const toAdd = [...selectedToolIds].filter(
         (id) => !assignedToolIds.has(id),
       );
@@ -1475,11 +1471,7 @@ function ConfigureToolView({
           assignTool.mutateAsync({
             agentId,
             toolId,
-            credentialSourceMcpServerId:
-              !isLocal && !isBuiltin ? (credential ?? undefined) : undefined,
-            executionSourceMcpServerId: isLocal
-              ? (credential ?? undefined)
-              : undefined,
+            mcpServerId: !isBuiltin ? (credential ?? undefined) : undefined,
             skipInvalidation: true,
           }),
         ),

@@ -26,6 +26,7 @@ interface TokenSelectProps {
   /** Catalog ID to filter credentials - only shows credentials for the same catalog item */
   catalogId: string;
   shouldSetDefaultValue: boolean;
+  prefersEnterpriseManaged?: boolean;
 }
 
 /**
@@ -41,6 +42,7 @@ export function TokenSelect({
   className,
   catalogId,
   shouldSetDefaultValue,
+  prefersEnterpriseManaged = false,
 }: TokenSelectProps) {
   const groupedCredentials = useMcpServersGroupedByCatalog({ catalogId });
 
@@ -59,7 +61,9 @@ export function TokenSelect({
   // biome-ignore lint/correctness/useExhaustiveDependencies: it's expected here to avoid unneeded invocations
   useEffect(() => {
     if (shouldSetDefaultValue && !value) {
-      if (mcpServers.length > 0) {
+      if (prefersEnterpriseManaged) {
+        onValueChange(DYNAMIC_CREDENTIAL_VALUE);
+      } else if (mcpServers.length > 0) {
         // Default to the first credential
         onValueChange(mcpServers[0].id);
       } else {
@@ -98,9 +102,29 @@ export function TokenSelect({
         <SelectValue placeholder="Select connection..." />
       </SelectTrigger>
       <SelectContent>
+        <div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">
+          Dynamic
+        </div>
+        <SelectItem
+          value={DYNAMIC_CREDENTIAL_VALUE}
+          className="cursor-pointer"
+          description={
+            prefersEnterpriseManaged
+              ? "Ask your identity provider for a runtime credential for this server."
+              : "Use the caller's available runtime credential instead of a fixed connection."
+          }
+        >
+          <div className="flex items-center gap-1">
+            <Zap className="h-3! w-3! text-amber-500" />
+            <span className="text-xs font-medium">Resolve at call time</span>
+          </div>
+        </SelectItem>
         {mcpServers.length > 0 && (
           <>
-            <div className="text-xs text-muted-foreground ml-2">Static</div>
+            <Divider className="my-2" />
+            <div className="px-2 pt-1 pb-1 text-xs text-muted-foreground">
+              Static
+            </div>
             {mcpServers.map((server) => (
               <SelectItem
                 key={server.id}
@@ -108,24 +132,13 @@ export function TokenSelect({
                 className="cursor-pointer"
                 data-testid={E2eTestId.StaticCredentialToUse}
               >
-                <div className="flex flex-col gap-1">
-                  <div className="flex gap-1 flex-wrap text-xs">
-                    {server.teamDetails
-                      ? server.teamDetails.name
-                      : server.ownerEmail || "Deleted user"}
-                  </div>
-                </div>
+                {server.teamDetails
+                  ? server.teamDetails.name
+                  : server.ownerEmail || "Deleted user"}
               </SelectItem>
             ))}
-            <Divider className="my-2" />
           </>
         )}
-        <SelectItem value={DYNAMIC_CREDENTIAL_VALUE} className="cursor-pointer">
-          <div className="flex items-center gap-1">
-            <Zap className="h-3! w-3! text-amber-500" />
-            <span className="text-xs font-medium">Resolve at call time</span>
-          </div>
-        </SelectItem>
       </SelectContent>
     </Select>
   );

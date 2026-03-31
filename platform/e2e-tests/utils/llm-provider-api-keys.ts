@@ -94,29 +94,32 @@ async function getParentKeyOptionNameForProvider(
   page: Page,
   provider: string,
 ): Promise<string> {
-  return page.evaluate(async ({ targetProvider, route }) => {
-    const response = await fetch(
-      `${route}?provider=${encodeURIComponent(targetProvider)}`,
-      {
-        credentials: "include",
-      },
-    );
-
-    if (!response.ok) {
-      throw new Error(
-        `Failed to load LLM provider API keys for ${targetProvider}: ${response.status} ${response.statusText}`,
+  return page.evaluate(
+    async ({ targetProvider, route }) => {
+      const response = await fetch(
+        `${route}?provider=${encodeURIComponent(targetProvider)}`,
+        {
+          credentials: "include",
+        },
       );
-    }
 
-    const apiKeys = (await response.json()) as Array<{ name: string }>;
-    const matchingKey = apiKeys[0];
+      if (!response.ok) {
+        throw new Error(
+          `Failed to load LLM provider API keys for ${targetProvider}: ${response.status} ${response.statusText}`,
+        );
+      }
 
-    if (!matchingKey?.name) {
-      throw new Error(
-        `No LLM provider API keys found for provider ${targetProvider}`,
-      );
-    }
+      const apiKeys = (await response.json()) as Array<{ name: string }>;
+      const matchingKey = apiKeys[0];
 
-    return matchingKey.name;
-  }, { targetProvider: provider, route: LLM_PROVIDER_API_KEYS_ROUTE });
+      if (!matchingKey?.name) {
+        throw new Error(
+          `No LLM provider API keys found for provider ${targetProvider}`,
+        );
+      }
+
+      return matchingKey.name;
+    },
+    { targetProvider: provider, route: LLM_PROVIDER_API_KEYS_ROUTE },
+  );
 }

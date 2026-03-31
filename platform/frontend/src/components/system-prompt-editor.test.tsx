@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockGetFrontendDocsUrl = vi.fn();
+const mockGetVisibleDocsUrl = vi.fn();
 
 vi.mock("@/components/editor", () => ({
   Editor: (props: { height?: string }) => (
@@ -12,6 +13,7 @@ vi.mock("@/components/editor", () => ({
 
 vi.mock("@/lib/docs/docs", () => ({
   getFrontendDocsUrl: (...args: unknown[]) => mockGetFrontendDocsUrl(...args),
+  getVisibleDocsUrl: (...args: unknown[]) => mockGetVisibleDocsUrl(...args),
 }));
 
 import { SystemPromptEditor } from "./system-prompt-editor";
@@ -19,6 +21,7 @@ import { SystemPromptEditor } from "./system-prompt-editor";
 describe("SystemPromptEditor", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetVisibleDocsUrl.mockImplementation((href) => href);
   });
 
   it("shows the Archestra docs link when available", () => {

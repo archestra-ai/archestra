@@ -24,6 +24,7 @@ import {
   useIdentityProvider,
   useUpdateIdentityProvider,
 } from "@/lib/auth/identity-provider.query.ee";
+import { normalizeIdentityProviderFormValues } from "./identity-provider-form.utils";
 import { OidcConfigForm } from "./oidc-config-form.ee";
 import { SamlConfigForm } from "./saml-config-form.ee";
 
@@ -135,7 +136,7 @@ export function EditIdentityProviderDialog({
       if (!provider) return;
       const result = await updateIdentityProvider.mutateAsync({
         id: provider.id,
-        data,
+        data: normalizeIdentityProviderFormValues(data),
       });
       // Only close the dialog if update succeeded (result is not null)
       if (result) {

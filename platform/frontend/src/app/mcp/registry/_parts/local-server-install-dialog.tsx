@@ -115,7 +115,6 @@ export function LocalServerInstallDialog({
   const [serviceAccount, setServiceAccount] = useState<string | undefined>(
     catalogItem?.localConfig?.serviceAccount,
   );
-
   // Extract environment variables that need prompting during installation
   const promptedEnvVars =
     catalogItem?.localConfig?.environment?.filter(

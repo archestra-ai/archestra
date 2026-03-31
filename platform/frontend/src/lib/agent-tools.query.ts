@@ -44,7 +44,7 @@ export function useAllProfileTools({
     search?: string;
     agentId?: string;
     origin?: string;
-    credentialSourceMcpServerId?: string;
+    mcpServerId?: string;
     mcpServerOwnerId?: string;
   };
   skipPagination?: boolean;
@@ -61,7 +61,7 @@ export function useAllProfileTools({
         search: filters?.search,
         agentId: filters?.agentId,
         origin: filters?.origin,
-        credentialSourceMcpServerId: filters?.credentialSourceMcpServerId,
+        mcpServerId: filters?.mcpServerId,
         mcpServerOwnerId: filters?.mcpServerOwnerId,
         skipPagination,
       },
@@ -109,28 +109,26 @@ export function useAssignTool() {
     mutationFn: async ({
       agentId,
       toolId,
-      credentialSourceMcpServerId,
-      executionSourceMcpServerId,
-      useDynamicTeamCredential,
+      mcpServerId,
+      resolveAtCallTime,
+      credentialResolutionMode,
       skipInvalidation,
     }: {
       agentId: string;
       toolId: string;
-      credentialSourceMcpServerId?: string | null;
-      executionSourceMcpServerId?: string | null;
-      useDynamicTeamCredential?: boolean;
+      mcpServerId?: string | null;
+      resolveAtCallTime?: boolean;
+      credentialResolutionMode?: "static" | "dynamic" | "enterprise_managed";
       skipInvalidation?: boolean;
     }) => {
       const body =
-        credentialSourceMcpServerId ||
-        executionSourceMcpServerId ||
-        useDynamicTeamCredential !== undefined
+        mcpServerId ||
+        resolveAtCallTime !== undefined ||
+        credentialResolutionMode
           ? {
-              credentialSourceMcpServerId:
-                credentialSourceMcpServerId || undefined,
-              executionSourceMcpServerId:
-                executionSourceMcpServerId || undefined,
-              useDynamicTeamCredential,
+              mcpServerId: mcpServerId ?? undefined,
+              resolveAtCallTime,
+              credentialResolutionMode,
             }
           : null;
 

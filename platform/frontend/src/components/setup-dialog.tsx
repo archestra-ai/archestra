@@ -58,6 +58,7 @@ export function SetupDialog({
     });
   }, [api]);
 
+  const isSingleStep = steps.length === 1;
   const isFirst = current === 0;
   const isLast = current === steps.length - 1;
 
@@ -92,18 +93,20 @@ export function SetupDialog({
 
         <div className="flex items-center justify-between border-t px-4 py-3">
           <div className="text-sm text-muted-foreground">
-            Step {current + 1} of {steps.length}
+            {!isSingleStep && `Step ${current + 1} of ${steps.length}`}
           </div>
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => api?.scrollPrev()}
-              disabled={isFirst}
-            >
-              <ChevronLeft className="mr-1 h-4 w-4" />
-              Back
-            </Button>
+            {!isSingleStep && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => api?.scrollPrev()}
+                disabled={isFirst}
+              >
+                <ChevronLeft className="mr-1 h-4 w-4" />
+                Back
+              </Button>
+            )}
             {isLast && lastStepAction && (
               <Button
                 size="sm"
@@ -118,7 +121,7 @@ export function SetupDialog({
                 Close
               </Button>
             )}
-            {!isLast && (
+            {!isSingleStep && !isLast && (
               <Button
                 size="sm"
                 onClick={() => api?.scrollNext()}

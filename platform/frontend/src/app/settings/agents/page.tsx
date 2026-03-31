@@ -368,7 +368,7 @@ export default function AgentSettingsPage() {
           ) : (
             <span className="text-red-600 dark:text-red-400">
               Agents can perform any action. Tool calls are allowed and results
-              are trusted.
+              are safe.
             </span>
           )
         }

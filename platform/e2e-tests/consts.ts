@@ -29,8 +29,7 @@ export const memberAuthFile = path.join(
 
 export const IS_CI = process.env.CI === "true";
 
-// Use 127.0.0.1 instead of localhost to avoid IPv6 issues with Docker networking
-// These can be overridden via environment variables for different test environments
+// These can be overridden via environment variables for different test environments.
 export const UI_BASE_URL =
   process.env.E2E_UI_BASE_URL || "http://localhost:3000";
 export const API_BASE_URL =
@@ -125,6 +124,13 @@ export const KC_TEST_USER = {
   name: "Admin User",
 };
 
+export const KC_MEMBER_USER = {
+  username: MEMBER_EMAIL.split("@")[0],
+  password: "memberpass",
+  email: MEMBER_EMAIL,
+  name: "Member User",
+};
+
 /** SSO domain - extracted from admin email for account linking */
 export const SSO_DOMAIN = ADMIN_EMAIL.split("@")[1];
 
@@ -144,7 +150,7 @@ export const MCP_SERVER_JWKS_BACKEND_URL = IS_CI
 
 /** Docker image for the JWKS MCP server (used for local K8s deployment tests) */
 export const MCP_SERVER_JWKS_DOCKER_IMAGE =
-  "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.1";
+  "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.3";
 
 /**
  * Keycloak internal URL for use by K8s pods (MCP servers spawned by orchestrator).

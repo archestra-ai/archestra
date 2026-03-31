@@ -4,6 +4,7 @@ import type { AgentType, DocsPage } from "@shared";
 import type { LucideIcon } from "lucide-react";
 import { ArrowRight, Bot, ExternalLink, Network, Route } from "lucide-react";
 import type { ReactNode } from "react";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
@@ -68,14 +69,13 @@ export function ConnectDialog({
               <ExternalLink className="h-3.5 w-3.5 shrink-0" />
               <span>
                 Need help? Check our{" "}
-                <a
+                <ExternalDocsLink
                   href={docsUrl}
-                  target="_blank"
-                  className="text-primary hover:underline font-medium"
-                  rel="noopener"
+                  className="font-medium text-primary"
+                  showIcon={false}
                 >
                   documentation
-                </a>
+                </ExternalDocsLink>
               </span>
             </>
           )}

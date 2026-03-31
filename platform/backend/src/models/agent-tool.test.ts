@@ -39,7 +39,7 @@ describe("AgentToolModel.findById", () => {
     expect(result).toBeUndefined();
   });
 
-  test("includes credential and execution source fields", async ({
+  test("includes static MCP server binding field", async ({
     makeAgent,
     makeTool,
     makeAgentTool,
@@ -47,18 +47,15 @@ describe("AgentToolModel.findById", () => {
   }) => {
     const agent = await makeAgent();
     const tool = await makeTool();
-    const credServer = await makeMcpServer({ name: "Cred Server" });
-    const execServer = await makeMcpServer({ name: "Exec Server" });
+    const server = await makeMcpServer({ name: "Bound Server" });
     const agentTool = await makeAgentTool(agent.id, tool.id, {
-      credentialSourceMcpServerId: credServer.id,
-      executionSourceMcpServerId: execServer.id,
+      mcpServerId: server.id,
     });
 
     const result = await AgentToolModel.findById(agentTool.id);
 
     expect(result).toBeDefined();
-    expect(result?.credentialSourceMcpServerId).toBe(credServer.id);
-    expect(result?.executionSourceMcpServerId).toBe(execServer.id);
+    expect(result?.mcpServerId).toBe(server.id);
   });
 });
 
@@ -528,13 +525,13 @@ describe("AgentToolModel.findAll", () => {
       const tool4 = await makeTool({ name: "tool-4" });
 
       await makeAgentTool(agent.id, tool1.id, {
-        credentialSourceMcpServerId: ownerServer1.id,
+        mcpServerId: ownerServer1.id,
       });
       await makeAgentTool(agent.id, tool2.id, {
-        executionSourceMcpServerId: ownerServer2.id,
+        mcpServerId: ownerServer2.id,
       });
       await makeAgentTool(agent.id, tool3.id, {
-        credentialSourceMcpServerId: otherOwnerServer.id,
+        mcpServerId: otherOwnerServer.id,
       });
       await makeAgentTool(agent.id, tool4.id);
 
@@ -546,21 +543,19 @@ describe("AgentToolModel.findAll", () => {
       expect(result.data).toHaveLength(2);
       expect(
         result.data.some(
-          (agentTool) =>
-            agentTool.credentialSourceMcpServerId === ownerServer1.id,
+          (agentTool) => agentTool.mcpServerId === ownerServer1.id,
         ),
       ).toBe(true);
       expect(
         result.data.some(
-          (agentTool) =>
-            agentTool.executionSourceMcpServerId === ownerServer2.id,
+          (agentTool) => agentTool.mcpServerId === ownerServer2.id,
         ),
       ).toBe(true);
       expect(
         result.data.every(
           (agentTool) =>
-            agentTool.credentialSourceMcpServerId === ownerServer1.id ||
-            agentTool.executionSourceMcpServerId === ownerServer2.id,
+            agentTool.mcpServerId === ownerServer1.id ||
+            agentTool.mcpServerId === ownerServer2.id,
         ),
       ).toBe(true);
     });
@@ -951,7 +946,7 @@ describe("AgentToolModel.findAll", () => {
         [agent1.id, agent2.id],
         [tool1.id, tool2.id],
         {
-          executionSourceMcpServerId: mcpServer.id,
+          mcpServerId: mcpServer.id,
         },
       );
 
@@ -976,7 +971,7 @@ describe("AgentToolModel.findAll", () => {
 
       expect(relevantAssignments).toHaveLength(4);
       relevantAssignments.forEach((assignment) => {
-        expect(assignment.executionSourceMcpServerId).toBe(mcpServer.id);
+        expect(assignment.mcpServerId).toBe(mcpServer.id);
       });
     });
 
@@ -1294,7 +1289,7 @@ describe("AgentToolModel.bulkCreateOrUpdateCredentials", () => {
 
     // Create initial assignment with server1 as credential source
     await makeAgentTool(agent.id, tool.id, {
-      credentialSourceMcpServerId: server1.id,
+      mcpServerId: server1.id,
     });
 
     // Bulk update to server2
@@ -1302,7 +1297,7 @@ describe("AgentToolModel.bulkCreateOrUpdateCredentials", () => {
       {
         agentId: agent.id,
         toolId: tool.id,
-        credentialSourceMcpServerId: server2.id,
+        mcpServerId: server2.id,
       },
     ]);
 
@@ -1310,7 +1305,7 @@ describe("AgentToolModel.bulkCreateOrUpdateCredentials", () => {
     expect(results[0].status).toBe("updated");
   });
 
-  test("updates useDynamicTeamCredential when it differs", async ({
+  test("updates credentialResolutionMode when it differs", async ({
     makeAgent,
     makeTool,
     makeAgentTool,
@@ -1323,7 +1318,7 @@ describe("AgentToolModel.bulkCreateOrUpdateCredentials", () => {
       {
         agentId: agent.id,
         toolId: tool.id,
-        useDynamicTeamCredential: true,
+        credentialResolutionMode: "dynamic",
       },
     ]);
 
@@ -1400,14 +1395,38 @@ describe("AgentToolModel.bulkCreate", () => {
       {
         agentId: agent.id,
         toolId: tool.id,
-        credentialSourceMcpServerId: server.id,
-        useDynamicTeamCredential: true,
+        mcpServerId: server.id,
+        credentialResolutionMode: "dynamic",
       },
     ]);
 
     expect(rows).toHaveLength(1);
-    expect(rows[0].credentialSourceMcpServerId).toBe(server.id);
-    expect(rows[0].useDynamicTeamCredential).toBe(true);
+    expect(rows[0].mcpServerId).toBe(server.id);
+    expect(rows[0].credentialResolutionMode).toBe("dynamic");
+  });
+
+  test("persists enterprise-managed mode on bulk-created rows", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const agent = await makeAgent();
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const tool = await makeTool({
+      name: "bulk-enterprise-managed",
+      catalogId: catalog.id,
+    });
+
+    const rows = await AgentToolModel.bulkCreate([
+      {
+        agentId: agent.id,
+        toolId: tool.id,
+        credentialResolutionMode: "enterprise_managed",
+      },
+    ]);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].credentialResolutionMode).toBe("enterprise_managed");
   });
 });
 
@@ -1423,9 +1442,8 @@ describe("AgentToolModel.create", () => {
 
     expect(agentTool.agentId).toBe(agent.id);
     expect(agentTool.toolId).toBe(tool.id);
-    expect(agentTool.credentialSourceMcpServerId).toBeNull();
-    expect(agentTool.executionSourceMcpServerId).toBeNull();
-    expect(agentTool.useDynamicTeamCredential).toBe(false);
+    expect(agentTool.mcpServerId).toBeNull();
+    expect(agentTool.credentialResolutionMode).toBe("static");
   });
 
   test("creates assignment with credential options", async ({
@@ -1438,10 +1456,10 @@ describe("AgentToolModel.create", () => {
     const server = await makeMcpServer();
 
     const agentTool = await AgentToolModel.create(agent.id, tool.id, {
-      credentialSourceMcpServerId: server.id,
+      mcpServerId: server.id,
     });
 
-    expect(agentTool.credentialSourceMcpServerId).toBe(server.id);
+    expect(agentTool.mcpServerId).toBe(server.id);
   });
 
   test("accepts organizationId to skip DB lookup in auto-configure", async ({

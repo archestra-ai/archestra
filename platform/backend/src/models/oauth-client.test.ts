@@ -2,6 +2,31 @@ import { describe, expect, test } from "@/test";
 import OAuthClientModel from "./oauth-client";
 
 describe("OAuthClientModel", () => {
+  describe("findByClientId", () => {
+    test("should return the full client when it exists", async ({
+      makeOAuthClient,
+    }) => {
+      const client = await makeOAuthClient({
+        clientId: "findable-client",
+        name: "Findable Client",
+      });
+
+      const found = await OAuthClientModel.findByClientId(client.clientId);
+
+      expect(found).toBeDefined();
+      expect(found?.id).toBe(client.id);
+      expect(found?.clientId).toBe("findable-client");
+      expect(found?.name).toBe("Findable Client");
+      expect(found?.tokenEndpointAuthMethod).toBe("none");
+    });
+
+    test("should return null when the client does not exist", async () => {
+      const found = await OAuthClientModel.findByClientId("missing-client");
+
+      expect(found).toBeNull();
+    });
+  });
+
   describe("getNameByClientId", () => {
     test("should return client name when client exists", async ({
       makeOAuthClient,
@@ -20,21 +45,6 @@ describe("OAuthClientModel", () => {
       const name = await OAuthClientModel.getNameByClientId("nonexistent-id");
 
       expect(name).toBeNull();
-    });
-
-    test("should return null when client has no name", async ({
-      makeOAuthClient,
-    }) => {
-      const client = await makeOAuthClient({
-        clientId: "nameless-client",
-        name: undefined,
-      });
-
-      const name = await OAuthClientModel.getNameByClientId(client.clientId);
-
-      // name defaults to "Test Client ..." from fixture, so create one without name
-      // The fixture always sets a name, so we test the "not found" path instead
-      expect(name).toBeDefined();
     });
   });
 
@@ -106,6 +116,14 @@ describe("OAuthClientModel", () => {
 
       const name = await OAuthClientModel.getNameByClientId(clientId);
       expect(name).toBe("Updated Name");
+
+      const found = await OAuthClientModel.findByClientId(clientId);
+      expect(found?.redirectUris).toEqual(["http://localhost:9000/callback"]);
+      expect(found?.grantTypes).toEqual([
+        "authorization_code",
+        "refresh_token",
+      ]);
+      expect(found?.metadata).toEqual({ cimd: true, updated: true });
     });
 
     test("should store optional fields", async () => {

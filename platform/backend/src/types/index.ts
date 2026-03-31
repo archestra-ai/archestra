@@ -14,6 +14,7 @@ export * from "./common-llm-format";
 export * from "./conversation";
 export * from "./conversation-share";
 export * from "./dual-llm";
+export * from "./enterprise-managed-credentials";
 export * from "./identity-provider";
 export * from "./incoming-email";
 export * from "./interaction";

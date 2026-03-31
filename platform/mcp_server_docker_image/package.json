@@ -10,6 +10,7 @@
   },
   "overrides": {
     "cross-spawn": ">=7.0.6",
-    "hono": ">=4.12.2"
+    "hono": ">=4.12.2",
+    "path-to-regexp": ">=8.4.0"
   }
 }

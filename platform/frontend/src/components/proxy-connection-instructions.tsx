@@ -6,6 +6,7 @@ import { useState } from "react";
 import { CodeText } from "@/components/code-text";
 import { ConnectionBaseUrlSelect } from "@/components/connection-base-url-select";
 import { CopyableCode } from "@/components/copyable-code";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import {
@@ -238,14 +239,13 @@ export function ProxyConnectionInstructions({
             <span>
               {authDocsUrl ? (
                 <>
-                  <a
+                  <ExternalDocsLink
                     href={`${authDocsUrl}#direct-provider-api-key`}
-                    target="_blank"
-                    rel="noopener noreferrer"
                     className="underline hover:text-foreground"
+                    showIcon={false}
                   >
                     Direct Provider API Key
-                  </a>{" "}
+                  </ExternalDocsLink>{" "}
                 </>
               ) : (
                 <>Direct Provider API Key </>
@@ -277,14 +277,13 @@ export function ProxyConnectionInstructions({
             <span>
               {authDocsUrl ? (
                 <>
-                  <a
+                  <ExternalDocsLink
                     href={`${authDocsUrl}#jwks-external-identity-provider`}
-                    target="_blank"
-                    rel="noopener noreferrer"
                     className="underline hover:text-foreground"
+                    showIcon={false}
                   >
                     JWKS Authentication
-                  </a>{" "}
+                  </ExternalDocsLink>{" "}
                 </>
               ) : (
                 <>JWKS Authentication </>

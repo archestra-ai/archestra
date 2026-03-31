@@ -9,20 +9,12 @@
  * the most recent ones intact so the LLM can work with current state.
  */
 
-import { parseFullToolName } from "@shared";
+import { isLargeResultBrowserMcpTool, parseFullToolName } from "@shared";
 import logger from "@/logging";
 import {
   estimateToolResultContentLength,
   previewToolResultContent,
 } from "@/utils/tool-result-preview";
-
-// Tool names that produce large outputs that should be summarized
-const BROWSER_TOOLS = [
-  "browser_snapshot",
-  "browser_navigate",
-  "browser_tabs",
-  // Match with prefixes (e.g., microsoft__playwright-mcp__browser_snapshot)
-];
 
 // Size threshold in characters - results larger than this will be stripped
 const SIZE_THRESHOLD = 2000;
@@ -47,13 +39,7 @@ type ToolCall = NonNullable<Message["tool_calls"]>[number];
  * Check if a tool name matches one of the browser tools
  */
 function isBrowserTool(toolName: string): boolean {
-  const normalizedName = toolName.toLowerCase();
-  return BROWSER_TOOLS.some(
-    (pattern) =>
-      normalizedName === pattern ||
-      normalizedName.endsWith(`__${pattern}`) ||
-      normalizedName.includes(`__${pattern}`),
-  );
+  return isLargeResultBrowserMcpTool(toolName);
 }
 
 /**

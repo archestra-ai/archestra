@@ -1,5 +1,5 @@
 {
-  "id": "cf9526f2-a73e-49a5-8764-2221da3643f2",
+  "id": "a546cc34-9113-476f-904d-50f943151563",
   "prevId": "53bfdc99-3e62-4055-9685-b6841a9f35ae",
   "version": "7",
   "dialect": "postgresql",
@@ -571,24 +571,18 @@
           "primaryKey": false,
           "notNull": true
         },
-        "credential_source_mcp_server_id": {
-          "name": "credential_source_mcp_server_id",
+        "mcp_server_id": {
+          "name": "mcp_server_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
-        "execution_source_mcp_server_id": {
-          "name": "execution_source_mcp_server_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "use_dynamic_team_credential": {
-          "name": "use_dynamic_team_credential",
-          "type": "boolean",
+        "credential_resolution_mode": {
+          "name": "credential_resolution_mode",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": false
+          "default": "'static'"
         },
         "created_at": {
           "name": "created_at",
@@ -633,25 +627,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "agent_tools_credential_source_mcp_server_id_mcp_server_id_fk": {
-          "name": "agent_tools_credential_source_mcp_server_id_mcp_server_id_fk",
+        "agent_tools_mcp_server_id_mcp_server_id_fk": {
+          "name": "agent_tools_mcp_server_id_mcp_server_id_fk",
           "tableFrom": "agent_tools",
           "tableTo": "mcp_server",
           "columnsFrom": [
-            "credential_source_mcp_server_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "agent_tools_execution_source_mcp_server_id_mcp_server_id_fk": {
-          "name": "agent_tools_execution_source_mcp_server_id_mcp_server_id_fk",
-          "tableFrom": "agent_tools",
-          "tableTo": "mcp_server",
-          "columnsFrom": [
-            "execution_source_mcp_server_id"
+            "mcp_server_id"
           ],
           "columnsTo": [
             "id"
@@ -2501,6 +2482,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "enterprise_managed_config": {
+          "name": "enterprise_managed_config",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "icon": {
           "name": "icon",
           "type": "text",
@@ -2808,12 +2795,6 @@
         "embedding_768": {
           "name": "embedding_768",
           "type": "vector(768)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "embedding_3072": {
-          "name": "embedding_3072",
-          "type": "vector(3072)",
           "primaryKey": false,
           "notNull": false
         },
@@ -5035,13 +5016,6 @@
         },
         "ignored": {
           "name": "ignored",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "is_embedding": {
-          "name": "is_embedding",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,

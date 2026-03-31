@@ -23,53 +23,35 @@ import type { ArchestraContext } from "./types";
 
 // === Constants ===
 
-const AgentAssignmentSchema = AgentToolAssignmentInputSchema.omit({
-  useDynamicTeamCredential: true,
-})
-  .extend({
-    toolId: AgentToolAssignmentInputSchema.shape.toolId.describe(
-      "The ID of the tool to assign.",
+const AgentAssignmentSchema = AgentToolAssignmentInputSchema.extend({
+  toolId: AgentToolAssignmentInputSchema.shape.toolId.describe(
+    "The ID of the tool to assign.",
+  ),
+  resolveAtCallTime:
+    AgentToolAssignmentInputSchema.shape.resolveAtCallTime.describe(
+      "When true, resolve credentials and execution target at tool call time. Prefer this for builder flows.",
     ),
-    resolveAtCallTime:
-      AgentToolAssignmentInputSchema.shape.resolveAtCallTime.describe(
-        "When true, resolve credentials and execution target at tool call time. Prefer this for builder flows.",
-      ),
-    credentialSourceMcpServerId:
-      AgentToolAssignmentInputSchema.shape.credentialSourceMcpServerId.describe(
-        "Optional explicit remote MCP installation to use as the credential source. Use this only when you want credentials to come from one specific installed MCP server instead of resolving them at call time.",
-      ),
-    executionSourceMcpServerId:
-      AgentToolAssignmentInputSchema.shape.executionSourceMcpServerId.describe(
-        "Optional explicit local MCP installation to run the tool on. Use this only when you want a local MCP tool to execute on one specific installed MCP server instead of resolving the execution target at call time.",
-      ),
-    agentId: UuidIdSchema.describe("The agent ID to assign the tool to."),
-  })
-  .strict();
+  mcpServerId: AgentToolAssignmentInputSchema.shape.mcpServerId.describe(
+    "Optional MCP server installation to pin the tool to when using static credential resolution.",
+  ),
+  agentId: UuidIdSchema.describe("The agent ID to assign the tool to."),
+}).strict();
 
-const McpGatewayAssignmentSchema = AgentToolAssignmentInputSchema.omit({
-  useDynamicTeamCredential: true,
-})
-  .extend({
-    toolId: AgentToolAssignmentInputSchema.shape.toolId.describe(
-      "The ID of the tool to assign.",
+const McpGatewayAssignmentSchema = AgentToolAssignmentInputSchema.extend({
+  toolId: AgentToolAssignmentInputSchema.shape.toolId.describe(
+    "The ID of the tool to assign.",
+  ),
+  resolveAtCallTime:
+    AgentToolAssignmentInputSchema.shape.resolveAtCallTime.describe(
+      "When true, resolve credentials and execution target at tool call time. Prefer this for builder flows.",
     ),
-    resolveAtCallTime:
-      AgentToolAssignmentInputSchema.shape.resolveAtCallTime.describe(
-        "When true, resolve credentials and execution target at tool call time. Prefer this for builder flows.",
-      ),
-    credentialSourceMcpServerId:
-      AgentToolAssignmentInputSchema.shape.credentialSourceMcpServerId.describe(
-        "Optional explicit remote MCP installation to use as the credential source. Use this only when you want credentials to come from one specific installed MCP server instead of resolving them at call time.",
-      ),
-    executionSourceMcpServerId:
-      AgentToolAssignmentInputSchema.shape.executionSourceMcpServerId.describe(
-        "Optional explicit local MCP installation to run the tool on. Use this only when you want a local MCP tool to execute on one specific installed MCP server instead of resolving the execution target at call time.",
-      ),
-    mcpGatewayId: UuidIdSchema.describe(
-      "The MCP gateway ID to assign the tool to.",
-    ),
-  })
-  .strict();
+  mcpServerId: AgentToolAssignmentInputSchema.shape.mcpServerId.describe(
+    "Optional MCP server installation to pin the tool to when using static credential resolution.",
+  ),
+  mcpGatewayId: UuidIdSchema.describe(
+    "The MCP gateway ID to assign the tool to.",
+  ),
+}).strict();
 
 type AgentAssignmentInput = z.infer<typeof AgentAssignmentSchema>;
 type McpGatewayAssignmentInput = z.infer<typeof McpGatewayAssignmentSchema>;
@@ -251,10 +233,7 @@ async function handleBulkAssignTool(params: {
           agentId: targetId,
           toolId: assignment.toolId,
           resolveAtCallTime: assignment.resolveAtCallTime,
-          credentialSourceMcpServerId:
-            assignment.credentialSourceMcpServerId ?? undefined,
-          executionSourceMcpServerId:
-            assignment.executionSourceMcpServerId ?? undefined,
+          mcpServerId: assignment.mcpServerId ?? undefined,
         });
       }),
     );

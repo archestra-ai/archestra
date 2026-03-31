@@ -23,6 +23,7 @@ import {
   CodeBlockCopyButton,
 } from "@/components/ai-elements/code-block";
 import { ConnectionBaseUrlSelect } from "@/components/connection-base-url-select";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -149,8 +150,11 @@ export function McpConnectionInstructions({
               name: string;
               description?: string | null;
             }>;
-            credentialSourceMcpServerId?: string | null;
-            useDynamicTeamCredential?: boolean;
+            mcpServerId?: string | null;
+            credentialResolutionMode?:
+              | "static"
+              | "dynamic"
+              | "enterprise_managed";
           }
         >(),
         archestraTools: [] as Array<{
@@ -165,8 +169,8 @@ export function McpConnectionInstructions({
       {
         server: (typeof mcpServers)[number];
         tools: Array<{ id: string; name: string; description?: string | null }>;
-        credentialSourceMcpServerId?: string | null;
-        useDynamicTeamCredential?: boolean;
+        mcpServerId?: string | null;
+        credentialResolutionMode?: "static" | "dynamic" | "enterprise_managed";
       }
     >();
 
@@ -201,15 +205,11 @@ export function McpConnectionInstructions({
           if (existing) {
             existing.tools.push(toolData);
           } else {
-            // Get credential source from the agent tool assignment
-            const credentialSource =
-              agentTool.credentialSourceMcpServerId ??
-              agentTool.executionSourceMcpServerId;
             groups.set(tool.catalogId, {
               server,
               tools: [toolData],
-              credentialSourceMcpServerId: credentialSource,
-              useDynamicTeamCredential: agentTool.useDynamicTeamCredential,
+              mcpServerId: agentTool.mcpServerId,
+              credentialResolutionMode: agentTool.credentialResolutionMode,
             });
           }
         }
@@ -474,20 +474,15 @@ export function McpConnectionInstructions({
               {Array.from(mcpServerToolGroups.entries()).map(
                 ([
                   serverId,
-                  {
-                    server,
-                    tools,
-                    credentialSourceMcpServerId,
-                    useDynamicTeamCredential,
-                  },
+                  { server, tools, mcpServerId, credentialResolutionMode },
                 ]) => (
                   <ReadOnlyMcpServerPill
                     key={serverId}
                     server={server}
                     tools={tools}
-                    credentialSourceMcpServerId={credentialSourceMcpServerId}
+                    mcpServerId={mcpServerId}
                     catalogItems={catalogItems}
-                    useDynamicTeamCredential={useDynamicTeamCredential}
+                    credentialResolutionMode={credentialResolutionMode}
                   />
                 ),
               )}
@@ -530,6 +525,9 @@ export function McpConnectionInstructions({
             <TabsTrigger value="static-token" className="flex-1">
               Static Token
             </TabsTrigger>
+            <TabsTrigger value="enterprise-sso" className="flex-1">
+              Enterprise SSO
+            </TabsTrigger>
             <TabsTrigger value="oauth" className="flex-1">
               OAuth 2.1
             </TabsTrigger>
@@ -537,16 +535,25 @@ export function McpConnectionInstructions({
           <p className="text-xs text-muted-foreground">
             For external identity providers, use{" "}
             {mcpAuthDocsUrl ? (
-              <a
-                href={`${mcpAuthDocsUrl}#external-idp-jwks`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:text-foreground"
-              >
-                JWKS authentication
-              </a>
+              <>
+                <ExternalDocsLink
+                  href={`${mcpAuthDocsUrl}#enterprise-managed-authorization`}
+                  className="underline hover:text-foreground"
+                  showIcon={false}
+                >
+                  enterprise-managed authorization
+                </ExternalDocsLink>
+                {" or "}
+                <ExternalDocsLink
+                  href={`${mcpAuthDocsUrl}#external-idp-jwks`}
+                  className="underline hover:text-foreground"
+                  showIcon={false}
+                >
+                  JWKS authentication
+                </ExternalDocsLink>
+              </>
             ) : (
-              "JWKS authentication"
+              "enterprise-managed authorization or JWKS authentication"
             )}
           </p>
         </div>
@@ -686,6 +693,19 @@ export function McpConnectionInstructions({
           </div>
         </TabsContent>
 
+        <TabsContent value="enterprise-sso" className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Use this when your MCP client signs users into your enterprise
+            identity provider and supports the MCP
+            enterprise-managed-authorization flow. The client should obtain an
+            ID-JAG from your IdP and exchange it with the gateway&apos;s token
+            endpoint automatically. You only need the MCP Gateway URL in the
+            client configuration.
+          </p>
+
+          <OAuthConfigBlock mcpUrl={mcpUrl} />
+        </TabsContent>
+
         {/* OAuth 2.1 Tab */}
         <TabsContent value="oauth" className="space-y-4">
           <p className="text-sm text-muted-foreground">
@@ -751,21 +771,21 @@ interface ReadOnlyMcpServerPillProps {
     catalogId?: string | null;
   };
   tools: Array<{ id: string; name: string; description?: string | null }>;
-  credentialSourceMcpServerId?: string | null;
+  mcpServerId?: string | null;
   catalogItems: Array<{
     id: string;
     name: string;
     description?: string | null;
   }>;
-  useDynamicTeamCredential?: boolean;
+  credentialResolutionMode?: "static" | "dynamic" | "enterprise_managed";
 }
 
 function ReadOnlyMcpServerPill({
   server,
   tools,
-  credentialSourceMcpServerId,
+  mcpServerId,
   catalogItems,
-  useDynamicTeamCredential,
+  credentialResolutionMode,
 }: ReadOnlyMcpServerPillProps) {
   const [open, setOpen] = useState(false);
 
@@ -788,22 +808,23 @@ function ReadOnlyMcpServerPill({
     : [];
 
   // Find the credential server to get owner email/team name
-  const credentialServer = credentialSourceMcpServerId
-    ? credentialServers.find((s) => s.id === credentialSourceMcpServerId)
+  const credentialServer = mcpServerId
+    ? credentialServers.find((s) => s.id === mcpServerId)
     : null;
 
   // Get credential display text (owner email or team name)
-  const credentialDisplayText = useDynamicTeamCredential
-    ? null
-    : credentialServer
-      ? (credentialServer.teamDetails?.name ??
-        credentialServer.ownerEmail ??
-        "Deleted user")
-      : null;
+  const credentialDisplayText =
+    credentialResolutionMode === "dynamic"
+      ? null
+      : credentialServer
+        ? (credentialServer.teamDetails?.name ??
+          credentialServer.ownerEmail ??
+          "Deleted user")
+        : null;
 
   // Check if we should show credential section
   const showCredentialSection =
-    useDynamicTeamCredential || credentialDisplayText;
+    credentialResolutionMode === "dynamic" || credentialDisplayText;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -847,7 +868,7 @@ function ReadOnlyMcpServerPill({
         {showCredentialSection && (
           <div className="p-4 border-b space-y-2 opacity-60">
             <Label className="text-sm font-medium">Credential</Label>
-            {useDynamicTeamCredential ? (
+            {credentialResolutionMode === "dynamic" ? (
               <div className="flex items-center gap-1 text-sm">
                 <Zap className="h-3 w-3 text-amber-500" />
                 <span className="font-medium">Resolve at call time</span>

@@ -61,6 +61,8 @@ spec:
               value: "8080"
             - name: KC_HEALTH_ENABLED
               value: "true"
+            - name: KC_FEATURES
+              value: {{ .Values.keycloak.features | join "," | quote }}
             # Keycloak 26+ v2 hostname configuration
             # Forces Keycloak to always return consistent issuer in tokens
             # regardless of how it's accessed (internal K8s service vs NodePort)
@@ -83,17 +85,24 @@ spec:
           readinessProbe:
             httpGet:
               path: /health/ready
-              port: 9000
+              port: {{ .Values.keycloak.healthPort | default 9000 }}
             initialDelaySeconds: {{ .Values.keycloak.readinessProbe.initialDelaySeconds | default 30 }}
             periodSeconds: {{ .Values.keycloak.readinessProbe.periodSeconds | default 10 }}
             timeoutSeconds: {{ .Values.keycloak.readinessProbe.timeoutSeconds | default 5 }}
           livenessProbe:
             httpGet:
               path: /health/live
-              port: 9000
+              port: {{ .Values.keycloak.healthPort | default 9000 }}
             initialDelaySeconds: {{ .Values.keycloak.livenessProbe.initialDelaySeconds | default 60 }}
             periodSeconds: {{ .Values.keycloak.livenessProbe.periodSeconds | default 30 }}
             timeoutSeconds: {{ .Values.keycloak.livenessProbe.timeoutSeconds | default 5 }}
+          startupProbe:
+            httpGet:
+              path: /health/ready
+              port: {{ .Values.keycloak.healthPort | default 9000 }}
+            failureThreshold: {{ .Values.keycloak.startupProbe.failureThreshold | default 30 }}
+            periodSeconds: {{ .Values.keycloak.startupProbe.periodSeconds | default 10 }}
+            timeoutSeconds: {{ .Values.keycloak.startupProbe.timeoutSeconds | default 5 }}
           resources:
             {{- toYaml .Values.keycloak.resources | nindent 12 }}
       {{- if .Values.keycloak.realm.import }}
@@ -124,6 +133,12 @@ data:
       "resetPasswordAllowed": true,
       "editUsernameAllowed": false,
       "bruteForceProtected": false,
+      "accessTokenLifespan": 3600,
+      "accessTokenLifespanForImplicitFlow": 3600,
+      "ssoSessionIdleTimeout": 28800,
+      "ssoSessionMaxLifespan": 28800,
+      "clientSessionIdleTimeout": 28800,
+      "clientSessionMaxLifespan": 28800,
       "groups": [
         {{- $groups := .Values.keycloak.groups | default list }}
         {{- range $index, $group := $groups }}
@@ -181,6 +196,34 @@ data:
                 "access.token.claim": "true",
                 "claim.name": "name",
                 "userinfo.token.claim": "true"
+              }
+            },
+            {
+              "name": "preferred_username",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-usermodel-property-mapper",
+              "consentRequired": false,
+              "config": {
+                "user.attribute": "username",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "claim.name": "preferred_username",
+                "jsonType.label": "String",
+                "userinfo.token.claim": "true"
+              }
+            },
+            {
+              "name": "demo_token_value",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-usermodel-attribute-mapper",
+              "consentRequired": false,
+              "config": {
+                "user.attribute": "demo_token_value",
+                "id.token.claim": "false",
+                "access.token.claim": "true",
+                "claim.name": "demo_token_value",
+                "jsonType.label": "String",
+                "userinfo.token.claim": "false"
               }
             },
             {
@@ -311,6 +354,17 @@ data:
               "temporary": false
             }
           ]
+          {{- if $user.attributes }},
+          "attributes": {
+            {{- $attrs := $user.attributes }}
+            {{- $first := true }}
+            {{- range $key, $value := $attrs }}
+            {{- if not $first }},{{ end }}
+            {{- $first = false }}
+            {{ $key | quote }}: [{{ $value | quote }}]
+            {{- end }}
+          }
+          {{- end }}
           {{- if $user.groups }},
           "groups": [
             {{- range $gindex, $group := $user.groups }}

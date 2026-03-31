@@ -32,7 +32,6 @@ import {
   Users,
   X,
 } from "lucide-react";
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
@@ -1775,23 +1774,6 @@ export function AgentDialog({
                               onCheckedChange={setConsiderContextUntrusted}
                             />
                           </div>
-                        </div>
-                      )}
-
-                      {/* Agent Trigger Rules (Agent only, hidden for built-in) */}
-                      {isInternalAgent && !isBuiltIn && (
-                        <div className="space-y-2">
-                          <Label>Agent Triggers</Label>
-                          <p className="text-sm text-muted-foreground">
-                            Manage email invocation and security rules from the
-                            Agent Triggers page.
-                          </p>
-                          <Link
-                            href="/agents/triggers/email"
-                            className="text-sm underline hover:text-foreground"
-                          >
-                            Open Agent Triggers
-                          </Link>
                         </div>
                       )}
 

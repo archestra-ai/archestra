@@ -244,58 +244,58 @@ export default function EmailPage() {
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
               <SearchInput
                 placeholder="Search agents..."
                 value={search}
                 syncQueryParams={false}
                 debounceMs={250}
                 onSearchChange={setSearch}
-                className="relative max-w-md flex-1"
+                className="relative w-full xl:max-w-md xl:flex-1"
               />
-            </div>
 
-            <div className="flex gap-1 flex-wrap">
-              <Button
-                variant="ghost"
-                size="sm"
-                className={cn(
-                  "h-7 text-xs rounded-full gap-1.5",
-                  statusFilter === "all" && "bg-primary/10 text-primary",
-                )}
-                onClick={() => setStatusFilter("all")}
-              >
-                <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
-                All ({sortedAgents.length})
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className={cn(
-                  "h-7 text-xs rounded-full gap-1.5",
-                  statusFilter === "enabled"
-                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                    : "text-muted-foreground",
-                )}
-                onClick={() => setStatusFilter("enabled")}
-              >
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                Enabled ({enabledAgentsCount})
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className={cn(
-                  "h-7 text-xs rounded-full gap-1.5",
-                  statusFilter === "disabled"
-                    ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                    : "text-muted-foreground",
-                )}
-                onClick={() => setStatusFilter("disabled")}
-              >
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                Disabled ({disabledAgentsCount})
-              </Button>
+              <div className="flex flex-wrap items-center gap-1 xl:justify-end">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={cn(
+                    "h-7 text-xs rounded-full gap-1.5",
+                    statusFilter === "all" && "bg-primary/10 text-primary",
+                  )}
+                  onClick={() => setStatusFilter("all")}
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
+                  All ({sortedAgents.length})
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={cn(
+                    "h-7 text-xs rounded-full gap-1.5",
+                    statusFilter === "enabled"
+                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                      : "text-muted-foreground",
+                  )}
+                  onClick={() => setStatusFilter("enabled")}
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  Enabled ({enabledAgentsCount})
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={cn(
+                    "h-7 text-xs rounded-full gap-1.5",
+                    statusFilter === "disabled"
+                      ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                      : "text-muted-foreground",
+                  )}
+                  onClick={() => setStatusFilter("disabled")}
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                  Disabled ({disabledAgentsCount})
+                </Button>
+              </div>
             </div>
 
             <div className="overflow-hidden rounded-md border">
@@ -464,12 +464,27 @@ function EmailAgentRow({
       <TableCell className="text-right">
         <PermissionButton
           permissions={{ agent: ["update"] }}
-          size="sm"
-          variant="outline"
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7"
           onClick={onEdit}
+          title={
+            agent.incomingEmailEnabled
+              ? "Edit email settings"
+              : "Configure email"
+          }
+          aria-label={
+            agent.incomingEmailEnabled
+              ? "Edit email settings"
+              : "Configure email"
+          }
         >
-          <Settings2 className="mr-2 h-4 w-4" />
-          {agent.incomingEmailEnabled ? "Edit" : "Configure"}
+          <Settings2 className="h-4 w-4" />
+          <span className="sr-only">
+            {agent.incomingEmailEnabled
+              ? "Edit email settings"
+              : "Configure email"}
+          </span>
         </PermissionButton>
       </TableCell>
     </TableRow>

@@ -19,7 +19,6 @@ import {
   DialogBody,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogForm,
   DialogHeader,
   DialogTitle,
@@ -283,7 +282,7 @@ export function AgentEmailSettingsDialog({
               </div>
             </DialogBody>
 
-            <DialogFooter>
+            <div className="flex flex-col-reverse gap-2 border-t px-4 py-3 sm:flex-row sm:justify-end">
               <Button
                 type="button"
                 variant="outline"
@@ -298,7 +297,7 @@ export function AgentEmailSettingsDialog({
               >
                 {updateAgentMutation.isPending ? "Saving..." : "Save settings"}
               </PermissionButton>
-            </DialogFooter>
+            </div>
           </DialogForm>
         </Form>
       </DialogContent>

@@ -1,22 +1,14 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  ExternalLink,
-  Mail,
-  RefreshCw,
-  Settings2,
-  Trash2,
-} from "lucide-react";
-import Link from "next/link";
+import { type archestraApiTypes, DocsPage } from "@shared";
+import { AlertTriangle, RefreshCw, Settings2, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { CopyButton } from "@/components/copy-button";
 import Divider from "@/components/divider";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
+import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Table,
@@ -38,8 +30,10 @@ import config from "@/lib/config/config";
 import { useConfig, usePublicBaseUrl } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { cn } from "@/lib/utils";
 import { CollapsibleSetupSection } from "../_components/collapsible-setup-section";
 import { CredentialField } from "../_components/credential-field";
+import { ExternalDocsLink } from "../_components/external-docs-link";
 import { SetupStep } from "../_components/setup-step";
 import { useTriggerStatuses } from "../_components/use-trigger-statuses";
 import { AgentEmailSettingsDialog } from "./agent-email-settings-dialog";
@@ -52,10 +46,11 @@ import {
 } from "./email-trigger.utils";
 
 type AgentRecord = archestraApiTypes.GetAllAgentsResponses["200"][number];
+type EmailStatusFilter = "all" | "enabled" | "disabled";
 
 export default function EmailPage() {
   const appName = useAppName();
-  const docsUrl = getFrontendDocsUrl("platform-agent-triggers-email");
+  const docsUrl = getFrontendDocsUrl(DocsPage.PlatformAgentTriggersEmail);
   const publicBaseUrl = usePublicBaseUrl();
   const { data: session } = useSession();
   const { data: configData, isLoading: featuresLoading } = useConfig();
@@ -69,6 +64,8 @@ export default function EmailPage() {
 
   const [setupOpen, setSetupOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<AgentRecord | null>(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<EmailStatusFilter>("all");
 
   const isLoading = featuresLoading || statusLoading || agentsLoading;
   const emailInfo = configData?.features.incomingEmail;
@@ -89,12 +86,28 @@ export default function EmailPage() {
   const enabledAgentsCount = sortedAgents.filter(
     (agent) => agent.incomingEmailEnabled,
   ).length;
-  const publicAgentsCount = sortedAgents.filter(
-    (agent) =>
-      agent.incomingEmailEnabled &&
-      agent.incomingEmailSecurityMode === "public",
-  ).length;
-  const restrictedAgentsCount = enabledAgentsCount - publicAgentsCount;
+  const disabledAgentsCount = sortedAgents.length - enabledAgentsCount;
+
+  const filteredAgents = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase();
+
+    return sortedAgents.filter((agent) => {
+      const matchesStatus =
+        statusFilter === "all"
+          ? true
+          : statusFilter === "enabled"
+            ? agent.incomingEmailEnabled
+            : !agent.incomingEmailEnabled;
+      const matchesSearch =
+        !normalizedSearch ||
+        agent.name.toLowerCase().includes(normalizedSearch) ||
+        agent.authorName?.toLowerCase().includes(normalizedSearch);
+
+      return matchesStatus && matchesSearch;
+    });
+  }, [search, sortedAgents, statusFilter]);
+
+  const hasActiveFilters = search.trim().length > 0 || statusFilter !== "all";
 
   return (
     <div className="flex flex-col gap-6">
@@ -131,24 +144,16 @@ export default function EmailPage() {
                 and provider credentials first, then return here to activate the
                 webhook subscription and agent aliases.
               </p>
-              {docsUrl && (
-                <Link
-                  href={docsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-primary hover:underline"
-                >
-                  Review the email setup guide
-                  <ExternalLink className="h-3 w-3" />
-                </Link>
-              )}
+              <ExternalDocsLink href={docsUrl}>
+                Review the email setup guide
+              </ExternalDocsLink>
             </div>
           )}
         </SetupStep>
 
         <SetupStep
           title="Activate the webhook subscription"
-          description="Create or reconfigure the Microsoft Graph subscription that sends new mail events to Archestra"
+          description={`Create or reconfigure the Microsoft Graph subscription that sends new mail events to ${appName}`}
           done={!!status?.isActive}
           ctaLabel={providerEnabled ? "Setup Email" : undefined}
           onAction={providerEnabled ? () => setSetupOpen(true) : undefined}
@@ -231,122 +236,123 @@ export default function EmailPage() {
           <Divider />
 
           <section className="flex flex-col gap-4">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-semibold">Agent Email Access</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Enable email invocation, adjust security rules, and review
-                  which agents currently have an email alias.
-                </p>
-              </div>
+            <div>
+              <h2 className="text-lg font-semibold">Agent Email Access</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Enable email invocation, adjust security rules, and review which
+                agents currently have an email alias.
+              </p>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-3">
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium">
-                    Email-enabled agents
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="flex items-center gap-3">
-                  <Mail className="h-5 w-5 text-muted-foreground" />
-                  <div>
-                    <div className="text-2xl font-semibold">
-                      {enabledAgentsCount}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Agents currently invocable by email
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium">
-                    Private or internal
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="flex items-center gap-3">
-                  <CheckCircle2 className="h-5 w-5 text-muted-foreground" />
-                  <div>
-                    <div className="text-2xl font-semibold">
-                      {restrictedAgentsCount}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Restricted to known users or approved domains
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium">
-                    Public agents
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="flex items-center gap-3">
-                  <Badge
-                    variant="secondary"
-                    className="bg-amber-500/10 text-amber-700"
-                  >
-                    Public
-                  </Badge>
-                  <div>
-                    <div className="text-2xl font-semibold">
-                      {publicAgentsCount}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Agents accepting email from any sender
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
+            <div className="flex items-center gap-3">
+              <SearchInput
+                placeholder="Search agents..."
+                value={search}
+                syncQueryParams={false}
+                debounceMs={250}
+                onSearchChange={setSearch}
+                className="relative max-w-md flex-1"
+              />
             </div>
 
-            <Card className="overflow-hidden">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Agent aliases</CardTitle>
-              </CardHeader>
-              <CardContent className="px-0 pb-0">
-                <Table>
-                  <TableHeader>
+            <div className="flex gap-1 flex-wrap">
+              <Button
+                variant="ghost"
+                size="sm"
+                className={cn(
+                  "h-7 text-xs rounded-full gap-1.5",
+                  statusFilter === "all" && "bg-primary/10 text-primary",
+                )}
+                onClick={() => setStatusFilter("all")}
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
+                All ({sortedAgents.length})
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={cn(
+                  "h-7 text-xs rounded-full gap-1.5",
+                  statusFilter === "enabled"
+                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                    : "text-muted-foreground",
+                )}
+                onClick={() => setStatusFilter("enabled")}
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                Enabled ({enabledAgentsCount})
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={cn(
+                  "h-7 text-xs rounded-full gap-1.5",
+                  statusFilter === "disabled"
+                    ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                    : "text-muted-foreground",
+                )}
+                onClick={() => setStatusFilter("disabled")}
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                Disabled ({disabledAgentsCount})
+              </Button>
+            </div>
+
+            <div className="overflow-hidden rounded-md border">
+              <Table>
+                <TableHeader className="bg-muted border-b-2 border-border">
+                  <TableRow>
+                    <TableHead className="w-[26%]">Agent</TableHead>
+                    <TableHead className="w-[16%]">Status</TableHead>
+                    <TableHead className="w-[24%]">Security</TableHead>
+                    <TableHead className="w-[24%]">Email alias</TableHead>
+                    <TableHead className="w-[10%] text-right">
+                      Actions
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredAgents.length > 0 ? (
+                    filteredAgents.map((agent) => (
+                      <EmailAgentRow
+                        key={agent.id}
+                        agent={agent}
+                        currentUserId={session?.user?.id}
+                        onEdit={() => setEditingAgent(agent)}
+                        providerEnabled={providerEnabled}
+                      />
+                    ))
+                  ) : (
                     <TableRow>
-                      <TableHead className="w-[26%]">Agent</TableHead>
-                      <TableHead className="w-[16%]">Status</TableHead>
-                      <TableHead className="w-[24%]">Security</TableHead>
-                      <TableHead className="w-[24%]">Email alias</TableHead>
-                      <TableHead className="w-[10%] text-right">
-                        Action
-                      </TableHead>
+                      <TableCell
+                        colSpan={5}
+                        className="h-40 text-center text-sm text-muted-foreground"
+                      >
+                        <div className="flex flex-col items-center justify-center gap-4">
+                          <p>
+                            {hasActiveFilters
+                              ? "No agents match your current filters."
+                              : "No internal agents are available yet."}
+                          </p>
+                          {hasActiveFilters && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSearch("");
+                                setStatusFilter("all");
+                              }}
+                            >
+                              Clear filters
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {sortedAgents.length > 0 ? (
-                      sortedAgents.map((agent) => (
-                        <EmailAgentRow
-                          key={agent.id}
-                          agent={agent}
-                          currentUserId={session?.user?.id}
-                          onEdit={() => setEditingAgent(agent)}
-                          providerEnabled={providerEnabled}
-                        />
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell
-                          colSpan={5}
-                          className="py-10 text-center text-sm text-muted-foreground"
-                        >
-                          No internal agents are available yet.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </section>
         </>
       )}
@@ -384,6 +390,7 @@ function EmailAgentRow({
   onEdit: () => void;
   providerEnabled: boolean;
 }) {
+  const appName = useAppName();
   const { data: emailAddress } = useAgentEmailAddress(
     providerEnabled && agent.incomingEmailEnabled ? agent.id : null,
   );
@@ -424,6 +431,7 @@ function EmailAgentRow({
               {describeIncomingEmailSecurityMode(
                 agent.incomingEmailSecurityMode,
                 agent.incomingEmailAllowedDomain,
+                appName,
               )}
             </p>
           </div>

@@ -3,6 +3,7 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { AlertTriangle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 
 interface StreamTimeoutWarningProps {
@@ -82,14 +83,13 @@ export function StreamTimeoutWarning({
             provider's load balancer is too low. We recommend increasing the
             timeout to at least 5 minutes.{" "}
             {docsUrl && (
-              <a
+              <ExternalDocsLink
                 href={docsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
                 className="font-medium underline hover:no-underline"
+                showIcon={false}
               >
                 Learn more in our documentation
-              </a>
+              </ExternalDocsLink>
             )}
           </p>
         </div>

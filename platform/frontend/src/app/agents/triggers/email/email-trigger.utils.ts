@@ -64,9 +64,10 @@ export function formatIncomingEmailSecurityMode(
 export function describeIncomingEmailSecurityMode(
   mode: IncomingEmailSecurityMode,
   allowedDomain?: string | null,
+  appName = "platform",
 ): string {
   if (mode === "private") {
-    return "Only matching Archestra users with access to this agent can email it.";
+    return `Only matching ${appName} users with access to this agent can email it.`;
   }
   if (mode === "internal") {
     return allowedDomain

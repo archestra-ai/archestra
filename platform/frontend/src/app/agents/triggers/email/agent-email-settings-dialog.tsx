@@ -45,6 +45,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useUpdateProfile } from "@/lib/agent.query";
 import { useAgentEmailAddress } from "@/lib/chatops/incoming-email.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   AgentEmailSettingsFormSchema,
   type AgentEmailSettingsFormValues,
@@ -66,6 +67,7 @@ export function AgentEmailSettingsDialog({
   onOpenChange,
   providerEnabled,
 }: AgentEmailSettingsDialogProps) {
+  const appName = useAppName();
   const updateAgentMutation = useUpdateProfile();
   const form = useForm<AgentEmailSettingsFormValues>({
     resolver: zodResolver(AgentEmailSettingsFormSchema),
@@ -204,6 +206,7 @@ export function AgentEmailSettingsDialog({
                           {describeIncomingEmailSecurityMode(
                             incomingEmailSecurityMode,
                             form.watch("incomingEmailAllowedDomain"),
+                            appName,
                           )}
                         </FormDescription>
                         <FormMessage />

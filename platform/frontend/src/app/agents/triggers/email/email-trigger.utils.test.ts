@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   AgentEmailSettingsFormSchema,
   describeIncomingEmailSecurityMode,
+  formatIncomingEmailExpiry,
   formatIncomingEmailSecurityMode,
   getIncomingEmailTimeUntilExpiry,
   getIncomingEmailWebhookUrl,
@@ -55,10 +56,20 @@ describe("email trigger utils", () => {
     ).toContain("@company.com");
   });
 
+  it("uses the app name for private mode descriptions", () => {
+    expect(
+      describeIncomingEmailSecurityMode("private", undefined, "Acme"),
+    ).toContain("Acme users");
+  });
+
   it("builds the incoming email webhook URL", () => {
     expect(getIncomingEmailWebhookUrl("https://app.example.com/")).toBe(
       "https://app.example.com/api/webhooks/incoming-email",
     );
+  });
+
+  it("returns invalid date for malformed expiry values", () => {
+    expect(formatIncomingEmailExpiry("not-a-date")).toBe("Invalid Date");
   });
 
   it("formats the time until expiry in days and hours", () => {

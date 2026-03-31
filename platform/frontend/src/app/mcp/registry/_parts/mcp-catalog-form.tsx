@@ -26,6 +26,7 @@ import {
   EnterpriseManagedCredentialFields,
 } from "@/components/enterprise-managed-credential-fields";
 import { EnvironmentVariablesFormField } from "@/components/environment-variables-form-field";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -724,14 +725,13 @@ export function McpCatalogForm({
                     <FormDescription>
                       {defaultImageDocsUrl ? (
                         <>
-                          <a
+                          <ExternalDocsLink
                             href={defaultImageDocsUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-primary underline hover:no-underline"
+                            className="underline hover:no-underline"
+                            showIcon={false}
                           >
                             Default image
-                          </a>{" "}
+                          </ExternalDocsLink>{" "}
                           includes alpine, npx, mcp[cli]. Use custom for
                           additional packages.
                         </>
@@ -749,14 +749,13 @@ export function McpCatalogForm({
                 <p className="text-sm text-muted-foreground">
                   Kubernetes secrets for pulling container images from private
                   registries.{" "}
-                  <a
+                  <ExternalDocsLink
                     href="https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary underline underline-offset-2 hover:text-primary/80"
+                    className="underline underline-offset-2 hover:text-primary/80"
+                    showIcon={false}
                   >
                     Learn more
-                  </a>
+                  </ExternalDocsLink>
                 </p>
 
                 {imagePullSecretFields.map((field, index) => {

@@ -6,6 +6,7 @@ import { Download, ExternalLink, Loader2, TriangleAlert } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
 import { CopyButton } from "@/components/copy-button";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { SetupDialog } from "@/components/setup-dialog";
 import { StepCard } from "@/components/step-card";
 import { Button } from "@/components/ui/button";
@@ -142,14 +143,12 @@ export function MsTeamsSetupDialog({
             <>
               {" "}
               Find out more in our{" "}
-              <a
+              <ExternalDocsLink
                 href={docsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
                 className="text-primary underline hover:no-underline"
               >
                 documentation
-              </a>
+              </ExternalDocsLink>
               .
             </>
           )}

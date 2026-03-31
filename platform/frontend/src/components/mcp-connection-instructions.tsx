@@ -23,6 +23,7 @@ import {
   CodeBlockCopyButton,
 } from "@/components/ai-elements/code-block";
 import { ConnectionBaseUrlSelect } from "@/components/connection-base-url-select";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -535,23 +536,21 @@ export function McpConnectionInstructions({
             For external identity providers, use{" "}
             {mcpAuthDocsUrl ? (
               <>
-                <a
+                <ExternalDocsLink
                   href={`${mcpAuthDocsUrl}#enterprise-managed-authorization`}
-                  target="_blank"
-                  rel="noopener noreferrer"
                   className="underline hover:text-foreground"
+                  showIcon={false}
                 >
                   enterprise-managed authorization
-                </a>
+                </ExternalDocsLink>
                 {" or "}
-                <a
+                <ExternalDocsLink
                   href={`${mcpAuthDocsUrl}#external-idp-jwks`}
-                  target="_blank"
-                  rel="noopener noreferrer"
                   className="underline hover:text-foreground"
+                  showIcon={false}
                 >
                   JWKS authentication
-                </a>
+                </ExternalDocsLink>
               </>
             ) : (
               "enterprise-managed authorization or JWKS authentication"

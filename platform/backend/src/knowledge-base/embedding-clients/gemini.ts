@@ -78,9 +78,6 @@ export async function callGeminiEmbedding(params: {
     const message =
       (err as { message?: string }).message ??
       (err instanceof Error ? err.message : String(err));
-    throw new GeminiEmbeddingError(
-      status,
-      message,
-    );
+    throw new GeminiEmbeddingError(status, message);
   }
 }

@@ -33753,7 +33753,7 @@ export type UpdateAgentSettingsResponse = UpdateAgentSettingsResponses[keyof Upd
 
 export type UpdateKnowledgeSettingsData = {
     body: {
-        embeddingModel?: string;
+        embeddingModel?: string | null;
         embeddingChatApiKeyId?: string | null;
         rerankerChatApiKeyId?: string | null;
         rerankerModel?: string | null;

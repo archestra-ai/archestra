@@ -357,6 +357,62 @@ describe("organization routes", () => {
   });
 
   describe("PATCH /api/organization/knowledge-settings", () => {
+    test("allows clearing embedding model with null", async ({
+      makeSecret,
+    }) => {
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const apiKey = await LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: secret.id,
+        name: "Embedding Key",
+        provider: "gemini",
+        scope: "personal",
+        userId: user.id,
+      });
+      const model = await ModelModel.create({
+        externalId: "gemini/gemini-embedding-001",
+        provider: "gemini",
+        modelId: "gemini-embedding-001",
+        description: "Gemini Embedding 001",
+        contextLength: null,
+        inputModalities: ["text"],
+        outputModalities: [],
+        supportsToolCalling: false,
+        promptPricePerToken: null,
+        completionPricePerToken: null,
+        embeddingDimensions: 3072,
+        lastSyncedAt: new Date(),
+      });
+
+      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+        apiKey.id,
+        [{ id: model.id, modelId: model.modelId }],
+        "gemini",
+      );
+
+      const setResponse = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: {
+          embeddingChatApiKeyId: apiKey.id,
+          embeddingModel: model.modelId,
+        },
+      });
+
+      expect(setResponse.statusCode).toBe(200);
+
+      const clearResponse = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: {
+          embeddingModel: null,
+        },
+      });
+
+      expect(clearResponse.statusCode).toBe(200);
+      expect(clearResponse.json().embeddingModel).toBeNull();
+    });
+
     test("rejects embedding models that are missing configured dimensions", async ({
       makeSecret,
     }) => {

@@ -226,6 +226,8 @@ export function inferEmbeddingDimensions(
     return 1536;
   }
   if (provider === "openai" && id === "text-embedding-3-large") {
+    // Default to 1536 for backwards compatibility with existing OpenAI KB
+    // embeddings; admins can opt into 3072 manually in the model editor.
     return 1536;
   }
   if (provider === "gemini" && id === "gemini-embedding-001") {

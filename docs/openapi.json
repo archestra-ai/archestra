@@ -126864,6 +126864,7 @@
                 "type": "object",
                 "properties": {
                   "embeddingModel": {
+                    "nullable": true,
                     "type": "string",
                     "minLength": 1
                   },

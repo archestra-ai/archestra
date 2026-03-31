@@ -4,6 +4,18 @@ import type { CimdUpsertData } from "@/types";
 
 class OAuthClientModel {
   /**
+   * Find a client by OAuth client_id.
+   */
+  static async findByClientId(clientId: string) {
+    const [client] = await db
+      .select()
+      .from(schema.oauthClientsTable)
+      .where(eq(schema.oauthClientsTable.clientId, clientId))
+      .limit(1);
+    return client ?? null;
+  }
+
+  /**
    * Get the client name by OAuth client_id (the public-facing identifier).
    * Returns null if client not found or has no name.
    */

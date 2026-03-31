@@ -12195,9 +12195,8 @@ export type GetAllAgentToolsResponses = {
     200: {
         data: Array<{
             id: string;
-            credentialSourceMcpServerId: string | null;
-            executionSourceMcpServerId: string | null;
-            useDynamicTeamCredential: boolean;
+            mcpServerId: string | null;
+            credentialResolutionMode: 'static' | 'dynamic' | 'enterprise_managed';
             createdAt: string;
             updatedAt: string;
             agent: {
@@ -12324,9 +12323,8 @@ export type UnassignToolFromAgentResponse = UnassignToolFromAgentResponses[keyof
 export type AssignToolToAgentData = {
     body: {
         resolveAtCallTime?: boolean;
-        useDynamicTeamCredential?: boolean;
-        credentialSourceMcpServerId?: string | null;
-        executionSourceMcpServerId?: string | null;
+        credentialResolutionMode?: 'static' | 'dynamic' | 'enterprise_managed';
+        mcpServerId?: string | null;
     } | null;
     path: {
         agentId: string;
@@ -12411,9 +12409,8 @@ export type BulkAssignToolsData = {
         assignments: Array<{
             toolId: string;
             resolveAtCallTime?: boolean;
-            useDynamicTeamCredential?: boolean;
-            credentialSourceMcpServerId?: string | null;
-            executionSourceMcpServerId?: string | null;
+            credentialResolutionMode?: 'static' | 'dynamic' | 'enterprise_managed';
+            mcpServerId?: string | null;
             agentId: string;
         }>;
     };
@@ -12703,9 +12700,8 @@ export type GetAgentToolsResponse = GetAgentToolsResponses[keyof GetAgentToolsRe
 
 export type UpdateAgentToolData = {
     body: {
-        credentialSourceMcpServerId?: string | null;
-        executionSourceMcpServerId?: string | null;
-        useDynamicTeamCredential?: boolean;
+        mcpServerId?: string | null;
+        credentialResolutionMode?: 'static' | 'dynamic' | 'enterprise_managed';
     };
     path: {
         id: string;
@@ -12781,9 +12777,8 @@ export type UpdateAgentToolResponses = {
         id?: string;
         agentId?: string;
         toolId?: string;
-        credentialSourceMcpServerId?: string | null;
-        executionSourceMcpServerId?: string | null;
-        useDynamicTeamCredential?: boolean;
+        mcpServerId?: string | null;
+        credentialResolutionMode: 'static' | 'dynamic' | 'enterprise_managed';
         createdAt?: string;
         updatedAt?: string;
     };
@@ -23296,6 +23291,23 @@ export type GetInternalMcpCatalogResponses = {
             streamable_http_url?: string;
             streamable_http_port?: number;
         } | null;
+        enterpriseManagedConfig: {
+            identityProviderId?: string;
+            resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
+            resourceIdentifier?: string;
+            requestedIssuer?: string;
+            requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
+            scopes?: Array<string>;
+            audience?: string;
+            clientIdOverride?: string;
+            tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
+            headerName?: string;
+            envVarName?: string;
+            bodyFieldName?: string;
+            responseFieldPath?: string;
+            fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
+            cacheTtlSeconds?: number;
+        } | null;
         icon: string | null;
         organizationId: string | null;
         authorId: string | null;
@@ -23409,6 +23421,23 @@ export type CreateInternalMcpCatalogItemData = {
             browser_auth?: boolean;
             streamable_http_url?: string;
             streamable_http_port?: number;
+        } | null;
+        enterpriseManagedConfig?: {
+            identityProviderId?: string;
+            resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
+            resourceIdentifier?: string;
+            requestedIssuer?: string;
+            requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
+            scopes?: Array<string>;
+            audience?: string;
+            clientIdOverride?: string;
+            tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
+            headerName?: string;
+            envVarName?: string;
+            bodyFieldName?: string;
+            responseFieldPath?: string;
+            fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
+            cacheTtlSeconds?: number;
         } | null;
         icon?: string | null;
         scope?: 'personal' | 'team' | 'org';
@@ -23582,6 +23611,23 @@ export type CreateInternalMcpCatalogItemResponses = {
             browser_auth?: boolean;
             streamable_http_url?: string;
             streamable_http_port?: number;
+        } | null;
+        enterpriseManagedConfig: {
+            identityProviderId?: string;
+            resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
+            resourceIdentifier?: string;
+            requestedIssuer?: string;
+            requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
+            scopes?: Array<string>;
+            audience?: string;
+            clientIdOverride?: string;
+            tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
+            headerName?: string;
+            envVarName?: string;
+            bodyFieldName?: string;
+            responseFieldPath?: string;
+            fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
+            cacheTtlSeconds?: number;
         } | null;
         icon: string | null;
         organizationId: string | null;
@@ -23847,6 +23893,23 @@ export type GetInternalMcpCatalogItemResponses = {
             streamable_http_url?: string;
             streamable_http_port?: number;
         } | null;
+        enterpriseManagedConfig: {
+            identityProviderId?: string;
+            resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
+            resourceIdentifier?: string;
+            requestedIssuer?: string;
+            requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
+            scopes?: Array<string>;
+            audience?: string;
+            clientIdOverride?: string;
+            tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
+            headerName?: string;
+            envVarName?: string;
+            bodyFieldName?: string;
+            responseFieldPath?: string;
+            fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
+            cacheTtlSeconds?: number;
+        } | null;
         icon: string | null;
         organizationId: string | null;
         authorId: string | null;
@@ -23959,6 +24022,23 @@ export type UpdateInternalMcpCatalogItemData = {
             browser_auth?: boolean;
             streamable_http_url?: string;
             streamable_http_port?: number;
+        } | null;
+        enterpriseManagedConfig?: {
+            identityProviderId?: string;
+            resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
+            resourceIdentifier?: string;
+            requestedIssuer?: string;
+            requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
+            scopes?: Array<string>;
+            audience?: string;
+            clientIdOverride?: string;
+            tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
+            headerName?: string;
+            envVarName?: string;
+            bodyFieldName?: string;
+            responseFieldPath?: string;
+            fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
+            cacheTtlSeconds?: number;
         } | null;
         icon?: string | null;
         scope?: 'personal' | 'team' | 'org';
@@ -24134,6 +24214,23 @@ export type UpdateInternalMcpCatalogItemResponses = {
             browser_auth?: boolean;
             streamable_http_url?: string;
             streamable_http_port?: number;
+        } | null;
+        enterpriseManagedConfig: {
+            identityProviderId?: string;
+            resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
+            resourceIdentifier?: string;
+            requestedIssuer?: string;
+            requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
+            scopes?: Array<string>;
+            audience?: string;
+            clientIdOverride?: string;
+            tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
+            headerName?: string;
+            envVarName?: string;
+            bodyFieldName?: string;
+            responseFieldPath?: string;
+            fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
+            cacheTtlSeconds?: number;
         } | null;
         icon: string | null;
         organizationId: string | null;
@@ -36808,11 +36905,10 @@ export type GetToolsWithAssignmentsResponses = {
                     id: string;
                     name: string;
                 };
-                credentialSourceMcpServerId: string | null;
+                mcpServerId: string | null;
                 credentialOwnerEmail: string | null;
-                executionSourceMcpServerId: string | null;
                 executionOwnerEmail: string | null;
-                useDynamicTeamCredential: boolean;
+                credentialResolutionMode: 'static' | 'dynamic' | 'enterprise_managed';
             }>;
         }>;
         pagination: {
@@ -38383,8 +38479,19 @@ export type GetIdentityProvidersResponses = {
             scopes?: Array<string>;
             overrideUserInfo?: boolean;
             tokenEndpoint?: string;
-            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
             jwksEndpoint?: string;
+            enterpriseManagedCredentials?: {
+                providerType?: 'generic_oidc' | 'okta' | 'keycloak';
+                clientId?: string;
+                clientSecret?: string;
+                tokenEndpoint?: string;
+                tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
+                privateKeyPem?: string;
+                privateKeyId?: string;
+                clientAssertionAudience?: string;
+                subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+            };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
              */
@@ -38499,8 +38606,19 @@ export type CreateIdentityProviderData = {
             scopes?: Array<string>;
             overrideUserInfo?: boolean;
             tokenEndpoint?: string;
-            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
             jwksEndpoint?: string;
+            enterpriseManagedCredentials?: {
+                providerType?: 'generic_oidc' | 'okta' | 'keycloak';
+                clientId?: string;
+                clientSecret?: string;
+                tokenEndpoint?: string;
+                tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
+                privateKeyPem?: string;
+                privateKeyId?: string;
+                clientAssertionAudience?: string;
+                subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+            };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
              */
@@ -38678,8 +38796,19 @@ export type CreateIdentityProviderResponses = {
             scopes?: Array<string>;
             overrideUserInfo?: boolean;
             tokenEndpoint?: string;
-            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
             jwksEndpoint?: string;
+            enterpriseManagedCredentials?: {
+                providerType?: 'generic_oidc' | 'okta' | 'keycloak';
+                clientId?: string;
+                clientSecret?: string;
+                tokenEndpoint?: string;
+                tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
+                privateKeyPem?: string;
+                privateKeyId?: string;
+                clientAssertionAudience?: string;
+                subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+            };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
              */
@@ -39022,8 +39151,19 @@ export type GetIdentityProviderResponses = {
             scopes?: Array<string>;
             overrideUserInfo?: boolean;
             tokenEndpoint?: string;
-            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
             jwksEndpoint?: string;
+            enterpriseManagedCredentials?: {
+                providerType?: 'generic_oidc' | 'okta' | 'keycloak';
+                clientId?: string;
+                clientSecret?: string;
+                tokenEndpoint?: string;
+                tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
+                privateKeyPem?: string;
+                privateKeyId?: string;
+                clientAssertionAudience?: string;
+                subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+            };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
              */
@@ -39138,8 +39278,19 @@ export type UpdateIdentityProviderData = {
             scopes?: Array<string>;
             overrideUserInfo?: boolean;
             tokenEndpoint?: string;
-            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
             jwksEndpoint?: string;
+            enterpriseManagedCredentials?: {
+                providerType?: 'generic_oidc' | 'okta' | 'keycloak';
+                clientId?: string;
+                clientSecret?: string;
+                tokenEndpoint?: string;
+                tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
+                privateKeyPem?: string;
+                privateKeyId?: string;
+                clientAssertionAudience?: string;
+                subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+            };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
              */
@@ -39318,8 +39469,19 @@ export type UpdateIdentityProviderResponses = {
             scopes?: Array<string>;
             overrideUserInfo?: boolean;
             tokenEndpoint?: string;
-            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
             jwksEndpoint?: string;
+            enterpriseManagedCredentials?: {
+                providerType?: 'generic_oidc' | 'okta' | 'keycloak';
+                clientId?: string;
+                clientSecret?: string;
+                tokenEndpoint?: string;
+                tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
+                privateKeyPem?: string;
+                privateKeyId?: string;
+                clientAssertionAudience?: string;
+                subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+            };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
              */

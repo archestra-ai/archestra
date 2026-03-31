@@ -17,7 +17,6 @@ import {
   parseFullToolName,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@shared";
-import { eq } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
 import {
   archestraMcpBranding,
@@ -29,7 +28,6 @@ import { userHasPermission } from "@/auth/utils";
 import { LRUCacheManager } from "@/cache-manager";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
-import db, { schema as dbSchema } from "@/database";
 import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
@@ -52,6 +50,11 @@ import {
   ATTR_MCP_IS_ERROR_RESULT,
   startActiveMcpSpan,
 } from "@/observability/tracing";
+import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
+import {
+  discoverOidcJwksUrl,
+  findExternalIdentityProviderById,
+} from "@/services/identity-providers/oidc";
 import { jwksValidator } from "@/services/jwks-validator";
 import {
   type AgentAccessContext,
@@ -785,6 +788,21 @@ async function validateOAuthTokenByHash(params: {
       return null;
     }
 
+    if (
+      accessToken.referenceId?.startsWith(MCP_RESOURCE_REFERENCE_PREFIX) &&
+      accessToken.referenceId !==
+        `${MCP_RESOURCE_REFERENCE_PREFIX}${params.profileId}`
+    ) {
+      logger.warn(
+        {
+          profileId: params.profileId,
+          tokenReferenceId: accessToken.referenceId,
+        },
+        "validateOAuthToken: token is bound to a different MCP resource",
+      );
+      return null;
+    }
+
     const userId = accessToken.userId;
     if (!userId) {
       return null;
@@ -961,7 +979,7 @@ export async function validateExternalIdpToken(
     }
 
     // Look up the identity provider to get OIDC config
-    const idpProvider = await findIdentityProviderById(
+    const idpProvider = await findExternalIdentityProviderById(
       agent.identityProviderId,
     );
     if (!idpProvider) {
@@ -981,10 +999,16 @@ export async function validateExternalIdpToken(
       return null;
     }
 
-    const oidcConfig = parseJsonField<OidcConfigForJwks>(
-      idpProvider.oidcConfig,
-    );
+    const oidcConfig = idpProvider.oidcConfig;
     if (!oidcConfig) {
+      return null;
+    }
+
+    if (!oidcConfig.clientId) {
+      logger.warn(
+        { profileId, identityProviderId: agent.identityProviderId },
+        "validateExternalIdpToken: identity provider OIDC clientId is required for audience validation",
+      );
       return null;
     }
 
@@ -993,7 +1017,8 @@ export async function validateExternalIdpToken(
     // e.g. in CI where the issuer is a NodePort URL but the backend runs in a pod).
     // Fall back to OIDC discovery from the issuer URL.
     const jwksUrl =
-      oidcConfig.jwksEndpoint ?? (await discoverJwksUrl(idpProvider.issuer));
+      oidcConfig.jwksEndpoint ??
+      (await discoverOidcJwksUrl(idpProvider.issuer));
     if (!jwksUrl) {
       logger.warn(
         { profileId, issuer: idpProvider.issuer },
@@ -1007,7 +1032,7 @@ export async function validateExternalIdpToken(
       token: tokenValue,
       issuerUrl: idpProvider.issuer,
       jwksUrl,
-      audience: oidcConfig.clientId ?? null,
+      audience: oidcConfig.clientId,
     });
 
     if (!result) {
@@ -1098,121 +1123,6 @@ export async function validateExternalIdpToken(
         error: error instanceof Error ? error.message : String(error),
       },
       "validateExternalIdpToken: unexpected error",
-    );
-    return null;
-  }
-}
-
-// =============================================================================
-// Internal helpers for external IdP validation
-// =============================================================================
-
-type OidcConfigForJwks = {
-  clientId?: string;
-  jwksEndpoint?: string;
-};
-
-/**
- * Simple identity provider lookup by ID (no org check).
- * Uses direct DB query since the IdentityProviderModel is enterprise-only (.ee.ts).
- * The schema file (identity-provider.ts) is NOT .ee, so this is safe to use.
- */
-async function findIdentityProviderById(id: string) {
-  const [provider] = await db
-    .select({
-      id: dbSchema.identityProvidersTable.id,
-      providerId: dbSchema.identityProvidersTable.providerId,
-      issuer: dbSchema.identityProvidersTable.issuer,
-      oidcConfig: dbSchema.identityProvidersTable.oidcConfig,
-    })
-    .from(dbSchema.identityProvidersTable)
-    .where(eq(dbSchema.identityProvidersTable.id, id));
-
-  return provider ?? null;
-}
-
-function parseJsonField<T>(value: unknown): T | null {
-  if (!value) return null;
-  if (typeof value === "object") return value as T;
-  if (typeof value === "string") {
-    try {
-      return JSON.parse(value);
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
-
-/**
- * Cache for OIDC discovery results (issuer → jwks_uri).
- * Bounded to MAX_OIDC_DISCOVERY_CACHE_SIZE entries with LRU-style eviction
- * (oldest entry removed when full). In practice this cache is very small —
- * entries correspond to configured identity providers, not user-controlled input.
- */
-const MAX_OIDC_DISCOVERY_CACHE_SIZE = 100;
-const oidcDiscoveryCache = new Map<string, string>();
-const oidcDiscoveryInflight = new Map<string, Promise<string | null>>();
-
-/**
- * Discover the JWKS URL from an OIDC issuer's well-known configuration.
- * Results are cached in memory. Concurrent requests for the same issuer
- * are deduplicated to avoid redundant network calls.
- */
-async function discoverJwksUrl(issuerUrl: string): Promise<string | null> {
-  const cached = oidcDiscoveryCache.get(issuerUrl);
-  if (cached) return cached;
-
-  const inflight = oidcDiscoveryInflight.get(issuerUrl);
-  if (inflight) return inflight;
-
-  const promise = fetchOidcJwksUrl(issuerUrl);
-  oidcDiscoveryInflight.set(issuerUrl, promise);
-  try {
-    return await promise;
-  } finally {
-    oidcDiscoveryInflight.delete(issuerUrl);
-  }
-}
-
-async function fetchOidcJwksUrl(issuerUrl: string): Promise<string | null> {
-  try {
-    // Normalize issuer URL (remove trailing slash for consistent well-known URL construction)
-    const normalizedIssuer = issuerUrl.replace(/\/$/, "");
-    const discoveryUrl = `${normalizedIssuer}/.well-known/openid-configuration`;
-
-    const response = await fetch(discoveryUrl, {
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!response.ok) {
-      logger.warn(
-        { issuerUrl, status: response.status },
-        "OIDC discovery failed",
-      );
-      return null;
-    }
-
-    const metadata = (await response.json()) as { jwks_uri?: string };
-    const jwksUri = metadata.jwks_uri;
-    if (!jwksUri || typeof jwksUri !== "string") {
-      logger.warn({ issuerUrl }, "OIDC discovery: no jwks_uri in metadata");
-      return null;
-    }
-
-    // Evict oldest entry if cache is full
-    if (oidcDiscoveryCache.size >= MAX_OIDC_DISCOVERY_CACHE_SIZE) {
-      const oldestKey = oidcDiscoveryCache.keys().next().value;
-      if (oldestKey) oidcDiscoveryCache.delete(oldestKey);
-    }
-    oidcDiscoveryCache.set(issuerUrl, jwksUri);
-    return jwksUri;
-  } catch (error) {
-    logger.warn(
-      {
-        issuerUrl,
-        error: error instanceof Error ? error.message : String(error),
-      },
-      "OIDC discovery request failed",
     );
     return null;
   }

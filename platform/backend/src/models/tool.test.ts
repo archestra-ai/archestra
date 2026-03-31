@@ -429,11 +429,10 @@ describe("ToolModel", () => {
       expect(result).toHaveLength(1);
       expect(result[0]).toEqual({
         toolName: "github_mcp_server__list_issues",
-        credentialSourceMcpServerId: null,
-        executionSourceMcpServerId: null,
+        mcpServerId: null,
         catalogId: catalogItem.id,
         catalogName: "github-mcp-server",
-        useDynamicTeamCredential: false,
+        credentialResolutionMode: "static",
       });
     });
 

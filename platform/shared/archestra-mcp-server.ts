@@ -14,7 +14,7 @@ export const ARCHESTRA_MCP_CATALOG_ID = "00000000-0000-4000-8000-000000000001";
  * Prefix for all built-in Archestra MCP tools.
  * Format: archestra__<tool_name>
  */
-export const ARCHESTRA_TOOL_PREFIX = `${ARCHESTRA_MCP_SERVER_NAME}__`;
+export const ARCHESTRA_TOOL_PREFIX = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
 
 export const TOOL_WHOAMI_SHORT_NAME = "whoami";
 export const TOOL_CREATE_AGENT_SHORT_NAME = "create_agent";

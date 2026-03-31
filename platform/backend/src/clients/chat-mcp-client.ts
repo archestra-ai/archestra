@@ -55,6 +55,7 @@ import {
   ATTR_MCP_IS_ERROR_RESULT,
   startActiveMcpSpan,
 } from "@/observability/tracing";
+import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import type { AgentType, GlobalToolPolicy } from "@/types";
 
 /**
@@ -432,7 +433,8 @@ export function closeChatMcpClient(
 
 /**
  * Get or create MCP client for the specified agent and user
- * Connects to internal MCP Gateway with team token authentication
+ * Connects to the internal MCP Gateway using either a session-derived external
+ * IdP JWT or the existing internal gateway token fallback.
  *
  * @param agentId - The agent (profile) ID
  * @param userId - The user ID for token selection
@@ -496,10 +498,26 @@ export async function getChatMcpClient(
     "🔄 No cached client found - creating new MCP client for agent/user via gateway",
   );
 
+  const externalIdpToken = await resolveSessionExternalIdpToken({
+    agentId,
+    userId,
+  });
+
   // Reuse pre-resolved token when available to avoid a redundant DB round-trip
   // (getChatMcpTools already calls selectMCPGatewayToken before this).
   let tokenValue: string;
-  if (preResolvedTokenValue) {
+  if (externalIdpToken) {
+    tokenValue = externalIdpToken.rawToken;
+    logger.info(
+      {
+        agentId,
+        userId,
+        identityProviderId: externalIdpToken.identityProviderId,
+        providerId: externalIdpToken.providerId,
+      },
+      "Using session-derived external IdP token for chat MCP client",
+    );
+  } else if (preResolvedTokenValue) {
     tokenValue = preResolvedTokenValue;
   } else {
     const tokenResult = await selectMCPGatewayToken(
@@ -511,7 +529,7 @@ export async function getChatMcpClient(
     if (!tokenResult) {
       logger.error(
         { agentId, userId },
-        "No valid team token available for user - cannot connect to MCP Gateway",
+        "No valid token available for user - cannot connect to MCP Gateway",
       );
       return null;
     }
@@ -1419,6 +1437,11 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
       .join("\n");
     return {
       content: extractedError || result.error || "Tool execution failed",
+      _meta: result._meta,
+      structuredContent: result.structuredContent,
+      rawContent: Array.isArray(result.content)
+        ? (result.content as ContentBlock[])
+        : undefined,
     };
   }
 

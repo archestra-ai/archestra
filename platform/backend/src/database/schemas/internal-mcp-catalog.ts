@@ -10,6 +10,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type {
   AuthField,
+  EnterpriseManagedCredentialConfig,
   InternalMcpCatalogServerType,
   LocalConfig,
   OAuthConfig,
@@ -59,6 +60,9 @@ const internalMcpCatalogTable = pgTable(
     userConfig: jsonb("user_config").$type<UserConfig>().default({}),
     // OAuth configuration for remote servers
     oauthConfig: jsonb("oauth_config").$type<OAuthConfig>(),
+    enterpriseManagedConfig: jsonb(
+      "enterprise_managed_config",
+    ).$type<EnterpriseManagedCredentialConfig>(),
     /** Catalog item icon: emoji character or base64-encoded image data URL */
     icon: text("icon"),
     organizationId: text("organization_id"),

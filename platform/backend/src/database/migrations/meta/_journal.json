@@ -1387,6 +1387,13 @@
       "when": 1774579648786,
       "tag": "0197_wise_northstar",
       "breakpoints": true
+    },
+    {
+      "idx": 198,
+      "version": "7",
+      "when": 1774707159349,
+      "tag": "0198_first_hammerhead",
+      "breakpoints": true
     }
   ]
 }

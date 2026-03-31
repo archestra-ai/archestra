@@ -125,6 +125,7 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useChatProfileMcpTools } from "@/lib/chat/chat.query";
 import config from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useConnectors } from "@/lib/knowledge/connector.query";
 import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
@@ -588,9 +589,9 @@ export function AgentDialog({
   const [llmModel, setLlmModel] = useState<string | null>(null);
   const [apiKeySelectorOpen, setApiKeySelectorOpen] = useState(false);
   const [selectedToolsCount, setSelectedToolsCount] = useState(0);
-  const [identityProviderId, setIdentityProviderId] = useState<string | null>(
-    null,
-  );
+  const [identityProviderId, setIdentityProviderId] = useState<
+    string | null | undefined
+  >(undefined);
   const [scope, setScope] = useState<AgentScope>("personal");
   const [knowledgeBaseIds, setKnowledgeBaseIds] = useState<string[]>([]);
   const [connectorIds, setConnectorIds] = useState<string[]>([]);
@@ -609,6 +610,20 @@ export function AgentDialog({
   const isDualLlmQuarantineBuiltIn =
     builtInAgentName === BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE;
   const isDualLlmBuiltIn = isDualLlmMainBuiltIn || isDualLlmQuarantineBuiltIn;
+  const supportsIdentityProvider =
+    agentType === "agent" || agentType === "mcp_gateway";
+  const inferredIdentityProviderId =
+    supportsIdentityProvider && identityProviders.length === 1
+      ? identityProviders[0]?.id
+      : null;
+  const effectiveIdentityProviderId =
+    identityProviderId === undefined
+      ? inferredIdentityProviderId
+      : identityProviderId;
+  const mcpAuthDocsUrl = getFrontendDocsUrl(
+    DocsPage.McpAuthentication,
+    "enterprise-managed-authorization",
+  );
   const showPrimarySettingsCard =
     !isBuiltIn ||
     shouldShowDescriptionField({ agentType, isBuiltIn }) ||
@@ -647,7 +662,7 @@ export function AgentDialog({
         setAssignedTeamIds(agentData.teams.map((t) => t.id));
         setLabels(agentData.labels);
         setConsiderContextUntrusted(agentData.considerContextUntrusted);
-        setIdentityProviderId(agentData.identityProviderId);
+        setIdentityProviderId(agentData.identityProviderId ?? undefined);
         setKnowledgeBaseIds(agentData.knowledgeBaseIds);
         setConnectorIds(agentData.connectorIds);
         setScope(agentData.scope);
@@ -682,7 +697,7 @@ export function AgentDialog({
         setAssignedTeamIds([]);
         setLabels([]);
         setConsiderContextUntrusted(false);
-        setIdentityProviderId(null);
+        setIdentityProviderId(undefined);
         setKnowledgeBaseIds([]);
         setConnectorIds([]);
         setScope("personal");
@@ -938,8 +953,8 @@ export function AgentDialog({
               llmModel: llmModel || null,
               suggestedPrompts: validSuggestedPrompts,
             }),
-            ...(agentType === "mcp_gateway" && {
-              identityProviderId: identityProviderId || null,
+            ...(supportsIdentityProvider && {
+              identityProviderId: effectiveIdentityProviderId || null,
             }),
             ...(agentType !== "llm_proxy" && {
               knowledgeBaseIds: knowledgeBaseIds,
@@ -971,8 +986,8 @@ export function AgentDialog({
             llmModel: llmModel || null,
             suggestedPrompts: validSuggestedPrompts,
           }),
-          ...(agentType === "mcp_gateway" && {
-            identityProviderId: identityProviderId || null,
+          ...(supportsIdentityProvider && {
+            identityProviderId: effectiveIdentityProviderId || null,
           }),
           ...(agentType !== "llm_proxy" && {
             knowledgeBaseIds: knowledgeBaseIds,
@@ -1038,7 +1053,7 @@ export function AgentDialog({
     incomingEmailEnabled,
     incomingEmailSecurityMode,
     incomingEmailAllowedDomain,
-    identityProviderId,
+    effectiveIdentityProviderId,
     knowledgeBaseIds,
     connectorIds,
     scope,
@@ -1060,6 +1075,7 @@ export function AgentDialog({
     syncDelegations,
     onCreated,
     onOpenChange,
+    supportsIdentityProvider,
   ]);
 
   const handleClose = useCallback(() => {
@@ -1980,30 +1996,35 @@ export function AgentDialog({
                         </div>
                       )}
 
-                      {/* Identity Provider for JWKS Auth (MCP Gateway only) */}
-                      {agentType === "mcp_gateway" &&
+                      {/* Identity Provider for enterprise-managed/JWKS auth */}
+                      {supportsIdentityProvider &&
                         identityProviders.length > 0 && (
                           <div className="space-y-2">
-                            <Label>Identity Provider (JWKS Auth)</Label>
+                            <Label>Identity Provider (Enterprise/JWKS)</Label>
                             <p className="text-sm text-muted-foreground">
                               Optionally select an Identity Provider to validate
-                              incoming JWT tokens via JWKS. When configured, MCP
-                              clients can authenticate using JWTs issued by this
-                              IdP.{" "}
-                              <a
-                                href={getDocsUrl(
-                                  DocsPage.McpAuthentication,
-                                  "external-idp-jwks",
-                                )}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="underline"
-                              >
-                                Learn more
-                              </a>
+                              incoming enterprise assertions or direct JWT
+                              bearer tokens issued by this IdP, and to broker
+                              enterprise-managed credentials for tool calls.
+                              When there is exactly one Identity Provider
+                              configured, Archestra uses it automatically if you
+                              leave this unset.
+                              {mcpAuthDocsUrl ? (
+                                <>
+                                  {" "}
+                                  <a
+                                    href={mcpAuthDocsUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="underline"
+                                  >
+                                    Learn more
+                                  </a>
+                                </>
+                              ) : null}
                             </p>
                             <Select
-                              value={identityProviderId ?? "none"}
+                              value={effectiveIdentityProviderId ?? "none"}
                               onValueChange={(value) =>
                                 setIdentityProviderId(
                                   value === "none" ? null : value,
@@ -2011,7 +2032,7 @@ export function AgentDialog({
                               }
                             >
                               <SelectTrigger>
-                                <SelectValue placeholder="No Identity Provider" />
+                                <SelectValue placeholder="Use configured Identity Provider automatically" />
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="none">

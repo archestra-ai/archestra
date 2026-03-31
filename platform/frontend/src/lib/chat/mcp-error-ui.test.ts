@@ -5,7 +5,7 @@ import {
   parseAuthRequired,
   parseExpiredAuth,
   parsePolicyDenied,
-} from "./common";
+} from "./mcp-error-ui";
 
 describe("parsePolicyDenied", () => {
   it("parses a plain-text policy denial with tool name, args, and reason", () => {
@@ -195,6 +195,17 @@ describe("parseExpiredAuth", () => {
     const text =
       'Expired or invalid authentication for "some-tool".\n\nPlease re-authenticate.';
     expect(parseExpiredAuth(text)).toBeNull();
+  });
+
+  it("parses the shorter assistant expired-auth phrasing without a catalog name", () => {
+    const url =
+      "http://localhost:3000/mcp/registry?reauth=cat_abc&server=srv_xyz";
+    const text = `Your credentials have expired. Please visit ${url} to re-authenticate and then try again.`;
+    const result = parseExpiredAuth(text);
+    expect(result).toEqual({
+      catalogName: "",
+      reauthUrl: url,
+    });
   });
 });
 

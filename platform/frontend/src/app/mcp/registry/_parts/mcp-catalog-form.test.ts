@@ -234,6 +234,32 @@ describe("formSchema", () => {
 
       expect(formSchema.parse(data)).toEqual(data);
     });
+
+    it("should reject enterprise-managed credentials for local stdio servers", () => {
+      const data = {
+        ...baseValidData,
+        authMethod: "enterprise_managed" as const,
+        enterpriseManagedConfig: {
+          requestedCredentialType: "bearer_token" as const,
+          tokenInjectionMode: "authorization_bearer" as const,
+        },
+        serverType: "local" as const,
+        serverUrl: "",
+        localConfig: {
+          command: "node",
+          arguments: "",
+          environment: [],
+          dockerImage: "",
+          transportType: "stdio" as const,
+          httpPort: "",
+          httpPath: "/mcp",
+        },
+      };
+
+      expect(() => formSchema.parse(data)).toThrow(
+        "Enterprise-managed credentials require streamable-http transport for self-hosted servers.",
+      );
+    });
   });
 
   describe("required fields", () => {

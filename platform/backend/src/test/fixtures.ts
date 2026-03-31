@@ -268,13 +268,13 @@ async function makeAgentTool(
   agentId: string,
   toolId: string,
   overrides: Partial<
-    Pick<
-      AgentTool,
-      "credentialSourceMcpServerId" | "executionSourceMcpServerId"
-    >
+    Pick<AgentTool, "mcpServerId" | "credentialResolutionMode">
   > = {},
 ) {
-  return await AgentToolModel.create(agentId, toolId, overrides);
+  return await AgentToolModel.create(agentId, toolId, {
+    mcpServerId: overrides.mcpServerId,
+    credentialResolutionMode: overrides.credentialResolutionMode,
+  });
 }
 
 /**
@@ -431,6 +431,7 @@ async function makeInternalMcpCatalog(
       | "localConfig"
       | "userConfig"
       | "oauthConfig"
+      | "enterpriseManagedConfig"
       | "scope"
       | "teams"
     >
@@ -495,7 +496,16 @@ async function makeInvitation(
 async function makeAccount(
   userId: string,
   overrides: Partial<
-    Pick<InsertAccount, "accountId" | "providerId" | "accessToken" | "idToken">
+    Pick<
+      InsertAccount,
+      | "accountId"
+      | "providerId"
+      | "accessToken"
+      | "refreshToken"
+      | "idToken"
+      | "accessTokenExpiresAt"
+      | "refreshTokenExpiresAt"
+    >
   > = {},
 ) {
   const [account] = await db
@@ -803,6 +813,7 @@ async function makeOAuthAccessToken(
     expiresAt?: Date;
     scopes?: string[];
     refreshId?: string;
+    referenceId?: string | null;
   } = {},
 ) {
   const id = crypto.randomUUID();
@@ -816,6 +827,7 @@ async function makeOAuthAccessToken(
       expiresAt: overrides.expiresAt ?? new Date(Date.now() + 3600000),
       scopes: overrides.scopes ?? ["mcp"],
       refreshId: overrides.refreshId ?? null,
+      referenceId: overrides.referenceId ?? null,
       createdAt: new Date(),
     })
     .returning();

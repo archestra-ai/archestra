@@ -1,0 +1,22 @@
+{
+  "scenarioName": "gemini-auth-ui-e2e",
+  "requiredScenarioState": "Started",
+  "newScenarioState": "tool_result_received",
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPathPattern": "/gemini/v1beta/models/[^:]+:streamGenerateContent",
+    "bodyPatterns": [
+      { "contains": "auth-calltime-ui-e2e" }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive"
+    },
+    "body": "data: {\"candidates\":[{\"content\":{\"parts\":[{\"functionCall\":{\"name\":\"auth-ui-e2e__test_ui_auth_tool\",\"args\":{}}}],\"role\":\"model\"},\"finishReason\":\"STOP\",\"index\":0}],\"usageMetadata\":{\"promptTokenCount\":50,\"candidatesTokenCount\":20,\"totalTokenCount\":70},\"modelVersion\":\"gemini-1.5-pro-002\"}\n\n"
+  }
+}

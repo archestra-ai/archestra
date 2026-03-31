@@ -43767,20 +43767,19 @@
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
-                          "credentialSourceMcpServerId": {
+                          "mcpServerId": {
                             "nullable": true,
                             "type": "string",
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
-                          "executionSourceMcpServerId": {
-                            "nullable": true,
+                          "credentialResolutionMode": {
                             "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                          },
-                          "useDynamicTeamCredential": {
-                            "type": "boolean"
+                            "enum": [
+                              "static",
+                              "dynamic",
+                              "enterprise_managed"
+                            ]
                           },
                           "createdAt": {
                             "type": "string",
@@ -43854,9 +43853,8 @@
                         },
                         "required": [
                           "id",
-                          "credentialSourceMcpServerId",
-                          "executionSourceMcpServerId",
-                          "useDynamicTeamCredential",
+                          "mcpServerId",
+                          "credentialResolutionMode",
                           "createdAt",
                           "updatedAt",
                           "agent",
@@ -44152,16 +44150,15 @@
                   "resolveAtCallTime": {
                     "type": "boolean"
                   },
-                  "useDynamicTeamCredential": {
-                    "type": "boolean"
-                  },
-                  "credentialSourceMcpServerId": {
-                    "nullable": true,
+                  "credentialResolutionMode": {
                     "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    "enum": [
+                      "static",
+                      "dynamic",
+                      "enterprise_managed"
+                    ]
                   },
-                  "executionSourceMcpServerId": {
+                  "mcpServerId": {
                     "nullable": true,
                     "type": "string",
                     "format": "uuid",
@@ -44724,16 +44721,15 @@
                         "resolveAtCallTime": {
                           "type": "boolean"
                         },
-                        "useDynamicTeamCredential": {
-                          "type": "boolean"
-                        },
-                        "credentialSourceMcpServerId": {
-                          "nullable": true,
+                        "credentialResolutionMode": {
                           "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                          "enum": [
+                            "static",
+                            "dynamic",
+                            "enterprise_managed"
+                          ]
                         },
-                        "executionSourceMcpServerId": {
+                        "mcpServerId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -45765,20 +45761,19 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "credentialSourceMcpServerId": {
+                  "mcpServerId": {
                     "nullable": true,
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
-                  "executionSourceMcpServerId": {
-                    "nullable": true,
+                  "credentialResolutionMode": {
                     "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
-                  "useDynamicTeamCredential": {
-                    "type": "boolean"
+                    "enum": [
+                      "static",
+                      "dynamic",
+                      "enterprise_managed"
+                    ]
                   }
                 }
               }
@@ -45820,20 +45815,19 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "credentialSourceMcpServerId": {
+                    "mcpServerId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "executionSourceMcpServerId": {
-                      "nullable": true,
+                    "credentialResolutionMode": {
                       "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "useDynamicTeamCredential": {
-                      "type": "boolean"
+                      "enum": [
+                        "static",
+                        "dynamic",
+                        "enterprise_managed"
+                      ]
                     },
                     "createdAt": {
                       "type": "string",
@@ -45844,6 +45838,9 @@
                       "format": "date-time"
                     }
                   },
+                  "required": [
+                    "credentialResolutionMode"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -86806,6 +86803,89 @@
                         ],
                         "additionalProperties": false
                       },
+                      "enterpriseManagedConfig": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "identityProviderId": {
+                            "type": "string"
+                          },
+                          "resourceType": {
+                            "type": "string",
+                            "enum": [
+                              "mcp",
+                              "oauth_protected_resource",
+                              "secret",
+                              "service_account",
+                              "custom_http"
+                            ]
+                          },
+                          "resourceIdentifier": {
+                            "type": "string"
+                          },
+                          "requestedIssuer": {
+                            "type": "string"
+                          },
+                          "requestedCredentialType": {
+                            "type": "string",
+                            "enum": [
+                              "id_jag",
+                              "bearer_token",
+                              "secret",
+                              "service_account",
+                              "opaque_json"
+                            ]
+                          },
+                          "scopes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "audience": {
+                            "type": "string"
+                          },
+                          "clientIdOverride": {
+                            "type": "string"
+                          },
+                          "tokenInjectionMode": {
+                            "type": "string",
+                            "enum": [
+                              "authorization_bearer",
+                              "raw_authorization",
+                              "header",
+                              "env",
+                              "body_field"
+                            ]
+                          },
+                          "headerName": {
+                            "type": "string"
+                          },
+                          "envVarName": {
+                            "type": "string"
+                          },
+                          "bodyFieldName": {
+                            "type": "string"
+                          },
+                          "responseFieldPath": {
+                            "type": "string"
+                          },
+                          "fallbackMode": {
+                            "type": "string",
+                            "enum": [
+                              "fail_closed",
+                              "fallback_to_dynamic",
+                              "fallback_to_static"
+                            ]
+                          },
+                          "cacheTtlSeconds": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "additionalProperties": false
+                      },
                       "icon": {
                         "nullable": true,
                         "type": "string"
@@ -86901,6 +86981,7 @@
                       "deploymentSpecYaml",
                       "userConfig",
                       "oauthConfig",
+                      "enterpriseManagedConfig",
                       "icon",
                       "organizationId",
                       "authorId",
@@ -87567,6 +87648,88 @@
                       "supports_resource_metadata"
                     ]
                   },
+                  "enterpriseManagedConfig": {
+                    "nullable": true,
+                    "type": "object",
+                    "properties": {
+                      "identityProviderId": {
+                        "type": "string"
+                      },
+                      "resourceType": {
+                        "type": "string",
+                        "enum": [
+                          "mcp",
+                          "oauth_protected_resource",
+                          "secret",
+                          "service_account",
+                          "custom_http"
+                        ]
+                      },
+                      "resourceIdentifier": {
+                        "type": "string"
+                      },
+                      "requestedIssuer": {
+                        "type": "string"
+                      },
+                      "requestedCredentialType": {
+                        "type": "string",
+                        "enum": [
+                          "id_jag",
+                          "bearer_token",
+                          "secret",
+                          "service_account",
+                          "opaque_json"
+                        ]
+                      },
+                      "scopes": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "audience": {
+                        "type": "string"
+                      },
+                      "clientIdOverride": {
+                        "type": "string"
+                      },
+                      "tokenInjectionMode": {
+                        "type": "string",
+                        "enum": [
+                          "authorization_bearer",
+                          "raw_authorization",
+                          "header",
+                          "env",
+                          "body_field"
+                        ]
+                      },
+                      "headerName": {
+                        "type": "string"
+                      },
+                      "envVarName": {
+                        "type": "string"
+                      },
+                      "bodyFieldName": {
+                        "type": "string"
+                      },
+                      "responseFieldPath": {
+                        "type": "string"
+                      },
+                      "fallbackMode": {
+                        "type": "string",
+                        "enum": [
+                          "fail_closed",
+                          "fallback_to_dynamic",
+                          "fallback_to_static"
+                        ]
+                      },
+                      "cacheTtlSeconds": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    }
+                  },
                   "icon": {
                     "nullable": true,
                     "type": "string"
@@ -88065,6 +88228,89 @@
                       ],
                       "additionalProperties": false
                     },
+                    "enterpriseManagedConfig": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "identityProviderId": {
+                          "type": "string"
+                        },
+                        "resourceType": {
+                          "type": "string",
+                          "enum": [
+                            "mcp",
+                            "oauth_protected_resource",
+                            "secret",
+                            "service_account",
+                            "custom_http"
+                          ]
+                        },
+                        "resourceIdentifier": {
+                          "type": "string"
+                        },
+                        "requestedIssuer": {
+                          "type": "string"
+                        },
+                        "requestedCredentialType": {
+                          "type": "string",
+                          "enum": [
+                            "id_jag",
+                            "bearer_token",
+                            "secret",
+                            "service_account",
+                            "opaque_json"
+                          ]
+                        },
+                        "scopes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "audience": {
+                          "type": "string"
+                        },
+                        "clientIdOverride": {
+                          "type": "string"
+                        },
+                        "tokenInjectionMode": {
+                          "type": "string",
+                          "enum": [
+                            "authorization_bearer",
+                            "raw_authorization",
+                            "header",
+                            "env",
+                            "body_field"
+                          ]
+                        },
+                        "headerName": {
+                          "type": "string"
+                        },
+                        "envVarName": {
+                          "type": "string"
+                        },
+                        "bodyFieldName": {
+                          "type": "string"
+                        },
+                        "responseFieldPath": {
+                          "type": "string"
+                        },
+                        "fallbackMode": {
+                          "type": "string",
+                          "enum": [
+                            "fail_closed",
+                            "fallback_to_dynamic",
+                            "fallback_to_static"
+                          ]
+                        },
+                        "cacheTtlSeconds": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "additionalProperties": false
+                    },
                     "icon": {
                       "nullable": true,
                       "type": "string"
@@ -88160,6 +88406,7 @@
                     "deploymentSpecYaml",
                     "userConfig",
                     "oauthConfig",
+                    "enterpriseManagedConfig",
                     "icon",
                     "organizationId",
                     "authorId",
@@ -88851,6 +89098,89 @@
                       ],
                       "additionalProperties": false
                     },
+                    "enterpriseManagedConfig": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "identityProviderId": {
+                          "type": "string"
+                        },
+                        "resourceType": {
+                          "type": "string",
+                          "enum": [
+                            "mcp",
+                            "oauth_protected_resource",
+                            "secret",
+                            "service_account",
+                            "custom_http"
+                          ]
+                        },
+                        "resourceIdentifier": {
+                          "type": "string"
+                        },
+                        "requestedIssuer": {
+                          "type": "string"
+                        },
+                        "requestedCredentialType": {
+                          "type": "string",
+                          "enum": [
+                            "id_jag",
+                            "bearer_token",
+                            "secret",
+                            "service_account",
+                            "opaque_json"
+                          ]
+                        },
+                        "scopes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "audience": {
+                          "type": "string"
+                        },
+                        "clientIdOverride": {
+                          "type": "string"
+                        },
+                        "tokenInjectionMode": {
+                          "type": "string",
+                          "enum": [
+                            "authorization_bearer",
+                            "raw_authorization",
+                            "header",
+                            "env",
+                            "body_field"
+                          ]
+                        },
+                        "headerName": {
+                          "type": "string"
+                        },
+                        "envVarName": {
+                          "type": "string"
+                        },
+                        "bodyFieldName": {
+                          "type": "string"
+                        },
+                        "responseFieldPath": {
+                          "type": "string"
+                        },
+                        "fallbackMode": {
+                          "type": "string",
+                          "enum": [
+                            "fail_closed",
+                            "fallback_to_dynamic",
+                            "fallback_to_static"
+                          ]
+                        },
+                        "cacheTtlSeconds": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "additionalProperties": false
+                    },
                     "icon": {
                       "nullable": true,
                       "type": "string"
@@ -88946,6 +89276,7 @@
                     "deploymentSpecYaml",
                     "userConfig",
                     "oauthConfig",
+                    "enterpriseManagedConfig",
                     "icon",
                     "organizationId",
                     "authorId",
@@ -89606,6 +89937,88 @@
                       "supports_resource_metadata"
                     ]
                   },
+                  "enterpriseManagedConfig": {
+                    "nullable": true,
+                    "type": "object",
+                    "properties": {
+                      "identityProviderId": {
+                        "type": "string"
+                      },
+                      "resourceType": {
+                        "type": "string",
+                        "enum": [
+                          "mcp",
+                          "oauth_protected_resource",
+                          "secret",
+                          "service_account",
+                          "custom_http"
+                        ]
+                      },
+                      "resourceIdentifier": {
+                        "type": "string"
+                      },
+                      "requestedIssuer": {
+                        "type": "string"
+                      },
+                      "requestedCredentialType": {
+                        "type": "string",
+                        "enum": [
+                          "id_jag",
+                          "bearer_token",
+                          "secret",
+                          "service_account",
+                          "opaque_json"
+                        ]
+                      },
+                      "scopes": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "audience": {
+                        "type": "string"
+                      },
+                      "clientIdOverride": {
+                        "type": "string"
+                      },
+                      "tokenInjectionMode": {
+                        "type": "string",
+                        "enum": [
+                          "authorization_bearer",
+                          "raw_authorization",
+                          "header",
+                          "env",
+                          "body_field"
+                        ]
+                      },
+                      "headerName": {
+                        "type": "string"
+                      },
+                      "envVarName": {
+                        "type": "string"
+                      },
+                      "bodyFieldName": {
+                        "type": "string"
+                      },
+                      "responseFieldPath": {
+                        "type": "string"
+                      },
+                      "fallbackMode": {
+                        "type": "string",
+                        "enum": [
+                          "fail_closed",
+                          "fallback_to_dynamic",
+                          "fallback_to_static"
+                        ]
+                      },
+                      "cacheTtlSeconds": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    }
+                  },
                   "icon": {
                     "nullable": true,
                     "type": "string"
@@ -90112,6 +90525,89 @@
                       ],
                       "additionalProperties": false
                     },
+                    "enterpriseManagedConfig": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "identityProviderId": {
+                          "type": "string"
+                        },
+                        "resourceType": {
+                          "type": "string",
+                          "enum": [
+                            "mcp",
+                            "oauth_protected_resource",
+                            "secret",
+                            "service_account",
+                            "custom_http"
+                          ]
+                        },
+                        "resourceIdentifier": {
+                          "type": "string"
+                        },
+                        "requestedIssuer": {
+                          "type": "string"
+                        },
+                        "requestedCredentialType": {
+                          "type": "string",
+                          "enum": [
+                            "id_jag",
+                            "bearer_token",
+                            "secret",
+                            "service_account",
+                            "opaque_json"
+                          ]
+                        },
+                        "scopes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "audience": {
+                          "type": "string"
+                        },
+                        "clientIdOverride": {
+                          "type": "string"
+                        },
+                        "tokenInjectionMode": {
+                          "type": "string",
+                          "enum": [
+                            "authorization_bearer",
+                            "raw_authorization",
+                            "header",
+                            "env",
+                            "body_field"
+                          ]
+                        },
+                        "headerName": {
+                          "type": "string"
+                        },
+                        "envVarName": {
+                          "type": "string"
+                        },
+                        "bodyFieldName": {
+                          "type": "string"
+                        },
+                        "responseFieldPath": {
+                          "type": "string"
+                        },
+                        "fallbackMode": {
+                          "type": "string",
+                          "enum": [
+                            "fail_closed",
+                            "fallback_to_dynamic",
+                            "fallback_to_static"
+                          ]
+                        },
+                        "cacheTtlSeconds": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "additionalProperties": false
+                    },
                     "icon": {
                       "nullable": true,
                       "type": "string"
@@ -90207,6 +90703,7 @@
                     "deploymentSpecYaml",
                     "userConfig",
                     "oauthConfig",
+                    "enterpriseManagedConfig",
                     "icon",
                     "organizationId",
                     "authorId",
@@ -137048,7 +137545,7 @@
                                   ],
                                   "additionalProperties": false
                                 },
-                                "credentialSourceMcpServerId": {
+                                "mcpServerId": {
                                   "nullable": true,
                                   "type": "string"
                                 },
@@ -137056,26 +137553,26 @@
                                   "nullable": true,
                                   "type": "string"
                                 },
-                                "executionSourceMcpServerId": {
-                                  "nullable": true,
-                                  "type": "string"
-                                },
                                 "executionOwnerEmail": {
                                   "nullable": true,
                                   "type": "string"
                                 },
-                                "useDynamicTeamCredential": {
-                                  "type": "boolean"
+                                "credentialResolutionMode": {
+                                  "type": "string",
+                                  "enum": [
+                                    "static",
+                                    "dynamic",
+                                    "enterprise_managed"
+                                  ]
                                 }
                               },
                               "required": [
                                 "agentToolId",
                                 "agent",
-                                "credentialSourceMcpServerId",
+                                "mcpServerId",
                                 "credentialOwnerEmail",
-                                "executionSourceMcpServerId",
                                 "executionOwnerEmail",
-                                "useDynamicTeamCredential"
+                                "credentialResolutionMode"
                               ],
                               "additionalProperties": false
                             }
@@ -142371,11 +142868,60 @@
                             "type": "string",
                             "enum": [
                               "client_secret_post",
-                              "client_secret_basic"
+                              "client_secret_basic",
+                              "private_key_jwt"
                             ]
                           },
                           "jwksEndpoint": {
                             "type": "string"
+                          },
+                          "enterpriseManagedCredentials": {
+                            "type": "object",
+                            "properties": {
+                              "providerType": {
+                                "type": "string",
+                                "enum": [
+                                  "generic_oidc",
+                                  "okta",
+                                  "keycloak"
+                                ]
+                              },
+                              "clientId": {
+                                "type": "string"
+                              },
+                              "clientSecret": {
+                                "type": "string"
+                              },
+                              "tokenEndpoint": {
+                                "type": "string"
+                              },
+                              "tokenEndpointAuthentication": {
+                                "type": "string",
+                                "enum": [
+                                  "client_secret_post",
+                                  "client_secret_basic",
+                                  "private_key_jwt"
+                                ]
+                              },
+                              "privateKeyPem": {
+                                "type": "string"
+                              },
+                              "privateKeyId": {
+                                "type": "string"
+                              },
+                              "clientAssertionAudience": {
+                                "type": "string"
+                              },
+                              "subjectTokenType": {
+                                "type": "string",
+                                "enum": [
+                                  "urn:ietf:params:oauth:token-type:access_token",
+                                  "urn:ietf:params:oauth:token-type:id_token",
+                                  "urn:ietf:params:oauth:token-type:jwt"
+                                ]
+                              }
+                            },
+                            "additionalProperties": false
                           },
                           "mapping": {
                             "description": "https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3",
@@ -142942,11 +143488,59 @@
                         "type": "string",
                         "enum": [
                           "client_secret_post",
-                          "client_secret_basic"
+                          "client_secret_basic",
+                          "private_key_jwt"
                         ]
                       },
                       "jwksEndpoint": {
                         "type": "string"
+                      },
+                      "enterpriseManagedCredentials": {
+                        "type": "object",
+                        "properties": {
+                          "providerType": {
+                            "type": "string",
+                            "enum": [
+                              "generic_oidc",
+                              "okta",
+                              "keycloak"
+                            ]
+                          },
+                          "clientId": {
+                            "type": "string"
+                          },
+                          "clientSecret": {
+                            "type": "string"
+                          },
+                          "tokenEndpoint": {
+                            "type": "string"
+                          },
+                          "tokenEndpointAuthentication": {
+                            "type": "string",
+                            "enum": [
+                              "client_secret_post",
+                              "client_secret_basic",
+                              "private_key_jwt"
+                            ]
+                          },
+                          "privateKeyPem": {
+                            "type": "string"
+                          },
+                          "privateKeyId": {
+                            "type": "string"
+                          },
+                          "clientAssertionAudience": {
+                            "type": "string"
+                          },
+                          "subjectTokenType": {
+                            "type": "string",
+                            "enum": [
+                              "urn:ietf:params:oauth:token-type:access_token",
+                              "urn:ietf:params:oauth:token-type:id_token",
+                              "urn:ietf:params:oauth:token-type:jwt"
+                            ]
+                          }
+                        }
                       },
                       "mapping": {
                         "description": "https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3",
@@ -143273,11 +143867,60 @@
                           "type": "string",
                           "enum": [
                             "client_secret_post",
-                            "client_secret_basic"
+                            "client_secret_basic",
+                            "private_key_jwt"
                           ]
                         },
                         "jwksEndpoint": {
                           "type": "string"
+                        },
+                        "enterpriseManagedCredentials": {
+                          "type": "object",
+                          "properties": {
+                            "providerType": {
+                              "type": "string",
+                              "enum": [
+                                "generic_oidc",
+                                "okta",
+                                "keycloak"
+                              ]
+                            },
+                            "clientId": {
+                              "type": "string"
+                            },
+                            "clientSecret": {
+                              "type": "string"
+                            },
+                            "tokenEndpoint": {
+                              "type": "string"
+                            },
+                            "tokenEndpointAuthentication": {
+                              "type": "string",
+                              "enum": [
+                                "client_secret_post",
+                                "client_secret_basic",
+                                "private_key_jwt"
+                              ]
+                            },
+                            "privateKeyPem": {
+                              "type": "string"
+                            },
+                            "privateKeyId": {
+                              "type": "string"
+                            },
+                            "clientAssertionAudience": {
+                              "type": "string"
+                            },
+                            "subjectTokenType": {
+                              "type": "string",
+                              "enum": [
+                                "urn:ietf:params:oauth:token-type:access_token",
+                                "urn:ietf:params:oauth:token-type:id_token",
+                                "urn:ietf:params:oauth:token-type:jwt"
+                              ]
+                            }
+                          },
+                          "additionalProperties": false
                         },
                         "mapping": {
                           "description": "https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3",
@@ -144105,11 +144748,60 @@
                           "type": "string",
                           "enum": [
                             "client_secret_post",
-                            "client_secret_basic"
+                            "client_secret_basic",
+                            "private_key_jwt"
                           ]
                         },
                         "jwksEndpoint": {
                           "type": "string"
+                        },
+                        "enterpriseManagedCredentials": {
+                          "type": "object",
+                          "properties": {
+                            "providerType": {
+                              "type": "string",
+                              "enum": [
+                                "generic_oidc",
+                                "okta",
+                                "keycloak"
+                              ]
+                            },
+                            "clientId": {
+                              "type": "string"
+                            },
+                            "clientSecret": {
+                              "type": "string"
+                            },
+                            "tokenEndpoint": {
+                              "type": "string"
+                            },
+                            "tokenEndpointAuthentication": {
+                              "type": "string",
+                              "enum": [
+                                "client_secret_post",
+                                "client_secret_basic",
+                                "private_key_jwt"
+                              ]
+                            },
+                            "privateKeyPem": {
+                              "type": "string"
+                            },
+                            "privateKeyId": {
+                              "type": "string"
+                            },
+                            "clientAssertionAudience": {
+                              "type": "string"
+                            },
+                            "subjectTokenType": {
+                              "type": "string",
+                              "enum": [
+                                "urn:ietf:params:oauth:token-type:access_token",
+                                "urn:ietf:params:oauth:token-type:id_token",
+                                "urn:ietf:params:oauth:token-type:jwt"
+                              ]
+                            }
+                          },
+                          "additionalProperties": false
                         },
                         "mapping": {
                           "description": "https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3",
@@ -144675,11 +145367,59 @@
                         "type": "string",
                         "enum": [
                           "client_secret_post",
-                          "client_secret_basic"
+                          "client_secret_basic",
+                          "private_key_jwt"
                         ]
                       },
                       "jwksEndpoint": {
                         "type": "string"
+                      },
+                      "enterpriseManagedCredentials": {
+                        "type": "object",
+                        "properties": {
+                          "providerType": {
+                            "type": "string",
+                            "enum": [
+                              "generic_oidc",
+                              "okta",
+                              "keycloak"
+                            ]
+                          },
+                          "clientId": {
+                            "type": "string"
+                          },
+                          "clientSecret": {
+                            "type": "string"
+                          },
+                          "tokenEndpoint": {
+                            "type": "string"
+                          },
+                          "tokenEndpointAuthentication": {
+                            "type": "string",
+                            "enum": [
+                              "client_secret_post",
+                              "client_secret_basic",
+                              "private_key_jwt"
+                            ]
+                          },
+                          "privateKeyPem": {
+                            "type": "string"
+                          },
+                          "privateKeyId": {
+                            "type": "string"
+                          },
+                          "clientAssertionAudience": {
+                            "type": "string"
+                          },
+                          "subjectTokenType": {
+                            "type": "string",
+                            "enum": [
+                              "urn:ietf:params:oauth:token-type:access_token",
+                              "urn:ietf:params:oauth:token-type:id_token",
+                              "urn:ietf:params:oauth:token-type:jwt"
+                            ]
+                          }
+                        }
                       },
                       "mapping": {
                         "description": "https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3",
@@ -145007,11 +145747,60 @@
                           "type": "string",
                           "enum": [
                             "client_secret_post",
-                            "client_secret_basic"
+                            "client_secret_basic",
+                            "private_key_jwt"
                           ]
                         },
                         "jwksEndpoint": {
                           "type": "string"
+                        },
+                        "enterpriseManagedCredentials": {
+                          "type": "object",
+                          "properties": {
+                            "providerType": {
+                              "type": "string",
+                              "enum": [
+                                "generic_oidc",
+                                "okta",
+                                "keycloak"
+                              ]
+                            },
+                            "clientId": {
+                              "type": "string"
+                            },
+                            "clientSecret": {
+                              "type": "string"
+                            },
+                            "tokenEndpoint": {
+                              "type": "string"
+                            },
+                            "tokenEndpointAuthentication": {
+                              "type": "string",
+                              "enum": [
+                                "client_secret_post",
+                                "client_secret_basic",
+                                "private_key_jwt"
+                              ]
+                            },
+                            "privateKeyPem": {
+                              "type": "string"
+                            },
+                            "privateKeyId": {
+                              "type": "string"
+                            },
+                            "clientAssertionAudience": {
+                              "type": "string"
+                            },
+                            "subjectTokenType": {
+                              "type": "string",
+                              "enum": [
+                                "urn:ietf:params:oauth:token-type:access_token",
+                                "urn:ietf:params:oauth:token-type:id_token",
+                                "urn:ietf:params:oauth:token-type:jwt"
+                              ]
+                            }
+                          },
+                          "additionalProperties": false
                         },
                         "mapping": {
                           "description": "https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3",

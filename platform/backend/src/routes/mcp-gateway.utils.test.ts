@@ -9,6 +9,7 @@ import {
   ToolModel,
   UserTokenModel,
 } from "@/models";
+import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import type { JwksValidationResult } from "@/services/jwks-validator";
 import { describe, expect, test } from "@/test";
 
@@ -519,6 +520,37 @@ describe("validateMCPGatewayToken", () => {
       expect(result?.organizationId).toBe(org.id);
     });
 
+    test("validateOAuthToken returns null when token is bound to another MCP resource", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeOAuthClient,
+      makeOAuthAccessToken,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "admin" });
+
+      const client = await makeOAuthClient({ userId: user.id });
+      const otherAgent = await makeAgent({ organizationId: org.id });
+      const targetAgent = await makeAgent({ organizationId: org.id });
+
+      const rawToken = `test-bound-resource-token-${crypto.randomUUID()}`;
+      const tokenHash = createHash("sha256")
+        .update(rawToken)
+        .digest("base64url");
+
+      await makeOAuthAccessToken(client.clientId, user.id, {
+        token: tokenHash,
+        referenceId: `${MCP_RESOURCE_REFERENCE_PREFIX}${otherAgent.id}`,
+      });
+
+      const result = await validateOAuthToken(targetAgent.id, rawToken);
+
+      expect(result).toBeNull();
+    });
+
     test("validateOAuthToken returns valid result when refresh token is not revoked", async ({
       makeUser,
       makeOrganization,
@@ -632,6 +664,35 @@ describe("validateExternalIdpToken", () => {
 
     const result = await validateExternalIdpToken(agent.id, FAKE_JWT);
     expect(result).toBeNull();
+  });
+
+  test("returns null when the identity provider OIDC config has no clientId for audience validation", async ({
+    makeOrganization,
+    makeIdentityProvider,
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    mockValidateJwt.mockClear();
+
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+
+    const idp = await makeIdentityProvider(org.id, {
+      oidcConfig: {
+        jwksEndpoint: "https://example.com/.well-known/jwks.json",
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      identityProviderId: idp.id,
+    });
+
+    const result = await validateExternalIdpToken(agent.id, FAKE_JWT);
+
+    expect(result).toBeNull();
+    expect(mockValidateJwt).not.toHaveBeenCalled();
   });
 
   test("returns null when email does not match any Archestra user", async ({

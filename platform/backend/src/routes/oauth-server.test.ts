@@ -5,6 +5,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { parseTrustProxy } from "@/config";
+import { JWT_BEARER_GRANT_TYPE } from "@/services/identity-providers/enterprise-managed/authorization";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import oauthServerRoutes from "./oauth-server";
 
@@ -88,6 +89,7 @@ describe("OAuth Server - Well-Known Endpoints", () => {
       expect(body.grant_types_supported).toEqual([
         "authorization_code",
         "refresh_token",
+        JWT_BEARER_GRANT_TYPE,
       ]);
       expect(body.code_challenge_methods_supported).toEqual(["S256"]);
       expect(body.token_endpoint_auth_methods_supported).toContain("none");

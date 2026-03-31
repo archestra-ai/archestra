@@ -3,7 +3,6 @@
 import {
   PROVIDERS_WITH_OPTIONAL_API_KEY,
   SUPPORTED_EMBEDDING_DIMENSIONS,
-  type SupportedProvider,
 } from "@shared";
 import {
   AlertTriangle,
@@ -82,13 +81,6 @@ const EMBEDDING_DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   ...DEFAULT_FORM_VALUES,
 };
 
-function getEmbeddingModelProvider(modelName: string): SupportedProvider {
-  if (modelName.includes("gemini") || modelName.includes("embedding-001"))
-    return "gemini";
-  if (modelName.startsWith("text-embedding")) return "openai";
-  return "ollama";
-}
-
 function AddApiKeyDialog({
   open,
   onOpenChange,
@@ -160,7 +152,7 @@ function AddApiKeyDialog({
       title="Add LLM Provider Key"
       description={
         forEmbedding
-          ? "Add an API key for knowledge base embeddings (OpenAI, Ollama, or Gemini)."
+          ? "Add an API key for knowledge base embeddings."
           : "Add an LLM provider API key for knowledge base reranking."
       }
       size="small"
@@ -174,9 +166,8 @@ function AddApiKeyDialog({
             <Alert variant="default">
               <Info className="h-4 w-4" />
               <AlertDescription className="text-xs">
-                OpenAI, Ollama, and Gemini are supported for embeddings. After
-                adding the key, sync models and mark an embedding model via the
-                model catalog (LLM Providers → Models).
+                After adding the key, sync models and mark an embedding model
+                via the model catalog (LLM Providers &gt; Models).
               </AlertDescription>
             </Alert>
           )}
@@ -187,9 +178,6 @@ function AddApiKeyDialog({
             isPending={createMutation.isPending}
             bedrockIamAuthEnabled={bedrockIamAuthEnabled}
             geminiVertexAiEnabled={geminiVertexAiEnabled}
-            allowedProviders={
-              forEmbedding ? ["openai", "ollama", "gemini"] : undefined
-            }
             hideScopeAndPrimary
           />
         </DialogBody>
@@ -472,8 +460,15 @@ function KnowledgeSettingsContent() {
     null,
   );
 
-  // Fetch embedding models dynamically from DB based on selected API key
   const { data: embeddingModels } = useEmbeddingModels(embeddingChatApiKeyId);
+  const selectedEmbeddingApiKey = useMemo(
+    () => apiKeys?.find((apiKey) => apiKey.id === embeddingChatApiKeyId) ?? null,
+    [apiKeys, embeddingChatApiKeyId],
+  );
+  const selectedEmbeddingProvider =
+    selectedEmbeddingApiKey?.provider ??
+    embeddingModels?.find((model) => model.id === embeddingModel)?.provider ??
+    null;
 
   useEffect(() => {
     if (organization) {
@@ -585,8 +580,8 @@ function KnowledgeSettingsContent() {
           </div>
           <p className="text-sm text-muted-foreground">
             Configure the API key and model used to generate vector embeddings
-            for knowledge base documents. OpenAI and Ollama providers are
-            supported.
+            for knowledge base documents. Any synced model marked as an
+            embedding model can be selected here.
           </p>
 
           <SettingsBlock
@@ -634,7 +629,7 @@ function KnowledgeSettingsContent() {
                       options={(embeddingModels ?? []).map((model) => ({
                         value: model.id,
                         model: model.id,
-                        provider: getEmbeddingModelProvider(model.id),
+                        provider: model.provider,
                       }))}
                       placeholder="Select embedding model..."
                       searchPlaceholder="Search or type model name..."
@@ -697,15 +692,12 @@ function KnowledgeSettingsContent() {
                 noPermissionHandle="tooltip"
               >
                 {({ hasPermission }) => {
-                  const provider = embeddingModel
-                    ? getEmbeddingModelProvider(embeddingModel)
-                    : null;
                   const hint =
-                    provider === "gemini"
+                    selectedEmbeddingProvider === "gemini"
                       ? "Gemini outputs 3072 dims natively; use 1536 to truncate via outputDimensionality."
-                      : provider === "openai"
+                      : selectedEmbeddingProvider === "openai"
                         ? "Use 1536 for text-embedding-3-small / text-embedding-3-large."
-                        : provider === "ollama"
+                        : selectedEmbeddingProvider === "ollama"
                           ? "Use 768 for nomic-embed-text."
                           : null;
                   return (

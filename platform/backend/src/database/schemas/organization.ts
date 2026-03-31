@@ -59,11 +59,11 @@ const organizationsTable = pgTable("organization", {
   /** Embedding model for knowledge base RAG — set explicitly when user configures embedding */
   embeddingModel: text("embedding_model"),
 
-  /** Vector dimensions for the embedding column (1536 or 768) */
+  /** Vector dimensions for the embedding column (for example 3072, 1536, or 768) */
   embeddingDimensions: integer("embedding_dimensions"),
 
   /**
-   * Chat API key used for generating embeddings (must use an embedding-compatible provider: OpenAI, Ollama).
+   * Chat API key used for generating embeddings.
    * FK to chat_api_keys(id) ON DELETE SET NULL — enforced by migration only
    * (Drizzle .references() causes TS circular inference: organization → chat-api-key → team → organization).
    */

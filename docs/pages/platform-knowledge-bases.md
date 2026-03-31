@@ -3,7 +3,7 @@ title: Overview
 category: Knowledge
 order: 1
 description: Built-in RAG with pgvector for document ingestion, hybrid search, and retrieval
-lastUpdated: 2026-03-06
+lastUpdated: 2026-03-31
 ---
 
 <!--
@@ -27,7 +27,7 @@ Connectors run on a cron schedule, pulling documents that are chunked and embedd
 flowchart LR
     C[Connectors] -->|cron schedule| D[Documents]
     D --> CH[Chunking]
-    CH -->|OpenAI API| E[Embedding]
+    CH -->|Embedding provider API| E[Embedding]
     E --> PG[(PostgreSQL + pgvector)]
 ```
 
@@ -37,7 +37,7 @@ At runtime, the agent's query is embedded, then vector and optional full-text se
 
 ```mermaid
 flowchart LR
-    Q[Agent Query] -->|OpenAI API| QE[Query Embedding]
+    Q[Agent Query] -->|Embedding provider API| QE[Query Embedding]
     QE --> VS[Vector Search]
     QE --> FTS["Full-Text Search (configurable)"]
     VS --> RRF[Reciprocal Rank Fusion]
@@ -53,9 +53,9 @@ Embedding and reranking require LLM provider API keys. These are configured in *
 
 ### Embedding
 
-Only OpenAI embedding models are supported. The selected API key must have access to the configured embedding model (`text-embedding-3-small` or `text-embedding-3-large`; both models are reduced to 1536 dimensions for the `pgvector` index).
+Embedding uses any synced model that has been marked as an embedding model in **LLM Providers > Models**. The selected API key must expose at least one synced embedding model. Known common choices include `text-embedding-3-small` (1536 dimensions), `text-embedding-3-large` (reduced to 1536 dimensions for the existing pgvector index), `gemini-embedding-001` (3072 dimensions, optionally truncated to 1536), and `nomic-embed-text` (768 dimensions).
 
-The embedding model is locked after documents have been embedded, and changing it is not currently supported (as changing models requires re-embedding all documents).
+The embedding model is locked after it has been saved. Changing it requires dropping the embedding configuration and re-embedding documents.
 
 ### Reranking
 

@@ -9,6 +9,18 @@ import type { EmbeddingApiResponse } from "./types";
 export type { EmbeddingApiResponse };
 export { GeminiEmbeddingError, OpenAIEmbeddingError };
 
+const RETRYABLE_NETWORK_ERROR_CODES = new Set([
+  "ECONNABORTED",
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "EHOSTUNREACH",
+  "ENETDOWN",
+  "ENETRESET",
+  "ENETUNREACH",
+  "ENOTFOUND",
+  "ETIMEDOUT",
+]);
+
 /**
  * Provider-agnostic embedding call.
  * Dispatches to the correct client based on `provider`.
@@ -53,7 +65,8 @@ export function isRetryableEmbeddingError(error: unknown): boolean {
   }
   // Network-level errors (ECONNRESET, ETIMEDOUT, etc.)
   if (error instanceof Error && "code" in error) {
-    return true;
+    const code = (error as Error & { code?: string }).code;
+    return typeof code === "string" && RETRYABLE_NETWORK_ERROR_CODES.has(code);
   }
   return false;
 }

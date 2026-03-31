@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.2.1](https://github.com/archestra-ai/archestra/compare/platform-v1.2.0...platform-v1.2.1) (2026-03-31)
+
+
+### Bug Fixes
+
+* add SSE heartbeat to prevent connection drops ([#3605](https://github.com/archestra-ai/archestra/issues/3605)) ([8e20d6b](https://github.com/archestra-ai/archestra/commit/8e20d6b2c51eb76ffd44347ee2210e997ae94d0f))
+* resolve virtual API keys in Gemini proxy passthrough routes ([#3602](https://github.com/archestra-ai/archestra/issues/3602)) ([d3538fc](https://github.com/archestra-ai/archestra/commit/d3538fcada767e78c351fa17162926fabe5ed1c0))
+
+
+### Miscellaneous Chores
+
+* block tool call when a2a requre human approval ([#3608](https://github.com/archestra-ai/archestra/issues/3608)) ([3ae75b4](https://github.com/archestra-ai/archestra/commit/3ae75b448a41eb4f2741b4e38631f05bd6b786fb))
+* **deps:** bump path-to-regexp from 8.3.0 to 8.4.0 in /platform/mcp_server_docker_image ([#3587](https://github.com/archestra-ai/archestra/issues/3587)) ([2965f9f](https://github.com/archestra-ai/archestra/commit/2965f9f50a55ffc216693e70d664f684d7f93673))
+* overhaul agent email trigger setup UX ([#3581](https://github.com/archestra-ai/archestra/issues/3581)) ([7343fd8](https://github.com/archestra-ai/archestra/commit/7343fd851037c33d39bc59a482465b377483d3c1))
+* safe/sensitive instead of trusted/untrusted context in UI ([#3609](https://github.com/archestra-ai/archestra/issues/3609)) ([1a4c667](https://github.com/archestra-ai/archestra/commit/1a4c6675ae8f8b5c4a90381ffdfa87f25264a775))
+
 ## [1.2.0](https://github.com/archestra-ai/archestra/compare/platform-v1.1.40...platform-v1.2.0) (2026-03-31)
 
 

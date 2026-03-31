@@ -395,6 +395,50 @@ describe("ModelModel", () => {
       expect(updated?.contextLength).toBe(100000);
       expect(updated?.supportsToolCalling).toBe(false);
     });
+
+    test("preserves manual isEmbedding overrides on non-full sync", async () => {
+      const [created] = await ModelModel.bulkUpsert([
+        {
+          externalId: "openai/custom-embed-toggle",
+          provider: "openai",
+          modelId: "custom-embed-toggle",
+          description: "Custom Embed Toggle",
+          contextLength: 8192,
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+          supportsToolCalling: false,
+          promptPricePerToken: "0.000001",
+          completionPricePerToken: "0.000002",
+          isEmbedding: false,
+          lastSyncedAt: new Date(),
+        },
+      ]);
+
+      await ModelModel.update(created.id, { isEmbedding: true });
+
+      await ModelModel.bulkUpsert([
+        {
+          externalId: "openai/custom-embed-toggle",
+          provider: "openai",
+          modelId: "custom-embed-toggle",
+          description: "Updated Custom Embed Toggle",
+          contextLength: 16384,
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+          supportsToolCalling: false,
+          promptPricePerToken: "0.000003",
+          completionPricePerToken: "0.000004",
+          isEmbedding: false,
+          lastSyncedAt: new Date(),
+        },
+      ]);
+
+      const updated = await ModelModel.findByProviderAndModelId(
+        "openai",
+        "custom-embed-toggle",
+      );
+      expect(updated?.isEmbedding).toBe(true);
+    });
   });
 
   describe("delete", () => {
@@ -802,6 +846,32 @@ describe("ModelModel", () => {
       expect(updated).not.toBeNull();
       expect(updated?.ignored).toBe(true);
       expect(updated?.inputModalities).toEqual(["text", "image"]);
+    });
+
+    test("can update isEmbedding alongside editable model settings", async () => {
+      const model = await ModelModel.create({
+        externalId: "openai/text-embedding-3-small",
+        provider: "openai",
+        modelId: "text-embedding-3-small",
+        description: null,
+        contextLength: 8192,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: false,
+        promptPricePerToken: "0.000001",
+        completionPricePerToken: "0.000002",
+        isEmbedding: false,
+        lastSyncedAt: new Date(),
+      });
+
+      const updated = await ModelModel.update(model.id, {
+        isEmbedding: true,
+        ignored: true,
+      });
+
+      expect(updated).not.toBeNull();
+      expect(updated?.isEmbedding).toBe(true);
+      expect(updated?.ignored).toBe(true);
     });
   });
 });

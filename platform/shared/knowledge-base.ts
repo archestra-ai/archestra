@@ -9,7 +9,7 @@ export type EmbeddingModel = string;
 
 export const DEFAULT_EMBEDDING_MODEL: EmbeddingModel = "text-embedding-3-small";
 
-/** Maximum number of chunks to embed per OpenAI API call */
+/** Maximum number of chunks to embed per embedding API call */
 export const EMBEDDING_BATCH_SIZE = 100;
 
 /** Default vector dimensions (used for the primary `embedding` column) */
@@ -56,7 +56,7 @@ export const EMBEDDING_MODELS: Record<string, EmbeddingModelMeta> = {
   },
   "text-embedding-3-large": {
     label: "text-embedding-3-large",
-    description: "Higher quality, 3072 dims, reduced to 1536 dims",
+    description: "Higher quality, native 3072 dims truncated to 1536 dims for storage",
     dimensions: 1536,
   },
   "nomic-embed-text": {

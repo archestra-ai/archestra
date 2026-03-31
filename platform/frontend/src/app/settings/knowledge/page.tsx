@@ -205,14 +205,14 @@ function ApiKeySelector({
   value,
   onChange,
   disabled,
-  filterEmbeddingProviders,
+  forEmbedding,
   label,
   pulse,
 }: {
   value: string | null;
   onChange: (value: string | null) => void;
   disabled: boolean;
-  filterEmbeddingProviders?: boolean;
+  forEmbedding?: boolean;
   label: string;
   pulse?: boolean;
 }) {
@@ -221,27 +221,25 @@ function ApiKeySelector({
   const prevSelectableCountRef = useRef<number | null>(null);
 
   const keys = apiKeys ?? [];
-  const isEmbeddingSelector = !!filterEmbeddingProviders;
-  const selectableKeys = keys;
-  const hasSelectableKeys = selectableKeys.length > 0;
+  const hasKeys = keys.length > 0;
   const selectedKey = keys.find((key) => key.id === value) ?? null;
 
   // Auto-select the first key when transitioning from 0 → N selectable keys
   useEffect(() => {
     if (isPending) return;
     const prevCount = prevSelectableCountRef.current;
-    prevSelectableCountRef.current = selectableKeys.length;
+    prevSelectableCountRef.current = keys.length;
 
-    if (prevCount === 0 && selectableKeys.length > 0 && !value) {
-      onChange(selectableKeys[0].id);
+    if (prevCount === 0 && keys.length > 0 && !value) {
+      onChange(keys[0].id);
     }
-  }, [selectableKeys, value, onChange, isPending]);
+  }, [keys, value, onChange, isPending]);
 
   if (isPending) {
     return <LoadingSpinner />;
   }
 
-  if (!hasSelectableKeys) {
+  if (!hasKeys) {
     return (
       <div className="space-y-2">
         {!disabled && (
@@ -259,7 +257,7 @@ function ApiKeySelector({
             <AddApiKeyDialog
               open={showAddDialog}
               onOpenChange={setShowAddDialog}
-              forEmbedding={isEmbeddingSelector}
+              forEmbedding={forEmbedding}
             />
           </>
         )}
@@ -462,7 +460,8 @@ function KnowledgeSettingsContent() {
 
   const { data: embeddingModels } = useEmbeddingModels(embeddingChatApiKeyId);
   const selectedEmbeddingApiKey = useMemo(
-    () => apiKeys?.find((apiKey) => apiKey.id === embeddingChatApiKeyId) ?? null,
+    () =>
+      apiKeys?.find((apiKey) => apiKey.id === embeddingChatApiKeyId) ?? null,
     [apiKeys, embeddingChatApiKeyId],
   );
   const selectedEmbeddingProvider =
@@ -505,21 +504,20 @@ function KnowledgeSettingsContent() {
     !!serverEmbeddingKeyId && !!serverEmbeddingModel;
 
   // Check if keys exist for pulsing logic
-  const hasEmbeddingKeys = useMemo(() => (apiKeys ?? []).length > 0, [apiKeys]);
-  const hasAnyKeys = useMemo(() => (apiKeys ?? []).length > 0, [apiKeys]);
+  const hasApiKeys = useMemo(() => (apiKeys ?? []).length > 0, [apiKeys]);
   const isInitialLoading = isPending || areApiKeysPending;
 
   const embeddingSetupStep = useSetupStep({
     selectedKeyId: embeddingChatApiKeyId,
     selectedModel: embeddingModel,
     selectedDimensions: embeddingDimensions,
-    hasSelectableKeys: isInitialLoading ? true : hasEmbeddingKeys,
+    hasSelectableKeys: isInitialLoading ? true : hasApiKeys,
   });
 
   const rerankerSetupStep = useSetupStep({
     selectedKeyId: rerankerChatApiKeyId,
     selectedModel: rerankerModel,
-    hasSelectableKeys: isInitialLoading ? true : hasAnyKeys,
+    hasSelectableKeys: isInitialLoading ? true : hasApiKeys,
   });
 
   const isFullyConfigured = !embeddingSetupStep && !rerankerSetupStep;
@@ -586,7 +584,7 @@ function KnowledgeSettingsContent() {
 
           <SettingsBlock
             title="LLM Provider API Key"
-            description="Select an API key for generating embeddings (OpenAI or Ollama)."
+            description="Select an API key for generating embeddings."
             control={
               <WithPermissions
                 permissions={{ knowledgeSettings: ["update"] }}
@@ -597,7 +595,7 @@ function KnowledgeSettingsContent() {
                     value={embeddingChatApiKeyId}
                     onChange={setEmbeddingChatApiKeyId}
                     disabled={!hasPermission}
-                    filterEmbeddingProviders
+                    forEmbedding
                     label="embedding API key"
                     pulse={
                       embeddingSetupStep === "add-key" ||

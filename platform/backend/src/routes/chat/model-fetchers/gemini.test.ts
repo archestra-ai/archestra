@@ -40,7 +40,10 @@ describe("gemini model fetchers", () => {
               {
                 name: "models/gemini-embedding-001",
                 displayName: "Gemini Embedding 001",
-                supportedGenerationMethods: ["embedContent", "batchEmbedContents"],
+                supportedGenerationMethods: [
+                  "embedContent",
+                  "batchEmbedContents",
+                ],
               },
               {
                 name: "models/aqa",
@@ -67,6 +70,32 @@ describe("gemini model fetchers", () => {
         {
           id: "gemini-embedding-001",
           displayName: "Gemini Embedding 001",
+          provider: "gemini",
+        },
+      ]);
+    });
+
+    test("includes Gemini models that only advertise batchEmbedContents", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            models: [
+              {
+                name: "models/gemini-batch-embedding-only",
+                displayName: "Gemini Batch Embedding Only",
+                supportedGenerationMethods: ["batchEmbedContents"],
+              },
+            ],
+          }),
+      });
+
+      const models = await fetchGeminiModels("test-api-key");
+
+      expect(models).toEqual([
+        {
+          id: "gemini-batch-embedding-only",
+          displayName: "Gemini Batch Embedding Only",
           provider: "gemini",
         },
       ]);

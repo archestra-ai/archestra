@@ -33,7 +33,9 @@ export async function callOpenAIEmbedding(params: {
     const response = await client.embeddings.create({
       model,
       input: texts,
-      ...(model.startsWith("nomic") ? {} : { dimensions }),
+      ...(dimensions !== undefined && !model.startsWith("nomic")
+        ? { dimensions }
+        : {}),
     });
 
     return {

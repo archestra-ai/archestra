@@ -39,11 +39,22 @@ export async function callGeminiEmbedding(params: {
           contents: text,
           config: dimensions ? { outputDimensionality: dimensions } : undefined,
         });
-        return response.embeddings?.[0]?.values ?? [];
+        const embedding = response.embeddings?.[0]?.values;
+        if (!embedding?.length) {
+          throw new GeminiEmbeddingError(
+            500,
+            "Gemini embedding response did not include embedding values",
+          );
+        }
+        return embedding;
       } catch (err: unknown) {
+        if (err instanceof GeminiEmbeddingError) {
+          throw err;
+        }
         const status =
           (err as { status?: number; httpStatusCode?: number }).status ??
-          (err as { status?: number; httpStatusCode?: number }).httpStatusCode ??
+          (err as { status?: number; httpStatusCode?: number })
+            .httpStatusCode ??
           500;
         throw new GeminiEmbeddingError(
           status,

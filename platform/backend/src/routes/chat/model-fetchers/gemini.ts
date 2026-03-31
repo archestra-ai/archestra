@@ -31,6 +31,7 @@ export async function fetchGeminiModels(
       (model) =>
         model.supportedGenerationMethods?.includes("generateContent") ||
         model.supportedGenerationMethods?.includes("embedContent") ||
+        model.supportedGenerationMethods?.includes("batchEmbedContents") ||
         false,
     )
     .map((model) => {

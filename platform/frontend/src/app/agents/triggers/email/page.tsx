@@ -258,6 +258,7 @@ export default function EmailPage() {
                 <Button
                   variant="ghost"
                   size="sm"
+                  aria-label="Filter: All agents"
                   className={cn(
                     "h-7 text-xs rounded-full gap-1.5",
                     statusFilter === "all" && "bg-primary/10 text-primary",
@@ -270,6 +271,7 @@ export default function EmailPage() {
                 <Button
                   variant="ghost"
                   size="sm"
+                  aria-label="Filter: Enabled agents"
                   className={cn(
                     "h-7 text-xs rounded-full gap-1.5",
                     statusFilter === "enabled"
@@ -284,6 +286,7 @@ export default function EmailPage() {
                 <Button
                   variant="ghost"
                   size="sm"
+                  aria-label="Filter: Disabled agents"
                   className={cn(
                     "h-7 text-xs rounded-full gap-1.5",
                     statusFilter === "disabled"

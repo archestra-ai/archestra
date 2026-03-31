@@ -88,7 +88,7 @@ export function AgentEmailSettingsDialog({
       incomingEmailSecurityMode: agent.incomingEmailSecurityMode,
       incomingEmailAllowedDomain: agent.incomingEmailAllowedDomain ?? "",
     });
-  }, [agent, form, open]);
+  }, [agent, open, form.reset]);
 
   const { data: emailAddress } = useAgentEmailAddress(
     providerEnabled && open && incomingEmailEnabled && agent ? agent.id : null,

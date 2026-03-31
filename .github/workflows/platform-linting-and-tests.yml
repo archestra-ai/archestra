@@ -48,7 +48,7 @@ env:
 jobs:
   platform-linting-and-tests:
     name: Platform Linting and Tests
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: write # Required for release-please auto-commit of codegen changes
     defaults:
@@ -329,21 +329,21 @@ jobs:
           # Identity provider tests manipulate shared SSO backend state and are
           # more reliable when isolated from the generic Chromium shards.
           - name: UI Identity Providers
-            runner: blacksmith-16vcpu-ubuntu-2404
+            runner: blacksmith-8vcpu-ubuntu-2404
             projects: identity-providers
             shard: ""
             extra_args: "--workers=1"
             artifact: blob-report-ui-identity-providers
           # Firefox tests - run sequentially to avoid race conditions on shared backend state
           - name: UI Firefox
-            runner: blacksmith-16vcpu-ubuntu-2404
+            runner: blacksmith-8vcpu-ubuntu-2404
             projects: firefox
             shard: ""
             extra_args: "--grep '@firefox' --workers=1"
             artifact: blob-report-ui-firefox
           # Webkit tests - run sequentially to avoid race conditions on shared backend state
           - name: UI Webkit
-            runner: blacksmith-16vcpu-ubuntu-2404
+            runner: blacksmith-8vcpu-ubuntu-2404
             projects: webkit
             shard: ""
             extra_args: "--grep '@webkit' --workers=1"
@@ -352,7 +352,7 @@ jobs:
           # Uses READONLY_VAULT so all replicas start in BYOS mode (in-memory initializeSecretsManager
           # only affects one replica, which fails with replicaCount > 1)
           - name: Vault
-            runner: blacksmith-16vcpu-ubuntu-2404
+            runner: blacksmith-8vcpu-ubuntu-2404
             projects: credentials-with-vault
             shard: ""
             extra_args: ""
@@ -452,7 +452,7 @@ jobs:
     name: Platform E2E Tests (Quickstart)
     needs: [platform-e2e-build]
     if: ${{ !cancelled() }}
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     permissions:
       contents: read
       id-token: write
@@ -646,7 +646,7 @@ jobs:
     name: Platform E2E Tests (Vault K8s)
     needs: [platform-e2e-build]
     if: ${{ !cancelled() }}
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     permissions:
       contents: read
       id-token: write

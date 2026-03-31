@@ -1351,6 +1351,4 @@ describe("AgentToolModel.create", () => {
 
     expect(agentTool.mcpServerId).toBe(server.id);
   });
-
 });
-

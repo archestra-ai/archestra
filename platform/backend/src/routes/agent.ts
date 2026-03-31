@@ -1,5 +1,4 @@
 import {
-  BUILT_IN_AGENT_IDS,
   createPaginatedResponseSchema,
   LABELS_ENTRY_DELIMITER,
   LABELS_VALUE_DELIMITER,

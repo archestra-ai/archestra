@@ -598,9 +598,7 @@ class ToolModel {
       }
 
       // Auto-configure policies via LLM if enabled (fire-and-forget)
-      ToolModel.triggerAutoConfigureIfEnabled(
-        insertedTools.map((t) => t.id),
-      );
+      ToolModel.triggerAutoConfigureIfEnabled(insertedTools.map((t) => t.id));
 
       // If some tools weren't inserted due to conflict, fetch them
       if (insertedTools.length < toolsToInsert.length) {
@@ -1338,9 +1336,7 @@ class ToolModel {
       }
 
       // Auto-configure policies via LLM if enabled (fire-and-forget)
-      ToolModel.triggerAutoConfigureIfEnabled(
-        insertedTools.map((t) => t.id),
-      );
+      ToolModel.triggerAutoConfigureIfEnabled(insertedTools.map((t) => t.id));
 
       created.push(...insertedTools);
     }

@@ -602,7 +602,7 @@ export function AgentDialog({
     builtInAgentName === BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN;
   const isDualLlmQuarantineBuiltIn =
     builtInAgentName === BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE;
-  const isDualLlmBuiltIn = isDualLlmMainBuiltIn || isDualLlmQuarantineBuiltIn;
+  const _isDualLlmBuiltIn = isDualLlmMainBuiltIn || isDualLlmQuarantineBuiltIn;
   const supportsIdentityProvider =
     agentType === "agent" || agentType === "mcp_gateway";
   const inferredIdentityProviderId =
@@ -1009,7 +1009,6 @@ export function AgentDialog({
     isBuiltIn,
     autoConfigureOnToolDiscovery,
     dualLlmMaxRounds,
-    isDualLlmBuiltIn,
     isDualLlmMainBuiltIn,
     isInternalAgent,
     isPolicyConfigBuiltIn,

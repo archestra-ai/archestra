@@ -25,7 +25,6 @@ import {
   createPaginatedResult,
   type PaginatedResult,
 } from "@/database/utils/pagination";
-import logger from "@/logging";
 import type {
   AgentTool,
   AgentToolFilters,
@@ -273,7 +272,7 @@ class AgentToolModel {
     options?: Partial<
       Pick<InsertAgentTool, "mcpServerId" | "credentialResolutionMode">
     >,
-    organizationId?: string,
+    _organizationId?: string,
   ) {
     const [agentTool] = await db
       .insert(schema.agentToolsTable)
@@ -301,7 +300,7 @@ class AgentToolModel {
       mcpServerId?: string | null;
       credentialResolutionMode?: CredentialResolutionMode;
     }>,
-    organizationId?: string,
+    _organizationId?: string,
   ) {
     if (values.length === 0) return [];
 

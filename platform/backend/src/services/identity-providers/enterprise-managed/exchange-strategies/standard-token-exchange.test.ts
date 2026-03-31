@@ -78,6 +78,54 @@ describe("standardTokenExchangeStrategy", () => {
 
     fetchMock.mockRestore();
   });
+
+  test("includes requested_issuer for brokered external token exchange", async () => {
+    const identityProvider = makeIdentityProvider({
+      issuer: "http://localhost:30081/realms/archestra",
+      oidcConfig: {
+        clientId: "archestra-oidc",
+        clientSecret: "archestra-oidc-secret",
+        tokenEndpoint:
+          "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+        enterpriseManagedCredentials: {
+          clientId: "archestra-oidc",
+          clientSecret: "archestra-oidc-secret",
+          tokenEndpoint:
+            "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+          tokenEndpointAuthentication: "client_secret_post",
+          subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+        },
+      },
+    });
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          access_token: "github-access-token",
+          issued_token_type: "urn:ietf:params:oauth:token-type:access_token",
+          expires_in: 300,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const result = await standardTokenExchangeStrategy.exchangeCredential({
+      identityProvider,
+      assertion: "user-access-token",
+      enterpriseManagedConfig: {
+        requestedCredentialType: "bearer_token",
+        requestedIssuer: "github",
+        tokenInjectionMode: "authorization_bearer",
+      },
+    });
+
+    expect(result.value).toBe("github-access-token");
+
+    const [, requestInit] = fetchMock.mock.calls[0] ?? [];
+    expect(String(requestInit?.body)).toContain("requested_issuer=github");
+
+    fetchMock.mockRestore();
+  });
 });
 
 function makeIdentityProvider(

@@ -9,12 +9,14 @@ import type { User } from "@/types";
 
 const {
   connectAndGetToolsMock,
+  exchangeEnterpriseManagedCredentialMock,
   hasPermissionMock,
   inspectServerMock,
   MockMcpServerConnectionTimeoutError,
   MockMcpServerNotReadyError,
 } = vi.hoisted(() => ({
   connectAndGetToolsMock: vi.fn(),
+  exchangeEnterpriseManagedCredentialMock: vi.fn(),
   hasPermissionMock: vi.fn(),
   inspectServerMock: vi.fn(),
   MockMcpServerNotReadyError: class MockMcpServerNotReadyError extends Error {},
@@ -28,6 +30,10 @@ vi.mock("@/clients/mcp-client", () => ({
     connectAndGetTools: connectAndGetToolsMock,
     inspectServer: inspectServerMock,
   },
+}));
+
+vi.mock("@/services/identity-providers/enterprise-managed/exchange", () => ({
+  exchangeEnterpriseManagedCredential: exchangeEnterpriseManagedCredentialMock,
 }));
 
 vi.mock("@/auth/utils", () => ({
@@ -54,6 +60,7 @@ describe("mcp server inspect route", () => {
 
   afterEach(async () => {
     connectAndGetToolsMock.mockReset();
+    exchangeEnterpriseManagedCredentialMock.mockReset();
     hasPermissionMock.mockReset();
     inspectServerMock.mockReset();
     global.fetch = originalFetch;
@@ -106,6 +113,87 @@ describe("mcp server inspect route", () => {
     expect(connectAndGetToolsMock.mock.calls[1][0]).toMatchObject({
       catalogItem: expect.objectContaining({ id: catalog.id }),
       secrets: { access_token: "session-access-token" },
+    });
+  });
+
+  test("automatically retries protected remote MCP server installation with an exchanged enterprise-managed credential", async ({
+    makeAccount,
+    makeIdentityProvider,
+    makeInternalMcpCatalog,
+  }) => {
+    const identityProvider = await makeIdentityProvider(user.id, {
+      providerId: "keycloak",
+      issuer: "http://localhost:30081/realms/archestra",
+      oidcConfig: {
+        clientId: "archestra-oidc",
+        clientSecret: "archestra-oidc-secret",
+        tokenEndpoint:
+          "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+        tokenEndpointAuthentication: "client_secret_post",
+        enterpriseManagedCredentials: {
+          providerType: "keycloak",
+          subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+        },
+      },
+    });
+
+    const catalog = await makeInternalMcpCatalog({
+      name: "GitHub Remote",
+      serverType: "remote",
+      serverUrl: "https://api.githubcopilot.com/mcp/",
+      enterpriseManagedConfig: {
+        identityProviderId: identityProvider.id,
+        requestedCredentialType: "bearer_token",
+        requestedIssuer: "github",
+        tokenInjectionMode: "authorization_bearer",
+      },
+    });
+
+    await makeAccount(user.id, {
+      providerId: "keycloak",
+      accessToken: "session-access-token",
+    });
+
+    exchangeEnterpriseManagedCredentialMock.mockResolvedValueOnce({
+      credentialType: "bearer_token",
+      expiresInSeconds: null,
+      issuedTokenType: "urn:ietf:params:oauth:token-type:access_token",
+      value: "exchanged-github-token",
+    });
+
+    connectAndGetToolsMock
+      .mockRejectedValueOnce(
+        new Error(
+          "Failed to connect to MCP server GitHub: Streamable HTTP error: Error POSTing to endpoint: bad request: missing required Authorization header",
+        ),
+      )
+      .mockResolvedValueOnce([
+        {
+          name: "add_issue_comment",
+          description: "Post a comment to a GitHub issue",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ]);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: "GitHub",
+        catalogId: catalog.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(exchangeEnterpriseManagedCredentialMock).toHaveBeenCalledWith({
+      identityProviderId: identityProvider.id,
+      assertion: "session-access-token",
+      enterpriseManagedConfig: expect.objectContaining({
+        requestedIssuer: "github",
+      }),
+    });
+    expect(connectAndGetToolsMock.mock.calls[1][0]).toMatchObject({
+      secrets: { access_token: "exchanged-github-token" },
     });
   });
 

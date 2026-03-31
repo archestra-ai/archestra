@@ -817,11 +817,17 @@ function inferEnterpriseExchangeType(params: {
   const providerId = params.providerId.toLowerCase();
   const issuerUrl = tryParseUrl(params.issuer);
 
-  if (issuerUrl?.hostname.endsWith(".okta.com") || providerId.includes("okta")) {
+  if (
+    issuerUrl?.hostname.endsWith(".okta.com") ||
+    providerId.includes("okta")
+  ) {
     return "okta";
   }
 
-  if (issuerUrl?.pathname.includes("/realms/") || providerId.includes("keycloak")) {
+  if (
+    issuerUrl?.pathname.includes("/realms/") ||
+    providerId.includes("keycloak")
+  ) {
     return "keycloak";
   }
 

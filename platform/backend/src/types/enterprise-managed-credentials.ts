@@ -40,6 +40,7 @@ export const EnterpriseManagedCredentialConfigSchema = z.object({
   identityProviderId: z.string().optional(),
   resourceType: EnterpriseManagedResourceTypeSchema.optional(),
   resourceIdentifier: z.string().optional(),
+  requestedIssuer: z.string().optional(),
   requestedCredentialType: EnterpriseManagedCredentialTypeSchema.optional(),
   scopes: z.array(z.string()).optional(),
   audience: z.string().optional(),

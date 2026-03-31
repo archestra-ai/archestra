@@ -57,6 +57,13 @@ class StandardTokenExchangeStrategy
       requestBody.set("audience", targetAudience);
     }
 
+    if (params.enterpriseManagedConfig.requestedIssuer) {
+      requestBody.set(
+        "requested_issuer",
+        params.enterpriseManagedConfig.requestedIssuer,
+      );
+    }
+
     if (params.enterpriseManagedConfig.scopes?.length) {
       requestBody.set("scope", params.enterpriseManagedConfig.scopes.join(" "));
     }

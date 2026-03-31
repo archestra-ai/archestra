@@ -12,6 +12,7 @@ import {
 
 export type EnterpriseManagedConfigInput = {
   resourceIdentifier?: string;
+  requestedIssuer?: string;
   requestedCredentialType?:
     | "bearer_token"
     | "id_jag"
@@ -112,6 +113,25 @@ export function EnterpriseManagedCredentialFields({
           }
           placeholder="Audience, resource ID, or other provider-specific identifier"
         />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-xs">External Provider Alias</Label>
+        <Input
+          value={config.requestedIssuer ?? ""}
+          onChange={(event) =>
+            onChange({
+              ...config,
+              requestedIssuer: event.target.value || undefined,
+            })
+          }
+          placeholder="github"
+        />
+        <p className="text-[11px] text-muted-foreground">
+          Optional. Use this when the identity provider brokers a token from an
+          external provider, for example a Keycloak identity provider alias such
+          as <code>github</code>.
+        </p>
       </div>
 
       <div className="space-y-1.5">

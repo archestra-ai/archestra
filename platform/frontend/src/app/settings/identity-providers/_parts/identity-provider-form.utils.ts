@@ -60,8 +60,8 @@ function inferEnterpriseExchangeType(params: {
   const parsedIssuer = tryParseIssuerUrl(params.issuer);
 
   if (
-    (parsedIssuer?.hostname === "okta.com" ||
-      parsedIssuer?.hostname.endsWith(".okta.com")) ||
+    parsedIssuer?.hostname === "okta.com" ||
+    parsedIssuer?.hostname.endsWith(".okta.com") ||
     providerId.includes("okta")
   ) {
     return "okta";

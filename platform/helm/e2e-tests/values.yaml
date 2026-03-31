@@ -29,9 +29,10 @@ keycloak:
     adminUser: admin
     adminPassword: admin
   features:
-    - token-exchange
-    - jwt-authorization-grant
-    - identity-assertion-jwt
+    - token-exchange:v1
+    - admin-fine-grained-authz:v1
+    - jwt-authorization-grant:v1
+    - identity-assertion-jwt:v1
   # Service configuration
   service:
     type: NodePort

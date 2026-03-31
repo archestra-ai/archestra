@@ -86823,6 +86823,9 @@
                           "resourceIdentifier": {
                             "type": "string"
                           },
+                          "requestedIssuer": {
+                            "type": "string"
+                          },
                           "requestedCredentialType": {
                             "type": "string",
                             "enum": [
@@ -87665,6 +87668,9 @@
                       "resourceIdentifier": {
                         "type": "string"
                       },
+                      "requestedIssuer": {
+                        "type": "string"
+                      },
                       "requestedCredentialType": {
                         "type": "string",
                         "enum": [
@@ -88240,6 +88246,9 @@
                           ]
                         },
                         "resourceIdentifier": {
+                          "type": "string"
+                        },
+                        "requestedIssuer": {
                           "type": "string"
                         },
                         "requestedCredentialType": {
@@ -89109,6 +89118,9 @@
                         "resourceIdentifier": {
                           "type": "string"
                         },
+                        "requestedIssuer": {
+                          "type": "string"
+                        },
                         "requestedCredentialType": {
                           "type": "string",
                           "enum": [
@@ -89945,6 +89957,9 @@
                       "resourceIdentifier": {
                         "type": "string"
                       },
+                      "requestedIssuer": {
+                        "type": "string"
+                      },
                       "requestedCredentialType": {
                         "type": "string",
                         "enum": [
@@ -90528,6 +90543,9 @@
                           ]
                         },
                         "resourceIdentifier": {
+                          "type": "string"
+                        },
+                        "requestedIssuer": {
                           "type": "string"
                         },
                         "requestedCredentialType": {

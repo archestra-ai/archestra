@@ -23295,6 +23295,7 @@ export type GetInternalMcpCatalogResponses = {
             identityProviderId?: string;
             resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
             resourceIdentifier?: string;
+            requestedIssuer?: string;
             requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
             scopes?: Array<string>;
             audience?: string;
@@ -23425,6 +23426,7 @@ export type CreateInternalMcpCatalogItemData = {
             identityProviderId?: string;
             resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
             resourceIdentifier?: string;
+            requestedIssuer?: string;
             requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
             scopes?: Array<string>;
             audience?: string;
@@ -23614,6 +23616,7 @@ export type CreateInternalMcpCatalogItemResponses = {
             identityProviderId?: string;
             resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
             resourceIdentifier?: string;
+            requestedIssuer?: string;
             requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
             scopes?: Array<string>;
             audience?: string;
@@ -23894,6 +23897,7 @@ export type GetInternalMcpCatalogItemResponses = {
             identityProviderId?: string;
             resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
             resourceIdentifier?: string;
+            requestedIssuer?: string;
             requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
             scopes?: Array<string>;
             audience?: string;
@@ -24023,6 +24027,7 @@ export type UpdateInternalMcpCatalogItemData = {
             identityProviderId?: string;
             resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
             resourceIdentifier?: string;
+            requestedIssuer?: string;
             requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
             scopes?: Array<string>;
             audience?: string;
@@ -24214,6 +24219,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
             identityProviderId?: string;
             resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
             resourceIdentifier?: string;
+            requestedIssuer?: string;
             requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
             scopes?: Array<string>;
             audience?: string;

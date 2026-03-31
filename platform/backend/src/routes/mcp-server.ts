@@ -18,6 +18,11 @@ import {
 } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import { refreshLinkedIdentityProviderAccessToken } from "@/services/identity-providers/access-token-refresh";
+import { exchangeEnterpriseManagedCredential } from "@/services/identity-providers/enterprise-managed/exchange";
+import {
+  findExternalIdentityProviderById,
+  findExternalIdentityProviderByProviderId,
+} from "@/services/identity-providers/oidc";
 import { autoReinstallServer } from "@/services/mcp-reinstall";
 import {
   ApiError,
@@ -1560,9 +1565,10 @@ async function connectAndGetToolsForInstallation(params: {
       throw error;
     }
 
-    const accessToken = await getCurrentIdentityProviderAccessToken(
-      params.userId,
-    );
+    const accessToken = await getInstallDiscoveryAccessToken({
+      catalogItem,
+      userId: params.userId,
+    });
     if (!accessToken || secrets.access_token === accessToken) {
       throw error;
     }
@@ -1613,6 +1619,52 @@ async function getCurrentIdentityProviderAccessToken(
   });
 }
 
+async function getInstallDiscoveryAccessToken(params: {
+  catalogItem: NonNullable<
+    Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>
+  >;
+  userId: string;
+}): Promise<string | undefined> {
+  const account = await AccountModel.getLatestSsoAccountWithAccessTokenByUserId(
+    params.userId,
+  );
+  if (!account?.accessToken) {
+    return undefined;
+  }
+
+  const accessToken = await getCurrentIdentityProviderAccessToken(
+    params.userId,
+  );
+  if (!accessToken) {
+    return undefined;
+  }
+
+  const enterpriseManagedConfig = params.catalogItem.enterpriseManagedConfig;
+  if (!enterpriseManagedConfig) {
+    return accessToken;
+  }
+
+  const identityProvider = enterpriseManagedConfig.identityProviderId
+    ? await findExternalIdentityProviderById(
+        enterpriseManagedConfig.identityProviderId,
+      )
+    : await findExternalIdentityProviderByProviderId(account.providerId);
+  if (!identityProvider) {
+    return accessToken;
+  }
+
+  const credential = await exchangeEnterpriseManagedCredential({
+    identityProviderId: identityProvider.id,
+    assertion: accessToken,
+    enterpriseManagedConfig,
+  });
+
+  return extractInstallDiscoveryCredentialValue({
+    credentialValue: credential.value,
+    responseFieldPath: enterpriseManagedConfig.responseFieldPath,
+  });
+}
+
 async function getSecretValues(
   secretId?: string,
 ): Promise<Record<string, unknown>> {
@@ -1645,9 +1697,52 @@ function isInstallDiscoveryAuthError(error: unknown): boolean {
     lower.includes("forbidden") ||
     lower.includes("authentication failed") ||
     lower.includes("authentication required") ||
+    lower.includes("missing required authorization header") ||
     lower.includes("invalid authorization header") ||
     lower.includes("invalid token") ||
     lower.includes("access denied") ||
     lower.includes("invalid credentials")
   );
+}
+
+function extractInstallDiscoveryCredentialValue(params: {
+  credentialValue: string | Record<string, unknown>;
+  responseFieldPath?: string;
+}): string {
+  if (typeof params.credentialValue === "string") {
+    return params.credentialValue;
+  }
+
+  if (!params.responseFieldPath) {
+    throw new Error(
+      "Install-time enterprise-managed discovery returned a structured credential but no responseFieldPath was configured",
+    );
+  }
+
+  const extractedValue = params.responseFieldPath
+    .split(".")
+    .filter(Boolean)
+    .reduce<unknown>((current, segment) => {
+      if (
+        segment === "__proto__" ||
+        segment === "constructor" ||
+        segment === "prototype"
+      ) {
+        return undefined;
+      }
+
+      if (!current || typeof current !== "object" || Array.isArray(current)) {
+        return undefined;
+      }
+
+      return (current as Record<string, unknown>)[segment];
+    }, params.credentialValue);
+
+  if (typeof extractedValue !== "string") {
+    throw new Error(
+      `Install-time enterprise-managed discovery response field '${params.responseFieldPath}' did not resolve to a string`,
+    );
+  }
+
+  return extractedValue;
 }

@@ -22,6 +22,7 @@ export const oauthConfigSchema = z.object({
 
 const enterpriseManagedConfigSchema = z.object({
   resourceIdentifier: z.string().optional(),
+  requestedIssuer: z.string().optional(),
   requestedCredentialType: z
     .enum([
       "bearer_token",

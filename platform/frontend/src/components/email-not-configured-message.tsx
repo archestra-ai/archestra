@@ -1,5 +1,5 @@
-import { ExternalLink } from "lucide-react";
 import Link from "next/link";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 
 interface EmailNotConfiguredMessageProps {
@@ -26,15 +26,12 @@ export function EmailNotConfiguredMessage({
         <>
           {" "}
           See the{" "}
-          <Link
+          <ExternalDocsLink
             href={docsUrl}
-            target="_blank"
-            rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-primary hover:underline"
           >
             setup guide
-            <ExternalLink className="h-3 w-3" />
-          </Link>{" "}
+          </ExternalDocsLink>{" "}
           for supported email providers and configuration.
         </>
       ) : (

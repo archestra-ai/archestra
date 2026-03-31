@@ -10,7 +10,7 @@ import {
 describe("parsePolicyDenied", () => {
   it("parses a plain-text policy denial with tool name, args, and reason", () => {
     const text =
-      '\nI tried to invoke the upstash__context7__get-library-docs tool with the following arguments: {"context7CompatibleLibraryID":"/websites/p5js_reference"}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: context contains untrusted data';
+      '\nI tried to invoke the upstash__context7__get-library-docs tool with the following arguments: {"context7CompatibleLibraryID":"/websites/p5js_reference"}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: context contains sensitive data';
     const result = parsePolicyDenied(text);
     expect(result).not.toBeNull();
     expect(result?.type).toBe("tool-upstash__context7__get-library-docs");
@@ -19,7 +19,7 @@ describe("parsePolicyDenied", () => {
       context7CompatibleLibraryID: "/websites/p5js_reference",
     });
     const errorInfo = JSON.parse(result?.errorText ?? "");
-    expect(errorInfo.reason).toContain("context contains untrusted data");
+    expect(errorInfo.reason).toContain("context contains sensitive data");
   });
 
   it("parses a JSON-wrapped policy denial (originalError.message)", () => {

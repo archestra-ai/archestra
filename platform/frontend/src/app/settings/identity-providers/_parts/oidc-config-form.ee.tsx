@@ -5,10 +5,10 @@ import {
   type IdentityProviderFormValues,
   isOktaHostname,
 } from "@shared";
-import { ExternalLink, Info, Plus, X } from "lucide-react";
-import Link from "next/link";
+import { Info, Plus, X } from "lucide-react";
 import { useCallback, useState } from "react";
 import type { UseFormReturn } from "react-hook-form";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
   Accordion,
   AccordionContent,
@@ -383,15 +383,12 @@ export function OidcConfigForm({
                 <FormDescription>
                   Send the <code>post_logout_redirect_uri</code> parameter
                   during sign-out.{" "}
-                  <Link
+                  <ExternalDocsLink
                     href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html"
-                    target="_blank"
-                    rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 underline underline-offset-4"
                   >
                     Learn more
-                    <ExternalLink className="h-3 w-3" />
-                  </Link>
+                  </ExternalDocsLink>
                 </FormDescription>
               </div>
             </FormItem>
@@ -600,15 +597,12 @@ function EnterpriseManagedCredentialsForm(props: {
               {identityProvidersDocsUrl ? (
                 <>
                   {" "}
-                  <Link
+                  <ExternalDocsLink
                     href={identityProvidersDocsUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 underline underline-offset-4"
                   >
                     Learn more
-                    <ExternalLink className="h-3 w-3" />
-                  </Link>
+                  </ExternalDocsLink>
                 </>
               ) : null}
             </p>

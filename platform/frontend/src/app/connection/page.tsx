@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { ArchestraArchitectureDiagram } from "@/components/archestra-architecture-diagram";
 import type { ArchitectureTabType } from "@/components/architecture-diagram/architecture-diagram";
 import { ConnectionOptions } from "@/components/connection-options";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { PageLayout } from "@/components/page-layout";
 import { useDefaultLlmProxy, useDefaultMcpGateway } from "@/lib/agent.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
@@ -86,12 +87,11 @@ export default function ConnectionPage() {
             <h2 className="text-lg font-medium mb-4">Integration Guides</h2>
             <div className="grid grid-cols-2 gap-3">
               {integrationGuides.map((guide) => (
-                <a
+                <ExternalDocsLink
                   key={guide.title}
                   href={guide.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                  className="flex gap-2 rounded-lg border border-border p-3 transition-colors hover:bg-muted/50 hover:no-underline"
+                  showIcon={false}
                 >
                   <div className="flex-1">
                     <div className="font-medium text-sm">{guide.title}</div>
@@ -114,7 +114,7 @@ export default function ConnectionPage() {
                       d="M9 5l7 7-7 7"
                     />
                   </svg>
-                </a>
+                </ExternalDocsLink>
               ))}
             </div>
           </div>

@@ -10,6 +10,7 @@ import { Building2, CheckCircle2, User, Users } from "lucide-react";
 import Link from "next/link";
 import { lazy, Suspense, useEffect, useMemo } from "react";
 import type { UseFormReturn } from "react-hook-form";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
   type VisibilityOption,
   VisibilitySelector,
@@ -536,14 +537,13 @@ export function LlmProviderApiKeyForm({
                 {authDocsUrl && (
                   <>
                     {" "}
-                    <Link
+                    <ExternalDocsLink
                       href={`${authDocsUrl}#api-key-scoping`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline hover:text-foreground"
+                      className="text-inherit underline hover:text-foreground"
+                      showIcon={false}
                     >
                       Learn more
-                    </Link>
+                    </ExternalDocsLink>
                   </>
                 )}
               </p>

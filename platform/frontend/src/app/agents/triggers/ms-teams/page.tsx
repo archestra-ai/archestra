@@ -1,6 +1,5 @@
 "use client";
-import { ExternalLink, Info } from "lucide-react";
-import Link from "next/link";
+import { Info } from "lucide-react";
 import { useState } from "react";
 import { CopyButton } from "@/components/copy-button";
 import Divider from "@/components/divider";
@@ -24,6 +23,7 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { ChannelsSection } from "../_components/channels-section";
 import { CollapsibleSetupSection } from "../_components/collapsible-setup-section";
 import { CredentialField } from "../_components/credential-field";
+import { ExternalDocsLink } from "../_components/external-docs-link";
 import { LlmKeySetupStep } from "../_components/llm-key-setup-step";
 import { SetupStep } from "../_components/setup-step";
 import type { ProviderConfig } from "../_components/types";
@@ -221,15 +221,12 @@ function NgrokSetupDialog({
               <DialogTitle>Enter your ngrok auth token</DialogTitle>
               <DialogDescription>
                 Get one at{" "}
-                <Link
+                <ExternalDocsLink
                   href="https://dashboard.ngrok.com/get-started/your-authtoken"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                  className="inline-flex text-primary"
                 >
                   ngrok.com
-                  <ExternalLink className="h-3 w-3" />
-                </Link>
+                </ExternalDocsLink>
               </DialogDescription>
             </DialogHeader>
             <DialogBody className="space-y-4 p-3">

@@ -205,7 +205,7 @@ describe("tool display helpers", () => {
           type: "tool-linear__create_issue",
           state: "input-available",
           errorText:
-            'I tried to invoke the linear__create_issue tool with the following arguments: {"title":"Blocked"}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: untrusted data detected',
+            'I tried to invoke the linear__create_issue tool with the following arguments: {"title":"Blocked"}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: sensitive data detected',
         } as never,
         toolResultPart: null,
       }),

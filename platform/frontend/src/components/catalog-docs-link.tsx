@@ -1,7 +1,6 @@
 "use client";
 
-import { ExternalLink } from "lucide-react";
-import { getVisibleDocsUrl } from "@/lib/docs/docs";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 
 export function CatalogDocsLink({
   url,
@@ -10,20 +9,9 @@ export function CatalogDocsLink({
   url: string;
   className?: string;
 }) {
-  const visibleUrl = getVisibleDocsUrl(url);
-  if (!visibleUrl) {
-    return null;
-  }
-
   return (
-    <a
-      href={visibleUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={className}
-    >
+    <ExternalDocsLink href={url} className={className} iconClassName="size-3.5">
       Docs
-      <ExternalLink className="size-3.5" />
-    </a>
+    </ExternalDocsLink>
   );
 }

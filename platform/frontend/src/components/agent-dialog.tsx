@@ -28,14 +28,12 @@ import {
   Globe,
   Key,
   Loader2,
-  Lock,
   Plus,
   RotateCcw,
   User,
   Users,
   X,
 } from "lucide-react";
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
@@ -52,6 +50,7 @@ import {
   type AgentToolsEditorRef,
 } from "@/components/agent-tools-editor";
 import { ModelSelector } from "@/components/chat/model-selector";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
   formatPermissionRequirement,
   PermissionRequirementHint,
@@ -126,7 +125,6 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useChatProfileMcpTools } from "@/lib/chat/chat.query";
 import config from "@/lib/config/config";
-import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useConnectors } from "@/lib/knowledge/connector.query";
@@ -519,7 +517,6 @@ export function AgentDialog({
   const { data: currentDelegations = [] } = useAgentDelegations(
     agentType !== "llm_proxy" ? agent?.id : undefined,
   );
-  const incomingEmail = useFeature("incomingEmail");
   const { data: canReadIdentityProviders } = useHasPermissions({
     identityProvider: ["read"],
   });
@@ -581,12 +578,6 @@ export function AgentDialog({
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const [considerContextUntrusted, setConsiderContextUntrusted] =
     useState(false);
-  const [incomingEmailEnabled, setIncomingEmailEnabled] = useState(false);
-  const [incomingEmailSecurityMode, setIncomingEmailSecurityMode] = useState<
-    "private" | "internal" | "public"
-  >("private");
-  const [incomingEmailAllowedDomain, setIncomingEmailAllowedDomain] =
-    useState("");
   const [llmApiKeyId, setLlmApiKeyId] = useState<string | null>(null);
   const [llmModel, setLlmModel] = useState<string | null>(null);
   const [apiKeySelectorOpen, setApiKeySelectorOpen] = useState(false);
@@ -668,11 +659,6 @@ export function AgentDialog({
         setKnowledgeBaseIds(agentData.knowledgeBaseIds);
         setConnectorIds(agentData.connectorIds);
         setScope(agentData.scope);
-        setIncomingEmailEnabled(agentData.incomingEmailEnabled);
-        setIncomingEmailSecurityMode(agentData.incomingEmailSecurityMode);
-        setIncomingEmailAllowedDomain(
-          agentData.incomingEmailAllowedDomain || "",
-        );
         setAutoConfigureOnToolDiscovery(
           agentData.builtInAgentConfig?.name ===
             BUILT_IN_AGENT_IDS.POLICY_CONFIG
@@ -703,9 +689,6 @@ export function AgentDialog({
         setKnowledgeBaseIds([]);
         setConnectorIds([]);
         setScope("personal");
-        setIncomingEmailEnabled(false);
-        setIncomingEmailSecurityMode("private");
-        setIncomingEmailAllowedDomain("");
         setAutoConfigureOnToolDiscovery(false);
         setDualLlmMaxRounds("5");
       }
@@ -854,26 +837,6 @@ export function AgentDialog({
       return;
     }
 
-    // Validate email domain when security mode is "internal"
-    if (
-      isInternalAgent &&
-      incomingEmailEnabled &&
-      incomingEmailSecurityMode === "internal"
-    ) {
-      const trimmedDomain = incomingEmailAllowedDomain.trim();
-      if (!trimmedDomain) {
-        toast.error("Allowed domain is required for internal security mode");
-        return;
-      }
-      // Basic domain format validation (no @, valid characters)
-      const domainRegex =
-        /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*$/;
-      if (!domainRegex.test(trimmedDomain)) {
-        toast.error("Please enter a valid domain (e.g., example.com)");
-        return;
-      }
-    }
-
     // Save any unsaved label before submitting
     const updatedLabels = agentLabelsRef.current?.saveUnsavedLabel() || labels;
 
@@ -896,17 +859,6 @@ export function AgentDialog({
       if (agent && !isBuiltIn) {
         await agentToolsEditorRef.current?.saveChanges();
       }
-
-      // Build email settings for internal agents (always save, backend controls enforcement)
-      const emailSettings = isInternalAgent
-        ? {
-            incomingEmailEnabled,
-            incomingEmailSecurityMode,
-            ...(incomingEmailSecurityMode === "internal" && {
-              incomingEmailAllowedDomain: incomingEmailAllowedDomain.trim(),
-            }),
-          }
-        : {};
 
       if (agent && isBuiltIn) {
         const builtInAgentConfig = isPolicyConfigBuiltIn
@@ -964,7 +916,6 @@ export function AgentDialog({
             labels: updatedLabels,
             scope,
             ...(showSecurity && { considerContextUntrusted }),
-            ...emailSettings,
           },
         });
         savedAgentId = updated?.id ?? agent.id;
@@ -997,7 +948,6 @@ export function AgentDialog({
           labels: updatedLabels,
           scope,
           ...(showSecurity && { considerContextUntrusted }),
-          ...emailSettings,
         });
         if (!created) return;
         savedAgentId = created?.id ?? "";
@@ -1050,9 +1000,6 @@ export function AgentDialog({
     considerContextUntrusted,
     llmApiKeyId,
     llmModel,
-    incomingEmailEnabled,
-    incomingEmailSecurityMode,
-    incomingEmailAllowedDomain,
     effectiveIdentityProviderId,
     knowledgeBaseIds,
     connectorIds,
@@ -1099,16 +1046,15 @@ export function AgentDialog({
               {isBuiltIn && agent?.description && (
                 <p className="pt-2 text-sm text-muted-foreground">
                   {agent.description}.{" "}
-                  <a
+                  <ExternalDocsLink
                     href={getDocsUrl(
                       DocsPage.PlatformBuiltInAgentsPolicyConfig,
                     )}
-                    target="_blank"
-                    rel="noopener noreferrer"
                     className="underline"
+                    showIcon={false}
                   >
                     Learn more
-                  </a>
+                  </ExternalDocsLink>
                 </p>
               )}
             </div>
@@ -1427,8 +1373,10 @@ export function AgentDialog({
 
             {/* Section 3: Capabilities (Tools, Subagents, Knowledge Sources) */}
             {showToolsAndSubagents && (
-              <div className="rounded-lg border bg-card p-4 space-y-4">
-                <div data-testid={E2eTestId.AgentCapabilitiesSection} />
+              <div
+                className="rounded-lg border bg-card p-4 space-y-4"
+                data-testid={E2eTestId.AgentCapabilitiesSection}
+              >
                 <h3 className="text-sm font-semibold">Capabilities</h3>
 
                 {/* Tools */}
@@ -1836,13 +1784,13 @@ export function AgentDialog({
                                 htmlFor="consider-context-untrusted"
                                 className="text-sm font-medium cursor-pointer"
                               >
-                                Treat context as untrusted from the start of
+                                Treat context as sensitive from the start of
                                 chat
                               </Label>
                               <p className="text-sm text-muted-foreground">
                                 When enabled, the context is always considered
-                                untrusted. Only tools allowed to run in
-                                untrusted context will be permitted.
+                                sensitive. Only tools allowed to run in
+                                sensitive context will be permitted.
                               </p>
                             </div>
                             <Switch
@@ -1851,173 +1799,6 @@ export function AgentDialog({
                               onCheckedChange={setConsiderContextUntrusted}
                             />
                           </div>
-                        </div>
-                      )}
-
-                      {/* Agent Trigger Rules (Agent only, hidden for built-in) */}
-                      {isInternalAgent && !isBuiltIn && (
-                        <div className="space-y-4">
-                          {/* Email */}
-                          {incomingEmail?.enabled ? (
-                            <div className="space-y-3">
-                              <div className="flex items-center justify-between">
-                                <div className="space-y-0.5">
-                                  <label
-                                    htmlFor="incoming-email-enabled"
-                                    className="text-sm cursor-pointer"
-                                  >
-                                    Email
-                                  </label>
-                                  <p className="text-xs text-muted-foreground">
-                                    Users can interact with this agent via email
-                                  </p>
-                                </div>
-                                <Switch
-                                  id="incoming-email-enabled"
-                                  checked={incomingEmailEnabled}
-                                  onCheckedChange={setIncomingEmailEnabled}
-                                />
-                              </div>
-
-                              {incomingEmailEnabled && (
-                                <div className="space-y-4 pt-2 border-t">
-                                  <div className="space-y-2">
-                                    <Label
-                                      htmlFor="incoming-email-security-mode"
-                                      className="text-sm"
-                                    >
-                                      Security mode
-                                    </Label>
-                                    <Select
-                                      value={incomingEmailSecurityMode}
-                                      onValueChange={(
-                                        value:
-                                          | "private"
-                                          | "internal"
-                                          | "public",
-                                      ) => setIncomingEmailSecurityMode(value)}
-                                    >
-                                      <SelectTrigger id="incoming-email-security-mode">
-                                        <SelectValue placeholder="Select security mode">
-                                          <div className="flex items-center gap-2">
-                                            {incomingEmailSecurityMode ===
-                                              "private" && (
-                                              <>
-                                                <Lock className="h-4 w-4" />
-                                                <span>Private</span>
-                                              </>
-                                            )}
-                                            {incomingEmailSecurityMode ===
-                                              "internal" && (
-                                              <>
-                                                <Building2 className="h-4 w-4" />
-                                                <span>Internal</span>
-                                              </>
-                                            )}
-                                            {incomingEmailSecurityMode ===
-                                              "public" && (
-                                              <>
-                                                <Globe className="h-4 w-4" />
-                                                <span>Public</span>
-                                              </>
-                                            )}
-                                          </div>
-                                        </SelectValue>
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="private">
-                                          <div className="flex items-start gap-2">
-                                            <Lock className="h-4 w-4 mt-0.5 text-muted-foreground" />
-                                            <div className="flex flex-col">
-                                              <span className="font-medium">
-                                                Private
-                                              </span>
-                                              <span className="text-xs text-muted-foreground">
-                                                Only registered users with
-                                                access
-                                              </span>
-                                            </div>
-                                          </div>
-                                        </SelectItem>
-                                        <SelectItem value="internal">
-                                          <div className="flex items-start gap-2">
-                                            <Building2 className="h-4 w-4 mt-0.5 text-muted-foreground" />
-                                            <div className="flex flex-col">
-                                              <span className="font-medium">
-                                                Internal
-                                              </span>
-                                              <span className="text-xs text-muted-foreground">
-                                                Only emails from allowed domain
-                                              </span>
-                                            </div>
-                                          </div>
-                                        </SelectItem>
-                                        <SelectItem value="public">
-                                          <div className="flex items-start gap-2">
-                                            <Globe className="h-4 w-4 mt-0.5 text-amber-500" />
-                                            <div className="flex flex-col">
-                                              <span className="font-medium">
-                                                Public
-                                              </span>
-                                              <span className="text-xs text-muted-foreground">
-                                                Any email (use with caution)
-                                              </span>
-                                            </div>
-                                          </div>
-                                        </SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-
-                                  {incomingEmailSecurityMode === "internal" && (
-                                    <div className="space-y-2">
-                                      <Label
-                                        htmlFor="incoming-email-allowed-domain"
-                                        className="text-sm"
-                                      >
-                                        Allowed domain
-                                      </Label>
-                                      <Input
-                                        id="incoming-email-allowed-domain"
-                                        placeholder="company.com"
-                                        value={incomingEmailAllowedDomain}
-                                        onChange={(e) =>
-                                          setIncomingEmailAllowedDomain(
-                                            e.target.value,
-                                          )
-                                        }
-                                      />
-                                      <p className="text-xs text-muted-foreground">
-                                        Only emails from @
-                                        {incomingEmailAllowedDomain ||
-                                          "your-domain.com"}{" "}
-                                        will be processed
-                                      </p>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="space-y-1.5">
-                              <div className="flex items-center justify-between">
-                                <div className="space-y-0.5">
-                                  <span className="text-sm">Email</span>
-                                  <p className="text-xs text-muted-foreground">
-                                    Users can interact with this agent via
-                                    email, first run initial set up in{" "}
-                                    <Link
-                                      href="/agents/triggers/email"
-                                      className="underline hover:text-foreground"
-                                    >
-                                      Agent Triggers
-                                    </Link>
-                                  </p>
-                                </div>
-                                <Switch disabled checked={false} />
-                              </div>
-                            </div>
-                          )}
                         </div>
                       )}
 
@@ -2032,19 +1813,18 @@ export function AgentDialog({
                               bearer tokens issued by this IdP, and to broker
                               enterprise-managed credentials for tool calls.
                               When there is exactly one Identity Provider
-                              configured, Archestra uses it automatically if you
+                              configured, {appName} uses it automatically if you
                               leave this unset.
                               {mcpAuthDocsUrl ? (
                                 <>
                                   {" "}
-                                  <a
+                                  <ExternalDocsLink
                                     href={mcpAuthDocsUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
                                     className="underline"
+                                    showIcon={false}
                                   >
                                     Learn more
-                                  </a>
+                                  </ExternalDocsLink>
                                 </>
                               ) : null}
                             </p>

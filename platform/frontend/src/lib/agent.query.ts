@@ -5,6 +5,7 @@ import {
   DEFAULT_SORT_DIRECTION,
   DEFAULT_TABLE_LIMIT,
 } from "@/consts";
+import { incomingEmailKeys } from "@/lib/chatops/incoming-email.query";
 import { handleApiError } from "@/lib/utils";
 
 const {
@@ -209,6 +210,9 @@ export function useUpdateProfile() {
       });
       // Invalidate tokens queries since team changes affect which tokens are visible for a profile
       queryClient.invalidateQueries({ queryKey: ["tokens"] });
+      queryClient.invalidateQueries({
+        queryKey: incomingEmailKeys.promptEmailAddress(variables.id),
+      });
       // Invalidate knowledge bases when knowledgeBaseIds change (updates assignedAgents)
       if (variables.data?.knowledgeBaseIds !== undefined) {
         queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });

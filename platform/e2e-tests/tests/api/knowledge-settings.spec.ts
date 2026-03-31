@@ -202,7 +202,7 @@ test.describe("Knowledge Settings API", () => {
     });
   });
 
-  test("should reject non-OpenAI API key for embedding", async ({
+  test("should allow non-OpenAI API key for embedding", async ({
     request,
     makeApiRequest,
   }) => {
@@ -220,22 +220,26 @@ test.describe("Knowledge Settings API", () => {
     });
     const chatApiKey = await createKeyResponse.json();
 
-    // Attempt to set it as the embedding key — should be rejected
+    // Attempt to set it as the embedding key — provider-specific restrictions
+    // were removed, so this should now succeed.
     const response = await makeApiRequest({
       request,
       method: "patch",
       urlSuffix: "/api/organization/knowledge-settings",
       data: { embeddingChatApiKeyId: chatApiKey.id },
-      ignoreStatusCheck: true,
     });
-    expect(response.status()).toBe(400);
+    expect(response.status()).toBe(200);
 
-    const errorBody = await response.json();
-    expect(errorBody.error.message).toContain(
-      "Embedding API key must use a compatible provider (OpenAI or Ollama)",
-    );
+    const organization = await response.json();
+    expect(organization.embeddingChatApiKeyId).toBe(chatApiKey.id);
 
     // Cleanup
+    await makeApiRequest({
+      request,
+      method: "patch",
+      urlSuffix: "/api/organization/knowledge-settings",
+      data: { embeddingChatApiKeyId: null },
+    });
     await makeApiRequest({
       request,
       method: "delete",

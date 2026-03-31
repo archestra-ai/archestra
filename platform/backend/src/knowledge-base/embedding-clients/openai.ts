@@ -1,3 +1,4 @@
+import { isNomicModel } from "@shared";
 import OpenAI from "openai";
 import type { EmbeddingApiResponse } from "./types";
 
@@ -33,7 +34,8 @@ export async function callOpenAIEmbedding(params: {
     const response = await client.embeddings.create({
       model,
       input: texts,
-      ...(dimensions !== undefined && !model.startsWith("nomic")
+      // Nomic models do not support the `dimensions` parameter.
+      ...(dimensions !== undefined && !isNomicModel(model)
         ? { dimensions }
         : {}),
     });

@@ -24,7 +24,9 @@ export const EmbeddingDimensionsSchema = z.union([
   z.literal(1536),
   z.literal(768),
 ]);
-export type SupportedEmbeddingDimension = z.infer<typeof EmbeddingDimensionsSchema>;
+export type SupportedEmbeddingDimension = z.infer<
+  typeof EmbeddingDimensionsSchema
+>;
 export const SUPPORTED_EMBEDDING_DIMENSIONS = [3072, 1536, 768] as const;
 
 /**
@@ -56,7 +58,8 @@ export const EMBEDDING_MODELS: Record<string, EmbeddingModelMeta> = {
   },
   "text-embedding-3-large": {
     label: "text-embedding-3-large",
-    description: "Higher quality, native 3072 dims truncated to 1536 dims for storage",
+    description:
+      "Higher quality, native 3072 dims truncated to 1536 dims for storage",
     dimensions: 1536,
   },
   "nomic-embed-text": {
@@ -66,7 +69,8 @@ export const EMBEDDING_MODELS: Record<string, EmbeddingModelMeta> = {
   },
   "gemini-embedding-001": {
     label: "gemini-embedding-001",
-    description: "Google Gemini embedding model, 3072 dims (or truncated to 1536 via outputDimensionality)",
+    description:
+      "Google Gemini embedding model, 3072 dims (or truncated to 1536 via outputDimensionality)",
     dimensions: 3072,
   },
 };
@@ -119,7 +123,7 @@ export const RERANKER_MIN_RELEVANCE_SCORE = 3;
  */
 type NomicTaskType = "search_document" | "search_query";
 
-function isNomicModel(model: string): boolean {
+export function isNomicModel(model: string): boolean {
   return model.startsWith("nomic");
 }
 

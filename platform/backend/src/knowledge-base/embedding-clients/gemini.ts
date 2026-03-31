@@ -22,15 +22,19 @@ export async function callGeminiEmbedding(params: {
   texts: string[];
   model: string;
   apiKey: string;
+  baseUrl?: string | null;
   dimensions?: number;
 }): Promise<EmbeddingApiResponse> {
-  const { texts, model, apiKey, dimensions } = params;
+  const { texts, model, apiKey, baseUrl, dimensions } = params;
 
-  const client = createGoogleGenAIClient(apiKey, "[GeminiEmbedding]");
+  const client = createGoogleGenAIClient(apiKey, "[GeminiEmbedding]", baseUrl);
 
   // Normalise to "models/gemini-embedding-001" format
   const modelId = model.startsWith("models/") ? model : `models/${model}`;
 
+  // The installed @google/genai SDK only exposes embedContent here, so each
+  // text is embedded individually for now. Revisit batchEmbedContents if the
+  // SDK surface or observed rate limits make that worthwhile.
   const embeddings = await Promise.all(
     texts.map(async (text) => {
       try {

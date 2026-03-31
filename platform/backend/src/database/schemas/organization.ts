@@ -59,7 +59,11 @@ const organizationsTable = pgTable("organization", {
   /** Embedding model for knowledge base RAG — set explicitly when user configures embedding */
   embeddingModel: text("embedding_model"),
 
-  /** Vector dimensions for the embedding column (for example 3072, 1536, or 768) */
+  /**
+   * @deprecated temporary transition field while embedding dimensions move to `models.embeddingDimensions`.
+   *
+   * TODO: Remove references and drop this column in a future release after existing org configs have been migrated.
+   */
   embeddingDimensions: integer("embedding_dimensions"),
 
   /**

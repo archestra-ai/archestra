@@ -32,50 +32,55 @@ export async function callGeminiEmbedding(params: {
   // Normalise to "models/gemini-embedding-001" format
   const modelId = model.startsWith("models/") ? model : `models/${model}`;
 
-  // The installed @google/genai SDK only exposes embedContent here, so each
-  // text is embedded individually for now. Revisit batchEmbedContents if the
-  // SDK surface or observed rate limits make that worthwhile.
-  const embeddings = await Promise.all(
-    texts.map(async (text) => {
-      try {
-        const response = await client.models.embedContent({
-          model: modelId,
-          contents: text,
-          config: dimensions ? { outputDimensionality: dimensions } : undefined,
-        });
-        const embedding = response.embeddings?.[0]?.values;
-        if (!embedding?.length) {
-          throw new GeminiEmbeddingError(
-            500,
-            "Gemini embedding response did not include embedding values",
-          );
-        }
-        return embedding;
-      } catch (err: unknown) {
-        if (err instanceof GeminiEmbeddingError) {
-          throw err;
-        }
-        const status =
-          (err as { status?: number; httpStatusCode?: number }).status ??
-          (err as { status?: number; httpStatusCode?: number })
-            .httpStatusCode ??
-          500;
-        throw new GeminiEmbeddingError(
-          status,
-          err instanceof Error ? err.message : String(err),
-        );
-      }
-    }),
-  );
+  try {
+    // The installed @google/genai SDK accepts multiple contents here. In API
+    // key mode it routes to batchEmbedContents; for Vertex, gemini-embedding-001
+    // is handled via the predict path and still supports batched inputs.
+    const response = await client.models.embedContent({
+      model: modelId,
+      contents: texts,
+      config: dimensions ? { outputDimensionality: dimensions } : undefined,
+    });
+    const embeddings = response.embeddings?.map((item) => item.values ?? []);
 
-  return {
-    object: "list",
-    data: embeddings.map((embedding, index) => ({
-      object: "embedding",
-      embedding,
-      index,
-    })),
-    model,
-    usage: { prompt_tokens: 0, total_tokens: 0 },
-  };
+    if (!embeddings?.length || embeddings.length !== texts.length) {
+      throw new GeminiEmbeddingError(
+        500,
+        "Gemini embedding response did not include embeddings for each input",
+      );
+    }
+
+    if (embeddings.some((embedding) => embedding.length === 0)) {
+      throw new GeminiEmbeddingError(
+        500,
+        "Gemini embedding response did not include embedding values",
+      );
+    }
+
+    return {
+      object: "list",
+      data: embeddings.map((embedding, index) => ({
+        object: "embedding",
+        embedding,
+        index,
+      })),
+      model,
+      usage: { prompt_tokens: 0, total_tokens: 0 },
+    };
+  } catch (err: unknown) {
+    if (err instanceof GeminiEmbeddingError) {
+      throw err;
+    }
+    const status =
+      (err as { status?: number; httpStatusCode?: number }).status ??
+      (err as { status?: number; httpStatusCode?: number }).httpStatusCode ??
+      500;
+    const message =
+      (err as { message?: string }).message ??
+      (err instanceof Error ? err.message : String(err));
+    throw new GeminiEmbeddingError(
+      status,
+      message,
+    );
+  }
 }

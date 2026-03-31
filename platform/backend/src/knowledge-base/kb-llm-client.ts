@@ -53,6 +53,10 @@ export async function resolveEmbeddingConfig(
     apiKey: resolved.apiKey,
     baseUrl: resolved.baseUrl,
     model: org.embeddingModel,
+    /**
+     * TODO: Temporary transition. Prefer per-model dimensions. Fall back to the deprecated org-level
+     * setting during the rollout, then to the historical 1536 default.
+     */
     dimensions: model?.embeddingDimensions ?? org.embeddingDimensions ?? 1536,
     provider: resolved.provider,
   };

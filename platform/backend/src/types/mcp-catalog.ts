@@ -106,7 +106,7 @@ export const SelectInternalMcpCatalogSchema = createSelectSchema(
   authorName: z.string().nullable().optional(),
 });
 
-export const InsertInternalMcpCatalogSchema = createInsertSchema(
+const InsertInternalMcpCatalogSchemaBase = createInsertSchema(
   schema.internalMcpCatalogTable,
 )
   .extend({
@@ -133,10 +133,14 @@ export const InsertInternalMcpCatalogSchema = createInsertSchema(
     updatedAt: true,
     organizationId: true,
     authorId: true,
-  })
-  .superRefine(validateEnterpriseManagedTransportConfig);
+  });
 
-export const UpdateInternalMcpCatalogSchema = createUpdateSchema(
+export const InsertInternalMcpCatalogSchema =
+  InsertInternalMcpCatalogSchemaBase.superRefine(
+    validateEnterpriseManagedTransportConfig,
+  );
+
+const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
   schema.internalMcpCatalogTable,
 )
   .extend({
@@ -162,8 +166,17 @@ export const UpdateInternalMcpCatalogSchema = createUpdateSchema(
     updatedAt: true,
     organizationId: true,
     authorId: true,
-  })
-  .superRefine(validateEnterpriseManagedTransportConfig);
+  });
+
+export const UpdateInternalMcpCatalogSchema =
+  UpdateInternalMcpCatalogSchemaBase.superRefine(
+    validateEnterpriseManagedTransportConfig,
+  );
+
+export const PartialUpdateInternalMcpCatalogSchema =
+  UpdateInternalMcpCatalogSchemaBase.partial().superRefine(
+    validateEnterpriseManagedTransportConfig,
+  );
 
 export type InternalMcpCatalogServerType = z.infer<
   typeof InternalMcpCatalogServerTypeSchema

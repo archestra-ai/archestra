@@ -1,4 +1,4 @@
-import type { SupportedProvider } from "@shared";
+import type { SupportedEmbeddingDimension, SupportedProvider } from "@shared";
 import {
   type ModelsDevApiResponse,
   modelsDevClient,
@@ -207,35 +207,34 @@ export function buildModelsToUpsert(params: {
       supportsToolCalling: capabilities.supportsToolCalling,
       promptPricePerToken: capabilities.promptPricePerToken,
       completionPricePerToken: capabilities.completionPricePerToken,
-      isEmbedding: inferIsEmbedding(model.id, provider),
+      embeddingDimensions: inferEmbeddingDimensions(model.id, provider),
       lastSyncedAt: new Date(),
     };
   });
 }
 
 /**
- * Best-effort inference of whether a model is an embedding model, based on its
- * name/ID. This is used during model sync as the default value; users can
- * override it manually via the model edit dialog.
- *
- * Rules (in priority order):
- * - OpenAI: model ID starts with "text-embedding"
- * - Gemini: model ID contains "embedding"
- * - Ollama / generic: model ID contains "embed" (covers nomic-embed-text, etc.)
+ * Best-effort inference of embedding dimensions for known models.
+ * Unknown models return null and can be configured manually in the model editor.
  */
-export function inferIsEmbedding(
+export function inferEmbeddingDimensions(
   modelId: string,
   provider: SupportedProvider,
-): boolean {
+): SupportedEmbeddingDimension | null {
   const id = modelId.toLowerCase();
-  if (provider === "openai") {
-    return id.startsWith("text-embedding");
+  if (provider === "openai" && id === "text-embedding-3-small") {
+    return 1536;
   }
-  if (provider === "gemini") {
-    return id.includes("embedding");
+  if (provider === "openai" && id === "text-embedding-3-large") {
+    return 1536;
   }
-  // Generic fallback: catches "nomic-embed-text", "mxbai-embed-large", etc.
-  return id.includes("embed");
+  if (provider === "gemini" && id === "gemini-embedding-001") {
+    return 3072;
+  }
+  if (id === "nomic-embed-text") {
+    return 768;
+  }
+  return null;
 }
 
 export function resolveModelCapabilities(params: {

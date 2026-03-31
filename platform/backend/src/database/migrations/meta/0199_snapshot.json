@@ -1,5 +1,5 @@
 {
-  "id": "207aee27-5992-42df-8719-996e39da12ed",
+  "id": "ef0aa632-050a-4a88-89c8-c5f2748b2869",
   "prevId": "a546cc34-9113-476f-904d-50f943151563",
   "version": "7",
   "dialect": "postgresql",
@@ -5027,12 +5027,11 @@
           "notNull": true,
           "default": false
         },
-        "is_embedding": {
-          "name": "is_embedding",
-          "type": "boolean",
+        "embedding_dimensions": {
+          "name": "embedding_dimensions",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": true,
-          "default": false
+          "notNull": false
         },
         "discovered_via_llm_proxy": {
           "name": "discovered_via_llm_proxy",

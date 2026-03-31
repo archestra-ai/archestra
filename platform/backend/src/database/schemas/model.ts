@@ -1,4 +1,4 @@
-import type { SupportedProvider } from "@shared";
+import type { SupportedEmbeddingDimension, SupportedProvider } from "@shared";
 import {
   boolean,
   index,
@@ -77,10 +77,12 @@ const modelsTable = pgTable(
     ignored: boolean("ignored").notNull().default(false),
 
     /**
-     * Whether this model is an embedding model (i.e., supports vector embedding generation).
-     * Auto-inferred from model name/id during sync; can be overridden manually.
+     * Embedding dimension metadata. When non-null, the model is treated as an
+     * embedding model and can be selected for knowledge base embeddings.
      */
-    isEmbedding: boolean("is_embedding").notNull().default(false),
+    embeddingDimensions: integer(
+      "embedding_dimensions",
+    ).$type<SupportedEmbeddingDimension>(),
 
     /** Whether this model was discovered via an LLM Proxy request (ensureModelExists).
      * Models with this flag are preserved even without API key links,

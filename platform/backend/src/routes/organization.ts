@@ -20,6 +20,7 @@ import {
   LlmProviderApiKeyModel,
   McpToolCallModel,
   MemberModel,
+  ModelModel,
   OrganizationModel,
   ToolModel,
   UserModel,
@@ -202,9 +203,10 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, body }, reply) => {
+      const currentOrg = await OrganizationModel.getById(organizationId);
+
       // Embedding model is locked once both key and model have been saved
       if (body.embeddingModel) {
-        const currentOrg = await OrganizationModel.getById(organizationId);
         if (
           currentOrg?.embeddingChatApiKeyId &&
           currentOrg?.embeddingModel &&
@@ -224,6 +226,39 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
         if (!chatApiKey) {
           throw new ApiError(404, "Embedding API key not found");
+        }
+      }
+
+      const shouldValidateEmbeddingSelection =
+        body.embeddingChatApiKeyId !== undefined ||
+        body.embeddingModel !== undefined;
+      const effectiveEmbeddingKeyId =
+        body.embeddingChatApiKeyId ?? currentOrg?.embeddingChatApiKeyId ?? null;
+      const effectiveEmbeddingModel =
+        body.embeddingModel ?? currentOrg?.embeddingModel ?? null;
+
+      if (
+        shouldValidateEmbeddingSelection &&
+        effectiveEmbeddingKeyId &&
+        effectiveEmbeddingModel
+      ) {
+        const resolved = await resolveApiKeyFromChatApiKey(
+          effectiveEmbeddingKeyId,
+        );
+        if (!resolved) {
+          throw new ApiError(400, "Could not resolve embedding API key");
+        }
+
+        const model = await ModelModel.findByProviderAndModelId(
+          resolved.provider,
+          effectiveEmbeddingModel,
+        );
+
+        if (model?.embeddingDimensions === null || !model) {
+          throw new ApiError(
+            400,
+            "Embedding model must be marked as an embedding model with configured dimensions in LLM Providers > Models.",
+          );
         }
       }
 

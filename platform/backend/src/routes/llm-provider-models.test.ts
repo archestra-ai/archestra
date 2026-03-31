@@ -145,6 +145,77 @@ describe("chat model routes", () => {
     ]);
   });
 
+  test("GET /api/llm-models/available?isEmbedding=true only returns embedding models with configured dimensions", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "gemini",
+      scope: "personal",
+      userId: user.id,
+    });
+
+    const configuredEmbeddingModel = await ModelModel.create({
+      externalId: "gemini/gemini-embedding-001",
+      provider: "gemini",
+      modelId: "gemini-embedding-001",
+      description: "Gemini Embedding 001",
+      contextLength: null,
+      inputModalities: ["text"],
+      outputModalities: [],
+      supportsToolCalling: false,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      ignored: false,
+      embeddingDimensions: 3072,
+      lastSyncedAt: new Date(),
+    });
+    const incompleteEmbeddingModel = await ModelModel.create({
+      externalId: "gemini/custom-embed-v2",
+      provider: "gemini",
+      modelId: "custom-embed-v2",
+      description: "Custom Embed V2",
+      contextLength: null,
+      inputModalities: ["text"],
+      outputModalities: [],
+      supportsToolCalling: false,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      ignored: false,
+      embeddingDimensions: null,
+      lastSyncedAt: new Date(),
+    });
+
+    await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+      apiKey.id,
+      [
+        {
+          id: configuredEmbeddingModel.id,
+          modelId: configuredEmbeddingModel.modelId,
+        },
+        {
+          id: incompleteEmbeddingModel.id,
+          modelId: incompleteEmbeddingModel.modelId,
+        },
+      ],
+      "gemini",
+    );
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/llm-models/available?apiKeyId=${apiKey.id}&isEmbedding=true`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual([
+      expect.objectContaining({
+        id: "gemini-embedding-001",
+        embeddingDimensions: 3072,
+      }),
+    ]);
+  });
+
   test("syncModelsForVisibleApiKeys syncs visible keys and preserves baseUrl", async ({
     makeSecret,
   }) => {

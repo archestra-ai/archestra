@@ -1,5 +1,8 @@
 import { vi } from "vitest";
 import type * as originalConfigModule from "@/config";
+import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
+import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
+import ModelModel from "@/models/model";
 import ToolModel from "@/models/tool";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -350,6 +353,100 @@ describe("organization routes", () => {
       const body = response.json();
       expect(body.appName).toBe("Persistence Test");
       expect(body.footerText).toBe("Persistent Footer");
+    });
+  });
+
+  describe("PATCH /api/organization/knowledge-settings", () => {
+    test("rejects embedding models that are missing configured dimensions", async ({
+      makeSecret,
+    }) => {
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const apiKey = await LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: secret.id,
+        name: "Embedding Key",
+        provider: "gemini",
+        scope: "personal",
+        userId: user.id,
+      });
+      const model = await ModelModel.create({
+        externalId: "gemini/custom-embed-v2",
+        provider: "gemini",
+        modelId: "custom-embed-v2",
+        description: "Custom Embed V2",
+        contextLength: null,
+        inputModalities: ["text"],
+        outputModalities: [],
+        supportsToolCalling: false,
+        promptPricePerToken: null,
+        completionPricePerToken: null,
+        embeddingDimensions: null,
+        lastSyncedAt: new Date(),
+      });
+
+      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+        apiKey.id,
+        [{ id: model.id, modelId: model.modelId }],
+        "gemini",
+      );
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: {
+          embeddingChatApiKeyId: apiKey.id,
+          embeddingModel: model.modelId,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain("configured dimensions");
+    });
+
+    test("accepts embedding models that are marked with dimensions", async ({
+      makeSecret,
+    }) => {
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const apiKey = await LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: secret.id,
+        name: "Embedding Key",
+        provider: "gemini",
+        scope: "personal",
+        userId: user.id,
+      });
+      const model = await ModelModel.create({
+        externalId: "gemini/gemini-embedding-001",
+        provider: "gemini",
+        modelId: "gemini-embedding-001",
+        description: "Gemini Embedding 001",
+        contextLength: null,
+        inputModalities: ["text"],
+        outputModalities: [],
+        supportsToolCalling: false,
+        promptPricePerToken: null,
+        completionPricePerToken: null,
+        embeddingDimensions: 3072,
+        lastSyncedAt: new Date(),
+      });
+
+      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+        apiKey.id,
+        [{ id: model.id, modelId: model.modelId }],
+        "gemini",
+      );
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: {
+          embeddingChatApiKeyId: apiKey.id,
+          embeddingModel: model.modelId,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().embeddingModel).toBe(model.modelId);
     });
   });
 });

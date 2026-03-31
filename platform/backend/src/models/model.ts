@@ -172,6 +172,7 @@ class ModelModel {
           supportsToolCalling: sql`COALESCE(${schema.modelsTable.supportsToolCalling}, excluded.supports_tool_calling)`,
           promptPricePerToken: data.promptPricePerToken,
           completionPricePerToken: data.completionPricePerToken,
+          embeddingDimensions: sql`COALESCE(${schema.modelsTable.embeddingDimensions}, excluded.embedding_dimensions)`,
           lastSyncedAt: new Date(),
           updatedAt: new Date(),
           // NOTE: customPricePerMillionInput/Output intentionally NOT updated
@@ -233,7 +234,7 @@ class ModelModel {
               supportsToolCalling: sql`COALESCE(${schema.modelsTable.supportsToolCalling}, excluded.supports_tool_calling)`,
               promptPricePerToken: sql`excluded.prompt_price_per_token`,
               completionPricePerToken: sql`excluded.completion_price_per_token`,
-              isEmbedding: sql`COALESCE(${schema.modelsTable.isEmbedding}, excluded.is_embedding)`,
+              embeddingDimensions: sql`COALESCE(${schema.modelsTable.embeddingDimensions}, excluded.embedding_dimensions)`,
               lastSyncedAt: sql`excluded.last_synced_at`,
               updatedAt: sql`NOW()`,
               // NOTE: customPricePerMillionInput/Output intentionally NOT updated
@@ -300,7 +301,7 @@ class ModelModel {
               supportsToolCalling: sql`excluded.supports_tool_calling`,
               promptPricePerToken: sql`excluded.prompt_price_per_token`,
               completionPricePerToken: sql`excluded.completion_price_per_token`,
-              isEmbedding: sql`excluded.is_embedding`,
+              embeddingDimensions: sql`excluded.embedding_dimensions`,
               customPricePerMillionInput: sql`NULL`,
               customPricePerMillionOutput: sql`NULL`,
               lastSyncedAt: sql`excluded.last_synced_at`,
@@ -404,8 +405,8 @@ class ModelModel {
     if (data.outputModalities !== undefined) {
       set.outputModalities = data.outputModalities;
     }
-    if (data.isEmbedding !== undefined) {
-      set.isEmbedding = data.isEmbedding;
+    if (data.embeddingDimensions !== undefined) {
+      set.embeddingDimensions = data.embeddingDimensions;
     }
 
     const [result] = await db
@@ -562,7 +563,7 @@ class ModelModel {
       return false;
     }
 
-    if (model.isEmbedding) {
+    if (model.embeddingDimensions !== null) {
       return false;
     }
 

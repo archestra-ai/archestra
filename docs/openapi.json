@@ -103269,8 +103269,28 @@
                       "isFastest": {
                         "type": "boolean"
                       },
-                      "isEmbedding": {
-                        "type": "boolean"
+                      "embeddingDimensions": {
+                        "nullable": true,
+                        "anyOf": [
+                          {
+                            "type": "number",
+                            "enum": [
+                              3072
+                            ]
+                          },
+                          {
+                            "type": "number",
+                            "enum": [
+                              1536
+                            ]
+                          },
+                          {
+                            "type": "number",
+                            "enum": [
+                              768
+                            ]
+                          }
+                        ]
                       }
                     },
                     "required": [
@@ -103857,8 +103877,28 @@
                       "ignored": {
                         "type": "boolean"
                       },
-                      "isEmbedding": {
-                        "type": "boolean"
+                      "embeddingDimensions": {
+                        "nullable": true,
+                        "anyOf": [
+                          {
+                            "type": "number",
+                            "enum": [
+                              3072
+                            ]
+                          },
+                          {
+                            "type": "number",
+                            "enum": [
+                              1536
+                            ]
+                          },
+                          {
+                            "type": "number",
+                            "enum": [
+                              768
+                            ]
+                          }
+                        ]
                       },
                       "discoveredViaLlmProxy": {
                         "type": "boolean"
@@ -103949,7 +103989,7 @@
                       "customPricePerMillionInput",
                       "customPricePerMillionOutput",
                       "ignored",
-                      "isEmbedding",
+                      "embeddingDimensions",
                       "discoveredViaLlmProxy",
                       "lastSyncedAt",
                       "createdAt",
@@ -104212,8 +104252,28 @@
                   "ignored": {
                     "type": "boolean"
                   },
-                  "isEmbedding": {
-                    "type": "boolean"
+                  "embeddingDimensions": {
+                    "nullable": true,
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "enum": [
+                          3072
+                        ]
+                      },
+                      {
+                        "type": "number",
+                        "enum": [
+                          1536
+                        ]
+                      },
+                      {
+                        "type": "number",
+                        "enum": [
+                          768
+                        ]
+                      }
+                    ]
                   },
                   "inputModalities": {
                     "nullable": true,
@@ -104359,8 +104419,28 @@
                     "ignored": {
                       "type": "boolean"
                     },
-                    "isEmbedding": {
-                      "type": "boolean"
+                    "embeddingDimensions": {
+                      "nullable": true,
+                      "anyOf": [
+                        {
+                          "type": "number",
+                          "enum": [
+                            3072
+                          ]
+                        },
+                        {
+                          "type": "number",
+                          "enum": [
+                            1536
+                          ]
+                        },
+                        {
+                          "type": "number",
+                          "enum": [
+                            768
+                          ]
+                        }
+                      ]
                     },
                     "discoveredViaLlmProxy": {
                       "type": "boolean"
@@ -104393,7 +104473,7 @@
                     "customPricePerMillionInput",
                     "customPricePerMillionOutput",
                     "ignored",
-                    "isEmbedding",
+                    "embeddingDimensions",
                     "discoveredViaLlmProxy",
                     "lastSyncedAt",
                     "createdAt",
@@ -126786,28 +126866,6 @@
                   "embeddingModel": {
                     "type": "string",
                     "minLength": 1
-                  },
-                  "embeddingDimensions": {
-                    "anyOf": [
-                      {
-                        "type": "number",
-                        "enum": [
-                          3072
-                        ]
-                      },
-                      {
-                        "type": "number",
-                        "enum": [
-                          1536
-                        ]
-                      },
-                      {
-                        "type": "number",
-                        "enum": [
-                          768
-                        ]
-                      }
-                    ]
                   },
                   "embeddingChatApiKeyId": {
                     "nullable": true,

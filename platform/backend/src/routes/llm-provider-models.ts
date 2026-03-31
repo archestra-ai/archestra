@@ -1,4 +1,5 @@
 import {
+  EmbeddingDimensionsSchema,
   PROVIDERS_WITH_OPTIONAL_API_KEY,
   RouteId,
   SupportedProvidersSchema,
@@ -33,7 +34,7 @@ const LlmModelSchema = z.object({
   capabilities: ModelCapabilitiesSchema.optional(),
   isBest: z.boolean().optional(),
   isFastest: z.boolean().optional(),
-  isEmbedding: z.boolean().optional(),
+  embeddingDimensions: EmbeddingDimensionsSchema.nullable().optional(),
 });
 
 const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -116,8 +117,10 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Filter by embedding status if requested
       if (isEmbedding !== undefined) {
-        filteredModels = filteredModels.filter(
-          ({ model }) => model.isEmbedding === isEmbedding,
+        filteredModels = filteredModels.filter(({ model }) =>
+          isEmbedding
+            ? model.embeddingDimensions !== null
+            : model.embeddingDimensions === null,
         );
       }
 
@@ -132,7 +135,7 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           capabilities: ModelModel.toCapabilities(model),
           isBest,
           isFastest,
-          isEmbedding: model.isEmbedding,
+          embeddingDimensions: model.embeddingDimensions,
         }));
 
       logger.info(

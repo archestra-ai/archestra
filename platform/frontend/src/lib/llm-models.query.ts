@@ -50,7 +50,7 @@ export function useLlmModels(params?: LlmModelsParams) {
 
 /**
  * Fetch embedding models for a specific API key.
- * Returns only models marked as isEmbedding=true for the given API key.
+ * Returns only models with configured embedding dimensions for the given API key.
  */
 export function useEmbeddingModels(apiKeyId: string | null) {
   return useQuery({

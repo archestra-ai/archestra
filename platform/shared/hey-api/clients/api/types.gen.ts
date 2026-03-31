@@ -27540,7 +27540,7 @@ export type GetLlmModelsResponses = {
         };
         isBest?: boolean;
         isFastest?: boolean;
-        isEmbedding?: boolean;
+        embeddingDimensions?: 3072 | 1536 | 768 | null;
     }>;
 };
 
@@ -27708,7 +27708,7 @@ export type GetModelsWithApiKeysResponses = {
         customPricePerMillionInput: string | null;
         customPricePerMillionOutput: string | null;
         ignored: boolean;
-        isEmbedding: boolean;
+        embeddingDimensions: 3072 | 1536 | 768 | null;
         discoveredViaLlmProxy: boolean;
         lastSyncedAt: string;
         createdAt: string;
@@ -27736,7 +27736,7 @@ export type UpdateModelData = {
         customPricePerMillionInput?: string | null;
         customPricePerMillionOutput?: string | null;
         ignored?: boolean;
-        isEmbedding?: boolean;
+        embeddingDimensions?: 3072 | 1536 | 768 | null;
         inputModalities?: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
         outputModalities?: Array<'text' | 'image' | 'audio'> | null;
     };
@@ -27825,7 +27825,7 @@ export type UpdateModelResponses = {
         customPricePerMillionInput: string | null;
         customPricePerMillionOutput: string | null;
         ignored: boolean;
-        isEmbedding: boolean;
+        embeddingDimensions: 3072 | 1536 | 768 | null;
         discoveredViaLlmProxy: boolean;
         lastSyncedAt: string;
         createdAt: string;
@@ -33754,7 +33754,6 @@ export type UpdateAgentSettingsResponse = UpdateAgentSettingsResponses[keyof Upd
 export type UpdateKnowledgeSettingsData = {
     body: {
         embeddingModel?: string;
-        embeddingDimensions?: 3072 | 1536 | 768;
         embeddingChatApiKeyId?: string | null;
         rerankerChatApiKeyId?: string | null;
         rerankerModel?: string | null;

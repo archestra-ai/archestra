@@ -1,8 +1,12 @@
 import type { EmbeddingModel, SupportedProvider } from "@shared";
-import { DEFAULT_PROVIDER_BASE_URLS, getEmbeddingDimensions } from "@shared";
+import { DEFAULT_PROVIDER_BASE_URLS } from "@shared";
 import { createDirectLLMModel, type LLMModel } from "@/clients/llm-client";
 import logger from "@/logging";
-import { LlmProviderApiKeyModel, OrganizationModel } from "@/models";
+import {
+  LlmProviderApiKeyModel,
+  ModelModel,
+  OrganizationModel,
+} from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 
 export interface EmbeddingConfig {
@@ -40,12 +44,16 @@ export async function resolveEmbeddingConfig(
     return null;
   }
 
+  const model = await ModelModel.findByProviderAndModelId(
+    resolved.provider,
+    org.embeddingModel,
+  );
+
   return {
     apiKey: resolved.apiKey,
     baseUrl: resolved.baseUrl,
     model: org.embeddingModel,
-    dimensions:
-      org.embeddingDimensions ?? getEmbeddingDimensions(org.embeddingModel),
+    dimensions: model?.embeddingDimensions ?? org.embeddingDimensions ?? 1536,
     provider: resolved.provider,
   };
 }

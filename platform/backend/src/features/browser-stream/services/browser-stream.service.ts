@@ -3,6 +3,7 @@ import {
   DEFAULT_BROWSER_PREVIEW_VIEWPORT_HEIGHT,
   DEFAULT_BROWSER_PREVIEW_VIEWPORT_WIDTH,
   isBrowserMcpTool,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
   PLAYWRIGHT_MCP_CATALOG_ID,
   TimeInMs,
 } from "@shared";
@@ -246,7 +247,7 @@ export class BrowserStreamService {
 
   /**
    * Find the Playwright browser navigate tool for an agent
-   * Matches tools like "browser_navigate" or "playwright__browser_navigate"
+   * Matches tools like "browser_navigate" or "playwright${MCP_SERVER_TOOL_NAME_SEPARATOR}browser_navigate"
    * but NOT "browser_navigate_back" or "browser_navigate_forward"
    */
   private async findNavigateTool(agentId: string): Promise<string | null> {
@@ -255,7 +256,8 @@ export class BrowserStreamService {
       // "browser_navigate" and "prefix__browser_navigate")
       if (toolName.endsWith("browser_navigate")) return true;
       // Check for __navigate suffix (older naming convention)
-      if (toolName.endsWith("__navigate")) return true;
+      if (toolName.endsWith(`${MCP_SERVER_TOOL_NAME_SEPARATOR}navigate`))
+        return true;
       // As a fallback, check for playwright navigate but exclude back/forward
       if (
         toolName.includes("playwright") &&

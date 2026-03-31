@@ -12,7 +12,10 @@
  * no value and only burns tokens on future requests.
  */
 
-import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
+import {
+  isLargeResultBrowserMcpTool,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
+} from "@shared";
 import logger from "@/logging";
 import type { ChatMessage, ChatMessagePart } from "@/types";
 import {
@@ -22,24 +25,6 @@ import {
 
 const IMAGE_STRIPPED_PLACEHOLDER = "[Image data stripped to save context]";
 
-// Browser tools that produce large outputs to be stripped
-// These tools return massive page snapshots (YAML accessibility trees)
-const BROWSER_TOOLS_TO_STRIP = [
-  "browser_snapshot",
-  "browser_navigate",
-  "browser_take_screenshot",
-  "browser_tabs", // Returns page snapshot for current tab
-  "browser_click",
-  "browser_type",
-  "browser_select_option",
-  "browser_hover",
-  "browser_drag",
-  "browser_scroll",
-  "browser_wait_for",
-  "browser_press_key",
-  "browser_evaluate",
-];
-
 // Size threshold - results larger than this will be stripped
 const BROWSER_RESULT_SIZE_THRESHOLD = 2000;
 
@@ -47,13 +32,7 @@ const BROWSER_RESULT_SIZE_THRESHOLD = 2000;
  * Check if a tool name is a browser tool that should have large results stripped
  */
 function isBrowserToolToStrip(toolName: string): boolean {
-  const normalizedName = toolName.toLowerCase();
-  return BROWSER_TOOLS_TO_STRIP.some(
-    (pattern) =>
-      normalizedName === pattern ||
-      normalizedName.endsWith(`__${pattern}`) ||
-      normalizedName.includes(`__${pattern}`),
-  );
+  return isLargeResultBrowserMcpTool(toolName);
 }
 
 /**

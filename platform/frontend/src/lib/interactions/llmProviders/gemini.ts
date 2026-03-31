@@ -1,4 +1,8 @@
-import type { archestraApiTypes } from "@shared";
+import {
+  ARCHESTRA_TOOL_NAME_TAG,
+  type archestraApiTypes,
+  parseArchestraToolRefusal,
+} from "@shared";
 import type { PartialUIMessage } from "@/components/message-thread";
 import type { DualLlmAnalysis, Interaction, InteractionUtils } from "./common";
 
@@ -171,9 +175,7 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
       if (message.role === "model" && Array.isArray(message.parts)) {
         for (const part of message.parts) {
           if (hasText(part) && part.text) {
-            const toolName = part.text.match(
-              /<archestra-tool-name>(.*?)<\/archestra-tool-name>/,
-            )?.[1];
+            const toolName = parseArchestraToolRefusal(part.text).toolName;
             if (toolName) {
               toolsRefused.add(toolName);
             }
@@ -188,9 +190,7 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
         if (candidate.content?.parts) {
           for (const part of candidate.content.parts) {
             if (hasText(part) && part.text) {
-              const toolName = part.text.match(
-                /<archestra-tool-name>(.*?)<\/archestra-tool-name>/,
-              )?.[1];
+              const toolName = parseArchestraToolRefusal(part.text).toolName;
               if (toolName) {
                 toolsRefused.add(toolName);
               }
@@ -230,7 +230,7 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
       if (message.role === "model" && Array.isArray(message.parts)) {
         for (const part of message.parts) {
           if (hasText(part) && part.text) {
-            if (part.text.includes("<archestra-tool-name>")) {
+            if (part.text.includes(`<${ARCHESTRA_TOOL_NAME_TAG}>`)) {
               count++;
             }
           }
@@ -244,7 +244,7 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
         if (candidate.content?.parts) {
           for (const part of candidate.content.parts) {
             if (hasText(part) && part.text) {
-              if (part.text.includes("<archestra-tool-name>")) {
+              if (part.text.includes(`<${ARCHESTRA_TOOL_NAME_TAG}>`)) {
                 count++;
               }
             }

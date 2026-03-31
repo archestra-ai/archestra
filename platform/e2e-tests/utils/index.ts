@@ -1,6 +1,7 @@
 export * from "./auth";
 export * from "./chat-ui";
 export * from "./dialogs";
+export * from "./http";
 export * from "./llm-provider-api-keys";
 export * from "./mcp-catalog";
 export * from "./mcp-gateway";

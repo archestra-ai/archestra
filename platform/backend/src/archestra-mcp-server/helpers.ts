@@ -39,22 +39,8 @@ export interface ToolAssignmentInput {
    * When true, credentials and execution target are resolved at tool call time.
    */
   resolveAtCallTime?: boolean;
-  /**
-   * Compatibility alias for `resolveAtCallTime`.
-   * Keep using `resolveAtCallTime` in new code; this alias exists so older
-   * callers do not break.
-   */
-  useDynamicTeamCredential?: boolean;
-  /**
-   * Explicit remote MCP installation to use as the credential source.
-   * This pins the tool to credentials from one installed MCP server.
-   */
-  credentialSourceMcpServerId?: string | null;
-  /**
-   * Explicit local MCP installation to use as the execution target.
-   * This pins the tool to run on one installed MCP server.
-   */
-  executionSourceMcpServerId?: string | null;
+  /** Static assignments pin the tool to one installed MCP server. */
+  mcpServerId?: string | null;
 }
 export type ToolAssignmentResult = {
   toolId: string;
@@ -113,11 +99,7 @@ export async function assignToolAssignments(
         agentId,
         toolId: assignment.toolId,
         resolveAtCallTime: assignment.resolveAtCallTime,
-        credentialSourceMcpServerId: assignment.credentialSourceMcpServerId,
-        executionSourceMcpServerId: assignment.executionSourceMcpServerId,
-        // This compatibility field is only still relevant for older REST/API
-        // callers. The Archestra MCP tool schemas now expose resolveAtCallTime.
-        useDynamicTeamCredential: assignment.useDynamicTeamCredential,
+        mcpServerId: assignment.mcpServerId,
         preFetchedData,
       });
 
@@ -407,10 +389,7 @@ async function buildAgentToolAssignmentPrefetch(params: {
   const uniqueMcpServerIds = [
     ...new Set(
       assignments
-        .flatMap((assignment) => [
-          assignment.credentialSourceMcpServerId,
-          assignment.executionSourceMcpServerId,
-        ])
+        .map((assignment) => assignment.mcpServerId)
         .filter((id): id is string => id != null),
     ),
   ];

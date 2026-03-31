@@ -301,8 +301,7 @@ async function validateVirtualKeyScope(params: {
   userTeamIds: string[];
   isAdmin: boolean;
 }): Promise<void> {
-  const { scope, teamIds, userId, organizationId, userTeamIds, isAdmin } =
-    params;
+  const { scope, teamIds, userTeamIds, isAdmin } = params;
 
   if (scope !== "team" && teamIds.length > 0) {
     throw new ApiError(400, "Teams can only be assigned to team-scoped keys");

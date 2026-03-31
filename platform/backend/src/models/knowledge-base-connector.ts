@@ -231,11 +231,12 @@ class KnowledgeBaseConnectorModel {
   }
 
   static async delete(id: string): Promise<boolean> {
-    const result = await db
+    const rows = await db
       .delete(schema.knowledgeBaseConnectorsTable)
-      .where(eq(schema.knowledgeBaseConnectorsTable.id, id));
+      .where(eq(schema.knowledgeBaseConnectorsTable.id, id))
+      .returning({ id: schema.knowledgeBaseConnectorsTable.id });
 
-    return result.rowCount !== null && result.rowCount > 0;
+    return rows.length > 0;
   }
 
   static async assignToKnowledgeBase(
@@ -252,7 +253,7 @@ class KnowledgeBaseConnectorModel {
     connectorId: string,
     knowledgeBaseId: string,
   ): Promise<boolean> {
-    const result = await db
+    const rows = await db
       .delete(schema.knowledgeBaseConnectorAssignmentsTable)
       .where(
         and(
@@ -265,9 +266,12 @@ class KnowledgeBaseConnectorModel {
             knowledgeBaseId,
           ),
         ),
-      );
+      )
+      .returning({
+        connectorId: schema.knowledgeBaseConnectorAssignmentsTable.connectorId,
+      });
 
-    return result.rowCount !== null && result.rowCount > 0;
+    return rows.length > 0;
   }
 
   static async getKnowledgeBaseIds(connectorId: string): Promise<string[]> {

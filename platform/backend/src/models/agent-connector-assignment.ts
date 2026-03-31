@@ -34,24 +34,30 @@ class AgentConnectorAssignmentModel {
     agentId: string,
     connectorId: string,
   ): Promise<boolean> {
-    const result = await db
+    const rows = await db
       .delete(schema.agentConnectorAssignmentsTable)
       .where(
         and(
           eq(schema.agentConnectorAssignmentsTable.agentId, agentId),
           eq(schema.agentConnectorAssignmentsTable.connectorId, connectorId),
         ),
-      );
+      )
+      .returning({
+        agentId: schema.agentConnectorAssignmentsTable.agentId,
+      });
 
-    return result.rowCount !== null && result.rowCount > 0;
+    return rows.length > 0;
   }
 
   static async unassignAllFromAgent(agentId: string): Promise<number> {
-    const result = await db
+    const rows = await db
       .delete(schema.agentConnectorAssignmentsTable)
-      .where(eq(schema.agentConnectorAssignmentsTable.agentId, agentId));
+      .where(eq(schema.agentConnectorAssignmentsTable.agentId, agentId))
+      .returning({
+        agentId: schema.agentConnectorAssignmentsTable.agentId,
+      });
 
-    return result.rowCount ?? 0;
+    return rows.length;
   }
 
   static async getConnectorIds(agentId: string): Promise<string[]> {

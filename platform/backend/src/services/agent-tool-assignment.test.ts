@@ -15,6 +15,7 @@ describe("validateCredentialSource", () => {
     makeMcpServer,
     makeMember,
     makeOrganization,
+    makeTool,
     makeUser,
   }) => {
     const organization = await makeOrganization();
@@ -30,6 +31,7 @@ describe("validateCredentialSource", () => {
       scope: "personal",
     });
     const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const tool = await makeTool({ catalogId: catalog.id, name: "remote_tool" });
     const mcpServer = await makeMcpServer({
       ownerId: owner.id,
       catalogId: catalog.id,
@@ -37,7 +39,8 @@ describe("validateCredentialSource", () => {
 
     const result = await validateCredentialSource({
       agentId: agent.id,
-      credentialSourceMcpServerId: mcpServer.id,
+      mcpServerId: mcpServer.id,
+      toolId: tool.id,
     });
 
     expect(result).toEqual({
@@ -65,7 +68,7 @@ describe("validateExecutionSource", () => {
     const result = await validateExecutionSource({
       toolId: tool.id,
       preFetchedTool: tool,
-      executionSourceMcpServerId: "server-1",
+      mcpServerId: "server-1",
       preFetchedServer: {
         id: "server-1",
         catalogId: catalog.id,
@@ -89,7 +92,7 @@ describe("validateExecutionSource", () => {
     const result = await validateExecutionSource({
       toolId: tool.id,
       preFetchedTool: tool,
-      executionSourceMcpServerId: "server-1",
+      mcpServerId: "server-1",
       preFetchedServer: {
         id: "server-1",
         catalogId: otherCatalog.id,
@@ -108,7 +111,7 @@ describe("validateExecutionSource", () => {
 });
 
 describe("validateAssignment late-bound precedence", () => {
-  test("prefers resolveAtCallTime over useDynamicTeamCredential when both are provided", async ({
+  test("prefers explicit credentialResolutionMode over resolveAtCallTime", async ({
     makeAgent,
     makeInternalMcpCatalog,
     makeTool,
@@ -126,10 +129,17 @@ describe("validateAssignment late-bound precedence", () => {
       agentId: agent.id,
       toolId: tool.id,
       resolveAtCallTime: true,
-      useDynamicTeamCredential: false,
+      credentialResolutionMode: "static",
     });
 
-    expect(result).toBeNull();
+    expect(result).toEqual({
+      code: "validation_error",
+      error: {
+        message:
+          "An MCP server installation or non-static credential resolution is required for remote MCP server tools",
+        type: "validation_error",
+      },
+    });
   });
 
   test("defaults late-bound resolution to false when both flags are omitted", async ({
@@ -155,7 +165,7 @@ describe("validateAssignment late-bound precedence", () => {
       code: "validation_error",
       error: {
         message:
-          "Credential source or dynamic team credential is required for remote MCP server tools",
+          "An MCP server installation or non-static credential resolution is required for remote MCP server tools",
         type: "validation_error",
       },
     });
@@ -218,12 +228,12 @@ describe("assignToolToAgent", () => {
     const createResult = await assignToolToAgent({
       agentId: agent.id,
       toolId: tool.id,
-      credentialSourceMcpServerId: firstServer.id,
+      mcpServerId: firstServer.id,
     });
     const updateResult = await assignToolToAgent({
       agentId: agent.id,
       toolId: tool.id,
-      credentialSourceMcpServerId: secondServer.id,
+      mcpServerId: secondServer.id,
     });
 
     expect(createResult).toBeNull();
@@ -239,6 +249,40 @@ describe("assignToolToAgent", () => {
         ),
       );
 
-    expect(assignment?.credentialSourceMcpServerId).toBe(secondServer.id);
+    expect(assignment?.mcpServerId).toBe(secondServer.id);
+  });
+
+  test("persists enterprise-managed mode", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const agent = await makeAgent();
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const tool = await makeTool({
+      name: "enterprise-managed-tool",
+      catalogId: catalog.id,
+    });
+
+    const createResult = await assignToolToAgent({
+      agentId: agent.id,
+      toolId: tool.id,
+      credentialResolutionMode: "enterprise_managed",
+    });
+
+    expect(createResult).toBeNull();
+
+    const [assignment] = await db
+      .select()
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agent.id),
+          eq(schema.agentToolsTable.toolId, tool.id),
+        ),
+      );
+
+    expect(assignment?.credentialResolutionMode).toBe("enterprise_managed");
+    expect(assignment?.credentialResolutionMode).not.toBe("dynamic");
   });
 });

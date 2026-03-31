@@ -4,6 +4,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import db, { schema as dbSchema } from "@/database";
+import { JWT_BEARER_GRANT_TYPE } from "@/services/identity-providers/enterprise-managed/authorization";
 import { UuidIdSchema } from "@/types";
 
 /**
@@ -125,7 +126,11 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         registration_endpoint: `${baseUrl}${OAUTH_ENDPOINTS.register}`,
         jwks_uri: `${baseUrl}${OAUTH_ENDPOINTS.jwks}`,
         response_types_supported: ["code"],
-        grant_types_supported: ["authorization_code", "refresh_token"],
+        grant_types_supported: [
+          "authorization_code",
+          "refresh_token",
+          JWT_BEARER_GRANT_TYPE,
+        ],
         token_endpoint_auth_methods_supported: [
           "client_secret_basic",
           "client_secret_post",

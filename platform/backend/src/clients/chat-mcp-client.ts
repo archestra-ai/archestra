@@ -55,6 +55,7 @@ import {
   ATTR_MCP_IS_ERROR_RESULT,
   startActiveMcpSpan,
 } from "@/observability/tracing";
+import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import type { AgentType, GlobalToolPolicy } from "@/types";
 
 /**
@@ -198,6 +199,7 @@ export const __test = {
   executeMcpTool,
   filterToolsByEnabledIds,
   pingClientWithTimeout,
+  throwIfApprovalRequired,
 };
 
 /**
@@ -432,7 +434,8 @@ export function closeChatMcpClient(
 
 /**
  * Get or create MCP client for the specified agent and user
- * Connects to internal MCP Gateway with team token authentication
+ * Connects to the internal MCP Gateway using either a session-derived external
+ * IdP JWT or the existing internal gateway token fallback.
  *
  * @param agentId - The agent (profile) ID
  * @param userId - The user ID for token selection
@@ -496,10 +499,26 @@ export async function getChatMcpClient(
     "🔄 No cached client found - creating new MCP client for agent/user via gateway",
   );
 
+  const externalIdpToken = await resolveSessionExternalIdpToken({
+    agentId,
+    userId,
+  });
+
   // Reuse pre-resolved token when available to avoid a redundant DB round-trip
   // (getChatMcpTools already calls selectMCPGatewayToken before this).
   let tokenValue: string;
-  if (preResolvedTokenValue) {
+  if (externalIdpToken) {
+    tokenValue = externalIdpToken.rawToken;
+    logger.info(
+      {
+        agentId,
+        userId,
+        identityProviderId: externalIdpToken.identityProviderId,
+        providerId: externalIdpToken.providerId,
+      },
+      "Using session-derived external IdP token for chat MCP client",
+    );
+  } else if (preResolvedTokenValue) {
     tokenValue = preResolvedTokenValue;
   } else {
     const tokenResult = await selectMCPGatewayToken(
@@ -511,7 +530,7 @@ export async function getChatMcpClient(
     if (!tokenResult) {
       logger.error(
         { agentId, userId },
-        "No valid team token available for user - cannot connect to MCP Gateway",
+        "No valid token available for user - cannot connect to MCP Gateway",
       );
       return null;
     }
@@ -693,7 +712,7 @@ export async function getChatMcpTools({
   delegationChain,
   abortSignal,
   user,
-  skipApprovalCheck,
+  blockOnApprovalRequired,
 }: {
   agentName: string;
   agentId: string;
@@ -710,8 +729,8 @@ export async function getChatMcpTools({
   abortSignal?: AbortSignal;
   /** User identity for OTEL span attributes */
   user?: { id: string; email?: string; name?: string };
-  /** Skip needsApproval hook (for A2A/autonomous contexts where no one can approve) */
-  skipApprovalCheck?: boolean;
+  /** Block tool execution when policy is require_approval (for A2A/autonomous contexts where no one can approve) */
+  blockOnApprovalRequired?: boolean;
 }): Promise<Record<string, Tool>> {
   const toolCacheKey = getToolCacheKey(agentId, userId, conversationId);
   const shouldUseToolCache = !abortSignal;
@@ -805,12 +824,10 @@ export async function getChatMcpTools({
       "Fetched tools from MCP Gateway for agent/user",
     );
 
-    // Fetch globalToolPolicy once for approval checks (only when needed)
-    let globalToolPolicy: GlobalToolPolicy = "permissive";
-    if (!skipApprovalCheck) {
-      const org = await OrganizationModel.getById(organizationId);
-      globalToolPolicy = org?.globalToolPolicy ?? "permissive";
-    }
+    // Fetch globalToolPolicy for approval checks (needed for both chat and autonomous contexts).
+    const org = await OrganizationModel.getById(organizationId);
+    const globalToolPolicy: GlobalToolPolicy =
+      org?.globalToolPolicy ?? "permissive";
 
     // Convert MCP tools to AI SDK Tool format
     const aiTools: Record<string, Tool> = {};
@@ -824,7 +841,7 @@ export async function getChatMcpTools({
         aiTools[mcpTool.name] = {
           description: mcpTool.description || `Tool: ${mcpTool.name}`,
           inputSchema: jsonSchema(normalizedSchema),
-          ...(!skipApprovalCheck
+          ...(!blockOnApprovalRequired
             ? {
                 needsApproval: async (args: unknown) => {
                   return ToolInvocationPolicyModel.checkApprovalRequired(
@@ -840,6 +857,14 @@ export async function getChatMcpTools({
               }
             : {}),
           execute: async (args: unknown) => {
+            if (blockOnApprovalRequired) {
+              await throwIfApprovalRequired(
+                mcpTool.name,
+                args,
+                globalToolPolicy,
+              );
+            }
+
             logger.info(
               { agentId, userId, toolName: mcpTool.name, arguments: args },
               "Executing MCP tool from chat (direct)",
@@ -1005,7 +1030,7 @@ export async function getChatMcpTools({
             description:
               agentTool.description || `Agent tool: ${agentTool.name}`,
             inputSchema: jsonSchema(normalizedSchema),
-            ...(!skipApprovalCheck
+            ...(!blockOnApprovalRequired
               ? {
                   needsApproval: async (args: unknown) => {
                     return ToolInvocationPolicyModel.checkApprovalRequired(
@@ -1021,6 +1046,14 @@ export async function getChatMcpTools({
                 }
               : {}),
             execute: async (args: Record<string, unknown>) => {
+              if (blockOnApprovalRequired) {
+                await throwIfApprovalRequired(
+                  agentTool.name,
+                  args,
+                  globalToolPolicy,
+                );
+              }
+
               logger.info(
                 {
                   agentId,
@@ -1419,6 +1452,11 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
       .join("\n");
     return {
       content: extractedError || result.error || "Tool execution failed",
+      _meta: result._meta,
+      structuredContent: result.structuredContent,
+      rawContent: Array.isArray(result.content)
+        ? (result.content as ContentBlock[])
+        : undefined,
     };
   }
 
@@ -1646,6 +1684,28 @@ function isAbortLikeError(error: unknown): boolean {
   }
 
   return error.message.toLowerCase().includes("abort");
+}
+
+async function throwIfApprovalRequired(
+  toolName: string,
+  args: unknown,
+  globalToolPolicy: GlobalToolPolicy,
+): Promise<void> {
+  const requiresApproval =
+    await ToolInvocationPolicyModel.checkApprovalRequired(
+      toolName,
+      isRecord(args) ? args : {},
+      {
+        teamIds: [],
+        externalAgentId: getChatExternalAgentId(),
+      },
+      globalToolPolicy,
+    );
+  if (requiresApproval) {
+    throw new Error(
+      "Tool invocation blocked: this tool requires human approval which is not available in autonomous agent sessions (A2A, Slack, MS Teams, sub-agents)",
+    );
+  }
 }
 
 function reportToolMetrics(params: {

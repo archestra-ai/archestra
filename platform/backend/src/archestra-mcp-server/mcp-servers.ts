@@ -26,7 +26,7 @@ import {
 import {
   InsertInternalMcpCatalogSchema,
   type InternalMcpCatalog,
-  UpdateInternalMcpCatalogSchema,
+  PartialUpdateInternalMcpCatalogSchema,
   UuidIdSchema,
 } from "@/types";
 import {
@@ -653,7 +653,7 @@ async function handleEditMcpDescription(
     }
 
     const validatedUpdate =
-      UpdateInternalMcpCatalogSchema.partial().parse(updateData);
+      PartialUpdateInternalMcpCatalogSchema.parse(updateData);
     const updated = await InternalMcpCatalogModel.update(
       existing.id,
       validatedUpdate,
@@ -772,7 +772,7 @@ async function handleEditMcpConfig(
     }
 
     const validatedUpdate =
-      UpdateInternalMcpCatalogSchema.partial().parse(updateData);
+      PartialUpdateInternalMcpCatalogSchema.parse(updateData);
     const updated = await InternalMcpCatalogModel.update(
       existing.id,
       validatedUpdate,
@@ -1301,6 +1301,6 @@ async function assignDiscoveredToolsToAgents(params: {
   }
 
   await AgentToolModel.bulkCreateForAgentsAndTools(agentIds, toolIds, {
-    executionSourceMcpServerId: mcpServerId,
+    mcpServerId,
   });
 }

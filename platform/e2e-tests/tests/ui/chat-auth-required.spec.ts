@@ -1,7 +1,10 @@
 import { E2eTestId, MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import { MARKETING_TEAM_NAME, WIREMOCK_INTERNAL_URL } from "../../consts";
 import { expect, test } from "../../fixtures";
-import { getTeamByName, LLM_PROVIDER_API_KEYS_ROUTE } from "../api/fixtures";
+import {
+  getTeamByName,
+  LLM_PROVIDER_API_KEYS_AVAILABLE_ROUTE,
+} from "../api/fixtures";
 import { makeApiRequest } from "../api/mcp-gateway-utils";
 
 /**
@@ -13,7 +16,7 @@ import { makeApiRequest } from "../api/mcp-gateway-utils";
  *
  * Flow:
  * 1. Admin installs a remote MCP server (owns the credential)
- * 2. A tool is assigned to an agent with useDynamicTeamCredential: true
+ * 2. A tool is assigned to an agent with resolveAtCallTime enabled
  * 3. Member user (in Marketing Team, but admin is NOT) uses the chat
  * 4. LLM (WireMock) returns a tool_use block for the test tool
  * 5. MCP Gateway resolves dynamic credential -> no match -> auth-required error
@@ -21,7 +24,7 @@ import { makeApiRequest } from "../api/mcp-gateway-utils";
  *
  * Uses static WireMock mappings:
  * - helm/e2e-tests/mappings/mcp-auth-ui-e2e-*.json (mock MCP server)
- * - helm/e2e-tests/mappings/anthropic-chat-auth-ui-e2e-*.json (mock LLM responses)
+ * - helm/e2e-tests/mappings/gemini-chat-auth-ui-e2e-*.json (mock LLM responses)
  */
 test.describe.configure({ mode: "serial" });
 
@@ -94,21 +97,25 @@ test.describe("Chat - Auth Required Tool", () => {
     // 4. Get Marketing Team (admin is NOT a member of this team)
     const marketingTeam = await getTeamByName(request, MARKETING_TEAM_NAME);
 
-    // 5. Create a dedicated Anthropic key for the test agent so the chat uses
-    // the WireMock-backed Anthropic flow without depending on prompt toolbar UI.
-    const chatApiKeyResponse = await makeApiRequest({
+    // 5. Use an already-available Gemini key so the test does not depend on
+    // provider-key creation/validation. The WireMock mappings match the prompt tag.
+    const availableKeysResponse = await makeApiRequest({
       request,
-      method: "post",
-      urlSuffix: LLM_PROVIDER_API_KEYS_ROUTE,
-      data: {
-        name: "Auth UI Test Anthropic Key",
-        provider: "anthropic",
-        apiKey: "test-anthropic-key",
-        scope: "org",
-      },
+      method: "get",
+      urlSuffix: LLM_PROVIDER_API_KEYS_AVAILABLE_ROUTE,
     });
-    const chatApiKey = await chatApiKeyResponse.json();
-    chatApiKeyId = chatApiKey.id;
+    const availableKeys = (await availableKeysResponse.json()) as Array<{
+      id: string;
+      provider: string;
+      bestModelId?: string | null;
+    }>;
+    const geminiKey = availableKeys.find((key) => key.provider === "gemini");
+    if (!geminiKey) {
+      throw new Error(
+        "Expected an available Gemini key for chat auth-required e2e",
+      );
+    }
+    chatApiKeyId = geminiKey.id;
 
     // 6. Create agent and assign Marketing Team so the member can access it.
     const profileResponse = await makeApiRequest({
@@ -121,7 +128,6 @@ test.describe("Chat - Auth Required Tool", () => {
         agentType: "agent",
         scope: "team",
         llmApiKeyId: chatApiKeyId,
-        llmModel: "claude-3-5-sonnet-20241022",
       },
     });
     const profile = await profileResponse.json();
@@ -134,12 +140,12 @@ test.describe("Chat - Auth Required Tool", () => {
       data: { teams: [marketingTeam.id] },
     });
 
-    // 7. Assign tool to agent with useDynamicTeamCredential: true
+    // 7. Assign tool to agent with resolveAtCallTime enabled
     await makeApiRequest({
       request,
       method: "post",
       urlSuffix: `/api/agents/${profileId}/tools/${discoveredTool.id}`,
-      data: { useDynamicTeamCredential: true },
+      data: { resolveAtCallTime: true, credentialResolutionMode: "dynamic" },
     });
   });
 
@@ -150,14 +156,6 @@ test.describe("Chat - Auth Required Tool", () => {
         request,
         method: "delete",
         urlSuffix: `/api/agents/${profileId}`,
-        ignoreStatusCheck: true,
-      }).catch(() => {});
-    }
-    if (chatApiKeyId) {
-      await makeApiRequest({
-        request,
-        method: "delete",
-        urlSuffix: `/api/llm-provider-api-keys/${chatApiKeyId}`,
         ignoreStatusCheck: true,
       }).catch(() => {});
     }
@@ -198,14 +196,16 @@ test.describe("Chat - Auth Required Tool", () => {
     await textarea.fill(testMessage);
     await memberPage.keyboard.press("Enter");
 
-    // The current chat UX surfaces missing-credential failures as a follow-up
-    // assistant message instead of the older auth-required card.
-    const missingCredentialsFollowup = memberPage.getByText(
-      /need to set up credentials first/i,
+    const authRequiredCard = memberPage.getByText(
+      /Authentication Required: No credentials found/i,
     );
+    const setupCredentialsButton = memberPage.getByRole("button", {
+      name: /set up credentials/i,
+    });
 
-    await expect(missingCredentialsFollowup).toBeVisible({
+    await expect(authRequiredCard).toBeVisible({
       timeout: 45_000,
     });
+    await expect(setupCredentialsButton).toBeVisible();
   });
 });

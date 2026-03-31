@@ -203,6 +203,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 **General**:
 
 - **Prefer Classes for Stateful Modules**: When encapsulating functionality that involves state (cached values, intervals, connections, etc.), prefer creating a class over standalone module functions. Export a singleton instance. This improves encapsulation, testability, and makes state management explicit.
+- **Use Shared Cache Utilities**: Do not introduce custom cache implementations with ad hoc `Map`s, manual TTLs, or hand-rolled eviction. Use one of the existing cache primitives in `backend/src/cache-manager.ts` (`cacheManager` or `LRUCacheManager`) unless there is a documented reason not to.
 
   ```typescript
   // Good - class with singleton

@@ -369,6 +369,8 @@ interface JsonSchema {
   required?: string[];
   description?: string;
   enum?: string[];
+  anyOf?: JsonSchema[];
+  oneOf?: JsonSchema[];
 }
 
 function renderToolSchemas(
@@ -411,26 +413,24 @@ function renderToolSchemas(
   return md;
 }
 
-function renderSchemaRows(
+export function renderSchemaRows(
   schema: JsonSchema,
   rootPrefix = "",
 ): { name: string; type: string; required: string; description: string }[] {
-  if (schema.type === "object" && schema.properties) {
+  const objectSchema = getObjectSchema(schema);
+  if (objectSchema?.properties) {
     return renderProperties(
-      schema.properties,
-      new Set(schema.required ?? []),
+      objectSchema.properties,
+      new Set(objectSchema.required ?? []),
       rootPrefix,
     );
   }
 
-  if (
-    schema.type === "array" &&
-    schema.items?.type === "object" &&
-    schema.items.properties
-  ) {
+  const arrayItemObjectSchema = getObjectSchema(schema.items);
+  if (schema.type === "array" && arrayItemObjectSchema?.properties) {
     return renderProperties(
-      schema.items.properties,
-      new Set(schema.items.required ?? []),
+      arrayItemObjectSchema.properties,
+      new Set(arrayItemObjectSchema.required ?? []),
       rootPrefix ? `${rootPrefix}[]` : "[]",
     );
   }
@@ -464,23 +464,25 @@ function renderProperties(
     });
 
     // Recurse into nested object properties
-    if (prop.type === "object" && prop.properties) {
-      const nestedRequired = new Set(prop.required ?? []);
+    const nestedObjectSchema = getObjectSchema(prop);
+    if (nestedObjectSchema?.properties) {
+      const nestedRequired = new Set(nestedObjectSchema.required ?? []);
       rows.push(
-        ...renderProperties(prop.properties, nestedRequired, qualifiedName),
+        ...renderProperties(
+          nestedObjectSchema.properties,
+          nestedRequired,
+          qualifiedName,
+        ),
       );
     }
 
     // Recurse into array item properties
-    if (
-      prop.type === "array" &&
-      prop.items?.type === "object" &&
-      prop.items.properties
-    ) {
-      const itemRequired = new Set(prop.items.required ?? []);
+    const itemObjectSchema = getObjectSchema(prop.items);
+    if (prop.type === "array" && itemObjectSchema?.properties) {
+      const itemRequired = new Set(itemObjectSchema.required ?? []);
       rows.push(
         ...renderProperties(
-          prop.items.properties,
+          itemObjectSchema.properties,
           itemRequired,
           `${qualifiedName}[]`,
         ),
@@ -491,14 +493,19 @@ function renderProperties(
   return rows;
 }
 
-function formatType(schema: JsonSchema): string {
+export function formatType(schema: JsonSchema): string {
   if (schema.enum) {
     return schema.enum.map((v) => `"${v}"`).join(" \\| ");
   }
 
+  const variants = getUnionVariants(schema);
+  if (variants) {
+    return variants.map(formatType).join(" \\| ");
+  }
+
   if (schema.type === "array") {
     if (schema.items) {
-      if (schema.items.type === "object") {
+      if (getObjectSchema(schema.items)) {
         return "object[]";
       }
       return `${schema.items.type ?? "any"}[]`;
@@ -507,4 +514,23 @@ function formatType(schema: JsonSchema): string {
   }
 
   return schema.type ?? "any";
+}
+
+function getObjectSchema(schema?: JsonSchema): JsonSchema | undefined {
+  if (!schema) {
+    return undefined;
+  }
+
+  if (schema.type === "object" && schema.properties) {
+    return schema;
+  }
+
+  return getUnionVariants(schema)?.find(
+    (variant) => variant.type === "object" && variant.properties,
+  );
+}
+
+function getUnionVariants(schema: JsonSchema): JsonSchema[] | undefined {
+  const variants = schema.anyOf ?? schema.oneOf;
+  return variants && variants.length > 0 ? variants : undefined;
 }

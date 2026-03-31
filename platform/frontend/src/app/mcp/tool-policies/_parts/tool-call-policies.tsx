@@ -237,7 +237,7 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
                       value={value}
                       description={
                         value === "require_approval"
-                          ? "Requires user confirmation before executing in chat. In autonomous agent sessions (A2A, API, MS Teams, subagents), the tool is always allowed."
+                          ? "Requires user confirmation before executing in chat. In autonomous agent sessions (A2A, API, MS Teams, subagents), the tool call is blocked."
                           : undefined
                       }
                     >

@@ -906,12 +906,9 @@ class ToolModel {
     const mcpTools = await db
       .select({
         toolName: schema.toolsTable.name,
-        credentialSourceMcpServerId:
-          schema.agentToolsTable.credentialSourceMcpServerId,
-        executionSourceMcpServerId:
-          schema.agentToolsTable.executionSourceMcpServerId,
-        useDynamicTeamCredential:
-          schema.agentToolsTable.useDynamicTeamCredential,
+        mcpServerId: schema.agentToolsTable.mcpServerId,
+        credentialResolutionMode:
+          schema.agentToolsTable.credentialResolutionMode,
         catalogId: schema.toolsTable.catalogId,
         catalogName: schema.internalMcpCatalogTable.name,
       })
@@ -952,12 +949,9 @@ class ToolModel {
     const mcpTools = await db
       .select({
         toolName: schema.toolsTable.name,
-        credentialSourceMcpServerId:
-          schema.agentToolsTable.credentialSourceMcpServerId,
-        executionSourceMcpServerId:
-          schema.agentToolsTable.executionSourceMcpServerId,
-        useDynamicTeamCredential:
-          schema.agentToolsTable.useDynamicTeamCredential,
+        mcpServerId: schema.agentToolsTable.mcpServerId,
+        credentialResolutionMode:
+          schema.agentToolsTable.credentialResolutionMode,
         catalogId: schema.toolsTable.catalogId,
         catalogName: schema.internalMcpCatalogTable.name,
       })
@@ -1409,11 +1403,8 @@ class ToolModel {
               await db.insert(schema.agentToolsTable).values({
                 agentId: agentTool.agentId,
                 toolId: targetTool.id,
-                credentialSourceMcpServerId:
-                  agentTool.credentialSourceMcpServerId,
-                executionSourceMcpServerId:
-                  agentTool.executionSourceMcpServerId,
-                useDynamicTeamCredential: agentTool.useDynamicTeamCredential,
+                mcpServerId: agentTool.mcpServerId,
+                credentialResolutionMode: agentTool.credentialResolutionMode,
               });
             }
           }
@@ -1959,14 +1950,11 @@ class ToolModel {
         agentToolId: schema.agentToolsTable.id,
         agentId: schema.agentsTable.id,
         agentName: schema.agentsTable.name,
-        credentialSourceMcpServerId:
-          schema.agentToolsTable.credentialSourceMcpServerId,
+        mcpServerId: schema.agentToolsTable.mcpServerId,
         credentialOwnerEmail: credentialOwnerAlias.email,
-        executionSourceMcpServerId:
-          schema.agentToolsTable.executionSourceMcpServerId,
         executionOwnerEmail: executionOwnerAlias.email,
-        useDynamicTeamCredential:
-          schema.agentToolsTable.useDynamicTeamCredential,
+        credentialResolutionMode:
+          schema.agentToolsTable.credentialResolutionMode,
       })
       .from(schema.agentToolsTable)
       .innerJoin(
@@ -1975,10 +1963,7 @@ class ToolModel {
       )
       .leftJoin(
         credentialMcpServerAlias,
-        eq(
-          schema.agentToolsTable.credentialSourceMcpServerId,
-          credentialMcpServerAlias.id,
-        ),
+        eq(schema.agentToolsTable.mcpServerId, credentialMcpServerAlias.id),
       )
       .leftJoin(
         credentialOwnerAlias,
@@ -1986,10 +1971,7 @@ class ToolModel {
       )
       .leftJoin(
         executionMcpServerAlias,
-        eq(
-          schema.agentToolsTable.executionSourceMcpServerId,
-          executionMcpServerAlias.id,
-        ),
+        eq(schema.agentToolsTable.mcpServerId, executionMcpServerAlias.id),
       )
       .leftJoin(
         executionOwnerAlias,
@@ -2003,11 +1985,10 @@ class ToolModel {
       Array<{
         agentToolId: string;
         agent: { id: string; name: string };
-        credentialSourceMcpServerId: string | null;
+        mcpServerId: string | null;
         credentialOwnerEmail: string | null;
-        executionSourceMcpServerId: string | null;
         executionOwnerEmail: string | null;
-        useDynamicTeamCredential: boolean;
+        credentialResolutionMode: "static" | "dynamic" | "enterprise_managed";
       }>
     >();
 
@@ -2018,12 +1999,8 @@ class ToolModel {
       // If not accessible, don't include the owner email (frontend will show "Owner outside your team")
       const credentialServerAccessible =
         !accessibleMcpServerIds ||
-        !assignment.credentialSourceMcpServerId ||
-        accessibleMcpServerIds.has(assignment.credentialSourceMcpServerId);
-      const executionServerAccessible =
-        !accessibleMcpServerIds ||
-        !assignment.executionSourceMcpServerId ||
-        accessibleMcpServerIds.has(assignment.executionSourceMcpServerId);
+        !assignment.mcpServerId ||
+        accessibleMcpServerIds.has(assignment.mcpServerId);
 
       existing.push({
         agentToolId: assignment.agentToolId,
@@ -2031,15 +2008,14 @@ class ToolModel {
           id: assignment.agentId,
           name: assignment.agentName,
         },
-        credentialSourceMcpServerId: assignment.credentialSourceMcpServerId,
+        mcpServerId: assignment.mcpServerId,
         credentialOwnerEmail: credentialServerAccessible
           ? assignment.credentialOwnerEmail
           : null,
-        executionSourceMcpServerId: assignment.executionSourceMcpServerId,
-        executionOwnerEmail: executionServerAccessible
+        executionOwnerEmail: credentialServerAccessible
           ? assignment.executionOwnerEmail
           : null,
-        useDynamicTeamCredential: assignment.useDynamicTeamCredential,
+        credentialResolutionMode: assignment.credentialResolutionMode,
       });
       assignmentsByToolId.set(assignment.toolId, existing);
     }

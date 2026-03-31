@@ -666,7 +666,7 @@ export function useHasPlaywrightMcpTools(
       const assignments = catalogTools.map((tool) => ({
         agentId: targetAgentId,
         toolId: tool.id,
-        useDynamicTeamCredential: true,
+        resolveAtCallTime: true,
       }));
       const { data } = await bulkAssignTools({ body: { assignments } });
       if (data?.failed?.length) {

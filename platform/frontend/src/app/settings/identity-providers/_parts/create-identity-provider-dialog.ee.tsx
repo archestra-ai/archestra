@@ -18,6 +18,7 @@ import {
 import { Form } from "@/components/ui/form";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useCreateIdentityProvider } from "@/lib/auth/identity-provider.query.ee";
+import { normalizeIdentityProviderFormValues } from "./identity-provider-form.utils";
 import { OidcConfigForm } from "./oidc-config-form.ee";
 import { SamlConfigForm } from "./saml-config-form.ee";
 
@@ -88,7 +89,9 @@ export function CreateIdentityProviderDialog({
 
   const onSubmit = useCallback(
     async (data: IdentityProviderFormValues) => {
-      const result = await createIdentityProvider.mutateAsync(data);
+      const result = await createIdentityProvider.mutateAsync(
+        normalizeIdentityProviderFormValues(data),
+      );
       // Only close the dialog if creation succeeded (result is not null)
       if (result) {
         form.reset();

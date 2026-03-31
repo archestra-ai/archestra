@@ -5,10 +5,16 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { CredentialResolutionModeSchema } from "@/types/enterprise-managed-credentials";
 import { UuidIdSchema } from "./api";
 import { ToolParametersContentSchema } from "./tool";
 
-export const SelectAgentToolSchema = createSelectSchema(schema.agentToolsTable)
+export const SelectAgentToolSchema = createSelectSchema(
+  schema.agentToolsTable,
+  {
+    credentialResolutionMode: CredentialResolutionModeSchema,
+  },
+)
   .omit({
     agentId: true,
     toolId: true,
@@ -29,14 +35,23 @@ export const SelectAgentToolSchema = createSelectSchema(schema.agentToolsTable)
     }),
   });
 
-export const InsertAgentToolSchema = createInsertSchema(schema.agentToolsTable);
-export const UpdateAgentToolSchema = createUpdateSchema(schema.agentToolsTable);
+export const InsertAgentToolSchema = createInsertSchema(
+  schema.agentToolsTable,
+  {
+    credentialResolutionMode: CredentialResolutionModeSchema,
+  },
+);
+export const UpdateAgentToolSchema = createUpdateSchema(
+  schema.agentToolsTable,
+  {
+    credentialResolutionMode: CredentialResolutionModeSchema,
+  },
+);
 export const AgentToolAssignmentInputSchema = z.object({
   toolId: UuidIdSchema,
   resolveAtCallTime: z.boolean().optional(),
-  useDynamicTeamCredential: z.boolean().optional(),
-  credentialSourceMcpServerId: UuidIdSchema.nullable().optional(),
-  executionSourceMcpServerId: UuidIdSchema.nullable().optional(),
+  credentialResolutionMode: CredentialResolutionModeSchema.optional(),
+  mcpServerId: UuidIdSchema.nullable().optional(),
 });
 
 export const AgentToolAssignmentBodySchema =
@@ -79,9 +94,8 @@ export type AgentToolFilters = z.infer<typeof AgentToolFilterSchema>;
 
 export type McpToolAssignment = {
   toolName: string;
-  credentialSourceMcpServerId: string | null;
-  executionSourceMcpServerId: string | null;
-  useDynamicTeamCredential: boolean;
+  mcpServerId: string | null;
+  credentialResolutionMode: z.infer<typeof CredentialResolutionModeSchema>;
   catalogId: string | null;
   catalogName: string | null;
 };

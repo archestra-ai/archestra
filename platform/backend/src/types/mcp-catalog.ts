@@ -133,7 +133,8 @@ export const InsertInternalMcpCatalogSchema = createInsertSchema(
     updatedAt: true,
     organizationId: true,
     authorId: true,
-  });
+  })
+  .superRefine(validateEnterpriseManagedTransportConfig);
 
 export const UpdateInternalMcpCatalogSchema = createUpdateSchema(
   schema.internalMcpCatalogTable,
@@ -161,7 +162,8 @@ export const UpdateInternalMcpCatalogSchema = createUpdateSchema(
     updatedAt: true,
     organizationId: true,
     authorId: true,
-  });
+  })
+  .superRefine(validateEnterpriseManagedTransportConfig);
 
 export type InternalMcpCatalogServerType = z.infer<
   typeof InternalMcpCatalogServerTypeSchema
@@ -182,3 +184,27 @@ export type InsertInternalMcpCatalog = z.infer<
 export type UpdateInternalMcpCatalog = z.infer<
   typeof UpdateInternalMcpCatalogSchema
 >;
+
+function validateEnterpriseManagedTransportConfig(
+  value: {
+    serverType?: InternalMcpCatalogServerType;
+    enterpriseManagedConfig?: unknown;
+    localConfig?: { transportType?: "stdio" | "streamable-http" } | null;
+  },
+  ctx: z.RefinementCtx,
+): void {
+  if (!value.enterpriseManagedConfig || value.serverType !== "local") {
+    return;
+  }
+
+  if (value.localConfig?.transportType === "streamable-http") {
+    return;
+  }
+
+  ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    path: ["localConfig", "transportType"],
+    message:
+      "Enterprise-managed credentials require streamable-http transport for local MCP servers.",
+  });
+}

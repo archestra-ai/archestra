@@ -87,6 +87,40 @@ describe("resolveSessionExternalIdpToken", () => {
     expect(result).toBeNull();
   });
 
+  test("returns null when the matching ID token has no exp claim", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeIdentityProvider,
+    makeAgent,
+    makeAccount,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "member" });
+
+    const identityProvider = await makeIdentityProvider(org.id, {
+      providerId: "okta-no-exp",
+      oidcConfig: { clientId: "okta-client-id" },
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      identityProviderId: identityProvider.id,
+    });
+
+    await makeAccount(user.id, {
+      providerId: "okta-no-exp",
+      idToken: createJwt({ sub: "user-123" }),
+    });
+
+    const result = await resolveSessionExternalIdpToken({
+      agentId: agent.id,
+      userId: user.id,
+    });
+
+    expect(result).toBeNull();
+  });
+
   test("uses the stored access token when the identity provider is configured for access_token subject exchange", async ({
     makeOrganization,
     makeUser,

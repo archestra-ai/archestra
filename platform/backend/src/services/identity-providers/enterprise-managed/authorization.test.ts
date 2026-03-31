@@ -79,7 +79,7 @@ describe("exchangeIdentityAssertionForAccessToken", () => {
 
     const result = await exchangeIdentityAssertionForAccessToken({
       assertion: makeAssertionJwt({
-        resource: `https://mcp.example.com/v1/mcp/${agent.id}`,
+        resource: `http://localhost:3000/v1/mcp/${agent.id}`,
         clientId: client.clientId,
         scope: "email",
       }),
@@ -177,7 +177,7 @@ describe("exchangeIdentityAssertionForAccessToken", () => {
 
     const result = await exchangeIdentityAssertionForAccessToken({
       assertion: makeAssertionJwt({
-        resource: `https://mcp.example.com/v1/mcp/${agent.id}`,
+        resource: `http://localhost:3000/v1/mcp/${agent.id}`,
         clientId: client.clientId,
         scope: "mcp email",
       }),
@@ -202,6 +202,68 @@ describe("exchangeIdentityAssertionForAccessToken", () => {
     expect(storedToken?.referenceId).toBe(
       `${MCP_RESOURCE_REFERENCE_PREFIX}${agent.id}`,
     );
+  });
+
+  test("rejects assertions whose resource URL points at a different host", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeAgent,
+    makeIdentityProvider,
+    makeOAuthClient,
+  }) => {
+    const user = await makeUser({ email: "employee@example.com" });
+    const org = await makeOrganization();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const identityProvider = await makeIdentityProvider(org.id);
+    await db
+      .update(schema.identityProvidersTable)
+      .set({
+        issuer: "https://idp.example.com",
+        oidcConfig: JSON.stringify({
+          issuer: "https://idp.example.com",
+          clientId: "idp-client",
+          jwksEndpoint: "https://idp.example.com/jwks",
+        }) as never,
+      })
+      .where(eq(schema.identityProvidersTable.id, identityProvider.id));
+    const agent = await makeAgent({
+      organizationId: org.id,
+      identityProviderId: identityProvider.id,
+    });
+    const client = await makeOAuthClient({ userId: user.id });
+
+    mockFindExternalIdentityProviderById.mockResolvedValue({
+      id: identityProvider.id,
+      issuer: "https://idp.example.com",
+      oidcConfig: {
+        clientId: "idp-client",
+        jwksEndpoint: "https://idp.example.com/jwks",
+      },
+    });
+    mockValidateJwt.mockResolvedValue({
+      sub: "subject-1",
+      email: user.email,
+      name: user.name,
+      rawClaims: {},
+    });
+
+    const result = await exchangeIdentityAssertionForAccessToken({
+      assertion: makeAssertionJwt({
+        resource: `https://attacker.example.com/v1/mcp/${agent.id}`,
+        clientId: client.clientId,
+        scope: "mcp email",
+      }),
+      clientId: client.clientId,
+      clientSecret: undefined,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected invalid_grant result");
+    }
+    expect(result.statusCode).toBe(400);
+    expect(result.body.error).toBe("invalid_grant");
   });
 });
 

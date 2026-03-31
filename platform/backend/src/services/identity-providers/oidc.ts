@@ -121,13 +121,14 @@ export function parseJsonField<T>(value: unknown): T | null {
 // =============================================================================
 
 const MAX_OIDC_DISCOVERY_CACHE_SIZE = 100;
+const OIDC_DISCOVERY_CACHE_TTL_MS = 5 * 60 * 1000;
 const oidcDiscoveryCache = new LRUCacheManager<string>({
   maxSize: MAX_OIDC_DISCOVERY_CACHE_SIZE,
-  defaultTtl: 0,
+  defaultTtl: OIDC_DISCOVERY_CACHE_TTL_MS,
 });
 const oidcMetadataCache = new LRUCacheManager<OidcMetadata>({
   maxSize: MAX_OIDC_DISCOVERY_CACHE_SIZE,
-  defaultTtl: 0,
+  defaultTtl: OIDC_DISCOVERY_CACHE_TTL_MS,
 });
 const oidcDiscoveryInflight = new Map<string, Promise<string | null>>();
 const oidcMetadataInflight = new Map<string, Promise<OidcMetadata | null>>();

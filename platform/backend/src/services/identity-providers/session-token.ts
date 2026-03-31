@@ -90,11 +90,11 @@ function isJwtExpired(token: string): boolean {
   try {
     const payload = jwtDecode<{ exp?: number }>(token);
     if (!payload.exp) {
-      return false;
+      return true;
     }
     return payload.exp <= Math.floor(Date.now() / 1000);
   } catch {
-    return false;
+    return true;
   }
 }
 

@@ -142,6 +142,23 @@ export const formSchema = z
         "Either command or Docker image must be provided. If Docker image is set, command is optional.",
       path: ["localConfig", "command"],
     },
+  )
+  .refine(
+    (data) => {
+      if (
+        data.serverType !== "local" ||
+        data.authMethod !== "enterprise_managed"
+      ) {
+        return true;
+      }
+
+      return data.localConfig?.transportType === "streamable-http";
+    },
+    {
+      message:
+        "Enterprise-managed credentials require streamable-http transport for self-hosted servers.",
+      path: ["localConfig", "transportType"],
+    },
   );
 
 export type McpCatalogFormValues = z.infer<typeof formSchema>;

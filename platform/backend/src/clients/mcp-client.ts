@@ -49,11 +49,15 @@ import {
 } from "@/models";
 import { refreshOAuthToken } from "@/routes/oauth";
 import { secretManager } from "@/secrets-manager";
-import { resolveEnterpriseTransportCredential } from "@/services/identity-providers/enterprise-managed/broker";
+import {
+  type ResolvedEnterpriseTransportCredential,
+  resolveEnterpriseTransportCredential,
+} from "@/services/identity-providers/enterprise-managed/broker";
 import type {
   CommonMcpToolDefinition,
   CommonToolCall,
   CommonToolResult,
+  EnterpriseManagedCredentialConfig,
   InternalMcpCatalog,
   MCPGatewayAuthMethod,
   McpToolAssignment,
@@ -187,6 +191,8 @@ class McpClient {
   private static readonly TOOL_NAME_CACHE_MAX_ENTRIES = 1_000;
   private static readonly SECRETS_CACHE_MAX_ENTRIES = 1_000;
   private static readonly SECRETS_CACHE_TTL_MS = 30_000;
+  private static readonly ENTERPRISE_CREDENTIAL_CACHE_MAX_ENTRIES = 1_000;
+  private static readonly ENTERPRISE_CREDENTIAL_CACHE_FALLBACK_TTL_MS = 30_000;
 
   private clients = new Map<string, Client>();
   private activeConnections = new Map<string, Client>();
@@ -221,6 +227,11 @@ class McpClient {
     maxSize: McpClient.SECRETS_CACHE_MAX_ENTRIES,
     defaultTtl: McpClient.SECRETS_CACHE_TTL_MS,
   });
+  private enterpriseCredentialCache =
+    new LRUCacheManager<ResolvedEnterpriseTransportCredential>({
+      maxSize: McpClient.ENTERPRISE_CREDENTIAL_CACHE_MAX_ENTRIES,
+      defaultTtl: McpClient.ENTERPRISE_CREDENTIAL_CACHE_FALLBACK_TTL_MS,
+    });
 
   /**
    * Close a cached session for a specific (catalogId, targetMcpServerId, agentId, conversationId).
@@ -314,7 +325,7 @@ class McpClient {
     }
     const enterpriseTransportCredential =
       tool.credentialResolutionMode === "enterprise_managed"
-        ? await resolveEnterpriseTransportCredential({
+        ? await this.resolveCachedEnterpriseTransportCredential({
             agentId,
             tokenAuth,
             enterpriseManagedConfig: effectiveEnterpriseManagedConfig,
@@ -2314,6 +2325,71 @@ class McpClient {
     );
 
     return { prompts: allPrompts };
+  }
+
+  private async resolveCachedEnterpriseTransportCredential(params: {
+    agentId: string;
+    tokenAuth?: TokenAuthContext;
+    enterpriseManagedConfig: EnterpriseManagedCredentialConfig | null;
+  }): Promise<ResolvedEnterpriseTransportCredential | null> {
+    const cacheKey = this.buildEnterpriseCredentialCacheKey(params);
+    if (cacheKey) {
+      const cachedCredential = this.enterpriseCredentialCache.get(cacheKey);
+      if (cachedCredential) {
+        return cachedCredential;
+      }
+    }
+
+    const credential = await resolveEnterpriseTransportCredential(params);
+    if (cacheKey && credential) {
+      this.enterpriseCredentialCache.set(
+        cacheKey,
+        credential,
+        this.resolveEnterpriseCredentialCacheTtl(credential.expiresInSeconds),
+      );
+    }
+
+    return credential;
+  }
+
+  private buildEnterpriseCredentialCacheKey(params: {
+    agentId: string;
+    tokenAuth?: TokenAuthContext;
+    enterpriseManagedConfig: EnterpriseManagedCredentialConfig | null;
+  }): string | null {
+    if (!params.enterpriseManagedConfig || !params.tokenAuth) {
+      return null;
+    }
+
+    return JSON.stringify({
+      agentId: params.agentId,
+      identityProviderId: params.enterpriseManagedConfig.identityProviderId,
+      resourceIdentifier: params.enterpriseManagedConfig.resourceIdentifier,
+      requestedIssuer: params.enterpriseManagedConfig.requestedIssuer,
+      requestedCredentialType:
+        params.enterpriseManagedConfig.requestedCredentialType,
+      tokenInjectionMode: params.enterpriseManagedConfig.tokenInjectionMode,
+      headerName: params.enterpriseManagedConfig.headerName,
+      responseFieldPath: params.enterpriseManagedConfig.responseFieldPath,
+      audience: params.enterpriseManagedConfig.audience,
+      scopes: params.enterpriseManagedConfig.scopes ?? [],
+      tokenId: params.tokenAuth.tokenId,
+      userId: params.tokenAuth.userId ?? null,
+      teamId: params.tokenAuth.teamId,
+      isOrganizationToken: params.tokenAuth.isOrganizationToken,
+      isExternalIdp: params.tokenAuth.isExternalIdp ?? false,
+      rawToken: params.tokenAuth.rawToken ?? null,
+    });
+  }
+
+  private resolveEnterpriseCredentialCacheTtl(
+    expiresInSeconds: number | null,
+  ): number {
+    if (expiresInSeconds && expiresInSeconds > 0) {
+      return expiresInSeconds * 1000;
+    }
+
+    return McpClient.ENTERPRISE_CREDENTIAL_CACHE_FALLBACK_TTL_MS;
   }
 }
 

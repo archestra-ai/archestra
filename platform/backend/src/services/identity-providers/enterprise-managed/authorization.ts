@@ -241,7 +241,13 @@ function readAssertionMetadata(assertion: string): {
 
 function extractProfileIdFromResource(resource: string): string | null {
   try {
-    const { pathname } = new URL(resource);
+    const resourceUrl = new URL(resource);
+    const issuerUrl = new URL(buildOAuthIssuer());
+    if (resourceUrl.origin !== issuerUrl.origin) {
+      return null;
+    }
+
+    const { pathname } = resourceUrl;
     const match = pathname.match(/^\/v1\/mcp\/([0-9a-f-]{36})$/i);
     return match?.[1] ?? null;
   } catch {

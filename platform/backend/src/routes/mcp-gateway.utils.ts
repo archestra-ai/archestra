@@ -1004,6 +1004,14 @@ export async function validateExternalIdpToken(
       return null;
     }
 
+    if (!oidcConfig.clientId) {
+      logger.warn(
+        { profileId, identityProviderId: agent.identityProviderId },
+        "validateExternalIdpToken: identity provider OIDC clientId is required for audience validation",
+      );
+      return null;
+    }
+
     // Use the JWKS endpoint from OIDC config if available (avoids OIDC discovery
     // round-trip, and works when the issuer URL isn't reachable from the backend
     // e.g. in CI where the issuer is a NodePort URL but the backend runs in a pod).
@@ -1024,7 +1032,7 @@ export async function validateExternalIdpToken(
       token: tokenValue,
       issuerUrl: idpProvider.issuer,
       jwksUrl,
-      audience: oidcConfig.clientId ?? null,
+      audience: oidcConfig.clientId,
     });
 
     if (!result) {

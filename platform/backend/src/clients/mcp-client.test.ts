@@ -1095,7 +1095,7 @@ describe("McpClient", () => {
           accountId: "acct-managed",
           providerId: identityProvider.providerId,
           userId: user.id,
-          idToken: "user-id-token",
+          idToken: createJwt({ exp: futureExpSeconds() }),
           createdAt: new Date(),
           updatedAt: new Date(),
         });
@@ -1147,6 +1147,125 @@ describe("McpClient", () => {
             ? options.requestInit.headers
             : new Headers(options?.requestInit?.headers);
         expect(headers.get("Authorization")).toBe("Bearer ghu_managed_token");
+
+        fetchMock.mockRestore();
+      });
+
+      test("caches the brokered enterprise-managed credential for repeated tool calls", async ({
+        makeIdentityProvider,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const organization = await makeOrganization();
+        const user = await makeUser({
+          email: "cached-managed-mcp@example.com",
+        });
+        const managedConfig = {
+          requestedCredentialType: "secret" as const,
+          resourceIdentifier: "orn:okta:pam:github-secret",
+          tokenInjectionMode: "authorization_bearer" as const,
+          responseFieldPath: "token",
+        };
+        const identityProvider = await makeIdentityProvider(organization.id, {
+          providerId: "okta-managed-cache",
+          issuer: "https://example.okta.com",
+          oidcConfig: {
+            clientId: "web-client-id",
+            tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+            enterpriseManagedCredentials: {
+              providerType: "okta",
+              clientId: "ai-agent-client-id",
+              tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+              tokenEndpointAuthentication: "client_secret_post",
+              clientSecret: "ai-agent-client-secret",
+            },
+          },
+        });
+
+        await AgentModel.update(agentId, {
+          organizationId: organization.id,
+          identityProviderId: identityProvider.id,
+        });
+
+        await McpServerModel.update(mcpServerId, { secretId: null });
+        await InternalMcpCatalogModel.update(catalogId, {
+          enterpriseManagedConfig: managedConfig,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__managed_cache_tool",
+          description: "Managed credential cache tool",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "enterprise_managed",
+        });
+
+        await db.insert(schema.accountsTable).values({
+          id: randomUUID(),
+          accountId: "acct-managed-cache",
+          providerId: identityProvider.providerId,
+          userId: user.id,
+          idToken: createJwt({ exp: futureExpSeconds() }),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              issued_token_type: "urn:okta:params:oauth:token-type:secret",
+              secret: { token: "ghu_managed_token" },
+              expires_in: 300,
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        );
+
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Managed result" }],
+          isError: false,
+        });
+
+        const firstResult = await mcpClient.executeToolCall(
+          {
+            id: "call_enterprise_managed_cache_1",
+            name: "github-mcp-server__managed_cache_tool",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: "session-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+          },
+          { conversationId: "enterprise-managed-cache-conv" },
+        );
+        const secondResult = await mcpClient.executeToolCall(
+          {
+            id: "call_enterprise_managed_cache_2",
+            name: "github-mcp-server__managed_cache_tool",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: "session-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+          },
+          { conversationId: "enterprise-managed-cache-conv" },
+        );
+
+        expect(firstResult.isError).toBe(false);
+        expect(secondResult.isError).toBe(false);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
 
         fetchMock.mockRestore();
       });
@@ -2202,3 +2321,19 @@ describe("McpClient", () => {
     });
   });
 });
+
+function createJwt(payload: Record<string, unknown>): string {
+  return [
+    base64UrlEncode({ alg: "none", typ: "JWT" }),
+    base64UrlEncode(payload),
+    "",
+  ].join(".");
+}
+
+function base64UrlEncode(value: unknown): string {
+  return Buffer.from(JSON.stringify(value)).toString("base64url");
+}
+
+function futureExpSeconds(): number {
+  return Math.floor(Date.now() / 1000) + 3600;
+}

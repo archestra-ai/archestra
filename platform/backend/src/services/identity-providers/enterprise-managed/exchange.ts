@@ -74,7 +74,7 @@ function supportsManagedResourceTokenExchange(
   }
 
   const issuerUrl = tryParseIssuerUrl(identityProvider.issuer);
-  return issuerUrl?.hostname.endsWith(".okta.com") ?? false;
+  return isOktaHostname(issuerUrl?.hostname ?? "");
 }
 
 function supportsStandardTokenExchange(
@@ -121,4 +121,15 @@ function tryParseIssuerUrl(issuer: string): URL | null {
   } catch {
     return null;
   }
+}
+
+function isOktaHostname(hostname: string): boolean {
+  if (hostname === "okta.com") {
+    return true;
+  }
+
+  const hostnameParts = hostname.split(".");
+  return (
+    hostnameParts.length > 2 && hostnameParts.slice(-2).join(".") === "okta.com"
+  );
 }

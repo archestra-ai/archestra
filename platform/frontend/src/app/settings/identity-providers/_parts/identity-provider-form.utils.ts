@@ -58,12 +58,9 @@ function inferEnterpriseExchangeType(params: {
 }): "okta" | "keycloak" | "generic_oidc" {
   const providerId = params.providerId.toLowerCase();
   const parsedIssuer = tryParseIssuerUrl(params.issuer);
+  const hostname = parsedIssuer?.hostname ?? "";
 
-  if (
-    parsedIssuer?.hostname === "okta.com" ||
-    parsedIssuer?.hostname.endsWith(".okta.com") ||
-    providerId.includes("okta")
-  ) {
+  if (isOktaHostname(hostname) || providerId.includes("okta")) {
     return "okta";
   }
 
@@ -83,6 +80,15 @@ function tryParseIssuerUrl(issuer: string): URL | null {
   } catch {
     return null;
   }
+}
+
+function isOktaHostname(hostname: string): boolean {
+  if (hostname === "okta.com") {
+    return true;
+  }
+
+  const hostnameParts = hostname.split(".");
+  return hostnameParts.length > 2 && hostnameParts.slice(-2).join(".") === "okta.com";
 }
 
 function getDefaultTokenEndpointAuthentication(

@@ -38,7 +38,7 @@ describe("resolveEnterpriseTransportCredential", () => {
       accountId: "acct-1",
       providerId: identityProvider.providerId,
       userId: user.id,
-      idToken: "user-id-token",
+      idToken: createJwt({ exp: futureExpSeconds(300) }),
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -275,7 +275,7 @@ describe("resolveEnterpriseTransportCredential", () => {
       accountId: "acct-prototype",
       providerId: identityProvider.providerId,
       userId: user.id,
-      idToken: "user-id-token",
+      idToken: createJwt({ exp: futureExpSeconds(300) }),
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -314,3 +314,21 @@ describe("resolveEnterpriseTransportCredential", () => {
     fetchMock.mockRestore();
   });
 });
+
+function createJwt(payload: Record<string, unknown>): string {
+  return [
+    base64UrlEncode({ alg: "none", typ: "JWT" }),
+    base64UrlEncode(payload),
+    "signature",
+  ].join(".");
+}
+
+function base64UrlEncode(value: unknown): string {
+  return Buffer.from(JSON.stringify(value))
+    .toString("base64url")
+    .replace(/=/g, "");
+}
+
+function futureExpSeconds(secondsFromNow: number): number {
+  return Math.floor(Date.now() / 1000) + secondsFromNow;
+}

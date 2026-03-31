@@ -1,6 +1,7 @@
 export const ARCHESTRA_TOOL_NAME_TAG = "archestra-tool-name";
 export const ARCHESTRA_TOOL_ARGUMENTS_TAG = "archestra-tool-arguments";
 export const ARCHESTRA_TOOL_REASON_TAG = "archestra-tool-reason";
+const MAX_REFUSAL_METADATA_LENGTH = 50_000;
 
 export type ArchestraToolRefusalInfo = {
   toolName?: string;
@@ -13,10 +14,24 @@ export function extractTaggedValue(params: {
   tagName: string;
 }): string | undefined {
   const { input, tagName } = params;
-  const match = input.match(
-    new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`),
-  );
-  return match?.[1];
+  if (input.length > MAX_REFUSAL_METADATA_LENGTH) {
+    return undefined;
+  }
+
+  const openTag = `<${tagName}>`;
+  const closeTag = `</${tagName}>`;
+  const startIndex = input.indexOf(openTag);
+  if (startIndex === -1) {
+    return undefined;
+  }
+
+  const valueStartIndex = startIndex + openTag.length;
+  const endIndex = input.indexOf(closeTag, valueStartIndex);
+  if (endIndex === -1) {
+    return undefined;
+  }
+
+  return input.slice(valueStartIndex, endIndex);
 }
 
 export function parseArchestraToolRefusal(

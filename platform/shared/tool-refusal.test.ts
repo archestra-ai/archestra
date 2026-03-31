@@ -25,4 +25,14 @@ describe("tool refusal helpers", () => {
       reason: "Tool invocation blocked: untrusted data detected",
     });
   });
+
+  test("ignores oversized refusal metadata payloads", () => {
+    const oversizedInput = `${"<archestra-tool-name>x".repeat(5_000)}</archestra-tool-name>`;
+
+    expect(parseArchestraToolRefusal(oversizedInput)).toEqual({
+      toolName: undefined,
+      toolArguments: undefined,
+      reason: undefined,
+    });
+  });
 });

@@ -267,7 +267,10 @@ function normalizeOktaCredentialResponse(params: {
       ? params.responseBody.issued_token_type
       : null;
 
-  if (typeof params.responseBody.access_token === "string") {
+  if (
+    typeof params.responseBody.access_token === "string" &&
+    params.responseBody.access_token.length > 0
+  ) {
     return {
       credentialType: params.requestedCredentialType,
       expiresInSeconds,

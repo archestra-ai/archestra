@@ -67,6 +67,86 @@ describe("mcp server inspect route", () => {
     await app.close();
   });
 
+  async function expectInaccessibleServerHidden(params: {
+    makeInternalMcpCatalog: (
+      args?: Record<string, unknown>,
+    ) => Promise<{ id: string }>;
+    makeMcpServer: (args: {
+      ownerId: string;
+      catalogId: string;
+    }) => Promise<{ id: string }>;
+    makeUser: (args?: Record<string, unknown>) => Promise<{ id: string }>;
+    method: "GET" | "POST";
+    urlBuilder: (id: string) => string;
+    payload?: Record<string, unknown>;
+  }) {
+    const otherUser = await params.makeUser({ email: "other@example.com" });
+    const catalog = await params.makeInternalMcpCatalog({ serverType: "local" });
+    const mcpServer = await params.makeMcpServer({
+      ownerId: otherUser.id,
+      catalogId: catalog.id,
+    });
+
+    hasPermissionMock.mockResolvedValueOnce({ success: false });
+
+    const response = await app.inject({
+      method: params.method,
+      url: params.urlBuilder(mcpServer.id),
+      payload: params.payload,
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({
+      error: {
+        message: "MCP server not found",
+        type: "api_not_found_error",
+      },
+    });
+  }
+
+  test("hides inaccessible MCP servers on installation-status", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeUser,
+  }) => {
+    await expectInaccessibleServerHidden({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeUser,
+      method: "GET",
+      urlBuilder: (id) => `/api/mcp_server/${id}/installation-status`,
+    });
+  });
+
+  test("hides inaccessible MCP servers on tools", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeUser,
+  }) => {
+    await expectInaccessibleServerHidden({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeUser,
+      method: "GET",
+      urlBuilder: (id) => `/api/mcp_server/${id}/tools`,
+    });
+  });
+
+  test("hides inaccessible MCP servers on inspect", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeUser,
+  }) => {
+    await expectInaccessibleServerHidden({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeUser,
+      method: "POST",
+      urlBuilder: (id) => `/api/mcp_server/${id}/inspect`,
+      payload: { method: "tools/list" },
+    });
+  });
+
   test("automatically retries protected remote MCP server installation with the current identity-provider access token", async ({
     makeAccount,
     makeInternalMcpCatalog,

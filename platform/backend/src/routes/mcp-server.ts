@@ -1,4 +1,5 @@
 import { isPlaywrightCatalogItem, RouteId } from "@shared";
+import type { IncomingHttpHeaders } from "node:http";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
@@ -1132,8 +1133,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { id } }, reply) => {
-      const mcpServer = await McpServerModel.findById(id);
+    async ({ params: { id }, user, headers }, reply) => {
+      const mcpServer = await findAccessibleMcpServer({
+        mcpServerId: id,
+        userId: user.id,
+        headers,
+      });
 
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
@@ -1176,9 +1181,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { id } }, reply) => {
-      // Get the MCP server first to check if it has a catalogId
-      const mcpServer = await McpServerModel.findById(id);
+    async ({ params: { id }, user, headers }, reply) => {
+      const mcpServer = await findAccessibleMcpServer({
+        mcpServerId: id,
+        userId: user.id,
+        headers,
+      });
 
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
@@ -1211,8 +1219,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.record(z.string(), z.unknown())),
       },
     },
-    async ({ params: { id }, body }, reply) => {
-      const mcpServer = await McpServerModel.findById(id);
+    async ({ params: { id }, body, user, headers }, reply) => {
+      const mcpServer = await findAccessibleMcpServer({
+        mcpServerId: id,
+        userId: user.id,
+        headers,
+      });
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
       }
@@ -1532,6 +1544,23 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default mcpServerRoutes;
+
+async function findAccessibleMcpServer(params: {
+  mcpServerId: string;
+  userId: string;
+  headers: IncomingHttpHeaders;
+}) {
+  const { success: isMcpServerAdmin } = await hasPermission(
+    { mcpServerInstallation: ["admin"] },
+    params.headers,
+  );
+
+  return McpServerModel.findById(
+    params.mcpServerId,
+    params.userId,
+    isMcpServerAdmin,
+  );
+}
 
 // =============================================================================
 // Internal helpers

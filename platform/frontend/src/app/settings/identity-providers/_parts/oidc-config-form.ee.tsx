@@ -1,6 +1,10 @@
 "use client";
 
-import { DocsPage, type IdentityProviderFormValues } from "@shared";
+import {
+  DocsPage,
+  isOktaHostname,
+  type IdentityProviderFormValues,
+} from "@shared";
 import { ExternalLink, Info, Plus, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useState } from "react";
@@ -817,10 +821,7 @@ function inferEnterpriseExchangeType(params: {
   const providerId = params.providerId.toLowerCase();
   const issuerUrl = tryParseUrl(params.issuer);
 
-  if (
-    issuerUrl?.hostname.endsWith(".okta.com") ||
-    providerId.includes("okta")
-  ) {
+  if (isOktaHostname(issuerUrl?.hostname ?? "") || providerId.includes("okta")) {
     return "okta";
   }
 

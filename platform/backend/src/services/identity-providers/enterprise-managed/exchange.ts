@@ -2,10 +2,12 @@ import {
   type ExternalIdentityProviderConfig,
   findExternalIdentityProviderById,
 } from "@/services/identity-providers/oidc";
+import logger from "@/logging";
 import type {
   EnterpriseManagedCredentialConfig,
   EnterpriseManagedCredentialType,
 } from "@/types";
+import { isOktaHostname } from "@shared";
 import { managedResourceTokenExchangeStrategy } from "./exchange-strategies/managed-resource-token-exchange";
 import { standardTokenExchangeStrategy } from "./exchange-strategies/standard-token-exchange";
 
@@ -41,6 +43,17 @@ export async function exchangeEnterpriseManagedCredential(params: {
   }
 
   const strategy = getEnterpriseCredentialExchangeStrategy(identityProvider);
+  logger.debug(
+    {
+      identityProviderId: identityProvider.id,
+      providerId: identityProvider.providerId,
+      strategy:
+        strategy === managedResourceTokenExchangeStrategy
+          ? "managed-resource-token-exchange"
+          : "standard-token-exchange",
+    },
+    "Selected enterprise-managed credential exchange strategy",
+  );
   return strategy.exchangeCredential({
     identityProvider,
     assertion: params.assertion,
@@ -121,15 +134,4 @@ function tryParseIssuerUrl(issuer: string): URL | null {
   } catch {
     return null;
   }
-}
-
-function isOktaHostname(hostname: string): boolean {
-  if (hostname === "okta.com") {
-    return true;
-  }
-
-  const hostnameParts = hostname.split(".");
-  return (
-    hostnameParts.length > 2 && hostnameParts.slice(-2).join(".") === "okta.com"
-  );
 }

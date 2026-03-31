@@ -173,6 +173,17 @@ export const IdpTeamSyncConfigSchema = z.object({
 
 export type IdpTeamSyncConfig = z.infer<typeof IdpTeamSyncConfigSchema>;
 
+export function isOktaHostname(hostname: string): boolean {
+  if (hostname === "okta.com") {
+    return true;
+  }
+
+  const hostnameParts = hostname.split(".");
+  return (
+    hostnameParts.length > 2 && hostnameParts.slice(-2).join(".") === "okta.com"
+  );
+}
+
 export const IdentityProviderFormSchema = z
   .object({
     providerId: z.string().min(1, "Provider ID is required"),

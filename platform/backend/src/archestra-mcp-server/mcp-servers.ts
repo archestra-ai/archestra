@@ -26,6 +26,7 @@ import {
 import {
   InsertInternalMcpCatalogSchema,
   type InternalMcpCatalog,
+  PartialUpdateInternalMcpCatalogSchema,
   UpdateInternalMcpCatalogSchema,
   UuidIdSchema,
 } from "@/types";
@@ -653,7 +654,7 @@ async function handleEditMcpDescription(
     }
 
     const validatedUpdate =
-      UpdateInternalMcpCatalogSchema.partial().parse(updateData);
+      PartialUpdateInternalMcpCatalogSchema.parse(updateData);
     const updated = await InternalMcpCatalogModel.update(
       existing.id,
       validatedUpdate,
@@ -772,7 +773,7 @@ async function handleEditMcpConfig(
     }
 
     const validatedUpdate =
-      UpdateInternalMcpCatalogSchema.partial().parse(updateData);
+      PartialUpdateInternalMcpCatalogSchema.parse(updateData);
     const updated = await InternalMcpCatalogModel.update(
       existing.id,
       validatedUpdate,

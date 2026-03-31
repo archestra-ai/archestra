@@ -1401,6 +1401,13 @@
       "when": 1774984836765,
       "tag": "0199_wide_mastermind",
       "breakpoints": true
+    },
+    {
+      "idx": 200,
+      "version": "7",
+      "when": 1775000404682,
+      "tag": "0200_bumpy_red_wolf",
+      "breakpoints": true
     }
   ]
 }

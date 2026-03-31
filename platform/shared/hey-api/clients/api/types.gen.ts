@@ -17539,8 +17539,10 @@ export type GetConversationShareResponses = {
         conversationId: string;
         organizationId: string;
         createdByUserId: string;
-        visibility: 'organization';
+        visibility: 'organization' | 'team' | 'user';
         createdAt: string;
+        teamIds: Array<string>;
+        userIds: Array<string>;
     } | null;
 };
 
@@ -17548,7 +17550,9 @@ export type GetConversationShareResponse = GetConversationShareResponses[keyof G
 
 export type ShareConversationData = {
     body: {
-        visibility: 'organization';
+        visibility: 'organization' | 'team' | 'user';
+        teamIds?: Array<string>;
+        userIds?: Array<string>;
     };
     path: {
         id: string;
@@ -17625,8 +17629,10 @@ export type ShareConversationResponses = {
         conversationId: string;
         organizationId: string;
         createdByUserId: string;
-        visibility: 'organization';
+        visibility: 'organization' | 'team' | 'user';
         createdAt: string;
+        teamIds: Array<string>;
+        userIds: Array<string>;
     };
 };
 

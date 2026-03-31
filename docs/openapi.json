@@ -62876,12 +62876,26 @@
                     "visibility": {
                       "type": "string",
                       "enum": [
-                        "organization"
+                        "organization",
+                        "team",
+                        "user"
                       ]
                     },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "teamIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "userIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -62890,7 +62904,9 @@
                     "organizationId",
                     "createdByUserId",
                     "visibility",
-                    "createdAt"
+                    "createdAt",
+                    "teamIds",
+                    "userIds"
                   ],
                   "additionalProperties": false
                 }
@@ -63120,7 +63136,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Share a conversation with your organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:update`: Edit chat messages and conversation settings",
+        "description": "Share a conversation with your organization, specific teams, or specific users\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:update`: Edit chat messages and conversation settings",
         "requestBody": {
           "required": true,
           "content": {
@@ -63131,8 +63147,22 @@
                   "visibility": {
                     "type": "string",
                     "enum": [
-                      "organization"
+                      "organization",
+                      "team",
+                      "user"
                     ]
+                  },
+                  "teamIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "userIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 },
                 "required": [
@@ -63181,12 +63211,26 @@
                     "visibility": {
                       "type": "string",
                       "enum": [
-                        "organization"
+                        "organization",
+                        "team",
+                        "user"
                       ]
                     },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "teamIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "userIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -63195,7 +63239,9 @@
                     "organizationId",
                     "createdByUserId",
                     "visibility",
-                    "createdAt"
+                    "createdAt",
+                    "teamIds",
+                    "userIds"
                   ],
                   "additionalProperties": false
                 }

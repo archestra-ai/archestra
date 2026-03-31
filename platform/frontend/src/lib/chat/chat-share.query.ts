@@ -34,10 +34,20 @@ export function useShareConversation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (conversationId: string) => {
+    mutationFn: async ({
+      conversationId,
+      visibility,
+      teamIds,
+      userIds,
+    }: {
+      conversationId: string;
+      visibility: "organization" | "team" | "user";
+      teamIds?: string[];
+      userIds?: string[];
+    }) => {
       const { data, error } = await shareConversation({
         path: { id: conversationId },
-        body: { visibility: "organization" },
+        body: { visibility, teamIds, userIds },
       });
       if (error) {
         handleApiError(error);
@@ -45,7 +55,7 @@ export function useShareConversation() {
       }
       return data;
     },
-    onSuccess: (data, conversationId) => {
+    onSuccess: (data, { conversationId }) => {
       if (!data) return;
       queryClient.setQueryData(["conversation-share", conversationId], data);
     },

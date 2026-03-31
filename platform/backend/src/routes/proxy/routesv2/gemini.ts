@@ -1,4 +1,6 @@
 import fastifyHttpProxy from "@fastify/http-proxy";
+import { ARCHESTRA_TOKEN_PREFIX } from "@shared";
+import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
@@ -14,6 +16,7 @@ import {
   geminiAdapterFactory,
 } from "../adapterV2/gemini";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
+import { validateVirtualApiKey } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
 
 /**
@@ -33,56 +36,14 @@ const geminiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
     upstream: config.llm.gemini.baseUrl,
     prefix: `${API_PREFIX}/v1beta`,
     rewritePrefix: "/v1",
-    /**
-     * Exclude generateContent and streamGenerateContent routes since we handle them below
-     */
-    preHandler: (request, reply, next) => {
-      if (
-        request.method === "POST" &&
-        (request.url.includes(":generateContent") ||
-          request.url.includes(":streamGenerateContent"))
-      ) {
-        // Skip proxy for these routes - we handle them below
-        reply.code(400).send({
-          error: {
-            code: 400,
-            message:
-              "generateContent requests should use the dedicated endpoint",
-            status: "INVALID_ARGUMENT",
-          },
-        });
-      } else {
-        next();
-      }
-    },
+    preHandler: createGeminiProxyPreHandler(),
   });
 
   await fastify.register(fastifyHttpProxy, {
     upstream: config.llm.gemini.baseUrl,
     prefix: `${API_PREFIX}/:agentId/v1beta`,
     rewritePrefix: "/v1",
-    /**
-     * Exclude generateContent and streamGenerateContent routes since we handle them below
-     */
-    preHandler: (request, reply, next) => {
-      if (
-        request.method === "POST" &&
-        (request.url.includes(":generateContent") ||
-          request.url.includes(":streamGenerateContent"))
-      ) {
-        // Skip proxy for these routes - we handle them below
-        reply.code(400).send({
-          error: {
-            code: 400,
-            message:
-              "generateContent requests should use the dedicated endpoint",
-            status: "INVALID_ARGUMENT",
-          },
-        });
-      } else {
-        next();
-      }
-    },
+    preHandler: createGeminiProxyPreHandler(),
   });
 
   /**
@@ -276,3 +237,60 @@ const geminiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default geminiProxyRoutesV2;
+
+function createGeminiProxyPreHandler() {
+  return async (request: FastifyRequest, reply: FastifyReply) => {
+    const urlPath = request.url.split("?")[0];
+    if (
+      request.method === "POST" &&
+      (urlPath.includes(":generateContent") ||
+        urlPath.includes(":streamGenerateContent"))
+    ) {
+      reply.code(400).send({
+        error: {
+          code: 400,
+          message: "generateContent requests should use the dedicated endpoint",
+          status: "INVALID_ARGUMENT",
+        },
+      });
+      return;
+    }
+
+    await resolveGeminiVirtualQueryKey(request);
+  };
+}
+
+/**
+ * Resolves virtual API keys in Gemini's ?key= query parameter.
+ * Gemini uses ?key= for auth (unlike OpenAI which uses Authorization header).
+ * If the key is a virtual key (starts with ARCHESTRA_TOKEN_PREFIX), resolve it
+ * to the real provider API key and rewrite the URL. Real Gemini keys pass through unchanged.
+ */
+async function resolveGeminiVirtualQueryKey(request: FastifyRequest) {
+  const url = request.raw.url;
+  if (!url) return;
+
+  const keyMatch = url.match(/[?&]key=([^&]+)/);
+  if (!keyMatch) return;
+
+  const keyValue = keyMatch[1];
+  if (!keyValue.startsWith(ARCHESTRA_TOKEN_PREFIX)) return;
+
+  try {
+    const resolved = await validateVirtualApiKey(keyValue, "gemini");
+    if (!resolved.apiKey) return;
+
+    request.raw.url = url.replace(`key=${keyValue}`, `key=${resolved.apiKey}`);
+
+    logger.info(
+      { method: request.method, url: request.url },
+      "Gemini proxy: resolved virtual API key in query parameter",
+    );
+  } catch (error) {
+    logger.warn(
+      { error, method: request.method, url: request.url },
+      "Gemini proxy: failed to resolve virtual API key",
+    );
+    throw error;
+  }
+}

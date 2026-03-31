@@ -44,6 +44,8 @@ import {
   type Agent,
   ApiError,
   type DualLlmAnalysis,
+  type InteractionRequest,
+  type InteractionResponse,
   type LLMProvider,
   type LLMStreamAdapter,
   type ToolCompressionStats,
@@ -587,6 +589,37 @@ export async function handleLLMProxy<
       return handleNonStreaming(client, finalRequest, reply, provider, ctx);
     }
   } catch (error) {
+    // Persist failed interactions so they appear in LLM logs
+    try {
+      const errorMessage = provider.extractErrorMessage(error);
+      logger.info(
+        { profileId: resolvedAgent.id, errorMessage },
+        "Persisting error interaction record",
+      );
+      await InteractionModel.create({
+        profileId: resolvedAgent.id,
+        externalAgentId,
+        executionId,
+        userId,
+        sessionId,
+        sessionSource,
+        source,
+        type: provider.interactionType,
+        request: requestAdapter.getOriginalRequest() as InteractionRequest,
+        processedRequest: null,
+        response: { error: errorMessage } as unknown as InteractionResponse,
+        model: requestAdapter.getModel(),
+        baselineModel: requestAdapter.getModel(),
+        inputTokens: 0,
+        outputTokens: 0,
+      });
+    } catch (interactionError) {
+      logger.error(
+        { err: interactionError, profileId: resolvedAgent.id },
+        "Failed to create error interaction record",
+      );
+    }
+
     return handleError(
       error,
       reply,

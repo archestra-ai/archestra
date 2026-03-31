@@ -8,6 +8,7 @@ import {
 import {
   getAdminKeycloakJwt,
   getMemberKeycloakJwt,
+  waitForApiEndpointHealthy,
   waitForServerInstallation,
 } from "../../utils";
 import { expect, test } from "./fixtures";
@@ -321,13 +322,13 @@ test.describe("Enterprise-managed MCP credentials", () => {
 async function expectProtectedDemoServerHealthy(
   request: APIRequestContext,
 ): Promise<void> {
-  const healthResponse = await request.get(
-    `${MCP_SERVER_JWKS_EXTERNAL_URL}/health`,
-  );
-  expect(
-    healthResponse.ok(),
-    `Protected demo MCP server is not reachable at ${MCP_SERVER_JWKS_EXTERNAL_URL}/health`,
-  ).toBeTruthy();
+  await waitForApiEndpointHealthy({
+    request,
+    url: `${MCP_SERVER_JWKS_EXTERNAL_URL}/health`,
+    maxAttempts: 20,
+    delayMs: 2000,
+    description: `Protected demo MCP server at ${MCP_SERVER_JWKS_EXTERNAL_URL}/health`,
+  });
 }
 
 async function createProfile(params: {

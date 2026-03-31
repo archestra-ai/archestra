@@ -1,4 +1,4 @@
-import type { archestraApiTypes } from "@shared";
+import { type archestraApiTypes, parseArchestraToolRefusal } from "@shared";
 import type { PartialUIMessage } from "@/components/message-thread";
 import type { DualLlmAnalysis, Interaction, InteractionUtils } from "./common";
 
@@ -63,9 +63,7 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
          */
         const refusal = message.refusal as string;
         if (refusal && refusal.length > 0) {
-          const toolName = refusal.match(
-            /<archestra-tool-name>(.*?)<\/archestra-tool-name>/,
-          )?.[1];
+          const toolName = parseArchestraToolRefusal(refusal).toolName;
           if (toolName) {
             toolsRefused.add(toolName);
           }
@@ -80,9 +78,7 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
        */
       const refusal = message.message.refusal as string;
       if (refusal && refusal.length > 0) {
-        const toolName = refusal.match(
-          /<archestra-tool-name>(.*?)<\/archestra-tool-name>/,
-        )?.[1];
+        const toolName = parseArchestraToolRefusal(refusal).toolName;
         if (toolName) {
           toolsRefused.add(toolName);
         }

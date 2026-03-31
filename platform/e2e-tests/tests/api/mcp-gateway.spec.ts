@@ -528,7 +528,7 @@ test.describe("MCP Gateway - External MCP Server Tests", () => {
         );
       }
 
-      // Assign the tool to the profile with executionSourceMcpServerId
+      // Assign the tool to the profile with the installed MCP server binding
       const assignResponse = await makeApiRequest({
         request,
         method: "post",
@@ -538,7 +538,7 @@ test.describe("MCP Gateway - External MCP Server Tests", () => {
             {
               agentId: profileId,
               toolId: testTool.id,
-              executionSourceMcpServerId: testServer.id,
+              mcpServerId: testServer.id,
             },
           ],
         },

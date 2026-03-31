@@ -20,19 +20,25 @@ wiremock:
 keycloak:
   enabled: true
   image:
-    registry: quay.io
-    repository: keycloak/keycloak
-    tag: "26.0"
+    registry: europe-west1-docker.pkg.dev
+    repository: friendly-path-465518-r6/archestra-public/keycloak
+    tag: "pr46048-5afbf42"
     pullPolicy: IfNotPresent
   # Admin credentials for e2e testing
   auth:
     adminUser: admin
     adminPassword: admin
+  features:
+    - token-exchange:v1
+    - admin-fine-grained-authz:v1
+    - jwt-authorization-grant:v1
+    - identity-assertion-jwt:v1
   # Service configuration
   service:
     type: NodePort
     port: 8080
     nodePort: 30081
+  healthPort: 9000
   # Public hostname/issuer URL advertised by Keycloak.
   # Local dev uses the NodePort forwarded to the host. CI overrides this to the
   # in-cluster service URL so server-side OIDC flows from the backend pod work.
@@ -57,6 +63,10 @@ keycloak:
     initialDelaySeconds: 30
     periodSeconds: 10
     timeoutSeconds: 5
+  startupProbe:
+    failureThreshold: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
   # Groups for role mapping tests
   groups:
     - name: "archestra-admins"
@@ -71,6 +81,8 @@ keycloak:
       password: "password"
       firstName: "Admin"
       lastName: "User"
+      attributes:
+        demo_token_value: "admin_user_token"
       groups:
         - "archestra-admins"
     # Member user - in archestra-users group, should get member role
@@ -79,6 +91,8 @@ keycloak:
       password: "memberpass"
       firstName: "Member"
       lastName: "User"
+      attributes:
+        demo_token_value: "member_user_token"
       groups:
         - "archestra-users"
   # Realm configuration for e2e testing
@@ -91,7 +105,7 @@ mcpServerJwks:
   enabled: true
   image:
     repository: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak
-    tag: "0.0.1"
+    tag: "0.0.3"
     pullPolicy: IfNotPresent
   # JWT audience claim the server expects (must match Keycloak client's audience mapper)
   jwtAudience: "archestra-oidc"

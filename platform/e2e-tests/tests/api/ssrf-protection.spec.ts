@@ -93,7 +93,7 @@ test.describe("SSRF Protection - NetworkPolicy for MCP Servers", () => {
 
   test.beforeAll(
     async ({
-      request,
+      adminRequest: request,
       createAgent,
       createMcpCatalogItem,
       installMcpServer,
@@ -177,12 +177,12 @@ test.describe("SSRF Protection - NetworkPolicy for MCP Servers", () => {
         );
       }
 
-      // Assign tool to profile (local MCP server tools require executionSourceMcpServerId)
+      // Assign tool to profile using the installed local MCP server.
       await makeApiRequest({
         request,
         method: "post",
         urlSuffix: `/api/agents/${profileId}/tools/${toolEntity.id}`,
-        data: { executionSourceMcpServerId: serverId },
+        data: { mcpServerId: serverId },
       });
 
       // Get an authentication token for tool calls
@@ -192,7 +192,7 @@ test.describe("SSRF Protection - NetworkPolicy for MCP Servers", () => {
 
   test.afterAll(
     async ({
-      request,
+      adminRequest: request,
       deleteAgent,
       deleteMcpCatalogItem,
       uninstallMcpServer,
@@ -227,7 +227,7 @@ test.describe("SSRF Protection - NetworkPolicy for MCP Servers", () => {
   }
 
   test("should block SSRF to Kubernetes metadata endpoint (169.254.169.254)", async ({
-    request,
+    adminRequest: request,
   }) => {
     // AWS/GCP/Azure metadata endpoint - a common SSRF target
     const result = await attemptSsrf(
@@ -239,7 +239,7 @@ test.describe("SSRF Protection - NetworkPolicy for MCP Servers", () => {
   });
 
   test("should block SSRF to cluster-internal service (10.x range)", async ({
-    request,
+    adminRequest: request,
   }) => {
     // Attempt to reach a private 10.x IP. We use 10.0.0.1 (not a real service) rather than
     // the Kubernetes API server ClusterIP (10.96.0.1) because kube-proxy DNAT-translates
@@ -250,7 +250,7 @@ test.describe("SSRF Protection - NetworkPolicy for MCP Servers", () => {
   });
 
   test("should block SSRF to private network (192.168.x.x range)", async ({
-    request,
+    adminRequest: request,
   }) => {
     const result = await attemptSsrf(request, "http://192.168.1.1/");
     expect(result).toContain("SSRF_BLOCKED");
@@ -258,21 +258,23 @@ test.describe("SSRF Protection - NetworkPolicy for MCP Servers", () => {
   });
 
   test("should block SSRF to private network (172.16.x.x range)", async ({
-    request,
+    adminRequest: request,
   }) => {
     const result = await attemptSsrf(request, "http://172.16.0.1/");
     expect(result).toContain("SSRF_BLOCKED");
     expect(result).not.toContain("SSRF_SUCCESS");
   });
 
-  test("should block SSRF to localhost / loopback", async ({ request }) => {
+  test("should block SSRF to localhost / loopback", async ({
+    adminRequest: request,
+  }) => {
     const result = await attemptSsrf(request, "http://127.0.0.1:9000/health");
     expect(result).toContain("SSRF_BLOCKED");
     expect(result).not.toContain("SSRF_SUCCESS");
   });
 
   test("should block SSRF to carrier-grade NAT range (100.64.x.x)", async ({
-    request,
+    adminRequest: request,
   }) => {
     const result = await attemptSsrf(request, "http://100.64.0.1/");
     expect(result).toContain("SSRF_BLOCKED");

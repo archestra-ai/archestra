@@ -222,7 +222,7 @@ export function McpServerCard({
         const assignments = tools.map((tool) => ({
           agentId: agent.id,
           toolId: tool.id,
-          useDynamicTeamCredential: true,
+          resolveAtCallTime: true,
         }));
         await bulkAssignTools.mutateAsync({ assignments });
       }

@@ -72,17 +72,11 @@ export function ToolDetailsDialog({
   const getCredentialDisplay = (
     assignment: (typeof tool.assignments)[0],
   ): string | null => {
-    if (assignment.useDynamicTeamCredential) {
+    if (assignment.credentialResolutionMode === "dynamic") {
       return "Resolve at call time";
     }
 
-    // Get the credential server ID (remote or local)
-    const credentialServerId =
-      assignment.credentialSourceMcpServerId ||
-      assignment.executionSourceMcpServerId;
-
-    // If no credential server, don't show anything
-    if (!credentialServerId) {
+    if (!assignment.mcpServerId) {
       return null;
     }
 

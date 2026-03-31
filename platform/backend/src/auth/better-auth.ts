@@ -6,9 +6,9 @@ import {
   ARCHESTRA_TOKEN_PREFIX,
   AUTO_PROVISIONED_INVITATION_STATUS,
   DEFAULT_APP_NAME,
+  IDENTITY_TRUSTED_PROVIDER_IDS,
   OAUTH_PAGES,
   OAUTH_SCOPES,
-  SSO_TRUSTED_PROVIDER_IDS,
 } from "@shared";
 import {
   allAvailableActions,
@@ -397,7 +397,7 @@ export type BetterAuth = typeof auth;
 
 async function getTrustedAccountLinkingProviderIds(): Promise<string[]> {
   if (!config.enterpriseFeatures.core) {
-    return [...SSO_TRUSTED_PROVIDER_IDS];
+    return [...IDENTITY_TRUSTED_PROVIDER_IDS];
   }
 
   const { default: IdentityProviderModel } = await import(

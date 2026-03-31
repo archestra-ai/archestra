@@ -1,11 +1,12 @@
 import { TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME } from "./archestra-mcp-server";
+import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "./consts";
 
 /**
  * Prefix for agent delegation tools.
  * Format: agent__<slugified_agent_name>
  * These are dynamically generated and are not Archestra MCP tools.
  */
-export const AGENT_TOOL_PREFIX = "agent__";
+export const AGENT_TOOL_PREFIX = `agent${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
 
 /** Maximum number of suggested prompts per agent */
 export const MAX_SUGGESTED_PROMPTS = 10;

@@ -13,6 +13,10 @@ import {
   UserModel,
   UserTokenModel,
 } from "@/models";
+import {
+  exchangeIdentityAssertionForAccessToken,
+  JWT_BEARER_GRANT_TYPE,
+} from "@/services/identity-providers/enterprise-managed/authorization";
 import { ApiError, constructResponseSchema } from "@/types";
 
 const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -284,6 +288,24 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      if (body?.grant_type === JWT_BEARER_GRANT_TYPE) {
+        const { clientId: authenticatedClientId, clientSecret } =
+          extractOAuthClientCredentials({
+            authorizationHeader: request.headers.authorization,
+            body,
+          });
+
+        const result = await exchangeIdentityAssertionForAccessToken({
+          assertion: body.assertion as string | undefined,
+          clientId: authenticatedClientId,
+          clientSecret,
+        });
+
+        return reply
+          .status(result.ok ? 200 : result.statusCode)
+          .send(result.body);
+      }
+
       if (body?.resource) {
         logger.debug(
           { resource: body.resource },
@@ -529,6 +551,37 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default authRoutes;
+
+function extractOAuthClientCredentials(params: {
+  authorizationHeader: string | string[] | undefined;
+  body: Record<string, unknown> | undefined;
+}): { clientId: string | undefined; clientSecret: string | undefined } {
+  const authHeader = Array.isArray(params.authorizationHeader)
+    ? params.authorizationHeader[0]
+    : params.authorizationHeader;
+  if (authHeader?.startsWith("Basic ")) {
+    try {
+      const decoded = Buffer.from(authHeader.slice("Basic ".length), "base64")
+        .toString("utf8")
+        .split(":");
+      const [clientId, ...secretParts] = decoded;
+      return {
+        clientId,
+        clientSecret: secretParts.join(":") || undefined,
+      };
+    } catch {
+      return {
+        clientId: undefined,
+        clientSecret: undefined,
+      };
+    }
+  }
+
+  return {
+    clientId: params.body?.client_id as string | undefined,
+    clientSecret: params.body?.client_secret as string | undefined,
+  };
+}
 
 function shouldSkipForwardedAuthHeader(headerName: string): boolean {
   const normalizedHeaderName = headerName.toLowerCase();

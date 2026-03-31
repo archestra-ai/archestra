@@ -357,7 +357,7 @@ function getProviderDisplayName(provider: SupportedProvider): string {
  * Migrates existing Playwright tool assignments to use dynamic credentials.
  * Static credentials break user isolation since multiple users would share
  * the same browser session. This ensures all Playwright assignments use
- * useDynamicTeamCredential=true.
+ * credentialResolutionMode="dynamic".
  */
 async function migratePlaywrightToolsToDynamicCredential(): Promise<void> {
   // Find all tool IDs belonging to the Playwright catalog
@@ -374,14 +374,13 @@ async function migratePlaywrightToolsToDynamicCredential(): Promise<void> {
   const result = await db
     .update(schema.agentToolsTable)
     .set({
-      useDynamicTeamCredential: true,
-      credentialSourceMcpServerId: null,
-      executionSourceMcpServerId: null,
+      credentialResolutionMode: "dynamic",
+      mcpServerId: null,
     })
     .where(
       and(
         inArray(schema.agentToolsTable.toolId, playwrightToolIds),
-        eq(schema.agentToolsTable.useDynamicTeamCredential, false),
+        eq(schema.agentToolsTable.credentialResolutionMode, "static"),
       ),
     );
 

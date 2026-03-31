@@ -16,7 +16,7 @@ import {
 import type { CallPolicyAction } from "@/lib/policy.utils";
 
 const REQUIRE_APPROVAL_DESCRIPTION =
-  "Requires user confirmation before executing in chat. In autonomous agent sessions (A2A, API, MS Teams, subagents), the tool is always allowed.";
+  "Requires user confirmation before executing in chat. In autonomous agent sessions (A2A, API, MS Teams, subagents), the tool call is blocked.";
 
 const CALL_POLICY_OPTIONS: { value: CallPolicyAction; label: string }[] = [
   { value: "allow_when_context_is_untrusted", label: "Allow always" },

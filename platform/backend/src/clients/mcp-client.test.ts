@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   MCP_CATALOG_INSTALL_PATH,
   MCP_CATALOG_REAUTH_QUERY_PARAM,
@@ -5,6 +6,7 @@ import {
 } from "@shared";
 import { vi } from "vitest";
 import config from "@/config";
+import db, { schema } from "@/database";
 import {
   AgentModel,
   AgentToolModel,
@@ -172,10 +174,10 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool1.id, {
-          credentialSourceMcpServerId: mcpServerId,
+          mcpServerId: mcpServerId,
         });
         await AgentToolModel.create(agentId, tool2.id, {
-          credentialSourceMcpServerId: mcpServerId,
+          mcpServerId: mcpServerId,
         });
 
         mockCallTool
@@ -252,7 +254,7 @@ describe("McpClient", () => {
           });
 
           await AgentToolModel.create(agentId, tool.id, {
-            credentialSourceMcpServerId: mcpServerId,
+            mcpServerId: mcpServerId,
           });
 
           mockCallTool.mockResolvedValueOnce({
@@ -340,7 +342,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          executionSourceMcpServerId: localMcpServerId,
+          mcpServerId: localMcpServerId,
         });
 
         // Mock runtime manager responses
@@ -391,7 +393,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          executionSourceMcpServerId: localMcpServerId,
+          mcpServerId: localMcpServerId,
         });
 
         // Mock runtime manager responses - no endpoint URL
@@ -419,6 +421,18 @@ describe("McpClient", () => {
           isError: true,
           error: expect.stringContaining("No HTTP endpoint URL found"),
           name: "local-streamable-http-server__test_tool",
+          _meta: {
+            archestraError: {
+              type: "generic",
+              message: expect.stringContaining("No HTTP endpoint URL found"),
+            },
+          },
+          structuredContent: {
+            archestraError: {
+              type: "generic",
+              message: expect.stringContaining("No HTTP endpoint URL found"),
+            },
+          },
         });
       });
 
@@ -432,7 +446,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          executionSourceMcpServerId: localMcpServerId,
+          mcpServerId: localMcpServerId,
         });
 
         // Mock runtime manager to indicate stdio transport (not HTTP)
@@ -506,7 +520,7 @@ describe("McpClient", () => {
           });
 
           await AgentToolModel.create(agentId, tool.id, {
-            executionSourceMcpServerId: localMcpServerId,
+            mcpServerId: localMcpServerId,
           });
 
           mockUsesStreamableHttp.mockResolvedValue(false);
@@ -555,7 +569,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          executionSourceMcpServerId: localMcpServerId,
+          mcpServerId: localMcpServerId,
         });
 
         // Mock runtime manager responses
@@ -609,7 +623,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          executionSourceMcpServerId: localMcpServerId,
+          mcpServerId: localMcpServerId,
         });
 
         mockUsesStreamableHttp.mockResolvedValue(true);
@@ -651,7 +665,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          executionSourceMcpServerId: localMcpServerId,
+          mcpServerId: localMcpServerId,
         });
 
         mockUsesStreamableHttp.mockResolvedValue(true);
@@ -730,9 +744,8 @@ describe("McpClient", () => {
         await AgentToolModel.createOrUpdateCredentials(
           agentId,
           tool.id,
-          null, // no credentialSourceMcpServerId
-          null, // no executionSourceMcpServerId
-          true, // useDynamicTeamCredential
+          null,
+          "dynamic",
         );
 
         const toolCall = {
@@ -767,6 +780,19 @@ describe("McpClient", () => {
         expect(result?.content).toEqual([
           { type: "text", text: result?.error },
         ]);
+        expect(result?._meta).toMatchObject({
+          archestraError: {
+            type: "auth_required",
+            catalogId: dynCatalog.id,
+            catalogName: "jira-mcp-server",
+            installUrl: `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?install=${dynCatalog.id}`,
+          },
+        });
+        expect(result?.structuredContent).toMatchObject({
+          archestraError: {
+            type: "auth_required",
+          },
+        });
       });
 
       test("returns install URL with team context when team token has no server", async ({
@@ -798,8 +824,7 @@ describe("McpClient", () => {
           agentId,
           tool.id,
           null,
-          null,
-          true,
+          "dynamic",
         );
 
         const toolCall = {
@@ -872,8 +897,7 @@ describe("McpClient", () => {
           agentId,
           tool.id,
           null,
-          null,
-          true,
+          "dynamic",
         );
 
         const toolCall = {
@@ -903,6 +927,433 @@ describe("McpClient", () => {
         expect(result?.content).toEqual([
           { type: "text", text: result?.error },
         ]);
+      });
+    });
+
+    describe("Enterprise-managed credentials", () => {
+      test("uses an external IdP JWT as the exchange assertion when the caller authenticates via external IdP auth", async ({
+        makeIdentityProvider,
+        makeOrganization,
+      }) => {
+        const organization = await makeOrganization();
+        const identityProvider = await makeIdentityProvider(organization.id, {
+          providerId: "enterprise-external-jwt",
+          issuer: "http://localhost:30081/realms/archestra",
+          oidcConfig: {
+            clientId: "archestra-oidc",
+            tokenEndpoint:
+              "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+            enterpriseManagedCredentials: {
+              providerType: "keycloak",
+              clientId: "archestra-oidc",
+              clientSecret: "archestra-oidc-secret",
+              tokenEndpoint:
+                "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+              tokenEndpointAuthentication: "client_secret_post",
+              subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+            },
+          },
+        });
+
+        await AgentModel.update(agentId, {
+          organizationId: organization.id,
+          identityProviderId: identityProvider.id,
+        });
+
+        await McpServerModel.update(mcpServerId, { secretId: null });
+        await InternalMcpCatalogModel.update(catalogId, {
+          name: "enterprise external jwt demo",
+          enterpriseManagedConfig: {
+            identityProviderId: identityProvider.id,
+            requestedCredentialType: "bearer_token",
+            resourceIdentifier: "archestra-oidc",
+            tokenInjectionMode: "authorization_bearer",
+          },
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "enterprise external jwt demo__debug-auth-token",
+          description: "Managed credential tool",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "enterprise_managed",
+        });
+
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              access_token: "exchanged-downstream-token",
+              expires_in: 300,
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        );
+
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Managed result" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCall(
+          {
+            id: "call_enterprise_external_jwt",
+            name: "enterprise external jwt demo__debug-auth-token",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: "external-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: "external-user-id",
+            isExternalIdp: true,
+            rawToken: "external-idp-jwt",
+          },
+        );
+
+        expect(result.isError).toBe(false);
+
+        const [, requestInit] = fetchMock.mock.calls.at(0) ?? [];
+        expect(String(requestInit?.body)).toContain(
+          "subject_token=external-idp-jwt",
+        );
+
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        const [, options] =
+          vi.mocked(StreamableHTTPClientTransport).mock.calls.at(-1) ?? [];
+        const headers =
+          options?.requestInit?.headers instanceof Headers
+            ? options.requestInit.headers
+            : new Headers(options?.requestInit?.headers);
+        expect(headers.get("Authorization")).toBe(
+          "Bearer exchanged-downstream-token",
+        );
+
+        fetchMock.mockRestore();
+      });
+
+      test("injects the brokered managed credential into the outgoing MCP request", async ({
+        makeIdentityProvider,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const organization = await makeOrganization();
+        const user = await makeUser({ email: "managed-mcp@example.com" });
+        const managedConfig = {
+          requestedCredentialType: "secret" as const,
+          resourceIdentifier: "orn:okta:pam:github-secret",
+          tokenInjectionMode: "authorization_bearer" as const,
+          responseFieldPath: "token",
+        };
+        const identityProvider = await makeIdentityProvider(organization.id, {
+          providerId: "okta-managed-mcp",
+          issuer: "https://example.okta.com",
+          oidcConfig: {
+            clientId: "web-client-id",
+            tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+            enterpriseManagedCredentials: {
+              providerType: "okta",
+              clientId: "ai-agent-client-id",
+              tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+              tokenEndpointAuthentication: "client_secret_post",
+              clientSecret: "ai-agent-client-secret",
+            },
+          },
+        });
+
+        await AgentModel.update(agentId, {
+          organizationId: organization.id,
+          identityProviderId: identityProvider.id,
+        });
+
+        await McpServerModel.update(mcpServerId, { secretId: null });
+        await InternalMcpCatalogModel.update(catalogId, {
+          enterpriseManagedConfig: managedConfig,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__managed_tool",
+          description: "Managed credential tool",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "enterprise_managed",
+        });
+
+        await db.insert(schema.accountsTable).values({
+          id: randomUUID(),
+          accountId: "acct-managed",
+          providerId: identityProvider.providerId,
+          userId: user.id,
+          idToken: createJwt({ exp: futureExpSeconds() }),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              issued_token_type: "urn:okta:params:oauth:token-type:secret",
+              secret: { token: "ghu_managed_token" },
+              expires_in: 300,
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        );
+
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Managed result" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCall(
+          {
+            id: "call_enterprise_managed",
+            name: "github-mcp-server__managed_tool",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: "session-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+          },
+          { conversationId: "enterprise-managed-conv" },
+        );
+
+        expect(result.isError).toBe(false);
+
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        const [, options] =
+          vi.mocked(StreamableHTTPClientTransport).mock.calls.at(-1) ?? [];
+        const headers =
+          options?.requestInit?.headers instanceof Headers
+            ? options.requestInit.headers
+            : new Headers(options?.requestInit?.headers);
+        expect(headers.get("Authorization")).toBe("Bearer ghu_managed_token");
+
+        fetchMock.mockRestore();
+      });
+
+      test("caches the brokered enterprise-managed credential for repeated tool calls", async ({
+        makeIdentityProvider,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const organization = await makeOrganization();
+        const user = await makeUser({
+          email: "cached-managed-mcp@example.com",
+        });
+        const managedConfig = {
+          requestedCredentialType: "secret" as const,
+          resourceIdentifier: "orn:okta:pam:github-secret",
+          tokenInjectionMode: "authorization_bearer" as const,
+          responseFieldPath: "token",
+        };
+        const identityProvider = await makeIdentityProvider(organization.id, {
+          providerId: "okta-managed-cache",
+          issuer: "https://example.okta.com",
+          oidcConfig: {
+            clientId: "web-client-id",
+            tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+            enterpriseManagedCredentials: {
+              providerType: "okta",
+              clientId: "ai-agent-client-id",
+              tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+              tokenEndpointAuthentication: "client_secret_post",
+              clientSecret: "ai-agent-client-secret",
+            },
+          },
+        });
+
+        await AgentModel.update(agentId, {
+          organizationId: organization.id,
+          identityProviderId: identityProvider.id,
+        });
+
+        await McpServerModel.update(mcpServerId, { secretId: null });
+        await InternalMcpCatalogModel.update(catalogId, {
+          enterpriseManagedConfig: managedConfig,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__managed_cache_tool",
+          description: "Managed credential cache tool",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "enterprise_managed",
+        });
+
+        await db.insert(schema.accountsTable).values({
+          id: randomUUID(),
+          accountId: "acct-managed-cache",
+          providerId: identityProvider.providerId,
+          userId: user.id,
+          idToken: createJwt({ exp: futureExpSeconds() }),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              issued_token_type: "urn:okta:params:oauth:token-type:secret",
+              secret: { token: "ghu_managed_token" },
+              expires_in: 300,
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        );
+
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Managed result" }],
+          isError: false,
+        });
+
+        const firstResult = await mcpClient.executeToolCall(
+          {
+            id: "call_enterprise_managed_cache_1",
+            name: "github-mcp-server__managed_cache_tool",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: "session-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+          },
+          { conversationId: "enterprise-managed-cache-conv" },
+        );
+        const secondResult = await mcpClient.executeToolCall(
+          {
+            id: "call_enterprise_managed_cache_2",
+            name: "github-mcp-server__managed_cache_tool",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: "session-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+          },
+          { conversationId: "enterprise-managed-cache-conv" },
+        );
+
+        expect(firstResult.isError).toBe(false);
+        expect(secondResult.isError).toBe(false);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+
+        fetchMock.mockRestore();
+      });
+
+      test("returns re-authentication error when no usable enterprise assertion is available", async ({
+        makeIdentityProvider,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const organization = await makeOrganization();
+        const user = await makeUser({
+          email: "missing-enterprise-assertion@example.com",
+        });
+        const identityProvider = await makeIdentityProvider(organization.id, {
+          providerId: "keycloak-managed-mcp",
+          issuer: "http://localhost:30081/realms/archestra",
+          oidcConfig: {
+            clientId: "archestra-oidc",
+            tokenEndpoint:
+              "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+            enterpriseManagedCredentials: {
+              providerType: "keycloak",
+              clientId: "archestra-oidc",
+              clientSecret: "archestra-oidc-secret",
+              tokenEndpoint:
+                "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+              tokenEndpointAuthentication: "client_secret_post",
+              subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+            },
+          },
+        });
+
+        await AgentModel.update(agentId, {
+          organizationId: organization.id,
+          identityProviderId: identityProvider.id,
+        });
+
+        await InternalMcpCatalogModel.update(catalogId, {
+          name: "keycloak protected demo",
+          enterpriseManagedConfig: {
+            identityProviderId: identityProvider.id,
+            requestedCredentialType: "bearer_token",
+            resourceIdentifier: "archestra-oidc",
+            tokenInjectionMode: "authorization_bearer",
+          },
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "keycloak protected demo__whoami",
+          description: "Show the current authenticated user",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "enterprise_managed",
+        });
+
+        const result = await mcpClient.executeToolCall(
+          {
+            id: "call_missing_enterprise_assertion",
+            name: "keycloak protected demo__whoami",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: "session-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+          },
+        );
+
+        expect(result.isError).toBe(true);
+        expect(result.error).toContain(
+          'Expired or invalid authentication for "keycloak protected demo"',
+        );
+        expect(result.error).toContain(
+          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${catalogId}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${mcpServerId}`,
+        );
+        expect(result._meta).toMatchObject({
+          archestraError: {
+            type: "auth_expired",
+            catalogId,
+            catalogName: "keycloak protected demo",
+            serverId: mcpServerId,
+          },
+        });
       });
     });
 
@@ -952,7 +1403,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServer.id,
+          mcpServerId: mcpServer.id,
         });
 
         // Mock callTool to throw UnauthorizedError
@@ -986,6 +1437,15 @@ describe("McpClient", () => {
         expect(result?.error).toContain(
           "Once you have re-authenticated, retry this tool call.",
         );
+        expect(result?._meta).toMatchObject({
+          archestraError: {
+            type: "auth_expired",
+            catalogId: oauthCatalog.id,
+            catalogName: "github-oauth-server",
+            serverId: mcpServer.id,
+            reauthUrl: `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${oauthCatalog.id}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${mcpServer.id}`,
+          },
+        });
       });
 
       test("returns expired-auth message with manage URL when tool call throws StreamableHTTPError 401 on OAuth server", async ({
@@ -1031,7 +1491,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServer.id,
+          mcpServerId: mcpServer.id,
         });
 
         // Mock callTool to throw StreamableHTTPError with 401
@@ -1100,7 +1560,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServer.id,
+          mcpServerId: mcpServer.id,
         });
 
         const { UnauthorizedError } = await import(
@@ -1167,7 +1627,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServer.id,
+          mcpServerId: mcpServer.id,
         });
 
         // Mock callTool to throw StreamableHTTPError with non-401 code but auth message
@@ -1254,7 +1714,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServer.id,
+          mcpServerId: mcpServer.id,
         });
 
         const { UnauthorizedError } = await import(
@@ -1349,7 +1809,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          executionSourceMcpServerId: localMcpServerId,
+          mcpServerId: localMcpServerId,
         });
 
         mockUsesStreamableHttp.mockResolvedValue(true);
@@ -1396,7 +1856,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          executionSourceMcpServerId: localMcpServerId,
+          mcpServerId: localMcpServerId,
         });
 
         mockUsesStreamableHttp.mockResolvedValue(true);
@@ -1453,7 +1913,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          executionSourceMcpServerId: localMcpServerId,
+          mcpServerId: localMcpServerId,
         });
 
         mockUsesStreamableHttp.mockResolvedValue(true);
@@ -1505,7 +1965,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          executionSourceMcpServerId: localMcpServerId,
+          mcpServerId: localMcpServerId,
         });
 
         mockUsesStreamableHttp.mockResolvedValue(true);
@@ -1572,7 +2032,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServerId,
+          mcpServerId: mcpServerId,
         });
 
         // Remote server reports tool with camelCase name
@@ -1612,7 +2072,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServerId,
+          mcpServerId: mcpServerId,
         });
 
         // Remote server reports tool with PascalCase name
@@ -1648,7 +2108,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServerId,
+          mcpServerId: mcpServerId,
         });
 
         // listTools throws an error
@@ -1683,7 +2143,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServerId,
+          mcpServerId: mcpServerId,
         });
 
         // Server returns tools, but not the one we're looking for
@@ -1720,7 +2180,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServerId,
+          mcpServerId: mcpServerId,
         });
 
         // Server also uses lowercase (snake_case)
@@ -1759,7 +2219,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServerId,
+          mcpServerId: mcpServerId,
         });
 
         mockCallTool.mockResolvedValueOnce({
@@ -1806,7 +2266,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServerId,
+          mcpServerId: mcpServerId,
         });
 
         const toolMeta = { ui: { resourceUri: "mcp://widget/stats" } };
@@ -1837,7 +2297,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServerId,
+          mcpServerId: mcpServerId,
         });
 
         const structured = { dashboard: { widgets: ["chart", "table"] } };
@@ -1861,3 +2321,19 @@ describe("McpClient", () => {
     });
   });
 });
+
+function createJwt(payload: Record<string, unknown>): string {
+  return [
+    base64UrlEncode({ alg: "none", typ: "JWT" }),
+    base64UrlEncode(payload),
+    "",
+  ].join(".");
+}
+
+function base64UrlEncode(value: unknown): string {
+  return Buffer.from(JSON.stringify(value)).toString("base64url");
+}
+
+function futureExpSeconds(): number {
+  return Math.floor(Date.now() / 1000) + 3600;
+}

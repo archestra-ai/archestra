@@ -5,7 +5,6 @@ import {
   getDefaultEnabledToolIds,
   getToolErrorText,
   isCompactEligible,
-  tryToExtractErrorFromOutput,
 } from "./chat-tools-display.utils";
 
 function tool(id: string) {
@@ -138,23 +137,50 @@ describe("getCurrentEnabledToolIds", () => {
 });
 
 describe("tool display helpers", () => {
-  it("extracts error strings from JSON output", () => {
-    expect(tryToExtractErrorFromOutput(JSON.stringify({ error: "boom" }))).toBe(
-      "boom",
-    );
-  });
-
   it("falls back to parsing JSON output errors", () => {
     expect(
       getToolErrorText({
         part: {
           type: "tool-github__create_issue",
           state: "input-available",
-          output: JSON.stringify({ error: "output error" }),
+          output: JSON.stringify({
+            _meta: {
+              archestraError: {
+                type: "generic",
+                message: "output error",
+              },
+            },
+          }),
         } as never,
         toolResultPart: null,
       }),
     ).toBe("output error");
+  });
+
+  it("extracts auth errors from structured tool output", () => {
+    expect(
+      getToolErrorText({
+        part: {
+          type: "tool-id-jag_test__get-server-info",
+          state: "output-available",
+          output: {
+            _meta: {
+              archestraError: {
+                type: "auth_expired",
+                message:
+                  'Expired or invalid authentication for "id-jag test".\n\nYour credentials failed authentication.',
+                catalogId: "cat_abc",
+                catalogName: "id-jag test",
+                serverId: "srv_xyz",
+                reauthUrl:
+                  "http://localhost:3000/mcp/registry?reauth=cat_abc&server=srv_xyz",
+              },
+            },
+          },
+        } as never,
+        toolResultPart: null,
+      }),
+    ).toContain('Expired or invalid authentication for "id-jag test"');
   });
 
   it("marks generic tool failures as compact-eligible", () => {
@@ -195,6 +221,33 @@ describe("tool display helpers", () => {
           state: "input-available",
           errorText:
             'Authentication required for "jira-atlassian-remote".\n\nNo credentials found for this MCP server. To continue, visit this URL: http://localhost:3000/mcp/registry?install=cat_demo',
+        } as never,
+        toolResultPart: null,
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps structured auth-expired responses as full cards", () => {
+    expect(
+      isCompactEligible({
+        toolName: "id-jag_test__get_server_info",
+        part: {
+          type: "tool-id-jag_test__get_server_info",
+          state: "output-available",
+          output: {
+            isError: true,
+            _meta: {
+              archestraError: {
+                type: "auth_expired",
+                message: 'Expired or invalid authentication for "id-jag test".',
+                catalogId: "cat_abc",
+                catalogName: "id-jag test",
+                serverId: "srv_xyz",
+                reauthUrl:
+                  "http://localhost:3000/mcp/registry?reauth=cat_abc&server=srv_xyz",
+              },
+            },
+          },
         } as never,
         toolResultPart: null,
       }),

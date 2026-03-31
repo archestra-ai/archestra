@@ -11,6 +11,7 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { EnterpriseManagedCredentialConfigSchema } from "./enterprise-managed-credentials";
 
 export const InternalMcpCatalogServerTypeSchema = z.enum([
   "local",
@@ -96,6 +97,7 @@ export const SelectInternalMcpCatalogSchema = createSelectSchema(
   authFields: z.array(AuthFieldSchema).nullable(),
   userConfig: z.record(z.string(), UserConfigFieldSchema).nullable(),
   oauthConfig: OAuthConfigSchema.nullable(),
+  enterpriseManagedConfig: EnterpriseManagedCredentialConfigSchema.nullable(),
   localConfig: LocalConfigSelectSchema.nullable(),
   // Labels are loaded from the junction table, not from the DB row
   labels: z.array(CatalogLabelSchema).default([]),
@@ -104,7 +106,7 @@ export const SelectInternalMcpCatalogSchema = createSelectSchema(
   authorName: z.string().nullable().optional(),
 });
 
-export const InsertInternalMcpCatalogSchema = createInsertSchema(
+const InsertInternalMcpCatalogSchemaBase = createInsertSchema(
   schema.internalMcpCatalogTable,
 )
   .extend({
@@ -118,6 +120,8 @@ export const InsertInternalMcpCatalogSchema = createInsertSchema(
       .nullable()
       .optional(),
     oauthConfig: OAuthConfigSchema.nullable().optional(),
+    enterpriseManagedConfig:
+      EnterpriseManagedCredentialConfigSchema.nullable().optional(),
     localConfig: LocalConfigSchema.nullable().optional(),
     // Labels are synced separately via McpCatalogLabelModel
     labels: z.array(CatalogLabelSchema).optional(),
@@ -131,7 +135,12 @@ export const InsertInternalMcpCatalogSchema = createInsertSchema(
     authorId: true,
   });
 
-export const UpdateInternalMcpCatalogSchema = createUpdateSchema(
+export const InsertInternalMcpCatalogSchema =
+  InsertInternalMcpCatalogSchemaBase.superRefine(
+    validateEnterpriseManagedTransportConfig,
+  );
+
+const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
   schema.internalMcpCatalogTable,
 )
   .extend({
@@ -143,6 +152,8 @@ export const UpdateInternalMcpCatalogSchema = createUpdateSchema(
       .nullable()
       .optional(),
     oauthConfig: OAuthConfigSchema.nullable().optional(),
+    enterpriseManagedConfig:
+      EnterpriseManagedCredentialConfigSchema.nullable().optional(),
     localConfig: LocalConfigSchema.nullable().optional(),
     // Labels are synced separately via McpCatalogLabelModel
     labels: z.array(CatalogLabelSchema).optional(),
@@ -156,6 +167,16 @@ export const UpdateInternalMcpCatalogSchema = createUpdateSchema(
     organizationId: true,
     authorId: true,
   });
+
+export const UpdateInternalMcpCatalogSchema =
+  UpdateInternalMcpCatalogSchemaBase.superRefine(
+    validateEnterpriseManagedTransportConfig,
+  );
+
+export const PartialUpdateInternalMcpCatalogSchema =
+  UpdateInternalMcpCatalogSchemaBase.partial().superRefine(
+    validateEnterpriseManagedTransportConfig,
+  );
 
 export type InternalMcpCatalogServerType = z.infer<
   typeof InternalMcpCatalogServerTypeSchema
@@ -176,3 +197,27 @@ export type InsertInternalMcpCatalog = z.infer<
 export type UpdateInternalMcpCatalog = z.infer<
   typeof UpdateInternalMcpCatalogSchema
 >;
+
+function validateEnterpriseManagedTransportConfig(
+  value: {
+    serverType?: InternalMcpCatalogServerType;
+    enterpriseManagedConfig?: unknown;
+    localConfig?: { transportType?: "stdio" | "streamable-http" } | null;
+  },
+  ctx: z.RefinementCtx,
+): void {
+  if (!value.enterpriseManagedConfig || value.serverType !== "local") {
+    return;
+  }
+
+  if (value.localConfig?.transportType === "streamable-http") {
+    return;
+  }
+
+  ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    path: ["localConfig", "transportType"],
+    message:
+      "Enterprise-managed credentials require streamable-http transport for local MCP servers.",
+  });
+}

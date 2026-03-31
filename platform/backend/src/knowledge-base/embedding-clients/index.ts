@@ -1,7 +1,10 @@
-import type { SupportedProvider, SupportedProviderDiscriminator } from "@shared";
-import type { EmbeddingApiResponse } from "./types";
+import type {
+  SupportedProvider,
+  SupportedProviderDiscriminator,
+} from "@shared";
 import { callGeminiEmbedding, GeminiEmbeddingError } from "./gemini";
 import { callOpenAIEmbedding, OpenAIEmbeddingError } from "./openai";
+import type { EmbeddingApiResponse } from "./types";
 
 export type { EmbeddingApiResponse };
 export { GeminiEmbeddingError, OpenAIEmbeddingError };
@@ -42,7 +45,10 @@ export function getEmbeddingDiscriminator(
  * Returns true if the error is retryable (rate-limited or server-side failure).
  */
 export function isRetryableEmbeddingError(error: unknown): boolean {
-  if (error instanceof GeminiEmbeddingError || error instanceof OpenAIEmbeddingError) {
+  if (
+    error instanceof GeminiEmbeddingError ||
+    error instanceof OpenAIEmbeddingError
+  ) {
     return error.status === 429 || error.status >= 500;
   }
   // Network-level errors (ECONNRESET, ETIMEDOUT, etc.)

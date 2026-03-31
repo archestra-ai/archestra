@@ -1,4 +1,8 @@
-import { EmbeddingDimensionsSchema, OrganizationCustomFontSchema, OrganizationThemeSchema } from "@shared";
+import {
+  EmbeddingDimensionsSchema,
+  OrganizationCustomFontSchema,
+  OrganizationThemeSchema,
+} from "@shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";

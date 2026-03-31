@@ -1,18 +1,20 @@
-import type { EmbeddingModel } from "@shared";
 import { addNomicTaskPrefix, EMBEDDING_BATCH_SIZE } from "@shared";
 import logger from "@/logging";
 import { KbChunkModel, KbDocumentModel } from "@/models";
 import {
   callEmbedding,
+  type EmbeddingApiResponse,
   getEmbeddingDiscriminator,
   isRetryableEmbeddingError,
-  type EmbeddingApiResponse,
 } from "./embedding-clients";
 import {
   buildEmbeddingInteraction,
   withKbObservability,
 } from "./kb-interaction";
-import { getDefaultOrgEmbeddingConfig, type EmbeddingConfig } from "./kb-llm-client";
+import {
+  type EmbeddingConfig,
+  getDefaultOrgEmbeddingConfig,
+} from "./kb-llm-client";
 
 const RETRY_MAX_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 1000;

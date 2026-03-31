@@ -5,12 +5,12 @@ import { KbChunkModel } from "@/models";
 import type { VectorSearchResult } from "@/models/kb-chunk";
 import * as metrics from "@/observability/metrics";
 import type { AclEntry } from "@/types";
+import { callEmbedding, getEmbeddingDiscriminator } from "./embedding-clients";
 import {
   buildEmbeddingInteraction,
   withKbObservability,
 } from "./kb-interaction";
-import { callEmbedding, getEmbeddingDiscriminator } from "./embedding-clients";
-import { resolveEmbeddingConfig, type EmbeddingConfig } from "./kb-llm-client";
+import { type EmbeddingConfig, resolveEmbeddingConfig } from "./kb-llm-client";
 import {
   expandQuery,
   KEYWORD_QUERY_HYBRID_ALPHA_WEIGHT,
@@ -30,7 +30,6 @@ interface ChunkResult {
     connectorType: string | null;
   };
 }
-
 
 class QueryService {
   async query(params: {
@@ -146,7 +145,11 @@ class QueryService {
       callback: () =>
         callEmbedding({
           texts: [
-            addNomicTaskPrefix(embeddingConfig.model, queryText, "search_query"),
+            addNomicTaskPrefix(
+              embeddingConfig.model,
+              queryText,
+              "search_query",
+            ),
           ],
           model: embeddingConfig.model,
           apiKey: embeddingConfig.apiKey,

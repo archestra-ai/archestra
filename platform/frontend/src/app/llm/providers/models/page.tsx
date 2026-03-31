@@ -65,7 +65,9 @@ export default function ModelsPage() {
   const [isRefreshingModels, setIsRefreshingModels] = useState(false);
   const [search, setSearch] = useState("");
   const [apiKeyFilter, setApiKeyFilter] = useState<string>("all");
-  const [modelTypeFilter, setModelTypeFilter] = useState<"all" | "chat" | "embedding">("all");
+  const [modelTypeFilter, setModelTypeFilter] = useState<
+    "all" | "chat" | "embedding"
+  >("all");
   const [editingModel, setEditingModel] = useState<ModelWithApiKeys | null>(
     null,
   );
@@ -166,7 +168,9 @@ export default function ModelsPage() {
             {row.original.isFastest && <FastestModelBadge />}
             {row.original.isBest && <BestModelBadge />}
             {row.original.isEmbedding && (
-              <Badge variant="secondary" className="text-xs">Embedding</Badge>
+              <Badge variant="secondary" className="text-xs">
+                Embedding
+              </Badge>
             )}
           </div>
         ),
@@ -312,7 +316,9 @@ export default function ModelsPage() {
             />
             <SearchableSelect
               value={modelTypeFilter}
-              onValueChange={(v) => setModelTypeFilter(v as "all" | "chat" | "embedding")}
+              onValueChange={(v) =>
+                setModelTypeFilter(v as "all" | "chat" | "embedding")
+              }
               placeholder="Model type"
               className="w-full sm:w-[200px]"
               items={[
@@ -332,7 +338,9 @@ export default function ModelsPage() {
           }
           hideSelectedCount
           isLoading={isPending}
-          hasActiveFilters={Boolean(search || apiKeyFilter !== "all" || modelTypeFilter !== "all")}
+          hasActiveFilters={Boolean(
+            search || apiKeyFilter !== "all" || modelTypeFilter !== "all",
+          )}
           filteredEmptyMessage="No models match your filters. Try adjusting your search."
           onClearFilters={() => {
             setSearch("");

@@ -321,7 +321,11 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       try {
         const response = await callEmbedding({
           texts: [
-            addNomicTaskPrefix(body.embeddingModel, "hello world", "search_document"),
+            addNomicTaskPrefix(
+              body.embeddingModel,
+              "hello world",
+              "search_document",
+            ),
           ],
           model: body.embeddingModel,
           apiKey: resolved.apiKey,
@@ -339,7 +343,10 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : "Unknown error";
-        logger.error({ err }, "[testEmbeddingConnection] embedding call failed");
+        logger.error(
+          { err },
+          "[testEmbeddingConnection] embedding call failed",
+        );
         return reply.send({ success: false, error: message });
       }
     },

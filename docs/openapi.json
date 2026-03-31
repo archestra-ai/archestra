@@ -103142,6 +103142,14 @@
             "in": "query",
             "name": "apiKeyId",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "isEmbedding",
+            "required": false
           }
         ],
         "responses": {
@@ -103259,6 +103267,9 @@
                         "type": "boolean"
                       },
                       "isFastest": {
+                        "type": "boolean"
+                      },
+                      "isEmbedding": {
                         "type": "boolean"
                       }
                     },
@@ -103846,6 +103857,9 @@
                       "ignored": {
                         "type": "boolean"
                       },
+                      "isEmbedding": {
+                        "type": "boolean"
+                      },
                       "discoveredViaLlmProxy": {
                         "type": "boolean"
                       },
@@ -103935,6 +103949,7 @@
                       "customPricePerMillionInput",
                       "customPricePerMillionOutput",
                       "ignored",
+                      "isEmbedding",
                       "discoveredViaLlmProxy",
                       "lastSyncedAt",
                       "createdAt",
@@ -104197,6 +104212,9 @@
                   "ignored": {
                     "type": "boolean"
                   },
+                  "isEmbedding": {
+                    "type": "boolean"
+                  },
                   "inputModalities": {
                     "nullable": true,
                     "minItems": 1,
@@ -104341,6 +104359,9 @@
                     "ignored": {
                       "type": "boolean"
                     },
+                    "isEmbedding": {
+                      "type": "boolean"
+                    },
                     "discoveredViaLlmProxy": {
                       "type": "boolean"
                     },
@@ -104372,6 +104393,7 @@
                     "customPricePerMillionInput",
                     "customPricePerMillionOutput",
                     "ignored",
+                    "isEmbedding",
                     "discoveredViaLlmProxy",
                     "lastSyncedAt",
                     "createdAt",
@@ -126767,6 +126789,12 @@
                   },
                   "embeddingDimensions": {
                     "anyOf": [
+                      {
+                        "type": "number",
+                        "enum": [
+                          3072
+                        ]
+                      },
                       {
                         "type": "number",
                         "enum": [

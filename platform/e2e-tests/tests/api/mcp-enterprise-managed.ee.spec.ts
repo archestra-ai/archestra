@@ -21,6 +21,82 @@ import {
 const DEBUG_TOOL_SHORT_NAME = "debug-auth-token";
 
 test.describe("Enterprise-managed MCP credentials", () => {
+  test("installs a protected remote MCP server without a manual access token", async ({
+    request,
+    createIdentityProvider,
+    deleteIdentityProvider,
+    deleteMcpCatalogItem,
+    uninstallMcpServer,
+  }) => {
+    test.slow();
+
+    await expectProtectedDemoServerHealthy(request);
+
+    const providerName = `EnterpriseManagedInstall${Date.now()}`;
+    const identityProviderId = await createIdentityProvider(
+      request,
+      providerName,
+      {
+        enterpriseManagedCredentials: {
+          clientId: KEYCLOAK_OIDC.clientId,
+          clientSecret: KEYCLOAK_OIDC.clientSecret,
+          tokenEndpoint: KEYCLOAK_OIDC.tokenEndpoint,
+          tokenEndpointAuthentication: "client_secret_post",
+          subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+        },
+      },
+    );
+
+    let catalogId: string | undefined;
+    let serverId: string | undefined;
+
+    try {
+      const catalogName = `enterprise-managed-install-${Date.now()}`;
+      catalogId = await createProtectedEnterpriseManagedCatalogItem({
+        request,
+        name: catalogName,
+        identityProviderId,
+      });
+
+      const installResponse = await makeApiRequest({
+        request,
+        method: "post",
+        urlSuffix: "/api/mcp_server",
+        data: {
+          name: catalogName,
+          catalogId,
+        },
+      });
+      const server = (await installResponse.json()) as { id: string };
+      serverId = server.id;
+
+      await waitForServerInstallation(request, serverId);
+
+      const toolsResponse = await makeApiRequest({
+        request,
+        method: "get",
+        urlSuffix: `/api/mcp_server/${serverId}/tools`,
+      });
+      const tools = (await toolsResponse.json()) as Array<{ name: string }>;
+
+      expect(
+        tools.some(
+          (tool) =>
+            tool.name ===
+            `${catalogName}${MCP_SERVER_TOOL_NAME_SEPARATOR}${DEBUG_TOOL_SHORT_NAME}`,
+        ),
+      ).toBe(true);
+    } finally {
+      if (serverId) {
+        await uninstallMcpServer(request, serverId);
+      }
+      if (catalogId) {
+        await deleteMcpCatalogItem(request, catalogId);
+      }
+      await deleteIdentityProvider(request, identityProviderId);
+    }
+  });
+
   test("uses per-user exchanged credentials for agent tool execution", async ({
     request,
     createIdentityProvider,
@@ -280,6 +356,7 @@ async function createProfile(params: {
 async function createProtectedEnterpriseManagedCatalogItem(params: {
   request: APIRequestContext;
   name: string;
+  identityProviderId?: string;
 }): Promise<string> {
   const response = await makeApiRequest({
     request: params.request,
@@ -293,6 +370,7 @@ async function createProtectedEnterpriseManagedCatalogItem(params: {
       serverUrl: `${MCP_SERVER_JWKS_BACKEND_URL}/mcp`,
       authMethod: "enterprise_managed",
       enterpriseManagedConfig: {
+        identityProviderId: params.identityProviderId,
         requestedCredentialType: "bearer_token",
         resourceIdentifier: KEYCLOAK_OIDC.clientId,
         tokenInjectionMode: "authorization_bearer",

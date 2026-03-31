@@ -1,5 +1,6 @@
 import { vi } from "vitest";
 import type * as originalConfigModule from "@/config";
+import * as embeddingClients from "@/knowledge-base/embedding-clients";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
@@ -503,6 +504,64 @@ describe("organization routes", () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.json().embeddingModel).toBe(model.modelId);
+    });
+  });
+
+  describe("POST /api/organization/knowledge-settings/test-embedding", () => {
+    test("passes configured embedding dimensions to callEmbedding", async ({
+      makeSecret,
+    }) => {
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const apiKey = await LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: secret.id,
+        name: "Embedding Key",
+        provider: "gemini",
+        scope: "personal",
+        userId: user.id,
+      });
+      await ModelModel.create({
+        externalId: "gemini/gemini-embedding-001",
+        provider: "gemini",
+        modelId: "gemini-embedding-001",
+        description: "Gemini Embedding 001",
+        contextLength: null,
+        inputModalities: ["text"],
+        outputModalities: [],
+        supportsToolCalling: false,
+        promptPricePerToken: null,
+        completionPricePerToken: null,
+        embeddingDimensions: 3072,
+        lastSyncedAt: new Date(),
+      });
+
+      const callEmbeddingSpy = vi
+        .spyOn(embeddingClients, "callEmbedding")
+        .mockResolvedValue({
+          object: "list",
+          data: [{ object: "embedding", embedding: [0.1, 0.2], index: 0 }],
+          model: "gemini-embedding-001",
+          usage: { prompt_tokens: 0, total_tokens: 0 },
+        });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/organization/knowledge-settings/test-embedding",
+        payload: {
+          embeddingChatApiKeyId: apiKey.id,
+          embeddingModel: "gemini-embedding-001",
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ success: true });
+      expect(callEmbeddingSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: "gemini",
+          model: "gemini-embedding-001",
+          dimensions: 3072,
+        }),
+      );
     });
   });
 });

@@ -353,6 +353,18 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
+      const model = await ModelModel.findByProviderAndModelId(
+        resolved.provider,
+        body.embeddingModel,
+      );
+      if (!model?.embeddingDimensions) {
+        return reply.send({
+          success: false,
+          error:
+            "Embedding model must be marked as an embedding model with configured dimensions in LLM Providers > Models.",
+        });
+      }
+
       try {
         const response = await callEmbedding({
           texts: [
@@ -365,6 +377,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
           model: body.embeddingModel,
           apiKey: resolved.apiKey,
           baseUrl: resolved.baseUrl,
+          dimensions: model.embeddingDimensions,
           provider: resolved.provider,
         });
 

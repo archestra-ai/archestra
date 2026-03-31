@@ -1,14 +1,21 @@
-import { BUILT_IN_AGENT_IDS, type SupportedProvider } from "@shared";
+import {
+  BUILT_IN_AGENT_IDS,
+  isSupportedProvider,
+  type SupportedProvider,
+} from "@shared";
 import { generateObject } from "ai";
-import { createLLMModel } from "@/clients/llm-client";
+import { createLLMModel, detectProviderFromModel } from "@/clients/llm-client";
 import logger from "@/logging";
 import {
   AgentModel,
   InternalMcpCatalogModel,
+  LlmProviderApiKeyModel,
+  LlmProviderApiKeyModelLinkModel,
   ToolInvocationPolicyModel,
   ToolModel,
   TrustedDataPolicyModel,
 } from "@/models";
+import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import type { Tool } from "@/types";
 import { type PolicyConfig, PolicyConfigSchema } from "@/types";
 import { resolveSmartDefaultLlm } from "@/utils/llm-resolution";
@@ -40,13 +47,26 @@ interface BulkAutoPolicyResult {
  */
 export class PolicyConfigurationService {
   /**
-   * Resolve the LLM provider/key for an organization.
-   * Returns the resolved config or null if unavailable.
+   * Resolve the LLM provider/key using the built-in agent's configured
+   * llmApiKeyId/llmModel, falling back to the org-wide smart default.
    */
   async resolveLlm(params: {
     organizationId: string;
     userId?: string;
   }): Promise<ResolvedLlm | null> {
+    const { organizationId } = params;
+
+    // Check the built-in agent's own LLM configuration first
+    const builtInAgent = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+      organizationId,
+    );
+
+    if (builtInAgent) {
+      const agentLlm = await resolveAgentLlm(builtInAgent);
+      if (agentLlm) return agentLlm;
+    }
+
     return resolveSmartDefaultLlm(params);
   }
 
@@ -295,8 +315,8 @@ export class PolicyConfigurationService {
       "configurePoliciesForTools: starting bulk auto-configure",
     );
 
-    // Resolve LLM once for all tools
-    const resolvedLlm = await resolveSmartDefaultLlm({
+    // Resolve LLM once for all tools (respects built-in agent's configured key/model)
+    const resolvedLlm = await this.resolveLlm({
       organizationId,
       userId,
     });
@@ -466,3 +486,56 @@ function buildPrompt(
 }
 
 export const policyConfigurationService = new PolicyConfigurationService();
+
+/**
+ * Resolve LLM from the agent's own llmApiKeyId/llmModel configuration.
+ * Mirrors the agent-level resolution in conversation-llm-selection.ts.
+ */
+async function resolveAgentLlm(agent: {
+  llmApiKeyId: string | null;
+  llmModel: string | null;
+}): Promise<ResolvedLlm | null> {
+  if (agent.llmApiKeyId) {
+    const apiKeyRecord = await LlmProviderApiKeyModel.findById(
+      agent.llmApiKeyId,
+    );
+    if (!apiKeyRecord) return null;
+
+    const provider = isSupportedProvider(apiKeyRecord.provider)
+      ? apiKeyRecord.provider
+      : detectProviderFromModel(agent.llmModel ?? "");
+
+    // Resolve the actual API key secret
+    let apiKey: string | undefined;
+    if (apiKeyRecord.secretId) {
+      const secret = await getSecretValueForLlmProviderApiKey(
+        apiKeyRecord.secretId,
+      );
+      apiKey = (secret as string) ?? undefined;
+    }
+
+    const modelName =
+      agent.llmModel ??
+      (await LlmProviderApiKeyModelLinkModel.getBestModel(apiKeyRecord.id))
+        ?.modelId;
+    if (!modelName) return null;
+
+    return {
+      provider,
+      apiKey,
+      modelName,
+      baseUrl: apiKeyRecord.baseUrl,
+    };
+  }
+
+  if (agent.llmModel) {
+    return {
+      provider: detectProviderFromModel(agent.llmModel),
+      apiKey: undefined,
+      modelName: agent.llmModel,
+      baseUrl: null,
+    };
+  }
+
+  return null;
+}

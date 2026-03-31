@@ -10697,7 +10697,7 @@ export type GetAgentsResponses = {
             identityProviderId: string | null;
             builtInAgentConfig: {
                 name: 'policy-configuration-subagent';
-                autoConfigureOnToolAssignment: boolean;
+                autoConfigureOnToolDiscovery: boolean;
             } | {
                 name: 'dual-llm-main-agent';
                 maxRounds: number;
@@ -10789,7 +10789,7 @@ export type CreateAgentData = {
         identityProviderId?: string | null;
         builtInAgentConfig?: {
             name: 'policy-configuration-subagent';
-            autoConfigureOnToolAssignment: boolean;
+            autoConfigureOnToolDiscovery: boolean;
         } | {
             name: 'dual-llm-main-agent';
             maxRounds: number;
@@ -10898,7 +10898,7 @@ export type CreateAgentResponses = {
         identityProviderId: string | null;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
-            autoConfigureOnToolAssignment: boolean;
+            autoConfigureOnToolDiscovery: boolean;
         } | {
             name: 'dual-llm-main-agent';
             maxRounds: number;
@@ -11069,7 +11069,7 @@ export type GetAllAgentsResponses = {
         identityProviderId: string | null;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
-            autoConfigureOnToolAssignment: boolean;
+            autoConfigureOnToolDiscovery: boolean;
         } | {
             name: 'dual-llm-main-agent';
             maxRounds: number;
@@ -11223,7 +11223,7 @@ export type GetDefaultMcpGatewayResponses = {
         identityProviderId: string | null;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
-            autoConfigureOnToolAssignment: boolean;
+            autoConfigureOnToolDiscovery: boolean;
         } | {
             name: 'dual-llm-main-agent';
             maxRounds: number;
@@ -11377,7 +11377,7 @@ export type GetDefaultLlmProxyResponses = {
         identityProviderId: string | null;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
-            autoConfigureOnToolAssignment: boolean;
+            autoConfigureOnToolDiscovery: boolean;
         } | {
             name: 'dual-llm-main-agent';
             maxRounds: number;
@@ -11612,7 +11612,7 @@ export type GetAgentResponses = {
         identityProviderId: string | null;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
-            autoConfigureOnToolAssignment: boolean;
+            autoConfigureOnToolDiscovery: boolean;
         } | {
             name: 'dual-llm-main-agent';
             maxRounds: number;
@@ -11695,7 +11695,7 @@ export type UpdateAgentData = {
         identityProviderId?: string | null;
         builtInAgentConfig?: {
             name: 'policy-configuration-subagent';
-            autoConfigureOnToolAssignment: boolean;
+            autoConfigureOnToolDiscovery: boolean;
         } | {
             name: 'dual-llm-main-agent';
             maxRounds: number;
@@ -11806,7 +11806,7 @@ export type UpdateAgentResponses = {
         identityProviderId: string | null;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
-            autoConfigureOnToolAssignment: boolean;
+            autoConfigureOnToolDiscovery: boolean;
         } | {
             name: 'dual-llm-main-agent';
             maxRounds: number;

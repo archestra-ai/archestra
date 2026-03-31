@@ -351,7 +351,7 @@ describe("agent routes", () => {
         authorId: user.id,
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolAssignment: true,
+          autoConfigureOnToolDiscovery: true,
         },
       });
       // Also create a regular agent with tools

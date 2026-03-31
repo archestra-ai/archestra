@@ -50,7 +50,7 @@ export type AgentScopeFilter = z.infer<typeof AgentScopeFilterSchema>;
 // Policy Configuration Subagent config
 const PolicyConfigAgentConfigSchema = z.object({
   name: z.literal(BUILT_IN_AGENT_IDS.POLICY_CONFIG),
-  autoConfigureOnToolAssignment: z.boolean(),
+  autoConfigureOnToolDiscovery: z.boolean(),
 });
 
 const DualLlmMainAgentConfigSchema = z.object({

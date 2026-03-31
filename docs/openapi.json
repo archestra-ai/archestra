@@ -37769,13 +37769,13 @@
                                       "policy-configuration-subagent"
                                     ]
                                   },
-                                  "autoConfigureOnToolAssignment": {
+                                  "autoConfigureOnToolDiscovery": {
                                     "type": "boolean"
                                   }
                                 },
                                 "required": [
                                   "name",
-                                  "autoConfigureOnToolAssignment"
+                                  "autoConfigureOnToolDiscovery"
                                 ],
                                 "additionalProperties": false
                               },
@@ -38437,13 +38437,13 @@
                               "policy-configuration-subagent"
                             ]
                           },
-                          "autoConfigureOnToolAssignment": {
+                          "autoConfigureOnToolDiscovery": {
                             "type": "boolean"
                           }
                         },
                         "required": [
                           "name",
-                          "autoConfigureOnToolAssignment"
+                          "autoConfigureOnToolDiscovery"
                         ]
                       },
                       {
@@ -38664,13 +38664,13 @@
                                 "policy-configuration-subagent"
                               ]
                             },
-                            "autoConfigureOnToolAssignment": {
+                            "autoConfigureOnToolDiscovery": {
                               "type": "boolean"
                             }
                           },
                           "required": [
                             "name",
-                            "autoConfigureOnToolAssignment"
+                            "autoConfigureOnToolDiscovery"
                           ],
                           "additionalProperties": false
                         },
@@ -39357,13 +39357,13 @@
                                   "policy-configuration-subagent"
                                 ]
                               },
-                              "autoConfigureOnToolAssignment": {
+                              "autoConfigureOnToolDiscovery": {
                                 "type": "boolean"
                               }
                             },
                             "required": [
                               "name",
-                              "autoConfigureOnToolAssignment"
+                              "autoConfigureOnToolDiscovery"
                             ],
                             "additionalProperties": false
                           },
@@ -39990,13 +39990,13 @@
                                 "policy-configuration-subagent"
                               ]
                             },
-                            "autoConfigureOnToolAssignment": {
+                            "autoConfigureOnToolDiscovery": {
                               "type": "boolean"
                             }
                           },
                           "required": [
                             "name",
-                            "autoConfigureOnToolAssignment"
+                            "autoConfigureOnToolDiscovery"
                           ],
                           "additionalProperties": false
                         },
@@ -40623,13 +40623,13 @@
                                 "policy-configuration-subagent"
                               ]
                             },
-                            "autoConfigureOnToolAssignment": {
+                            "autoConfigureOnToolDiscovery": {
                               "type": "boolean"
                             }
                           },
                           "required": [
                             "name",
-                            "autoConfigureOnToolAssignment"
+                            "autoConfigureOnToolDiscovery"
                           ],
                           "additionalProperties": false
                         },
@@ -41268,13 +41268,13 @@
                                 "policy-configuration-subagent"
                               ]
                             },
-                            "autoConfigureOnToolAssignment": {
+                            "autoConfigureOnToolDiscovery": {
                               "type": "boolean"
                             }
                           },
                           "required": [
                             "name",
-                            "autoConfigureOnToolAssignment"
+                            "autoConfigureOnToolDiscovery"
                           ],
                           "additionalProperties": false
                         },
@@ -41888,13 +41888,13 @@
                               "policy-configuration-subagent"
                             ]
                           },
-                          "autoConfigureOnToolAssignment": {
+                          "autoConfigureOnToolDiscovery": {
                             "type": "boolean"
                           }
                         },
                         "required": [
                           "name",
-                          "autoConfigureOnToolAssignment"
+                          "autoConfigureOnToolDiscovery"
                         ]
                       },
                       {
@@ -42120,13 +42120,13 @@
                                 "policy-configuration-subagent"
                               ]
                             },
-                            "autoConfigureOnToolAssignment": {
+                            "autoConfigureOnToolDiscovery": {
                               "type": "boolean"
                             }
                           },
                           "required": [
                             "name",
-                            "autoConfigureOnToolAssignment"
+                            "autoConfigureOnToolDiscovery"
                           ],
                           "additionalProperties": false
                         },

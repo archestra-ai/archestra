@@ -41,7 +41,7 @@ describe("built-in agents routes", () => {
       systemPrompt: "You are a policy configuration subagent.",
       builtInAgentConfig: {
         name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-        autoConfigureOnToolAssignment: false,
+        autoConfigureOnToolDiscovery: false,
       },
       teams: [],
       labels: [],
@@ -159,7 +159,7 @@ describe("built-in agents routes", () => {
     expect(builtIn).toBeTruthy();
 
     const originalAutoConfig =
-      builtIn.builtInAgentConfig?.autoConfigureOnToolAssignment ?? false;
+      builtIn.builtInAgentConfig?.autoConfigureOnToolDiscovery ?? false;
     const newAutoConfig = !originalAutoConfig;
 
     const updateResponse = await app.inject({
@@ -168,7 +168,7 @@ describe("built-in agents routes", () => {
       payload: {
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolAssignment: newAutoConfig,
+          autoConfigureOnToolDiscovery: newAutoConfig,
         },
       },
     });
@@ -179,9 +179,36 @@ describe("built-in agents routes", () => {
     expect(updated.builtInAgentConfig).toEqual(
       expect.objectContaining({
         name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-        autoConfigureOnToolAssignment: newAutoConfig,
+        autoConfigureOnToolDiscovery: newAutoConfig,
       }),
     );
+  });
+
+  test("can update systemPrompt of built-in agent", async () => {
+    const listResponse = await app.inject({
+      method: "GET",
+      url: "/api/agents?agentTypes=agent&scope=built_in&limit=100",
+    });
+    const listResult = listResponse.json();
+    const agents = listResult.data ?? listResult;
+    const builtIn = agents.find(
+      (a: { builtInAgentConfig?: { name: string } }) =>
+        a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+    );
+    expect(builtIn).toBeTruthy();
+
+    const newPrompt = "Custom system prompt for policy config agent";
+    const updateResponse = await app.inject({
+      method: "PUT",
+      url: `/api/agents/${builtIn.id}`,
+      payload: {
+        systemPrompt: newPrompt,
+      },
+    });
+
+    expect(updateResponse.statusCode).toBe(200);
+    const updated = updateResponse.json();
+    expect(updated.systemPrompt).toBe(newPrompt);
   });
 
   test("built-in agent excluded from /api/agents/all when excludeBuiltIn=true", async () => {

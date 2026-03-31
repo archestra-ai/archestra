@@ -1,13 +1,13 @@
+import { isOktaHostname } from "@shared";
+import logger from "@/logging";
 import {
   type ExternalIdentityProviderConfig,
   findExternalIdentityProviderById,
 } from "@/services/identity-providers/oidc";
-import logger from "@/logging";
 import type {
   EnterpriseManagedCredentialConfig,
   EnterpriseManagedCredentialType,
 } from "@/types";
-import { isOktaHostname } from "@shared";
 import { managedResourceTokenExchangeStrategy } from "./exchange-strategies/managed-resource-token-exchange";
 import { standardTokenExchangeStrategy } from "./exchange-strategies/standard-token-exchange";
 

@@ -1,5 +1,5 @@
-import { isPlaywrightCatalogItem, RouteId } from "@shared";
 import type { IncomingHttpHeaders } from "node:http";
+import { isPlaywrightCatalogItem, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";

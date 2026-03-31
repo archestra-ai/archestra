@@ -81,7 +81,9 @@ describe("mcp server inspect route", () => {
     payload?: Record<string, unknown>;
   }) {
     const otherUser = await params.makeUser({ email: "other@example.com" });
-    const catalog = await params.makeInternalMcpCatalog({ serverType: "local" });
+    const catalog = await params.makeInternalMcpCatalog({
+      serverType: "local",
+    });
     const mcpServer = await params.makeMcpServer({
       ownerId: otherUser.id,
       catalogId: catalog.id,

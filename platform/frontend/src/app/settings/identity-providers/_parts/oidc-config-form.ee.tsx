@@ -2,8 +2,8 @@
 
 import {
   DocsPage,
-  isOktaHostname,
   type IdentityProviderFormValues,
+  isOktaHostname,
 } from "@shared";
 import { ExternalLink, Info, Plus, X } from "lucide-react";
 import Link from "next/link";
@@ -821,7 +821,10 @@ function inferEnterpriseExchangeType(params: {
   const providerId = params.providerId.toLowerCase();
   const issuerUrl = tryParseUrl(params.issuer);
 
-  if (isOktaHostname(issuerUrl?.hostname ?? "") || providerId.includes("okta")) {
+  if (
+    isOktaHostname(issuerUrl?.hostname ?? "") ||
+    providerId.includes("okta")
+  ) {
     return "okta";
   }
 

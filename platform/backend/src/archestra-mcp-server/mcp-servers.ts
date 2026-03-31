@@ -27,7 +27,6 @@ import {
   InsertInternalMcpCatalogSchema,
   type InternalMcpCatalog,
   PartialUpdateInternalMcpCatalogSchema,
-  UpdateInternalMcpCatalogSchema,
   UuidIdSchema,
 } from "@/types";
 import {

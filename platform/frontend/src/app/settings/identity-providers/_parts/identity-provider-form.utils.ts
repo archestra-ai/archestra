@@ -1,4 +1,4 @@
-import { isOktaHostname, type IdentityProviderFormValues } from "@shared";
+import { type IdentityProviderFormValues, isOktaHostname } from "@shared";
 
 export function normalizeIdentityProviderFormValues(
   data: IdentityProviderFormValues,

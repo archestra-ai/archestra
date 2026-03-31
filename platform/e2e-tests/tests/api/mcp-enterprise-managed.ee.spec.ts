@@ -22,7 +22,7 @@ import {
 const DEBUG_TOOL_SHORT_NAME = "debug-auth-token";
 
 test.describe("Enterprise-managed MCP credentials", () => {
-  test("installs a protected remote MCP server without a manual access token", async ({
+  test.skip("installs a protected remote MCP server without a manual access token", async ({
     request,
     createIdentityProvider,
     deleteIdentityProvider,

@@ -389,11 +389,7 @@ async function buildAgentToolAssignmentPrefetch(params: {
   const uniqueMcpServerIds = [
     ...new Set(
       assignments
-        .flatMap((assignment) => [
-          assignment.mcpServerId,
-          assignment.mcpServerId,
-          assignment.mcpServerId,
-        ])
+        .map((assignment) => assignment.mcpServerId)
         .filter((id): id is string => id != null),
     ),
   ];

@@ -577,12 +577,12 @@ export function generateMockInteraction(
   const responseMessage = shouldBlock
     ? {
         role: "assistant",
-        content: `\nI tried to invoke the ${selectedTool.name} tool with the following arguments: ${argsString}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: context contains untrusted data`,
+        content: `\nI tried to invoke the ${selectedTool.name} tool with the following arguments: ${argsString}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: context contains sensitive data`,
         refusal: `\n${buildArchestraToolRefusalMetadata({
           toolName: selectedTool.name,
           toolArguments: argsString,
-          reason: "Tool invocation blocked: context contains untrusted data",
-        })}\n\nI tried to invoke the ${selectedTool.name} tool with the following arguments: ${argsString}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: context contains untrusted data`,
+          reason: "Tool invocation blocked: context contains sensitive data",
+        })}\n\nI tried to invoke the ${selectedTool.name} tool with the following arguments: ${argsString}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: context contains sensitive data`,
       }
     : {
         role: "assistant",

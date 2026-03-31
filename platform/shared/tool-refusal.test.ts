@@ -12,7 +12,7 @@ describe("tool refusal helpers", () => {
     const metadata = buildArchestraToolRefusalMetadata({
       toolName: "github__delete_branch",
       toolArguments: '{"branch":"main"}',
-      reason: "Tool invocation blocked: untrusted data detected",
+      reason: "Tool invocation blocked: sensitive data detected",
     });
 
     expect(metadata).toContain(`<${ARCHESTRA_TOOL_NAME_TAG}>`);
@@ -22,7 +22,7 @@ describe("tool refusal helpers", () => {
     expect(parseArchestraToolRefusal(metadata)).toEqual({
       toolName: "github__delete_branch",
       toolArguments: '{"branch":"main"}',
-      reason: "Tool invocation blocked: untrusted data detected",
+      reason: "Tool invocation blocked: sensitive data detected",
     });
   });
 

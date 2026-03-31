@@ -1811,13 +1811,13 @@ export function AgentDialog({
                                 htmlFor="consider-context-untrusted"
                                 className="text-sm font-medium cursor-pointer"
                               >
-                                Treat context as untrusted from the start of
+                                Treat context as sensitive from the start of
                                 chat
                               </Label>
                               <p className="text-sm text-muted-foreground">
                                 When enabled, the context is always considered
-                                untrusted. Only tools allowed to run in
-                                untrusted context will be permitted.
+                                sensitive. Only tools allowed to run in
+                                sensitive context will be permitted.
                               </p>
                             </div>
                             <Switch

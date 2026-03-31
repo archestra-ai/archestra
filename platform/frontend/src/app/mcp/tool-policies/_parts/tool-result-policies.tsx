@@ -251,7 +251,7 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
           <p className="text-sm text-muted-foreground">
             Tool results impact agent decisions and actions. This policy allows
             to mark tool results as &ldquo;trusted&rdquo; or
-            &ldquo;untrusted&rdquo; to prevent agent acting on untrusted data.{" "}
+            &ldquo;sensitive&rdquo; to prevent agent acting on sensitive data.{" "}
             <a
               href={getDocsUrl(DocsPage.PlatformDynamicTools)}
               target="_blank"

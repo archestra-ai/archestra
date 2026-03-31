@@ -80,14 +80,11 @@ export const LocalConfigSchema = z
     serviceAccount: z.string().optional(),
     imagePullSecrets: z.array(ImagePullSecretConfigSchema).optional(),
   })
-  .refine(
-    (data) => data.command || data.dockerImage,
-    {
-      message:
-        "Either command or dockerImage must be provided. If dockerImage is set, command is optional (Docker image's default CMD will be used).",
-      path: ["command"],
-    },
-  );
+  .refine((data) => data.command || data.dockerImage, {
+    message:
+      "Either command or dockerImage must be provided. If dockerImage is set, command is optional (Docker image's default CMD will be used).",
+    path: ["command"],
+  });
 
 export const LocalConfigFormSchema = z.object({
   command: z.string().optional(),

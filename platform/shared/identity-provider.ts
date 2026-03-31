@@ -18,9 +18,8 @@ export type IdentityProviderId =
   (typeof IDENTITY_PROVIDER_ID)[keyof typeof IDENTITY_PROVIDER_ID];
 
 /** List of built-in identity provider IDs trusted for account linking. */
-export const IDENTITY_TRUSTED_PROVIDER_IDS = Object.values(
-  IDENTITY_PROVIDER_ID,
-);
+export const IDENTITY_TRUSTED_PROVIDER_IDS =
+  Object.values(IDENTITY_PROVIDER_ID);
 
 export const IdentityProviderOidcConfigSchema = z
   .object({
@@ -36,11 +35,7 @@ export const IdentityProviderOidcConfigSchema = z
     overrideUserInfo: z.boolean().optional(),
     tokenEndpoint: z.string().optional(),
     tokenEndpointAuthentication: z
-      .enum([
-        "client_secret_post",
-        "client_secret_basic",
-        "private_key_jwt",
-      ])
+      .enum(["client_secret_post", "client_secret_basic", "private_key_jwt"])
       .optional(),
     jwksEndpoint: z.string().optional(),
     enterpriseManagedCredentials: z

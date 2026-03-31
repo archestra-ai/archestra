@@ -131,14 +131,10 @@ function parsePolicyDeniedMcpToolError(
 ): PolicyDeniedMcpToolError | null {
   const tagged = parseArchestraToolRefusal(input);
   const toolName =
-    tagged.toolName ??
-    extractToolNameFromPolicyDeniedMessage(input);
+    tagged.toolName ?? extractToolNameFromPolicyDeniedMessage(input);
   const toolArgs =
-    tagged.toolArguments ??
-    extractToolArgumentsFromPolicyDeniedMessage(input);
-  const reason =
-    tagged.reason ??
-    extractReasonFromPolicyDeniedMessage(input);
+    tagged.toolArguments ?? extractToolArgumentsFromPolicyDeniedMessage(input);
+  const reason = tagged.reason ?? extractReasonFromPolicyDeniedMessage(input);
 
   if (!toolName || !reason) {
     return null;
@@ -215,11 +211,7 @@ function extractReasonFromPolicyDeniedMessage(input: string): string | null {
   const deniedIndex = lowered.indexOf("denied");
   const blockedIndex = lowered.indexOf("blocked");
   const markerIndex =
-    deniedIndex >= 0
-      ? deniedIndex
-      : blockedIndex >= 0
-        ? blockedIndex
-        : -1;
+    deniedIndex >= 0 ? deniedIndex : blockedIndex >= 0 ? blockedIndex : -1;
 
   if (markerIndex < 0) {
     return null;

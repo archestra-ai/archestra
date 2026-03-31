@@ -1152,3 +1152,49 @@ describe("mcpToolToModelOutput", () => {
     expect(result).toEqual({ type: "text", value: "Just text, no metadata" });
   });
 });
+
+describe("throwIfApprovalRequired", () => {
+  const { throwIfApprovalRequired } = chatClient.__test;
+
+  test("does not throw when globalToolPolicy is permissive", async () => {
+    await expect(
+      throwIfApprovalRequired("some-tool", {}, "permissive"),
+    ).resolves.toBeUndefined();
+  });
+
+  test("does not throw when tool has no require_approval policy", async ({
+    makeTool,
+    makeToolPolicy,
+  }) => {
+    const tool = await makeTool({ name: "allowed-tool" });
+    await makeToolPolicy(tool.id, {
+      action: "allow_when_context_is_untrusted",
+      conditions: [],
+    });
+
+    await expect(
+      throwIfApprovalRequired("allowed-tool", {}, "restrictive"),
+    ).resolves.toBeUndefined();
+  });
+
+  test("throws when tool has require_approval policy", async ({
+    makeTool,
+    makeToolPolicy,
+  }) => {
+    const tool = await makeTool({ name: "restricted-tool" });
+    await makeToolPolicy(tool.id, {
+      action: "require_approval",
+      conditions: [],
+    });
+
+    await expect(
+      throwIfApprovalRequired("restricted-tool", {}, "restrictive"),
+    ).rejects.toThrow("Tool invocation blocked");
+  });
+
+  test("does not throw when tool is not found in DB", async () => {
+    await expect(
+      throwIfApprovalRequired("nonexistent-tool", {}, "restrictive"),
+    ).resolves.toBeUndefined();
+  });
+});

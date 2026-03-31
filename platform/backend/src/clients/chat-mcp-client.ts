@@ -199,6 +199,7 @@ export const __test = {
   executeMcpTool,
   filterToolsByEnabledIds,
   pingClientWithTimeout,
+  throwIfApprovalRequired,
 };
 
 /**
@@ -823,7 +824,7 @@ export async function getChatMcpTools({
       "Fetched tools from MCP Gateway for agent/user",
     );
 
-    // Fetch globalToolPolicy for approval checks (needed for both chat and autonomous contexts)
+    // Fetch globalToolPolicy for approval checks (needed for both chat and autonomous contexts).
     const org = await OrganizationModel.getById(organizationId);
     const globalToolPolicy: GlobalToolPolicy =
       org?.globalToolPolicy ?? "permissive";
@@ -857,19 +858,11 @@ export async function getChatMcpTools({
             : {}),
           execute: async (args: unknown) => {
             if (blockOnApprovalRequired) {
-              const requiresApproval =
-                await ToolInvocationPolicyModel.checkApprovalRequired(
-                  mcpTool.name,
-                  isRecord(args) ? args : {},
-                  {
-                    teamIds: [],
-                    externalAgentId: getChatExternalAgentId(),
-                  },
-                  globalToolPolicy,
-                );
-              if (requiresApproval) {
-                return "Tool invocation blocked: this tool requires human approval which is not available autonomous agent sessions (A2A, Slack, MS Teams, sub-agents)";
-              }
+              await throwIfApprovalRequired(
+                mcpTool.name,
+                args,
+                globalToolPolicy,
+              );
             }
 
             logger.info(
@@ -1054,19 +1047,11 @@ export async function getChatMcpTools({
               : {}),
             execute: async (args: Record<string, unknown>) => {
               if (blockOnApprovalRequired) {
-                const requiresApproval =
-                  await ToolInvocationPolicyModel.checkApprovalRequired(
-                    agentTool.name,
-                    isRecord(args) ? args : {},
-                    {
-                      teamIds: [],
-                      externalAgentId: getChatExternalAgentId(),
-                    },
-                    globalToolPolicy,
-                  );
-                if (requiresApproval) {
-                  return "Tool invocation blocked: this tool requires human approval which is not available autonomous agent sessions (A2A, Slack, MS Teams, sub-agents)";
-                }
+                await throwIfApprovalRequired(
+                  agentTool.name,
+                  args,
+                  globalToolPolicy,
+                );
               }
 
               logger.info(
@@ -1699,6 +1684,28 @@ function isAbortLikeError(error: unknown): boolean {
   }
 
   return error.message.toLowerCase().includes("abort");
+}
+
+async function throwIfApprovalRequired(
+  toolName: string,
+  args: unknown,
+  globalToolPolicy: GlobalToolPolicy,
+): Promise<void> {
+  const requiresApproval =
+    await ToolInvocationPolicyModel.checkApprovalRequired(
+      toolName,
+      isRecord(args) ? args : {},
+      {
+        teamIds: [],
+        externalAgentId: getChatExternalAgentId(),
+      },
+      globalToolPolicy,
+    );
+  if (requiresApproval) {
+    throw new Error(
+      "Tool invocation blocked: this tool requires human approval which is not available in autonomous agent sessions (A2A, Slack, MS Teams, sub-agents)",
+    );
+  }
 }
 
 function reportToolMetrics(params: {

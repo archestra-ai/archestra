@@ -340,7 +340,7 @@ describe("tool assignment with late-bound resolution", () => {
     const parsed = JSON.parse((result.content[0] as any).text);
     expect(parsed.failed.length).toBe(1);
     expect(parsed.failed[0].error).toContain(
-      "Credential source or dynamic team credential is required",
+      "An MCP server installation or non-static credential resolution is required for remote MCP server tools",
     );
   });
 
@@ -367,7 +367,7 @@ describe("tool assignment with late-bound resolution", () => {
     const parsed = JSON.parse((result.content[0] as any).text);
     expect(parsed.failed.length).toBe(1);
     expect(parsed.failed[0].error).toContain(
-      "Execution source installation or dynamic team credential is required",
+      "An MCP server installation or non-static credential resolution is required for local MCP server tools",
     );
   });
 

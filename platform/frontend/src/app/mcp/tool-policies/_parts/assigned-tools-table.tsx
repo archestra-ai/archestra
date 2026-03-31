@@ -847,7 +847,7 @@ export function AssignedToolsTable({
                         Allow always
                       </SelectItem>
                       <SelectItem value="block_when_context_is_untrusted">
-                        Allow in trusted context
+                        Allow in safe context
                       </SelectItem>
                       <SelectItem
                         value="require_approval"
@@ -989,7 +989,7 @@ export function AssignedToolsTable({
                       Allow always
                     </SelectItem>
                     <SelectItem value="block_when_context_is_untrusted">
-                      Allow in trusted context
+                      Allow in safe context
                     </SelectItem>
                     <SelectItem value="block_always">Block always</SelectItem>
                   </SelectContent>

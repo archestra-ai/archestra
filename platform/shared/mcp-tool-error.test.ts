@@ -69,19 +69,19 @@ describe("extractMcpToolError", () => {
       extractMcpToolError(`\
 <archestra-tool-name>github__delete_branch</archestra-tool-name>
 <archestra-tool-arguments>{"branch":"main"}</archestra-tool-arguments>
-<archestra-tool-reason>Tool invocation blocked: untrusted data detected</archestra-tool-reason>
+<archestra-tool-reason>Tool invocation blocked: sensitive data detected</archestra-tool-reason>
 
 I tried to invoke the github__delete_branch tool with the following arguments: {"branch":"main"}.
 
 However, I was denied by a tool invocation policy:
 
-Tool invocation blocked: untrusted data detected`),
+Tool invocation blocked: sensitive data detected`),
     ).toEqual({
       type: "policy_denied",
       message: expect.any(String),
       toolName: "github__delete_branch",
       input: { branch: "main" },
-      reason: "Tool invocation blocked: untrusted data detected",
+      reason: "Tool invocation blocked: sensitive data detected",
     });
   });
 
@@ -91,13 +91,13 @@ Tool invocation blocked: untrusted data detected`),
 
 However, I was denied by a tool invocation policy:
 
-Tool invocation blocked: untrusted data detected`),
+Tool invocation blocked: sensitive data detected`),
     ).toEqual({
       type: "policy_denied",
       message: expect.any(String),
       toolName: "github__delete_branch",
       input: { branch: "main" },
-      reason: "untrusted data detected",
+      reason: "sensitive data detected",
     });
   });
 });

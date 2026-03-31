@@ -279,7 +279,7 @@ describe("evaluatePolicies", () => {
 
     expect(result).not.toBeNull();
     expect(result?.blockedToolName).toBe("external__read_file");
-    expect(result?.reason).toContain("untrusted");
+    expect(result?.reason).toContain("sensitive");
   });
 
   test("allows tool in restrictive mode with trusted context and no policy", async ({

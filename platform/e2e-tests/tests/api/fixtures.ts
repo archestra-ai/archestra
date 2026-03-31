@@ -6,6 +6,7 @@ import { type APIRequestContext, test as base } from "@playwright/test";
 import type { SupportedProvider } from "@shared";
 import {
   API_BASE_URL,
+  adminAuthFile,
   editorAuthFile,
   KEYCLOAK_OIDC,
   memberAuthFile,
@@ -1257,11 +1258,14 @@ export const test = base.extend<TestFixtures>({
     await use(deleteConnector);
   },
   /**
-   * Admin request - same auth as default `request` fixture
+   * Admin request - creates a new request context with admin auth
    */
-  adminRequest: async ({ request }, use) => {
-    // Default request is already admin (via storageState in config)
-    await use(request);
+  adminRequest: async ({ playwright }, use) => {
+    const context = await playwright.request.newContext({
+      storageState: adminAuthFile,
+    });
+    await use(context);
+    await context.dispose();
   },
   /**
    * Editor request - creates a new request context with editor auth

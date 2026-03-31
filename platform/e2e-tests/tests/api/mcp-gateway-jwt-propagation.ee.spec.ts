@@ -39,7 +39,7 @@ import {
 
 test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
   test("should propagate JWT to upstream MCP server and return user identity from tool call", async ({
-    request,
+    adminRequest: request,
     createAgent,
     deleteAgent,
     createIdentityProvider,
@@ -208,7 +208,7 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
   });
 
   test("should reject tool call when upstream MCP server rejects invalid JWT", async ({
-    request,
+    adminRequest: request,
     createAgent,
     deleteAgent,
     createIdentityProvider,
@@ -350,7 +350,7 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
   });
 
   test("should propagate JWT to local K8s-orchestrated MCP server via streamable-http", async ({
-    request,
+    adminRequest: request,
     createAgent,
     deleteAgent,
     createIdentityProvider,

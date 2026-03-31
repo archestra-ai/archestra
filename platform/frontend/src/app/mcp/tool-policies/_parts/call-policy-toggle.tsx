@@ -22,7 +22,7 @@ const CALL_POLICY_OPTIONS: { value: CallPolicyAction; label: string }[] = [
   { value: "allow_when_context_is_untrusted", label: "Allow always" },
   {
     value: "block_when_context_is_untrusted",
-    label: "Allow in trusted context",
+    label: "Allow in safe context",
   },
   { value: "require_approval", label: "Require approval" },
   { value: "block_always", label: "Block always" },
@@ -116,7 +116,7 @@ export function CallPolicyToggle({
               <Handshake className="h-3.5 w-3.5" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Allow in trusted context</TooltipContent>
+          <TooltipContent>Allow in safe context</TooltipContent>
         </Tooltip>
       </TooltipProvider>
       <TooltipProvider delayDuration={100}>

@@ -10,7 +10,7 @@ export const RESULT_POLICY_ACTION_OPTIONS: {
   value: ResultPolicyAction;
   label: string;
 }[] = [
-  { value: "mark_as_trusted", label: "Trusted" },
+  { value: "mark_as_trusted", label: "Safe" },
   { value: "mark_as_untrusted", label: "Sensitive" },
   { value: "sanitize_with_dual_llm", label: "Dual LLM" },
   { value: "block_always", label: "Blocked" },
@@ -21,7 +21,7 @@ export const RESULT_POLICY_ACTION_OPTIONS_LONG: {
   value: ResultPolicyAction;
   label: string;
 }[] = [
-  { value: "mark_as_trusted", label: "Mark as trusted" },
+  { value: "mark_as_trusted", label: "Mark as safe" },
   { value: "mark_as_untrusted", label: "Mark as sensitive" },
   { value: "sanitize_with_dual_llm", label: "Sanitize with Dual LLM" },
   { value: "block_always", label: "Block" },

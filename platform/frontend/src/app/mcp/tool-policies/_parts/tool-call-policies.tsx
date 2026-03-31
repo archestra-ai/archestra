@@ -224,7 +224,7 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
                     },
                     {
                       value: "block_when_context_is_untrusted",
-                      label: "Allow in trusted context",
+                      label: "Allow in safe context",
                     },
                     {
                       value: "require_approval",

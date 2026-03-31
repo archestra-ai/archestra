@@ -151,7 +151,7 @@ function AttributePathExamples() {
                   </ul>
                   <p className="text-muted-foreground mt-2 italic">
                     Use case: Block emails from external domains or mark
-                    internal emails as trusted
+                    internal emails as safe
                   </p>
                 </div>
               </div>
@@ -250,7 +250,7 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
           <h3 className="text-sm font-semibold mb-1">Tool Result Policies</h3>
           <p className="text-sm text-muted-foreground">
             Tool results impact agent decisions and actions. This policy allows
-            to mark tool results as &ldquo;trusted&rdquo; or
+            to mark tool results as &ldquo;safe&rdquo; or
             &ldquo;sensitive&rdquo; to prevent agent acting on sensitive data.{" "}
             <a
               href={getDocsUrl(DocsPage.PlatformDynamicTools)}

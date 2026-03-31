@@ -47,19 +47,19 @@ flowchart LR
     ACL --> R[Results]
 ```
 
-## LLM Provider Configuration
+## Knowledge Settings
 
-Embedding and reranking require LLM provider API keys. These are configured in **Settings > Knowledge** by selecting existing LLM Provider Keys -- no environment variables are needed. Both must be configured before knowledge bases and connectors can be used.
+Embedding and reranking are configured in **Settings > Knowledge** by selecting existing LLM Provider Keys. Both must be configured before knowledge bases and connectors can be used.
 
 ### Embedding
 
-Embedding uses any synced model that has been marked as an embedding model in **LLM Providers > Models**. The selected API key must expose at least one synced embedding model. Known common choices include `text-embedding-3-small` (1536 dimensions), `text-embedding-3-large` (reduced to 1536 dimensions for the existing pgvector index), `gemini-embedding-001` (3072 dimensions, optionally truncated to 1536), and `nomic-embed-text` (768 dimensions).
+The embedding model can be any synced model with embedding dimensions configured in **LLM Providers > Models**. The selected API key must expose at least one such model.
 
 The embedding model is locked after it has been saved. Changing it requires dropping the embedding configuration and re-embedding documents.
 
 ### Reranking
 
-The reranker uses an LLM to score and reorder search results by relevance. Any LLM provider and model can be used -- the model should support structured output.
+The reranker uses an LLM to score and reorder search results by relevance. Any synced chat model can be used. In practice, the model should support structured output.
 
 ## Connectors
 

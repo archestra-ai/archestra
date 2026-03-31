@@ -80,6 +80,12 @@ let mockApiKeys: Array<{
   provider: string;
   scope: string;
 }> = [];
+let mockEmbeddingModels: Array<{
+  id: string;
+  provider: string;
+  displayName: string;
+  isEmbedding: boolean;
+}> = [];
 
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   useAvailableLlmProviderApiKeys: () => ({
@@ -105,14 +111,7 @@ vi.mock("@/lib/llm-models.query", () => ({
     isPending: false,
   }),
   useEmbeddingModels: () => ({
-    data: [
-      {
-        id: "text-embedding-3-small",
-        provider: "openai",
-        displayName: "text-embedding-3-small",
-        isEmbedding: true,
-      },
-    ],
+    data: mockEmbeddingModels,
     isPending: false,
   }),
 }));
@@ -168,6 +167,14 @@ beforeEach(() => {
   mockOrganization = null;
   mockOrgPending = false;
   mockApiKeys = [];
+  mockEmbeddingModels = [
+    {
+      id: "text-embedding-3-small",
+      provider: "openai",
+      displayName: "text-embedding-3-small",
+      isEmbedding: true,
+    },
+  ];
 });
 
 describe("KnowledgeSettingsPage", () => {
@@ -371,6 +378,35 @@ describe("KnowledgeSettingsPage", () => {
       );
 
       expect(screen.getByText("custom-embedding-model")).toBeInTheDocument();
+    });
+
+    it("shows a helpful empty state when the selected key has no embedding models", async () => {
+      const user = userEvent.setup();
+
+      mockOrganization = {
+        embeddingChatApiKeyId: "key-1",
+        embeddingModel: null,
+        rerankerChatApiKeyId: null,
+        rerankerModel: null,
+      };
+      mockApiKeys = [
+        {
+          id: "key-1",
+          name: "Vertex AI",
+          provider: "gemini",
+          scope: "org",
+        },
+      ];
+      mockEmbeddingModels = [];
+      renderPage();
+
+      await user.click(getEmbeddingModelTrigger());
+
+      expect(
+        screen.getByText(
+          'No embedding models detected for "Vertex AI". Mark one in LLM Providers > Models, or type a model name manually.',
+        ),
+      ).toBeInTheDocument();
     });
   });
 

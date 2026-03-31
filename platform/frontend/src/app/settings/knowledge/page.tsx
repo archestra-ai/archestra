@@ -468,6 +468,9 @@ function KnowledgeSettingsContent() {
     selectedEmbeddingApiKey?.provider ??
     embeddingModels?.find((model) => model.id === embeddingModel)?.provider ??
     null;
+  const embeddingEmptyMessage = selectedEmbeddingApiKey
+    ? `No embedding models detected for "${selectedEmbeddingApiKey.name}". Mark one in LLM Providers > Models, or type a model name manually.`
+    : "Select an embedding API key first.";
 
   useEffect(() => {
     if (organization) {
@@ -631,6 +634,7 @@ function KnowledgeSettingsContent() {
                       }))}
                       placeholder="Select embedding model..."
                       searchPlaceholder="Search or type model name..."
+                      emptyMessage={embeddingEmptyMessage}
                       className={cn(
                         "w-80",
                         embeddingSetupStep === "select-model" &&
@@ -682,7 +686,7 @@ function KnowledgeSettingsContent() {
             description={
               isEmbeddingModelLocked
                 ? "Embedding dimensions cannot be changed after configuration is saved."
-                : "Select the vector dimensions for embeddings. Must match the model's output dimensions (e.g. 1536 for OpenAI, 768 for nomic-embed-text)."
+                : "Select the vector dimensions for embeddings. Must match the model's output dimensions."
             }
             control={
               <WithPermissions

@@ -9,6 +9,8 @@ import {
   ToolInput,
 } from "@/components/ai-elements/tool";
 import type { PolicyDeniedPart } from "@/components/message-thread";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useOrganization } from "@/lib/organization.query";
 import { EditPolicyDialog } from "./edit-policy-dialog";
 import { ToolStatusRow } from "./tool-status-row";
 
@@ -28,6 +30,10 @@ export function PolicyDeniedTool({
   editable,
 }: PolicyDeniedToolProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const { data: canUpdateToolPolicy } = useHasPermissions({
+    toolPolicy: ["update"],
+  });
+  const { data: organization } = useOrganization();
 
   // Parse errorText JSON: { method, args, reason }
   let reason = "Policy denied";
@@ -40,6 +46,13 @@ export function PolicyDeniedTool({
 
   const hasInput = Object.keys(policyDenied.input ?? {}).length > 0;
   const toolName = policyDenied.type.replace("tool-", "");
+  const supportMessage = organization?.chatErrorSupportMessage?.trim();
+  const canEditPolicy = editable && canUpdateToolPolicy === true;
+  const inlineSupportMessage =
+    editable && canUpdateToolPolicy === false
+      ? supportMessage ||
+        "You do not have permission to edit tool guardrails. Contact your administrator or support team for help."
+      : undefined;
 
   return (
     <>
@@ -52,13 +65,12 @@ export function PolicyDeniedTool({
         <ToolContent>
           {hasInput ? <ToolInput input={policyDenied.input} /> : null}
           <ToolStatusRow
-            icon={
-              <ShieldX className="mt-0.5 size-4 flex-none text-destructive" />
-            }
+            icon={<ShieldX className="size-4 flex-none text-destructive" />}
             title="Rejected"
             description={reason}
+            secondaryText={inlineSupportMessage}
             actions={
-              editable
+              canEditPolicy
                 ? [
                     {
                       label: "Edit policy",
@@ -71,7 +83,7 @@ export function PolicyDeniedTool({
           />
         </ToolContent>
       </Tool>
-      {editable && (
+      {canEditPolicy && (
         <EditPolicyDialog
           open={isModalOpen}
           onOpenChange={setIsModalOpen}

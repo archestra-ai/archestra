@@ -67,6 +67,24 @@ Connectors pull data from external tools (Jira, Confluence, etc.) on a schedule.
 
 See [Knowledge Connectors](/docs/platform-knowledge-connectors) for supported connector types, configuration, and management.
 
+### Sync Behavior
+
+Connector sync has two simple phases:
+
+1. **Ingestion**: pull new or changed source documents and chunk them.
+2. **Embedding**: generate vectors for those chunks so the content becomes searchable.
+
+Syncs can start on schedule or manually. Archestra prevents overlapping runs for the same connector, keeps an incremental checkpoint, and resumes large syncs from the last saved position instead of starting over.
+
+In practice this means:
+
+- new documents are inserted, chunked, and embedded
+- unchanged documents are skipped
+- changed documents are reprocessed so search stays current
+- large syncs can continue over multiple runs without losing progress
+
+Use **Force Re-sync** when you want to clear the checkpoint and rebuild the indexed content from the beginning.
+
 ## Assigning Knowledge Bases
 
 Knowledge bases can be assigned to Agents and MCP Gateways. An Agent can have multiple knowledge bases, and a knowledge base can be shared across agents.

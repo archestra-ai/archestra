@@ -174,6 +174,7 @@ export default function ModelsPage() {
       },
       {
         accessorKey: "modelId",
+        size: 280,
         header: "Model ID",
         cell: ({ row }) => (
           <div className="min-w-0 space-y-2">
@@ -222,7 +223,7 @@ export default function ModelsPage() {
       },
       {
         id: "pricingInput",
-        size: 120,
+        size: 104,
         header: "$/M Input",
         cell: ({ row }) => {
           const price = row.original.pricePerMillionInput;
@@ -236,7 +237,7 @@ export default function ModelsPage() {
       },
       {
         id: "pricingOutput",
-        size: 120,
+        size: 104,
         header: "$/M Output",
         cell: ({ row }) => {
           const price = row.original.pricePerMillionOutput;
@@ -265,7 +266,6 @@ export default function ModelsPage() {
       },
       {
         id: "actions",
-        size: 60,
         header: "Actions",
         cell: ({ row }) => (
           <TableRowActions
@@ -276,7 +276,7 @@ export default function ModelsPage() {
                 ) : (
                   <EyeOff className="h-4 w-4" />
                 ),
-                label: row.original.ignored ? "Show in chat" : "Ignore in chat",
+                label: row.original.ignored ? "Show model" : "Hide model",
                 onClick: () =>
                   updateModel.mutate({
                     id: row.original.id,
@@ -642,7 +642,7 @@ function EditModelDialog({
                   <li>
                     In {appName} chat, a model appears as a standard chat model
                     when it supports both text input and text output and is not
-                    marked as ignored.
+                    hidden.
                   </li>
                   <li>
                     Image, audio, video, and PDF input modalities control
@@ -771,11 +771,11 @@ function EditModelDialog({
               <FormItem className="rounded-lg border p-3">
                 <div className="flex items-center justify-between gap-4">
                   <div className="space-y-1">
-                    <FormLabel>Ignore this model</FormLabel>
+                    <FormLabel>Hide this model</FormLabel>
                     <p className="text-sm text-muted-foreground">
-                      Ignored models remain synced and editable in this catalog,
-                      but they are excluded from the {appName} chat model
-                      selection list.
+                      Hidden models remain synced and editable in this catalog,
+                      but they are excluded anywhere {appName} offers model
+                      selection.
                     </p>
                   </div>
                   <FormControl>

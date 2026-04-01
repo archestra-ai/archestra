@@ -2,6 +2,7 @@
  * Built-in agent identifiers and names.
  * Used across backend, frontend, and e2e-tests.
  */
+import { POLICY_CONFIG_SYSTEM_PROMPT_EXPRESSIONS } from "./system-prompt-template";
 
 /** Display names for built-in agents */
 export const BUILT_IN_AGENT_NAMES = {
@@ -19,17 +20,17 @@ export const BUILT_IN_AGENT_IDS = {
 
 /** System prompt template for the policy configuration subagent.
  * Uses Handlebars syntax for variable substitution, consistent with other system prompts.
- * Available context: tool.name, tool.description, mcpServerName, tool.parameters
+ * Available context comes from buildPolicyConfigSystemPromptContext().
  */
 export const POLICY_CONFIG_SYSTEM_PROMPT = `Analyze this MCP tool and determine security policies.
 
 The primary security goal is to PREVENT LEAKING SENSITIVE DATA FROM INTERNAL SYSTEMS TO EXTERNAL SERVICES. Internal systems (Jira, GitHub, databases, etc.) contain sensitive organizational data. External-facing tools (browsers, web scrapers, email senders, etc.) can transmit data outside the organization. Policies must ensure sensitive internal data never flows outward through external tools.
 
-Tool: {{tool.name}}
-Description: {{tool.description}}
-MCP Server: {{mcpServerName}}
-Parameters: {{tool.parameters}}
-Annotations: {{tool.annotations}}
+Tool: ${POLICY_CONFIG_SYSTEM_PROMPT_EXPRESSIONS.toolName}
+Description: ${POLICY_CONFIG_SYSTEM_PROMPT_EXPRESSIONS.toolDescription}
+MCP Server: ${POLICY_CONFIG_SYSTEM_PROMPT_EXPRESSIONS.mcpServerName}
+Parameters: ${POLICY_CONFIG_SYSTEM_PROMPT_EXPRESSIONS.toolParameters}
+Annotations: ${POLICY_CONFIG_SYSTEM_PROMPT_EXPRESSIONS.toolAnnotations}
 
 Determine two policies:
 

@@ -32,6 +32,7 @@ import {
 } from "react";
 import { filterOptimisticToolCalls } from "@/components/chat/chat-messages.utils";
 import { useGenerateConversationTitle } from "@/lib/chat/chat.query";
+import { restoreRenderableAssistantParts } from "@/lib/chat/chat-session-utils";
 import { getChatExternalAgentId } from "@/lib/chat/chat-utils";
 import appConfig from "@/lib/config/config";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -306,6 +307,7 @@ function ChatSessionHook({
   const retryCountRef = useRef(0);
   const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastUserMessageIdRef = useRef<string | null>(null);
+  const previousMessagesRef = useRef<UIMessage[]>([]);
 
   // Track early UI data from data-tool-ui-start events (toolCallId → resource data)
   const [earlyToolUiStarts, setEarlyToolUiStarts] = useState<
@@ -489,17 +491,28 @@ function ChatSessionHook({
     },
   } as Parameters<typeof useChat>[0]);
 
+  const messagesWithRestoredAssistantParts = restoreRenderableAssistantParts({
+    previousMessages: previousMessagesRef.current,
+    nextMessages: messages,
+  });
+  previousMessagesRef.current = messagesWithRestoredAssistantParts;
+
   // Keep sendMessageRef up-to-date for onFinish callback
   sendMessageRef.current = sendMessage;
+
+  const stableMessages = messagesWithRestoredAssistantParts;
 
   // Reset retry counter only when the user sends a genuinely new message.
   // We track the last user message ID to avoid resetting during regenerate(),
   // which manipulates the messages array without a new user message.
-  const lastUserMessage = [...messages]
+  const lastStableUserMessage = [...stableMessages]
     .reverse()
     .find((m) => m.role === "user");
-  if (lastUserMessage && lastUserMessage.id !== lastUserMessageIdRef.current) {
-    lastUserMessageIdRef.current = lastUserMessage.id;
+  if (
+    lastStableUserMessage &&
+    lastStableUserMessage.id !== lastUserMessageIdRef.current
+  ) {
+    lastUserMessageIdRef.current = lastStableUserMessage.id;
     retryCountRef.current = 0;
   }
 
@@ -509,9 +522,9 @@ function ChatSessionHook({
     }
 
     setOptimisticToolCalls((current) =>
-      filterOptimisticToolCalls(messages, current),
+      filterOptimisticToolCalls(stableMessages, current),
     );
-  }, [messages, optimisticToolCalls.length]);
+  }, [stableMessages, optimisticToolCalls.length]);
 
   // Auto-generate title after first assistant response
   useEffect(() => {
@@ -524,8 +537,10 @@ function ChatSessionHook({
     }
 
     // Check if we have at least one user message and one assistant message
-    const userMessages = messages.filter((m) => m.role === "user");
-    const assistantMessages = messages.filter((m) => m.role === "assistant");
+    const userMessages = stableMessages.filter((m) => m.role === "user");
+    const assistantMessages = stableMessages.filter(
+      (m) => m.role === "assistant",
+    );
 
     // Only generate title after first exchange (1 user + 1 assistant message)
     // and when status is ready (not still streaming)
@@ -544,7 +559,7 @@ function ChatSessionHook({
         generateTitleMutation.mutate({ id: conversationId });
       }
     }
-  }, [messages, status, conversationId, generateTitleMutation]);
+  }, [stableMessages, status, conversationId, generateTitleMutation]);
 
   // Always keep the session ref up-to-date with the latest values (including
   // function references from useChat which change every render). This is a ref
@@ -552,7 +567,7 @@ function ChatSessionHook({
   const sessionRef = useRef<ChatSession>(null as unknown as ChatSession);
   sessionRef.current = {
     conversationId,
-    messages,
+    messages: stableMessages,
     sendMessage,
     stop,
     status,
@@ -576,7 +591,7 @@ function ChatSessionHook({
     notifySessionUpdate();
   }, [
     conversationId,
-    messages,
+    stableMessages,
     sendMessage,
     stop,
     status,

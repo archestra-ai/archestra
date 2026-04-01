@@ -11,7 +11,15 @@ import type {
   RowSelectionState,
   SortingState,
 } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp, Loader2, Pencil, Wand2 } from "lucide-react";
+import {
+  Bot,
+  ChevronDown,
+  ChevronUp,
+  Loader2,
+  Network,
+  Pencil,
+  Wand2,
+} from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { LoadingSpinner } from "@/components/loading";
@@ -68,7 +76,8 @@ import {
   useToolsWithAssignments,
 } from "@/lib/tools/tool.query";
 import { isMcpToolByProperties } from "@/lib/tools/tool.utils";
-import type { ToolsInitialData } from "../page";
+import type { ToolsInitialData } from "../types";
+import { getVisibleCatalogSources } from "./assigned-tools-table.utils";
 import { CallPolicyToggle } from "./call-policy-toggle";
 
 type GetToolsWithAssignmentsQueryParams = NonNullable<
@@ -184,6 +193,7 @@ export function AssignedToolsTable({
     filters: {
       search: searchFromUrl || undefined,
       origin: originFilter !== "all" ? originFilter : undefined,
+      excludeArchestraTools: true,
     },
   });
 
@@ -194,6 +204,8 @@ export function AssignedToolsTable({
     (newPagination: { pageIndex: number; pageSize: number }) => {
       setRowSelection({});
       setSelectedTools([]);
+      setBulkCallPolicyValue("");
+      setBulkResultPolicyValue("");
 
       setPagination(newPagination);
     },
@@ -203,6 +215,8 @@ export function AssignedToolsTable({
   const handleRowSelectionChange = useCallback(
     (newRowSelection: RowSelectionState) => {
       setRowSelection(newRowSelection);
+      setBulkCallPolicyValue("");
+      setBulkResultPolicyValue("");
 
       const newSelectedTools = Object.keys(newRowSelection)
         .map((rowId) => tools.find((tool) => tool.id === rowId))
@@ -216,6 +230,8 @@ export function AssignedToolsTable({
   const handleSearchChange = useCallback(() => {
     setRowSelection({});
     setSelectedTools([]);
+    setBulkCallPolicyValue("");
+    setBulkResultPolicyValue("");
   }, []);
 
   const handleOriginFilterChange = useCallback(
@@ -227,6 +243,8 @@ export function AssignedToolsTable({
       });
       setRowSelection({});
       setSelectedTools([]);
+      setBulkCallPolicyValue("");
+      setBulkResultPolicyValue("");
     },
     [updateQueryParams],
   );
@@ -304,6 +322,8 @@ export function AssignedToolsTable({
         }
       } finally {
         setIsBulkUpdating(false);
+        setBulkCallPolicyValue("");
+        setBulkResultPolicyValue("");
       }
     },
     [
@@ -356,11 +376,6 @@ export function AssignedToolsTable({
       toast.error(errorMessage);
     }
   }, [selectedTools, autoConfigureMutation]);
-
-  const clearSelection = useCallback(() => {
-    setRowSelection({});
-    setSelectedTools([]);
-  }, []);
 
   const clearFilters = useCallback(() => {
     setOriginFilter(DEFAULT_FILTER_ALL);
@@ -490,7 +505,7 @@ export function AssignedToolsTable({
             className="-ml-4 h-auto px-4 py-2 font-medium hover:bg-transparent"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           >
-            Origin
+            Source
             <SortIcon isSorted={column.getIsSorted()} />
           </Button>
         ),
@@ -508,7 +523,7 @@ export function AssignedToolsTable({
                     <TooltipTrigger asChild>
                       <Badge
                         variant="default"
-                        className="bg-indigo-500 inline-flex max-w-full gap-1.5 overflow-hidden align-middle"
+                        className="bg-indigo-500 text-white inline-flex max-w-full gap-1.5 overflow-hidden align-middle"
                       >
                         <McpCatalogIcon
                           icon={catalogItem.icon}
@@ -539,8 +554,9 @@ export function AssignedToolsTable({
                   <TooltipTrigger asChild>
                     <Badge
                       variant="secondary"
-                      className="bg-violet-600 text-white"
+                      className="bg-violet-600 text-white gap-1.5"
                     >
+                      <Bot className="h-3.5 w-3.5 shrink-0" />
                       Agent
                     </Badge>
                   </TooltipTrigger>
@@ -558,8 +574,9 @@ export function AssignedToolsTable({
                 <TooltipTrigger asChild>
                   <Badge
                     variant="secondary"
-                    className="bg-amber-700 text-white"
+                    className="bg-amber-700 text-white gap-1.5"
                   >
+                    <Network className="h-3.5 w-3.5 shrink-0" />
                     LLM Proxy
                   </Badge>
                 </TooltipTrigger>
@@ -764,14 +781,10 @@ export function AssignedToolsTable({
 
   const hasSelection = selectedTools.length > 0;
 
-  // Get unique origins from internal MCP catalog
-  const uniqueOrigins = useMemo(() => {
-    const origins = new Set<{ id: string; name: string }>();
-    internalMcpCatalogItems?.forEach((item) => {
-      origins.add({ id: item.id, name: item.name });
-    });
-    return Array.from(origins);
-  }, [internalMcpCatalogItems]);
+  const visibleCatalogSources = useMemo(
+    () => getVisibleCatalogSources(internalMcpCatalogItems),
+    [internalMcpCatalogItems],
+  );
 
   return (
     <PermissivePolicyOverlay>
@@ -787,40 +800,62 @@ export function AssignedToolsTable({
           <SearchableSelect
             value={originFilter}
             onValueChange={handleOriginFilterChange}
-            placeholder="Filter by Origin"
+            placeholder="Filter by Source"
             items={[
-              { value: "all", label: "All Origins" },
-              { value: "agent", label: "Agent" },
-              { value: "llm-proxy", label: "LLM Proxy" },
-              ...uniqueOrigins.map((origin) => ({
-                value: origin.id,
-                label: origin.name,
+              { value: "all", label: "All Sources" },
+              {
+                value: "agent",
+                label: "Agent",
+                content: (
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Bot className="h-4 w-4 shrink-0" />
+                    <span className="truncate">Agent</span>
+                  </div>
+                ),
+                selectedContent: (
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Bot className="h-4 w-4 shrink-0" />
+                    <span className="truncate">Agent</span>
+                  </div>
+                ),
+              },
+              {
+                value: "llm-proxy",
+                label: "LLM Proxy",
+                content: (
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Network className="h-4 w-4 shrink-0" />
+                    <span className="truncate">LLM Proxy</span>
+                  </div>
+                ),
+                selectedContent: (
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Network className="h-4 w-4 shrink-0" />
+                    <span className="truncate">LLM Proxy</span>
+                  </div>
+                ),
+              },
+              ...visibleCatalogSources.map((source) => ({
+                value: source.id,
+                label: source.name,
                 content: (
                   <div className="flex items-center gap-2 min-w-0">
                     <McpCatalogIcon
-                      icon={
-                        internalMcpCatalogItems?.find(
-                          (item) => item.id === origin.id,
-                        )?.icon
-                      }
-                      catalogId={origin.id}
+                      icon={source.icon}
+                      catalogId={source.id}
                       size={16}
                     />
-                    <span className="truncate">{origin.name}</span>
+                    <span className="truncate">{source.name}</span>
                   </div>
                 ),
                 selectedContent: (
                   <div className="flex items-center gap-2 min-w-0">
                     <McpCatalogIcon
-                      icon={
-                        internalMcpCatalogItems?.find(
-                          (item) => item.id === origin.id,
-                        )?.icon
-                      }
-                      catalogId={origin.id}
+                      icon={source.icon}
+                      catalogId={source.id}
                       size={16}
                     />
-                    <span className="truncate">{origin.name}</span>
+                    <span className="truncate">{source.name}</span>
                   </div>
                 ),
               })),
@@ -854,14 +889,14 @@ export function AssignedToolsTable({
               </span>
             )}
           </div>
-          <div className="flex items-center gap-4 flex-wrap ml-auto">
+          <div className="ml-auto flex flex-wrap items-end gap-4">
             <WithPermissions
               permissions={{ toolPolicy: ["update"] }}
               noPermissionHandle="tooltip"
             >
               {({ hasPermission }) => (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs font-medium text-muted-foreground">
                     Call Policy:
                   </span>
                   <Select
@@ -872,7 +907,7 @@ export function AssignedToolsTable({
                       handleBulkAction("callPolicy", value);
                     }}
                   >
-                    <SelectTrigger className="h-8 w-[180px] text-sm" size="sm">
+                    <SelectTrigger className="h-8 w-[168px] text-sm" size="sm">
                       <SelectValue placeholder="Select action" />
                     </SelectTrigger>
                     <SelectContent>
@@ -899,8 +934,8 @@ export function AssignedToolsTable({
               noPermissionHandle="tooltip"
             >
               {({ hasPermission }) => (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs font-medium text-muted-foreground">
                     Results are:
                   </span>
                   <Select
@@ -911,7 +946,7 @@ export function AssignedToolsTable({
                       handleBulkAction("resultPolicyAction", value);
                     }}
                   >
-                    <SelectTrigger className="h-8 w-[160px] text-sm" size="sm">
+                    <SelectTrigger className="h-8 w-[150px] text-sm" size="sm">
                       <SelectValue placeholder="Select action" />
                     </SelectTrigger>
                     <SelectContent>
@@ -925,7 +960,6 @@ export function AssignedToolsTable({
                 </div>
               )}
             </WithPermissions>
-            <div className="ml-2 h-4 w-px bg-border" />
             <Tooltip>
               <TooltipTrigger asChild>
                 <PermissionButton
@@ -958,19 +992,11 @@ export function AssignedToolsTable({
                 </p>
               </TooltipContent>
             </Tooltip>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={clearSelection}
-              disabled={!hasSelection || isBulkUpdating}
-            >
-              Clear selection
-            </Button>
           </div>
         </div>
 
         {/* Bulk actions - Mobile */}
-        <div className="flex flex-col gap-3 p-3 bg-muted/50 border border-border rounded-lg lg:hidden">
+        <div className="flex flex-col gap-3 rounded-lg border border-border bg-muted/50 p-3 lg:hidden">
           {/* Title / selection info */}
           <div className="flex items-center gap-2">
             {hasSelection ? (
@@ -996,73 +1022,81 @@ export function AssignedToolsTable({
             )}
           </div>
 
-          {/* Call Policy */}
-          <WithPermissions
-            permissions={{ toolPolicy: ["update"] }}
-            noPermissionHandle="tooltip"
-          >
-            {({ hasPermission }) => (
-              <div className="flex flex-col gap-1.5">
-                <span className="text-xs font-medium text-muted-foreground">
-                  Call Policy
-                </span>
-                <Select
-                  disabled={!hasSelection || isBulkUpdating || !hasPermission}
-                  value={bulkCallPolicyValue}
-                  onValueChange={(value: CallPolicyAction) => {
-                    setBulkCallPolicyValue(value);
-                    handleBulkAction("callPolicy", value);
-                  }}
-                >
-                  <SelectTrigger className="h-9 w-full text-sm" size="sm">
-                    <SelectValue placeholder="Select action" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="allow_when_context_is_untrusted">
-                      Allow always
-                    </SelectItem>
-                    <SelectItem value="block_when_context_is_untrusted">
-                      Allow in safe context
-                    </SelectItem>
-                    <SelectItem value="block_always">Block always</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </WithPermissions>
-
-          {/* Results are */}
-          <WithPermissions
-            permissions={{ toolPolicy: ["update"] }}
-            noPermissionHandle="tooltip"
-          >
-            {({ hasPermission }) => (
-              <div className="flex flex-col gap-1.5">
-                <span className="text-xs font-medium text-muted-foreground">
-                  Results are
-                </span>
-                <Select
-                  disabled={!hasSelection || isBulkUpdating || !hasPermission}
-                  value={bulkResultPolicyValue}
-                  onValueChange={(value: ResultPolicyAction) => {
-                    setBulkResultPolicyValue(value);
-                    handleBulkAction("resultPolicyAction", value);
-                  }}
-                >
-                  <SelectTrigger className="h-9 w-full text-sm" size="sm">
-                    <SelectValue placeholder="Select action" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {RESULT_POLICY_ACTION_OPTIONS.map(({ value, label }) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
+          <div className="flex flex-col gap-3">
+            {/* Call Policy */}
+            <WithPermissions
+              permissions={{ toolPolicy: ["update"] }}
+              noPermissionHandle="tooltip"
+            >
+              {({ hasPermission }) => (
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Call Policy
+                  </span>
+                  <Select
+                    disabled={!hasSelection || isBulkUpdating || !hasPermission}
+                    value={bulkCallPolicyValue}
+                    onValueChange={(value: CallPolicyAction) => {
+                      setBulkCallPolicyValue(value);
+                      handleBulkAction("callPolicy", value);
+                    }}
+                  >
+                    <SelectTrigger className="h-9 w-full text-sm" size="sm">
+                      <SelectValue placeholder="Select action" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="allow_when_context_is_untrusted">
+                        Allow always
                       </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </WithPermissions>
+                      <SelectItem value="block_when_context_is_untrusted">
+                        Allow in safe context
+                      </SelectItem>
+                      <SelectItem
+                        value="require_approval"
+                        description="Requires user confirmation before executing in chat. In autonomous agent sessions (A2A, API, MS Teams, subagents), the tool call is blocked."
+                      >
+                        Require approval
+                      </SelectItem>
+                      <SelectItem value="block_always">Block always</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </WithPermissions>
+
+            {/* Results are */}
+            <WithPermissions
+              permissions={{ toolPolicy: ["update"] }}
+              noPermissionHandle="tooltip"
+            >
+              {({ hasPermission }) => (
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Results are
+                  </span>
+                  <Select
+                    disabled={!hasSelection || isBulkUpdating || !hasPermission}
+                    value={bulkResultPolicyValue}
+                    onValueChange={(value: ResultPolicyAction) => {
+                      setBulkResultPolicyValue(value);
+                      handleBulkAction("resultPolicyAction", value);
+                    }}
+                  >
+                    <SelectTrigger className="h-9 w-full text-sm" size="sm">
+                      <SelectValue placeholder="Select action" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {RESULT_POLICY_ACTION_OPTIONS.map(({ value, label }) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </WithPermissions>
+          </div>
 
           {/* Action buttons */}
           <div className="flex flex-col gap-2 pt-1">
@@ -1099,15 +1133,6 @@ export function AssignedToolsTable({
                 </p>
               </TooltipContent>
             </Tooltip>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="w-full justify-center"
-              onClick={clearSelection}
-              disabled={!hasSelection || isBulkUpdating}
-            >
-              Clear selection
-            </Button>
           </div>
         </div>
 

@@ -70,7 +70,7 @@ export function SidebarWarningsAccordion() {
                 tooltip="Enable security engine"
                 className="text-destructive hover:text-destructive"
               >
-                <Link href="/mcp/tool-policies">
+                <Link href="/mcp/tool-guardrails">
                   <AlertTriangle className="shrink-0" />
                   <span>Enable security engine</span>
                 </Link>

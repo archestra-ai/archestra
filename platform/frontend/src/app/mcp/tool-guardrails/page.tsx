@@ -1,8 +1,4 @@
-import {
-  archestraApiSdk,
-  type archestraApiTypes,
-  type ErrorExtended,
-} from "@shared";
+import { archestraApiSdk, type ErrorExtended } from "@shared";
 
 import { ServerErrorFallback } from "@/components/error-fallback";
 import {
@@ -16,18 +12,12 @@ import {
 } from "@/lib/policy.utils";
 import { handleApiError } from "@/lib/utils";
 import { getServerApiHeaders } from "@/lib/utils/server";
-import { ToolPoliciesClient } from "./page.client";
+import { ToolGuardrailsClient } from "./page.client";
+import type { ToolsInitialData } from "./types";
 
 export const dynamic = "force-dynamic";
 
-export type ToolsInitialData = {
-  toolsWithAssignments: archestraApiTypes.GetToolsWithAssignmentsResponses["200"];
-  internalMcpCatalog: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
-  toolInvocationPolicies: ReturnType<typeof transformToolInvocationPolicies>;
-  toolResultPolicies: ReturnType<typeof transformToolResultPolicies>;
-};
-
-export default async function ToolPoliciesPage() {
+export default async function ToolGuardrailsPage() {
   let initialData: ToolsInitialData = {
     toolsWithAssignments: {
       data: [],
@@ -59,6 +49,7 @@ export default async function ToolPoliciesPage() {
           offset: 0,
           sortBy: DEFAULT_SORT_BY,
           sortDirection: DEFAULT_SORT_DIRECTION,
+          excludeArchestraTools: true,
         },
       }),
       archestraApiSdk.getInternalMcpCatalog({ headers }),
@@ -91,5 +82,5 @@ export default async function ToolPoliciesPage() {
   } catch (error) {
     return <ServerErrorFallback error={error as ErrorExtended} />;
   }
-  return <ToolPoliciesClient initialData={initialData} />;
+  return <ToolGuardrailsClient initialData={initialData} />;
 }

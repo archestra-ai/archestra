@@ -158,10 +158,10 @@ const navigationItems = [
   },
   {
     icon: Wrench,
-    label: "Tool Policies",
-    value: "tool-policies",
-    keywords: "tools policies permissions",
-    href: "/mcp/tool-policies",
+    label: "Tool Guardrails",
+    value: "tool-guardrails",
+    keywords: "tools guardrails policies permissions security",
+    href: "/mcp/tool-guardrails",
   },
   {
     icon: Router,

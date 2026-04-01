@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import {
+  buildUserSystemPromptContext,
   type InteractionSource,
   PLAYWRIGHT_MCP_CATALOG_ID,
   type SupportedProvider,
@@ -25,7 +26,7 @@ import { mapProviderError, ProviderError } from "@/routes/chat/errors";
 import {
   promptNeedsRendering,
   renderSystemPrompt,
-  type SystemPromptContext,
+  type UserSystemPromptContext,
 } from "@/templating";
 
 /**
@@ -138,19 +139,17 @@ export async function executeA2AMessage(
   let systemPrompt: string | undefined;
 
   // Build template context only when prompts use Handlebars syntax
-  let promptContext: SystemPromptContext | null = null;
+  let promptContext: UserSystemPromptContext | null = null;
   if (promptNeedsRendering(agent.systemPrompt)) {
     const [userDetails, userTeams] = await Promise.all([
       UserModel.getById(userId),
       TeamModel.getUserTeams(userId),
     ]);
-    promptContext = {
-      user: {
-        name: userDetails?.name ?? "",
-        email: userDetails?.email ?? "",
-        teams: userTeams.map((t) => t.name),
-      },
-    };
+    promptContext = buildUserSystemPromptContext({
+      userName: userDetails?.name ?? "",
+      userEmail: userDetails?.email ?? "",
+      userTeams: userTeams.map((t) => t.name),
+    });
   }
 
   const renderedPrompt = renderSystemPrompt(agent.systemPrompt, promptContext);

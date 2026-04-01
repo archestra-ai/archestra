@@ -90,7 +90,7 @@ This starts Archestra Platform with:
 docker run pydantic-ai-archestra-example --secure
 ```
 
-**Expected behavior**: Archestra will mark the GitHub API response as untrusted. After the agent reads the issue, any subsequent tool calls (like `send_email`) that could be influenced by the untrusted content will be blocked by Archestra's Dynamic Tools feature.
+**Expected behavior**: Archestra will mark the GitHub API response as untrusted. After the agent reads the issue, any subsequent tool calls (like `send_email`) that could be influenced by the untrusted content will be blocked by Archestra's AI tool guardrails.
 
 ## Step 6. Integrate Pydantic AI with Archestra in your own code
 
@@ -163,4 +163,4 @@ The decision tree for Archestra would be:
 
 Now you are safe from Lethal Trifecta type attacks and prompt injections cannot influence your agent. With Archestra, the GitHub API response is automatically marked as untrusted, and any subsequent dangerous tool calls (like `send_email`) are blocked.
 
-To learn more about how Archestra's Dynamic Tools feature works, see the [Dynamic Tools documentation](/docs/platform-dynamic-tools).
+To learn more about how Archestra's AI tool guardrails work, see the [AI tool guardrails documentation](/docs/platform-ai-tool-guardrails).

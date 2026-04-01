@@ -642,7 +642,7 @@ function EditModelDialog({
                   <li>
                     In {appName} chat, a model appears as a standard chat model
                     when it supports both text input and text output and is not
-                    marked as ignored.
+                    hidden.
                   </li>
                   <li>
                     Image, audio, video, and PDF input modalities control

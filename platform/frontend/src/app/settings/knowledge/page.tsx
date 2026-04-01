@@ -502,13 +502,14 @@ function KnowledgeSettingsContent() {
   const showSelectEmbeddingKeyHint =
     !embeddingChatApiKeyId && !isEmbeddingModelLocked;
   const showEmbeddingMeta = !!selectedEmbeddingModel || isEmbeddingModelLocked;
+  const showEmbeddingSupportText =
+    showEmbeddingMeta ||
+    showSelectEmbeddingKeyHint ||
+    showConfigureEmbeddingModelsLink;
   const showEmbeddingActions =
     isEmbeddingModelLocked || (!!embeddingChatApiKeyId && !!embeddingModel);
   const showEmbeddingSupportPanel =
-    showEmbeddingMeta ||
-    showSelectEmbeddingKeyHint ||
-    showConfigureEmbeddingModelsLink ||
-    showEmbeddingActions;
+    showEmbeddingSupportText || showEmbeddingActions;
 
   // Check if keys exist for pulsing logic
   const hasApiKeys = useMemo(() => (apiKeys ?? []).length > 0, [apiKeys]);
@@ -618,49 +619,59 @@ function KnowledgeSettingsContent() {
                   />
                   {showEmbeddingSupportPanel && (
                     <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
-                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                        <div className="space-y-1.5">
-                          {selectedEmbeddingModel && (
-                            <p className="flex items-start gap-2 text-xs text-muted-foreground">
-                              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                              <span>
-                                Uses{" "}
-                                {selectedEmbeddingModel.embeddingDimensions}
-                                -dimensional vectors.
-                                {selectedEmbeddingProvider === "gemini" &&
-                                  selectedEmbeddingModel.embeddingDimensions ===
-                                    1536 &&
-                                  " Gemini will truncate from its native 3072 dimensions via outputDimensionality."}
-                              </span>
-                            </p>
-                          )}
-                          {isEmbeddingModelLocked && (
-                            <p className="flex items-start gap-2 text-xs text-muted-foreground">
-                              <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                              <span>
-                                Locked — changing the embedding model requires
-                                re-embedding all documents.
-                              </span>
-                            </p>
-                          )}
-                          {showSelectEmbeddingKeyHint && (
-                            <p className="text-xs text-muted-foreground">
-                              Select an embedding API key first.
-                            </p>
-                          )}
-                          {showConfigureEmbeddingModelsLink && (
-                            <p className="text-xs text-muted-foreground">
-                              Configure embedding dimensions for a synced model{" "}
-                              <Link
-                                href="/llm/providers/models"
-                                className="text-primary underline underline-offset-2"
-                              >
-                                here
-                              </Link>
-                              .
-                            </p>
-                          )}
-                        </div>
+                      <div
+                        className={cn(
+                          "flex flex-col gap-3",
+                          showEmbeddingSupportText &&
+                            showEmbeddingActions &&
+                            "md:flex-row md:items-start md:justify-between",
+                        )}
+                      >
+                        {showEmbeddingSupportText && (
+                          <div className="space-y-1.5">
+                            {selectedEmbeddingModel && (
+                              <p className="flex items-start gap-2 text-xs text-muted-foreground">
+                                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                <span>
+                                  Uses{" "}
+                                  {selectedEmbeddingModel.embeddingDimensions}
+                                  -dimensional vectors.
+                                  {selectedEmbeddingProvider === "gemini" &&
+                                    selectedEmbeddingModel.embeddingDimensions ===
+                                      1536 &&
+                                    " Gemini will truncate from its native 3072 dimensions via outputDimensionality."}
+                                </span>
+                              </p>
+                            )}
+                            {isEmbeddingModelLocked && (
+                              <p className="flex items-start gap-2 text-xs text-muted-foreground">
+                                <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                <span>
+                                  Locked — changing the embedding model requires
+                                  re-embedding all documents.
+                                </span>
+                              </p>
+                            )}
+                            {showSelectEmbeddingKeyHint && (
+                              <p className="text-xs text-muted-foreground">
+                                Select an embedding API key first.
+                              </p>
+                            )}
+                            {showConfigureEmbeddingModelsLink && (
+                              <p className="text-xs text-muted-foreground">
+                                Configure embedding dimensions for a synced
+                                model{" "}
+                                <Link
+                                  href="/llm/providers/models"
+                                  className="text-primary underline underline-offset-2"
+                                >
+                                  here
+                                </Link>
+                                .
+                              </p>
+                            )}
+                          </div>
+                        )}
                         {showEmbeddingActions && (
                           <div className="flex flex-wrap justify-end gap-2 md:shrink-0">
                             {embeddingChatApiKeyId && embeddingModel && (

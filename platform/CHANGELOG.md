@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.2.2](https://github.com/archestra-ai/archestra/compare/platform-v1.2.1...platform-v1.2.2) (2026-04-01)
+
+
+### Features
+
+* add scoped chat sharing and canonical chat routes ([#3616](https://github.com/archestra-ai/archestra/issues/3616)) ([ba53dbf](https://github.com/archestra-ai/archestra/commit/ba53dbfc8f6ec037f5ab0990ecf7134e16f41062))
+* make knowledge base embeddings model-driven ([#3611](https://github.com/archestra-ai/archestra/issues/3611)) ([eb3d546](https://github.com/archestra-ai/archestra/commit/eb3d54661d45386f92880aec88d88af33714d279))
+
+
+### Bug Fixes
+
+* repair chat sharing migration ordering ([#3622](https://github.com/archestra-ai/archestra/issues/3622)) ([71f3e91](https://github.com/archestra-ai/archestra/commit/71f3e9147dafcaee05d18519162030bce89234ff))
+* users table limit ([#3621](https://github.com/archestra-ai/archestra/issues/3621)) ([18ce1d5](https://github.com/archestra-ai/archestra/commit/18ce1d5ef3933352de00996d3009156e66e4406f))
+
+
+### Miscellaneous Chores
+
+* correctly render subagent tools in the guardrails table ([#3620](https://github.com/archestra-ai/archestra/issues/3620)) ([53f1399](https://github.com/archestra-ai/archestra/commit/53f139912c475cd3492548521e75e20312f0190c))
+* improve policy config subagent ([#3612](https://github.com/archestra-ai/archestra/issues/3612)) ([d00b532](https://github.com/archestra-ai/archestra/commit/d00b5325d51be90dd6eb388d940cc14c3c913920))
+* refine tool guardrails, chat flows, and knowledge/model UX ([#3624](https://github.com/archestra-ai/archestra/issues/3624)) ([30d9e68](https://github.com/archestra-ai/archestra/commit/30d9e681cee6fac0255fb94e1590691cea006f3b))
+
 ## [1.2.1](https://github.com/archestra-ai/archestra/compare/platform-v1.2.0...platform-v1.2.1) (2026-03-31)
 
 

@@ -1,5 +1,6 @@
 import { archestraApiSdk } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { handleApiError } from "@/lib/utils";
 
 const {
@@ -58,6 +59,9 @@ export function useShareConversation() {
     onSuccess: (data, { conversationId }) => {
       if (!data) return;
       queryClient.setQueryData(["conversation-share", conversationId], data);
+      queryClient.invalidateQueries({ queryKey: ["conversation", conversationId] });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      toast.success("Chat visibility updated");
     },
   });
 }
@@ -78,6 +82,9 @@ export function useUnshareConversation() {
     },
     onSuccess: (_data, conversationId) => {
       queryClient.setQueryData(["conversation-share", conversationId], null);
+      queryClient.invalidateQueries({ queryKey: ["conversation", conversationId] });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      toast.success("Chat sharing removed");
     },
   });
 }

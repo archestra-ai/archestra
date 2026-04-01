@@ -442,19 +442,20 @@ export class PolicyConfigurationService {
     const annotations = tool.meta?.annotations as
       | Record<string, unknown>
       | undefined;
-    const prompt = renderSystemPrompt(builtInAgent.systemPrompt, null, {
-      tool: {
-        name: tool.name,
-        description: tool.description || "No description provided",
-        parameters: tool.parameters
-          ? JSON.stringify(tool.parameters, null, 2)
-          : "No parameters",
-        annotations: annotations
-          ? JSON.stringify(annotations, null, 2)
-          : "Not provided",
-      },
-      mcpServerName: mcpServerName || "Unknown",
-    })!;
+    const prompt =
+      renderSystemPrompt(builtInAgent.systemPrompt, null, {
+        tool: {
+          name: tool.name,
+          description: tool.description || "No description provided",
+          parameters: tool.parameters
+            ? JSON.stringify(tool.parameters, null, 2)
+            : "No parameters",
+          annotations: annotations
+            ? JSON.stringify(annotations, null, 2)
+            : "Not provided",
+        },
+        mcpServerName: mcpServerName || "Unknown",
+      }) ?? "";
 
     try {
       const result = await generateObject({

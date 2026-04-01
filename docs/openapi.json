@@ -45114,16 +45114,16 @@
                               "toolInvocationAction": {
                                 "type": "string",
                                 "enum": [
-                                  "allow_when_context_is_untrusted",
-                                  "block_when_context_is_untrusted",
+                                  "allow_when_context_is_sensitive",
+                                  "block_when_context_is_sensitive",
                                   "block_always"
                                 ]
                               },
                               "trustedDataAction": {
                                 "type": "string",
                                 "enum": [
-                                  "mark_as_trusted",
-                                  "mark_as_untrusted",
+                                  "mark_as_safe",
+                                  "mark_as_sensitive",
                                   "sanitize_with_dual_llm",
                                   "block_always"
                                 ]
@@ -54203,24 +54203,6 @@
                           {
                             "type": "object",
                             "properties": {
-                              "auto": {
-                                "type": "object",
-                                "properties": {}
-                              }
-                            }
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "any": {
-                                "type": "object",
-                                "properties": {}
-                              }
-                            }
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
                               "tool": {
                                 "type": "object",
                                 "properties": {
@@ -54235,7 +54217,36 @@
                             },
                             "required": [
                               "tool"
-                            ]
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "any": {
+                                "type": "object",
+                                "properties": {},
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": [
+                              "any"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "auto": {
+                                "type": "object",
+                                "properties": {},
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": [
+                              "auto"
+                            ],
+                            "additionalProperties": {}
                           }
                         ]
                       }
@@ -55387,24 +55398,6 @@
                           {
                             "type": "object",
                             "properties": {
-                              "auto": {
-                                "type": "object",
-                                "properties": {}
-                              }
-                            }
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "any": {
-                                "type": "object",
-                                "properties": {}
-                              }
-                            }
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
                               "tool": {
                                 "type": "object",
                                 "properties": {
@@ -55419,7 +55412,36 @@
                             },
                             "required": [
                               "tool"
-                            ]
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "any": {
+                                "type": "object",
+                                "properties": {},
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": [
+                              "any"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "auto": {
+                                "type": "object",
+                                "properties": {},
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": [
+                              "auto"
+                            ],
+                            "additionalProperties": {}
                           }
                         ]
                       }
@@ -56581,24 +56603,6 @@
                           {
                             "type": "object",
                             "properties": {
-                              "auto": {
-                                "type": "object",
-                                "properties": {}
-                              }
-                            }
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "any": {
-                                "type": "object",
-                                "properties": {}
-                              }
-                            }
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
                               "tool": {
                                 "type": "object",
                                 "properties": {
@@ -56613,7 +56617,36 @@
                             },
                             "required": [
                               "tool"
-                            ]
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "any": {
+                                "type": "object",
+                                "properties": {},
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": [
+                              "any"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "auto": {
+                                "type": "object",
+                                "properties": {},
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": [
+                              "auto"
+                            ],
+                            "additionalProperties": {}
                           }
                         ]
                       }
@@ -57338,24 +57371,6 @@
                           {
                             "type": "object",
                             "properties": {
-                              "auto": {
-                                "type": "object",
-                                "properties": {}
-                              }
-                            }
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "any": {
-                                "type": "object",
-                                "properties": {}
-                              }
-                            }
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
                               "tool": {
                                 "type": "object",
                                 "properties": {
@@ -57370,7 +57385,36 @@
                             },
                             "required": [
                               "tool"
-                            ]
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "any": {
+                                "type": "object",
+                                "properties": {},
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": [
+                              "any"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "auto": {
+                                "type": "object",
+                                "properties": {},
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": [
+                              "auto"
+                            ],
+                            "additionalProperties": {}
                           }
                         ]
                       }
@@ -58105,24 +58149,6 @@
                           {
                             "type": "object",
                             "properties": {
-                              "auto": {
-                                "type": "object",
-                                "properties": {}
-                              }
-                            }
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "any": {
-                                "type": "object",
-                                "properties": {}
-                              }
-                            }
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
                               "tool": {
                                 "type": "object",
                                 "properties": {
@@ -58137,7 +58163,36 @@
                             },
                             "required": [
                               "tool"
-                            ]
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "any": {
+                                "type": "object",
+                                "properties": {},
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": [
+                              "any"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "auto": {
+                                "type": "object",
+                                "properties": {},
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": [
+                              "auto"
+                            ],
+                            "additionalProperties": {}
                           }
                         ]
                       }
@@ -59304,24 +59359,6 @@
                           {
                             "type": "object",
                             "properties": {
-                              "auto": {
-                                "type": "object",
-                                "properties": {}
-                              }
-                            }
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "any": {
-                                "type": "object",
-                                "properties": {}
-                              }
-                            }
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
                               "tool": {
                                 "type": "object",
                                 "properties": {
@@ -59336,7 +59373,36 @@
                             },
                             "required": [
                               "tool"
-                            ]
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "any": {
+                                "type": "object",
+                                "properties": {},
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": [
+                              "any"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "auto": {
+                                "type": "object",
+                                "properties": {},
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": [
+                              "auto"
+                            ],
+                            "additionalProperties": {}
                           }
                         ]
                       }
@@ -75774,28 +75840,6 @@
                                           {
                                             "type": "object",
                                             "properties": {
-                                              "auto": {
-                                                "type": "object",
-                                                "properties": {},
-                                                "additionalProperties": false
-                                              }
-                                            },
-                                            "additionalProperties": false
-                                          },
-                                          {
-                                            "type": "object",
-                                            "properties": {
-                                              "any": {
-                                                "type": "object",
-                                                "properties": {},
-                                                "additionalProperties": false
-                                              }
-                                            },
-                                            "additionalProperties": false
-                                          },
-                                          {
-                                            "type": "object",
-                                            "properties": {
                                               "tool": {
                                                 "type": "object",
                                                 "properties": {
@@ -75812,7 +75856,35 @@
                                             "required": [
                                               "tool"
                                             ],
-                                            "additionalProperties": false
+                                            "additionalProperties": {}
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "any": {
+                                                "type": "object",
+                                                "properties": {},
+                                                "additionalProperties": {}
+                                              }
+                                            },
+                                            "required": [
+                                              "any"
+                                            ],
+                                            "additionalProperties": {}
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "auto": {
+                                                "type": "object",
+                                                "properties": {},
+                                                "additionalProperties": {}
+                                              }
+                                            },
+                                            "required": [
+                                              "auto"
+                                            ],
+                                            "additionalProperties": {}
                                           }
                                         ]
                                       }
@@ -76525,28 +76597,6 @@
                                           {
                                             "type": "object",
                                             "properties": {
-                                              "auto": {
-                                                "type": "object",
-                                                "properties": {},
-                                                "additionalProperties": false
-                                              }
-                                            },
-                                            "additionalProperties": false
-                                          },
-                                          {
-                                            "type": "object",
-                                            "properties": {
-                                              "any": {
-                                                "type": "object",
-                                                "properties": {},
-                                                "additionalProperties": false
-                                              }
-                                            },
-                                            "additionalProperties": false
-                                          },
-                                          {
-                                            "type": "object",
-                                            "properties": {
                                               "tool": {
                                                 "type": "object",
                                                 "properties": {
@@ -76563,7 +76613,35 @@
                                             "required": [
                                               "tool"
                                             ],
-                                            "additionalProperties": false
+                                            "additionalProperties": {}
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "any": {
+                                                "type": "object",
+                                                "properties": {},
+                                                "additionalProperties": {}
+                                              }
+                                            },
+                                            "required": [
+                                              "any"
+                                            ],
+                                            "additionalProperties": {}
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "auto": {
+                                                "type": "object",
+                                                "properties": {},
+                                                "additionalProperties": {}
+                                              }
+                                            },
+                                            "required": [
+                                              "auto"
+                                            ],
+                                            "additionalProperties": {}
                                           }
                                         ]
                                       }
@@ -82420,28 +82498,6 @@
                                     {
                                       "type": "object",
                                       "properties": {
-                                        "auto": {
-                                          "type": "object",
-                                          "properties": {},
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "any": {
-                                          "type": "object",
-                                          "properties": {},
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
                                         "tool": {
                                           "type": "object",
                                           "properties": {
@@ -82458,7 +82514,35 @@
                                       "required": [
                                         "tool"
                                       ],
-                                      "additionalProperties": false
+                                      "additionalProperties": {}
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "any": {
+                                          "type": "object",
+                                          "properties": {},
+                                          "additionalProperties": {}
+                                        }
+                                      },
+                                      "required": [
+                                        "any"
+                                      ],
+                                      "additionalProperties": {}
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "auto": {
+                                          "type": "object",
+                                          "properties": {},
+                                          "additionalProperties": {}
+                                        }
+                                      },
+                                      "required": [
+                                        "auto"
+                                      ],
+                                      "additionalProperties": {}
                                     }
                                   ]
                                 }
@@ -83171,28 +83255,6 @@
                                     {
                                       "type": "object",
                                       "properties": {
-                                        "auto": {
-                                          "type": "object",
-                                          "properties": {},
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "any": {
-                                          "type": "object",
-                                          "properties": {},
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
                                         "tool": {
                                           "type": "object",
                                           "properties": {
@@ -83209,7 +83271,35 @@
                                       "required": [
                                         "tool"
                                       ],
-                                      "additionalProperties": false
+                                      "additionalProperties": {}
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "any": {
+                                          "type": "object",
+                                          "properties": {},
+                                          "additionalProperties": {}
+                                        }
+                                      },
+                                      "required": [
+                                        "any"
+                                      ],
+                                      "additionalProperties": {}
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "auto": {
+                                          "type": "object",
+                                          "properties": {},
+                                          "additionalProperties": {}
+                                        }
+                                      },
+                                      "required": [
+                                        "auto"
+                                      ],
+                                      "additionalProperties": {}
                                     }
                                   ]
                                 }

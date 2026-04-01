@@ -12579,8 +12579,8 @@ export type AutoConfigureAgentToolPoliciesResponses = {
             toolId: string;
             success: boolean;
             config?: {
-                toolInvocationAction: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always';
-                trustedDataAction: 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm' | 'block_always';
+                toolInvocationAction: 'allow_when_context_is_sensitive' | 'block_when_context_is_sensitive' | 'block_always';
+                trustedDataAction: 'mark_as_safe' | 'mark_as_sensitive' | 'sanitize_with_dual_llm' | 'block_always';
                 reasoning: string;
             };
             error?: string;
@@ -15139,17 +15139,20 @@ export type BedrockConverseWithDefaultAgentData = {
                 };
             }>;
             toolChoice?: {
-                auto?: {
-                    [key: string]: unknown;
-                };
-            } | {
-                any?: {
-                    [key: string]: unknown;
-                };
-            } | {
                 tool: {
                     name: string;
                 };
+                [key: string]: unknown;
+            } | {
+                any: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
+            } | {
+                auto: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
             };
         };
         guardrailConfig?: {
@@ -15440,17 +15443,20 @@ export type BedrockConverseWithAgentData = {
                 };
             }>;
             toolChoice?: {
-                auto?: {
-                    [key: string]: unknown;
-                };
-            } | {
-                any?: {
-                    [key: string]: unknown;
-                };
-            } | {
                 tool: {
                     name: string;
                 };
+                [key: string]: unknown;
+            } | {
+                any: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
+            } | {
+                auto: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
             };
         };
         guardrailConfig?: {
@@ -15743,17 +15749,20 @@ export type BedrockConverseStreamWithDefaultAgentData = {
                 };
             }>;
             toolChoice?: {
-                auto?: {
-                    [key: string]: unknown;
-                };
-            } | {
-                any?: {
-                    [key: string]: unknown;
-                };
-            } | {
                 tool: {
                     name: string;
                 };
+                [key: string]: unknown;
+            } | {
+                any: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
+            } | {
+                auto: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
             };
         };
         guardrailConfig?: {
@@ -15925,17 +15934,20 @@ export type BedrockConverseStreamWithAgentData = {
                 };
             }>;
             toolChoice?: {
-                auto?: {
-                    [key: string]: unknown;
-                };
-            } | {
-                any?: {
-                    [key: string]: unknown;
-                };
-            } | {
                 tool: {
                     name: string;
                 };
+                [key: string]: unknown;
+            } | {
+                any: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
+            } | {
+                auto: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
             };
         };
         guardrailConfig?: {
@@ -16109,17 +16121,20 @@ export type BedrockConverseWithAgentAndModelData = {
                 };
             }>;
             toolChoice?: {
-                auto?: {
-                    [key: string]: unknown;
-                };
-            } | {
-                any?: {
-                    [key: string]: unknown;
-                };
-            } | {
                 tool: {
                     name: string;
                 };
+                [key: string]: unknown;
+            } | {
+                any: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
+            } | {
+                auto: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
             };
         };
         guardrailConfig?: {
@@ -16413,17 +16428,20 @@ export type BedrockConverseStreamWithAgentAndModelData = {
                 };
             }>;
             toolChoice?: {
-                auto?: {
-                    [key: string]: unknown;
-                };
-            } | {
-                any?: {
-                    [key: string]: unknown;
-                };
-            } | {
                 tool: {
                     name: string;
                 };
+                [key: string]: unknown;
+            } | {
+                any: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
+            } | {
+                auto: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
             };
         };
         guardrailConfig?: {
@@ -21091,17 +21109,20 @@ export type GetInteractionsResponses = {
                         };
                     }>;
                     toolChoice?: {
-                        auto?: {
-                            [key: string]: never;
-                        };
-                    } | {
-                        any?: {
-                            [key: string]: never;
-                        };
-                    } | {
                         tool: {
                             name: string;
                         };
+                        [key: string]: unknown;
+                    } | {
+                        any: {
+                            [key: string]: unknown;
+                        };
+                        [key: string]: unknown;
+                    } | {
+                        auto: {
+                            [key: string]: unknown;
+                        };
+                        [key: string]: unknown;
                     };
                 };
                 guardrailConfig?: {
@@ -21247,17 +21268,20 @@ export type GetInteractionsResponses = {
                         };
                     }>;
                     toolChoice?: {
-                        auto?: {
-                            [key: string]: never;
-                        };
-                    } | {
-                        any?: {
-                            [key: string]: never;
-                        };
-                    } | {
                         tool: {
                             name: string;
                         };
+                        [key: string]: unknown;
+                    } | {
+                        any: {
+                            [key: string]: unknown;
+                        };
+                        [key: string]: unknown;
+                    } | {
+                        auto: {
+                            [key: string]: unknown;
+                        };
+                        [key: string]: unknown;
                     };
                 };
                 guardrailConfig?: {
@@ -22440,17 +22464,20 @@ export type GetInteractionResponses = {
                     };
                 }>;
                 toolChoice?: {
-                    auto?: {
-                        [key: string]: never;
-                    };
-                } | {
-                    any?: {
-                        [key: string]: never;
-                    };
-                } | {
                     tool: {
                         name: string;
                     };
+                    [key: string]: unknown;
+                } | {
+                    any: {
+                        [key: string]: unknown;
+                    };
+                    [key: string]: unknown;
+                } | {
+                    auto: {
+                        [key: string]: unknown;
+                    };
+                    [key: string]: unknown;
                 };
             };
             guardrailConfig?: {
@@ -22596,17 +22623,20 @@ export type GetInteractionResponses = {
                     };
                 }>;
                 toolChoice?: {
-                    auto?: {
-                        [key: string]: never;
-                    };
-                } | {
-                    any?: {
-                        [key: string]: never;
-                    };
-                } | {
                     tool: {
                         name: string;
                     };
+                    [key: string]: unknown;
+                } | {
+                    any: {
+                        [key: string]: unknown;
+                    };
+                    [key: string]: unknown;
+                } | {
+                    auto: {
+                        [key: string]: unknown;
+                    };
+                    [key: string]: unknown;
                 };
             };
             guardrailConfig?: {

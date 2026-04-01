@@ -359,6 +359,11 @@ const testConfigsMap = {
   deepseek: deepseekConfig,
   minimax: minimaxConfig,
   bedrock: bedrockConfig,
+  azure: makeOpenAiCompatibleCostConfig({
+    providerName: "Azure AI Foundry",
+    modelName: "test-azure-cost-limit",
+    provider: "azure",
+  }),
 } satisfies Record<SupportedProvider, TokenCostLimitTestConfig>;
 
 const testConfigs = Object.values(testConfigsMap);

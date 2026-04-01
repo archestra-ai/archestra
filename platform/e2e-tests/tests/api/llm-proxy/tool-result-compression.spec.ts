@@ -653,6 +653,7 @@ const testConfigsMap = {
   bedrock: bedrockConfig,
   openrouter: openrouterConfig,
   perplexity: null, // Perplexity does not support tool calling (has built-in web search instead)
+  azure: null, // Azure e2e test config not yet implemented
 } satisfies Record<SupportedProvider, CompressionTestConfig | null>;
 
 const testConfigs = Object.values(testConfigsMap).filter(

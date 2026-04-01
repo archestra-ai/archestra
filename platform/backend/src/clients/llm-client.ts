@@ -421,6 +421,7 @@ const envApiKeyGetters: Record<SupportedProvider, () => string | undefined> = {
   vllm: () => config.chat.vllm.apiKey,
   zhipuai: () => config.chat.zhipuai.apiKey,
   deepseek: () => config.chat.deepseek.apiKey,
+  azure: () => config.chat.azure.apiKey,
 };
 
 /**
@@ -552,6 +553,38 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
     defaultBaseUrl: config.llm.deepseek.baseUrl,
     apiKeyRequiredMessage:
       "DeepSeek API key is required. Please configure DEEPSEEK_API_KEY.",
+  },
+
+  azure: {
+    createModel: ({
+      apiKey,
+      modelName,
+      baseURL,
+      headers,
+      fetch: providedFetch,
+    }) => {
+      const fetchWithVersion: typeof globalThis.fetch = (input, init) => {
+        const url = new URL(
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.href
+              : (input as Request).url,
+        );
+        url.searchParams.set("api-version", config.llm.azure.apiVersion);
+        const fetchFn = providedFetch ?? globalThis.fetch;
+        return fetchFn(url.toString(), init);
+      };
+      return createOpenAI({
+        apiKey,
+        baseURL,
+        headers: { ...headers, "api-key": apiKey ?? "" },
+        fetch: fetchWithVersion,
+      }).chat(modelName);
+    },
+    defaultBaseUrl: config.llm.azure.baseUrl || undefined,
+    apiKeyRequiredMessage:
+      "Azure AI Foundry API key is required. Please configure ARCHESTRA_CHAT_AZURE_OPENAI_API_KEY.",
   },
 
   // --- OpenAI-compatible providers with optional API key ---

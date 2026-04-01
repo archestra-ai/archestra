@@ -218,6 +218,10 @@ export const RouteId = {
     "minimaxChatCompletionsWithDefaultAgent",
   MinimaxChatCompletionsWithAgent: "minimaxChatCompletionsWithAgent",
 
+  // Proxy Routes - Azure AI Foundry
+  AzureChatCompletionsWithDefaultAgent: "azureChatCompletionsWithDefaultAgent",
+  AzureChatCompletionsWithAgent: "azureChatCompletionsWithAgent",
+
   // Chat Routes
   StreamChat: "streamChat",
   StopChatStream: "stopChatStream",

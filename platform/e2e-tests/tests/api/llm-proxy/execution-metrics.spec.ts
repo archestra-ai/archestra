@@ -286,6 +286,7 @@ const testConfigsMap = {
   openrouter: openrouterConfig,
   perplexity: null, // Perplexity has no tool calling - execution metrics require tool call flows
   xai: xaiConfig,
+  azure: null, // Azure e2e test config not yet implemented
 } satisfies Record<SupportedProvider, ExecutionMetricsTestConfig | null>;
 
 const testConfigs = Object.values(testConfigsMap).filter(

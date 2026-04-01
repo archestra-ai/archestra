@@ -630,6 +630,7 @@ const testConfigsMap = {
   deepseek: deepseekConfig,
   bedrock: null, // Bedrock messages use nested content arrays that the tokenizer doesn't count correctly
   openrouter: openrouterConfig,
+  azure: null, // Azure e2e test config not yet implemented
 } satisfies Record<SupportedProvider, ModelOptimizationTestConfig | null>;
 
 const testConfigs = Object.values(testConfigsMap).filter(

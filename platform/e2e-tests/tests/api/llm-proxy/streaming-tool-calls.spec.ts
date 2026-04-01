@@ -309,6 +309,7 @@ const testConfigsMap = {
   openrouter: openrouterConfig,
   perplexity: null, // Perplexity does not support tool calling
   xai: xaiConfig,
+  azure: null, // Azure e2e test config not yet implemented
 } satisfies Record<SupportedProvider, StreamingToolCallTestConfig | null>;
 
 const testConfigs = Object.values(testConfigsMap).filter(

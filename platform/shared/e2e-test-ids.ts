@@ -14,7 +14,7 @@ export const E2eTestId = {
   InvitationLinkCopyButton: "invitation-link-copy-button",
   InvitationErrorMessage: "invitation-error-message",
   SidebarUserProfile: "sidebar-user-profile",
-  SidebarNavGuardrails: "sidebar-nav-tool-policies",
+  SidebarNavGuardrails: "sidebar-nav-tool-guardrails",
   ManageCredentialsDialog: "manage-credentials-dialog",
   ManageCredentialsDialogTable: "manage-credentials-dialog-table",
   CredentialRow: "credential-row",

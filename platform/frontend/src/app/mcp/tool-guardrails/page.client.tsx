@@ -12,9 +12,9 @@ import {
 import type { ToolWithAssignmentsData } from "@/lib/tools/tool.query";
 import { AssignedToolsTable } from "./_parts/assigned-tools-table";
 import { ToolDetailsDialog } from "./_parts/tool-details-dialog";
-import type { ToolsInitialData } from "./page";
+import type { ToolsInitialData } from "./types";
 
-export function ToolPoliciesClient({
+export function ToolGuardrailsClient({
   initialData,
 }: {
   initialData?: ToolsInitialData;

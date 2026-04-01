@@ -23,7 +23,7 @@ export const DocsPage = {
   PlatformCostsAndLimits: "platform-costs-and-limits",
   PlatformDeployment: "platform-deployment",
   PlatformDeveloperQuickstart: "platform-developer-quickstart",
-  PlatformDynamicTools: "platform-dynamic-tools",
+  PlatformAiToolGuardrails: "platform-ai-tool-guardrails",
   PlatformFoundry: "platform-foundry",
   PlatformIdentityProviders: "platform-identity-providers",
   PlatformKnowledgeGraphs: "platform-knowledge-graphs",

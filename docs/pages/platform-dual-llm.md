@@ -1,5 +1,5 @@
 ---
-title: Dual LLM
+title: Dual LLM Agent
 category: Agents
 subcategory: Built-In Agents
 order: 8
@@ -15,7 +15,7 @@ Exception:
 - Screenshot
 -->
 
-Dual LLM is a built-in security workflow for tools that return untrusted content. Instead of letting the main agent read raw output from sources like web pages, email, or user-generated files, Archestra routes that output through two built-in agents with different responsibilities.
+Dual LLM is a built-in security workflow for tools that return untrusted content. It is one strategy Archestra uses to reduce [lethal trifecta](/docs/platform-lethal-trifecta) risk. Instead of letting the main agent read raw output from sources like web pages, email, or user-generated files, Archestra routes that output through two built-in agents with different responsibilities.
 
 ## How It Works
 
@@ -37,7 +37,7 @@ Dual LLM runs when a tool's trusted-data policy is set to `sanitize_with_dual_ll
 - File or document readers that return user-controlled content
 - Any external source where exact raw text is unsafe but a safe summary is still useful
 
-Policy Configuration can recommend this automatically for tools that read from untrusted sources. See [Policy Configuration](/docs/platform-built-in-agents-policy-config).
+Tool Policy Configuration Agent can recommend this automatically for tools that read from untrusted sources. See [Tool Policy Configuration Agent](/docs/platform-built-in-agents-policy-config).
 
 ## Built-In Agent Settings
 

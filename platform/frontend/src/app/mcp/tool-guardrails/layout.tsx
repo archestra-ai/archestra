@@ -2,7 +2,7 @@
 
 import { PageLayout } from "@/components/page-layout";
 
-export default function ToolsLayout({
+export default function ToolGuardrailsLayout({
   children,
 }: {
   children: React.ReactNode;

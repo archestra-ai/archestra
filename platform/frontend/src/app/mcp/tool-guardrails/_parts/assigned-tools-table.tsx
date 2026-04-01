@@ -76,7 +76,7 @@ import {
   useToolsWithAssignments,
 } from "@/lib/tools/tool.query";
 import { isMcpToolByProperties } from "@/lib/tools/tool.utils";
-import type { ToolsInitialData } from "../page";
+import type { ToolsInitialData } from "../types";
 import { getVisibleCatalogSources } from "./assigned-tools-table.utils";
 import { CallPolicyToggle } from "./call-policy-toggle";
 

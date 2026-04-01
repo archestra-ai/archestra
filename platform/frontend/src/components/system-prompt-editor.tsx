@@ -134,7 +134,11 @@ export function SystemPromptEditor({
 // Internal helpers
 // ===
 
-let completionsRegisteredKey: string | null = null;
+let completionsProviderRegistered = false;
+let currentTemplateExpressions: ReadonlyArray<{
+  expression: string;
+  description: string;
+}> = [];
 
 type Monaco = Parameters<
   NonNullable<import("@monaco-editor/react").EditorProps["beforeMount"]>
@@ -147,12 +151,10 @@ function registerSystemPromptCompletions(
     description: string;
   }>,
 ) {
-  const registrationKey = JSON.stringify(
-    templateExpressions.map((expression) => expression.expression),
-  );
+  currentTemplateExpressions = templateExpressions;
 
-  if (completionsRegisteredKey === registrationKey) return;
-  completionsRegisteredKey = registrationKey;
+  if (completionsProviderRegistered) return;
+  completionsProviderRegistered = true;
 
   // biome-ignore lint/suspicious/noExplicitAny: Monaco namespace types aren't directly indexable
   const provideCompletionItems = (model: any, position: any) => {
@@ -176,7 +178,7 @@ function registerSystemPromptCompletions(
       endColumn: col + endOffset,
     };
     return {
-      suggestions: templateExpressions.map((v) => ({
+      suggestions: currentTemplateExpressions.map((v) => ({
         label: v.expression,
         kind: monaco.languages.CompletionItemKind.Variable,
         insertText: v.expression,

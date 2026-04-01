@@ -253,11 +253,11 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
             to mark tool results as &ldquo;safe&rdquo; or
             &ldquo;sensitive&rdquo; to prevent agent acting on sensitive data.{" "}
             <ExternalDocsLink
-              href={getDocsUrl(DocsPage.PlatformDynamicTools)}
+              href={getDocsUrl(DocsPage.PlatformAiToolGuardrails)}
               className="text-inherit underline hover:text-foreground"
               showIcon={false}
             >
-              Read more about Dynamic Tools.
+              Read more about Tool Guardrails.
             </ExternalDocsLink>
           </p>
           <p className="text-sm text-muted-foreground mt-2"></p>

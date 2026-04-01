@@ -16897,6 +16897,10 @@ export type GetChatConversationsResponses = {
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
         } | null;
+        share: {
+            id: string;
+            visibility: 'organization' | 'team' | 'user';
+        } | null;
         messages: Array<unknown>;
     }>;
 };
@@ -17002,6 +17006,10 @@ export type CreateChatConversationResponses = {
             systemPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
+        } | null;
+        share: {
+            id: string;
+            visibility: 'organization' | 'team' | 'user';
         } | null;
         messages: Array<unknown>;
     };
@@ -17184,6 +17192,10 @@ export type GetChatConversationResponses = {
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
         } | null;
+        share: {
+            id: string;
+            visibility: 'organization' | 'team' | 'user';
+        } | null;
         messages: Array<unknown>;
     };
 };
@@ -17293,6 +17305,10 @@ export type UpdateChatConversationResponses = {
             systemPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
+        } | null;
+        share: {
+            id: string;
+            visibility: 'organization' | 'team' | 'user';
         } | null;
         messages: Array<unknown>;
     };
@@ -17734,6 +17750,10 @@ export type GetSharedConversationResponses = {
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
         } | null;
+        share: {
+            id: string;
+            visibility: 'organization' | 'team' | 'user';
+        } | null;
         messages: Array<unknown>;
         sharedByUserId: string;
     };
@@ -17838,6 +17858,10 @@ export type ForkSharedConversationResponses = {
             systemPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
+        } | null;
+        share: {
+            id: string;
+            visibility: 'organization' | 'team' | 'user';
         } | null;
         messages: Array<unknown>;
     };
@@ -17946,6 +17970,10 @@ export type GenerateChatConversationTitleResponses = {
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
         } | null;
+        share: {
+            id: string;
+            visibility: 'organization' | 'team' | 'user';
+        } | null;
         messages: Array<unknown>;
     };
 };
@@ -18051,6 +18079,10 @@ export type UpdateChatMessageResponses = {
             systemPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
+        } | null;
+        share: {
+            id: string;
+            visibility: 'organization' | 'team' | 'user';
         } | null;
         messages: Array<unknown>;
     };

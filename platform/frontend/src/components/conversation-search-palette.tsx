@@ -19,7 +19,7 @@ import {
   Wrench,
   Zap,
 } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -215,7 +215,7 @@ export function ConversationSearchPalette({
   recentChatsView = false,
 }: ConversationSearchPaletteProps) {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const pathname = usePathname();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedValue, setSelectedValue] = useState("");
   const [isPendingDeletion, setIsPendingDeletion] = useState<string | null>(
@@ -277,7 +277,7 @@ export function ConversationSearchPalette({
   }, [selectedValue, searchQuery]);
 
   const handleSelectConversation = (conversationId: string) => {
-    router.push(`/chat?conversation=${conversationId}`);
+    router.push(`/chat/${conversationId}`);
     onOpenChange(false);
   };
 
@@ -309,11 +309,11 @@ export function ConversationSearchPalette({
       setIsPendingDeletion(null);
 
       // Redirect to new chat if the deleted conversation is currently open
-      if (searchParams.get("conversation") === conversationId) {
+      if (pathname === `/chat/${conversationId}`) {
         router.push("/chat");
       }
     },
-    [deleteMutation, conversations, searchParams, router],
+    [deleteMutation, conversations, pathname, router],
   );
 
   const handlePinConversation = useCallback(

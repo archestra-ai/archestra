@@ -376,11 +376,20 @@ export function useChatProfileMcpTools(agentId: string | undefined) {
  * Returns { hasCustomSelection: boolean, enabledToolIds: string[] } or null on error
  */
 export async function fetchConversationEnabledTools(conversationId: string) {
-  const { data, error } = await getConversationEnabledTools({
+  const response = await getConversationEnabledTools({
     path: { id: conversationId },
   });
-  if (error) return null;
-  return data;
+  if (response.error) {
+    return {
+      data: null,
+      status: response.response.status,
+    };
+  }
+
+  return {
+    data: response.data,
+    status: response.response.status,
+  };
 }
 
 /**
@@ -395,14 +404,16 @@ export function useConversationEnabledTools(
     queryKey: ["conversation", conversationId, "enabled-tools"],
     queryFn: async () => {
       if (!conversationId) return null;
-      const data = await fetchConversationEnabledTools(conversationId);
-      if (!data) {
-        handleApiError({
-          error: new Error("Failed to fetch enabled tools"),
-        });
+      const result = await fetchConversationEnabledTools(conversationId);
+      if (!result?.data) {
+        if (result?.status !== 404) {
+          handleApiError({
+            error: new Error("Failed to fetch enabled tools"),
+          });
+        }
         return null;
       }
-      return data;
+      return result.data;
     },
     enabled: !!conversationId,
     staleTime: 30 * 1000, // 30 seconds
@@ -675,10 +686,10 @@ export function useHasPlaywrightMcpTools(
       // If conversation has custom tool selection, add new tools to enabled list
       if (conversationId) {
         const enabledData = await fetchConversationEnabledTools(conversationId);
-        if (enabledData?.hasCustomSelection) {
+        if (enabledData?.data?.hasCustomSelection) {
           const newToolIds = catalogTools.map((t) => t.id);
           const merged = [
-            ...new Set([...enabledData.enabledToolIds, ...newToolIds]),
+            ...new Set([...enabledData.data.enabledToolIds, ...newToolIds]),
           ];
           await updateConversationEnabledTools({
             path: { id: conversationId },

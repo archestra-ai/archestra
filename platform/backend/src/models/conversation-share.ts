@@ -36,6 +36,29 @@ class ConversationShareModel {
     return ConversationShareModel.attachTargets(share);
   }
 
+  static async findAccessibleByConversationId(params: {
+    conversationId: string;
+    organizationId: string;
+    userId: string;
+  }): Promise<ConversationShareWithTargets | null> {
+    const share = await ConversationShareModel.findByConversationId({
+      conversationId: params.conversationId,
+      organizationId: params.organizationId,
+    });
+
+    if (!share) {
+      return null;
+    }
+
+    const canAccess = await ConversationShareModel.userCanAccessShare({
+      shareId: share.id,
+      organizationId: params.organizationId,
+      userId: params.userId,
+    });
+
+    return canAccess ? share : null;
+  }
+
   static async findByShareId(params: {
     shareId: string;
     organizationId: string;

@@ -14,6 +14,7 @@ import type {
   InsertConversation,
   UpdateConversation,
 } from "@/types";
+import ConversationShareModel from "./conversation-share";
 
 class ConversationModel {
   static async create(data: InsertConversation): Promise<Conversation> {
@@ -326,6 +327,34 @@ class ConversationModel {
     };
   }
 
+  static async findAccessibleById(params: {
+    id: string;
+    userId: string;
+    organizationId: string;
+  }): Promise<Conversation | null> {
+    const ownedConversation = await ConversationModel.findById(params);
+
+    if (ownedConversation) {
+      return ownedConversation;
+    }
+
+    const accessibleShare =
+      await ConversationShareModel.findAccessibleByConversationId({
+        conversationId: params.id,
+        organizationId: params.organizationId,
+        userId: params.userId,
+      });
+
+    if (!accessibleShare) {
+      return null;
+    }
+
+    return ConversationModel.findByIdInOrganization({
+      id: params.id,
+      organizationId: params.organizationId,
+    });
+  }
+
   static async update(
     id: string,
     userId: string,
@@ -409,6 +438,74 @@ class ConversationModel {
       .limit(1);
 
     return result[0]?.agentId ?? null;
+  }
+
+  private static async findByIdInOrganization(params: {
+    id: string;
+    organizationId: string;
+  }): Promise<Conversation | null> {
+    const rows = await db
+      .select({
+        conversation: getTableColumns(schema.conversationsTable),
+        message: getTableColumns(schema.messagesTable),
+        share: {
+          id: schema.conversationSharesTable.id,
+          visibility: schema.conversationSharesTable.visibility,
+        },
+        agent: {
+          id: schema.agentsTable.id,
+          name: schema.agentsTable.name,
+          systemPrompt: schema.agentsTable.systemPrompt,
+          agentType: schema.agentsTable.agentType,
+          llmApiKeyId: schema.agentsTable.llmApiKeyId,
+        },
+      })
+      .from(schema.conversationsTable)
+      .leftJoin(
+        schema.agentsTable,
+        eq(schema.conversationsTable.agentId, schema.agentsTable.id),
+      )
+      .leftJoin(
+        schema.messagesTable,
+        eq(schema.conversationsTable.id, schema.messagesTable.conversationId),
+      )
+      .leftJoin(
+        schema.conversationSharesTable,
+        eq(
+          schema.conversationsTable.id,
+          schema.conversationSharesTable.conversationId,
+        ),
+      )
+      .where(
+        and(
+          eq(schema.conversationsTable.id, params.id),
+          eq(schema.conversationsTable.organizationId, params.organizationId),
+        ),
+      )
+      .orderBy(schema.messagesTable.createdAt);
+
+    if (rows.length === 0) {
+      return null;
+    }
+
+    const firstRow = rows[0];
+    const messages = [];
+
+    for (const row of rows) {
+      if (row.message?.content) {
+        messages.push({
+          ...row.message.content,
+          id: row.message.id,
+        });
+      }
+    }
+
+    return {
+      ...firstRow.conversation,
+      agent: firstRow.agent,
+      share: firstRow.share?.id ? firstRow.share : null,
+      messages,
+    };
   }
 }
 

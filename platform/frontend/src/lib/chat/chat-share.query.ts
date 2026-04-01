@@ -7,7 +7,6 @@ const {
   getConversationShare,
   shareConversation,
   unshareConversation,
-  getSharedConversation,
   forkSharedConversation,
 } = archestraApiSdk;
 
@@ -16,14 +15,16 @@ export function useConversationShare(conversationId: string | undefined) {
     queryKey: ["conversation-share", conversationId],
     queryFn: async () => {
       if (!conversationId) return null;
-      const { data, error } = await getConversationShare({
+      const response = await getConversationShare({
         path: { id: conversationId },
       });
-      if (error) {
-        handleApiError(error);
+      if (response.error) {
+        if (response.response.status !== 404) {
+          handleApiError(response.error);
+        }
         return null;
       }
-      return data;
+      return response.data;
     },
     enabled: !!conversationId,
     staleTime: 30 * 1000,
@@ -59,7 +60,9 @@ export function useShareConversation() {
     onSuccess: (data, { conversationId }) => {
       if (!data) return;
       queryClient.setQueryData(["conversation-share", conversationId], data);
-      queryClient.invalidateQueries({ queryKey: ["conversation", conversationId] });
+      queryClient.invalidateQueries({
+        queryKey: ["conversation", conversationId],
+      });
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
       toast.success("Chat visibility updated");
     },
@@ -82,31 +85,12 @@ export function useUnshareConversation() {
     },
     onSuccess: (_data, conversationId) => {
       queryClient.setQueryData(["conversation-share", conversationId], null);
-      queryClient.invalidateQueries({ queryKey: ["conversation", conversationId] });
+      queryClient.invalidateQueries({
+        queryKey: ["conversation", conversationId],
+      });
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
       toast.success("Chat sharing removed");
     },
-  });
-}
-
-export function useSharedConversation(shareId: string | undefined) {
-  return useQuery({
-    queryKey: ["shared-conversation", shareId],
-    queryFn: async () => {
-      if (!shareId) return null;
-      const { data, error } = await getSharedConversation({
-        path: { shareId },
-      });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
-      return data;
-    },
-    enabled: !!shareId,
-    staleTime: 0,
-    gcTime: 10 * 60 * 1000,
-    retry: false,
   });
 }
 

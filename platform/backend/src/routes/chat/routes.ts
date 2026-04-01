@@ -829,7 +829,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
-      const conversation = await ConversationModel.findById({
+      const conversation = await ConversationModel.findAccessibleById({
         id: id,
         userId: user.id,
         organizationId: organizationId,
@@ -1179,7 +1179,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             userIds: z.array(z.string()).optional(),
           })
           .superRefine((value, ctx) => {
-            if (value.visibility === "team" && (value.teamIds ?? []).length === 0) {
+            if (
+              value.visibility === "team" &&
+              (value.teamIds ?? []).length === 0
+            ) {
               ctx.addIssue({
                 code: z.ZodIssueCode.custom,
                 message: "Select at least one team",
@@ -1187,7 +1190,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               });
             }
 
-            if (value.visibility === "user" && (value.userIds ?? []).length === 0) {
+            if (
+              value.visibility === "user" &&
+              (value.userIds ?? []).length === 0
+            ) {
               ctx.addIssue({
                 code: z.ZodIssueCode.custom,
                 message: "Select at least one user",
@@ -1195,7 +1201,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               });
             }
           }),
-        response: constructResponseSchema(SelectConversationShareWithTargetsSchema),
+        response: constructResponseSchema(
+          SelectConversationShareWithTargetsSchema,
+        ),
       },
     },
     async ({ params: { id }, body, user, organizationId }) => {

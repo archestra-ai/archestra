@@ -60707,6 +60707,30 @@
                         ],
                         "additionalProperties": false
                       },
+                      "share": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "visibility": {
+                            "type": "string",
+                            "enum": [
+                              "organization",
+                              "team",
+                              "user"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "visibility"
+                        ],
+                        "additionalProperties": false
+                      },
                       "messages": {
                         "type": "array",
                         "items": {}
@@ -60728,6 +60752,7 @@
                       "createdAt",
                       "updatedAt",
                       "agent",
+                      "share",
                       "messages"
                     ],
                     "additionalProperties": false
@@ -61164,6 +61189,30 @@
                       ],
                       "additionalProperties": false
                     },
+                    "share": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "visibility": {
+                          "type": "string",
+                          "enum": [
+                            "organization",
+                            "team",
+                            "user"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "visibility"
+                      ],
+                      "additionalProperties": false
+                    },
                     "messages": {
                       "type": "array",
                       "items": {}
@@ -61185,6 +61234,7 @@
                     "createdAt",
                     "updatedAt",
                     "agent",
+                    "share",
                     "messages"
                   ],
                   "additionalProperties": false
@@ -61580,6 +61630,30 @@
                       ],
                       "additionalProperties": false
                     },
+                    "share": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "visibility": {
+                          "type": "string",
+                          "enum": [
+                            "organization",
+                            "team",
+                            "user"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "visibility"
+                      ],
+                      "additionalProperties": false
+                    },
                     "messages": {
                       "type": "array",
                       "items": {}
@@ -61601,6 +61675,7 @@
                     "createdAt",
                     "updatedAt",
                     "agent",
+                    "share",
                     "messages"
                   ],
                   "additionalProperties": false
@@ -62055,6 +62130,30 @@
                       ],
                       "additionalProperties": false
                     },
+                    "share": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "visibility": {
+                          "type": "string",
+                          "enum": [
+                            "organization",
+                            "team",
+                            "user"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "visibility"
+                      ],
+                      "additionalProperties": false
+                    },
                     "messages": {
                       "type": "array",
                       "items": {}
@@ -62076,6 +62175,7 @@
                     "createdAt",
                     "updatedAt",
                     "agent",
+                    "share",
                     "messages"
                   ],
                   "additionalProperties": false
@@ -63892,6 +63992,30 @@
                       ],
                       "additionalProperties": false
                     },
+                    "share": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "visibility": {
+                          "type": "string",
+                          "enum": [
+                            "organization",
+                            "team",
+                            "user"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "visibility"
+                      ],
+                      "additionalProperties": false
+                    },
                     "messages": {
                       "type": "array",
                       "items": {}
@@ -63916,6 +64040,7 @@
                     "createdAt",
                     "updatedAt",
                     "agent",
+                    "share",
                     "messages",
                     "sharedByUserId"
                   ],
@@ -64332,6 +64457,30 @@
                       ],
                       "additionalProperties": false
                     },
+                    "share": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "visibility": {
+                          "type": "string",
+                          "enum": [
+                            "organization",
+                            "team",
+                            "user"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "visibility"
+                      ],
+                      "additionalProperties": false
+                    },
                     "messages": {
                       "type": "array",
                       "items": {}
@@ -64353,6 +64502,7 @@
                     "createdAt",
                     "updatedAt",
                     "agent",
+                    "share",
                     "messages"
                   ],
                   "additionalProperties": false
@@ -64764,6 +64914,30 @@
                       ],
                       "additionalProperties": false
                     },
+                    "share": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "visibility": {
+                          "type": "string",
+                          "enum": [
+                            "organization",
+                            "team",
+                            "user"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "visibility"
+                      ],
+                      "additionalProperties": false
+                    },
                     "messages": {
                       "type": "array",
                       "items": {}
@@ -64785,6 +64959,7 @@
                     "createdAt",
                     "updatedAt",
                     "agent",
+                    "share",
                     "messages"
                   ],
                   "additionalProperties": false
@@ -65206,6 +65381,30 @@
                       ],
                       "additionalProperties": false
                     },
+                    "share": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "visibility": {
+                          "type": "string",
+                          "enum": [
+                            "organization",
+                            "team",
+                            "user"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "visibility"
+                      ],
+                      "additionalProperties": false
+                    },
                     "messages": {
                       "type": "array",
                       "items": {}
@@ -65227,6 +65426,7 @@
                     "createdAt",
                     "updatedAt",
                     "agent",
+                    "share",
                     "messages"
                   ],
                   "additionalProperties": false

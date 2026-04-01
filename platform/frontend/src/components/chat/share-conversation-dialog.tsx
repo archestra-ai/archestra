@@ -3,6 +3,18 @@
 import { Globe, Link, Lock, UserRound, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FormDialog } from "@/components/form-dialog";
+import {
+  AssignmentCombobox,
+  type AssignmentComboboxItem,
+} from "@/components/ui/assignment-combobox";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
+  type VisibilityOption,
+  VisibilitySelector,
+} from "@/components/visibility-selector";
 import { useSession } from "@/lib/auth/auth.query";
 import {
   useConversationShare,
@@ -11,18 +23,6 @@ import {
 } from "@/lib/chat/chat-share.query";
 import { useOrganizationMembers } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  AssignmentCombobox,
-  type AssignmentComboboxItem,
-} from "@/components/ui/assignment-combobox";
-import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import {
-  VisibilitySelector,
-  type VisibilityOption,
-} from "@/components/visibility-selector";
 
 type ShareVisibility = "private" | "organization" | "team" | "user";
 
@@ -51,7 +51,7 @@ export function ShareConversationDialog({
   const [userIds, setUserIds] = useState<string[]>([]);
 
   const shareLink = share
-    ? `${window.location.origin}/chat/shared/${share.id}`
+    ? `${window.location.origin}/chat/${conversationId}`
     : "";
 
   const availableMembers = useMemo(
@@ -111,9 +111,7 @@ export function ShareConversationDialog({
     setUserIds(share.userIds);
   }, [open, share]);
 
-  const visibilityOptions = useMemo<
-    Array<VisibilityOption<ShareVisibility>>
-  >(
+  const visibilityOptions = useMemo<Array<VisibilityOption<ShareVisibility>>>(
     () => [
       {
         value: "private",

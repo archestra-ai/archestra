@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ShareConversationDialog } from "./share-conversation-dialog";
@@ -72,8 +73,10 @@ vi.mock("@/components/visibility-selector", () => ({
   }: {
     value: string;
     options: Array<{ value: string; label: string }>;
-    onValueChange: (value: "private" | "organization" | "team" | "user") => void;
-    children?: unknown;
+    onValueChange: (
+      value: "private" | "organization" | "team" | "user",
+    ) => void;
+    children?: ReactNode;
   }) => (
     <div>
       <div>{value}</div>

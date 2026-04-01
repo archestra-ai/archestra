@@ -1,8 +1,8 @@
+import ConversationModel from "@/models/conversation";
+import ConversationShareModel from "@/models/conversation-share";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import ConversationModel from "@/models/conversation";
-import ConversationShareModel from "@/models/conversation-share";
 import type { User } from "@/types";
 
 describe("chat share routes", () => {

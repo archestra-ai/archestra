@@ -425,13 +425,12 @@ describe("ConversationShareModel", () => {
         organizationId: org.id,
         userId: teammate.id,
       });
-    const blockedConversation = await ConversationShareModel.getSharedConversation(
-      {
+    const blockedConversation =
+      await ConversationShareModel.getSharedConversation({
         shareId: share.id,
         organizationId: org.id,
         userId: outsider.id,
-      },
-    );
+      });
 
     expect(accessibleConversation?.id).toBe(conversation.id);
     expect(blockedConversation).toBeNull();

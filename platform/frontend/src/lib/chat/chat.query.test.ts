@@ -83,6 +83,7 @@ function makeConversation(): archestraApiTypes.GetChatConversationResponses["200
       agentType: "agent",
       llmApiKeyId: "key-openai",
     },
+    share: null,
     messages: [],
   };
 }

@@ -9,7 +9,7 @@ import {
   Trash2,
   UsersRound,
 } from "lucide-react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { TruncatedText } from "@/components/truncated-text";
@@ -49,7 +49,6 @@ import { getConversationDisplayTitle } from "@/lib/chat/chat-utils";
 import { useStableConversations } from "@/lib/hooks/use-stable-conversations";
 import { cn } from "@/lib/utils";
 
-const CONVERSATION_QUERY_PARAM = "conversation";
 const SIDEBAR_CHAT_SLOTS = 3;
 const MAX_TITLE_LENGTH = 100;
 
@@ -77,7 +76,6 @@ function AISparkleIcon({ isAnimating = false }: { isAnimating?: boolean }) {
 export function ChatSidebarSection() {
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const isAuthenticated = useIsAuthenticated();
   const { data: canReadConversation } = useHasPermissions({
     chat: ["read"],
@@ -109,8 +107,8 @@ export function ChatSidebarSection() {
 
   const { isMobile, setOpenMobile } = useSidebar();
 
-  const currentConversationId = pathname.startsWith("/chat")
-    ? searchParams.get(CONVERSATION_QUERY_PARAM)
+  const currentConversationId = pathname.startsWith("/chat/")
+    ? (pathname.split("/").at(-1) ?? null)
     : null;
 
   // Stabilize conversation order to prevent sidebar "jumping" when React Query
@@ -148,7 +146,7 @@ export function ChatSidebarSection() {
     if (isMobile) {
       setOpenMobile(false);
     }
-    router.push(`/chat?${CONVERSATION_QUERY_PARAM}=${id}`);
+    router.push(`/chat/${id}`);
   };
 
   const handleStartEdit = (id: string, currentTitle: string | null) => {

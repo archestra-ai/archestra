@@ -15,6 +15,7 @@ import {
   Router,
   Settings,
   Shield,
+  UsersRound,
   Wrench,
   Zap,
 } from "lucide-react";
@@ -30,6 +31,12 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   SHORTCUT_DELETE,
   SHORTCUT_NEW_CHAT,
@@ -188,6 +195,18 @@ interface ConversationSearchPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   recentChatsView?: boolean;
+}
+
+function getConversationShareTooltip(visibility: string | undefined) {
+  if (visibility === "team") {
+    return "Shared with selected teams";
+  }
+
+  if (visibility === "user") {
+    return "Shared with selected users";
+  }
+
+  return "Shared with your organization";
 }
 
 export function ConversationSearchPalette({
@@ -446,6 +465,18 @@ export function ConversationSearchPalette({
       >
         <div className="flex items-start gap-2 w-full min-w-0">
           <IconComponent className="h-4 w-4 shrink-0 text-muted-foreground" />
+          {conv.share && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <UsersRound className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary/80" />
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  {getConversationShareTooltip(conv.share.visibility)}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
           <span className="text-sm flex-1 min-w-0 break-words leading-snug line-clamp-2">
             {displayTitle}
           </span>

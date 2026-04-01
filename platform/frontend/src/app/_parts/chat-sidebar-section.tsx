@@ -7,6 +7,7 @@ import {
   PinOff,
   Sparkles,
   Trash2,
+  UsersRound,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -51,6 +52,18 @@ import { cn } from "@/lib/utils";
 const CONVERSATION_QUERY_PARAM = "conversation";
 const SIDEBAR_CHAT_SLOTS = 3;
 const MAX_TITLE_LENGTH = 100;
+
+function getConversationShareTooltip(visibility: string | undefined) {
+  if (visibility === "team") {
+    return "Shared with selected teams";
+  }
+
+  if (visibility === "user") {
+    return "Shared with selected users";
+  }
+
+  return "Shared with your organization";
+}
 
 function AISparkleIcon({ isAnimating = false }: { isAnimating?: boolean }) {
   return (
@@ -272,6 +285,18 @@ export function ChatSidebarSection() {
               <span className="flex items-center gap-2 min-w-0 flex-1">
                 {showPinIcon && (
                   <Pin className="h-3 w-3 shrink-0 text-muted-foreground" />
+                )}
+                {conv.share && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <UsersRound className="h-3.5 w-3.5 shrink-0 text-primary/80" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top">
+                        {getConversationShareTooltip(conv.share.visibility)}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 )}
                 {(hasRecentlyGeneratedTitle || isRegenerating) && (
                   <AISparkleIcon isAnimating />

@@ -3,14 +3,7 @@
 import { Globe, Link, Lock, UserRound, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FormDialog } from "@/components/form-dialog";
-import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
-import { Button } from "@/components/ui/button";
-import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import {
-  VisibilitySelector,
-  type VisibilityOption,
-} from "@/components/visibility-selector";
+import { useSession } from "@/lib/auth/auth.query";
 import {
   useConversationShare,
   useShareConversation,
@@ -18,6 +11,20 @@ import {
 } from "@/lib/chat/chat-share.query";
 import { useOrganizationMembers } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  AssignmentCombobox,
+  type AssignmentComboboxItem,
+} from "@/components/ui/assignment-combobox";
+import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
+  VisibilitySelector,
+  type VisibilityOption,
+} from "@/components/visibility-selector";
+
+type ShareVisibility = "private" | "organization" | "team" | "user";
 
 export function ShareConversationDialog({
   conversationId,
@@ -33,19 +40,59 @@ export function ShareConversationDialog({
   );
   const shareMutation = useShareConversation();
   const unshareMutation = useUnshareConversation();
+  const { data: session } = useSession();
   const { data: teams = [] } = useTeams({ enabled: open });
   const { data: members = [] } = useOrganizationMembers(open);
+  const currentUserId = session?.user?.id;
   const isShared = !!share;
   const isPending = shareMutation.isPending || unshareMutation.isPending;
-  const [visibility, setVisibility] = useState<
-    "private" | "organization" | "team" | "user"
-  >("private");
+  const [visibility, setVisibility] = useState<ShareVisibility>("private");
   const [teamIds, setTeamIds] = useState<string[]>([]);
   const [userIds, setUserIds] = useState<string[]>([]);
 
   const shareLink = share
     ? `${window.location.origin}/chat/shared/${share.id}`
     : "";
+
+  const availableMembers = useMemo(
+    () => members.filter((member) => member.id !== currentUserId),
+    [currentUserId, members],
+  );
+
+  const teamItems = useMemo<AssignmentComboboxItem[]>(
+    () =>
+      teams.map((team) => ({
+        id: team.id,
+        name: team.name,
+      })),
+    [teams],
+  );
+
+  const userItems = useMemo<AssignmentComboboxItem[]>(
+    () =>
+      availableMembers.map((member) => ({
+        id: member.id,
+        name: member.name || member.email,
+        description: member.email,
+      })),
+    [availableMembers],
+  );
+
+  const selectedTeamLabels = useMemo(
+    () =>
+      teamItems
+        .filter((team) => teamIds.includes(team.id))
+        .map((team) => team.name),
+    [teamIds, teamItems],
+  );
+
+  const selectedUserLabels = useMemo(
+    () =>
+      userItems
+        .filter((user) => userIds.includes(user.id))
+        .map((user) => user.name),
+    [userIds, userItems],
+  );
 
   useEffect(() => {
     if (!open) {
@@ -65,7 +112,7 @@ export function ShareConversationDialog({
   }, [open, share]);
 
   const visibilityOptions = useMemo<
-    Array<VisibilityOption<"private" | "organization" | "team" | "user">>
+    Array<VisibilityOption<ShareVisibility>>
   >(
     () => [
       {
@@ -93,11 +140,12 @@ export function ShareConversationDialog({
         label: "Users",
         description: "Share this chat with selected people.",
         icon: UserRound,
-        disabled: members.length === 0,
-        disabledLabel: members.length === 0 ? "No users available" : undefined,
+        disabled: userItems.length === 0,
+        disabledLabel:
+          userItems.length === 0 ? "No users available" : undefined,
       },
     ],
-    [members.length, teams.length],
+    [teams.length, userItems.length],
   );
 
   const handleSave = useCallback(async () => {
@@ -147,10 +195,13 @@ export function ShareConversationDialog({
   ]);
 
   const handleCopyLinkAndClose = useCallback(async () => {
-    if (!shareLink) return;
+    if (!shareLink) {
+      return;
+    }
+
     await navigator.clipboard.writeText(shareLink);
     onOpenChange(false);
-  }, [shareLink, onOpenChange]);
+  }, [onOpenChange, shareLink]);
 
   return (
     <FormDialog
@@ -169,38 +220,60 @@ export function ShareConversationDialog({
           {visibility === "team" && (
             <div className="space-y-2">
               <Label>Teams</Label>
-              <MultiSelectCombobox
-                options={teams.map((team) => ({
-                  value: team.id,
-                  label: team.name,
-                }))}
-                value={teamIds}
-                onChange={setTeamIds}
-                placeholder={
-                  teams.length === 0 ? "No teams available" : "Search teams..."
+              <AssignmentCombobox
+                items={teamItems}
+                selectedIds={teamIds}
+                onToggle={(teamId) =>
+                  setTeamIds((current) =>
+                    current.includes(teamId)
+                      ? current.filter((id) => id !== teamId)
+                      : [...current, teamId],
+                  )
                 }
+                label="Select teams"
+                placeholder="Search teams..."
                 emptyMessage="No teams found."
-                disabled={isPending || isLoading}
+                className="h-9 w-full justify-between border text-sm text-foreground"
               />
+              {selectedTeamLabels.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {selectedTeamLabels.map((teamName) => (
+                    <Badge key={teamName} variant="secondary">
+                      {teamName}
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
           {visibility === "user" && (
             <div className="space-y-2">
               <Label>Users</Label>
-              <MultiSelectCombobox
-                options={members.map((member) => ({
-                  value: member.id,
-                  label: member.name || member.email,
-                }))}
-                value={userIds}
-                onChange={setUserIds}
-                placeholder={
-                  members.length === 0 ? "No users available" : "Search users..."
+              <AssignmentCombobox
+                items={userItems}
+                selectedIds={userIds}
+                onToggle={(userId) =>
+                  setUserIds((current) =>
+                    current.includes(userId)
+                      ? current.filter((id) => id !== userId)
+                      : [...current, userId],
+                  )
                 }
+                label="Select users"
+                placeholder="Search users..."
                 emptyMessage="No users found."
-                disabled={isPending || isLoading}
+                className="h-9 w-full justify-between border text-sm text-foreground"
               />
+              {selectedUserLabels.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {selectedUserLabels.map((userName) => (
+                    <Badge key={userName} variant="secondary">
+                      {userName}
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </VisibilitySelector>

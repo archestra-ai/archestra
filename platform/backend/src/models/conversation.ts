@@ -120,6 +120,10 @@ class ConversationModel {
         .select({
           conversation: getTableColumns(schema.conversationsTable),
           message: getTableColumns(schema.messagesTable),
+          share: {
+            id: schema.conversationSharesTable.id,
+            visibility: schema.conversationSharesTable.visibility,
+          },
           agent: {
             id: schema.agentsTable.id,
             name: schema.agentsTable.name,
@@ -153,6 +157,13 @@ class ConversationModel {
             )`,
           ),
         )
+        .leftJoin(
+          schema.conversationSharesTable,
+          eq(
+            schema.conversationsTable.id,
+            schema.conversationSharesTable.conversationId,
+          ),
+        )
         .where(and(...conditions))
         .orderBy(
           desc(schema.conversationsTable.updatedAt),
@@ -177,6 +188,7 @@ class ConversationModel {
           conversationMap.set(conversationId, {
             ...row.conversation,
             agent: row.agent,
+            share: row.share?.id ? row.share : null,
             messages: [],
           });
         }
@@ -203,6 +215,10 @@ class ConversationModel {
       const rows = await db
         .select({
           conversation: getTableColumns(schema.conversationsTable),
+          share: {
+            id: schema.conversationSharesTable.id,
+            visibility: schema.conversationSharesTable.visibility,
+          },
           agent: {
             id: schema.agentsTable.id,
             name: schema.agentsTable.name,
@@ -216,12 +232,20 @@ class ConversationModel {
           schema.agentsTable,
           eq(schema.conversationsTable.agentId, schema.agentsTable.id),
         )
+        .leftJoin(
+          schema.conversationSharesTable,
+          eq(
+            schema.conversationsTable.id,
+            schema.conversationSharesTable.conversationId,
+          ),
+        )
         .where(and(...conditions))
         .orderBy(desc(schema.conversationsTable.updatedAt));
 
       return rows.map((row) => ({
         ...row.conversation,
         agent: row.agent,
+        share: row.share?.id ? row.share : null,
         messages: [], // Messages fetched separately via findById
       }));
     }
@@ -240,6 +264,10 @@ class ConversationModel {
       .select({
         conversation: getTableColumns(schema.conversationsTable),
         message: getTableColumns(schema.messagesTable),
+        share: {
+          id: schema.conversationSharesTable.id,
+          visibility: schema.conversationSharesTable.visibility,
+        },
         agent: {
           id: schema.agentsTable.id,
           name: schema.agentsTable.name,
@@ -256,6 +284,13 @@ class ConversationModel {
       .leftJoin(
         schema.messagesTable,
         eq(schema.conversationsTable.id, schema.messagesTable.conversationId),
+      )
+      .leftJoin(
+        schema.conversationSharesTable,
+        eq(
+          schema.conversationsTable.id,
+          schema.conversationSharesTable.conversationId,
+        ),
       )
       .where(
         and(
@@ -286,6 +321,7 @@ class ConversationModel {
     return {
       ...firstRow.conversation,
       agent: firstRow.agent,
+      share: firstRow.share?.id ? firstRow.share : null,
       messages,
     };
   }

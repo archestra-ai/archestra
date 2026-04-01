@@ -73,6 +73,16 @@ const agentsTable = pgTable(
     /** Allowed domain for 'internal' security mode (e.g., 'example.com') */
     incomingEmailAllowedDomain: text("incoming_email_allowed_domain"),
 
+    // Schedule trigger settings (only used when agentType = 'agent')
+    /** Whether scheduled execution is enabled for this agent */
+    scheduleEnabled: boolean("schedule_enabled").notNull().default(false),
+    /** Cron expression defining when to trigger the agent (e.g. '0 9 * * 1-5') */
+    schedule: text("schedule"),
+    /** Message/prompt to send when the agent is triggered by schedule */
+    schedulePrompt: text("schedule_prompt"),
+    /** Timestamp of the last scheduled execution */
+    lastScheduledAt: timestamp("last_scheduled_at", { mode: "date" }),
+
     // LLM configuration (allows per-agent model selection)
     /** API key ID for LLM calls */
     llmApiKeyId: uuid("llm_api_key_id").references(
@@ -112,6 +122,7 @@ const agentsTable = pgTable(
     index("agents_identity_provider_id_idx").on(table.identityProviderId),
     index("agents_author_id_idx").on(table.authorId),
     index("agents_scope_idx").on(table.scope),
+    index("agents_schedule_enabled_idx").on(table.scheduleEnabled),
   ],
 );
 

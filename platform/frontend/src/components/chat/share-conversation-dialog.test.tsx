@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
-import type { ReactNode } from "react";
 import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ShareConversationDialog } from "./share-conversation-dialog";
 

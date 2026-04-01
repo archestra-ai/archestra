@@ -778,7 +778,8 @@ export function ChatPageContent({
       name: agent.name,
     })),
   });
-  const newChatAgentId = activeAgentId ?? initialAgentId ?? internalAgents[0]?.id ?? null;
+  const newChatAgentId =
+    activeAgentId ?? initialAgentId ?? internalAgents[0]?.id ?? null;
 
   // Find the specific internal agent for this conversation (if any)
   const _conversationInternalAgent = conversationAgentId
@@ -793,14 +794,14 @@ export function ChatPageContent({
   const browserToolsAgentId = isReadOnlySharedConversation
     ? undefined
     : conversationId
-    ? (conversationAgentId ?? promptAgentId ?? undefined)
-    : (initialAgentId ?? undefined);
+      ? (conversationAgentId ?? promptAgentId ?? undefined)
+      : (initialAgentId ?? undefined);
 
   const playwrightSetupAgentId = isReadOnlySharedConversation
     ? undefined
     : conversationId
-    ? (conversationAgentId ?? undefined)
-    : (initialAgentId ?? undefined);
+      ? (conversationAgentId ?? undefined)
+      : (initialAgentId ?? undefined);
 
   const { hasPlaywrightMcpTools, isLoading: isLoadingBrowserTools } =
     useHasPlaywrightMcpTools(browserToolsAgentId, conversationToolsStateId);
@@ -820,10 +821,10 @@ export function ChatPageContent({
     playwrightSetupAgentId,
     conversationToolsStateId,
     {
-    enabled:
-      !isReadOnlySharedConversation &&
-      hasChatAccess &&
-      canUpdateAgent !== false,
+      enabled:
+        !isReadOnlySharedConversation &&
+        hasChatAccess &&
+        canUpdateAgent !== false,
     },
   );
   // Treat both loading and required as "visible" for disabling submit, hiding arrow, etc.
@@ -1298,9 +1299,8 @@ export function ChatPageContent({
                 try {
                   // The backend creates conversation with default enabled tools
                   // We need to apply pending actions to modify that default
-                  const enabledToolsResult = await fetchConversationEnabledTools(
-                    newConversation.id,
-                  );
+                  const enabledToolsResult =
+                    await fetchConversationEnabledTools(newConversation.id);
                   if (enabledToolsResult?.data) {
                     const baseEnabledToolIds =
                       enabledToolsResult.data.enabledToolIds || [];

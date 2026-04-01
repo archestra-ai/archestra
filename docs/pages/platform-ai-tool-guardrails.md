@@ -5,7 +5,7 @@ subcategory: Security Concepts
 order: 3
 ---
 
-<!-- 
+<!--
 Check ../docs_writer_prompt.md before changing this file.
 
 This document is human-built, shouldn't be updated with AI. Don't change anything here.
@@ -48,8 +48,8 @@ flowchart TD
 
 Archestra discovers tools in two main ways:
 
-1. **LLM Proxy tool discovery**. When requests flow through the [LLM Proxy](/docs/platform-llm-proxy), Archestra records the tool definitions included in those requests and makes them configurable in `/mcp/tool-guardrails`.
-2. **Archestra-orchestrated MCP tool discovery**. When tools belong to MCP servers managed by [Archestra MCP Gateways](/docs/platform-mcp-gateway), Archestra already knows those tool definitions and surfaces them in the same guardrails view.
+1. **LLM Proxy tool discovery**. When requests flow through the [LLM Proxy](/docs/platform-llm-proxy), Archestra records the tool definitions included in those requests.
+2. **Archestra-orchestrated MCP tool discovery**. When tools belong to MCP servers managed by the [Archestra MCP Orchestrator](/docs/platform-orchestrator), Archestra already knows those tool definitions and surfaces them in the same guardrails view.
 
 This gives you one control plane for tools discovered from live agent traffic and tools hosted by MCP infrastructure that Archestra orchestrates directly.
 
@@ -59,12 +59,30 @@ Tool result policies control how tool output is treated after a tool runs.
 
 Available actions:
 
-- `mark_as_trusted`: The result is considered safe and can continue through the agent loop normally.
-- `mark_as_untrusted`: The result is treated as sensitive or risky context for later decisions.
-- `sanitize_with_dual_llm`: The result is routed through the [Dual LLM Agent](/docs/platform-dual-llm) before it is returned to the main agent.
-- `block_always`: The result is blocked entirely.
+- **Safe**: The result is considered safe and can continue through the agent loop normally.
+- **Sensitive**: The result is treated as sensitive or risky context for later decisions.
+- **Dual LLM**: The result is routed through the [Dual LLM Agent](/docs/platform-dual-llm) before it is returned to the main agent.
+- **Blocked**: The result is blocked entirely.
 
 Use tool result policies when the tool itself may be safe to call, but the returned data could still be sensitive, adversarial, or prompt-injectable.
+
+For example, a `read_email` tool may be safe to call, but the returned messages may still contain untrusted external content:
+
+```json
+{
+  "emails": [
+    { "from": "eng@mycompany.com", "subject": "Build green" },
+    { "from": "vendor@example.com", "subject": "Invoice attached" }
+  ]
+}
+```
+
+You can define one or more tool result policies that inspect the response and decide how to classify it:
+
+- If every `emails[*].from` value ends with `@mycompany.com`, mark the result as **Safe**
+- If any `emails[*].from` value comes from outside your domain, mark the result as **Sensitive**
+
+That lets the agent continue normally when it is only reading internal mail, while automatically tightening later tool use after reading email from outside your company.
 
 ### Tool Call Policies
 
@@ -72,12 +90,29 @@ Tool call policies control whether a tool may run in the current context.
 
 Available actions:
 
-- `allow_when_context_is_untrusted`: The tool can run even when the current context is marked sensitive or untrusted.
-- `block_when_context_is_untrusted`: The tool can run only while the current context is still safe.
-- `require_approval`: The tool requires explicit user approval in chat. In autonomous execution contexts, the call is blocked.
-- `block_always`: The tool is never allowed to run automatically.
+- **Allow always**: The tool can run even when the current context is marked sensitive or untrusted.
+- **Allow in safe context**: The tool can run only while the current context is still safe.
+- **Require approval**: The tool requires explicit user approval in chat. In autonomous execution contexts, the call is blocked.
+- **Block always**: The tool is never allowed to run automatically.
 
 Use tool call policies to separate safe internal read paths from tools that could exfiltrate data or cause side effects.
+
+For example, a `send_email` tool may only be acceptable for internal recipients:
+
+```json
+{
+  "to": ["alice@mycompany.com", "bob@mycompany.com"],
+  "subject": "Deployment update",
+  "body": "Build is complete."
+}
+```
+
+You can define one or more tool call policies that inspect the arguments before the tool runs:
+
+- If every `to[*]` value ends with `@mycompany.com`, use **Allow always**
+- If any `to[*]` value points outside your domain, use **Require approval** or **Block always**
+
+This makes the policy decision depend on the actual attempted action, not just on the name of the tool.
 
 ### Context-Aware Enforcement
 
@@ -88,6 +123,8 @@ Archestra evaluates tool calls against the current context, not just against a s
 - If a tool result policy marks returned data as untrusted, later tool call policy evaluation becomes stricter.
 
 This lets the same agent behave normally in safe contexts and become more restricted only after the conversation or tool output crosses a trust boundary.
+
+Policies can also be scoped to specific agents. For example, you might allow an internal support agent to use `send_email` for `@mycompany.com` recipients while keeping the same tool blocked for a broader research agent.
 
 ## Policy Configuration Agent
 

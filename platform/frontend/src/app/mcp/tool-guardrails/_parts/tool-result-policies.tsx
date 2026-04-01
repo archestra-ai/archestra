@@ -186,7 +186,7 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
   const keyItems = [
     ...contextOptions.map((key) => ({
       value: key,
-      label: key === CONTEXT_EXTERNAL_AGENT_ID ? "External Agent" : "Teams",
+      label: key === CONTEXT_EXTERNAL_AGENT_ID ? "Agent" : "Teams",
     })),
   ];
   const allPolicies = byProfileToolId[tool.id] || [];

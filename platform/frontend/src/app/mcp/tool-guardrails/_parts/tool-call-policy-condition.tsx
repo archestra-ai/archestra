@@ -99,7 +99,7 @@ export function ToolCallPolicyCondition({
                 </SelectItem>
                 {externalAgentIds.length > 0 && (
                   <SelectItem value={CONTEXT_EXTERNAL_AGENT_ID}>
-                    External Agent
+                    Agent
                   </SelectItem>
                 )}
                 {(teams?.length ?? 0) > 0 && (

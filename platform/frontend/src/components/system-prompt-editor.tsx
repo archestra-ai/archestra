@@ -20,6 +20,7 @@ export function SystemPromptEditor({
   height = "200px",
   expandedHeight = "420px",
   variant = "default",
+  headerExtra,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -28,6 +29,8 @@ export function SystemPromptEditor({
   expandedHeight?: string;
   /** "section" uses bold h3 (matching section headings), "default" uses lighter text */
   variant?: "default" | "section";
+  /** Extra element rendered in the header next to the expand button */
+  headerExtra?: React.ReactNode;
 }) {
   const docsUrl = getFrontendDocsUrl(
     DocsPage.PlatformAgents,
@@ -74,20 +77,22 @@ export function SystemPromptEditor({
             )}
           </p>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="shrink-0"
-          onClick={() => setIsExpanded((current) => !current)}
-        >
-          {isExpanded ? (
-            <Minimize2 className="size-4" />
-          ) : (
-            <Maximize2 className="size-4" />
-          )}
-          <span>{isExpanded ? "Collapse" : "Expand"}</span>
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          {headerExtra}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setIsExpanded((current) => !current)}
+          >
+            {isExpanded ? (
+              <Minimize2 className="size-4" />
+            ) : (
+              <Maximize2 className="size-4" />
+            )}
+            <span>{isExpanded ? "Collapse" : "Expand"}</span>
+          </Button>
+        </div>
       </div>
       <div className="border rounded-md overflow-hidden">
         <Editor

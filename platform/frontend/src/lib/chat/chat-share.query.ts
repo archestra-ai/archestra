@@ -1,28 +1,34 @@
-import { archestraApiSdk } from "@shared";
+import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { handleApiError } from "@/lib/utils";
 
 const {
   getConversationShare,
   shareConversation,
   unshareConversation,
-  getSharedConversation,
   forkSharedConversation,
 } = archestraApiSdk;
+
+type ShareConversationMutationInput = {
+  conversationId: string;
+} & NonNullable<archestraApiTypes.ShareConversationData["body"]>;
 
 export function useConversationShare(conversationId: string | undefined) {
   return useQuery({
     queryKey: ["conversation-share", conversationId],
     queryFn: async () => {
       if (!conversationId) return null;
-      const { data, error } = await getConversationShare({
+      const response = await getConversationShare({
         path: { id: conversationId },
       });
-      if (error) {
-        handleApiError(error);
+      if (response.error) {
+        if (response.response.status !== 404) {
+          handleApiError(response.error);
+        }
         return null;
       }
-      return data;
+      return response.data;
     },
     enabled: !!conversationId,
     staleTime: 30 * 1000,
@@ -34,10 +40,15 @@ export function useShareConversation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (conversationId: string) => {
+    mutationFn: async ({
+      conversationId,
+      visibility,
+      teamIds,
+      userIds,
+    }: ShareConversationMutationInput) => {
       const { data, error } = await shareConversation({
         path: { id: conversationId },
-        body: { visibility: "organization" },
+        body: { visibility, teamIds, userIds },
       });
       if (error) {
         handleApiError(error);
@@ -45,9 +56,14 @@ export function useShareConversation() {
       }
       return data;
     },
-    onSuccess: (data, conversationId) => {
+    onSuccess: (data, { conversationId }) => {
       if (!data) return;
       queryClient.setQueryData(["conversation-share", conversationId], data);
+      queryClient.invalidateQueries({
+        queryKey: ["conversation", conversationId],
+      });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      toast.success("Chat visibility updated");
     },
   });
 }
@@ -68,28 +84,12 @@ export function useUnshareConversation() {
     },
     onSuccess: (_data, conversationId) => {
       queryClient.setQueryData(["conversation-share", conversationId], null);
-    },
-  });
-}
-
-export function useSharedConversation(shareId: string | undefined) {
-  return useQuery({
-    queryKey: ["shared-conversation", shareId],
-    queryFn: async () => {
-      if (!shareId) return null;
-      const { data, error } = await getSharedConversation({
-        path: { shareId },
+      queryClient.invalidateQueries({
+        queryKey: ["conversation", conversationId],
       });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
-      return data;
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      toast.success("Chat sharing removed");
     },
-    enabled: !!shareId,
-    staleTime: 0,
-    gcTime: 10 * 60 * 1000,
-    retry: false,
   });
 }
 

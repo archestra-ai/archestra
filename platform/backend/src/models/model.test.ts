@@ -395,6 +395,50 @@ describe("ModelModel", () => {
       expect(updated?.contextLength).toBe(100000);
       expect(updated?.supportsToolCalling).toBe(false);
     });
+
+    test("preserves manual embedding dimension overrides on non-full sync", async () => {
+      const [created] = await ModelModel.bulkUpsert([
+        {
+          externalId: "openai/custom-embed-toggle",
+          provider: "openai",
+          modelId: "custom-embed-toggle",
+          description: "Custom Embed Toggle",
+          contextLength: 8192,
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+          supportsToolCalling: false,
+          promptPricePerToken: "0.000001",
+          completionPricePerToken: "0.000002",
+          embeddingDimensions: null,
+          lastSyncedAt: new Date(),
+        },
+      ]);
+
+      await ModelModel.update(created.id, { embeddingDimensions: 1536 });
+
+      await ModelModel.bulkUpsert([
+        {
+          externalId: "openai/custom-embed-toggle",
+          provider: "openai",
+          modelId: "custom-embed-toggle",
+          description: "Updated Custom Embed Toggle",
+          contextLength: 16384,
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+          supportsToolCalling: false,
+          promptPricePerToken: "0.000003",
+          completionPricePerToken: "0.000004",
+          embeddingDimensions: null,
+          lastSyncedAt: new Date(),
+        },
+      ]);
+
+      const updated = await ModelModel.findByProviderAndModelId(
+        "openai",
+        "custom-embed-toggle",
+      );
+      expect(updated?.embeddingDimensions).toBe(1536);
+    });
   });
 
   describe("delete", () => {
@@ -802,6 +846,56 @@ describe("ModelModel", () => {
       expect(updated).not.toBeNull();
       expect(updated?.ignored).toBe(true);
       expect(updated?.inputModalities).toEqual(["text", "image"]);
+    });
+
+    test("can update embedding dimensions alongside editable model settings", async () => {
+      const model = await ModelModel.create({
+        externalId: "openai/text-embedding-3-small",
+        provider: "openai",
+        modelId: "text-embedding-3-small",
+        description: null,
+        contextLength: 8192,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: false,
+        promptPricePerToken: "0.000001",
+        completionPricePerToken: "0.000002",
+        embeddingDimensions: null,
+        lastSyncedAt: new Date(),
+      });
+
+      const updated = await ModelModel.update(model.id, {
+        embeddingDimensions: 1536,
+        ignored: true,
+      });
+
+      expect(updated).not.toBeNull();
+      expect(updated?.embeddingDimensions).toBe(1536);
+      expect(updated?.ignored).toBe(true);
+    });
+
+    test("clears embedding dimensions when a model is no longer used for embeddings", async () => {
+      const model = await ModelModel.create({
+        externalId: "openai/text-embedding-3-large",
+        provider: "openai",
+        modelId: "text-embedding-3-large",
+        description: null,
+        contextLength: 8192,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: false,
+        promptPricePerToken: "0.000001",
+        completionPricePerToken: "0.000002",
+        embeddingDimensions: 1536,
+        lastSyncedAt: new Date(),
+      });
+
+      const updated = await ModelModel.update(model.id, {
+        embeddingDimensions: null,
+      });
+
+      expect(updated).not.toBeNull();
+      expect(updated?.embeddingDimensions).toBeNull();
     });
   });
 });

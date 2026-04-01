@@ -109,8 +109,8 @@ test.describe("Built-In Agents API", () => {
         expect(result.toolId).toBeDefined();
         // Matches wiremock openai-policy-config-subagent.json response
         expect(result.config).toEqual({
-          toolInvocationAction: "allow_when_context_is_untrusted",
-          trustedDataAction: "mark_as_untrusted",
+          toolInvocationAction: "allow_when_context_is_sensitive",
+          trustedDataAction: "mark_as_sensitive",
           reasoning: "E2E test: read-only tool with external data",
         });
       }
@@ -150,20 +150,18 @@ test.describe("Built-In Agents API", () => {
     }
   });
 
-  test("auto-configure triggers on individual tool assignment", async ({
+  test("auto-configure triggers on tool discovery (MCP server install)", async ({
     request,
     makeApiRequest,
-    createAgent,
     createMcpCatalogItem,
     installMcpServer,
-    deleteAgent,
     uninstallMcpServer,
     getTeamByName,
   }) => {
     // Relies on CI-seeded OpenAI chat API key routing through WireMock.
     // The WireMock mapping matches on body containing "toolInvocationAction".
 
-    // 1. Enable autoConfigureOnToolAssignment on the built-in agent
+    // 1. Enable autoConfigureOnToolDiscovery on the built-in agent
     const builtIn = await getBuiltInAgent(request, makeApiRequest);
     expect(builtIn).toBeTruthy();
 
@@ -174,26 +172,18 @@ test.describe("Built-In Agents API", () => {
       data: {
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolAssignment: true,
+          autoConfigureOnToolDiscovery: true,
         },
       },
     });
 
-    // 2. Create an agent and install an MCP server (without agent assignment)
     const defaultTeam = await getTeamByName(request, "Default Team");
     expect(defaultTeam).toBeTruthy();
 
-    const agentResponse = await createAgent(
-      request,
-      `Policy Config Test Agent ${Date.now()}`,
-      "org",
-    );
-    const agent = await agentResponse.json();
-
-    const serverName = `policy-config-assign-test-${Date.now()}`;
+    const serverName = `policy-config-discovery-test-${Date.now()}`;
     const catalogResponse = await createMcpCatalogItem(request, {
       name: serverName,
-      description: "Test server for auto-configure assignment e2e test",
+      description: "Test server for auto-configure discovery e2e test",
       serverType: "remote",
       serverUrl: `${WIREMOCK_INTERNAL_URL}/mcp/context7`,
     });
@@ -201,7 +191,7 @@ test.describe("Built-In Agents API", () => {
 
     let serverId: string | undefined;
     try {
-      // 3. Install MCP server WITHOUT agentIds — tools are created but not assigned
+      // 2. Install MCP server — tools are discovered and auto-configured
       const serverResponse = await installMcpServer(request, {
         name: catalogItem.name,
         catalogId: catalogItem.id,
@@ -210,7 +200,7 @@ test.describe("Built-In Agents API", () => {
       const server = await serverResponse.json();
       serverId = server.id;
 
-      // 4. Find tool IDs from the installed server
+      // 3. Find tool IDs from the installed server
       const toolsResponse = await makeApiRequest({
         request,
         method: "get",
@@ -220,21 +210,11 @@ test.describe("Built-In Agents API", () => {
       const tools = toolsResult.data as Array<{ id: string; name: string }>;
       expect(tools.length).toBeGreaterThan(0);
 
-      // 5. Individually assign a tool to the agent via the POST endpoint
-      //    This uses AgentToolModel.create() which triggers auto-configure
-      const toolToAssign = tools[0];
-      await makeApiRequest({
-        request,
-        method: "post",
-        urlSuffix: `/api/agents/${agent.id}/tools/${toolToAssign.id}`,
-        data: {
-          mcpServerId: server.id,
-        },
-      });
+      const discoveredTool = tools[0];
 
-      // 6. Poll until auto-configure has updated the tool invocation policy
-      //    to the WireMock-stubbed value. Default policies may already exist
-      //    with block_when_context_is_untrusted, so we poll for the expected value.
+      // 4. Poll until auto-configure has updated the tool invocation policy
+      //    to the WireMock-stubbed value. Default policies are created first,
+      //    then LLM analysis overwrites them asynchronously.
       let invocationPolicyConfigured = false;
       for (let attempt = 0; attempt < 30; attempt++) {
         const invocationResponse = await makeApiRequest({
@@ -244,7 +224,7 @@ test.describe("Built-In Agents API", () => {
         });
         const invocationPolicies = await invocationResponse.json();
         const policy = invocationPolicies.find(
-          (p: { toolId: string }) => p.toolId === toolToAssign.id,
+          (p: { toolId: string }) => p.toolId === discoveredTool.id,
         );
         if (policy && policy.action === "allow_when_context_is_untrusted") {
           invocationPolicyConfigured = true;
@@ -254,7 +234,7 @@ test.describe("Built-In Agents API", () => {
       }
       expect(invocationPolicyConfigured).toBe(true);
 
-      // 7. Verify trusted data policy was also updated by auto-configure
+      // 5. Verify trusted data policy was also updated by auto-configure
       let trustedDataPolicyConfigured = false;
       for (let attempt = 0; attempt < 10; attempt++) {
         const trustedDataResponse = await makeApiRequest({
@@ -264,7 +244,7 @@ test.describe("Built-In Agents API", () => {
         });
         const trustedDataPolicies = await trustedDataResponse.json();
         const tdPolicy = trustedDataPolicies.find(
-          (p: { toolId: string }) => p.toolId === toolToAssign.id,
+          (p: { toolId: string }) => p.toolId === discoveredTool.id,
         );
         if (tdPolicy && tdPolicy.action === "mark_as_untrusted") {
           trustedDataPolicyConfigured = true;
@@ -278,7 +258,6 @@ test.describe("Built-In Agents API", () => {
       if (serverId) {
         await uninstallMcpServer(request, serverId);
       }
-      await deleteAgent(request, agent.id);
       // Restore original auto-configure setting
       await makeApiRequest({
         request,
@@ -287,7 +266,7 @@ test.describe("Built-In Agents API", () => {
         data: {
           builtInAgentConfig: {
             name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-            autoConfigureOnToolAssignment: false,
+            autoConfigureOnToolDiscovery: false,
           },
         },
       });

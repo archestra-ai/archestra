@@ -5,6 +5,7 @@ import {
   type AgentType,
   archestraApiSdk,
   type archestraApiTypes,
+  BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS,
   BUILT_IN_AGENT_IDS,
   DocsPage,
   E2eTestId,
@@ -28,6 +29,7 @@ import {
   Key,
   Loader2,
   Plus,
+  RotateCcw,
   User,
   Users,
   X,
@@ -586,7 +588,7 @@ export function AgentDialog({
   const [scope, setScope] = useState<AgentScope>("personal");
   const [knowledgeBaseIds, setKnowledgeBaseIds] = useState<string[]>([]);
   const [connectorIds, setConnectorIds] = useState<string[]>([]);
-  const [autoConfigureOnToolAssignment, setAutoConfigureOnToolAssignment] =
+  const [autoConfigureOnToolDiscovery, setAutoConfigureOnToolDiscovery] =
     useState(false);
   const [dualLlmMaxRounds, setDualLlmMaxRounds] = useState("5");
 
@@ -600,7 +602,7 @@ export function AgentDialog({
     builtInAgentName === BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN;
   const isDualLlmQuarantineBuiltIn =
     builtInAgentName === BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE;
-  const isDualLlmBuiltIn = isDualLlmMainBuiltIn || isDualLlmQuarantineBuiltIn;
+  const _isDualLlmBuiltIn = isDualLlmMainBuiltIn || isDualLlmQuarantineBuiltIn;
   const supportsIdentityProvider =
     agentType === "agent" || agentType === "mcp_gateway";
   const inferredIdentityProviderId =
@@ -657,10 +659,10 @@ export function AgentDialog({
         setKnowledgeBaseIds(agentData.knowledgeBaseIds);
         setConnectorIds(agentData.connectorIds);
         setScope(agentData.scope);
-        setAutoConfigureOnToolAssignment(
+        setAutoConfigureOnToolDiscovery(
           agentData.builtInAgentConfig?.name ===
             BUILT_IN_AGENT_IDS.POLICY_CONFIG
-            ? agentData.builtInAgentConfig.autoConfigureOnToolAssignment
+            ? agentData.builtInAgentConfig.autoConfigureOnToolDiscovery
             : false,
         );
         setDualLlmMaxRounds(
@@ -687,7 +689,7 @@ export function AgentDialog({
         setKnowledgeBaseIds([]);
         setConnectorIds([]);
         setScope("personal");
-        setAutoConfigureOnToolAssignment(false);
+        setAutoConfigureOnToolDiscovery(false);
         setDualLlmMaxRounds("5");
       }
       // Reset counts when dialog opens
@@ -862,7 +864,7 @@ export function AgentDialog({
         const builtInAgentConfig = isPolicyConfigBuiltIn
           ? {
               name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-              autoConfigureOnToolAssignment,
+              autoConfigureOnToolDiscovery,
             }
           : isDualLlmMainBuiltIn
             ? {
@@ -877,9 +879,7 @@ export function AgentDialog({
           id: agent.id,
           data: {
             builtInAgentConfig,
-            ...(isDualLlmBuiltIn && {
-              systemPrompt: trimmedSystemPrompt || null,
-            }),
+            systemPrompt: trimmedSystemPrompt || null,
             llmApiKeyId: llmApiKeyId || null,
             llmModel: llmModel || null,
           },
@@ -1007,9 +1007,8 @@ export function AgentDialog({
     agentType,
     agent,
     isBuiltIn,
-    autoConfigureOnToolAssignment,
+    autoConfigureOnToolDiscovery,
     dualLlmMaxRounds,
-    isDualLlmBuiltIn,
     isDualLlmMainBuiltIn,
     isInternalAgent,
     isPolicyConfigBuiltIn,
@@ -1136,20 +1135,20 @@ export function AgentDialog({
                     <div className="flex items-center justify-between">
                       <div className="space-y-0.5">
                         <Label
-                          htmlFor="auto-configure-on-tool-assignment"
+                          htmlFor="auto-configure-on-tool-discovery"
                           className="text-sm font-medium cursor-pointer"
                         >
-                          Auto-configure on tool assignment
+                          Auto-configure on tool discovery
                         </Label>
                         <p className="text-sm text-muted-foreground">
                           Automatically analyze and configure security policies
-                          when tools are assigned to agents
+                          when tools are discovered
                         </p>
                       </div>
                       <Switch
-                        id="auto-configure-on-tool-assignment"
-                        checked={autoConfigureOnToolAssignment}
-                        onCheckedChange={setAutoConfigureOnToolAssignment}
+                        id="auto-configure-on-tool-discovery"
+                        checked={autoConfigureOnToolDiscovery}
+                        onCheckedChange={setAutoConfigureOnToolDiscovery}
                       />
                     </div>
                   </div>
@@ -1177,8 +1176,33 @@ export function AgentDialog({
                 <SystemPromptEditor
                   value={systemPrompt}
                   onChange={setSystemPrompt}
-                  readOnly={isBuiltIn && !isDualLlmBuiltIn}
                   variant="section"
+                  headerExtra={
+                    isBuiltIn && builtInAgentName ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0"
+                        disabled={
+                          systemPrompt ===
+                          (BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS[
+                            builtInAgentName
+                          ] ?? "")
+                        }
+                        onClick={() =>
+                          setSystemPrompt(
+                            BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS[
+                              builtInAgentName
+                            ] ?? "",
+                          )
+                        }
+                      >
+                        <RotateCcw className="size-4" />
+                        Reset to Default
+                      </Button>
+                    ) : undefined
+                  }
                 />
               </div>
             )}

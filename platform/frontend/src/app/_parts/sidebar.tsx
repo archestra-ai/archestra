@@ -84,8 +84,7 @@ const headerNavItems: NavItem[] = [
     title: "New Chat",
     url: "/chat",
     icon: MessageCircle,
-    customIsActive: (pathname: string, searchParams: URLSearchParams) =>
-      pathname === "/chat" && !searchParams.get("conversation"),
+    customIsActive: (pathname: string) => pathname === "/chat",
   },
 ];
 

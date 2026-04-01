@@ -6,15 +6,18 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Bot,
+  CornerDownLeftIcon,
   FileText,
   Globe,
+  MicIcon,
   MoreVertical,
+  PaperclipIcon,
   Plus,
   Share2,
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   useCallback,
   useEffect,
@@ -37,6 +40,7 @@ import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ChatLinkButton } from "@/components/chat/chat-help-link";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
+import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import {
   PlaywrightInstallDialog,
   usePlaywrightSetupRequired,
@@ -47,6 +51,10 @@ import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import type { LlmProviderApiKeyFormValues } from "@/components/llm-provider-api-key-form";
 import { LoadingSpinner } from "@/components/loading";
+import MessageThread, {
+  type PartialUIMessage,
+} from "@/components/message-thread";
+import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -73,7 +81,7 @@ import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { TypingText } from "@/components/ui/typing-text";
 import { Version } from "@/components/version";
 import { useDefaultAgentId, useInternalAgents } from "@/lib/agent.query";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useRecentlyGeneratedTitles } from "@/lib/chat/chat.hook";
 import {
   fetchConversationEnabledTools,
@@ -85,7 +93,10 @@ import {
   useUpdateConversationEnabledTools,
 } from "@/lib/chat/chat.query";
 import { useChatAgentState } from "@/lib/chat/chat-agent-state.hook";
-import { useConversationShare } from "@/lib/chat/chat-share.query";
+import {
+  useConversationShare,
+  useForkSharedConversation,
+} from "@/lib/chat/chat-share.query";
 import {
   conversationStorageKeys,
   getConversationDisplayTitle,
@@ -119,18 +130,19 @@ import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import ArchestraPromptInput from "./prompt-input";
 
-const CONVERSATION_QUERY_PARAM = "conversation";
-
 const BROWSER_OPEN_KEY = "archestra-chat-browser-open";
 
-export default function ChatPage() {
+export function ChatPageContent({
+  routeConversationId,
+}: {
+  routeConversationId?: string;
+}) {
   const queryClient = useQueryClient();
   const router = useRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const [conversationId, setConversationId] = useState<string | undefined>(
-    () => searchParams.get(CONVERSATION_QUERY_PARAM) || undefined,
+    routeConversationId,
   );
 
   // Hide version display from layout - chat page has its own version display
@@ -153,10 +165,10 @@ export default function ChatPage() {
   >(undefined);
 
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
-  const { data: conversationShare } = useConversationShare(
-    conversationId ?? undefined,
-  );
-  const isShared = !!conversationShare;
+  const [isForkDialogOpen, setIsForkDialogOpen] = useState(false);
+  const [forkAgentId, setForkAgentId] = useState<string | null>(null);
+  const forkSharedConversationMutation = useForkSharedConversation();
+  const { data: session } = useSession();
 
   // Dialog management for MCP installation
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<
@@ -419,8 +431,6 @@ export default function ChatPage() {
     return undefined;
   }, [initialModel, modelsByProvider]);
 
-  const chatSession = useChatSession(conversationId);
-
   const { isLoading: isLoadingFeatures } = useConfig();
   const { data: chatModels = [] } = useLlmModels();
   // Check if user has any API keys (including system keys for keyless providers
@@ -428,38 +438,20 @@ export default function ChatPage() {
   const hasAnyApiKey = chatApiKeys.length > 0;
   const isLoadingApiKeyCheck = isLoadingApiKeys || isLoadingFeatures;
 
-  // Sync conversation ID with URL and reset initial state when navigating to base /chat
-  // Use a ref for the comparison so the effect only fires when the URL changes,
-  // not when conversationId is set programmatically by selectConversation().
-  // Without this, router.push() + setConversationId() creates a race: the effect
-  // re-runs before the URL catches up and resets conversationId back to undefined.
-  const conversationIdRef = useRef(conversationId);
-  conversationIdRef.current = conversationId;
-
   useEffect(() => {
-    // Normalize null to undefined for consistent comparison
-    const conversationParam =
-      searchParams.get(CONVERSATION_QUERY_PARAM) ?? undefined;
-    if (conversationParam !== conversationIdRef.current) {
-      setConversationId(conversationParam);
+    setConversationId(routeConversationId);
 
-      // Reset initial state when navigating to /chat without a conversation
-      // This ensures a fresh state when user clicks "New chat" or navigates back
-      if (!conversationParam) {
-        // Reset initial state to trigger re-selection from useEffects
-        setInitialAgentId(null);
-        setInitialModel("");
-        setInitialModelSource(null);
-        modelInitializedRef.current = false;
-      }
-
-      // Focus textarea after navigation (e.g., from search dialog)
-      // Use requestAnimationFrame to ensure DOM is ready
-      requestAnimationFrame(() => {
-        textareaRef.current?.focus();
-      });
+    if (!routeConversationId) {
+      setInitialAgentId(null);
+      setInitialModel("");
+      setInitialModelSource(null);
+      modelInitializedRef.current = false;
     }
-  }, [searchParams]);
+
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+    });
+  }, [routeConversationId]);
 
   // Get user_prompt from URL for auto-sending
   const initialUserPrompt = useMemo(() => {
@@ -471,17 +463,35 @@ export default function ChatPage() {
     (id: string | undefined) => {
       setConversationId(id);
       if (id) {
-        router.push(`${pathname}?${CONVERSATION_QUERY_PARAM}=${id}`);
+        router.push(`/chat/${id}`);
       } else {
-        router.push(pathname);
+        router.push("/chat");
       }
     },
-    [pathname, router],
+    [router],
   );
 
   // Fetch conversation with messages
   const { data: conversation, isLoading: isLoadingConversation } =
     useConversation(conversationId);
+  const canManageShare =
+    !!conversationId &&
+    !!conversation &&
+    conversation.userId === session?.user.id;
+  useConversationShare(canManageShare ? conversationId : undefined);
+  const isShared = !!conversation?.share;
+  const isReadOnlySharedConversation =
+    !!conversationId &&
+    !!conversation?.share &&
+    conversation.userId !== session?.user.id;
+  const chatSession = useChatSession(
+    isReadOnlySharedConversation ? undefined : conversationId,
+  );
+  const sharedConversationMessages = useMemo(
+    () => (conversation?.messages ?? []) as PartialUIMessage[],
+    [conversation?.messages],
+  );
+  const effectiveForkAgentId = forkAgentId ?? internalAgents[0]?.id ?? null;
 
   // Track title generation for typing animation in the header
   const conversationForTitleTracking = useMemo(
@@ -768,6 +778,8 @@ export default function ChatPage() {
       name: agent.name,
     })),
   });
+  const newChatAgentId =
+    activeAgentId ?? initialAgentId ?? internalAgents[0]?.id ?? null;
 
   // Find the specific internal agent for this conversation (if any)
   const _conversationInternalAgent = conversationAgentId
@@ -776,30 +788,45 @@ export default function ChatPage() {
 
   // Get current agent info
   const currentProfileId = conversationAgentId;
-  const browserToolsAgentId = conversationId
-    ? (conversationAgentId ?? promptAgentId ?? undefined)
-    : (initialAgentId ?? undefined);
+  const conversationToolsStateId = isReadOnlySharedConversation
+    ? undefined
+    : conversationId;
+  const browserToolsAgentId = isReadOnlySharedConversation
+    ? undefined
+    : conversationId
+      ? (conversationAgentId ?? promptAgentId ?? undefined)
+      : (initialAgentId ?? undefined);
 
-  const playwrightSetupAgentId = conversationId
-    ? (conversationAgentId ?? undefined)
-    : (initialAgentId ?? undefined);
+  const playwrightSetupAgentId = isReadOnlySharedConversation
+    ? undefined
+    : conversationId
+      ? (conversationAgentId ?? undefined)
+      : (initialAgentId ?? undefined);
 
   const { hasPlaywrightMcpTools, isLoading: isLoadingBrowserTools } =
-    useHasPlaywrightMcpTools(browserToolsAgentId, conversationId);
+    useHasPlaywrightMcpTools(browserToolsAgentId, conversationToolsStateId);
   // Show while loading so it doesn't flash hidden for members whose agent already has playwright
   // tools. Once loading is done, hides only if the user lacks permission AND agent has no tools.
   const showBrowserButton =
-    canUpdateAgent ||
-    hasPlaywrightMcpTools ||
-    (!!conversationId && isLoadingConversation) ||
-    (!!browserToolsAgentId && isLoadingBrowserTools);
+    !isReadOnlySharedConversation &&
+    (canUpdateAgent ||
+      hasPlaywrightMcpTools ||
+      (!!conversationId && isLoadingConversation) ||
+      (!!browserToolsAgentId && isLoadingBrowserTools));
 
   const {
     isLoading: isPlaywrightCheckLoading,
     isRequired: isPlaywrightSetupRequired,
-  } = usePlaywrightSetupRequired(playwrightSetupAgentId, conversationId, {
-    enabled: hasChatAccess && canUpdateAgent !== false,
-  });
+  } = usePlaywrightSetupRequired(
+    playwrightSetupAgentId,
+    conversationToolsStateId,
+    {
+      enabled:
+        !isReadOnlySharedConversation &&
+        hasChatAccess &&
+        canUpdateAgent !== false,
+    },
+  );
   // Treat both loading and required as "visible" for disabling submit, hiding arrow, etc.
   // Only applies to users who can actually perform the installation.
   const isPlaywrightSetupVisible =
@@ -1169,6 +1196,27 @@ export default function ChatPage() {
     setPendingBrowserUrl(undefined);
   }, []);
 
+  const handleForkSharedConversation = useCallback(async () => {
+    if (!conversation?.share?.id || !effectiveForkAgentId) {
+      return;
+    }
+
+    const result = await forkSharedConversationMutation.mutateAsync({
+      shareId: conversation.share.id,
+      agentId: effectiveForkAgentId,
+    });
+
+    if (result) {
+      setIsForkDialogOpen(false);
+      router.push(`/chat/${result.id}`);
+    }
+  }, [
+    conversation?.share?.id,
+    effectiveForkAgentId,
+    forkSharedConversationMutation,
+    router,
+  ]);
+
   // Handle initial agent change (when no conversation exists)
   const handleInitialAgentChange = useCallback(
     (agentId: string) => {
@@ -1251,11 +1299,11 @@ export default function ChatPage() {
                 try {
                   // The backend creates conversation with default enabled tools
                   // We need to apply pending actions to modify that default
-                  const data = await fetchConversationEnabledTools(
-                    newConversation.id,
-                  );
-                  if (data) {
-                    const baseEnabledToolIds = data.enabledToolIds || [];
+                  const enabledToolsResult =
+                    await fetchConversationEnabledTools(newConversation.id);
+                  if (enabledToolsResult?.data) {
+                    const baseEnabledToolIds =
+                      enabledToolsResult.data.enabledToolIds || [];
                     const newEnabledToolIds = applyPendingActions(
                       baseEnabledToolIds,
                       pendingActions,
@@ -1370,7 +1418,10 @@ export default function ChatPage() {
 
   // If user lacks permission to read agents or LLM providers, show access denied
   // Must check before loading state since disabled queries stay in pending state
-  if (canReadAgent === false || canReadLlmProvider === false) {
+  if (
+    !conversationId &&
+    (canReadAgent === false || canReadLlmProvider === false)
+  ) {
     const missingPermissions: string[] = [];
     if (canReadAgent === false) missingPermissions.push("agent:read");
     if (canReadLlmProvider === false)
@@ -1527,7 +1578,7 @@ export default function ChatPage() {
               )}
               {/* Right side - desktop: original buttons */}
               <div className="hidden md:flex items-center gap-2 flex-shrink-0">
-                {conversationId && (
+                {canManageShare && (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -1547,7 +1598,7 @@ export default function ChatPage() {
                     )}
                   </Button>
                 )}
-                {conversationId && <div className="w-px h-4 bg-border" />}
+                {canManageShare && <div className="w-px h-4 bg-border" />}
                 <Button
                   variant={isArtifactOpen ? "secondary" : "ghost"}
                   size="sm"
@@ -1593,7 +1644,7 @@ export default function ChatPage() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    {conversationId && (
+                    {canManageShare && (
                       <DropdownMenuItem
                         onSelect={() => setIsShareDialogOpen(true)}
                       >
@@ -1689,55 +1740,103 @@ export default function ChatPage() {
                     "hidden md:block",
                 )}
               >
-                <ChatMessages
-                  conversationId={conversationId}
-                  agentId={currentProfileId || initialAgentId || undefined}
-                  messages={messages}
-                  status={status}
-                  optimisticToolCalls={optimisticToolCalls}
-                  isLoadingConversation={isLoadingConversation}
-                  onMessagesUpdate={setMessages}
-                  agentName={
-                    (currentProfileId
-                      ? internalAgents.find((a) => a.id === currentProfileId)
-                      : internalAgents.find((a) => a.id === initialAgentId)
-                    )?.name
-                  }
-                  selectedModel={conversation?.selectedModel ?? initialModel}
-                  modelSource={conversationModelSource ?? initialModelSource}
-                  onUserMessageEdit={(
-                    editedMessage,
-                    updatedMessages,
-                    editedPartIndex,
-                  ) => {
-                    if (setMessages && sendMessage) {
-                      userMessageJustEdited.current = true;
-                      const messagesWithoutEditedMessage =
-                        updatedMessages.slice(0, -1);
-                      setMessages(messagesWithoutEditedMessage);
-                      const editedPart = editedMessage.parts?.[editedPartIndex];
-                      const editedText =
-                        editedPart?.type === "text" ? editedPart.text : "";
-                      if (editedText?.trim()) {
-                        sendMessage({
-                          role: "user",
-                          parts: [{ type: "text", text: editedText }],
-                        });
-                      }
+                {isReadOnlySharedConversation ? (
+                  <MessageThread
+                    messages={sharedConversationMessages}
+                    containerClassName="h-full"
+                    hideDivider
+                    profileId={conversation?.agent?.id}
+                  />
+                ) : (
+                  <ChatMessages
+                    conversationId={conversationId}
+                    agentId={currentProfileId || initialAgentId || undefined}
+                    messages={messages}
+                    status={status}
+                    optimisticToolCalls={optimisticToolCalls}
+                    isLoadingConversation={isLoadingConversation}
+                    onMessagesUpdate={setMessages}
+                    agentName={
+                      (currentProfileId
+                        ? internalAgents.find((a) => a.id === currentProfileId)
+                        : internalAgents.find((a) => a.id === initialAgentId)
+                      )?.name
                     }
-                  }}
-                  error={error}
-                  onToolApprovalResponse={
-                    addToolApprovalResponse
-                      ? ({ id, approved, reason }) => {
-                          addToolApprovalResponse({ id, approved, reason });
+                    selectedModel={conversation?.selectedModel ?? initialModel}
+                    modelSource={conversationModelSource ?? initialModelSource}
+                    onUserMessageEdit={(
+                      editedMessage,
+                      updatedMessages,
+                      editedPartIndex,
+                    ) => {
+                      if (setMessages && sendMessage) {
+                        userMessageJustEdited.current = true;
+                        const messagesWithoutEditedMessage =
+                          updatedMessages.slice(0, -1);
+                        setMessages(messagesWithoutEditedMessage);
+                        const editedPart =
+                          editedMessage.parts?.[editedPartIndex];
+                        const editedText =
+                          editedPart?.type === "text" ? editedPart.text : "";
+                        if (editedText?.trim()) {
+                          sendMessage({
+                            role: "user",
+                            parts: [{ type: "text", text: editedText }],
+                          });
                         }
-                      : undefined
-                  }
-                />
+                      }
+                    }}
+                    error={error}
+                    onToolApprovalResponse={
+                      addToolApprovalResponse
+                        ? ({ id, approved, reason }) => {
+                            addToolApprovalResponse({ id, approved, reason });
+                          }
+                        : undefined
+                    }
+                  />
+                )}
               </div>
 
-              {isAgentDeleted ? (
+              {isReadOnlySharedConversation ? (
+                <div className="sticky bottom-0 bg-background border-t p-4">
+                  <div className="max-w-4xl mx-auto space-y-3">
+                    <div className="relative">
+                      <div className="border-input dark:bg-input/30 relative flex w-full flex-col rounded-md border shadow-xs opacity-30 blur-[3px] pointer-events-none select-none">
+                        <div className="px-4 py-5 min-h-[120px]">
+                          <span className="text-sm text-muted-foreground">
+                            Type a message...
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between w-full px-3 pb-3">
+                          <div className="flex items-center gap-1">
+                            <div className="size-8 flex items-center justify-center">
+                              <PaperclipIcon className="size-4 text-muted-foreground" />
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="size-8 flex items-center justify-center">
+                              <MicIcon className="size-4 text-muted-foreground" />
+                            </div>
+                            <div className="size-8 flex items-center justify-center rounded-md bg-primary">
+                              <CornerDownLeftIcon className="size-4 text-primary-foreground" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-auto">
+                        <Button onClick={() => setIsForkDialogOpen(true)}>
+                          <Plus className="h-4 w-4 mr-2" />
+                          Start New Chat from here
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <Version inline />
+                    </div>
+                  </div>
+                </div>
+              ) : isAgentDeleted ? (
                 <div className="sticky bottom-0 bg-background border-t p-4">
                   <div className="max-w-4xl mx-auto">
                     <div className="flex items-center justify-between gap-4 p-4 rounded-lg border border-muted bg-muted/50">
@@ -1802,7 +1901,7 @@ export default function ChatPage() {
             </>
           ) : (
             /* No active chat: centered prompt input */
-            activeAgentId && (
+            newChatAgentId && (
               // biome-ignore lint/a11y/noStaticElementInteractions: click-to-focus container
               // biome-ignore lint/a11y/useKeyWithClickEvents: click-to-focus container
               <div
@@ -1877,7 +1976,7 @@ export default function ChatPage() {
                       onModelSelectorOpenChange={
                         handleInitialModelSelectorOpenChange
                       }
-                      agentId={activeAgentId}
+                      agentId={newChatAgentId}
                       currentProvider={initialProvider}
                       textareaRef={textareaRef}
                       initialApiKeyId={initialApiKeyId}
@@ -1954,15 +2053,54 @@ export default function ChatPage() {
         agentType="agent"
       />
 
-      {conversationId && (
+      {canManageShare && conversationId && (
         <ShareConversationDialog
           conversationId={conversationId}
           open={isShareDialogOpen}
           onOpenChange={setIsShareDialogOpen}
         />
       )}
+
+      <StandardDialog
+        open={isForkDialogOpen}
+        onOpenChange={setIsForkDialogOpen}
+        title="Start New Chat"
+        description="Select an agent to start a new chat with the preloaded messages from this conversation."
+        size="small"
+        bodyClassName="py-1"
+        footer={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => setIsForkDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleForkSharedConversation}
+              disabled={
+                !effectiveForkAgentId ||
+                forkSharedConversationMutation.isPending
+              }
+            >
+              {forkSharedConversationMutation.isPending
+                ? "Creating..."
+                : "Start Chat"}
+            </Button>
+          </>
+        }
+      >
+        <InitialAgentSelector
+          currentAgentId={forkAgentId}
+          onAgentChange={setForkAgentId}
+        />
+      </StandardDialog>
     </div>
   );
+}
+
+export default function ChatPage() {
+  return <ChatPageContent key="new-chat" />;
 }
 
 // =========================================================================

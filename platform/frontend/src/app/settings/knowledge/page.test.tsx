@@ -80,6 +80,12 @@ let mockApiKeys: Array<{
   provider: string;
   scope: string;
 }> = [];
+let mockEmbeddingModels: Array<{
+  id: string;
+  provider: string;
+  displayName: string;
+  embeddingDimensions: 3072 | 1536 | 768 | null;
+}> = [];
 
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   useAvailableLlmProviderApiKeys: () => ({
@@ -102,6 +108,10 @@ vi.mock("@/lib/llm-models.query", () => ({
         displayName: "Claude 3 Opus",
       },
     ],
+    isPending: false,
+  }),
+  useEmbeddingModels: () => ({
+    data: mockEmbeddingModels,
     isPending: false,
   }),
 }));
@@ -157,6 +167,14 @@ beforeEach(() => {
   mockOrganization = null;
   mockOrgPending = false;
   mockApiKeys = [];
+  mockEmbeddingModels = [
+    {
+      id: "text-embedding-3-small",
+      provider: "openai",
+      displayName: "text-embedding-3-small",
+      embeddingDimensions: 1536,
+    },
+  ];
 });
 
 describe("KnowledgeSettingsPage", () => {
@@ -287,6 +305,36 @@ describe("KnowledgeSettingsPage", () => {
       expect(screen.getByText("text-embedding-3-large")).toBeInTheDocument();
     });
 
+    it("shows the configured embedding dimensions from model metadata", () => {
+      mockOrganization = {
+        embeddingChatApiKeyId: "key-1",
+        embeddingModel: "gemini-embedding-001",
+        rerankerChatApiKeyId: null,
+        rerankerModel: null,
+      };
+      mockApiKeys = [
+        {
+          id: "key-1",
+          name: "Vertex AI",
+          provider: "gemini",
+          scope: "org",
+        },
+      ];
+      mockEmbeddingModels = [
+        {
+          id: "gemini-embedding-001",
+          provider: "gemini",
+          displayName: "gemini-embedding-001",
+          embeddingDimensions: 1536,
+        },
+      ];
+      renderPage();
+
+      expect(
+        screen.getByText(/Uses 1536-dimensional vectors/),
+      ).toBeInTheDocument();
+    });
+
     it("shows embedding model descriptions in the dropdown", async () => {
       const user = userEvent.setup();
 
@@ -309,16 +357,14 @@ describe("KnowledgeSettingsPage", () => {
       await user.click(getEmbeddingModelTrigger());
 
       expect(
-        screen.getAllByText("Best cost/quality ratio (1536 dims)").length,
+        screen.getAllByText("text-embedding-3-small").length,
       ).toBeGreaterThanOrEqual(1);
     });
 
-    it("allows entering a custom embedding model name", async () => {
-      const user = userEvent.setup();
-
+    it("preserves a previously saved embedding model even if it is no longer detected", () => {
       mockOrganization = {
         embeddingChatApiKeyId: "key-1",
-        embeddingModel: null,
+        embeddingModel: "legacy-embedding-model",
         rerankerChatApiKeyId: null,
         rerankerModel: null,
       };
@@ -330,15 +376,41 @@ describe("KnowledgeSettingsPage", () => {
           scope: "org",
         },
       ];
+      mockEmbeddingModels = [];
+      renderPage();
+
+      expect(screen.getByText("legacy-embedding-model")).toBeInTheDocument();
+    });
+
+    it("shows a helpful empty state when the selected key has no embedding models", async () => {
+      const user = userEvent.setup();
+
+      mockOrganization = {
+        embeddingChatApiKeyId: "key-1",
+        embeddingModel: null,
+        rerankerChatApiKeyId: null,
+        rerankerModel: null,
+      };
+      mockApiKeys = [
+        {
+          id: "key-1",
+          name: "Vertex AI",
+          provider: "gemini",
+          scope: "org",
+        },
+      ];
+      mockEmbeddingModels = [];
       renderPage();
 
       await user.click(getEmbeddingModelTrigger());
-      await user.type(
-        screen.getByPlaceholderText("Search or type model name..."),
-        "custom-embedding-model{enter}",
-      );
 
-      expect(screen.getByText("custom-embedding-model")).toBeInTheDocument();
+      expect(
+        screen.getByText('No embedding models detected for "Vertex AI".'),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "here" })).toHaveAttribute(
+        "href",
+        "/llm/providers/models",
+      );
     });
   });
 
@@ -367,7 +439,7 @@ describe("KnowledgeSettingsPage", () => {
       ).toBeInTheDocument();
     });
 
-    it("shows permanent choice description when model is locked", () => {
+    it("shows lock message when model is locked", () => {
       mockOrganization = {
         embeddingChatApiKeyId: "key-1",
         embeddingModel: "text-embedding-3-small",
@@ -386,7 +458,7 @@ describe("KnowledgeSettingsPage", () => {
 
       expect(
         screen.getByText(
-          /The embedding model cannot be changed after it has been saved/,
+          /Locked — changing the embedding model requires re-embedding all documents/,
         ),
       ).toBeInTheDocument();
     });

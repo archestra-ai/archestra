@@ -278,7 +278,7 @@ function SessionsTable({
                       : conversationTitle}
                   </span>
                   <Link
-                    href={`/chat?conversation=${session.sessionId}`}
+                    href={`/chat/${session.sessionId}`}
                     onClick={(e) => e.stopPropagation()}
                     className="shrink-0"
                   >

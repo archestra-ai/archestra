@@ -1,15 +1,20 @@
 import type { EmbeddingModel, SupportedProvider } from "@shared";
-import { DEFAULT_PROVIDER_BASE_URLS, getEmbeddingDimensions } from "@shared";
-import OpenAI from "openai";
+import { DEFAULT_PROVIDER_BASE_URLS } from "@shared";
 import { createDirectLLMModel, type LLMModel } from "@/clients/llm-client";
 import logger from "@/logging";
-import { LlmProviderApiKeyModel, OrganizationModel } from "@/models";
+import {
+  LlmProviderApiKeyModel,
+  ModelModel,
+  OrganizationModel,
+} from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 
-interface EmbeddingConfig {
-  client: OpenAI;
+export interface EmbeddingConfig {
+  apiKey: string;
+  baseUrl: string | null;
   model: EmbeddingModel;
   dimensions: number;
+  provider: SupportedProvider;
 }
 
 interface RerankerConfig {
@@ -39,14 +44,21 @@ export async function resolveEmbeddingConfig(
     return null;
   }
 
+  const model = await ModelModel.findByProviderAndModelId(
+    resolved.provider,
+    org.embeddingModel,
+  );
+
   return {
-    client: new OpenAI({
-      apiKey: resolved.apiKey,
-      baseURL: resolved.baseUrl ?? undefined,
-    }),
+    apiKey: resolved.apiKey,
+    baseUrl: resolved.baseUrl,
     model: org.embeddingModel,
-    dimensions:
-      org.embeddingDimensions ?? getEmbeddingDimensions(org.embeddingModel),
+    /**
+     * TODO: Temporary transition. Prefer per-model dimensions. Fall back to the deprecated org-level
+     * setting during the rollout, then to the historical 1536 default.
+     */
+    dimensions: model?.embeddingDimensions ?? org.embeddingDimensions ?? 1536,
+    provider: resolved.provider,
   };
 }
 

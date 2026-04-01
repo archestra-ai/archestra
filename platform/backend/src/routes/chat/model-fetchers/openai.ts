@@ -42,7 +42,6 @@ export async function fetchOpenAiModels(
 
   const excludePatterns = [
     "instruct",
-    "embedding",
     "tts",
     "whisper",
     "image",

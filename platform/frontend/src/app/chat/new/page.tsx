@@ -23,7 +23,8 @@ export default function ChatNewPage() {
     if (agentId) params.set("agentId", agentId);
     if (userPrompt) params.set("user_prompt", userPrompt);
 
-    router.replace(`/chat?${params.toString()}`);
+    const queryString = params.toString();
+    router.replace(queryString ? `/chat?${queryString}` : "/chat");
   }, [searchParams, router]);
 
   return null;

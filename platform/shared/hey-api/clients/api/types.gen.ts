@@ -10697,7 +10697,7 @@ export type GetAgentsResponses = {
             identityProviderId: string | null;
             builtInAgentConfig: {
                 name: 'policy-configuration-subagent';
-                autoConfigureOnToolAssignment: boolean;
+                autoConfigureOnToolDiscovery: boolean;
             } | {
                 name: 'dual-llm-main-agent';
                 maxRounds: number;
@@ -10789,7 +10789,7 @@ export type CreateAgentData = {
         identityProviderId?: string | null;
         builtInAgentConfig?: {
             name: 'policy-configuration-subagent';
-            autoConfigureOnToolAssignment: boolean;
+            autoConfigureOnToolDiscovery: boolean;
         } | {
             name: 'dual-llm-main-agent';
             maxRounds: number;
@@ -10898,7 +10898,7 @@ export type CreateAgentResponses = {
         identityProviderId: string | null;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
-            autoConfigureOnToolAssignment: boolean;
+            autoConfigureOnToolDiscovery: boolean;
         } | {
             name: 'dual-llm-main-agent';
             maxRounds: number;
@@ -11069,7 +11069,7 @@ export type GetAllAgentsResponses = {
         identityProviderId: string | null;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
-            autoConfigureOnToolAssignment: boolean;
+            autoConfigureOnToolDiscovery: boolean;
         } | {
             name: 'dual-llm-main-agent';
             maxRounds: number;
@@ -11223,7 +11223,7 @@ export type GetDefaultMcpGatewayResponses = {
         identityProviderId: string | null;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
-            autoConfigureOnToolAssignment: boolean;
+            autoConfigureOnToolDiscovery: boolean;
         } | {
             name: 'dual-llm-main-agent';
             maxRounds: number;
@@ -11377,7 +11377,7 @@ export type GetDefaultLlmProxyResponses = {
         identityProviderId: string | null;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
-            autoConfigureOnToolAssignment: boolean;
+            autoConfigureOnToolDiscovery: boolean;
         } | {
             name: 'dual-llm-main-agent';
             maxRounds: number;
@@ -11612,7 +11612,7 @@ export type GetAgentResponses = {
         identityProviderId: string | null;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
-            autoConfigureOnToolAssignment: boolean;
+            autoConfigureOnToolDiscovery: boolean;
         } | {
             name: 'dual-llm-main-agent';
             maxRounds: number;
@@ -11695,7 +11695,7 @@ export type UpdateAgentData = {
         identityProviderId?: string | null;
         builtInAgentConfig?: {
             name: 'policy-configuration-subagent';
-            autoConfigureOnToolAssignment: boolean;
+            autoConfigureOnToolDiscovery: boolean;
         } | {
             name: 'dual-llm-main-agent';
             maxRounds: number;
@@ -11806,7 +11806,7 @@ export type UpdateAgentResponses = {
         identityProviderId: string | null;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
-            autoConfigureOnToolAssignment: boolean;
+            autoConfigureOnToolDiscovery: boolean;
         } | {
             name: 'dual-llm-main-agent';
             maxRounds: number;
@@ -12579,8 +12579,8 @@ export type AutoConfigureAgentToolPoliciesResponses = {
             toolId: string;
             success: boolean;
             config?: {
-                toolInvocationAction: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always';
-                trustedDataAction: 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm' | 'block_always';
+                toolInvocationAction: 'allow_when_context_is_sensitive' | 'block_when_context_is_sensitive' | 'block_always';
+                trustedDataAction: 'mark_as_safe' | 'mark_as_sensitive' | 'sanitize_with_dual_llm' | 'block_always';
                 reasoning: string;
             };
             error?: string;
@@ -15139,17 +15139,20 @@ export type BedrockConverseWithDefaultAgentData = {
                 };
             }>;
             toolChoice?: {
-                auto?: {
-                    [key: string]: unknown;
-                };
-            } | {
-                any?: {
-                    [key: string]: unknown;
-                };
-            } | {
                 tool: {
                     name: string;
                 };
+                [key: string]: unknown;
+            } | {
+                any: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
+            } | {
+                auto: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
             };
         };
         guardrailConfig?: {
@@ -15440,17 +15443,20 @@ export type BedrockConverseWithAgentData = {
                 };
             }>;
             toolChoice?: {
-                auto?: {
-                    [key: string]: unknown;
-                };
-            } | {
-                any?: {
-                    [key: string]: unknown;
-                };
-            } | {
                 tool: {
                     name: string;
                 };
+                [key: string]: unknown;
+            } | {
+                any: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
+            } | {
+                auto: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
             };
         };
         guardrailConfig?: {
@@ -15743,17 +15749,20 @@ export type BedrockConverseStreamWithDefaultAgentData = {
                 };
             }>;
             toolChoice?: {
-                auto?: {
-                    [key: string]: unknown;
-                };
-            } | {
-                any?: {
-                    [key: string]: unknown;
-                };
-            } | {
                 tool: {
                     name: string;
                 };
+                [key: string]: unknown;
+            } | {
+                any: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
+            } | {
+                auto: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
             };
         };
         guardrailConfig?: {
@@ -15925,17 +15934,20 @@ export type BedrockConverseStreamWithAgentData = {
                 };
             }>;
             toolChoice?: {
-                auto?: {
-                    [key: string]: unknown;
-                };
-            } | {
-                any?: {
-                    [key: string]: unknown;
-                };
-            } | {
                 tool: {
                     name: string;
                 };
+                [key: string]: unknown;
+            } | {
+                any: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
+            } | {
+                auto: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
             };
         };
         guardrailConfig?: {
@@ -16109,17 +16121,20 @@ export type BedrockConverseWithAgentAndModelData = {
                 };
             }>;
             toolChoice?: {
-                auto?: {
-                    [key: string]: unknown;
-                };
-            } | {
-                any?: {
-                    [key: string]: unknown;
-                };
-            } | {
                 tool: {
                     name: string;
                 };
+                [key: string]: unknown;
+            } | {
+                any: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
+            } | {
+                auto: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
             };
         };
         guardrailConfig?: {
@@ -16413,17 +16428,20 @@ export type BedrockConverseStreamWithAgentAndModelData = {
                 };
             }>;
             toolChoice?: {
-                auto?: {
-                    [key: string]: unknown;
-                };
-            } | {
-                any?: {
-                    [key: string]: unknown;
-                };
-            } | {
                 tool: {
                     name: string;
                 };
+                [key: string]: unknown;
+            } | {
+                any: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
+            } | {
+                auto: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
             };
         };
         guardrailConfig?: {
@@ -16897,6 +16915,10 @@ export type GetChatConversationsResponses = {
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
         } | null;
+        share: {
+            id: string;
+            visibility: 'organization' | 'team' | 'user';
+        } | null;
         messages: Array<unknown>;
     }>;
 };
@@ -17002,6 +17024,10 @@ export type CreateChatConversationResponses = {
             systemPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
+        } | null;
+        share: {
+            id: string;
+            visibility: 'organization' | 'team' | 'user';
         } | null;
         messages: Array<unknown>;
     };
@@ -17184,6 +17210,10 @@ export type GetChatConversationResponses = {
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
         } | null;
+        share: {
+            id: string;
+            visibility: 'organization' | 'team' | 'user';
+        } | null;
         messages: Array<unknown>;
     };
 };
@@ -17293,6 +17323,10 @@ export type UpdateChatConversationResponses = {
             systemPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
+        } | null;
+        share: {
+            id: string;
+            visibility: 'organization' | 'team' | 'user';
         } | null;
         messages: Array<unknown>;
     };
@@ -17539,8 +17573,10 @@ export type GetConversationShareResponses = {
         conversationId: string;
         organizationId: string;
         createdByUserId: string;
-        visibility: 'organization';
+        visibility: 'organization' | 'team' | 'user';
         createdAt: string;
+        teamIds: Array<string>;
+        userIds: Array<string>;
     } | null;
 };
 
@@ -17548,7 +17584,9 @@ export type GetConversationShareResponse = GetConversationShareResponses[keyof G
 
 export type ShareConversationData = {
     body: {
-        visibility: 'organization';
+        visibility: 'organization' | 'team' | 'user';
+        teamIds?: Array<string>;
+        userIds?: Array<string>;
     };
     path: {
         id: string;
@@ -17625,8 +17663,10 @@ export type ShareConversationResponses = {
         conversationId: string;
         organizationId: string;
         createdByUserId: string;
-        visibility: 'organization';
+        visibility: 'organization' | 'team' | 'user';
         createdAt: string;
+        teamIds: Array<string>;
+        userIds: Array<string>;
     };
 };
 
@@ -17727,6 +17767,10 @@ export type GetSharedConversationResponses = {
             systemPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
+        } | null;
+        share: {
+            id: string;
+            visibility: 'organization' | 'team' | 'user';
         } | null;
         messages: Array<unknown>;
         sharedByUserId: string;
@@ -17832,6 +17876,10 @@ export type ForkSharedConversationResponses = {
             systemPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
+        } | null;
+        share: {
+            id: string;
+            visibility: 'organization' | 'team' | 'user';
         } | null;
         messages: Array<unknown>;
     };
@@ -17940,6 +17988,10 @@ export type GenerateChatConversationTitleResponses = {
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
         } | null;
+        share: {
+            id: string;
+            visibility: 'organization' | 'team' | 'user';
+        } | null;
         messages: Array<unknown>;
     };
 };
@@ -18045,6 +18097,10 @@ export type UpdateChatMessageResponses = {
             systemPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
+        } | null;
+        share: {
+            id: string;
+            visibility: 'organization' | 'team' | 'user';
         } | null;
         messages: Array<unknown>;
     };
@@ -21091,17 +21147,20 @@ export type GetInteractionsResponses = {
                         };
                     }>;
                     toolChoice?: {
-                        auto?: {
-                            [key: string]: never;
-                        };
-                    } | {
-                        any?: {
-                            [key: string]: never;
-                        };
-                    } | {
                         tool: {
                             name: string;
                         };
+                        [key: string]: unknown;
+                    } | {
+                        any: {
+                            [key: string]: unknown;
+                        };
+                        [key: string]: unknown;
+                    } | {
+                        auto: {
+                            [key: string]: unknown;
+                        };
+                        [key: string]: unknown;
                     };
                 };
                 guardrailConfig?: {
@@ -21247,17 +21306,20 @@ export type GetInteractionsResponses = {
                         };
                     }>;
                     toolChoice?: {
-                        auto?: {
-                            [key: string]: never;
-                        };
-                    } | {
-                        any?: {
-                            [key: string]: never;
-                        };
-                    } | {
                         tool: {
                             name: string;
                         };
+                        [key: string]: unknown;
+                    } | {
+                        any: {
+                            [key: string]: unknown;
+                        };
+                        [key: string]: unknown;
+                    } | {
+                        auto: {
+                            [key: string]: unknown;
+                        };
+                        [key: string]: unknown;
                     };
                 };
                 guardrailConfig?: {
@@ -22440,17 +22502,20 @@ export type GetInteractionResponses = {
                     };
                 }>;
                 toolChoice?: {
-                    auto?: {
-                        [key: string]: never;
-                    };
-                } | {
-                    any?: {
-                        [key: string]: never;
-                    };
-                } | {
                     tool: {
                         name: string;
                     };
+                    [key: string]: unknown;
+                } | {
+                    any: {
+                        [key: string]: unknown;
+                    };
+                    [key: string]: unknown;
+                } | {
+                    auto: {
+                        [key: string]: unknown;
+                    };
+                    [key: string]: unknown;
                 };
             };
             guardrailConfig?: {
@@ -22596,17 +22661,20 @@ export type GetInteractionResponses = {
                     };
                 }>;
                 toolChoice?: {
-                    auto?: {
-                        [key: string]: never;
-                    };
-                } | {
-                    any?: {
-                        [key: string]: never;
-                    };
-                } | {
                     tool: {
                         name: string;
                     };
+                    [key: string]: unknown;
+                } | {
+                    any: {
+                        [key: string]: unknown;
+                    };
+                    [key: string]: unknown;
+                } | {
+                    auto: {
+                        [key: string]: unknown;
+                    };
+                    [key: string]: unknown;
                 };
             };
             guardrailConfig?: {
@@ -27455,6 +27523,7 @@ export type GetLlmModelsData = {
     query?: {
         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
         apiKeyId?: string;
+        isEmbedding?: string;
     };
     url: '/api/llm-models/available';
 };
@@ -27539,6 +27608,7 @@ export type GetLlmModelsResponses = {
         };
         isBest?: boolean;
         isFastest?: boolean;
+        embeddingDimensions?: 3072 | 1536 | 768 | null;
     }>;
 };
 
@@ -27706,6 +27776,7 @@ export type GetModelsWithApiKeysResponses = {
         customPricePerMillionInput: string | null;
         customPricePerMillionOutput: string | null;
         ignored: boolean;
+        embeddingDimensions: 3072 | 1536 | 768 | null;
         discoveredViaLlmProxy: boolean;
         lastSyncedAt: string;
         createdAt: string;
@@ -27733,6 +27804,7 @@ export type UpdateModelData = {
         customPricePerMillionInput?: string | null;
         customPricePerMillionOutput?: string | null;
         ignored?: boolean;
+        embeddingDimensions?: 3072 | 1536 | 768 | null;
         inputModalities?: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
         outputModalities?: Array<'text' | 'image' | 'audio'> | null;
     };
@@ -27821,6 +27893,7 @@ export type UpdateModelResponses = {
         customPricePerMillionInput: string | null;
         customPricePerMillionOutput: string | null;
         ignored: boolean;
+        embeddingDimensions: 3072 | 1536 | 768 | null;
         discoveredViaLlmProxy: boolean;
         lastSyncedAt: string;
         createdAt: string;
@@ -33748,8 +33821,7 @@ export type UpdateAgentSettingsResponse = UpdateAgentSettingsResponses[keyof Upd
 
 export type UpdateKnowledgeSettingsData = {
     body: {
-        embeddingModel?: string;
-        embeddingDimensions?: 1536 | 768;
+        embeddingModel?: string | null;
         embeddingChatApiKeyId?: string | null;
         rerankerChatApiKeyId?: string | null;
         rerankerModel?: string | null;
@@ -36796,7 +36868,7 @@ export type GetToolsWithAssignmentsData = {
         sortDirection?: 'asc' | 'desc';
         search?: string;
         /**
-         * Can be 'llm-proxy' or a catalogId
+         * Can be 'llm-proxy', 'agent', or a catalogId
          */
         origin?: string;
         /**

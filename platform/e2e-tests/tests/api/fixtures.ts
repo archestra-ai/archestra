@@ -925,7 +925,7 @@ const updateSecuritySettings = async (
 const updateKnowledgeSettings = async (
   request: APIRequestContext,
   updates: {
-    embeddingModel?: "text-embedding-3-small" | "text-embedding-3-large";
+    embeddingModel?: string | null;
     embeddingChatApiKeyId?: string | null;
     rerankerChatApiKeyId?: string | null;
     rerankerModel?: string | null;

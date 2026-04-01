@@ -21,7 +21,7 @@ vi.mock("@/utils/llm-resolution", () => ({
 
 const MOCK_BUILT_IN_AGENT = {
   systemPrompt:
-    "Analyze this MCP tool: {tool.name} - {tool.description} - {mcpServerName} - {tool.parameters}",
+    "Analyze this MCP tool: {{tool.name}} - {{tool.description}} - {{mcpServerName}} - {{tool.parameters}}",
 };
 
 const MOCK_RESOLVED_LLM = {
@@ -124,11 +124,11 @@ describe("PolicyConfigurationService", () => {
       const mcpServer = await makeMcpServer({ name: "test-server" });
       const tool = await makeTool({ catalogId: mcpServer.catalogId });
 
-      // Mock the generateObject call
+      // Mock the generateObject call (uses new LLM-facing enum values)
       vi.mocked(generateObject).mockResolvedValue({
         object: {
-          toolInvocationAction: "allow_when_context_is_untrusted",
-          trustedDataAction: "mark_as_trusted",
+          toolInvocationAction: "allow_when_context_is_sensitive",
+          trustedDataAction: "mark_as_safe",
           reasoning: "This tool is safe",
         },
       } as never);
@@ -140,8 +140,8 @@ describe("PolicyConfigurationService", () => {
 
       expect(result.success).toBe(true);
       expect(result.config).toEqual({
-        toolInvocationAction: "allow_when_context_is_untrusted",
-        trustedDataAction: "mark_as_trusted",
+        toolInvocationAction: "allow_when_context_is_sensitive",
+        trustedDataAction: "mark_as_safe",
         reasoning: "This tool is safe",
       });
 
@@ -237,7 +237,7 @@ describe("PolicyConfigurationService", () => {
 
       vi.mocked(generateObject).mockResolvedValue({
         object: {
-          toolInvocationAction: "allow_when_context_is_untrusted",
+          toolInvocationAction: "allow_when_context_is_sensitive",
           trustedDataAction: "sanitize_with_dual_llm",
           reasoning: "This tool needs sanitization",
         },
@@ -255,7 +255,7 @@ describe("PolicyConfigurationService", () => {
       expect(trustedDataPolicies[0].action).toBe("sanitize_with_dual_llm");
     });
 
-    test("handles block_when_context_is_untrusted invocation action", async ({
+    test("handles block_when_context_is_sensitive invocation action", async ({
       makeOrganization,
       makeMcpServer,
       makeTool,
@@ -272,8 +272,8 @@ describe("PolicyConfigurationService", () => {
 
       vi.mocked(generateObject).mockResolvedValue({
         object: {
-          toolInvocationAction: "block_when_context_is_untrusted",
-          trustedDataAction: "mark_as_untrusted",
+          toolInvocationAction: "block_when_context_is_sensitive",
+          trustedDataAction: "mark_as_sensitive",
           reasoning: "External API that could leak data",
         },
       } as never);

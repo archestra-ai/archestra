@@ -1907,7 +1907,7 @@ describe("AgentModel", () => {
         agentType: "agent",
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolAssignment: false,
+          autoConfigureOnToolDiscovery: false,
         },
       });
 
@@ -1919,7 +1919,7 @@ describe("AgentModel", () => {
       expect(result?.builtInAgentConfig).toEqual(
         expect.objectContaining({
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolAssignment: false,
+          autoConfigureOnToolDiscovery: false,
         }),
       );
     });
@@ -1979,7 +1979,7 @@ describe("AgentModel", () => {
         agentType: "agent",
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolAssignment: false,
+          autoConfigureOnToolDiscovery: false,
         },
       });
 
@@ -2004,7 +2004,7 @@ describe("AgentModel", () => {
         agentType: "agent",
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolAssignment: false,
+          autoConfigureOnToolDiscovery: false,
         },
       });
 
@@ -2029,7 +2029,7 @@ describe("AgentModel", () => {
         agentType: "agent",
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolAssignment: false,
+          autoConfigureOnToolDiscovery: false,
         },
       });
 
@@ -2065,7 +2065,7 @@ describe("AgentModel", () => {
         agentType: "agent",
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolAssignment: false,
+          autoConfigureOnToolDiscovery: false,
         },
       });
 
@@ -2172,7 +2172,7 @@ describe("AgentModel", () => {
         agentType: "agent",
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolAssignment: false,
+          autoConfigureOnToolDiscovery: false,
         },
       });
 

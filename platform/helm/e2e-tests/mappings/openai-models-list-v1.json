@@ -24,6 +24,14 @@
         {
           "id": "gpt-4o-mini",
           "name": "GPT-4o Mini"
+        },
+        {
+          "id": "text-embedding-3-small",
+          "name": "Text Embedding 3 Small"
+        },
+        {
+          "id": "text-embedding-3-large",
+          "name": "Text Embedding 3 Large"
         }
       ]
     }

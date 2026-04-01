@@ -29,7 +29,10 @@ export async function fetchGeminiModels(
   return data.models
     .filter(
       (model) =>
-        model.supportedGenerationMethods?.includes("generateContent") ?? false,
+        model.supportedGenerationMethods?.includes("generateContent") ||
+        model.supportedGenerationMethods?.includes("embedContent") ||
+        model.supportedGenerationMethods?.includes("batchEmbedContents") ||
+        false,
     )
     .map((model) => {
       const modelId = model.name.replace("models/", "");

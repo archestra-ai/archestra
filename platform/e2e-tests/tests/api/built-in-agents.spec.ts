@@ -109,8 +109,8 @@ test.describe("Built-In Agents API", () => {
         expect(result.toolId).toBeDefined();
         // Matches wiremock openai-policy-config-subagent.json response
         expect(result.config).toEqual({
-          toolInvocationAction: "allow_when_context_is_untrusted",
-          trustedDataAction: "mark_as_untrusted",
+          toolInvocationAction: "allow_when_context_is_sensitive",
+          trustedDataAction: "mark_as_sensitive",
           reasoning: "E2E test: read-only tool with external data",
         });
       }

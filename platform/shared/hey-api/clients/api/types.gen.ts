@@ -36830,7 +36830,7 @@ export type GetToolsWithAssignmentsData = {
         sortDirection?: 'asc' | 'desc';
         search?: string;
         /**
-         * Can be 'llm-proxy' or a catalogId
+         * Can be 'llm-proxy', 'agent', or a catalogId
          */
         origin?: string;
         /**

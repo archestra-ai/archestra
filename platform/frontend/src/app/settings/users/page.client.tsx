@@ -187,11 +187,12 @@ function MembersTab({
   const pathname = usePathname();
 
   const pageFromUrl = searchParams.get("page");
+  const limitFromUrl = searchParams.get("limit");
   const nameFilter = searchParams.get("name") || "";
   const roleFilter = searchParams.get("role") || "";
 
   const pageIndex = Number(pageFromUrl || "1") - 1;
-  const pageSize = DEFAULT_TABLE_LIMIT;
+  const pageSize = Number(limitFromUrl) || DEFAULT_TABLE_LIMIT;
   const offset = pageIndex * pageSize;
 
   const {
@@ -221,6 +222,11 @@ function MembersTab({
     (newPagination: { pageIndex: number; pageSize: number }) => {
       const params = new URLSearchParams(searchParams.toString());
       params.set("page", String(newPagination.pageIndex + 1));
+      if (newPagination.pageSize !== DEFAULT_TABLE_LIMIT) {
+        params.set("limit", String(newPagination.pageSize));
+      } else {
+        params.delete("limit");
+      }
       router.push(`${pathname}?${params.toString()}`, { scroll: false });
     },
     [searchParams, router, pathname],
@@ -569,8 +575,9 @@ function InvitationsTab({
   const pathname = usePathname();
 
   const pageFromUrl = searchParams.get("page");
+  const limitFromUrl = searchParams.get("limit");
   const pageIndex = Number(pageFromUrl || "1") - 1;
-  const pageSize = DEFAULT_TABLE_LIMIT;
+  const pageSize = Number(limitFromUrl) || DEFAULT_TABLE_LIMIT;
   const offset = pageIndex * pageSize;
 
   const { data: invitationsResponse, isPending } = useInvitationsPaginated({
@@ -587,6 +594,11 @@ function InvitationsTab({
       const params = new URLSearchParams(searchParams.toString());
       params.set("page", String(newPagination.pageIndex + 1));
       params.set("tab", "invitations");
+      if (newPagination.pageSize !== DEFAULT_TABLE_LIMIT) {
+        params.set("limit", String(newPagination.pageSize));
+      } else {
+        params.delete("limit");
+      }
       router.push(`${pathname}?${params.toString()}`, { scroll: false });
     },
     [searchParams, router, pathname],

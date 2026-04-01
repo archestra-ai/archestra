@@ -5,11 +5,12 @@ import { KbChunkModel } from "@/models";
 import type { VectorSearchResult } from "@/models/kb-chunk";
 import * as metrics from "@/observability/metrics";
 import type { AclEntry } from "@/types";
+import { callEmbedding, getEmbeddingDiscriminator } from "./embedding-clients";
 import {
   buildEmbeddingInteraction,
   withKbObservability,
 } from "./kb-interaction";
-import { resolveEmbeddingConfig } from "./kb-llm-client";
+import { type EmbeddingConfig, resolveEmbeddingConfig } from "./kb-llm-client";
 import {
   expandQuery,
   KEYWORD_QUERY_HYBRID_ALPHA_WEIGHT,
@@ -28,13 +29,6 @@ interface ChunkResult {
     documentId: string;
     connectorType: string | null;
   };
-}
-
-interface EmbeddingConfig {
-  // biome-ignore lint/suspicious/noExplicitAny: OpenAI client type
-  client: any;
-  model: string;
-  dimensions: number;
 }
 
 class QueryService {
@@ -144,21 +138,24 @@ class QueryService {
 
     const embeddingResponse = await withKbObservability({
       operationName: "embedding",
-      provider: "openai",
+      provider: embeddingConfig.provider,
       model: embeddingConfig.model,
       source: "knowledge:embedding",
-      type: "openai:embeddings",
+      type: getEmbeddingDiscriminator(embeddingConfig.provider),
       callback: () =>
-        embeddingConfig.client.embeddings.create({
+        callEmbedding({
+          texts: [
+            addNomicTaskPrefix(
+              embeddingConfig.model,
+              queryText,
+              "search_query",
+            ),
+          ],
           model: embeddingConfig.model,
-          input: addNomicTaskPrefix(
-            embeddingConfig.model,
-            queryText,
-            "search_query",
-          ),
-          ...(embeddingConfig.model.startsWith("nomic")
-            ? {}
-            : { dimensions: embeddingConfig.dimensions }),
+          apiKey: embeddingConfig.apiKey,
+          baseUrl: embeddingConfig.baseUrl,
+          dimensions: embeddingConfig.dimensions,
+          provider: embeddingConfig.provider,
         }),
       buildInteraction: (
         response: Parameters<typeof buildEmbeddingInteraction>[0]["response"],

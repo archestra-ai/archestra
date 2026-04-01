@@ -29,6 +29,14 @@
           "name": "GPT-4o Mini"
         },
         {
+          "id": "text-embedding-3-small",
+          "name": "Text Embedding 3 Small"
+        },
+        {
+          "id": "text-embedding-3-large",
+          "name": "Text Embedding 3 Large"
+        },
+        {
           "id": "claude-3-5-sonnet-20241022",
           "name": "Claude 3.5 Sonnet"
         },

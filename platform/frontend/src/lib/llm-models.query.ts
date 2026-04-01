@@ -49,6 +49,29 @@ export function useLlmModels(params?: LlmModelsParams) {
 }
 
 /**
+ * Fetch embedding models for a specific API key.
+ * Returns only models with configured embedding dimensions for the given API key.
+ */
+export function useEmbeddingModels(apiKeyId: string | null) {
+  return useQuery({
+    queryKey: ["llm-models", "embedding", apiKeyId],
+    queryFn: async (): Promise<LlmModel[]> => {
+      if (!apiKeyId) return [];
+      const { data, error } = await getLlmModels({
+        query: { apiKeyId, isEmbedding: "true" },
+      });
+      if (error) {
+        handleApiError(error);
+        return [];
+      }
+      return data ?? [];
+    },
+    enabled: !!apiKeyId,
+    placeholderData: keepPreviousData,
+  });
+}
+
+/**
  * Get models grouped by provider for UI display.
  * Returns models grouped by provider with loading/error states.
  * When apiKeyId is provided, only returns models linked to that specific key.

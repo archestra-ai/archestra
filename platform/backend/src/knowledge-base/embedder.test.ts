@@ -28,7 +28,6 @@ vi.mock("./kb-llm-client", () => ({
   getDefaultOrgEmbeddingConfig: mockGetDefaultOrgEmbeddingConfig,
 }));
 
-import OpenAI from "openai";
 import { KbChunkModel, KbDocumentModel } from "@/models";
 import { describe, expect, test } from "@/test";
 
@@ -41,9 +40,11 @@ function makeFakeEmbedding(seed: number): number[] {
 
 function makeEmbeddingContext() {
   return {
-    client: new OpenAI({ apiKey: "test-key" }),
+    apiKey: "test-key",
+    baseUrl: null,
     model: "text-embedding-3-small" as const,
     dimensions: 1536,
+    provider: "openai" as const,
   };
 }
 

@@ -1398,8 +1398,15 @@
     {
       "idx": 199,
       "version": "7",
-      "when": 1774968680942,
-      "tag": "0199_rename-auto-configure-on-tool-discovery",
+      "when": 1774984836765,
+      "tag": "0199_wide_mastermind",
+      "breakpoints": true
+    },
+    {
+      "idx": 200,
+      "version": "7",
+      "when": 1775041485679,
+      "tag": "0200_rename-auto-configure-on-tool-discovery",
       "breakpoints": true
     }
   ]

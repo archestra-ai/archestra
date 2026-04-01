@@ -1,4 +1,4 @@
-import { Star, Zap } from "lucide-react";
+import { Fingerprint, Star, Zap } from "lucide-react";
 import { InlineTag } from "@/components/ui/inline-tag";
 
 export function UnknownCapabilitiesBadge() {
@@ -27,6 +27,17 @@ export function BestModelBadge() {
       className="text-purple-700 dark:text-purple-400 bg-purple-100 dark:bg-purple-950"
     >
       best
+    </InlineTag>
+  );
+}
+
+export function EmbeddingModelBadge() {
+  return (
+    <InlineTag
+      icon={<Fingerprint />}
+      className="text-cyan-700 dark:text-cyan-400 bg-cyan-100 dark:bg-cyan-950"
+    >
+      embedding
     </InlineTag>
   );
 }

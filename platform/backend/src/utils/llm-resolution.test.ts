@@ -42,6 +42,7 @@ const MOCK_MODEL = {
   completionPricePerToken: null,
   customPricePerMillionInput: null,
   customPricePerMillionOutput: null,
+  embeddingDimensions: null,
   ignored: false,
   discoveredViaLlmProxy: false,
   lastSyncedAt: new Date(),

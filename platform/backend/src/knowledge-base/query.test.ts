@@ -154,7 +154,7 @@ describe("QueryService", () => {
 
     expect(mockEmbeddingsCreate).toHaveBeenCalledWith({
       model: "text-embedding-3-small",
-      input: "TypeScript",
+      input: ["TypeScript"],
       dimensions: 1536,
     });
   });

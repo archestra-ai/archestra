@@ -137514,7 +137514,7 @@
             "in": "query",
             "name": "origin",
             "required": false,
-            "description": "Can be 'llm-proxy' or a catalogId"
+            "description": "Can be 'llm-proxy', 'agent', or a catalogId"
           },
           {
             "schema": {

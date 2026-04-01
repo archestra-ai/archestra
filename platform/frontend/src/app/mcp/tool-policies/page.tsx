@@ -59,6 +59,7 @@ export default async function ToolPoliciesPage() {
           offset: 0,
           sortBy: DEFAULT_SORT_BY,
           sortDirection: DEFAULT_SORT_DIRECTION,
+          excludeArchestraTools: true,
         },
       }),
       archestraApiSdk.getInternalMcpCatalog({ headers }),

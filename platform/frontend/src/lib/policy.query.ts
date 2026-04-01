@@ -5,6 +5,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { toast } from "sonner";
 import type { PolicyCondition } from "@/app/mcp/tool-policies/_parts/tool-call-policy-condition";
 
 const {
@@ -298,9 +299,16 @@ export function useBulkCallPolicyMutation() {
       });
       return result.data ?? { updated: 0, created: 0 };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["tool-invocation-policies"] });
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+      const total = result.updated + result.created;
+      toast.success(
+        `Updated default call policy for ${total} tool${total === 1 ? "" : "s"}.`,
+      );
+    },
+    onError: () => {
+      toast.error("Failed to update default call policies.");
     },
   });
 }
@@ -321,9 +329,16 @@ export function useBulkResultPolicyMutation() {
       });
       return result.data ?? { updated: 0, created: 0 };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["tool-result-policies"] });
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+      const total = result.updated + result.created;
+      toast.success(
+        `Updated default result policy for ${total} tool${total === 1 ? "" : "s"}.`,
+      );
+    },
+    onError: () => {
+      toast.error("Failed to update default result policies.");
     },
   });
 }

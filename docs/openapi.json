@@ -93211,7 +93211,8 @@
                                     {
                                       "type": "string",
                                       "enum": [
-                                        "servicenow"
+                                        "servicenow",
+                                        "notion"
                                       ]
                                     }
                                   ]
@@ -95090,7 +95091,8 @@
                 {
                   "type": "string",
                   "enum": [
-                    "servicenow"
+                    "servicenow",
+                    "notion"
                   ]
                 }
               ]
@@ -95157,7 +95159,8 @@
                               {
                                 "type": "string",
                                 "enum": [
-                                  "servicenow"
+                                  "servicenow",
+                                  "notion"
                                 ]
                               }
                             ]
@@ -95337,7 +95340,8 @@
                                   "type": {
                                     "type": "string",
                                     "enum": [
-                                      "servicenow"
+                                      "servicenow",
+                                      "notion"
                                     ]
                                   },
                                   "instanceUrl": {},
@@ -95821,7 +95825,8 @@
                       {
                         "type": "string",
                         "enum": [
-                          "servicenow"
+                          "servicenow",
+                          "notion"
                         ]
                       }
                     ]
@@ -96005,7 +96010,8 @@
                           "type": {
                             "type": "string",
                             "enum": [
-                              "servicenow"
+                              "servicenow",
+                              "notion"
                             ]
                           },
                           "instanceUrl": {
@@ -96143,7 +96149,8 @@
                         {
                           "type": "string",
                           "enum": [
-                            "servicenow"
+                            "servicenow",
+                            "notion"
                           ]
                         }
                       ]
@@ -96323,7 +96330,8 @@
                             "type": {
                               "type": "string",
                               "enum": [
-                                "servicenow"
+                                "servicenow",
+                                "notion"
                               ]
                             },
                             "instanceUrl": {},
@@ -96755,7 +96763,8 @@
                         {
                           "type": "string",
                           "enum": [
-                            "servicenow"
+                            "servicenow",
+                            "notion"
                           ]
                         }
                       ]
@@ -96935,7 +96944,8 @@
                             "type": {
                               "type": "string",
                               "enum": [
-                                "servicenow"
+                                "servicenow",
+                                "notion"
                               ]
                             },
                             "instanceUrl": {},
@@ -97501,7 +97511,8 @@
                           "type": {
                             "type": "string",
                             "enum": [
-                              "servicenow"
+                              "servicenow",
+                              "notion"
                             ]
                           },
                           "instanceUrl": {
@@ -97637,7 +97648,8 @@
                         {
                           "type": "string",
                           "enum": [
-                            "servicenow"
+                            "servicenow",
+                            "notion"
                           ]
                         }
                       ]
@@ -97817,7 +97829,8 @@
                             "type": {
                               "type": "string",
                               "enum": [
-                                "servicenow"
+                                "servicenow",
+                                "notion"
                               ]
                             },
                             "instanceUrl": {},

@@ -406,15 +406,13 @@ describe("ConversationShareModel", () => {
 
     expect(
       await ConversationShareModel.userCanAccessShare({
-        shareId: share.id,
-        organizationId: org.id,
+        share,
         userId: teammate.id,
       }),
     ).toBe(true);
     expect(
       await ConversationShareModel.userCanAccessShare({
-        shareId: share.id,
-        organizationId: org.id,
+        share,
         userId: outsider.id,
       }),
     ).toBe(false);
@@ -474,15 +472,13 @@ describe("ConversationShareModel", () => {
 
     expect(
       await ConversationShareModel.userCanAccessShare({
-        shareId: share.id,
-        organizationId: org.id,
+        share,
         userId: invitedUser.id,
       }),
     ).toBe(true);
     expect(
       await ConversationShareModel.userCanAccessShare({
-        shareId: share.id,
-        organizationId: org.id,
+        share,
         userId: outsider.id,
       }),
     ).toBe(false);

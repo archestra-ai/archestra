@@ -183,6 +183,7 @@ export function ShareConversationDialog({
       teamIds: nextTeamIds,
       userIds: nextUserIds,
     });
+    onOpenChange(false);
   }, [
     conversationId,
     isLoading,

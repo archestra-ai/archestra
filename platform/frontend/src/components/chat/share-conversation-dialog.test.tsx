@@ -48,24 +48,19 @@ vi.mock("@/components/ui/assignment-combobox", () => ({
   AssignmentCombobox: ({
     items,
     selectedIds,
-    onSelectionChange,
+    onToggle,
   }: {
     items: Array<{ id: string; name: string }>;
     selectedIds: string[];
-    onSelectionChange: (value: string[]) => void;
+    onToggle: (id: string) => void;
   }) => (
     <div>
       {items.map((item) => (
         <button
           key={item.id}
           type="button"
-          onClick={() =>
-            onSelectionChange(
-              selectedIds.includes(item.id)
-                ? selectedIds.filter((selectedId) => selectedId !== item.id)
-                : [...selectedIds, item.id],
-            )
-          }
+          aria-pressed={selectedIds.includes(item.id)}
+          onClick={() => onToggle(item.id)}
         >
           {item.name}
         </button>

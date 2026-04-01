@@ -1,6 +1,5 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
 import {
   MoreHorizontal,
   Pencil,
@@ -46,30 +45,15 @@ import {
   usePinConversation,
   useUpdateConversation,
 } from "@/lib/chat/chat.query";
-import { getConversationDisplayTitle } from "@/lib/chat/chat-utils";
+import {
+  getConversationDisplayTitle,
+  getConversationShareTooltip,
+} from "@/lib/chat/chat-utils";
 import { useStableConversations } from "@/lib/hooks/use-stable-conversations";
 import { cn } from "@/lib/utils";
 
 const SIDEBAR_CHAT_SLOTS = 3;
 const MAX_TITLE_LENGTH = 100;
-
-type ConversationShareVisibility = NonNullable<
-  archestraApiTypes.GetChatConversationsResponses["200"][number]["share"]
->["visibility"];
-
-function getConversationShareTooltip(
-  visibility: ConversationShareVisibility | undefined,
-) {
-  if (visibility === "team") {
-    return "Shared with selected teams";
-  }
-
-  if (visibility === "user") {
-    return "Shared with selected users";
-  }
-
-  return "Shared with your organization";
-}
 
 function AISparkleIcon({ isAnimating = false }: { isAnimating?: boolean }) {
   return (

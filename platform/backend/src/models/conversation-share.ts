@@ -51,8 +51,7 @@ class ConversationShareModel {
     }
 
     const canAccess = await ConversationShareModel.userCanAccessShare({
-      shareId: share.id,
-      organizationId: params.organizationId,
+      share,
       userId: params.userId,
     });
 
@@ -204,7 +203,13 @@ class ConversationShareModel {
     userId: string;
   }): Promise<(Conversation & { sharedByUserId: string }) | null> {
     const share = await ConversationShareModel.findByShareId(params);
-    if (!share || !(await ConversationShareModel.userCanAccessShare(params))) {
+    if (
+      !share ||
+      !(await ConversationShareModel.userCanAccessShare({
+        share,
+        userId: params.userId,
+      }))
+    ) {
       return null;
     }
 
@@ -253,42 +258,39 @@ class ConversationShareModel {
   }
 
   static async userCanAccessShare(params: {
-    shareId: string;
-    organizationId: string;
+    share: ConversationShareWithTargets;
     userId: string;
   }): Promise<boolean> {
-    const share = await ConversationShareModel.findByShareId(params);
-
-    if (!share) {
-      return false;
-    }
-
-    if (share.createdByUserId === params.userId) {
+    if (params.share.createdByUserId === params.userId) {
       return true;
     }
 
-    if (share.visibility === "organization") {
+    if (params.share.visibility === "organization") {
       return true;
     }
 
-    if (share.visibility === "user") {
-      return share.userIds.includes(params.userId);
+    if (params.share.visibility === "user") {
+      return params.share.userIds.includes(params.userId);
     }
 
-    if (share.teamIds.length === 0) {
-      return false;
+    if (params.share.visibility === "team") {
+      if (params.share.teamIds.length === 0) {
+        return false;
+      }
+
+      const memberships = await db
+        .select({ teamId: schema.teamMembersTable.teamId })
+        .from(schema.teamMembersTable)
+        .where(eq(schema.teamMembersTable.userId, params.userId));
+
+      const userTeamIds = new Set(
+        memberships.map((membership) => membership.teamId),
+      );
+
+      return params.share.teamIds.some((teamId) => userTeamIds.has(teamId));
     }
 
-    const memberships = await db
-      .select({ teamId: schema.teamMembersTable.teamId })
-      .from(schema.teamMembersTable)
-      .where(eq(schema.teamMembersTable.userId, params.userId));
-
-    const userTeamIds = new Set(
-      memberships.map((membership) => membership.teamId),
-    );
-
-    return share.teamIds.some((teamId) => userTeamIds.has(teamId));
+    return false;
   }
 
   private static async attachTargets(

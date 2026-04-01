@@ -1,6 +1,4 @@
 "use client";
-
-import type { archestraApiTypes } from "@shared";
 import { useDebounce } from "@uidotdev/usehooks";
 import { isToday, isWithinInterval, isYesterday, subDays } from "date-fns";
 import {
@@ -52,7 +50,10 @@ import {
   useDeleteConversation,
   usePinConversation,
 } from "@/lib/chat/chat.query";
-import { getConversationDisplayTitle } from "@/lib/chat/chat-utils";
+import {
+  getConversationDisplayTitle,
+  getConversationShareTooltip,
+} from "@/lib/chat/chat-utils";
 import { usePlatform } from "@/lib/hooks/use-platform";
 
 /**
@@ -196,24 +197,6 @@ interface ConversationSearchPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   recentChatsView?: boolean;
-}
-
-type ConversationShareVisibility = NonNullable<
-  archestraApiTypes.GetChatConversationsResponses["200"][number]["share"]
->["visibility"];
-
-function getConversationShareTooltip(
-  visibility: ConversationShareVisibility | undefined,
-) {
-  if (visibility === "team") {
-    return "Shared with selected teams";
-  }
-
-  if (visibility === "user") {
-    return "Shared with selected users";
-  }
-
-  return "Shared with your organization";
 }
 
 export function ConversationSearchPalette({

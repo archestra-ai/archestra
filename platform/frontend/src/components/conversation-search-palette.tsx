@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import { useDebounce } from "@uidotdev/usehooks";
 import { isToday, isWithinInterval, isYesterday, subDays } from "date-fns";
 import {
@@ -197,7 +198,13 @@ interface ConversationSearchPaletteProps {
   recentChatsView?: boolean;
 }
 
-function getConversationShareTooltip(visibility: string | undefined) {
+type ConversationShareVisibility = NonNullable<
+  archestraApiTypes.GetChatConversationsResponses["200"][number]["share"]
+>["visibility"];
+
+function getConversationShareTooltip(
+  visibility: ConversationShareVisibility | undefined,
+) {
   if (visibility === "team") {
     return "Shared with selected teams";
   }

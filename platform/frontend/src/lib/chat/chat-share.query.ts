@@ -1,4 +1,4 @@
-import { archestraApiSdk } from "@shared";
+import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { handleApiError } from "@/lib/utils";
@@ -9,6 +9,10 @@ const {
   unshareConversation,
   forkSharedConversation,
 } = archestraApiSdk;
+
+type ShareConversationMutationInput = {
+  conversationId: string;
+} & NonNullable<archestraApiTypes.ShareConversationData["body"]>;
 
 export function useConversationShare(conversationId: string | undefined) {
   return useQuery({
@@ -41,12 +45,7 @@ export function useShareConversation() {
       visibility,
       teamIds,
       userIds,
-    }: {
-      conversationId: string;
-      visibility: "organization" | "team" | "user";
-      teamIds?: string[];
-      userIds?: string[];
-    }) => {
+    }: ShareConversationMutationInput) => {
       const { data, error } = await shareConversation({
         path: { id: conversationId },
         body: { visibility, teamIds, userIds },

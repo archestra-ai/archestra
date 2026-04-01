@@ -487,4 +487,98 @@ describe("ConversationShareModel", () => {
       }),
     ).toBe(false);
   });
+
+  test("findAccessibleByConversationId returns share for organization access", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+    makeMember,
+  }) => {
+    const owner = await makeUser();
+    const viewer = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      name: "Test Agent",
+      teams: [],
+      organizationId: org.id,
+    });
+
+    await makeMember(owner.id, org.id);
+    await makeMember(viewer.id, org.id);
+
+    const conversation = await ConversationModel.create({
+      userId: owner.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      selectedModel: "gpt-4o",
+    });
+
+    const share = await ConversationShareModel.upsert({
+      conversationId: conversation.id,
+      organizationId: org.id,
+      createdByUserId: owner.id,
+      visibility: "organization",
+      teamIds: [],
+      userIds: [],
+    });
+
+    const accessibleShare =
+      await ConversationShareModel.findAccessibleByConversationId({
+        conversationId: conversation.id,
+        organizationId: org.id,
+        userId: viewer.id,
+      });
+
+    expect(accessibleShare).toMatchObject({
+      id: share.id,
+      conversationId: conversation.id,
+      visibility: "organization",
+    });
+  });
+
+  test("findAccessibleByConversationId returns null for unauthorized user", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+    makeMember,
+  }) => {
+    const owner = await makeUser();
+    const invitedUser = await makeUser();
+    const outsider = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      name: "Test Agent",
+      teams: [],
+      organizationId: org.id,
+    });
+
+    await makeMember(owner.id, org.id);
+    await makeMember(invitedUser.id, org.id);
+    await makeMember(outsider.id, org.id);
+
+    const conversation = await ConversationModel.create({
+      userId: owner.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      selectedModel: "gpt-4o",
+    });
+
+    await ConversationShareModel.upsert({
+      conversationId: conversation.id,
+      organizationId: org.id,
+      createdByUserId: owner.id,
+      visibility: "user",
+      teamIds: [],
+      userIds: [invitedUser.id],
+    });
+
+    const accessibleShare =
+      await ConversationShareModel.findAccessibleByConversationId({
+        conversationId: conversation.id,
+        organizationId: org.id,
+        userId: outsider.id,
+      });
+
+    expect(accessibleShare).toBeNull();
+  });
 });

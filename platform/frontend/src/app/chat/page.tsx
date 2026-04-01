@@ -1418,7 +1418,10 @@ export function ChatPageContent({
 
   // If user lacks permission to read agents or LLM providers, show access denied
   // Must check before loading state since disabled queries stay in pending state
-  if (canReadAgent === false || canReadLlmProvider === false) {
+  if (
+    !conversationId &&
+    (canReadAgent === false || canReadLlmProvider === false)
+  ) {
     const missingPermissions: string[] = [];
     if (canReadAgent === false) missingPermissions.push("agent:read");
     if (canReadLlmProvider === false)

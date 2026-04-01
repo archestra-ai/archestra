@@ -1349,6 +1349,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         agentId,
         selectedModel: sharedConversation.selectedModel,
+        selectedProvider: sharedConversation.selectedProvider ?? undefined,
       });
 
       if (sharedConversation.messages.length > 0) {

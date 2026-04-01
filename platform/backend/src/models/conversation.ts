@@ -349,6 +349,8 @@ class ConversationModel {
       return null;
     }
 
+    // Shared conversations intentionally return another user's conversation
+    // once share access has been validated for this org/user pair.
     return ConversationModel.findByIdInOrganization({
       id: params.id,
       organizationId: params.organizationId,

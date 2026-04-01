@@ -91,6 +91,9 @@ class ConversationShareModel {
     teamIds: string[];
     userIds: string[];
   }): Promise<ConversationShareWithTargets> {
+    // Caller must verify the requesting user owns the conversation before
+    // updating share state for it. This model only enforces org/conversation
+    // identity, not conversation ownership.
     const shareId = await db.transaction(async (tx) => {
       const [existing] = await tx
         .select()

@@ -1,17 +1,22 @@
 "use client";
 
 import {
+  type archestraApiTypes,
   INPUT_MODALITY_OPTIONS,
   type ModelInputModality,
   type ModelOutputModality,
   OUTPUT_MODALITY_OPTIONS,
+  SUPPORTED_EMBEDDING_DIMENSIONS,
 } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   AlertCircle,
   ArrowLeftRight,
+  Boxes,
+  Brain,
   Eye,
   EyeOff,
+  Fingerprint,
   Pencil,
   RefreshCw,
   RotateCcw,
@@ -25,6 +30,7 @@ import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
 import { LlmProviderApiKeyFilterSelect } from "@/components/llm-provider-options";
 import {
   BestModelBadge,
+  EmbeddingModelBadge,
   FastestModelBadge,
   UnknownCapabilitiesBadge,
 } from "@/components/model-badges";
@@ -45,6 +51,13 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -65,6 +78,9 @@ export default function ModelsPage() {
   const [isRefreshingModels, setIsRefreshingModels] = useState(false);
   const [search, setSearch] = useState("");
   const [apiKeyFilter, setApiKeyFilter] = useState<string>("all");
+  const [modelTypeFilter, setModelTypeFilter] = useState<
+    "all" | "chat" | "embedding"
+  >("all");
   const [editingModel, setEditingModel] = useState<ModelWithApiKeys | null>(
     null,
   );
@@ -80,13 +96,18 @@ export default function ModelsPage() {
         m.apiKeys.some((k) => k.id === apiKeyFilter),
       );
     }
+    if (modelTypeFilter === "embedding") {
+      result = result.filter((m) => m.embeddingDimensions !== null);
+    } else if (modelTypeFilter === "chat") {
+      result = result.filter((m) => m.embeddingDimensions === null);
+    }
     // Stable sort so rows don't jump when data refetches after edits
     return [...result].sort(
       (a, b) =>
         a.provider.localeCompare(b.provider) ||
         a.modelId.localeCompare(b.modelId),
     );
-  }, [models, search, apiKeyFilter]);
+  }, [models, search, apiKeyFilter, modelTypeFilter]);
 
   const availableApiKeys = useMemo(() => {
     const keyMap = new Map<
@@ -155,10 +176,15 @@ export default function ModelsPage() {
         accessorKey: "modelId",
         header: "Model ID",
         cell: ({ row }) => (
-          <div className="flex items-center gap-2">
+          <div className="min-w-0 space-y-2">
             <span className="font-mono text-sm">{row.original.modelId}</span>
-            {row.original.isFastest && <FastestModelBadge />}
-            {row.original.isBest && <BestModelBadge />}
+            <div className="mt-0.5 flex flex-wrap items-center gap-2">
+              {row.original.isFastest && <FastestModelBadge />}
+              {row.original.isBest && <BestModelBadge />}
+              {row.original.embeddingDimensions !== null && (
+                <EmbeddingModelBadge />
+              )}
+            </div>
           </div>
         ),
       },
@@ -301,6 +327,64 @@ export default function ModelsPage() {
                 ];
               })}
             />
+            <SearchableSelect
+              value={modelTypeFilter}
+              onValueChange={(v) =>
+                setModelTypeFilter(v as "all" | "chat" | "embedding")
+              }
+              placeholder="Model type"
+              className="w-full sm:w-[200px]"
+              items={[
+                {
+                  value: "all",
+                  label: "All models",
+                  content: (
+                    <span className="flex items-center gap-2">
+                      <Boxes className="h-4 w-4 text-muted-foreground" />
+                      <span>All models</span>
+                    </span>
+                  ),
+                  selectedContent: (
+                    <span className="flex items-center gap-2">
+                      <Boxes className="h-4 w-4 text-muted-foreground" />
+                      <span>All models</span>
+                    </span>
+                  ),
+                },
+                {
+                  value: "chat",
+                  label: "Chat / generation",
+                  content: (
+                    <span className="flex items-center gap-2">
+                      <Brain className="h-4 w-4 text-muted-foreground" />
+                      <span>Chat / generation</span>
+                    </span>
+                  ),
+                  selectedContent: (
+                    <span className="flex items-center gap-2">
+                      <Brain className="h-4 w-4 text-muted-foreground" />
+                      <span>Chat / generation</span>
+                    </span>
+                  ),
+                },
+                {
+                  value: "embedding",
+                  label: "Embedding",
+                  content: (
+                    <span className="flex items-center gap-2">
+                      <Fingerprint className="h-4 w-4 text-muted-foreground" />
+                      <span>Embedding</span>
+                    </span>
+                  ),
+                  selectedContent: (
+                    <span className="flex items-center gap-2">
+                      <Fingerprint className="h-4 w-4 text-muted-foreground" />
+                      <span>Embedding</span>
+                    </span>
+                  ),
+                },
+              ]}
+            />
           </div>
         )}
         <DataTable
@@ -312,11 +396,14 @@ export default function ModelsPage() {
           }
           hideSelectedCount
           isLoading={isPending}
-          hasActiveFilters={Boolean(search || apiKeyFilter !== "all")}
+          hasActiveFilters={Boolean(
+            search || apiKeyFilter !== "all" || modelTypeFilter !== "all",
+          )}
           filteredEmptyMessage="No models match your filters. Try adjusting your search."
           onClearFilters={() => {
             setSearch("");
             setApiKeyFilter("all");
+            setModelTypeFilter("all");
           }}
           emptyMessage={
             apiKeys.length === 0
@@ -341,10 +428,27 @@ export default function ModelsPage() {
 
 // --- Edit Model Dialog ---
 
+type UpdateModelBody = archestraApiTypes.UpdateModelData["body"];
+type UpdateModelEmbeddingDimensions = NonNullable<
+  UpdateModelBody["embeddingDimensions"]
+>;
+
+const EMBEDDING_DIMENSION_MAP = {
+  "768": 768,
+  "1536": 1536,
+  "3072": 3072,
+} satisfies Record<string, UpdateModelEmbeddingDimensions>;
+const NOT_EMBEDDING_MODEL_VALUE = "none";
+
+type EditModelEmbeddingDimensionsValue =
+  | ""
+  | keyof typeof EMBEDDING_DIMENSION_MAP;
+
 interface EditModelFormValues {
   customPricePerMillionInput: string;
   customPricePerMillionOutput: string;
   ignored: boolean;
+  embeddingDimensions: EditModelEmbeddingDimensionsValue;
   inputModalities: string[];
   outputModalities: string[];
 }
@@ -377,12 +481,16 @@ function EditModelDialog({
   const handleSubmit = async (values: EditModelFormValues) => {
     const inputPrice = values.customPricePerMillionInput.trim() || null;
     const outputPrice = values.customPricePerMillionOutput.trim() || null;
+    const embeddingDimensions = getEmbeddingDimensionsValue(
+      values.embeddingDimensions,
+    );
 
     const result = await updateModel.mutateAsync({
       id: model.id,
       customPricePerMillionInput: inputPrice,
       customPricePerMillionOutput: outputPrice,
       ignored: values.ignored,
+      embeddingDimensions,
       inputModalities: values.inputModalities as ModelInputModality[],
       outputModalities: values.outputModalities as ModelOutputModality[],
     });
@@ -605,6 +713,57 @@ function EditModelDialog({
 
           <Separator />
 
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <span className="text-sm font-medium">Embedding</span>
+              <p className="text-sm text-muted-foreground">
+                Set embedding dimensions to make this model available for
+                knowledge base embeddings. Leave it unset for chat-only models.
+                This must match the vector size the provider returns or the size
+                you intentionally truncate to.
+              </p>
+            </div>
+
+            <FormField
+              control={form.control}
+              name="embeddingDimensions"
+              render={({ field }) => (
+                <FormItem>
+                  <Select
+                    value={field.value || NOT_EMBEDDING_MODEL_VALUE}
+                    onValueChange={(value) =>
+                      field.onChange(
+                        value === NOT_EMBEDDING_MODEL_VALUE ? "" : value,
+                      )
+                    }
+                  >
+                    <FormControl>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Not an embedding model" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value={NOT_EMBEDDING_MODEL_VALUE}>
+                        Not an embedding model
+                      </SelectItem>
+                      {SUPPORTED_EMBEDDING_DIMENSIONS.map((dimension) => (
+                        <SelectItem
+                          key={dimension}
+                          value={dimension.toString()}
+                        >
+                          {dimension}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+
+          <Separator />
+
           <FormField
             control={form.control}
             name="ignored"
@@ -776,7 +935,29 @@ function getDefaults(model: ModelWithApiKeys): EditModelFormValues {
     customPricePerMillionInput: model.customPricePerMillionInput ?? "",
     customPricePerMillionOutput: model.customPricePerMillionOutput ?? "",
     ignored: model.ignored,
+    embeddingDimensions: model.embeddingDimensions
+      ? getEmbeddingDimensionsString(model.embeddingDimensions)
+      : "",
     inputModalities: model.inputModalities ?? [],
     outputModalities: model.outputModalities ?? [],
   };
+}
+
+function getEmbeddingDimensionsString(
+  value: UpdateModelEmbeddingDimensions,
+): EditModelEmbeddingDimensionsValue {
+  if (value === 768) return "768";
+  if (value === 1536) return "1536";
+  if (value === 3072) return "3072";
+  return "";
+}
+
+function getEmbeddingDimensionsValue(
+  value: EditModelEmbeddingDimensionsValue,
+): UpdateModelEmbeddingDimensions | null {
+  if (!value) {
+    return null;
+  }
+
+  return EMBEDDING_DIMENSION_MAP[value];
 }

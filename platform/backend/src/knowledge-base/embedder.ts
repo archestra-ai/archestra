@@ -1,27 +1,28 @@
-import type { EmbeddingModel } from "@shared";
 import { addNomicTaskPrefix, EMBEDDING_BATCH_SIZE } from "@shared";
-import OpenAI from "openai";
 import logger from "@/logging";
 import { KbChunkModel, KbDocumentModel } from "@/models";
+import {
+  callEmbedding,
+  type EmbeddingApiResponse,
+  getEmbeddingDiscriminator,
+  isRetryableEmbeddingError,
+} from "./embedding-clients";
 import {
   buildEmbeddingInteraction,
   withKbObservability,
 } from "./kb-interaction";
-import { getDefaultOrgEmbeddingConfig } from "./kb-llm-client";
+import {
+  type EmbeddingConfig,
+  getDefaultOrgEmbeddingConfig,
+} from "./kb-llm-client";
 
 const RETRY_MAX_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 1000;
 
-interface EmbeddingContext {
-  client: OpenAI;
-  model: EmbeddingModel;
-  dimensions: number;
-}
-
 class EmbeddingService {
   async processDocument(
     documentId: string,
-    ctx: EmbeddingContext,
+    ctx: EmbeddingConfig,
   ): Promise<void> {
     const document = await KbDocumentModel.findById(documentId);
     if (!document) {
@@ -245,24 +246,25 @@ class EmbeddingService {
   }
 
   private async callEmbeddingApiWithRetry(
-    ctx: EmbeddingContext,
+    ctx: EmbeddingConfig,
     texts: string[],
-  ): Promise<OpenAI.Embeddings.CreateEmbeddingResponse> {
+  ): Promise<EmbeddingApiResponse> {
     for (let attempt = 1; attempt <= RETRY_MAX_ATTEMPTS; attempt++) {
       try {
-        const response = await withKbObservability({
+        return await withKbObservability({
           operationName: "embedding",
-          provider: "openai",
+          provider: ctx.provider,
           model: ctx.model,
           source: "knowledge:embedding",
-          type: "openai:embeddings",
+          type: getEmbeddingDiscriminator(ctx.provider),
           callback: () =>
-            ctx.client.embeddings.create({
+            callEmbedding({
+              texts,
               model: ctx.model,
-              input: texts,
-              ...(ctx.model.startsWith("nomic")
-                ? {}
-                : { dimensions: ctx.dimensions }),
+              apiKey: ctx.apiKey,
+              baseUrl: ctx.baseUrl,
+              dimensions: ctx.dimensions,
+              provider: ctx.provider,
             }),
           buildInteraction: (resp) =>
             buildEmbeddingInteraction({
@@ -272,11 +274,9 @@ class EmbeddingService {
               response: resp,
             }),
         });
-
-        return response;
       } catch (error) {
         const isLastAttempt = attempt === RETRY_MAX_ATTEMPTS;
-        if (isLastAttempt || !this.isRetryableError(error)) {
+        if (isLastAttempt || !isRetryableEmbeddingError(error)) {
           throw error;
         }
 
@@ -295,17 +295,6 @@ class EmbeddingService {
 
     // Unreachable, but satisfies TypeScript
     throw new Error("Retry loop exited unexpectedly");
-  }
-
-  private isRetryableError(error: unknown): boolean {
-    if (error instanceof OpenAI.APIError) {
-      return error.status === 429 || (error.status ?? 0) >= 500;
-    }
-    // Network-level errors (ECONNRESET, ETIMEDOUT, etc.)
-    if (error instanceof Error && "code" in error) {
-      return true;
-    }
-    return false;
   }
 }
 

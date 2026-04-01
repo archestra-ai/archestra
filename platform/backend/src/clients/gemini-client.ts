@@ -23,6 +23,7 @@ import logger from "@/logging";
 export function createGoogleGenAIClient(
   apiKey: string | undefined,
   logPrefix = "[Gemini]",
+  baseUrlOverride?: string | null,
 ): GoogleGenAI {
   const { vertexAi } = config.llm.gemini;
 
@@ -69,14 +70,14 @@ export function createGoogleGenAIClient(
   }
 
   logger.debug(
-    { baseUrl: config.llm.gemini.baseUrl },
+    { baseUrl: baseUrlOverride || config.llm.gemini.baseUrl },
     `${logPrefix} Initializing GoogleGenAI with API key mode`,
   );
 
   return new GoogleGenAI({
     apiKey,
     httpOptions: {
-      baseUrl: config.llm.gemini.baseUrl,
+      baseUrl: baseUrlOverride || config.llm.gemini.baseUrl,
       apiVersion: "v1beta",
     },
   });

@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.0"
+    "version": "1.2.1"
   },
   "components": {
     "schemas": {
@@ -103142,6 +103142,14 @@
             "in": "query",
             "name": "apiKeyId",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "isEmbedding",
+            "required": false
           }
         ],
         "responses": {
@@ -103260,6 +103268,29 @@
                       },
                       "isFastest": {
                         "type": "boolean"
+                      },
+                      "embeddingDimensions": {
+                        "nullable": true,
+                        "anyOf": [
+                          {
+                            "type": "number",
+                            "enum": [
+                              3072
+                            ]
+                          },
+                          {
+                            "type": "number",
+                            "enum": [
+                              1536
+                            ]
+                          },
+                          {
+                            "type": "number",
+                            "enum": [
+                              768
+                            ]
+                          }
+                        ]
                       }
                     },
                     "required": [
@@ -103846,6 +103877,29 @@
                       "ignored": {
                         "type": "boolean"
                       },
+                      "embeddingDimensions": {
+                        "nullable": true,
+                        "anyOf": [
+                          {
+                            "type": "number",
+                            "enum": [
+                              3072
+                            ]
+                          },
+                          {
+                            "type": "number",
+                            "enum": [
+                              1536
+                            ]
+                          },
+                          {
+                            "type": "number",
+                            "enum": [
+                              768
+                            ]
+                          }
+                        ]
+                      },
                       "discoveredViaLlmProxy": {
                         "type": "boolean"
                       },
@@ -103935,6 +103989,7 @@
                       "customPricePerMillionInput",
                       "customPricePerMillionOutput",
                       "ignored",
+                      "embeddingDimensions",
                       "discoveredViaLlmProxy",
                       "lastSyncedAt",
                       "createdAt",
@@ -104197,6 +104252,29 @@
                   "ignored": {
                     "type": "boolean"
                   },
+                  "embeddingDimensions": {
+                    "nullable": true,
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "enum": [
+                          3072
+                        ]
+                      },
+                      {
+                        "type": "number",
+                        "enum": [
+                          1536
+                        ]
+                      },
+                      {
+                        "type": "number",
+                        "enum": [
+                          768
+                        ]
+                      }
+                    ]
+                  },
                   "inputModalities": {
                     "nullable": true,
                     "minItems": 1,
@@ -104341,6 +104419,29 @@
                     "ignored": {
                       "type": "boolean"
                     },
+                    "embeddingDimensions": {
+                      "nullable": true,
+                      "anyOf": [
+                        {
+                          "type": "number",
+                          "enum": [
+                            3072
+                          ]
+                        },
+                        {
+                          "type": "number",
+                          "enum": [
+                            1536
+                          ]
+                        },
+                        {
+                          "type": "number",
+                          "enum": [
+                            768
+                          ]
+                        }
+                      ]
+                    },
                     "discoveredViaLlmProxy": {
                       "type": "boolean"
                     },
@@ -104372,6 +104473,7 @@
                     "customPricePerMillionInput",
                     "customPricePerMillionOutput",
                     "ignored",
+                    "embeddingDimensions",
                     "discoveredViaLlmProxy",
                     "lastSyncedAt",
                     "createdAt",
@@ -126762,24 +126864,9 @@
                 "type": "object",
                 "properties": {
                   "embeddingModel": {
+                    "nullable": true,
                     "type": "string",
                     "minLength": 1
-                  },
-                  "embeddingDimensions": {
-                    "anyOf": [
-                      {
-                        "type": "number",
-                        "enum": [
-                          1536
-                        ]
-                      },
-                      {
-                        "type": "number",
-                        "enum": [
-                          768
-                        ]
-                      }
-                    ]
                   },
                   "embeddingChatApiKeyId": {
                     "nullable": true,

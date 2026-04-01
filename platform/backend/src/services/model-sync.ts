@@ -1,4 +1,4 @@
-import type { SupportedProvider } from "@shared";
+import type { SupportedEmbeddingDimension, SupportedProvider } from "@shared";
 import {
   type ModelsDevApiResponse,
   modelsDevClient,
@@ -207,9 +207,36 @@ export function buildModelsToUpsert(params: {
       supportsToolCalling: capabilities.supportsToolCalling,
       promptPricePerToken: capabilities.promptPricePerToken,
       completionPricePerToken: capabilities.completionPricePerToken,
+      embeddingDimensions: inferEmbeddingDimensions(model.id, provider),
       lastSyncedAt: new Date(),
     };
   });
+}
+
+/**
+ * Best-effort inference of embedding dimensions for known models.
+ * Unknown models return null and can be configured manually in the model editor.
+ */
+export function inferEmbeddingDimensions(
+  modelId: string,
+  provider: SupportedProvider,
+): SupportedEmbeddingDimension | null {
+  const id = modelId.toLowerCase();
+  if (provider === "openai" && id === "text-embedding-3-small") {
+    return 1536;
+  }
+  if (provider === "openai" && id === "text-embedding-3-large") {
+    // Default to 1536 for backwards compatibility with existing OpenAI KB
+    // embeddings; admins can opt into 3072 manually in the model editor.
+    return 1536;
+  }
+  if (provider === "gemini" && id === "gemini-embedding-001") {
+    return 3072;
+  }
+  if (id === "nomic-embed-text") {
+    return 768;
+  }
+  return null;
 }
 
 export function resolveModelCapabilities(params: {

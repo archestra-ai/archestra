@@ -172,6 +172,7 @@ class ModelModel {
           supportsToolCalling: sql`COALESCE(${schema.modelsTable.supportsToolCalling}, excluded.supports_tool_calling)`,
           promptPricePerToken: data.promptPricePerToken,
           completionPricePerToken: data.completionPricePerToken,
+          embeddingDimensions: sql`COALESCE(${schema.modelsTable.embeddingDimensions}, excluded.embedding_dimensions)`,
           lastSyncedAt: new Date(),
           updatedAt: new Date(),
           // NOTE: customPricePerMillionInput/Output intentionally NOT updated
@@ -233,6 +234,7 @@ class ModelModel {
               supportsToolCalling: sql`COALESCE(${schema.modelsTable.supportsToolCalling}, excluded.supports_tool_calling)`,
               promptPricePerToken: sql`excluded.prompt_price_per_token`,
               completionPricePerToken: sql`excluded.completion_price_per_token`,
+              embeddingDimensions: sql`COALESCE(${schema.modelsTable.embeddingDimensions}, excluded.embedding_dimensions)`,
               lastSyncedAt: sql`excluded.last_synced_at`,
               updatedAt: sql`NOW()`,
               // NOTE: customPricePerMillionInput/Output intentionally NOT updated
@@ -299,6 +301,7 @@ class ModelModel {
               supportsToolCalling: sql`excluded.supports_tool_calling`,
               promptPricePerToken: sql`excluded.prompt_price_per_token`,
               completionPricePerToken: sql`excluded.completion_price_per_token`,
+              embeddingDimensions: sql`excluded.embedding_dimensions`,
               customPricePerMillionInput: sql`NULL`,
               customPricePerMillionOutput: sql`NULL`,
               lastSyncedAt: sql`excluded.last_synced_at`,
@@ -401,6 +404,9 @@ class ModelModel {
     }
     if (data.outputModalities !== undefined) {
       set.outputModalities = data.outputModalities;
+    }
+    if (data.embeddingDimensions !== undefined) {
+      set.embeddingDimensions = data.embeddingDimensions;
     }
 
     const [result] = await db
@@ -554,6 +560,10 @@ class ModelModel {
 
   static supportsTextChat(model: Model): boolean {
     if (model.ignored) {
+      return false;
+    }
+
+    if (model.embeddingDimensions !== null) {
       return false;
     }
 

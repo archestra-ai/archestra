@@ -1394,6 +1394,13 @@
       "when": 1774707159349,
       "tag": "0198_first_hammerhead",
       "breakpoints": true
+    },
+    {
+      "idx": 199,
+      "version": "7",
+      "when": 1774984836765,
+      "tag": "0199_wide_mastermind",
+      "breakpoints": true
     }
   ]
 }

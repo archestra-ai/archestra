@@ -359,6 +359,7 @@ function ChatSessionHook({
     addToolApprovalResponse,
   } = useChat({
     messages: initialMessages,
+    generateId: () => crypto.randomUUID(),
     transport: new DefaultChatTransport({
       api: "/api/chat",
       credentials: "include",

@@ -201,7 +201,6 @@ class ConversationModel {
             conversation.messages.length <
             ConversationModel.MESSAGES_PER_CONVERSATION_LIMIT
           ) {
-            // Merge database UUID into message content
             conversation.messages.push({
               ...row.message.content,
               id: row.message.id,
@@ -311,7 +310,10 @@ class ConversationModel {
 
     for (const row of rows) {
       if (row.message?.content) {
-        // Merge database UUID into message content (overrides AI SDK's temporary ID)
+        // Use the DB row UUID as the canonical message ID. For new messages
+        // (where frontend generates UUIDs via crypto.randomUUID()) this is a
+        // no-op since content.id === row.id. For legacy messages persisted
+        // before the UUID unification, this maps the old nanoid to the DB UUID.
         messages.push({
           ...row.message.content,
           id: row.message.id,

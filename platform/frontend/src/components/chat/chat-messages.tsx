@@ -305,8 +305,6 @@ export function ChatMessages({
     // Don't call onMessagesUpdate here - let onUserMessageEdit handle state
     // to avoid race condition with old messages reappearing
 
-    // Find the edited message and trigger regeneration
-    // Pass the partIndex so the caller knows which specific part was edited
     if (onUserMessageEdit && data?.messages) {
       const editedMessage = (data.messages as UIMessage[]).find(
         (m) => m.id === messageId,

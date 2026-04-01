@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   buildUserSystemPromptContext,
   type ChatErrorResponse,
@@ -388,6 +389,29 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               // Preserve incoming message IDs so the client updates existing
               // assistant messages instead of rendering duplicate ones.
               originalMessages: messages as UIMessage[],
+              onFinish: async ({
+                messages: finalMessages,
+                responseMessage,
+              }) => {
+                removeAbortListeners();
+
+                // Only persist if not already persisted by onError
+                if (!messagesPersisted && conversationId) {
+                  try {
+                    await persistNewMessages(
+                      conversationId,
+                      finalMessages,
+                      "onFinish",
+                    );
+                    messagesPersisted = true;
+                  } catch (error) {
+                    logger.error(
+                      { error, conversationId },
+                      "Failed to persist messages during onFinish",
+                    );
+                  }
+                }
+              },
               onError: (error) => {
                 // Persist messages on stream-level errors (e.g. errors thrown
                 // in execute before writer.merge() is reached). Without this,
@@ -602,8 +626,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   }
                 }
 
+                const assistantMessageId = randomUUID();
+                writer.write({ type: "start", messageId: assistantMessageId });
+
                 writer.merge(
                   result.toUIMessageStream({
+                    sendStart: false,
                     originalMessages: messages as UIMessage[],
                     onError: (error) => {
                       // Claim persistence before the async work below starts,
@@ -681,26 +709,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           isRetryable: mappedError.isRetryable,
                           ...traceCtx,
                         });
-                      }
-                    },
-                    onFinish: async ({ messages: finalMessages }) => {
-                      removeAbortListeners();
-
-                      // Only persist if not already persisted by onError
-                      if (!messagesPersisted && conversationId) {
-                        try {
-                          await persistNewMessages(
-                            conversationId,
-                            finalMessages,
-                            "onFinish",
-                          );
-                          messagesPersisted = true;
-                        } catch (error) {
-                          logger.error(
-                            { error, conversationId },
-                            "Failed to persist messages during onFinish",
-                          );
-                        }
                       }
                     },
                   }),
@@ -1544,10 +1552,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
       reply,
     ) => {
-      // Fetch the message to get its conversation ID
-      // Use findByAnyId to support both DB UUIDs and AI SDK nanoid content IDs
-      // (in-session messages retain their nanoid IDs until page reload)
-      const message = await MessageModel.findByAnyId(id);
+      // Fetch the message to get its conversation ID.
+      // All message IDs are UUIDs (frontend generates UUIDs via crypto.randomUUID()).
+      const message = await MessageModel.findById(id);
 
       if (!message) {
         throw new ApiError(404, "Message not found");
@@ -1937,9 +1944,14 @@ async function persistNewMessages(
       messagesToStore = normalizeChatMessages(messagesToSave);
     }
 
-    // Append only new messages with timestamps
+    // Append only new messages with timestamps.
+    // All message IDs are now UUIDs (frontend uses crypto.randomUUID() for user
+    // messages, backend generates UUIDs for assistant messages via the stream's
+    // `start` event). Reuse the message ID as the DB row ID so frontend and
+    // backend always agree on a single ID per message.
     const now = Date.now();
     const messageData = messagesToStore.map((msg, index) => ({
+      ...(msg.id ? { id: msg.id } : {}),
       conversationId,
       role: msg.role ?? "assistant",
       content: msg,

@@ -26,6 +26,7 @@ export * from "./pagination";
 export * from "./permission.types";
 export * from "./playwright-browser";
 export * from "./policy-conditions";
+export * from "./policy-config-system-prompt";
 export * from "./roles";
 export * from "./routes";
 export * from "./slack";

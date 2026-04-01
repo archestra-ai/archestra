@@ -1,4 +1,5 @@
 import { BUILT_IN_AGENT_IDS } from "./built-in-agents";
+import { POLICY_CONFIG_SYSTEM_PROMPT_TEMPLATE_EXPRESSIONS } from "./policy-config-system-prompt";
 
 /**
  * System prompt template variables and helpers available for Handlebars templating.
@@ -37,29 +38,6 @@ export const SYSTEM_PROMPT_HELPERS = [
 export const SYSTEM_PROMPT_TEMPLATE_EXPRESSIONS = [
   ...SYSTEM_PROMPT_VARIABLES,
   ...SYSTEM_PROMPT_HELPERS,
-] as const;
-
-export const POLICY_CONFIG_SYSTEM_PROMPT_TEMPLATE_EXPRESSIONS = [
-  {
-    expression: "{{tool.name}}",
-    description: "Name of the MCP tool being evaluated",
-  },
-  {
-    expression: "{{tool.description}}",
-    description: "Description of the MCP tool being evaluated",
-  },
-  {
-    expression: "{{tool.parameters}}",
-    description: "JSON schema for the MCP tool parameters",
-  },
-  {
-    expression: "{{tool.annotations}}",
-    description: "MCP tool annotations such as read-only or destructive hints",
-  },
-  {
-    expression: "{{mcpServerName}}",
-    description: "Name of the MCP server that provides the tool",
-  },
 ] as const;
 
 export function getSystemPromptTemplateExpressions(params?: {

@@ -563,6 +563,9 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       headers,
       fetch: providedFetch,
     }) => {
+      // The Vercel AI SDK's createOpenAI() has no defaultQuery option (unlike the
+      // openai package used by adapterV2), so we inject api-version at the fetch
+      // level — Azure requires it on every request.
       const fetchWithVersion: typeof globalThis.fetch = (input, init) => {
         const url = new URL(
           typeof input === "string"

@@ -25,6 +25,7 @@ import type {
   LLMResponseAdapter,
   LLMStreamAdapter,
 } from "@/types";
+import { ApiError } from "@/types";
 import {
   OpenAIRequestAdapter,
   OpenAIResponseAdapter,
@@ -218,7 +219,7 @@ export const azureAdapterFactory: LLMProvider<
     options: CreateClientOptions,
   ): OpenAIProvider {
     if (!apiKey) {
-      throw new Error("API key required for Azure AI Foundry");
+      throw new ApiError(401, "API key required for Azure AI Foundry");
     }
 
     const customFetch = options.agent

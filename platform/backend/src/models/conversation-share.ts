@@ -220,6 +220,10 @@ class ConversationShareModel {
     return {
       ...firstRow.conversation,
       agent: firstRow.agent,
+      share: {
+        id: share.id,
+        visibility: share.visibility,
+      },
       messages,
       sharedByUserId: share.createdByUserId,
     };
@@ -257,7 +261,9 @@ class ConversationShareModel {
       .from(schema.teamMembersTable)
       .where(eq(schema.teamMembersTable.userId, params.userId));
 
-    const userTeamIds = new Set(memberships.map((membership) => membership.teamId));
+    const userTeamIds = new Set(
+      memberships.map((membership) => membership.teamId),
+    );
 
     return share.teamIds.some((teamId) => userTeamIds.has(teamId));
   }

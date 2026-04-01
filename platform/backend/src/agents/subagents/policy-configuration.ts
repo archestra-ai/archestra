@@ -17,7 +17,12 @@ import {
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import type { Tool } from "@/types";
-import { type PolicyConfig, PolicyConfigSchema } from "@/types";
+import {
+  type PolicyConfig,
+  PolicyConfigSchema,
+  mapToolInvocationAction,
+  mapTrustedDataAction,
+} from "@/types";
 import { resolveSmartDefaultLlm } from "@/utils/llm-resolution";
 
 interface ResolvedLlm {
@@ -142,16 +147,24 @@ export class PolicyConfigurationService {
         organizationId,
       });
 
+      // Map LLM-facing enum values to database-stored values
+      const dbInvocationAction = mapToolInvocationAction(
+        policyConfig.toolInvocationAction,
+      );
+      const dbTrustedDataAction = mapTrustedDataAction(
+        policyConfig.trustedDataAction,
+      );
+
       // Create/upsert call policy (tool invocation policy)
       await ToolInvocationPolicyModel.bulkUpsertDefaultPolicy(
         [toolId],
-        policyConfig.toolInvocationAction,
+        dbInvocationAction,
       );
 
       // Create/upsert result policy (trusted data policy)
       await TrustedDataPolicyModel.bulkUpsertDefaultPolicy(
         [toolId],
-        policyConfig.trustedDataAction,
+        dbTrustedDataAction,
       );
 
       // Update tool with timestamps, reasoning, and model for tracking

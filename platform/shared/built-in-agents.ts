@@ -30,24 +30,24 @@ Parameters: {tool.parameters}
 Determine:
 
 1. toolInvocationAction (enum) - When should this tool be allowed?
-   - "allow_when_context_is_untrusted": Safe to invoke even with untrusted data (read-only, doesn't leak sensitive data)
-   - "block_when_context_is_untrusted": Only invoke when context is trusted (could leak data if untrusted input is present)
+   - "allow_when_context_is_sensitive": Safe to invoke even with sensitive data in the context (read-only, doesn't leak sensitive data)
+   - "block_when_context_is_sensitive": Only invoke when context is safe (could leak data if sensitive input is present)
    - "block_always": Never invoke automatically (writes data, executes code, sends data externally)
 
 2. trustedDataAction (enum) - How should the tool's results be treated?
-   - "mark_as_trusted": Internal systems (databases, APIs, dev tools like list-endpoints/get-config)
-   - "mark_as_untrusted": External/filesystem data where exact values are safe to use directly
-   - "sanitize_with_dual_llm": Untrusted data that needs summarization without exposing exact values
+   - "mark_as_safe": Results are safe — internal systems (databases, APIs, dev tools like list-endpoints/get-config)
+   - "mark_as_sensitive": Results are sensitive — external/filesystem data where exact values are safe to use directly
+   - "sanitize_with_dual_llm": Sensitive data that needs summarization without exposing exact values
    - "block_always": Highly sensitive or dangerous output that should be blocked entirely
 
 Examples:
-- Internal dev tools: invocation="allow_when_context_is_untrusted", result="mark_as_trusted"
-- Database queries: invocation="allow_when_context_is_untrusted", result="mark_as_trusted"
-- File reads (code/config): invocation="allow_when_context_is_untrusted", result="mark_as_untrusted"
-- Web search/scraping: invocation="allow_when_context_is_untrusted", result="sanitize_with_dual_llm"
-- File writes: invocation="block_always", result="mark_as_trusted"
-- External APIs (raw data): invocation="block_when_context_is_untrusted", result="mark_as_untrusted"
-- Code execution: invocation="block_always", result="mark_as_untrusted"`;
+- Internal dev tools: invocation="allow_when_context_is_sensitive", result="mark_as_safe"
+- Database queries: invocation="allow_when_context_is_sensitive", result="mark_as_safe"
+- File reads (code/config): invocation="allow_when_context_is_sensitive", result="mark_as_sensitive"
+- Web search/scraping: invocation="allow_when_context_is_sensitive", result="sanitize_with_dual_llm"
+- File writes: invocation="block_always", result="mark_as_safe"
+- External APIs (raw data): invocation="block_when_context_is_sensitive", result="mark_as_sensitive"
+- Code execution: invocation="block_always", result="mark_as_sensitive"`;
 
 export const DUAL_LLM_MAIN_SYSTEM_PROMPT = `You are the privileged side of the Dual LLM security workflow.
 

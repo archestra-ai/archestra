@@ -16,6 +16,7 @@ import {
   TrustedDataPolicyModel,
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import { renderSystemPrompt } from "@/templating";
 import type { Tool } from "@/types";
 import {
   type PolicyConfig,
@@ -393,7 +394,7 @@ export class PolicyConfigurationService {
    * Analyze a tool and determine appropriate security policies using LLM
    */
   private async analyzeTool(params: {
-    tool: Pick<Tool, "id" | "name" | "description" | "parameters">;
+    tool: Pick<Tool, "id" | "name" | "description" | "parameters" | "meta">;
     mcpServerName: string | null;
     provider: SupportedProvider;
     apiKey: string | undefined;
@@ -438,7 +439,22 @@ export class PolicyConfigurationService {
       modelName,
       baseUrl,
     });
-    const prompt = buildPrompt(builtInAgent.systemPrompt, tool, mcpServerName);
+    const annotations = tool.meta?.annotations as
+      | Record<string, unknown>
+      | undefined;
+    const prompt = renderSystemPrompt(builtInAgent.systemPrompt, null, {
+      tool: {
+        name: tool.name,
+        description: tool.description || "No description provided",
+        parameters: tool.parameters
+          ? JSON.stringify(tool.parameters, null, 2)
+          : "No parameters",
+        annotations: annotations
+          ? JSON.stringify(annotations, null, 2)
+          : "Not provided",
+      },
+      mcpServerName: mcpServerName || "Unknown",
+    })!;
 
     try {
       const result = await generateObject({
@@ -472,30 +488,6 @@ export class PolicyConfigurationService {
       throw error;
     }
   }
-}
-
-/**
- * Build the analysis prompt by substituting tool metadata into the template.
- * The template comes from the built-in agent's systemPrompt.
- */
-function buildPrompt(
-  template: string,
-  tool: Pick<Tool, "name" | "description" | "parameters">,
-  mcpServerName: string | null,
-): string {
-  return template
-    .replaceAll("{tool.name}", tool.name)
-    .replaceAll(
-      "{tool.description}",
-      tool.description || "No description provided",
-    )
-    .replaceAll("{mcpServerName}", mcpServerName || "Unknown")
-    .replaceAll(
-      "{tool.parameters}",
-      tool.parameters
-        ? JSON.stringify(tool.parameters, null, 2)
-        : "No parameters",
-    );
 }
 
 export const policyConfigurationService = new PolicyConfigurationService();

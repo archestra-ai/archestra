@@ -177,20 +177,25 @@ export function promptNeedsRendering(
  * Render an agent's system prompt, applying Handlebars template variables
  * (e.g. {{user.name}}) when present. Returns null if no system prompt is set.
  * If the template fails to compile or render, returns the original string unchanged.
+ *
+ * @param additionalContext - Optional extra context merged alongside user context.
+ *   Used by specific subagents (e.g. policy configuration) to inject agent-specific
+ *   template variables without polluting the shared SystemPromptContext interface.
  */
 export function renderSystemPrompt(
   systemPrompt: string | null,
   context?: SystemPromptContext | null,
+  additionalContext?: Record<string, unknown>,
 ): string | null {
   if (!systemPrompt) {
     return null;
-  } else if (!context) {
+  } else if (!context && !additionalContext) {
     return systemPrompt;
   }
 
   try {
     const template = Handlebars.compile(systemPrompt, { noEscape: true });
-    return template(context);
+    return template({ ...context, ...additionalContext });
   } catch (error) {
     logger.warn(
       { err: error },

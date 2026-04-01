@@ -21,7 +21,7 @@ vi.mock("@/utils/llm-resolution", () => ({
 
 const MOCK_BUILT_IN_AGENT = {
   systemPrompt:
-    "Analyze this MCP tool: {tool.name} - {tool.description} - {mcpServerName} - {tool.parameters}",
+    "Analyze this MCP tool: {{tool.name}} - {{tool.description}} - {{mcpServerName}} - {{tool.parameters}}",
 };
 
 const MOCK_RESOLVED_LLM = {

@@ -1177,6 +1177,7 @@ export function AgentDialog({
                   value={systemPrompt}
                   onChange={setSystemPrompt}
                   variant="section"
+                  builtInAgentId={builtInAgentName}
                   headerExtra={
                     isBuiltIn && builtInAgentName ? (
                       <Button

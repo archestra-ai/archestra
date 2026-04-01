@@ -22,7 +22,7 @@ When triggered, the subagent sends each tool's name, description, MCP server nam
 | --------------------------------- | ----------------------------------------------------------------------------- |
 | `allow_when_context_is_sensitive` | Safe to invoke even with sensitive data in the context (read-only tools, internal dev tools) |
 | `block_when_context_is_sensitive` | Only invoke when context is safe (tools that could leak data)                                |
-| `block_always`                    | Never invoke automatically (writes data, executes code, sends externally)     |
+| `block_always`                    | Never invoke automatically (tools that delete or destroy data)                |
 
 **trustedDataAction** (Result Policy) -- how should the tool's output be treated:
 
@@ -39,14 +39,13 @@ The LLM also returns a reasoning field explaining why it chose those settings (t
 
 The subagent evaluates tool metadata against examples like:
 
-- Internal dev tools (list-endpoints, get-config): allow invocation, mark results safe
-- Database queries: allow invocation, mark results safe
+- Internal read-only tools (list-endpoints, get-config): allow invocation, mark results safe
+- Database queries (read-only): allow invocation, mark results sensitive
 - File reads (code/config): allow invocation, mark results sensitive
-- Web search/scraping: allow invocation, sanitize results with Dual LLM
-- File writes: block invocation, mark results safe
-- Code execution: block invocation, mark results sensitive
+- Web search/scraping: block when context is sensitive, mark results safe
+- Delete/remove/destroy operations: block invocation always, mark results safe
 
-These examples guide the LLM toward consistent policy decisions across different tool types.
+The subagent blocks any tool that is obviously destructive — i.e. tools that delete or destroy data.
 
 ## Triggering Policy Configuration
 

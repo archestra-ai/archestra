@@ -44,30 +44,30 @@ vi.mock("@/lib/organization.query", () => ({
   })),
 }));
 
-vi.mock("@/components/ui/multi-select-combobox", () => ({
-  MultiSelectCombobox: ({
-    options,
-    value,
-    onChange,
+vi.mock("@/components/ui/assignment-combobox", () => ({
+  AssignmentCombobox: ({
+    items,
+    selectedIds,
+    onSelectionChange,
   }: {
-    options: Array<{ value: string; label: string }>;
-    value: string[];
-    onChange: (value: string[]) => void;
+    items: Array<{ id: string; name: string }>;
+    selectedIds: string[];
+    onSelectionChange: (value: string[]) => void;
   }) => (
     <div>
-      {options.map((option) => (
+      {items.map((item) => (
         <button
-          key={option.value}
+          key={item.id}
           type="button"
           onClick={() =>
-            onChange(
-              value.includes(option.value)
-                ? value.filter((item) => item !== option.value)
-                : [...value, option.value],
+            onSelectionChange(
+              selectedIds.includes(item.id)
+                ? selectedIds.filter((selectedId) => selectedId !== item.id)
+                : [...selectedIds, item.id],
             )
           }
         >
-          {option.label}
+          {item.name}
         </button>
       ))}
     </div>

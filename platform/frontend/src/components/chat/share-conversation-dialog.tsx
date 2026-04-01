@@ -52,6 +52,7 @@ export function ShareConversationDialog({
   const [visibility, setVisibility] = useState<ShareVisibility>("private");
   const [teamIds, setTeamIds] = useState<string[]>([]);
   const [userIds, setUserIds] = useState<string[]>([]);
+  const hasVisibleShareLink = !!share && visibility !== "private";
 
   const shareLink = share
     ? `${window.location.origin}/chat/${conversationId}`
@@ -279,7 +280,7 @@ export function ShareConversationDialog({
           )}
         </VisibilitySelector>
 
-        {isShared && shareLink && (
+        {hasVisibleShareLink && shareLink && (
           <div className="flex min-w-0 items-center gap-2 overflow-hidden rounded-md border bg-muted/50 px-3 py-2">
             <span className="min-w-0 flex-1 truncate font-mono text-sm text-muted-foreground">
               {shareLink}
@@ -311,7 +312,7 @@ export function ShareConversationDialog({
           variant="secondary"
           className="w-full sm:w-auto"
           onClick={handleCopyLinkAndClose}
-          disabled={isPending || !shareLink}
+          disabled={isPending || !hasVisibleShareLink || !shareLink}
         >
           <Link className="mr-2 h-4 w-4" />
           Copy Link

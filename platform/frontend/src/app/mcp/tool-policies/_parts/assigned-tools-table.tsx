@@ -1,6 +1,11 @@
 "use client";
 
-import { type archestraApiTypes, parseFullToolName } from "@shared";
+import {
+  AGENT_TOOL_PREFIX,
+  type archestraApiTypes,
+  isAgentTool,
+  parseFullToolName,
+} from "@shared";
 import type {
   ColumnDef,
   RowSelectionState,
@@ -473,7 +478,11 @@ export function AssignedToolsTable({
       {
         id: "origin",
         accessorFn: (row) =>
-          isMcpToolByProperties(row) ? "1-mcp" : "2-intercepted",
+          isMcpToolByProperties(row)
+            ? "1-mcp"
+            : isAgentTool(row.name)
+              ? "2-agent"
+              : "3-intercepted",
         size: 180,
         header: ({ column }) => (
           <Button
@@ -517,6 +526,29 @@ export function AssignedToolsTable({
                   </Tooltip>
                 </TooltipProvider>
               </div>
+            );
+          }
+
+          if (isAgentTool(row.original.name)) {
+            const agentName = row.original.name
+              .slice(AGENT_TOOL_PREFIX.length)
+              .replaceAll("_", " ");
+            return (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge
+                      variant="secondary"
+                      className="bg-violet-600 text-white"
+                    >
+                      Agent
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Delegates to {agentName} agent</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             );
           }
 
@@ -758,6 +790,7 @@ export function AssignedToolsTable({
             placeholder="Filter by Origin"
             items={[
               { value: "all", label: "All Origins" },
+              { value: "agent", label: "Agent" },
               { value: "llm-proxy", label: "LLM Proxy" },
               ...uniqueOrigins.map((origin) => ({
                 value: origin.id,

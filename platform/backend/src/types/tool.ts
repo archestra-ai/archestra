@@ -85,7 +85,10 @@ export const ToolWithAssignmentsSchema = z.object({
 // Filter schema for tools with assignments
 export const ToolFilterSchema = z.object({
   search: z.string().optional(),
-  origin: z.string().optional().describe("Can be 'llm-proxy' or a catalogId"),
+  origin: z
+    .string()
+    .optional()
+    .describe("Can be 'llm-proxy', 'agent', or a catalogId"),
   excludeArchestraTools: z.coerce
     .boolean()
     .optional()

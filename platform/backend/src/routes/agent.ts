@@ -1,5 +1,4 @@
 import {
-  BUILT_IN_AGENT_IDS,
   createPaginatedResponseSchema,
   LABELS_ENTRY_DELIMITER,
   LABELS_VALUE_DELIMITER,
@@ -598,23 +597,14 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
-        const allowsSystemPromptUpdate =
-          existingAgent.builtInAgentConfig.name ===
-            BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN ||
-          existingAgent.builtInAgentConfig.name ===
-            BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE;
-
         // Only allow specific fields for built-in agents.
-        // The policy configuration built-in keeps its seeded prompt immutable,
-        // while the dual LLM built-ins allow prompt customization.
         updateData = {
           ...(body.builtInAgentConfig !== undefined && {
             builtInAgentConfig: body.builtInAgentConfig,
           }),
-          ...(allowsSystemPromptUpdate &&
-            body.systemPrompt !== undefined && {
-              systemPrompt: body.systemPrompt,
-            }),
+          ...(body.systemPrompt !== undefined && {
+            systemPrompt: body.systemPrompt,
+          }),
           ...(body.llmApiKeyId !== undefined && {
             llmApiKeyId: body.llmApiKeyId,
           }),

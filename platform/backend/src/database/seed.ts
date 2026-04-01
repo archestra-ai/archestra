@@ -434,7 +434,7 @@ async function seedBuiltInAgents(): Promise<void> {
       systemPrompt: POLICY_CONFIG_SYSTEM_PROMPT,
       builtInAgentConfig: {
         name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-        autoConfigureOnToolAssignment: false,
+        autoConfigureOnToolDiscovery: false,
       } as const,
     },
     {

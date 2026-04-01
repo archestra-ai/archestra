@@ -20,17 +20,17 @@ When triggered, the subagent sends each tool's name, description, MCP server nam
 
 | Value                             | Meaning                                                                       |
 | --------------------------------- | ----------------------------------------------------------------------------- |
-| `allow_when_context_is_untrusted` | Safe to invoke even with untrusted data (read-only tools, internal dev tools) |
-| `block_when_context_is_untrusted` | Only invoke when context is trusted (tools that could leak data)              |
-| `block_always`                    | Never invoke automatically (writes data, executes code, sends externally)     |
+| `allow_when_context_is_sensitive` | Safe to invoke even with sensitive data in the context (read-only tools, internal dev tools) |
+| `block_when_context_is_sensitive` | Only invoke when context is safe (tools that could leak data)                                |
+| `block_always`                    | Never invoke automatically (tools that delete or destroy data)                |
 
 **trustedDataAction** (Result Policy) -- how should the tool's output be treated:
 
 | Value                    | Meaning                                                                                                                            |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `mark_as_trusted`        | Results are trusted (internal systems, databases, dev tools)                                                                       |
-| `mark_as_untrusted`      | Results are untrusted but exact values are safe to use (filesystem, external APIs)                                                 |
-| `sanitize_with_dual_llm` | Results are processed through the [Dual LLM](/docs/platform-dual-llm) pattern (web scraping, untrusted data needing summarization) |
+| `mark_as_safe`           | Results are safe (internal systems, databases, dev tools)                                                                            |
+| `mark_as_sensitive`      | Results are sensitive but exact values are safe to use (filesystem, external APIs)                                                   |
+| `sanitize_with_dual_llm` | Results are processed through the [Dual LLM](/docs/platform-dual-llm) pattern (web scraping, sensitive data needing summarization)   |
 | `block_always`           | Results are blocked entirely                                                                                                       |
 
 The LLM also returns a reasoning field explaining why it chose those settings (this reasoning is stored on the tool record for auditability).
@@ -39,14 +39,13 @@ The LLM also returns a reasoning field explaining why it chose those settings (t
 
 The subagent evaluates tool metadata against examples like:
 
-- Internal dev tools (list-endpoints, get-config): allow invocation, trust results
-- Database queries: allow invocation, trust results
-- File reads (code/config): allow invocation, mark results untrusted
-- Web search/scraping: allow invocation, sanitize results with Dual LLM
-- File writes: block invocation, trust results
-- Code execution: block invocation, mark results untrusted
+- Internal read-only tools (list-endpoints, get-config): allow invocation, mark results safe
+- Database queries (read-only): allow invocation, mark results sensitive
+- File reads (code/config): allow invocation, mark results sensitive
+- Web search/scraping: block when context is sensitive, mark results safe
+- Delete/remove/destroy operations: block invocation always, mark results safe
 
-These examples guide the LLM toward consistent policy decisions across different tool types.
+The subagent blocks any tool that is obviously destructive — i.e. tools that delete or destroy data.
 
 ## Triggering Policy Configuration
 

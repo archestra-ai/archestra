@@ -19,10 +19,10 @@ import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { renderSystemPrompt } from "@/templating";
 import type { Tool } from "@/types";
 import {
-  type PolicyConfig,
-  PolicyConfigSchema,
   mapToolInvocationAction,
   mapTrustedDataAction,
+  type PolicyConfig,
+  PolicyConfigSchema,
 } from "@/types";
 import { resolveSmartDefaultLlm } from "@/utils/llm-resolution";
 

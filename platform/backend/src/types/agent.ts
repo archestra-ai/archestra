@@ -278,7 +278,9 @@ export type PolicyConfig = z.infer<typeof PolicyConfigSchema>;
 /** Maps LLM-facing PolicyConfig enum values to the database-stored policy values. */
 const TOOL_INVOCATION_ACTION_MAP: Record<
   PolicyConfig["toolInvocationAction"],
-  "allow_when_context_is_untrusted" | "block_when_context_is_untrusted" | "block_always"
+  | "allow_when_context_is_untrusted"
+  | "block_when_context_is_untrusted"
+  | "block_always"
 > = {
   allow_when_context_is_sensitive: "allow_when_context_is_untrusted",
   block_when_context_is_sensitive: "block_when_context_is_untrusted",
@@ -287,7 +289,10 @@ const TOOL_INVOCATION_ACTION_MAP: Record<
 
 const TRUSTED_DATA_ACTION_MAP: Record<
   PolicyConfig["trustedDataAction"],
-  "mark_as_trusted" | "mark_as_untrusted" | "sanitize_with_dual_llm" | "block_always"
+  | "mark_as_trusted"
+  | "mark_as_untrusted"
+  | "sanitize_with_dual_llm"
+  | "block_always"
 > = {
   mark_as_safe: "mark_as_trusted",
   mark_as_sensitive: "mark_as_untrusted",
@@ -295,10 +300,14 @@ const TRUSTED_DATA_ACTION_MAP: Record<
   block_always: "block_always",
 };
 
-export function mapToolInvocationAction(action: PolicyConfig["toolInvocationAction"]) {
+export function mapToolInvocationAction(
+  action: PolicyConfig["toolInvocationAction"],
+) {
   return TOOL_INVOCATION_ACTION_MAP[action];
 }
 
-export function mapTrustedDataAction(action: PolicyConfig["trustedDataAction"]) {
+export function mapTrustedDataAction(
+  action: PolicyConfig["trustedDataAction"],
+) {
   return TRUSTED_DATA_ACTION_MAP[action];
 }

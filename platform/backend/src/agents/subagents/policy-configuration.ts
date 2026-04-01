@@ -1,16 +1,29 @@
-import { BUILT_IN_AGENT_IDS, type SupportedProvider } from "@shared";
+import {
+  BUILT_IN_AGENT_IDS,
+  isSupportedProvider,
+  type SupportedProvider,
+} from "@shared";
 import { generateObject } from "ai";
-import { createLLMModel } from "@/clients/llm-client";
+import { createLLMModel, detectProviderFromModel } from "@/clients/llm-client";
 import logger from "@/logging";
 import {
   AgentModel,
   InternalMcpCatalogModel,
+  LlmProviderApiKeyModel,
+  LlmProviderApiKeyModelLinkModel,
   ToolInvocationPolicyModel,
   ToolModel,
   TrustedDataPolicyModel,
 } from "@/models";
+import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import { renderSystemPrompt } from "@/templating";
 import type { Tool } from "@/types";
-import { type PolicyConfig, PolicyConfigSchema } from "@/types";
+import {
+  mapToolInvocationAction,
+  mapTrustedDataAction,
+  type PolicyConfig,
+  PolicyConfigSchema,
+} from "@/types";
 import { resolveSmartDefaultLlm } from "@/utils/llm-resolution";
 
 interface ResolvedLlm {
@@ -40,13 +53,26 @@ interface BulkAutoPolicyResult {
  */
 export class PolicyConfigurationService {
   /**
-   * Resolve the LLM provider/key for an organization.
-   * Returns the resolved config or null if unavailable.
+   * Resolve the LLM provider/key using the built-in agent's configured
+   * llmApiKeyId/llmModel, falling back to the org-wide smart default.
    */
   async resolveLlm(params: {
     organizationId: string;
     userId?: string;
   }): Promise<ResolvedLlm | null> {
+    const { organizationId } = params;
+
+    // Check the built-in agent's own LLM configuration first
+    const builtInAgent = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+      organizationId,
+    );
+
+    if (builtInAgent) {
+      const agentLlm = await resolveAgentLlm(builtInAgent);
+      if (agentLlm) return agentLlm;
+    }
+
     return resolveSmartDefaultLlm(params);
   }
 
@@ -122,16 +148,24 @@ export class PolicyConfigurationService {
         organizationId,
       });
 
+      // Map LLM-facing enum values to database-stored values
+      const dbInvocationAction = mapToolInvocationAction(
+        policyConfig.toolInvocationAction,
+      );
+      const dbTrustedDataAction = mapTrustedDataAction(
+        policyConfig.trustedDataAction,
+      );
+
       // Create/upsert call policy (tool invocation policy)
       await ToolInvocationPolicyModel.bulkUpsertDefaultPolicy(
         [toolId],
-        policyConfig.toolInvocationAction,
+        dbInvocationAction,
       );
 
       // Create/upsert result policy (trusted data policy)
       await TrustedDataPolicyModel.bulkUpsertDefaultPolicy(
         [toolId],
-        policyConfig.trustedDataAction,
+        dbTrustedDataAction,
       );
 
       // Update tool with timestamps, reasoning, and model for tracking
@@ -192,7 +226,7 @@ export class PolicyConfigurationService {
       // Set loading timestamp to show loading state in UI
       await ToolModel.setAutoConfiguringState(toolId);
 
-      // Create a 10-second timeout promise
+      // Create a 20-second timeout promise
       const timeoutPromise = new Promise<{
         success: false;
         timedOut: true;
@@ -202,9 +236,9 @@ export class PolicyConfigurationService {
           resolve({
             success: false,
             timedOut: true,
-            error: "Auto-configure timed out (>10s)",
+            error: "Auto-configure timed out (>20s)",
           });
-        }, 10000);
+        }, 20000);
       });
 
       // Race between auto-configure and timeout
@@ -295,8 +329,8 @@ export class PolicyConfigurationService {
       "configurePoliciesForTools: starting bulk auto-configure",
     );
 
-    // Resolve LLM once for all tools
-    const resolvedLlm = await resolveSmartDefaultLlm({
+    // Resolve LLM once for all tools (respects built-in agent's configured key/model)
+    const resolvedLlm = await this.resolveLlm({
       organizationId,
       userId,
     });
@@ -360,7 +394,7 @@ export class PolicyConfigurationService {
    * Analyze a tool and determine appropriate security policies using LLM
    */
   private async analyzeTool(params: {
-    tool: Pick<Tool, "id" | "name" | "description" | "parameters">;
+    tool: Pick<Tool, "id" | "name" | "description" | "parameters" | "meta">;
     mcpServerName: string | null;
     provider: SupportedProvider;
     apiKey: string | undefined;
@@ -405,7 +439,23 @@ export class PolicyConfigurationService {
       modelName,
       baseUrl,
     });
-    const prompt = buildPrompt(builtInAgent.systemPrompt, tool, mcpServerName);
+    const annotations = tool.meta?.annotations as
+      | Record<string, unknown>
+      | undefined;
+    const prompt =
+      renderSystemPrompt(builtInAgent.systemPrompt, null, {
+        tool: {
+          name: tool.name,
+          description: tool.description || "No description provided",
+          parameters: tool.parameters
+            ? JSON.stringify(tool.parameters, null, 2)
+            : "No parameters",
+          annotations: annotations
+            ? JSON.stringify(annotations, null, 2)
+            : "Not provided",
+        },
+        mcpServerName: mcpServerName || "Unknown",
+      }) ?? "";
 
     try {
       const result = await generateObject({
@@ -441,28 +491,57 @@ export class PolicyConfigurationService {
   }
 }
 
-/**
- * Build the analysis prompt by substituting tool metadata into the template.
- * The template comes from the built-in agent's systemPrompt.
- */
-function buildPrompt(
-  template: string,
-  tool: Pick<Tool, "name" | "description" | "parameters">,
-  mcpServerName: string | null,
-): string {
-  return template
-    .replaceAll("{tool.name}", tool.name)
-    .replaceAll(
-      "{tool.description}",
-      tool.description || "No description provided",
-    )
-    .replaceAll("{mcpServerName}", mcpServerName || "Unknown")
-    .replaceAll(
-      "{tool.parameters}",
-      tool.parameters
-        ? JSON.stringify(tool.parameters, null, 2)
-        : "No parameters",
-    );
-}
-
 export const policyConfigurationService = new PolicyConfigurationService();
+
+/**
+ * Resolve LLM from the agent's own llmApiKeyId/llmModel configuration.
+ * Mirrors the agent-level resolution in conversation-llm-selection.ts.
+ */
+async function resolveAgentLlm(agent: {
+  llmApiKeyId: string | null;
+  llmModel: string | null;
+}): Promise<ResolvedLlm | null> {
+  if (agent.llmApiKeyId) {
+    const apiKeyRecord = await LlmProviderApiKeyModel.findById(
+      agent.llmApiKeyId,
+    );
+    if (!apiKeyRecord) return null;
+
+    const provider = isSupportedProvider(apiKeyRecord.provider)
+      ? apiKeyRecord.provider
+      : detectProviderFromModel(agent.llmModel ?? "");
+
+    // Resolve the actual API key secret
+    let apiKey: string | undefined;
+    if (apiKeyRecord.secretId) {
+      const secret = await getSecretValueForLlmProviderApiKey(
+        apiKeyRecord.secretId,
+      );
+      apiKey = (secret as string) ?? undefined;
+    }
+
+    const modelName =
+      agent.llmModel ??
+      (await LlmProviderApiKeyModelLinkModel.getBestModel(apiKeyRecord.id))
+        ?.modelId;
+    if (!modelName) return null;
+
+    return {
+      provider,
+      apiKey,
+      modelName,
+      baseUrl: apiKeyRecord.baseUrl,
+    };
+  }
+
+  if (agent.llmModel) {
+    return {
+      provider: detectProviderFromModel(agent.llmModel),
+      apiKey: undefined,
+      modelName: agent.llmModel,
+      baseUrl: null,
+    };
+  }
+
+  return null;
+}

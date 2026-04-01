@@ -70,7 +70,7 @@ function makeBuiltInAgent(params: {
             }
           : {
               name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-              autoConfigureOnToolAssignment: false,
+              autoConfigureOnToolDiscovery: false,
             },
     builtIn: true,
     createdAt: new Date(),

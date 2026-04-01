@@ -968,7 +968,7 @@ export const requiredEndpointPermissionsMap: Partial<
 export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // Chat
   "/chat": { chat: ["read"] },
-  "/chat/shared": { chat: ["read"] },
+  "/chat/[conversationId]": { chat: ["read"] },
 
   // Agents
   "/agents": { agent: ["read"] },

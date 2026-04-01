@@ -13,7 +13,11 @@ export { default as chatopsProcessedMessagesTable } from "./chatops-processed-me
 export { default as connectorRunsTable } from "./connector-run";
 export { default as conversationsTable } from "./conversation";
 export { default as conversationEnabledToolsTable } from "./conversation-enabled-tool";
-export { default as conversationSharesTable } from "./conversation-share";
+export {
+  conversationShareTeamsTable,
+  conversationShareUsersTable,
+  default as conversationSharesTable,
+} from "./conversation-share";
 export { default as identityProvidersTable } from "./identity-provider";
 export { default as incomingEmailSubscriptionsTable } from "./incoming-email-subscription";
 export { default as interactionsTable } from "./interaction";

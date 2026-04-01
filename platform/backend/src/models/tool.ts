@@ -2,6 +2,7 @@ import {
   AGENT_TOOL_PREFIX,
   ARCHESTRA_MCP_CATALOG_ID,
   ARCHESTRA_TOOL_SHORT_NAMES,
+  BUILT_IN_AGENT_IDS,
   DEFAULT_ARCHESTRA_TOOL_NAMES,
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
@@ -595,6 +596,9 @@ class ToolModel {
       for (const tool of insertedTools) {
         await ToolModel.createDefaultPolicies(tool.id);
       }
+
+      // Auto-configure policies via LLM if enabled (fire-and-forget)
+      ToolModel.triggerAutoConfigureIfEnabled(insertedTools.map((t) => t.id));
 
       // If some tools weren't inserted due to conflict, fetch them
       if (insertedTools.length < toolsToInsert.length) {
@@ -1330,6 +1334,9 @@ class ToolModel {
       for (const tool of insertedTools) {
         await ToolModel.createDefaultPolicies(tool.id);
       }
+
+      // Auto-configure policies via LLM if enabled (fire-and-forget)
+      ToolModel.triggerAutoConfigureIfEnabled(insertedTools.map((t) => t.id));
 
       created.push(...insertedTools);
     }
@@ -2087,6 +2094,53 @@ class ToolModel {
       TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
     );
     return tools.filter((t) => t.name !== brandedKnowledgeToolName);
+  }
+
+  /**
+   * Fire-and-forget: check if auto-configure is enabled, then run LLM-based
+   * policy analysis for newly discovered tools.
+   */
+  private static triggerAutoConfigureIfEnabled(toolIds: string[]) {
+    if (toolIds.length === 0) return;
+
+    db.select({ id: schema.organizationsTable.id })
+      .from(schema.organizationsTable)
+      .limit(1)
+      .then(async (rows) => {
+        if (rows.length === 0) return;
+        const organizationId = rows[0].id;
+
+        const { policyConfigurationService } = await import(
+          "@/agents/subagents/policy-configuration"
+        );
+        const { default: AgentModel } = await import("./agent");
+
+        const builtInAgent = await AgentModel.getBuiltInAgent(
+          BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+          organizationId,
+        );
+        const config = builtInAgent?.builtInAgentConfig;
+        if (
+          config?.name !== BUILT_IN_AGENT_IDS.POLICY_CONFIG ||
+          !config.autoConfigureOnToolDiscovery
+        ) {
+          return;
+        }
+
+        await policyConfigurationService.configurePoliciesForTools({
+          toolIds,
+          organizationId,
+        });
+      })
+      .catch((error) => {
+        logger.error(
+          {
+            toolIds,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          "Failed to trigger auto-configure for discovered tools",
+        );
+      });
   }
 }
 

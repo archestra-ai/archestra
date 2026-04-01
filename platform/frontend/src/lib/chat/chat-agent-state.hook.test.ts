@@ -214,6 +214,7 @@ function makeConversation(
       agentType: "agent",
       llmApiKeyId: null,
     },
+    share: null,
     messages: [],
     ...overrides,
   };

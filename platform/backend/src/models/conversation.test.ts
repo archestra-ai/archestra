@@ -1,5 +1,7 @@
 import { describe, expect, test } from "@/test";
 import ConversationModel from "./conversation";
+import ConversationShareModel from "./conversation-share";
+import MessageModel from "./message";
 
 describe("ConversationModel", () => {
   test("can create a conversation", async ({
@@ -316,6 +318,169 @@ describe("ConversationModel", () => {
       id: "550e8400-e29b-41d4-a716-446655440000",
       userId: user.id,
       organizationId: org.id,
+    });
+
+    expect(found).toBeNull();
+  });
+
+  test("findAccessibleById returns owned conversation", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Owned Agent", teams: [] });
+
+    const conversation = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Owned Conversation",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    const found = await ConversationModel.findAccessibleById({
+      id: conversation.id,
+      userId: user.id,
+      organizationId: org.id,
+    });
+
+    expect(found?.id).toBe(conversation.id);
+    expect(found?.title).toBe("Owned Conversation");
+  });
+
+  test("findAccessibleById returns shared conversation for authorized non-owner", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+    makeMember,
+  }) => {
+    const owner = await makeUser();
+    const viewer = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Shared Agent", teams: [] });
+
+    await makeMember(owner.id, org.id);
+    await makeMember(viewer.id, org.id);
+
+    const conversation = await ConversationModel.create({
+      userId: owner.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Shared Conversation",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "user",
+      content: {
+        id: "temp-id",
+        role: "user",
+        parts: [{ type: "text", text: "Hello shared world" }],
+      },
+    });
+
+    await ConversationShareModel.upsert({
+      conversationId: conversation.id,
+      organizationId: org.id,
+      createdByUserId: owner.id,
+      visibility: "organization",
+      teamIds: [],
+      userIds: [],
+    });
+
+    const found = await ConversationModel.findAccessibleById({
+      id: conversation.id,
+      userId: viewer.id,
+      organizationId: org.id,
+    });
+
+    expect(found?.id).toBe(conversation.id);
+    expect(found?.userId).toBe(owner.id);
+    expect(found?.share).toMatchObject({ visibility: "organization" });
+    expect(found?.messages).toHaveLength(1);
+  });
+
+  test("findAccessibleById returns null for unauthorized user", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+    makeMember,
+  }) => {
+    const owner = await makeUser();
+    const invitedUser = await makeUser();
+    const outsider = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Private Share Agent", teams: [] });
+
+    await makeMember(owner.id, org.id);
+    await makeMember(invitedUser.id, org.id);
+    await makeMember(outsider.id, org.id);
+
+    const conversation = await ConversationModel.create({
+      userId: owner.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Private Shared Conversation",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    await ConversationShareModel.upsert({
+      conversationId: conversation.id,
+      organizationId: org.id,
+      createdByUserId: owner.id,
+      visibility: "user",
+      teamIds: [],
+      userIds: [invitedUser.id],
+    });
+
+    const found = await ConversationModel.findAccessibleById({
+      id: conversation.id,
+      userId: outsider.id,
+      organizationId: org.id,
+    });
+
+    expect(found).toBeNull();
+  });
+
+  test("findAccessibleById returns null for shared conversation in a different organization", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+    makeMember,
+  }) => {
+    const owner = await makeUser();
+    const viewer = await makeUser();
+    const org = await makeOrganization();
+    const otherOrg = await makeOrganization();
+    const agent = await makeAgent({ name: "Org Scoped Agent", teams: [] });
+
+    await makeMember(owner.id, org.id);
+    await makeMember(viewer.id, org.id);
+
+    const conversation = await ConversationModel.create({
+      userId: owner.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Org Scoped Conversation",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    await ConversationShareModel.upsert({
+      conversationId: conversation.id,
+      organizationId: org.id,
+      createdByUserId: owner.id,
+      visibility: "organization",
+      teamIds: [],
+      userIds: [],
+    });
+
+    const found = await ConversationModel.findAccessibleById({
+      id: conversation.id,
+      userId: viewer.id,
+      organizationId: otherOrg.id,
     });
 
     expect(found).toBeNull();

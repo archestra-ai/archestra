@@ -37769,13 +37769,13 @@
                                       "policy-configuration-subagent"
                                     ]
                                   },
-                                  "autoConfigureOnToolAssignment": {
+                                  "autoConfigureOnToolDiscovery": {
                                     "type": "boolean"
                                   }
                                 },
                                 "required": [
                                   "name",
-                                  "autoConfigureOnToolAssignment"
+                                  "autoConfigureOnToolDiscovery"
                                 ],
                                 "additionalProperties": false
                               },
@@ -38437,13 +38437,13 @@
                               "policy-configuration-subagent"
                             ]
                           },
-                          "autoConfigureOnToolAssignment": {
+                          "autoConfigureOnToolDiscovery": {
                             "type": "boolean"
                           }
                         },
                         "required": [
                           "name",
-                          "autoConfigureOnToolAssignment"
+                          "autoConfigureOnToolDiscovery"
                         ]
                       },
                       {
@@ -38664,13 +38664,13 @@
                                 "policy-configuration-subagent"
                               ]
                             },
-                            "autoConfigureOnToolAssignment": {
+                            "autoConfigureOnToolDiscovery": {
                               "type": "boolean"
                             }
                           },
                           "required": [
                             "name",
-                            "autoConfigureOnToolAssignment"
+                            "autoConfigureOnToolDiscovery"
                           ],
                           "additionalProperties": false
                         },
@@ -39357,13 +39357,13 @@
                                   "policy-configuration-subagent"
                                 ]
                               },
-                              "autoConfigureOnToolAssignment": {
+                              "autoConfigureOnToolDiscovery": {
                                 "type": "boolean"
                               }
                             },
                             "required": [
                               "name",
-                              "autoConfigureOnToolAssignment"
+                              "autoConfigureOnToolDiscovery"
                             ],
                             "additionalProperties": false
                           },
@@ -39990,13 +39990,13 @@
                                 "policy-configuration-subagent"
                               ]
                             },
-                            "autoConfigureOnToolAssignment": {
+                            "autoConfigureOnToolDiscovery": {
                               "type": "boolean"
                             }
                           },
                           "required": [
                             "name",
-                            "autoConfigureOnToolAssignment"
+                            "autoConfigureOnToolDiscovery"
                           ],
                           "additionalProperties": false
                         },
@@ -40623,13 +40623,13 @@
                                 "policy-configuration-subagent"
                               ]
                             },
-                            "autoConfigureOnToolAssignment": {
+                            "autoConfigureOnToolDiscovery": {
                               "type": "boolean"
                             }
                           },
                           "required": [
                             "name",
-                            "autoConfigureOnToolAssignment"
+                            "autoConfigureOnToolDiscovery"
                           ],
                           "additionalProperties": false
                         },
@@ -41268,13 +41268,13 @@
                                 "policy-configuration-subagent"
                               ]
                             },
-                            "autoConfigureOnToolAssignment": {
+                            "autoConfigureOnToolDiscovery": {
                               "type": "boolean"
                             }
                           },
                           "required": [
                             "name",
-                            "autoConfigureOnToolAssignment"
+                            "autoConfigureOnToolDiscovery"
                           ],
                           "additionalProperties": false
                         },
@@ -41888,13 +41888,13 @@
                               "policy-configuration-subagent"
                             ]
                           },
-                          "autoConfigureOnToolAssignment": {
+                          "autoConfigureOnToolDiscovery": {
                             "type": "boolean"
                           }
                         },
                         "required": [
                           "name",
-                          "autoConfigureOnToolAssignment"
+                          "autoConfigureOnToolDiscovery"
                         ]
                       },
                       {
@@ -42120,13 +42120,13 @@
                                 "policy-configuration-subagent"
                               ]
                             },
-                            "autoConfigureOnToolAssignment": {
+                            "autoConfigureOnToolDiscovery": {
                               "type": "boolean"
                             }
                           },
                           "required": [
                             "name",
-                            "autoConfigureOnToolAssignment"
+                            "autoConfigureOnToolDiscovery"
                           ],
                           "additionalProperties": false
                         },
@@ -45114,16 +45114,16 @@
                               "toolInvocationAction": {
                                 "type": "string",
                                 "enum": [
-                                  "allow_when_context_is_untrusted",
-                                  "block_when_context_is_untrusted",
+                                  "allow_when_context_is_sensitive",
+                                  "block_when_context_is_sensitive",
                                   "block_always"
                                 ]
                               },
                               "trustedDataAction": {
                                 "type": "string",
                                 "enum": [
-                                  "mark_as_trusted",
-                                  "mark_as_untrusted",
+                                  "mark_as_safe",
+                                  "mark_as_sensitive",
                                   "sanitize_with_dual_llm",
                                   "block_always"
                                 ]
@@ -54203,24 +54203,6 @@
                           {
                             "type": "object",
                             "properties": {
-                              "auto": {
-                                "type": "object",
-                                "properties": {}
-                              }
-                            }
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "any": {
-                                "type": "object",
-                                "properties": {}
-                              }
-                            }
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
                               "tool": {
                                 "type": "object",
                                 "properties": {
@@ -54235,7 +54217,36 @@
                             },
                             "required": [
                               "tool"
-                            ]
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "any": {
+                                "type": "object",
+                                "properties": {},
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": [
+                              "any"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "auto": {
+                                "type": "object",
+                                "properties": {},
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": [
+                              "auto"
+                            ],
+                            "additionalProperties": {}
                           }
                         ]
                       }
@@ -55387,24 +55398,6 @@
                           {
                             "type": "object",
                             "properties": {
-                              "auto": {
-                                "type": "object",
-                                "properties": {}
-                              }
-                            }
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "any": {
-                                "type": "object",
-                                "properties": {}
-                              }
-                            }
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
                               "tool": {
                                 "type": "object",
                                 "properties": {
@@ -55419,7 +55412,36 @@
                             },
                             "required": [
                               "tool"
-                            ]
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "any": {
+                                "type": "object",
+                                "properties": {},
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": [
+                              "any"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "auto": {
+                                "type": "object",
+                                "properties": {},
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": [
+                              "auto"
+                            ],
+                            "additionalProperties": {}
                           }
                         ]
                       }
@@ -56581,24 +56603,6 @@
                           {
                             "type": "object",
                             "properties": {
-                              "auto": {
-                                "type": "object",
-                                "properties": {}
-                              }
-                            }
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "any": {
-                                "type": "object",
-                                "properties": {}
-                              }
-                            }
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
                               "tool": {
                                 "type": "object",
                                 "properties": {
@@ -56613,7 +56617,36 @@
                             },
                             "required": [
                               "tool"
-                            ]
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "any": {
+                                "type": "object",
+                                "properties": {},
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": [
+                              "any"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "auto": {
+                                "type": "object",
+                                "properties": {},
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": [
+                              "auto"
+                            ],
+                            "additionalProperties": {}
                           }
                         ]
                       }
@@ -57338,24 +57371,6 @@
                           {
                             "type": "object",
                             "properties": {
-                              "auto": {
-                                "type": "object",
-                                "properties": {}
-                              }
-                            }
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "any": {
-                                "type": "object",
-                                "properties": {}
-                              }
-                            }
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
                               "tool": {
                                 "type": "object",
                                 "properties": {
@@ -57370,7 +57385,36 @@
                             },
                             "required": [
                               "tool"
-                            ]
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "any": {
+                                "type": "object",
+                                "properties": {},
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": [
+                              "any"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "auto": {
+                                "type": "object",
+                                "properties": {},
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": [
+                              "auto"
+                            ],
+                            "additionalProperties": {}
                           }
                         ]
                       }
@@ -58105,24 +58149,6 @@
                           {
                             "type": "object",
                             "properties": {
-                              "auto": {
-                                "type": "object",
-                                "properties": {}
-                              }
-                            }
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "any": {
-                                "type": "object",
-                                "properties": {}
-                              }
-                            }
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
                               "tool": {
                                 "type": "object",
                                 "properties": {
@@ -58137,7 +58163,36 @@
                             },
                             "required": [
                               "tool"
-                            ]
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "any": {
+                                "type": "object",
+                                "properties": {},
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": [
+                              "any"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "auto": {
+                                "type": "object",
+                                "properties": {},
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": [
+                              "auto"
+                            ],
+                            "additionalProperties": {}
                           }
                         ]
                       }
@@ -59304,24 +59359,6 @@
                           {
                             "type": "object",
                             "properties": {
-                              "auto": {
-                                "type": "object",
-                                "properties": {}
-                              }
-                            }
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "any": {
-                                "type": "object",
-                                "properties": {}
-                              }
-                            }
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
                               "tool": {
                                 "type": "object",
                                 "properties": {
@@ -59336,7 +59373,36 @@
                             },
                             "required": [
                               "tool"
-                            ]
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "any": {
+                                "type": "object",
+                                "properties": {},
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": [
+                              "any"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "auto": {
+                                "type": "object",
+                                "properties": {},
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": [
+                              "auto"
+                            ],
+                            "additionalProperties": {}
                           }
                         ]
                       }
@@ -60707,6 +60773,30 @@
                         ],
                         "additionalProperties": false
                       },
+                      "share": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "visibility": {
+                            "type": "string",
+                            "enum": [
+                              "organization",
+                              "team",
+                              "user"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "visibility"
+                        ],
+                        "additionalProperties": false
+                      },
                       "messages": {
                         "type": "array",
                         "items": {}
@@ -60728,6 +60818,7 @@
                       "createdAt",
                       "updatedAt",
                       "agent",
+                      "share",
                       "messages"
                     ],
                     "additionalProperties": false
@@ -61164,6 +61255,30 @@
                       ],
                       "additionalProperties": false
                     },
+                    "share": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "visibility": {
+                          "type": "string",
+                          "enum": [
+                            "organization",
+                            "team",
+                            "user"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "visibility"
+                      ],
+                      "additionalProperties": false
+                    },
                     "messages": {
                       "type": "array",
                       "items": {}
@@ -61185,6 +61300,7 @@
                     "createdAt",
                     "updatedAt",
                     "agent",
+                    "share",
                     "messages"
                   ],
                   "additionalProperties": false
@@ -61580,6 +61696,30 @@
                       ],
                       "additionalProperties": false
                     },
+                    "share": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "visibility": {
+                          "type": "string",
+                          "enum": [
+                            "organization",
+                            "team",
+                            "user"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "visibility"
+                      ],
+                      "additionalProperties": false
+                    },
                     "messages": {
                       "type": "array",
                       "items": {}
@@ -61601,6 +61741,7 @@
                     "createdAt",
                     "updatedAt",
                     "agent",
+                    "share",
                     "messages"
                   ],
                   "additionalProperties": false
@@ -62055,6 +62196,30 @@
                       ],
                       "additionalProperties": false
                     },
+                    "share": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "visibility": {
+                          "type": "string",
+                          "enum": [
+                            "organization",
+                            "team",
+                            "user"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "visibility"
+                      ],
+                      "additionalProperties": false
+                    },
                     "messages": {
                       "type": "array",
                       "items": {}
@@ -62076,6 +62241,7 @@
                     "createdAt",
                     "updatedAt",
                     "agent",
+                    "share",
                     "messages"
                   ],
                   "additionalProperties": false
@@ -62876,12 +63042,26 @@
                     "visibility": {
                       "type": "string",
                       "enum": [
-                        "organization"
+                        "organization",
+                        "team",
+                        "user"
                       ]
                     },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "teamIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "userIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -62890,7 +63070,9 @@
                     "organizationId",
                     "createdByUserId",
                     "visibility",
-                    "createdAt"
+                    "createdAt",
+                    "teamIds",
+                    "userIds"
                   ],
                   "additionalProperties": false
                 }
@@ -63120,7 +63302,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Share a conversation with your organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:update`: Edit chat messages and conversation settings",
+        "description": "Share a conversation with your organization, specific teams, or specific users\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:update`: Edit chat messages and conversation settings",
         "requestBody": {
           "required": true,
           "content": {
@@ -63131,8 +63313,22 @@
                   "visibility": {
                     "type": "string",
                     "enum": [
-                      "organization"
+                      "organization",
+                      "team",
+                      "user"
                     ]
+                  },
+                  "teamIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "userIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 },
                 "required": [
@@ -63181,12 +63377,26 @@
                     "visibility": {
                       "type": "string",
                       "enum": [
-                        "organization"
+                        "organization",
+                        "team",
+                        "user"
                       ]
                     },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "teamIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "userIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -63195,7 +63405,9 @@
                     "organizationId",
                     "createdByUserId",
                     "visibility",
-                    "createdAt"
+                    "createdAt",
+                    "teamIds",
+                    "userIds"
                   ],
                   "additionalProperties": false
                 }
@@ -63846,6 +64058,30 @@
                       ],
                       "additionalProperties": false
                     },
+                    "share": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "visibility": {
+                          "type": "string",
+                          "enum": [
+                            "organization",
+                            "team",
+                            "user"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "visibility"
+                      ],
+                      "additionalProperties": false
+                    },
                     "messages": {
                       "type": "array",
                       "items": {}
@@ -63870,6 +64106,7 @@
                     "createdAt",
                     "updatedAt",
                     "agent",
+                    "share",
                     "messages",
                     "sharedByUserId"
                   ],
@@ -64286,6 +64523,30 @@
                       ],
                       "additionalProperties": false
                     },
+                    "share": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "visibility": {
+                          "type": "string",
+                          "enum": [
+                            "organization",
+                            "team",
+                            "user"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "visibility"
+                      ],
+                      "additionalProperties": false
+                    },
                     "messages": {
                       "type": "array",
                       "items": {}
@@ -64307,6 +64568,7 @@
                     "createdAt",
                     "updatedAt",
                     "agent",
+                    "share",
                     "messages"
                   ],
                   "additionalProperties": false
@@ -64718,6 +64980,30 @@
                       ],
                       "additionalProperties": false
                     },
+                    "share": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "visibility": {
+                          "type": "string",
+                          "enum": [
+                            "organization",
+                            "team",
+                            "user"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "visibility"
+                      ],
+                      "additionalProperties": false
+                    },
                     "messages": {
                       "type": "array",
                       "items": {}
@@ -64739,6 +65025,7 @@
                     "createdAt",
                     "updatedAt",
                     "agent",
+                    "share",
                     "messages"
                   ],
                   "additionalProperties": false
@@ -65160,6 +65447,30 @@
                       ],
                       "additionalProperties": false
                     },
+                    "share": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "visibility": {
+                          "type": "string",
+                          "enum": [
+                            "organization",
+                            "team",
+                            "user"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "visibility"
+                      ],
+                      "additionalProperties": false
+                    },
                     "messages": {
                       "type": "array",
                       "items": {}
@@ -65181,6 +65492,7 @@
                     "createdAt",
                     "updatedAt",
                     "agent",
+                    "share",
                     "messages"
                   ],
                   "additionalProperties": false
@@ -75774,28 +76086,6 @@
                                           {
                                             "type": "object",
                                             "properties": {
-                                              "auto": {
-                                                "type": "object",
-                                                "properties": {},
-                                                "additionalProperties": false
-                                              }
-                                            },
-                                            "additionalProperties": false
-                                          },
-                                          {
-                                            "type": "object",
-                                            "properties": {
-                                              "any": {
-                                                "type": "object",
-                                                "properties": {},
-                                                "additionalProperties": false
-                                              }
-                                            },
-                                            "additionalProperties": false
-                                          },
-                                          {
-                                            "type": "object",
-                                            "properties": {
                                               "tool": {
                                                 "type": "object",
                                                 "properties": {
@@ -75812,7 +76102,35 @@
                                             "required": [
                                               "tool"
                                             ],
-                                            "additionalProperties": false
+                                            "additionalProperties": {}
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "any": {
+                                                "type": "object",
+                                                "properties": {},
+                                                "additionalProperties": {}
+                                              }
+                                            },
+                                            "required": [
+                                              "any"
+                                            ],
+                                            "additionalProperties": {}
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "auto": {
+                                                "type": "object",
+                                                "properties": {},
+                                                "additionalProperties": {}
+                                              }
+                                            },
+                                            "required": [
+                                              "auto"
+                                            ],
+                                            "additionalProperties": {}
                                           }
                                         ]
                                       }
@@ -76525,28 +76843,6 @@
                                           {
                                             "type": "object",
                                             "properties": {
-                                              "auto": {
-                                                "type": "object",
-                                                "properties": {},
-                                                "additionalProperties": false
-                                              }
-                                            },
-                                            "additionalProperties": false
-                                          },
-                                          {
-                                            "type": "object",
-                                            "properties": {
-                                              "any": {
-                                                "type": "object",
-                                                "properties": {},
-                                                "additionalProperties": false
-                                              }
-                                            },
-                                            "additionalProperties": false
-                                          },
-                                          {
-                                            "type": "object",
-                                            "properties": {
                                               "tool": {
                                                 "type": "object",
                                                 "properties": {
@@ -76563,7 +76859,35 @@
                                             "required": [
                                               "tool"
                                             ],
-                                            "additionalProperties": false
+                                            "additionalProperties": {}
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "any": {
+                                                "type": "object",
+                                                "properties": {},
+                                                "additionalProperties": {}
+                                              }
+                                            },
+                                            "required": [
+                                              "any"
+                                            ],
+                                            "additionalProperties": {}
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "auto": {
+                                                "type": "object",
+                                                "properties": {},
+                                                "additionalProperties": {}
+                                              }
+                                            },
+                                            "required": [
+                                              "auto"
+                                            ],
+                                            "additionalProperties": {}
                                           }
                                         ]
                                       }
@@ -82420,28 +82744,6 @@
                                     {
                                       "type": "object",
                                       "properties": {
-                                        "auto": {
-                                          "type": "object",
-                                          "properties": {},
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "any": {
-                                          "type": "object",
-                                          "properties": {},
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
                                         "tool": {
                                           "type": "object",
                                           "properties": {
@@ -82458,7 +82760,35 @@
                                       "required": [
                                         "tool"
                                       ],
-                                      "additionalProperties": false
+                                      "additionalProperties": {}
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "any": {
+                                          "type": "object",
+                                          "properties": {},
+                                          "additionalProperties": {}
+                                        }
+                                      },
+                                      "required": [
+                                        "any"
+                                      ],
+                                      "additionalProperties": {}
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "auto": {
+                                          "type": "object",
+                                          "properties": {},
+                                          "additionalProperties": {}
+                                        }
+                                      },
+                                      "required": [
+                                        "auto"
+                                      ],
+                                      "additionalProperties": {}
                                     }
                                   ]
                                 }
@@ -83171,28 +83501,6 @@
                                     {
                                       "type": "object",
                                       "properties": {
-                                        "auto": {
-                                          "type": "object",
-                                          "properties": {},
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "any": {
-                                          "type": "object",
-                                          "properties": {},
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
                                         "tool": {
                                           "type": "object",
                                           "properties": {
@@ -83209,7 +83517,35 @@
                                       "required": [
                                         "tool"
                                       ],
-                                      "additionalProperties": false
+                                      "additionalProperties": {}
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "any": {
+                                          "type": "object",
+                                          "properties": {},
+                                          "additionalProperties": {}
+                                        }
+                                      },
+                                      "required": [
+                                        "any"
+                                      ],
+                                      "additionalProperties": {}
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "auto": {
+                                          "type": "object",
+                                          "properties": {},
+                                          "additionalProperties": {}
+                                        }
+                                      },
+                                      "required": [
+                                        "auto"
+                                      ],
+                                      "additionalProperties": {}
                                     }
                                   ]
                                 }

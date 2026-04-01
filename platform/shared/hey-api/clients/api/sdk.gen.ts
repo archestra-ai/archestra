@@ -1021,7 +1021,7 @@ export const unshareConversation = <ThrowOnError extends boolean = false>(option
 export const getConversationShare = <ThrowOnError extends boolean = false>(options: Options<GetConversationShareData, ThrowOnError>) => (options.client ?? client).get<GetConversationShareResponses, GetConversationShareErrors, ThrowOnError>({ url: '/api/chat/conversations/{id}/share', ...options });
 
 /**
- * Share a conversation with your organization
+ * Share a conversation with your organization, specific teams, or specific users
  *
  * Authentication:
  *

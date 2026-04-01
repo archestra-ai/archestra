@@ -50,7 +50,7 @@ export type AgentScopeFilter = z.infer<typeof AgentScopeFilterSchema>;
 // Policy Configuration Subagent config
 const PolicyConfigAgentConfigSchema = z.object({
   name: z.literal(BUILT_IN_AGENT_IDS.POLICY_CONFIG),
-  autoConfigureOnToolAssignment: z.boolean(),
+  autoConfigureOnToolDiscovery: z.boolean(),
 });
 
 const DualLlmMainAgentConfigSchema = z.object({
@@ -242,28 +242,28 @@ export type UpdateAgent = z.infer<typeof UpdateAgentSchema>;
 export const PolicyConfigSchema = z.object({
   toolInvocationAction: z
     .enum([
-      "allow_when_context_is_untrusted",
-      "block_when_context_is_untrusted",
+      "allow_when_context_is_sensitive",
+      "block_when_context_is_sensitive",
       "block_always",
     ])
     .describe(
       "When should this tool be allowed to be invoked? " +
-        "'allow_when_context_is_untrusted' - Allow invocation even when untrusted data is present (safe read-only tools). " +
-        "'block_when_context_is_untrusted' - Allow only when context is trusted, block when untrusted data is present (tools that could leak data). " +
+        "'allow_when_context_is_sensitive' - Allow invocation even when sensitive data is present (safe read-only tools). " +
+        "'block_when_context_is_sensitive' - Allow only when context is safe, block when sensitive data is present (tools that could leak data). " +
         "'block_always' - Never allow automatic invocation (dangerous tools that execute code, write data, or send data externally).",
     ),
   trustedDataAction: z
     .enum([
-      "mark_as_trusted",
-      "mark_as_untrusted",
+      "mark_as_safe",
+      "mark_as_sensitive",
       "sanitize_with_dual_llm",
       "block_always",
     ])
     .describe(
       "How should the tool's results be treated? " +
-        "'mark_as_trusted' - Results are trusted and can be used directly (internal systems, databases, dev tools). " +
-        "'mark_as_untrusted' - Results are untrusted and will restrict subsequent tool usage (external/filesystem data where exact values are safe). " +
-        "'sanitize_with_dual_llm' - Results are processed through dual LLM security pattern (untrusted data that needs summarization). " +
+        "'mark_as_safe' - Results are safe and can be used directly (internal systems, databases, dev tools). " +
+        "'mark_as_sensitive' - Results are sensitive and will restrict subsequent tool usage (external/filesystem data where exact values are safe). " +
+        "'sanitize_with_dual_llm' - Results are processed through dual LLM security pattern (sensitive data that needs summarization). " +
         "'block_always' - Results are blocked entirely (highly sensitive or dangerous output).",
     ),
   reasoning: z
@@ -274,3 +274,40 @@ export const PolicyConfigSchema = z.object({
 });
 
 export type PolicyConfig = z.infer<typeof PolicyConfigSchema>;
+
+/** Maps LLM-facing PolicyConfig enum values to the database-stored policy values. */
+const TOOL_INVOCATION_ACTION_MAP: Record<
+  PolicyConfig["toolInvocationAction"],
+  | "allow_when_context_is_untrusted"
+  | "block_when_context_is_untrusted"
+  | "block_always"
+> = {
+  allow_when_context_is_sensitive: "allow_when_context_is_untrusted",
+  block_when_context_is_sensitive: "block_when_context_is_untrusted",
+  block_always: "block_always",
+};
+
+const TRUSTED_DATA_ACTION_MAP: Record<
+  PolicyConfig["trustedDataAction"],
+  | "mark_as_trusted"
+  | "mark_as_untrusted"
+  | "sanitize_with_dual_llm"
+  | "block_always"
+> = {
+  mark_as_safe: "mark_as_trusted",
+  mark_as_sensitive: "mark_as_untrusted",
+  sanitize_with_dual_llm: "sanitize_with_dual_llm",
+  block_always: "block_always",
+};
+
+export function mapToolInvocationAction(
+  action: PolicyConfig["toolInvocationAction"],
+) {
+  return TOOL_INVOCATION_ACTION_MAP[action];
+}
+
+export function mapTrustedDataAction(
+  action: PolicyConfig["trustedDataAction"],
+) {
+  return TRUSTED_DATA_ACTION_MAP[action];
+}

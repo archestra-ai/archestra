@@ -6,6 +6,14 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { ConversationShareVisibilitySchema } from "./conversation-share";
+
+const ConversationShareSummarySchema = z
+  .object({
+    id: z.string().uuid(),
+    visibility: ConversationShareVisibilitySchema,
+  })
+  .nullable();
 
 // Override selectedProvider to use the proper enum type
 // For select schema, it's nullable (matches DB schema)
@@ -31,6 +39,7 @@ export const SelectConversationSchema = createSelectSchema(
       llmApiKeyId: z.string().nullable(),
     })
     .nullable(),
+  share: ConversationShareSummarySchema,
   messages: z.array(z.any()), // UIMessage[] from AI SDK
   ...selectExtendedFields,
 });

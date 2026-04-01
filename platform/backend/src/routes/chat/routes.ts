@@ -54,7 +54,7 @@ import { resolveConversationLlmSelectionForAgent } from "@/services/conversation
 import {
   promptNeedsRendering,
   renderSystemPrompt,
-  type SystemPromptContext,
+  type UserSystemPromptContext,
 } from "@/templating";
 import {
   ApiError,
@@ -213,7 +213,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let systemPrompt: string | undefined;
 
       // Build template context only when prompts use Handlebars syntax
-      let promptContext: SystemPromptContext | null = null;
+      let promptContext: UserSystemPromptContext | null = null;
       if (promptNeedsRendering(agent.systemPrompt)) {
         const userTeams = await TeamModel.getUserTeams(user.id);
         promptContext = buildUserSystemPromptContext({

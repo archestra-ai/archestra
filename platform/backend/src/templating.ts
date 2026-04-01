@@ -1,6 +1,6 @@
 import {
   SYSTEM_PROMPT_HELPER_NAMES,
-  type UserSystemPromptContext as SystemPromptContext,
+  type UserSystemPromptContext,
 } from "@shared";
 import Handlebars from "handlebars";
 import logger from "@/logging";
@@ -173,11 +173,11 @@ export function promptNeedsRendering(
  *
  * @param additionalContext - Optional extra context merged alongside user context.
  *   Used by specific subagents (e.g. policy configuration) to inject agent-specific
- *   template variables without polluting the shared SystemPromptContext interface.
+ *   template variables without polluting the shared UserSystemPromptContext interface.
  */
 export function renderSystemPrompt(
   systemPrompt: string | null,
-  context?: SystemPromptContext | null,
+  context?: UserSystemPromptContext | null,
   additionalContext?: Record<string, unknown>,
 ): string | null {
   if (!systemPrompt) {
@@ -263,3 +263,5 @@ export function extractGroupsWithTemplate(
     return [];
   }
 }
+
+export type { UserSystemPromptContext };

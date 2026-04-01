@@ -1051,6 +1051,12 @@ export function AssignedToolsTable({
                       <SelectItem value="block_when_context_is_untrusted">
                         Allow in safe context
                       </SelectItem>
+                      <SelectItem
+                        value="require_approval"
+                        description="Requires user confirmation before executing in chat. In autonomous agent sessions (A2A, API, MS Teams, subagents), the tool call is blocked."
+                      >
+                        Require approval
+                      </SelectItem>
                       <SelectItem value="block_always">Block always</SelectItem>
                     </SelectContent>
                   </Select>

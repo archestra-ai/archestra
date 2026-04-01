@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 import { restoreRenderableAssistantParts } from "./chat-session-utils";
 
 describe("restoreRenderableAssistantParts", () => {
-  test("preserves previous assistant parts when the updated assistant message becomes empty", () => {
+  test("preserves previous assistant parts when the same assistant message becomes empty", () => {
     const previousMessages = [
       {
         id: "user-1",
@@ -20,7 +20,7 @@ describe("restoreRenderableAssistantParts", () => {
     const nextMessages = [
       previousMessages[0],
       {
-        id: "assistant-uuid",
+        id: "assistant-1",
         role: "assistant",
         parts: [{ type: "text", text: "" }],
       },
@@ -31,11 +31,33 @@ describe("restoreRenderableAssistantParts", () => {
     ).toEqual([
       previousMessages[0],
       {
-        id: "assistant-uuid",
+        id: "assistant-1",
         role: "assistant",
         parts: [{ type: "text", text: "I called the tool successfully." }],
       },
     ]);
+  });
+
+  test("does not restore parts onto a different assistant message after list changes", () => {
+    const previousMessages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "first response" }],
+      },
+    ] as UIMessage[];
+
+    const nextMessages = [
+      {
+        id: "assistant-2",
+        role: "assistant",
+        parts: [{ type: "text", text: "" }],
+      },
+    ] as UIMessage[];
+
+    expect(
+      restoreRenderableAssistantParts({ previousMessages, nextMessages }),
+    ).toBe(nextMessages);
   });
 
   test("does not overwrite assistant messages that still have renderable parts", () => {

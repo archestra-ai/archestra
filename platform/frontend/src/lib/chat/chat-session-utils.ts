@@ -16,13 +16,18 @@ export function restoreRenderableAssistantParts(params: {
 }): UIMessage[] {
   const { previousMessages, nextMessages } = params;
   let changed = false;
+  const previousAssistantMessagesById = new Map(
+    previousMessages
+      .filter((message) => message.role === "assistant")
+      .map((message) => [message.id, message]),
+  );
 
-  const restoredMessages = nextMessages.map((message, index) => {
+  const restoredMessages = nextMessages.map((message) => {
     if (message.role !== "assistant" || hasRenderableAssistantParts(message)) {
       return message;
     }
 
-    const previousMessage = previousMessages[index];
+    const previousMessage = previousAssistantMessagesById.get(message.id);
     if (
       previousMessage?.role !== "assistant" ||
       !hasRenderableAssistantParts(previousMessage)

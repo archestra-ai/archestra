@@ -26,7 +26,7 @@ import { mapProviderError, ProviderError } from "@/routes/chat/errors";
 import {
   promptNeedsRendering,
   renderSystemPrompt,
-  type SystemPromptContext,
+  type UserSystemPromptContext,
 } from "@/templating";
 
 /**
@@ -139,7 +139,7 @@ export async function executeA2AMessage(
   let systemPrompt: string | undefined;
 
   // Build template context only when prompts use Handlebars syntax
-  let promptContext: SystemPromptContext | null = null;
+  let promptContext: UserSystemPromptContext | null = null;
   if (promptNeedsRendering(agent.systemPrompt)) {
     const [userDetails, userTeams] = await Promise.all([
       UserModel.getById(userId),

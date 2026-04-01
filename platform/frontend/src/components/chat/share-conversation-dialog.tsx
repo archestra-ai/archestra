@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import { Globe, Link, Lock, UserRound, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FormDialog } from "@/components/form-dialog";
@@ -24,7 +25,9 @@ import {
 import { useOrganizationMembers } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 
-type ShareVisibility = "private" | "organization" | "team" | "user";
+type ShareVisibility =
+  | "private"
+  | NonNullable<archestraApiTypes.ShareConversationData["body"]>["visibility"];
 
 export function ShareConversationDialog({
   conversationId,

@@ -22,6 +22,16 @@ vi.mock("@/lib/chat/chat-share.query", () => ({
   })),
 }));
 
+vi.mock("@/lib/auth/auth.query", () => ({
+  useSession: vi.fn(() => ({
+    data: {
+      user: {
+        id: "current-user-id",
+      },
+    },
+  })),
+}));
+
 vi.mock("@/lib/teams/team.query", () => ({
   useTeams: vi.fn(() => ({
     data: [{ id: "team-1", name: "Engineering" }],

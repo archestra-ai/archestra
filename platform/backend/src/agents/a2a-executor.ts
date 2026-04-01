@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import {
+  buildUserSystemPromptContext,
   type InteractionSource,
   PLAYWRIGHT_MCP_CATALOG_ID,
   type SupportedProvider,
@@ -144,13 +145,11 @@ export async function executeA2AMessage(
       UserModel.getById(userId),
       TeamModel.getUserTeams(userId),
     ]);
-    promptContext = {
-      user: {
-        name: userDetails?.name ?? "",
-        email: userDetails?.email ?? "",
-        teams: userTeams.map((t) => t.name),
-      },
-    };
+    promptContext = buildUserSystemPromptContext({
+      userName: userDetails?.name ?? "",
+      userEmail: userDetails?.email ?? "",
+      userTeams: userTeams.map((t) => t.name),
+    });
   }
 
   const renderedPrompt = renderSystemPrompt(agent.systemPrompt, promptContext);

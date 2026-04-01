@@ -1,3 +1,7 @@
+import {
+  SYSTEM_PROMPT_HELPER_NAMES,
+  type UserSystemPromptContext as SystemPromptContext,
+} from "@shared";
 import Handlebars from "handlebars";
 import logger from "@/logging";
 
@@ -142,25 +146,14 @@ Handlebars.registerHelper("pluck", (array, property) => {
  */
 
 // Returns the current date in YYYY-MM-DD format (UTC)
-Handlebars.registerHelper("currentDate", () => {
+Handlebars.registerHelper(SYSTEM_PROMPT_HELPER_NAMES.currentDate, () => {
   return new Date().toISOString().split("T")[0];
 });
 
 // Returns the current time in HH:MM:SS UTC format
-Handlebars.registerHelper("currentTime", () => {
+Handlebars.registerHelper(SYSTEM_PROMPT_HELPER_NAMES.currentTime, () => {
   return `${new Date().toISOString().split("T")[1].split(".")[0]} UTC`;
 });
-
-/**
- * Context for rendering system prompt templates
- */
-export interface SystemPromptContext {
-  user: {
-    name: string;
-    email: string;
-    teams: string[];
-  };
-}
 
 /**
  * Check if any of the given prompt strings contain Handlebars syntax (`{{`).

@@ -2,7 +2,7 @@
  * Built-in agent identifiers and names.
  * Used across backend, frontend, and e2e-tests.
  */
-import { POLICY_CONFIG_SYSTEM_PROMPT_EXPRESSIONS } from "./policy-config-system-prompt";
+import { POLICY_CONFIG_SYSTEM_PROMPT_EXPRESSIONS } from "./system-prompt-template";
 
 /** Display names for built-in agents */
 export const BUILT_IN_AGENT_NAMES = {

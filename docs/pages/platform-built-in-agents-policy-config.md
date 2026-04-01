@@ -14,40 +14,11 @@ The Tool Policy Configuration Agent analyzes tool metadata and automatically det
 
 ## How It Works
 
-When triggered, the subagent sends each tool's name, description, MCP server name, and parameter schema to an LLM. The LLM returns a structured response with two policy decisions:
+When triggered, the subagent sends each tool's name, description, MCP server name, parameter schema, and [tool annotations](https://modelcontextprotocol.io/specification/2025-06-18/schema#toolannotations) to an LLM. The LLM returns structured recommendations for both tool call policies and tool result policies, along with reasoning that is stored for auditability.
 
-**toolInvocationAction** (Tool Call Policy) -- when should the tool be allowed to execute:
+The specific policy options and enforcement behavior are documented on [AI Tool Guardrails](/docs/platform-ai-tool-guardrails). This built-in agent is the mechanism that proposes those defaults automatically.
 
-| Value                             | Meaning                                                                       |
-| --------------------------------- | ----------------------------------------------------------------------------- |
-| `allow_when_context_is_sensitive` | Safe to invoke even with sensitive data in the context (read-only tools, internal dev tools) |
-| `block_when_context_is_sensitive` | Only invoke when context is safe (tools that could leak data)                                |
-| `block_always`                    | Never invoke automatically (tools that delete or destroy data)                |
-
-**trustedDataAction** (Tool Result Policy) -- how should the tool's output be treated:
-
-| Value                    | Meaning                                                                                                                            |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `mark_as_safe`           | Results are safe (internal systems, databases, dev tools)                                                                            |
-| `mark_as_sensitive`      | Results are sensitive but exact values are safe to use (filesystem, external APIs)                                                   |
-| `sanitize_with_dual_llm` | Results are processed through the [Dual LLM Agent](/docs/platform-dual-llm) pattern (web scraping, sensitive data needing summarization)   |
-| `block_always`           | Results are blocked entirely                                                                                                       |
-
-The LLM also returns a reasoning field explaining why it chose those settings (this reasoning is stored on the tool record for auditability).
-
-## Analysis Prompt
-
-The subagent evaluates tool metadata against examples like:
-
-- Internal read-only tools (list-endpoints, get-config): allow invocation, mark results safe
-- Database queries (read-only): allow invocation, mark results sensitive
-- File reads (code/config): allow invocation, mark results sensitive
-- Web search/scraping: block when context is sensitive, mark results safe
-- Delete/remove/destroy operations: block invocation always, mark results safe
-
-The subagent blocks any tool that is obviously destructive — i.e. tools that delete or destroy data.
-
-## Triggering Policy Configuration
+## When It Runs
 
 The Tool Policy Configuration Agent can run in two ways:
 

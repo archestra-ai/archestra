@@ -515,11 +515,6 @@ async function migrateSecretsToEncrypted(): Promise<void> {
 }
 
 /**
- * Seeds the Policy Configuration Subagent built-in agent for fresh installs.
- * Migration 0159 creates this agent for existing organizations, but new
- * deployments (fresh DB after the migration) need it seeded here.
- */
-/**
  * Ensures all existing members have a personal default chat agent.
  * Runs on startup to backfill members created before this feature.
  */

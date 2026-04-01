@@ -38,28 +38,3 @@ Dual LLM runs when a tool's trusted-data policy is set to `sanitize_with_dual_ll
 - Any external source where exact raw text is unsafe but a safe summary is still useful
 
 Tool Policy Configuration Agent can recommend this automatically for tools that read from untrusted sources. See [Tool Policy Configuration Agent](/docs/platform-built-in-agents-policy-config).
-
-## Built-In Agent Settings
-
-Both built-in agents are editable:
-
-- **Dual LLM Main Agent**: system prompt, model selection, and max rounds
-- **Dual LLM Quarantine Agent**: system prompt and model selection
-
-## What Gets Stored
-
-When Dual LLM runs, Archestra stores the analysis transcript on the log record:
-
-- the question-and-answer conversation between the two built-in agents
-- the final sanitized result used in place of the raw tool output
-
-## Relationship to Tool Policies
-
-Dual LLM is not enabled globally. It is one possible trusted-data policy action alongside:
-
-- `mark_as_trusted`
-- `mark_as_untrusted`
-- `sanitize_with_dual_llm`
-- `block_always`
-
-Use Dual LLM when the tool is useful, the source is untrusted, and the agent only needs a safe summary rather than verbatim output.

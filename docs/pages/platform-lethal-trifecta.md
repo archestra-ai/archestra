@@ -5,7 +5,7 @@ subcategory: Security Concepts
 order: 2
 ---
 
-<!-- 
+<!--
 Check ../docs_writer_prompt.md before changing this file.
 
 This document is human-built, shouldn't be updated with AI. Don't change anything here.
@@ -103,11 +103,11 @@ AI tool guardrails are Archestra's deterministic enforcement layer for tool exec
 
 [Learn more about AI Tool Guardrails →](/docs/platform-ai-tool-guardrails)
 
-### Archestra Dual LLM
+### Archestra Dual LLM Agent
 
-Archestra's dual LLM guardrail system provides an independent security validation layer. A separate LLM reviews all tool invocations without passing the untrusted data to the context, ensuring malicious prompts cannot bypass security policies.
+Archestra's dual LLM Agent provides an independent security validation layer. A separate LLM reviews all tool invocations without passing the untrusted data to the context, ensuring malicious prompts cannot bypass security policies.
 
-[Learn more about Archestra Dual LLM →](/docs/platform-dual-llm)
+[Learn more about Archestra Dual LLM Agent →](/docs/platform-dual-llm)
 
 ## References
 

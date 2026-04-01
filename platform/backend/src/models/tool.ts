@@ -1785,13 +1785,18 @@ class ToolModel {
       );
     }
 
-    // Filter by origin (either "llm-proxy" or a catalogId)
+    // Filter by origin ("llm-proxy", "agent", or a catalogId)
     if (filters?.origin) {
       if (filters.origin === "llm-proxy") {
         // LLM Proxy tools: shared proxy tools with agentId=NULL, catalogId=NULL, no delegation
         toolWhereConditions.push(isNull(schema.toolsTable.catalogId));
         toolWhereConditions.push(isNull(schema.toolsTable.agentId));
         toolWhereConditions.push(isNull(schema.toolsTable.delegateToAgentId));
+      } else if (filters.origin === "agent") {
+        // Agent delegation tools have a non-null delegateToAgentId
+        toolWhereConditions.push(
+          isNotNull(schema.toolsTable.delegateToAgentId),
+        );
       } else {
         // MCP tools have a catalogId
         toolWhereConditions.push(
@@ -1868,9 +1873,8 @@ class ToolModel {
         orderByClause = direction(schema.toolsTable.name);
         break;
       case "origin":
-        // Sort by catalogId (null values for LLM Proxy)
         orderByClause = direction(
-          sql`CASE WHEN ${schema.toolsTable.catalogId} IS NULL THEN '2-llm-proxy' ELSE '1-mcp' END`,
+          sql`CASE WHEN ${schema.toolsTable.catalogId} IS NOT NULL THEN '1-mcp' WHEN ${schema.toolsTable.delegateToAgentId} IS NOT NULL THEN '2-agent' ELSE '3-llm-proxy' END`,
         );
         break;
       case "assignmentCount":

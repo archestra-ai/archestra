@@ -1,6 +1,6 @@
 "use client";
 
-import { parseFullToolName } from "@shared";
+import { AGENT_TOOL_PREFIX, isAgentTool, parseFullToolName } from "@shared";
 import { formatDistanceToNow } from "date-fns";
 import {
   ChevronDown,
@@ -144,6 +144,28 @@ export function ToolDetailsDialog({
                         </TooltipTrigger>
                         <TooltipContent>
                           <p>{catalogItem?.name || "MCP Server"}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : isAgentTool(tool.name) ? (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Badge
+                            variant="secondary"
+                            className="bg-violet-600 text-white"
+                          >
+                            Agent
+                          </Badge>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>
+                            Delegates to{" "}
+                            {tool.name
+                              .slice(AGENT_TOOL_PREFIX.length)
+                              .replaceAll("_", " ")}{" "}
+                            agent
+                          </p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>

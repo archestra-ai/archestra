@@ -45,7 +45,7 @@ const APP_NAME = DEFAULT_APP_NAME;
 const {
   api: { apiKeyAuthorizationHeaderName },
   frontendBaseUrl,
-  auth: { secret, cookieDomain, trustedOrigins },
+  auth: { secret, cookieDomain, trustedOrigins: staticTrustedOrigins },
 } = config;
 
 const ac = createAccessControl(allAvailableActions);
@@ -198,7 +198,7 @@ export const auth = betterAuth({
     },
   },
 
-  trustedOrigins,
+  trustedOrigins: getTrustedOriginsForAuthRequest,
 
   database: drizzleAdapter(db, {
     provider: "pg", // or "mysql", "sqlite"
@@ -395,6 +395,24 @@ function getBetterAuthLogLevel(
 
 export type BetterAuth = typeof auth;
 
+async function getTrustedOriginsForAuthRequest(request?: Request) {
+  const trustedOrigins = [...staticTrustedOrigins];
+
+  if (!shouldTrustAllOriginsForSsoRegistration(request)) {
+    return trustedOrigins;
+  }
+
+  return [
+    ...new Set([
+      ...trustedOrigins,
+      "http://*:*",
+      "https://*:*",
+      "http://*",
+      "https://*",
+    ]),
+  ];
+}
+
 async function getTrustedAccountLinkingProviderIds(): Promise<string[]> {
   if (!config.enterpriseFeatures.core) {
     return [...IDENTITY_TRUSTED_PROVIDER_IDS];
@@ -406,6 +424,18 @@ async function getTrustedAccountLinkingProviderIds(): Promise<string[]> {
   );
 
   return IdentityProviderModel.getTrustedAccountLinkingProviderIds();
+}
+
+function shouldTrustAllOriginsForSsoRegistration(request?: Request) {
+  if (!request) {
+    return true;
+  }
+
+  try {
+    return new URL(request.url).pathname.endsWith("/sso/register");
+  } catch {
+    return false;
+  }
 }
 
 /**

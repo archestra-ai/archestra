@@ -1,3 +1,4 @@
+import { TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON } from "@shared";
 import { describe, expect, it } from "vitest";
 import {
   extractCatalogIdFromInstallUrl,
@@ -9,8 +10,7 @@ import {
 
 describe("parsePolicyDenied", () => {
   it("parses a plain-text policy denial with tool name, args, and reason", () => {
-    const text =
-      '\nI tried to invoke the upstash__context7__get-library-docs tool with the following arguments: {"context7CompatibleLibraryID":"/websites/p5js_reference"}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: context contains sensitive data';
+    const text = `\nI tried to invoke the upstash__context7__get-library-docs tool with the following arguments: {"context7CompatibleLibraryID":"/websites/p5js_reference"}.\n\nHowever, I was denied by a tool invocation policy:\n\n${TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON}`;
     const result = parsePolicyDenied(text);
     expect(result).not.toBeNull();
     expect(result?.type).toBe("tool-upstash__context7__get-library-docs");
@@ -35,6 +35,27 @@ describe("parsePolicyDenied", () => {
     expect(result?.type).toBe("tool-my-tool");
     expect(result?.input).toEqual({ key: "value" });
     expect(result?.unsafeContextActiveAtRequestStart).toBe(false);
+  });
+
+  it("uses structured reasonType for policy denials when available", () => {
+    const text = JSON.stringify({
+      _meta: {
+        archestraError: {
+          type: "policy_denied",
+          message: "blocked",
+          toolName: "some-tool",
+          input: {},
+          reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
+          reasonType: "sensitive_context",
+        },
+      },
+    });
+
+    const result = parsePolicyDenied(text);
+
+    expect(result).not.toBeNull();
+    expect(result?.type).toBe("tool-some-tool");
+    expect(result?.unsafeContextActiveAtRequestStart).toBe(true);
   });
 
   it("parses a JSON-wrapped policy denial (message)", () => {

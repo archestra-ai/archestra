@@ -35,6 +35,7 @@ export * from "./test-mcp-server";
 export * from "./themes/theme-config";
 export * from "./themes/theme-utils";
 export * from "./tool-refusal";
+export * from "./tool-invocation-policy-reasons";
 export * from "./types";
 export * from "./utils";
 export * from "./vault";

@@ -27,9 +27,8 @@ export function parsePolicyDenied(text: string): PolicyDeniedPart | null {
     toolCallId: "",
     state: "output-denied",
     input: policyDenied.input,
-    unsafeContextActiveAtRequestStart: policyDenied.reason.includes(
-      "context contains sensitive data",
-    ),
+    unsafeContextActiveAtRequestStart:
+      policyDenied.reasonType === "sensitive_context",
     errorText: JSON.stringify({ reason: policyDenied.reason }),
   };
 }

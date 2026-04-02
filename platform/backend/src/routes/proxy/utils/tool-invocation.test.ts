@@ -1,4 +1,8 @@
-import { getArchestraToolFullName, TOOL_LIST_AGENTS_SHORT_NAME } from "@shared";
+import {
+  getArchestraToolFullName,
+  TOOL_INVOCATION_DISABLED_FOR_CONVERSATION_REASON,
+  TOOL_LIST_AGENTS_SHORT_NAME,
+} from "@shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { AgentTeamModel, OrganizationModel } from "@/models";
 import { describe, expect, test } from "@/test";
@@ -105,7 +109,7 @@ describe("evaluatePolicies", () => {
 
     expect(result).not.toBeNull();
     expect(result?.reason).toBe(
-      "Tool invocation blocked: tool not enabled for this conversation",
+      TOOL_INVOCATION_DISABLED_FOR_CONVERSATION_REASON,
     );
     expect(result?.blockedToolName).toBe("disabled_tool");
     expect(result?.allToolCallNames).toEqual(["disabled_tool"]);

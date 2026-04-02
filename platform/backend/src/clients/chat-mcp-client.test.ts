@@ -2,6 +2,7 @@ import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import {
   getArchestraToolFullName,
+  TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_WHOAMI_SHORT_NAME,
@@ -1233,7 +1234,7 @@ describe("throwIfApprovalRequired", () => {
 
     await expect(
       throwIfApprovalRequired("restricted-tool", {}, "restrictive"),
-    ).rejects.toThrow("Tool invocation blocked");
+    ).rejects.toThrow(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);
   });
 
   test("does not throw when tool is not found in DB", async () => {

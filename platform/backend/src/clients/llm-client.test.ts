@@ -1,13 +1,33 @@
 import { vi } from "vitest";
+import {
+  EXTERNAL_AGENT_ID_HEADER,
+  SESSION_ID_HEADER,
+  SOURCE_HEADER,
+  UNTRUSTED_CONTEXT_HEADER,
+  USER_ID_HEADER,
+} from "@shared";
 import { describe, expect, it, test } from "@/test";
 
 // Mock the gemini-client module before importing llm-client
 const mockIsVertexAiEnabled = vi.hoisted(() => vi.fn(() => false));
+const mockCreateAnthropic = vi.hoisted(() =>
+  vi.fn(({ headers }: { headers?: Record<string, string> }) =>
+    vi.fn((modelName: string) => ({
+      provider: "anthropic",
+      modelName,
+      headers,
+    })),
+  ),
+);
 vi.mock("@/clients/gemini-client", () => ({
   isVertexAiEnabled: mockIsVertexAiEnabled,
 }));
+vi.mock("@ai-sdk/anthropic", () => ({
+  createAnthropic: mockCreateAnthropic,
+}));
 
 import {
+  createLLMModel,
   createDirectLLMModel,
   detectProviderFromModel,
   resolveProviderApiKey,
@@ -229,6 +249,58 @@ describe("createDirectLLMModel", () => {
       }),
     ).toThrow(
       "Zhipu AI API key is required. Please configure ZHIPUAI_API_KEY.",
+    );
+  });
+});
+
+describe("createLLMModel", () => {
+  test("sets the untrusted-context header only when contextIsTrusted is false", () => {
+    createLLMModel({
+      provider: "anthropic",
+      apiKey: "test-key",
+      agentId: "agent-1",
+      modelName: "claude-3-5-haiku-20241022",
+      userId: "user-1",
+      externalAgentId: "external-agent-1",
+      sessionId: "session-1",
+      source: "chat",
+      baseUrl: null,
+      contextIsTrusted: false,
+    });
+
+    expect(mockCreateAnthropic).toHaveBeenCalledWith(
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          [EXTERNAL_AGENT_ID_HEADER]: "external-agent-1",
+          [USER_ID_HEADER]: "user-1",
+          [SESSION_ID_HEADER]: "session-1",
+          [SOURCE_HEADER]: "chat",
+          [UNTRUSTED_CONTEXT_HEADER]: "true",
+        }),
+      }),
+    );
+
+    mockCreateAnthropic.mockClear();
+
+    createLLMModel({
+      provider: "anthropic",
+      apiKey: "test-key",
+      agentId: "agent-1",
+      modelName: "claude-3-5-haiku-20241022",
+      userId: "user-1",
+      externalAgentId: "external-agent-1",
+      sessionId: "session-1",
+      source: "chat",
+      baseUrl: null,
+      contextIsTrusted: undefined,
+    });
+
+    expect(mockCreateAnthropic).toHaveBeenCalledWith(
+      expect.objectContaining({
+        headers: expect.not.objectContaining({
+          [UNTRUSTED_CONTEXT_HEADER]: "true",
+        }),
+      }),
     );
   });
 });

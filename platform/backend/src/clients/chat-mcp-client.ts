@@ -17,6 +17,7 @@ import {
   isBrowserMcpTool,
   parseFullToolName,
   TimeInMs,
+  TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
 } from "@shared";
 import { type JSONSchema7, jsonSchema, type Tool } from "ai";
 import { evaluateToolExecutionContextTrust } from "@/agents/context-trust";
@@ -1836,9 +1837,7 @@ async function throwIfApprovalRequired(
       globalToolPolicy,
     );
   if (requiresApproval) {
-    throw new Error(
-      "Tool invocation blocked: this tool requires human approval which is not available in autonomous agent sessions (A2A, Slack, MS Teams, sub-agents)",
-    );
+    throw new Error(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);
   }
 }
 

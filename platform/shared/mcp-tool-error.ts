@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isSensitiveContextPolicyDeniedReason } from "./tool-invocation-policy-reasons";
 import { parseArchestraToolRefusal } from "./tool-refusal";
 
 export const McpToolErrorTypeSchema = z.enum([
@@ -36,6 +37,11 @@ export const AuthExpiredMcpToolErrorSchema = z
   })
   .strict();
 
+export const PolicyDeniedReasonTypeSchema = z.enum([
+  "sensitive_context",
+  "generic",
+]);
+
 export const PolicyDeniedMcpToolErrorSchema = z
   .object({
     type: z.literal("policy_denied"),
@@ -43,6 +49,7 @@ export const PolicyDeniedMcpToolErrorSchema = z
     toolName: z.string(),
     input: z.record(z.string(), z.unknown()),
     reason: z.string(),
+    reasonType: PolicyDeniedReasonTypeSchema.optional(),
   })
   .strict();
 
@@ -63,10 +70,23 @@ export type AuthExpiredMcpToolError = z.infer<
 export type PolicyDeniedMcpToolError = z.infer<
   typeof PolicyDeniedMcpToolErrorSchema
 >;
+export type PolicyDeniedReasonType = z.infer<
+  typeof PolicyDeniedReasonTypeSchema
+>;
 export type McpToolError = z.infer<typeof McpToolErrorSchema>;
 
 export function extractMcpToolError(input: unknown): McpToolError | null {
   return extractMcpToolErrorRecursive(input, 0);
+}
+
+export function classifyPolicyDeniedReason(
+  reason: string,
+): PolicyDeniedReasonType {
+  if (isSensitiveContextPolicyDeniedReason(reason)) {
+    return "sensitive_context";
+  }
+
+  return "generic";
 }
 
 function extractMcpToolErrorRecursive(
@@ -79,7 +99,7 @@ function extractMcpToolErrorRecursive(
 
   const direct = McpToolErrorSchema.safeParse(input);
   if (direct.success) {
-    return direct.data;
+    return normalizeMcpToolError(direct.data);
   }
 
   if (typeof input === "string") {
@@ -155,6 +175,18 @@ function parsePolicyDeniedMcpToolError(
     toolName,
     input: parsedInput,
     reason,
+    reasonType: classifyPolicyDeniedReason(reason),
+  };
+}
+
+function normalizeMcpToolError(error: McpToolError): McpToolError {
+  if (error.type !== "policy_denied") {
+    return error;
+  }
+
+  return {
+    ...error,
+    reasonType: error.reasonType ?? classifyPolicyDeniedReason(error.reason),
   };
 }
 

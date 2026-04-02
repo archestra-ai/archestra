@@ -594,10 +594,10 @@ class IdentityProviderModel {
       };
     }
 
-    // Register with Better Auth
-    await auth.api.registerSSOProvider({
-      body: parsedData,
-      headers: new Headers(headers),
+    const registeredProviderData = await registerSsoProvider({
+      auth,
+      data: parsedData,
+      headers,
     });
 
     // Better Auth automatically creates the database record, so we need to find it
@@ -626,7 +626,9 @@ class IdentityProviderModel {
      */
     // Also store roleMapping and teamSyncConfig if provided (Better Auth doesn't handle these fields)
     // Note: These are stored as JSON text but typed as objects in Drizzle schema
-    const oidcConfigJson = serializeConfigValue(data.oidcConfig);
+    const oidcConfigJson = serializeConfigValue(
+      stripOidcRegistrationOnlyFields(registeredProviderData.oidcConfig),
+    );
     const samlConfigJson = serializeConfigValue(data.samlConfig);
     const roleMappingJson = serializeConfigValue(data.roleMapping);
     const teamSyncConfigJson = serializeConfigValue(data.teamSyncConfig);
@@ -821,6 +823,48 @@ class IdentityProviderModel {
 
 export default IdentityProviderModel;
 
+async function registerSsoProvider(params: {
+  auth: BetterAuth;
+  data: RegistrationProviderData;
+  headers: HeadersInit;
+}) {
+  try {
+    await params.auth.api.registerSSOProvider({
+      body: params.data as never,
+      headers: new Headers(params.headers),
+    });
+    return params.data;
+  } catch (error) {
+    if (
+      !shouldRetryOidcRegistrationWithHydratedEndpoints(error) ||
+      !params.data.oidcConfig
+    ) {
+      throw error;
+    }
+
+    logger.info(
+      { providerId: params.data.providerId, issuer: params.data.issuer },
+      "Retrying OIDC provider registration with hydrated endpoints",
+    );
+
+    const hydratedOidcConfig = await hydrateOidcConfigForRegistration({
+      issuer: params.data.issuer,
+      oidcConfig: params.data.oidcConfig,
+    });
+    const fallbackData = {
+      ...params.data,
+      oidcConfig: hydratedOidcConfig,
+    };
+
+    await params.auth.api.registerSSOProvider({
+      body: fallbackData as never,
+      headers: new Headers(params.headers),
+    });
+
+    return fallbackData;
+  }
+}
+
 function serializeConfigValue(
   value: string | object | null | undefined,
 ): string | null | undefined {
@@ -833,4 +877,215 @@ function serializeConfigValue(
   }
 
   return JSON.stringify(value);
+}
+
+function stripOidcRegistrationOnlyFields(
+  value: string | object | null | undefined,
+) {
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  const { skipDiscovery: _skipDiscovery, ...rest } = value as Record<
+    string,
+    unknown
+  >;
+  return rest;
+}
+
+function shouldRetryOidcRegistrationWithHydratedEndpoints(error: unknown) {
+  if (!(error instanceof APIError)) {
+    return false;
+  }
+
+  return (
+    error.body?.code === "discovery_untrusted_origin" ||
+    error.body?.message?.includes("Untrusted OIDC discovery URL") === true
+  );
+}
+
+async function hydrateOidcConfigForRegistration(params: {
+  issuer: string;
+  oidcConfig: RegistrationOidcConfig;
+}) {
+  const discoveryEndpoint = getDiscoveryEndpoint({
+    issuer: params.issuer,
+    oidcConfig: params.oidcConfig,
+  });
+  const discoveryDocument = await fetchOidcDiscoveryDocument(discoveryEndpoint);
+
+  validateDiscoveryIssuer({
+    discoveryEndpoint,
+    documentIssuer: discoveryDocument.issuer,
+    requestedIssuer: params.issuer,
+  });
+
+  const authorizationEndpoint =
+    getOptionalString(params.oidcConfig.authorizationEndpoint) ??
+    discoveryDocument.authorization_endpoint;
+  const tokenEndpoint =
+    getOptionalString(params.oidcConfig.tokenEndpoint) ??
+    discoveryDocument.token_endpoint;
+  const jwksEndpoint =
+    getOptionalString(params.oidcConfig.jwksEndpoint) ??
+    discoveryDocument.jwks_uri;
+
+  if (!authorizationEndpoint || !tokenEndpoint || !jwksEndpoint) {
+    throw new APIError("BAD_REQUEST", {
+      message:
+        "OIDC discovery document is missing one or more required endpoints.",
+    });
+  }
+
+  return {
+    ...params.oidcConfig,
+    authorizationEndpoint,
+    tokenEndpoint,
+    jwksEndpoint,
+    userInfoEndpoint:
+      getOptionalString(params.oidcConfig.userInfoEndpoint) ??
+      discoveryDocument.userinfo_endpoint,
+    tokenEndpointAuthentication: getRegistrationTokenEndpointAuthentication(
+      params.oidcConfig.tokenEndpointAuthentication,
+      selectTokenEndpointAuthentication(
+        discoveryDocument.token_endpoint_auth_methods_supported,
+      ),
+    ),
+    skipDiscovery: true,
+  };
+}
+
+async function fetchOidcDiscoveryDocument(discoveryEndpoint: string) {
+  let response: Response;
+
+  try {
+    response = await fetch(discoveryEndpoint, {
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch (error) {
+    logger.warn(
+      { err: error, discoveryEndpoint },
+      "Failed to fetch OIDC discovery document for provider registration",
+    );
+    throw new APIError("BAD_REQUEST", {
+      message: `Unable to fetch OIDC discovery document from "${discoveryEndpoint}".`,
+    });
+  }
+
+  if (!response.ok) {
+    throw new APIError("BAD_REQUEST", {
+      message: `OIDC discovery document request failed with status ${response.status}.`,
+    });
+  }
+
+  const payload = (await response.json()) as Partial<OidcDiscoveryDocument>;
+  return {
+    issuer: getOptionalString(payload.issuer),
+    authorization_endpoint: getOptionalString(payload.authorization_endpoint),
+    token_endpoint: getOptionalString(payload.token_endpoint),
+    jwks_uri: getOptionalString(payload.jwks_uri),
+    userinfo_endpoint: getOptionalString(payload.userinfo_endpoint),
+    token_endpoint_auth_methods_supported: Array.isArray(
+      payload.token_endpoint_auth_methods_supported,
+    )
+      ? payload.token_endpoint_auth_methods_supported.filter(
+          (value): value is string => typeof value === "string",
+        )
+      : undefined,
+  };
+}
+
+function getDiscoveryEndpoint(params: {
+  issuer: string;
+  oidcConfig: RegistrationOidcConfig;
+}) {
+  const configuredDiscoveryEndpoint = getOptionalString(
+    params.oidcConfig.discoveryEndpoint,
+  );
+
+  if (configuredDiscoveryEndpoint) {
+    return configuredDiscoveryEndpoint;
+  }
+
+  return `${params.issuer.replace(/\/$/, "")}/.well-known/openid-configuration`;
+}
+
+function validateDiscoveryIssuer(params: {
+  discoveryEndpoint: string;
+  documentIssuer?: string;
+  requestedIssuer: string;
+}) {
+  if (!params.documentIssuer) {
+    return;
+  }
+
+  const normalizedDocumentIssuer = params.documentIssuer.replace(/\/$/, "");
+  const normalizedRequestedIssuer = params.requestedIssuer.replace(/\/$/, "");
+
+  if (normalizedDocumentIssuer === normalizedRequestedIssuer) {
+    return;
+  }
+
+  throw new APIError("BAD_REQUEST", {
+    message: `OIDC discovery issuer mismatch for "${params.discoveryEndpoint}".`,
+  });
+}
+
+function selectTokenEndpointAuthentication(
+  supportedMethods?: string[],
+): "client_secret_post" | "client_secret_basic" {
+  if (!supportedMethods?.length) {
+    return "client_secret_basic";
+  }
+
+  if (supportedMethods.includes("client_secret_basic")) {
+    return "client_secret_basic";
+  }
+
+  if (supportedMethods.includes("client_secret_post")) {
+    return "client_secret_post";
+  }
+
+  return "client_secret_basic";
+}
+
+function getOptionalString(value: unknown) {
+  return typeof value === "string" && value.trim().length > 0
+    ? value
+    : undefined;
+}
+
+function getRegistrationTokenEndpointAuthentication(
+  value: unknown,
+  fallback: "client_secret_post" | "client_secret_basic",
+) {
+  if (value === "client_secret_post" || value === "client_secret_basic") {
+    return value;
+  }
+
+  return fallback;
+}
+
+type RegistrationOidcConfig = NonNullable<
+  InsertIdentityProvider["oidcConfig"]
+> & {
+  skipDiscovery?: boolean;
+};
+
+interface RegistrationProviderData {
+  providerId: string;
+  issuer: string;
+  domain: string;
+  organizationId: string;
+  oidcConfig?: RegistrationOidcConfig;
+  samlConfig?: InsertIdentityProvider["samlConfig"];
+}
+
+interface OidcDiscoveryDocument {
+  issuer?: string;
+  authorization_endpoint?: string;
+  token_endpoint?: string;
+  jwks_uri?: string;
+  userinfo_endpoint?: string;
+  token_endpoint_auth_methods_supported?: string[];
 }

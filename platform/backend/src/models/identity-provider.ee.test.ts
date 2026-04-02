@@ -66,6 +66,100 @@ function createParams(
 
 describe("IdentityProviderModel", () => {
   describe("create", () => {
+    test("retries registration with hydrated discovery endpoints", async ({
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const registerError = new APIError("BAD_REQUEST", {
+        message:
+          'Untrusted OIDC discovery URL: The main discovery endpoint "https://sso.myid.example.com/oauth2/default/.well-known/openid-configuration" is not trusted by your trusted origins configuration.',
+        code: "discovery_untrusted_origin",
+      });
+      const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            issuer: "https://sso.myid.example.com/oauth2/default",
+            authorization_endpoint:
+              "https://sso.myid.example.com/oauth2/default/v1/authorize",
+            token_endpoint:
+              "https://sso.myid.example.com/oauth2/default/v1/token",
+            jwks_uri: "https://sso.myid.example.com/oauth2/default/v1/keys",
+          }),
+        ),
+      );
+
+      const registerSSOProvider = vi.fn(async ({ body }) => {
+        if (registerSSOProvider.mock.calls.length === 1) {
+          throw registerError;
+        }
+
+        await db.insert(schema.identityProvidersTable).values({
+          id: crypto.randomUUID(),
+          providerId: body.providerId,
+          issuer: body.issuer,
+          domain: body.domain,
+          organizationId: org.id,
+          userId: user.id,
+          oidcConfig: JSON.stringify(
+            body.oidcConfig,
+          ) as unknown as typeof schema.identityProvidersTable.$inferInsert.oidcConfig,
+        });
+      });
+
+      const created = await IdentityProviderModel.create(
+        {
+          providerId: "myid",
+          issuer: "https://sso.myid.example.com/oauth2/default",
+          domain: "example.com",
+          userId: user.id,
+          oidcConfig: {
+            issuer: "https://sso.myid.example.com/oauth2/default",
+            pkce: true,
+            clientId: "archestra-oidc",
+            clientSecret: "archestra-oidc-secret",
+            discoveryEndpoint:
+              "https://sso.myid.example.com/oauth2/default/.well-known/openid-configuration",
+          },
+        },
+        org.id,
+        new Headers(),
+        {
+          api: {
+            registerSSOProvider,
+          },
+        } as unknown as Parameters<typeof IdentityProviderModel.create>[3],
+      );
+
+      expect(registerSSOProvider).toHaveBeenCalledTimes(2);
+      expect(registerSSOProvider).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          body: expect.objectContaining({
+            providerId: "myid",
+            oidcConfig: expect.objectContaining({
+              skipDiscovery: true,
+              authorizationEndpoint:
+                "https://sso.myid.example.com/oauth2/default/v1/authorize",
+              tokenEndpoint:
+                "https://sso.myid.example.com/oauth2/default/v1/token",
+              jwksEndpoint:
+                "https://sso.myid.example.com/oauth2/default/v1/keys",
+            }),
+          }),
+        }),
+      );
+      expect(created.oidcConfig).toEqual(
+        expect.objectContaining({
+          authorizationEndpoint:
+            "https://sso.myid.example.com/oauth2/default/v1/authorize",
+          tokenEndpoint: "https://sso.myid.example.com/oauth2/default/v1/token",
+          jwksEndpoint: "https://sso.myid.example.com/oauth2/default/v1/keys",
+        }),
+      );
+      fetchSpy.mockRestore();
+    });
+
     test("persists enterprise-managed credentials inside oidcConfig", async ({
       makeOrganization,
       makeUser,

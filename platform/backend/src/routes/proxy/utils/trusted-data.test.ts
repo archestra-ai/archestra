@@ -471,6 +471,47 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       });
     });
 
+    test("preserves the first unsafe boundary when multiple tool results are untrusted", async () => {
+      const commonMessages: CommonMessage[] = [
+        { role: "assistant" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_001",
+              name: "get_emails",
+              content: { source: "unknown", data: "first untrusted" },
+              isError: false,
+            },
+            {
+              id: "call_002",
+              name: "get_emails",
+              content: { source: "unknown", data: "second untrusted" },
+              isError: false,
+            },
+          ],
+        },
+      ];
+
+      const result = await evaluateIfContextIsTrusted(
+        commonMessages,
+        agentId,
+        organizationId,
+        undefined,
+        false,
+        "restrictive",
+        { teamIds: [] },
+      );
+
+      expect(result.contextIsTrusted).toBe(false);
+      expect(result.unsafeContextBoundary).toEqual({
+        kind: "tool_result",
+        reason: "tool_result_marked_untrusted",
+        toolCallId: "call_001",
+        toolName: "get_emails",
+      });
+    });
+
     test("handles tool calls without matching tool definition", async () => {
       const commonMessages: CommonMessage[] = [
         {

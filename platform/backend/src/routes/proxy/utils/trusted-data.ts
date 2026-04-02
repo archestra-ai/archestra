@@ -143,6 +143,8 @@ export async function evaluateIfContextIsTrusted(
   // Process evaluation results
   for (let i = 0; i < allToolCalls.length; i++) {
     const { toolCallId, toolResult, toolName } = allToolCalls[i];
+    // evaluateBulk() returns a Map keyed by the stringified input index, so we
+    // read results back using the same positional key we submitted above.
     const evaluation = evaluationResults.get(i.toString());
 
     if (!evaluation) {
@@ -152,6 +154,8 @@ export async function evaluateIfContextIsTrusted(
         "[trustedData] evaluateIfContextIsTrusted: no evaluation result, treating as untrusted",
       );
       hasUntrustedData = true;
+      // Preserve the first point where context became unsafe so the UI can show
+      // a stable boundary even if later tool results are also untrusted.
       unsafeContextBoundary ??= createToolResultBoundary({
         reason: "tool_result_marked_untrusted",
         toolCallId,
@@ -184,6 +188,8 @@ export async function evaluateIfContextIsTrusted(
       toolResultUpdates[toolCallId] =
         `[Content blocked by policy${reason ? `: ${reason}` : ""}]`;
       toolResultIsTrusted = false;
+      // Preserve the first point where context became unsafe so the UI can show
+      // a stable boundary even if later tool results are also untrusted.
       unsafeContextBoundary ??= createToolResultBoundary({
         reason: "tool_result_blocked",
         toolCallId,
@@ -234,6 +240,8 @@ export async function evaluateIfContextIsTrusted(
 
     if (!toolResultIsTrusted) {
       hasUntrustedData = true;
+      // Preserve the first point where context became unsafe so the UI can show
+      // a stable boundary even if later tool results are also untrusted.
       unsafeContextBoundary ??= createToolResultBoundary({
         reason: "tool_result_marked_untrusted",
         toolCallId,

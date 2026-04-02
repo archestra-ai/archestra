@@ -282,6 +282,9 @@ export function createLLMModel(params: {
   if (source) {
     clientHeaders[SOURCE_HEADER] = source;
   }
+  // Only propagate the header when the caller has explicitly established that
+  // context is unsafe. `undefined` means trust was not evaluated for this flow,
+  // so we preserve the default trusted behavior.
   if (contextIsTrusted === false) {
     clientHeaders[UNTRUSTED_CONTEXT_HEADER] = "true";
   }

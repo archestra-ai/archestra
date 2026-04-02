@@ -118,4 +118,39 @@ describe("delegation tool execution", () => {
       }),
     );
   });
+
+  test("leaves trust propagation unset when the parent context was never evaluated", async ({
+    makeAgent,
+    makeAgentTool,
+  }) => {
+    const targetAgent = await makeAgent({ name: "Research Agent" });
+    const delegationTool = await ToolModel.findOrCreateDelegationTool(
+      targetAgent.id,
+    );
+    await makeAgentTool(testAgent.id, delegationTool.id);
+
+    mockExecuteA2AMessage.mockResolvedValue({
+      messageId: "subagent-message-2",
+      text: "Handled by subagent",
+      finishReason: "stop",
+    });
+
+    const result = await executeArchestraTool(
+      `${AGENT_TOOL_PREFIX}${slugify(targetAgent.name)}`,
+      { message: "Investigate the issue." },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: targetAgent.id,
+        message: "Investigate the issue.",
+        organizationId: mockContext.organizationId,
+        userId: "system",
+        parentDelegationChain: testAgent.id,
+        parentContextIsTrusted: undefined,
+      }),
+    );
+  });
 });

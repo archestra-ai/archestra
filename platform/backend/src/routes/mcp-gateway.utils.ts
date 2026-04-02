@@ -12,9 +12,9 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import {
   ARCHESTRA_TOKEN_PREFIX,
+  isAgentTool,
   MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
   MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
-  isAgentTool,
   OAUTH_TOKEN_ID_PREFIX,
   parseFullToolName,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
@@ -127,6 +127,18 @@ const rawArchestraTokenCache =
   });
 
 /**
+ * The MCP TypeScript SDK does not yet model `capabilities.extensions` on the
+ * server constructor options, even though the initialize handshake needs it.
+ * Track upstream here:
+ * https://github.com/modelcontextprotocol/typescript-sdk/issues/1063
+ */
+type McpServerCapabilitiesWithExtensions = NonNullable<
+  ConstructorParameters<typeof McpServer>[1]
+>["capabilities"] & {
+  extensions?: Record<string, unknown>;
+};
+
+/**
  * Creates an MCP server for the given agent.
  * Pass `preloadedAgent` (e.g. from the proxy's access cache) to skip the
  * redundant DB lookup that would otherwise happen inside this function.
@@ -155,7 +167,7 @@ export async function createAgentServer(
         extensions: extensionCapabilities,
         prompts: {},
         tools: { listChanged: false },
-      } as never,
+      } as McpServerCapabilitiesWithExtensions,
     },
   );
   const { server } = mcpServer;

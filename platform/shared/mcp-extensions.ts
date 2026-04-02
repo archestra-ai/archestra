@@ -1,3 +1,11 @@
+/**
+ * Official MCP extension identifiers and initialize capability payloads.
+ * Spec reference:
+ * https://modelcontextprotocol.io/extensions/overview#negotiation
+ * https://modelcontextprotocol.io/extensions/client-matrix#extension-overview
+ * TypeScript SDK typing gap:
+ * https://github.com/modelcontextprotocol/typescript-sdk/issues/1063
+ */
 export const MCP_APPS_EXTENSION_ID = "io.modelcontextprotocol/ui";
 export const MCP_ENTERPRISE_AUTH_EXTENSION_ID =
   "io.modelcontextprotocol/enterprise-managed-authorization";

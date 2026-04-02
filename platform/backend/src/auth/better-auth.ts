@@ -395,6 +395,18 @@ function getBetterAuthLogLevel(
 
 export type BetterAuth = typeof auth;
 
+/**
+ * Better Auth applies `trustedOrigins` to OIDC discovery during SSO provider
+ * registration, which means custom IdP setup can fail before the provider is
+ * saved unless the discovery origin is already trusted:
+ * https://better-auth.com/docs/plugins/sso#trusted-origins
+ *
+ * Archestra admins are explicitly configuring their own IdPs, so we widen
+ * origin trust only for provider registration instead of requiring per-IdP
+ * allowlisting. Better Auth also invokes this callback with `request`
+ * undefined during internal `auth.api` calls, which is the registration path
+ * used by `IdentityProviderModel.create()`.
+ */
 async function getTrustedOriginsForAuthRequest(request?: Request) {
   const trustedOrigins = [...staticTrustedOrigins];
 
@@ -426,6 +438,10 @@ async function getTrustedAccountLinkingProviderIds(): Promise<string[]> {
   return IdentityProviderModel.getTrustedAccountLinkingProviderIds();
 }
 
+/**
+ * Keep the wildcard expansion scoped to SSO provider registration so every
+ * other auth request still uses the configured trusted origins unchanged.
+ */
 function shouldTrustAllOriginsForSsoRegistration(request?: Request) {
   if (!request) {
     return true;

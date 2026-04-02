@@ -1,13 +1,13 @@
+import {
+  MCP_APPS_EXTENSION_ID,
+  MCP_ENTERPRISE_AUTH_EXTENSION_ID,
+} from "@shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   serializerCompiler,
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import {
-  MCP_APPS_EXTENSION_ID,
-  MCP_ENTERPRISE_AUTH_EXTENSION_ID,
-} from "@shared";
 import { TeamTokenModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { mcpGatewayRoutes } from "./mcp-gateway";

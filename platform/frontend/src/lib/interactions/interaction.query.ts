@@ -30,6 +30,7 @@ export function useInteractions({
   sortDirection = "desc",
   initialData,
   enabled = true,
+  refetchInterval,
 }: {
   profileId?: string;
   externalAgentId?: string;
@@ -47,6 +48,7 @@ export function useInteractions({
   >["sortDirection"];
   initialData?: archestraApiTypes.GetInteractionsResponses["200"];
   enabled?: boolean;
+  refetchInterval?: number;
 } = {}) {
   return useQuery({
     queryKey: [
@@ -109,7 +111,7 @@ export function useInteractions({
         ? initialData
         : undefined,
     enabled,
-    // refetchInterval: 3_000, // later we might want to switch to websockets or sse, polling for now
+    ...(refetchInterval ? { refetchInterval } : {}),
   });
 }
 

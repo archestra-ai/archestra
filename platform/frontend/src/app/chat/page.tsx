@@ -543,6 +543,7 @@ export function ChatPageContent({
     sortBy: "createdAt",
     sortDirection: "desc",
     enabled: !!conversationId && !!canReadToolPolicy,
+    refetchInterval: conversationId && canReadToolPolicy ? 3_000 : undefined,
   });
   const latestUnsafeContextBoundary = canReadToolPolicy
     ? latestConversationInteractions?.data?.[0]?.unsafeContextBoundary

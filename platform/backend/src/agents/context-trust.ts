@@ -1,7 +1,7 @@
 import type { ToolExecutionOptions } from "ai";
+import { evaluateIfContextIsTrusted } from "@/guardrails/trusted-data";
 import { AgentTeamModel } from "@/models";
 import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
-import { evaluateIfContextIsTrusted } from "@/routes/proxy/utils/trusted-data";
 import type {
   CommonMessage,
   GlobalToolPolicy,

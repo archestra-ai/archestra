@@ -13,8 +13,8 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import type { PolicyBlockResult } from "@/guardrails/tool-invocation";
 import { ModelModel } from "@/models";
-import type { PolicyBlockResult } from "@/routes/proxy/utils/tool-invocation";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   createAnthropicTestClient,
@@ -51,11 +51,9 @@ vi.mock("prom-client", () => ({
 const mockEvaluatePolicies = vi.fn<() => Promise<PolicyBlockResult | null>>();
 const mockGetGlobalToolPolicy = vi.fn<() => Promise<string>>();
 
-vi.mock("@/routes/proxy/utils/tool-invocation", async (importOriginal) => {
+vi.mock("@/guardrails/tool-invocation", async (importOriginal) => {
   const original =
-    await importOriginal<
-      typeof import("@/routes/proxy/utils/tool-invocation")
-    >();
+    await importOriginal<typeof import("@/guardrails/tool-invocation")>();
   return {
     ...original,
     evaluatePolicies: (..._args: unknown[]) => mockEvaluatePolicies(),

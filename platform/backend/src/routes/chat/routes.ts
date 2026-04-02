@@ -33,7 +33,6 @@ import {
   createLLMModelForAgent,
   detectProviderFromModel,
   isApiKeyRequired,
-  resolveProviderApiKey,
 } from "@/clients/llm-client";
 import config from "@/config";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
@@ -69,6 +68,7 @@ import {
   UpdateConversationSchema,
   UuidIdSchema,
 } from "@/types";
+import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import {
   resolveConversationLlmSelectionForAgent,
   resolveFastModelName,

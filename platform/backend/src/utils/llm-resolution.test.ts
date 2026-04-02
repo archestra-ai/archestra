@@ -1,6 +1,5 @@
 import { vi } from "vitest";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
-import * as llmClient from "@/clients/llm-client";
 import config from "@/config";
 import {
   LlmProviderApiKeyModel,
@@ -8,6 +7,7 @@ import {
   OrganizationModel,
 } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
+import * as llmApiKeyResolution from "@/utils/llm-api-key-resolution";
 import {
   resolveConversationLlmSelectionForAgent,
   resolveFastModelName,
@@ -52,7 +52,9 @@ describe("resolveSmartDefaultLlm", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     // Default: no provider has a key
-    vi.spyOn(llmClient, "resolveProviderApiKey").mockResolvedValue(NO_KEY);
+    vi.spyOn(llmApiKeyResolution, "resolveProviderApiKey").mockResolvedValue(
+      NO_KEY,
+    );
     // Default: no system keys exist
     vi.spyOn(LlmProviderApiKeyModel, "findSystemKey").mockResolvedValue(null);
   });
@@ -72,7 +74,7 @@ describe("resolveSmartDefaultLlm", () => {
   }) => {
     const org = await makeOrganization();
 
-    vi.mocked(llmClient.resolveProviderApiKey).mockImplementation(
+    vi.mocked(llmApiKeyResolution.resolveProviderApiKey).mockImplementation(
       async (params) => {
         if (params.provider === "anthropic") {
           return {
@@ -153,7 +155,7 @@ describe("resolveSmartDefaultLlm", () => {
     const org = await makeOrganization();
 
     // Both anthropic and openai have keys, but anthropic has no models
-    vi.mocked(llmClient.resolveProviderApiKey).mockImplementation(
+    vi.mocked(llmApiKeyResolution.resolveProviderApiKey).mockImplementation(
       async (params) => {
         if (params.provider === "anthropic") {
           return {
@@ -207,7 +209,7 @@ describe("resolveSmartDefaultLlm", () => {
   }) => {
     const org = await makeOrganization();
 
-    vi.mocked(llmClient.resolveProviderApiKey).mockImplementation(
+    vi.mocked(llmApiKeyResolution.resolveProviderApiKey).mockImplementation(
       async (params) => {
         if (params.provider === "anthropic") {
           return {
@@ -228,7 +230,7 @@ describe("resolveSmartDefaultLlm", () => {
 
     expect(result).not.toBeNull();
     // Verify resolveProviderApiKey was called without userId
-    expect(llmClient.resolveProviderApiKey).toHaveBeenCalledWith(
+    expect(llmApiKeyResolution.resolveProviderApiKey).toHaveBeenCalledWith(
       expect.objectContaining({
         organizationId: org.id,
         userId: undefined,
@@ -244,7 +246,7 @@ describe("resolveSmartDefaultLlm", () => {
       userId: "user-123",
     });
 
-    expect(llmClient.resolveProviderApiKey).toHaveBeenCalledWith(
+    expect(llmApiKeyResolution.resolveProviderApiKey).toHaveBeenCalledWith(
       expect.objectContaining({
         organizationId: org.id,
         userId: "user-123",
@@ -258,7 +260,7 @@ describe("resolveSmartDefaultLlm", () => {
     const org = await makeOrganization();
 
     // API key from env var (no chatApiKeyId)
-    vi.mocked(llmClient.resolveProviderApiKey).mockResolvedValue({
+    vi.mocked(llmApiKeyResolution.resolveProviderApiKey).mockResolvedValue({
       apiKey: "sk-env-key",
       source: "environment",
       chatApiKeyId: undefined,
@@ -303,7 +305,9 @@ describe("resolveSmartDefaultLlmForChat", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     // Default: no provider has a key
-    vi.spyOn(llmClient, "resolveProviderApiKey").mockResolvedValue(NO_KEY);
+    vi.spyOn(llmApiKeyResolution, "resolveProviderApiKey").mockResolvedValue(
+      NO_KEY,
+    );
     // Default: no system keys exist
     vi.spyOn(LlmProviderApiKeyModel, "findSystemKey").mockResolvedValue(null);
     // Default: Vertex AI disabled
@@ -315,7 +319,7 @@ describe("resolveSmartDefaultLlmForChat", () => {
   }) => {
     const org = await makeOrganization();
 
-    vi.mocked(llmClient.resolveProviderApiKey).mockImplementation(
+    vi.mocked(llmApiKeyResolution.resolveProviderApiKey).mockImplementation(
       async (params) => {
         if (params.provider === "anthropic") {
           return {
@@ -410,7 +414,7 @@ describe("resolveSmartDefaultLlmForChat", () => {
     const org = await makeOrganization();
 
     // Set up both a DB key and an env var key
-    vi.mocked(llmClient.resolveProviderApiKey).mockImplementation(
+    vi.mocked(llmApiKeyResolution.resolveProviderApiKey).mockImplementation(
       async (params) => {
         if (params.provider === "anthropic") {
           return {
@@ -454,7 +458,9 @@ describe("resolveSmartDefaultLlmForChat", () => {
 describe("resolveConversationLlmSelectionForAgent", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    vi.spyOn(llmClient, "resolveProviderApiKey").mockResolvedValue(NO_KEY);
+    vi.spyOn(llmApiKeyResolution, "resolveProviderApiKey").mockResolvedValue(
+      NO_KEY,
+    );
     vi.spyOn(LlmProviderApiKeyModel, "findSystemKey").mockResolvedValue(null);
   });
 
@@ -562,7 +568,9 @@ describe("resolveConversationLlmSelectionForAgent", () => {
   }) => {
     const org = await makeOrganization();
 
-    vi.mocked(llmClient.resolveProviderApiKey).mockResolvedValue(NO_KEY);
+    vi.mocked(llmApiKeyResolution.resolveProviderApiKey).mockResolvedValue(
+      NO_KEY,
+    );
     vi.spyOn(OrganizationModel, "getById").mockResolvedValue({
       id: org.id,
       defaultLlmModel: null,

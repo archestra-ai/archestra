@@ -48,12 +48,12 @@ import {
   startActiveMcpSpan,
 } from "@/observability/tracing";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
-import { UNSAFE_CONTEXT_BOUNDARY_REASON } from "@/types";
 import type {
   AgentType,
   GlobalToolPolicy,
   UnsafeContextBoundary,
 } from "@/types";
+import { UNSAFE_CONTEXT_BOUNDARY_REASON } from "@/types";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { buildMcpClientInfo } from "@/utils/mcp-client-info";
 

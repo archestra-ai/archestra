@@ -13,7 +13,6 @@ import type { InteractionSource } from "@shared";
 import {
   EXTERNAL_AGENT_ID_HEADER,
   PROVIDER_BASE_URL_HEADER,
-  PROVIDERS_WITH_OPTIONAL_API_KEY,
   SESSION_ID_HEADER,
   SOURCE_HEADER,
   type SupportedProvider,
@@ -29,9 +28,8 @@ import {
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config from "@/config";
 import logger from "@/logging";
-import { LlmProviderApiKeyModel, TeamModel } from "@/models";
-import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { ApiError } from "@/types";
+import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 
 /**
  * Placeholder API key for providers that don't require authentication (vLLM, Ollama).
@@ -96,100 +94,6 @@ export function detectProviderFromModel(model: string): SupportedProvider {
   // Default to anthropic for backwards compatibility
   // Note: vLLM and Ollama cannot be auto-detected as they can serve any model
   return "anthropic";
-}
-
-/**
- * Resolve API key for a provider using priority:
- * agent's configured key > conversation > personal > team > org > environment variable
- *
- * When userId is provided: resolves via getCurrentApiKey (agent key > personal > team > org).
- * When no userId: checks org keys only.
- */
-export async function resolveProviderApiKey(params: {
-  organizationId: string;
-  userId?: string;
-  provider: SupportedProvider;
-  conversationId?: string | null;
-  agentLlmApiKeyId?: string | null;
-}): Promise<{
-  apiKey: string | undefined;
-  source: string;
-  chatApiKeyId: string | undefined;
-  baseUrl: string | null;
-}> {
-  const { organizationId, userId, provider, conversationId, agentLlmApiKeyId } =
-    params;
-
-  // Try scope-based resolution
-  let resolvedApiKey: {
-    id: string;
-    secretId: string | null;
-    scope: string;
-    baseUrl: string | null;
-  } | null = null;
-
-  if (userId) {
-    const userTeamIds = await TeamModel.getUserTeamIds(userId);
-    resolvedApiKey = await LlmProviderApiKeyModel.getCurrentApiKey({
-      organizationId,
-      userId,
-      userTeamIds,
-      provider,
-      conversationId: conversationId ?? null,
-      agentLlmApiKeyId,
-    });
-  } else {
-    resolvedApiKey = await LlmProviderApiKeyModel.findByScope(
-      organizationId,
-      provider,
-      "org",
-    );
-  }
-
-  if (resolvedApiKey) {
-    if (resolvedApiKey.secretId) {
-      const secretValue = await getSecretValueForLlmProviderApiKey(
-        resolvedApiKey.secretId,
-      );
-      if (secretValue) {
-        return {
-          apiKey: secretValue as string,
-          source: resolvedApiKey.scope,
-          chatApiKeyId: resolvedApiKey.id,
-          baseUrl: resolvedApiKey.baseUrl,
-        };
-      }
-    }
-
-    // Key exists but has no secret (e.g. Ollama, vLLM with optional API key).
-    // Return the resolved key so the caller gets the baseUrl and chatApiKeyId.
-    if (PROVIDERS_WITH_OPTIONAL_API_KEY.has(provider)) {
-      return {
-        apiKey: undefined,
-        source: resolvedApiKey.scope,
-        chatApiKeyId: resolvedApiKey.id,
-        baseUrl: resolvedApiKey.baseUrl,
-      };
-    }
-  }
-
-  // Fall back to environment variable
-  const envApiKey = envApiKeyGetters[provider]();
-  if (envApiKey) {
-    return {
-      apiKey: envApiKey,
-      source: "environment",
-      chatApiKeyId: undefined,
-      baseUrl: null,
-    };
-  }
-
-  return {
-    apiKey: undefined,
-    source: "environment",
-    chatApiKeyId: undefined,
-    baseUrl: null,
-  };
 }
 
 /**
@@ -411,29 +315,6 @@ export async function createLLMModelForAgent(params: {
 // =============================================================================
 // Internal helpers
 // =============================================================================
-
-/**
- * Environment variable API key getter for each provider.
- * TypeScript enforces that ALL providers in SupportedProvider have an entry.
- */
-const envApiKeyGetters: Record<SupportedProvider, () => string | undefined> = {
-  anthropic: () => config.chat.anthropic.apiKey,
-  bedrock: () => config.chat.bedrock.apiKey,
-  cerebras: () => config.chat.cerebras.apiKey,
-  cohere: () => config.chat.cohere.apiKey,
-  gemini: () => config.chat.gemini.apiKey,
-  minimax: () => config.chat.minimax.apiKey,
-  mistral: () => config.chat.mistral.apiKey,
-  ollama: () => config.chat.ollama.apiKey,
-  openai: () => config.chat.openai.apiKey,
-  openrouter: () => config.chat.openrouter?.apiKey || undefined,
-  perplexity: () => config.chat.perplexity.apiKey,
-  groq: () => config.chat.groq.apiKey,
-  xai: () => config.chat.xai.apiKey,
-  vllm: () => config.chat.vllm.apiKey,
-  zhipuai: () => config.chat.zhipuai.apiKey,
-  deepseek: () => config.chat.deepseek.apiKey,
-};
 
 /**
  * Unified model creation config for each provider.

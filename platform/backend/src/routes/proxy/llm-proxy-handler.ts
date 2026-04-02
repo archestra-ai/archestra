@@ -51,8 +51,8 @@ import {
   type LLMStreamAdapter,
   type ToolCompressionStats,
   type ToonSkipReason,
-  type UnsafeContextBoundary,
   UNSAFE_CONTEXT_BOUNDARY_REASON,
+  type UnsafeContextBoundary,
 } from "@/types";
 import { isLoopbackAddress } from "@/utils/network";
 import {

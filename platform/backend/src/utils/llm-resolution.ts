@@ -6,10 +6,7 @@ import {
   SupportedProvidersSchema,
 } from "@shared";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
-import {
-  detectProviderFromModel,
-  resolveProviderApiKey,
-} from "@/clients/llm-client";
+import { detectProviderFromModel } from "@/clients/llm-client";
 import config, { getProviderEnvApiKey } from "@/config";
 import logger from "@/logging";
 import {
@@ -18,6 +15,7 @@ import {
   OrganizationModel,
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 
 export interface ConversationLlmSelection {
   chatApiKeyId: string | null;

@@ -1973,10 +1973,7 @@ const unsafeContextBoundaryReasonMap = {
 function isUnsafeContextBoundaryReason(
   reason: unknown,
 ): reason is UnsafeContextBoundaryReason {
-  return (
-    typeof reason === "string" &&
-    reason in unsafeContextBoundaryReasonMap
-  );
+  return typeof reason === "string" && reason in unsafeContextBoundaryReasonMap;
 }
 
 function toolPartMatchesUnsafeContextBoundary(

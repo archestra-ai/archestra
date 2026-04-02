@@ -169,13 +169,17 @@ const MessageThread = ({
                           const policyDenied = parsePolicyDenied(part.text);
                           if (policyDenied) {
                             return (
-                              <PolicyDeniedTool
-                                key={partKey}
-                                policyDenied={policyDenied}
-                                {...(profileId
-                                  ? { editable: true, profileId }
-                                  : { editable: false })}
-                              />
+                              <Fragment key={partKey}>
+                                {policyDenied.unsafeContextActiveAtRequestStart && (
+                                  <PreexistingUnsafeContextDivider />
+                                )}
+                                <PolicyDeniedTool
+                                  policyDenied={policyDenied}
+                                  {...(profileId
+                                    ? { editable: true, profileId }
+                                    : { editable: false })}
+                                />
+                              </Fragment>
                             );
                           }
                           const isLastAssistantMessage =
@@ -635,6 +639,7 @@ export type PolicyDeniedPart = {
   state: "output-denied";
   input: Record<string, unknown>;
   errorText: string;
+  unsafeContextActiveAtRequestStart?: boolean;
 };
 
 export type DualLlmPart = {

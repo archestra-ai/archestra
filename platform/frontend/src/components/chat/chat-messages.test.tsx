@@ -243,6 +243,53 @@ describe("ChatMessages", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders the unsafe-context divider immediately after the unsafe tool result within the same message", () => {
+    const messages = [
+      {
+        id: "assistant-live-unsafe",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-read_email",
+            toolCallId: "call-live-unsafe",
+            state: "output-available",
+            input: { folder: "inbox" },
+            output: {
+              content: "ARCH_TEST = secret-value",
+              unsafeContextBoundary: {
+                kind: "tool_result",
+                reason: "tool_result_marked_untrusted",
+                toolCallId: "call-live-unsafe",
+                toolName: "read_email",
+              },
+            },
+          },
+          {
+            type: "text",
+            text: "Done.",
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    const divider = screen.getByText("Sensitive context starts here");
+    const assistantText = screen.getByText("Done.");
+
+    expect(divider).toBeInTheDocument();
+    expect(
+      divider.compareDocumentPosition(assistantText) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("renders the preexisting unsafe-context divider when the request starts unsafe", () => {
     render(
       <ChatMessages
@@ -261,6 +308,35 @@ describe("ChatMessages", () => {
           kind: "preexisting_untrusted",
           reason: "inherited_from_parent",
         }}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "Sensitive context was already active when this request started",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("renders the preexisting unsafe-context divider for policy-denied text caused by sensitive context", () => {
+    const messages = [
+      {
+        id: "assistant-denied",
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: "\nI tried to invoke the internal-dev-test-server__print_archestra_test tool with the following arguments: {}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: context contains sensitive data",
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
       />,
     );
 

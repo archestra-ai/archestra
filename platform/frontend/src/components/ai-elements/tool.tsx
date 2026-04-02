@@ -306,13 +306,14 @@ export const ToolOutput = ({
 
   let Output: ReactNode;
   let copyText: string | undefined;
+  const displayOutput = normalizeToolOutput(output);
 
-  if (typeof output === "object" || typeof output === "string") {
+  if (typeof displayOutput === "object" || typeof displayOutput === "string") {
     // If output is a string, try to parse it as JSON for proper formatting
-    let formattedOutput = output;
-    if (typeof output === "string") {
+    let formattedOutput = displayOutput;
+    if (typeof displayOutput === "string") {
       try {
-        formattedOutput = JSON.parse(output);
+        formattedOutput = JSON.parse(displayOutput);
       } catch {
         // Not valid JSON, use as-is
       }
@@ -374,8 +375,8 @@ export const ToolOutput = ({
       </div>
     );
   } else {
-    copyText = String(output);
-    Output = <div>{String(output)}</div>;
+    copyText = String(displayOutput);
+    Output = <div>{String(displayOutput)}</div>;
   }
 
   return (
@@ -400,3 +401,33 @@ export const ToolOutput = ({
     </div>
   );
 };
+
+function normalizeToolOutput(output: ToolUIPart["output"]): unknown {
+  if (!isMcpToolOutput(output)) {
+    return output;
+  }
+
+  if (output.content) {
+    return output.content;
+  }
+
+  if (output.structuredContent !== undefined) {
+    return output.structuredContent;
+  }
+
+  return output;
+}
+
+function isMcpToolOutput(value: unknown): value is {
+  content: string;
+  structuredContent?: unknown;
+  rawContent?: unknown;
+  _meta?: unknown;
+} {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "content" in value &&
+    typeof value.content === "string"
+  );
+}

@@ -6,7 +6,10 @@ import {
   SupportedProvidersSchema,
 } from "@shared";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
-import { resolveProviderApiKey } from "@/clients/llm-client";
+import {
+  detectProviderFromModel,
+  resolveProviderApiKey,
+} from "@/clients/llm-client";
 import config, { getProviderEnvApiKey } from "@/config";
 import logger from "@/logging";
 import {
@@ -14,6 +17,12 @@ import {
   LlmProviderApiKeyModelLinkModel,
   OrganizationModel,
 } from "@/models";
+
+export interface ConversationLlmSelection {
+  chatApiKeyId: string | null;
+  selectedModel: string;
+  selectedProvider: SupportedProvider;
+}
 
 /**
  * Resolve the best available LLM provider, API key, model, and base URL
@@ -71,6 +80,39 @@ export async function resolveSmartDefaultLlm(params: {
   }
 
   return null;
+}
+
+export async function resolveConversationLlmSelectionForAgent(params: {
+  agent: {
+    llmApiKeyId: string | null;
+    llmModel: string | null;
+  };
+  organizationId: string;
+  userId: string;
+}): Promise<ConversationLlmSelection> {
+  const { agent, organizationId, userId } = params;
+
+  const agentSelection = await resolveAgentLlmSelection(agent);
+  if (agentSelection) {
+    return agentSelection;
+  }
+
+  const organizationSelection =
+    await resolveOrganizationLlmSelection(organizationId);
+  if (organizationSelection) {
+    return organizationSelection;
+  }
+
+  const smartDefault = await resolveSmartDefaultLlmForChat({
+    organizationId,
+    userId,
+  });
+
+  return {
+    chatApiKeyId: null,
+    selectedModel: smartDefault.model,
+    selectedProvider: smartDefault.provider,
+  };
 }
 
 /**
@@ -167,4 +209,70 @@ export async function resolveFastModelName(
   }
 
   return FAST_MODELS[provider];
+}
+
+async function resolveAgentLlmSelection(agent: {
+  llmApiKeyId: string | null;
+  llmModel: string | null;
+}): Promise<ConversationLlmSelection | null> {
+  if (agent.llmApiKeyId) {
+    const apiKey = await LlmProviderApiKeyModel.findById(agent.llmApiKeyId);
+    if (apiKey) {
+      const provider = isSupportedProvider(apiKey.provider)
+        ? apiKey.provider
+        : detectProviderFromModel(agent.llmModel ?? "");
+
+      if (agent.llmModel) {
+        return {
+          chatApiKeyId: apiKey.id,
+          selectedModel: agent.llmModel,
+          selectedProvider: provider,
+        };
+      }
+
+      const bestModel = await LlmProviderApiKeyModelLinkModel.getBestModel(
+        apiKey.id,
+      );
+      if (bestModel) {
+        return {
+          chatApiKeyId: apiKey.id,
+          selectedModel: bestModel.modelId,
+          selectedProvider: provider,
+        };
+      }
+    }
+  }
+
+  if (!agent.llmModel) {
+    return null;
+  }
+
+  return {
+    chatApiKeyId: null,
+    selectedModel: agent.llmModel,
+    selectedProvider: detectProviderFromModel(agent.llmModel),
+  };
+}
+
+async function resolveOrganizationLlmSelection(
+  organizationId: string,
+): Promise<ConversationLlmSelection | null> {
+  const organization = await OrganizationModel.getById(organizationId);
+  if (!organization?.defaultLlmModel) {
+    return null;
+  }
+
+  const apiKey = organization.defaultLlmApiKeyId
+    ? await LlmProviderApiKeyModel.findById(organization.defaultLlmApiKeyId)
+    : null;
+
+  return {
+    chatApiKeyId: apiKey?.id ?? null,
+    selectedModel: organization.defaultLlmModel,
+    selectedProvider:
+      organization.defaultLlmProvider &&
+      isSupportedProvider(organization.defaultLlmProvider)
+        ? organization.defaultLlmProvider
+        : detectProviderFromModel(organization.defaultLlmModel),
+  };
 }

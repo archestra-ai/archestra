@@ -119,7 +119,6 @@ import {
 import { useConfig } from "@/lib/config/config.query";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
-import { useInteractions } from "@/lib/interactions/interaction.query";
 import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import {
   type SupportedProvider,
@@ -161,6 +160,10 @@ export function ChatPageContent({
   const pendingFilesRef = useRef<
     Array<{ url: string; mediaType: string; filename?: string }>
   >([]);
+  const lastVisibleMessagesRef = useRef<UIMessage[]>([]);
+  const lastVisibleMessagesConversationRef = useRef<string | undefined>(
+    routeConversationId,
+  );
   const userMessageJustEdited = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const autoSendTriggeredRef = useRef(false);
@@ -196,9 +199,6 @@ export function ChatPageContent({
   });
   const { data: canReadLlmProvider } = useHasPermissions({
     llmProviderApiKey: ["read"],
-  });
-  const { data: canReadToolPolicy } = useHasPermissions({
-    toolPolicy: ["read"],
   });
   const { data: canReadTeams } = useHasPermissions({
     team: ["read"],
@@ -537,17 +537,6 @@ export function ChatPageContent({
     () => (conversation?.messages ?? []) as PartialUIMessage[],
     [conversation?.messages],
   );
-  const { data: latestConversationInteractions } = useInteractions({
-    ...(conversationId ? { sessionId: conversationId } : {}),
-    limit: 1,
-    sortBy: "createdAt",
-    sortDirection: "desc",
-    enabled: !!conversationId && !!canReadToolPolicy,
-    refetchInterval: conversationId && canReadToolPolicy ? 3_000 : undefined,
-  });
-  const latestUnsafeContextBoundary = canReadToolPolicy
-    ? latestConversationInteractions?.data?.[0]?.unsafeContextBoundary
-    : undefined;
   const effectiveForkAgentId = forkAgentId ?? internalAgents[0]?.id ?? null;
 
   // Track title generation for typing animation in the header
@@ -806,8 +795,40 @@ export function ChatPageContent({
     previousArtifactRef.current = conversation?.artifact;
   }, [conversation?.artifact, isArtifactOpen, conversationId]);
 
-  // Extract chat session properties (or use defaults if session not ready)
-  const messages = chatSession?.messages ?? [];
+  useEffect(() => {
+    if (lastVisibleMessagesConversationRef.current !== conversationId) {
+      lastVisibleMessagesConversationRef.current = conversationId;
+      lastVisibleMessagesRef.current = [];
+    }
+  }, [conversationId]);
+
+  const persistedConversationMessages = useMemo(
+    () => (conversation?.messages ?? []) as UIMessage[],
+    [conversation?.messages],
+  );
+
+  // Keep the last visible thread around so brief session dropouts do not blank
+  // the chat while the backend/persistence layer catches up.
+  useEffect(() => {
+    if (chatSession?.messages && chatSession.messages.length > 0) {
+      lastVisibleMessagesRef.current = chatSession.messages;
+      return;
+    }
+
+    if (persistedConversationMessages.length > 0) {
+      lastVisibleMessagesRef.current = persistedConversationMessages;
+    }
+  }, [chatSession?.messages, persistedConversationMessages]);
+
+  // Extract chat session properties (or use persisted / last visible state if session dips)
+  const messages =
+    (chatSession?.messages && chatSession.messages.length > 0
+      ? chatSession.messages
+      : undefined) ??
+    (persistedConversationMessages.length > 0
+      ? persistedConversationMessages
+      : undefined) ??
+    lastVisibleMessagesRef.current;
   const sendMessage = chatSession?.sendMessage;
   const status = chatSession?.status ?? "ready";
   const setMessages = chatSession?.setMessages;
@@ -948,16 +969,17 @@ export function ChatPageContent({
       loadedConversationRef.current = undefined;
     }
 
-    // Sync messages from backend only on initial load or when recovering from empty state
-    // The AI SDK manages message state correctly during streaming, so we shouldn't overwrite it
+    // Sync messages from backend only on the initial conversation load.
+    // Once a live chat session exists, the AI SDK session state is authoritative.
+    // Overwriting from the DB after that can race with persistence and temporarily
+    // replace streamed assistant content with stale user-only messages.
     const shouldSync =
       conversation?.messages &&
       conversation.id === conversationId &&
       status !== "submitted" &&
       status !== "streaming" &&
       !userMessageJustEdited.current &&
-      (loadedConversationRef.current !== conversationId ||
-        messages.length === 0);
+      loadedConversationRef.current !== conversationId;
 
     if (shouldSync) {
       setMessages(conversation.messages as UIMessage[]);
@@ -1003,14 +1025,7 @@ export function ChatPageContent({
     if (status === "ready" && userMessageJustEdited.current) {
       userMessageJustEdited.current = false;
     }
-  }, [
-    conversationId,
-    conversation,
-    setMessages,
-    sendMessage,
-    status,
-    messages.length,
-  ]);
+  }, [conversationId, conversation, setMessages, sendMessage, status]);
 
   // Poll for the assistant response when the page was reloaded mid-stream.
   // After reload the DB may only contain the user message (persisted early by
@@ -1792,7 +1807,6 @@ export function ChatPageContent({
                     containerClassName="h-full"
                     hideDivider
                     profileId={conversation?.agent?.id}
-                    unsafeContextBoundary={latestUnsafeContextBoundary}
                   />
                 ) : (
                   <ChatMessages
@@ -1811,7 +1825,6 @@ export function ChatPageContent({
                     }
                     selectedModel={conversation?.selectedModel ?? initialModel}
                     modelSource={conversationModelSource ?? initialModelSource}
-                    unsafeContextBoundary={latestUnsafeContextBoundary}
                     onUserMessageEdit={(
                       editedMessage,
                       updatedMessages,

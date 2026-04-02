@@ -9,6 +9,7 @@ import {
   PostMessageTransport,
 } from "@modelcontextprotocol/ext-apps/app-bridge";
 import {
+  type archestraApiTypes,
   buildFullToolName,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   parseFullToolName,
@@ -40,6 +41,8 @@ export type McpToolOutput = {
   content: string;
   /** Additional metadata (timestamps, version info, etc.) not intended for model context */
   _meta?: Record<string, unknown>;
+  /** Unsafe-context boundary marker preserved in the live tool stream */
+  unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
   /** Structured data optimized for UI rendering (not added to model context) */
   structuredContent?: Record<string, unknown>;
   /** Original MCP content blocks from the tool response */

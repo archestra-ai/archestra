@@ -20,6 +20,7 @@ describe("parsePolicyDenied", () => {
     });
     const errorInfo = JSON.parse(result?.errorText ?? "");
     expect(errorInfo.reason).toContain("context contains sensitive data");
+    expect(result?.unsafeContextActiveAtRequestStart).toBe(true);
   });
 
   it("parses a JSON-wrapped policy denial (originalError.message)", () => {
@@ -33,6 +34,7 @@ describe("parsePolicyDenied", () => {
     expect(result).not.toBeNull();
     expect(result?.type).toBe("tool-my-tool");
     expect(result?.input).toEqual({ key: "value" });
+    expect(result?.unsafeContextActiveAtRequestStart).toBe(false);
   });
 
   it("parses a JSON-wrapped policy denial (message)", () => {

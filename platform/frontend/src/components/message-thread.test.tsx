@@ -114,4 +114,27 @@ describe("MessageThread", () => {
       screen.getByText("Sensitive context starts here"),
     ).toBeInTheDocument();
   });
+
+  it("renders the preexisting unsafe-context divider for sensitive policy denials", () => {
+    const messages: PartialUIMessage[] = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: "\nI tried to invoke the internal-dev-test-server__print_archestra_test tool with the following arguments: {}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: context contains sensitive data",
+          },
+        ],
+      },
+    ];
+
+    render(<MessageThread messages={messages} />);
+
+    expect(
+      screen.getByText(
+        "Sensitive context was already active when this request started",
+      ),
+    ).toBeInTheDocument();
+  });
 });

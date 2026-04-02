@@ -498,7 +498,7 @@ export const policyConfigurationService = new PolicyConfigurationService();
 
 /**
  * Resolve LLM from the agent's own llmApiKeyId/llmModel configuration.
- * Mirrors the agent-level resolution in conversation-llm-selection.ts.
+ * Mirrors the agent-level resolution in utils/llm-resolution.ts.
  */
 async function resolveAgentLlm(agent: {
   llmApiKeyId: string | null;

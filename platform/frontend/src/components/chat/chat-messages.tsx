@@ -181,6 +181,9 @@ export function ChatMessages({
   const { data: canExpandToolCalls } = useHasPermissions({
     chatExpandToolCalls: ["enable"],
   });
+  const { data: canReadToolPolicy } = useHasPermissions({
+    toolPolicy: ["read"],
+  });
   const { data: canReadMcpRegistry } = useHasPermissions({
     mcpRegistry: ["read"],
   });
@@ -405,21 +408,35 @@ export function ChatMessages({
                     if (groupMap.has(i)) {
                       const group = groupMap.get(i);
                       if (!group) return null;
-                      return (
-                        <CompactToolGroup
-                          key={getCompactGroupKey(message.id, group.startIndex)}
-                          tools={group.entries.map((entry) => ({
-                            key: getToolEntryKey(message.id, entry),
-                            toolName: entry.toolName,
-                            part: entry.part,
-                            toolResultPart: entry.toolResultPart,
-                            errorText: entry.errorText,
-                          }))}
-                          toolIconMap={toolIconMap}
-                          canExpandToolCalls={canExpandToolCalls}
-                          onToolApprovalResponse={onToolApprovalResponse}
-                        />
-                      );
+                      return renderCompactGroupWithUnsafeContextDivider({
+                        partKey: getCompactGroupKey(
+                          message.id,
+                          group.startIndex,
+                        ),
+                        parts: group.entries.map(
+                          (entry) => entry.toolResultPart ?? entry.part,
+                        ),
+                        unsafeContextBoundary,
+                        canReadToolPolicy: !!canReadToolPolicy,
+                        renderedPart: (
+                          <CompactToolGroup
+                            key={getCompactGroupKey(
+                              message.id,
+                              group.startIndex,
+                            )}
+                            tools={group.entries.map((entry) => ({
+                              key: getToolEntryKey(message.id, entry),
+                              toolName: entry.toolName,
+                              part: entry.part,
+                              toolResultPart: entry.toolResultPart,
+                              errorText: entry.errorText,
+                            }))}
+                            toolIconMap={toolIconMap}
+                            canExpandToolCalls={canExpandToolCalls}
+                            onToolApprovalResponse={onToolApprovalResponse}
+                          />
+                        ),
+                      });
                     }
 
                     // Skip parts consumed by compact groups
@@ -456,13 +473,18 @@ export function ChatMessages({
                         const policyDenied = parsePolicyDenied(part.text);
                         if (policyDenied) {
                           return (
-                            <PolicyDeniedTool
-                              key={partKey}
-                              policyDenied={policyDenied}
-                              {...(agentId
-                                ? { editable: true, profileId: agentId }
-                                : { editable: false })}
-                            />
+                            <Fragment key={partKey}>
+                              {canReadToolPolicy &&
+                                policyDenied.unsafeContextActiveAtRequestStart && (
+                                  <PreexistingUnsafeContextDivider />
+                                )}
+                              <PolicyDeniedTool
+                                policyDenied={policyDenied}
+                                {...(agentId
+                                  ? { editable: true, profileId: agentId }
+                                  : { editable: false })}
+                              />
+                            </Fragment>
                           );
                         }
 
@@ -815,37 +837,43 @@ export function ChatMessages({
                           toolResultPart = nextPart;
                         }
 
-                        return (
-                          <MessageTool
-                            part={part}
-                            key={partKey}
-                            toolResultPart={toolResultPart}
-                            toolName={toolName}
-                            agentId={agentId}
-                            isDebugging={isDebugging}
-                            canExpandToolCalls={canExpandToolCalls}
-                            onToolApprovalResponse={onToolApprovalResponse}
-                            onInstallMcp={
-                              orchestrator.triggerInstallByCatalogId
-                            }
-                            onReauthMcp={
-                              orchestrator.triggerReauthByCatalogIdAndServerId
-                            }
-                            getToolShortName={getToolShortName}
-                            toolIconMap={toolIconMap}
-                            earlyToolUiData={
-                              part.toolCallId
-                                ? earlyToolUiStarts[part.toolCallId]
-                                : undefined
-                            }
-                            onSendMessage={(text) =>
-                              session?.sendMessage({
-                                role: "user",
-                                parts: [{ type: "text", text }],
-                              })
-                            }
-                          />
-                        );
+                        return renderPartWithUnsafeContextDivider({
+                          partKey,
+                          part: toolResultPart ?? part,
+                          unsafeContextBoundary,
+                          canReadToolPolicy: !!canReadToolPolicy,
+                          renderedPart: (
+                            <MessageTool
+                              part={part}
+                              key={partKey}
+                              toolResultPart={toolResultPart}
+                              toolName={toolName}
+                              agentId={agentId}
+                              isDebugging={isDebugging}
+                              canExpandToolCalls={canExpandToolCalls}
+                              onToolApprovalResponse={onToolApprovalResponse}
+                              onInstallMcp={
+                                orchestrator.triggerInstallByCatalogId
+                              }
+                              onReauthMcp={
+                                orchestrator.triggerReauthByCatalogIdAndServerId
+                              }
+                              getToolShortName={getToolShortName}
+                              toolIconMap={toolIconMap}
+                              earlyToolUiData={
+                                part.toolCallId
+                                  ? earlyToolUiStarts[part.toolCallId]
+                                  : undefined
+                              }
+                              onSendMessage={(text) =>
+                                session?.sendMessage({
+                                  role: "user",
+                                  parts: [{ type: "text", text }],
+                                })
+                              }
+                            />
+                          ),
+                        });
                       }
 
                       default: {
@@ -893,33 +921,39 @@ export function ChatMessages({
                             output: outputPart?.output,
                           }) as ToolUIPart;
 
-                          return (
-                            <MessageTool
-                              key={`${message.id}-${tcId}`}
-                              part={effectivePart}
-                              toolResultPart={outputPart}
-                              toolName={toolName}
-                              agentId={agentId}
-                              isDebugging={isDebugging}
-                              canExpandToolCalls={canExpandToolCalls}
-                              onToolApprovalResponse={onToolApprovalResponse}
-                              onInstallMcp={
-                                orchestrator.triggerInstallByCatalogId
-                              }
-                              onReauthMcp={
-                                orchestrator.triggerReauthByCatalogIdAndServerId
-                              }
-                              getToolShortName={getToolShortName}
-                              toolIconMap={toolIconMap}
-                              onSendMessage={(text) =>
-                                session?.sendMessage({
-                                  role: "user",
-                                  parts: [{ type: "text", text }],
-                                })
-                              }
-                              earlyToolUiData={earlyToolUiStarts[tcId]}
-                            />
-                          );
+                          return renderPartWithUnsafeContextDivider({
+                            partKey,
+                            part: outputPart ?? effectivePart,
+                            unsafeContextBoundary,
+                            canReadToolPolicy: !!canReadToolPolicy,
+                            renderedPart: (
+                              <MessageTool
+                                key={`${message.id}-${tcId}`}
+                                part={effectivePart}
+                                toolResultPart={outputPart}
+                                toolName={toolName}
+                                agentId={agentId}
+                                isDebugging={isDebugging}
+                                canExpandToolCalls={canExpandToolCalls}
+                                onToolApprovalResponse={onToolApprovalResponse}
+                                onInstallMcp={
+                                  orchestrator.triggerInstallByCatalogId
+                                }
+                                onReauthMcp={
+                                  orchestrator.triggerReauthByCatalogIdAndServerId
+                                }
+                                getToolShortName={getToolShortName}
+                                toolIconMap={toolIconMap}
+                                onSendMessage={(text) =>
+                                  session?.sendMessage({
+                                    role: "user",
+                                    parts: [{ type: "text", text }],
+                                  })
+                                }
+                                earlyToolUiData={earlyToolUiStarts[tcId]}
+                              />
+                            ),
+                          });
                         }
 
                         // Regular tool-* parts: skip if a data-tool-ui-start already
@@ -955,35 +989,41 @@ export function ChatMessages({
                             toolResultPart = nextPart;
                           }
 
-                          return (
-                            <MessageTool
-                              part={part}
-                              key={partKey}
-                              toolResultPart={toolResultPart}
-                              toolName={toolName}
-                              agentId={agentId}
-                              isDebugging={isDebugging}
-                              canExpandToolCalls={canExpandToolCalls}
-                              onToolApprovalResponse={onToolApprovalResponse}
-                              onInstallMcp={
-                                orchestrator.triggerInstallByCatalogId
-                              }
-                              onReauthMcp={
-                                orchestrator.triggerReauthByCatalogIdAndServerId
-                              }
-                              getToolShortName={getToolShortName}
-                              toolIconMap={toolIconMap}
-                              earlyToolUiData={
-                                tcId ? earlyToolUiStarts[tcId] : undefined
-                              }
-                              onSendMessage={(text) =>
-                                session?.sendMessage({
-                                  role: "user",
-                                  parts: [{ type: "text", text }],
-                                })
-                              }
-                            />
-                          );
+                          return renderPartWithUnsafeContextDivider({
+                            partKey,
+                            part: toolResultPart ?? part,
+                            unsafeContextBoundary,
+                            canReadToolPolicy: !!canReadToolPolicy,
+                            renderedPart: (
+                              <MessageTool
+                                part={part}
+                                key={partKey}
+                                toolResultPart={toolResultPart}
+                                toolName={toolName}
+                                agentId={agentId}
+                                isDebugging={isDebugging}
+                                canExpandToolCalls={canExpandToolCalls}
+                                onToolApprovalResponse={onToolApprovalResponse}
+                                onInstallMcp={
+                                  orchestrator.triggerInstallByCatalogId
+                                }
+                                onReauthMcp={
+                                  orchestrator.triggerReauthByCatalogIdAndServerId
+                                }
+                                getToolShortName={getToolShortName}
+                                toolIconMap={toolIconMap}
+                                earlyToolUiData={
+                                  tcId ? earlyToolUiStarts[tcId] : undefined
+                                }
+                                onSendMessage={(text) =>
+                                  session?.sendMessage({
+                                    role: "user",
+                                    parts: [{ type: "text", text }],
+                                  })
+                                }
+                              />
+                            ),
+                          });
                         }
 
                         // Skip step-start and other non-renderable parts
@@ -995,10 +1035,6 @@ export function ChatMessages({
                 <SwapAgentDivider
                   message={message}
                   getToolShortName={getToolShortName}
-                />
-                <UnsafeContextDivider
-                  message={message}
-                  unsafeContextBoundary={unsafeContextBoundary}
                 />
               </div>
             );
@@ -1741,27 +1777,170 @@ function SwapAgentDivider({
   return null;
 }
 
-function UnsafeContextDivider({
-  message,
+function renderPartWithUnsafeContextDivider({
+  partKey,
+  part,
+  renderedPart,
   unsafeContextBoundary,
+  canReadToolPolicy,
 }: {
-  message: UIMessage;
+  partKey: string;
+  part: DynamicToolUIPart | ToolUIPart;
+  renderedPart: React.ReactNode;
   unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
+  canReadToolPolicy: boolean;
 }) {
-  if (!unsafeContextBoundary || unsafeContextBoundary.kind !== "tool_result") {
-    return null;
+  if (!canReadToolPolicy) {
+    return renderedPart;
   }
 
-  const messageContainsBoundary = (message.parts ?? []).some(
-    (part) =>
-      isToolPart(part) && part.toolCallId === unsafeContextBoundary.toolCallId,
+  const resolvedUnsafeContextBoundary =
+    extractUnsafeContextBoundaryFromToolOutput(part.output) ??
+    unsafeContextBoundary;
+
+  if (
+    !resolvedUnsafeContextBoundary ||
+    resolvedUnsafeContextBoundary.kind !== "tool_result"
+  ) {
+    return renderedPart;
+  }
+
+  if (part.toolCallId !== resolvedUnsafeContextBoundary.toolCallId) {
+    return renderedPart;
+  }
+
+  return (
+    <Fragment key={`${partKey}-unsafe-context-boundary`}>
+      {renderedPart}
+      <UnsafeContextStartsHereDivider />
+    </Fragment>
   );
+}
 
-  if (!messageContainsBoundary) {
-    return null;
+function renderCompactGroupWithUnsafeContextDivider({
+  partKey,
+  parts,
+  renderedPart,
+  unsafeContextBoundary,
+  canReadToolPolicy,
+}: {
+  partKey: string;
+  parts: Array<DynamicToolUIPart | ToolUIPart>;
+  renderedPart: React.ReactNode;
+  unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
+  canReadToolPolicy: boolean;
+}) {
+  if (!canReadToolPolicy) {
+    return renderedPart;
   }
 
-  return <UnsafeContextStartsHereDivider />;
+  const resolvedUnsafeContextBoundary =
+    parts
+      .map((part) => extractUnsafeContextBoundaryFromToolOutput(part.output))
+      .find((boundary) => boundary?.kind === "tool_result") ??
+    unsafeContextBoundary;
+
+  if (
+    !resolvedUnsafeContextBoundary ||
+    resolvedUnsafeContextBoundary.kind !== "tool_result"
+  ) {
+    return renderedPart;
+  }
+
+  if (
+    !parts.some(
+      (part) => part.toolCallId === resolvedUnsafeContextBoundary.toolCallId,
+    )
+  ) {
+    return renderedPart;
+  }
+
+  return (
+    <Fragment key={`${partKey}-unsafe-context-boundary`}>
+      {renderedPart}
+      <UnsafeContextStartsHereDivider />
+    </Fragment>
+  );
+}
+
+function extractUnsafeContextBoundaryFromToolOutput(
+  output: unknown,
+): archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"] {
+  if (
+    typeof output === "object" &&
+    output !== null &&
+    "unsafeContextBoundary" in output
+  ) {
+    const topLevelUnsafeContextBoundary = output.unsafeContextBoundary;
+    if (
+      typeof topLevelUnsafeContextBoundary === "object" &&
+      topLevelUnsafeContextBoundary !== null &&
+      "kind" in topLevelUnsafeContextBoundary &&
+      topLevelUnsafeContextBoundary.kind === "tool_result" &&
+      "toolCallId" in topLevelUnsafeContextBoundary &&
+      typeof topLevelUnsafeContextBoundary.toolCallId === "string" &&
+      "toolName" in topLevelUnsafeContextBoundary &&
+      typeof topLevelUnsafeContextBoundary.toolName === "string" &&
+      "reason" in topLevelUnsafeContextBoundary &&
+      isUnsafeContextBoundaryReason(topLevelUnsafeContextBoundary.reason)
+    ) {
+      return {
+        kind: "tool_result",
+        reason: topLevelUnsafeContextBoundary.reason,
+        toolCallId: topLevelUnsafeContextBoundary.toolCallId,
+        toolName: topLevelUnsafeContextBoundary.toolName,
+      };
+    }
+  }
+
+  if (
+    typeof output !== "object" ||
+    output === null ||
+    !("_meta" in output) ||
+    typeof output._meta !== "object" ||
+    output._meta === null ||
+    !("unsafeContextBoundary" in output._meta)
+  ) {
+    return undefined;
+  }
+
+  const unsafeContextBoundary = output._meta.unsafeContextBoundary;
+  if (
+    typeof unsafeContextBoundary !== "object" ||
+    unsafeContextBoundary === null ||
+    !("kind" in unsafeContextBoundary) ||
+    unsafeContextBoundary.kind !== "tool_result" ||
+    !("toolCallId" in unsafeContextBoundary) ||
+    typeof unsafeContextBoundary.toolCallId !== "string" ||
+    !("toolName" in unsafeContextBoundary) ||
+    typeof unsafeContextBoundary.toolName !== "string" ||
+    !("reason" in unsafeContextBoundary) ||
+    !isUnsafeContextBoundaryReason(unsafeContextBoundary.reason)
+  ) {
+    return undefined;
+  }
+
+  return {
+    kind: "tool_result",
+    reason: unsafeContextBoundary.reason,
+    toolCallId: unsafeContextBoundary.toolCallId,
+    toolName: unsafeContextBoundary.toolName,
+  };
+}
+
+function isUnsafeContextBoundaryReason(
+  reason: unknown,
+): reason is
+  | "agent_configured_untrusted"
+  | "inherited_from_parent"
+  | "tool_result_marked_untrusted"
+  | "tool_result_blocked" {
+  return (
+    reason === "agent_configured_untrusted" ||
+    reason === "inherited_from_parent" ||
+    reason === "tool_result_marked_untrusted" ||
+    reason === "tool_result_blocked"
+  );
 }
 
 function getRenderedToolName(

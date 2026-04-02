@@ -371,12 +371,14 @@ describe("executeMcpTool error handling", () => {
   const baseCtx = {
     toolName: "test_tool",
     toolArguments: {},
-    agentId: "agent-1",
+    agentId: "00000000-0000-4000-8000-000000000001",
     agentName: "Test Agent",
-    userId: "user-1",
-    organizationId: "org-1",
+    userId: "00000000-0000-4000-8000-000000000002",
+    organizationId: "00000000-0000-4000-8000-000000000003",
     userIsAgentAdmin: false,
     mcpGwToken: null,
+    globalToolPolicy: "permissive" as const,
+    considerContextUntrusted: false,
   };
 
   const mockResult = (overrides: Record<string, unknown>) => ({
@@ -530,6 +532,48 @@ describe("executeMcpTool error handling", () => {
         text: 'Expired or invalid authentication for "id-jag test".',
       },
     ]);
+  });
+
+  test("attaches unsafe-context boundary metadata when a tool result is marked untrusted", async ({
+    makeAgent,
+    makeTool,
+    makeTrustedDataPolicy,
+  }) => {
+    const agent = await makeAgent();
+    const tool = await makeTool({ name: "test_tool" });
+
+    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce({
+      id: "call-1",
+      name: "test_tool",
+      content: [{ type: "text", text: "ARCH_TEST = secret-value" }],
+      isError: false,
+    } as never);
+
+    await makeTrustedDataPolicy(tool.id, {
+      conditions: [],
+      action: "mark_as_untrusted",
+    });
+
+    const result = await chatClient.__test.executeMcpTool({
+      ...baseCtx,
+      agentId: agent.id,
+      globalToolPolicy: "restrictive",
+    });
+
+    expect(result.unsafeContextBoundary).toMatchObject({
+      kind: "tool_result",
+      reason: "tool_result_marked_untrusted",
+      toolCallId: expect.any(String),
+      toolName: "test_tool",
+    });
+    expect(result._meta).toMatchObject({
+      unsafeContextBoundary: {
+        kind: "tool_result",
+        reason: "tool_result_marked_untrusted",
+        toolCallId: expect.any(String),
+        toolName: "test_tool",
+      },
+    });
   });
 });
 

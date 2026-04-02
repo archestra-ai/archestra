@@ -50,7 +50,6 @@ import {
   TeamModel,
 } from "@/models";
 import { startActiveChatSpan } from "@/observability/tracing";
-import { resolveConversationLlmSelectionForAgent } from "@/services/conversation-llm-selection";
 import {
   promptNeedsRendering,
   renderSystemPrompt,
@@ -71,6 +70,7 @@ import {
   UuidIdSchema,
 } from "@/types";
 import {
+  resolveConversationLlmSelectionForAgent,
   resolveFastModelName,
   resolveSmartDefaultLlmForChat,
 } from "@/utils/llm-resolution";

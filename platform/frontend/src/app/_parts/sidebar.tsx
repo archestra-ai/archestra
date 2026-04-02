@@ -43,7 +43,6 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
-  SidebarRail,
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
@@ -525,7 +524,6 @@ export function AppSidebar() {
           </SidebarGroup>
         </SignedIn>
       </SidebarFooter>
-      <SidebarRail />
     </Sidebar>
   );
 }

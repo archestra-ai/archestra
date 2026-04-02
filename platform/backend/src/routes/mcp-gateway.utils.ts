@@ -12,6 +12,8 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import {
   ARCHESTRA_TOKEN_PREFIX,
+  MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
+  MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
   isAgentTool,
   OAUTH_TOKEN_ID_PREFIX,
   parseFullToolName,
@@ -134,6 +136,11 @@ export async function createAgentServer(
   tokenAuth?: TokenAuthContext,
   preloadedAgent?: AgentInfo,
 ): Promise<{ server: McpServer; agent: AgentInfo }> {
+  const extensionCapabilities = {
+    ...MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
+    ...MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
+  } as const;
+
   const mcpServer = new McpServer(
     {
       name: `archestra-agent-${agentId}`,
@@ -145,9 +152,10 @@ export async function createAgentServer(
           subscribe: true,
           listChanged: true,
         },
+        extensions: extensionCapabilities,
         prompts: {},
         tools: { listChanged: false },
-      },
+      } as never,
     },
   );
   const { server } = mcpServer;

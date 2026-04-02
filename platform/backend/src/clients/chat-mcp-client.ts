@@ -6,12 +6,6 @@ type ClientCapabilitiesWithExtensions = ClientCapabilities & {
   extensions?: Record<string, unknown>;
 };
 
-const UI_EXTENSION_CAPABILITIES = {
-  "io.modelcontextprotocol/ui": {
-    mimeTypes: ["text/html;profile=mcp-app"] as const,
-  },
-} as const;
-
 import {
   type McpUiResourceCsp,
   type McpUiResourcePermissions,
@@ -27,6 +21,7 @@ import type {
 import {
   isAgentTool,
   isBrowserMcpTool,
+  MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
   parseFullToolName,
   TimeInMs,
 } from "@shared";
@@ -556,7 +551,7 @@ export async function getChatMcpClient(
 
     const capabilities: ClientCapabilitiesWithExtensions = {
       roots: { listChanged: true },
-      extensions: UI_EXTENSION_CAPABILITIES,
+      extensions: MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
     };
 
     // Create MCP client

@@ -4,6 +4,10 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
+import {
+  MCP_APPS_EXTENSION_ID,
+  MCP_ENTERPRISE_AUTH_EXTENSION_ID,
+} from "@shared";
 import { TeamTokenModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { mcpGatewayRoutes } from "./mcp-gateway";
@@ -74,6 +78,10 @@ describe("MCP Gateway (stateless mode)", () => {
     // (or if returned, it's ephemeral and not stored)
     const result = initResponse.json();
     expect(result).toHaveProperty("result");
+    expect(result.result.capabilities.extensions).toEqual({
+      [MCP_APPS_EXTENSION_ID]: {},
+      [MCP_ENTERPRISE_AUTH_EXTENSION_ID]: {},
+    });
   });
 
   test("handles tools/list request successfully (stateless)", async ({

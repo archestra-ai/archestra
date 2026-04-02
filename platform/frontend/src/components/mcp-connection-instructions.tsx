@@ -237,7 +237,7 @@ export function McpConnectionInstructions({
     [mcpServers],
   );
 
-  const mcpUrl = `${connectionUrl}/mcp/${selectedProfileId}`;
+  const mcpUrl = `${connectionUrl}/mcp/${selectedProfile?.slug ?? selectedProfileId}`;
 
   // Default to personal token if available, otherwise org token, then first token
   const orgToken = tokens?.find((t) => t.isOrganizationToken);

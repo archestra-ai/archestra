@@ -37701,6 +37701,9 @@
                           "name": {
                             "type": "string"
                           },
+                          "slug": {
+                            "type": "string"
+                          },
                           "isDefault": {
                             "type": "boolean"
                           },
@@ -38049,6 +38052,7 @@
                           "authorId",
                           "scope",
                           "name",
+                          "slug",
                           "isDefault",
                           "considerContextUntrusted",
                           "agentType",
@@ -38596,6 +38600,9 @@
                     "name": {
                       "type": "string"
                     },
+                    "slug": {
+                      "type": "string"
+                    },
                     "isDefault": {
                       "type": "boolean"
                     },
@@ -38944,6 +38951,7 @@
                     "authorId",
                     "scope",
                     "name",
+                    "slug",
                     "isDefault",
                     "considerContextUntrusted",
                     "agentType",
@@ -39287,6 +39295,9 @@
                         ]
                       },
                       "name": {
+                        "type": "string"
+                      },
+                      "slug": {
                         "type": "string"
                       },
                       "isDefault": {
@@ -39637,6 +39648,7 @@
                       "authorId",
                       "scope",
                       "name",
+                      "slug",
                       "isDefault",
                       "considerContextUntrusted",
                       "agentType",
@@ -39922,6 +39934,9 @@
                     "name": {
                       "type": "string"
                     },
+                    "slug": {
+                      "type": "string"
+                    },
                     "isDefault": {
                       "type": "boolean"
                     },
@@ -40270,6 +40285,7 @@
                     "authorId",
                     "scope",
                     "name",
+                    "slug",
                     "isDefault",
                     "considerContextUntrusted",
                     "agentType",
@@ -40555,6 +40571,9 @@
                     "name": {
                       "type": "string"
                     },
+                    "slug": {
+                      "type": "string"
+                    },
                     "isDefault": {
                       "type": "boolean"
                     },
@@ -40903,6 +40922,7 @@
                     "authorId",
                     "scope",
                     "name",
+                    "slug",
                     "isDefault",
                     "considerContextUntrusted",
                     "agentType",
@@ -41200,6 +41220,9 @@
                     "name": {
                       "type": "string"
                     },
+                    "slug": {
+                      "type": "string"
+                    },
                     "isDefault": {
                       "type": "boolean"
                     },
@@ -41548,6 +41571,7 @@
                     "authorId",
                     "scope",
                     "name",
+                    "slug",
                     "isDefault",
                     "considerContextUntrusted",
                     "agentType",
@@ -42052,6 +42076,9 @@
                     "name": {
                       "type": "string"
                     },
+                    "slug": {
+                      "type": "string"
+                    },
                     "isDefault": {
                       "type": "boolean"
                     },
@@ -42400,6 +42427,7 @@
                     "authorId",
                     "scope",
                     "name",
+                    "slug",
                     "isDefault",
                     "considerContextUntrusted",
                     "agentType",
@@ -109600,8 +109628,7 @@
           {
             "schema": {
               "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+              "minLength": 1
             },
             "in": "path",
             "name": "profileId",
@@ -109725,8 +109752,7 @@
           {
             "schema": {
               "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+              "minLength": 1
             },
             "in": "path",
             "name": "profileId",

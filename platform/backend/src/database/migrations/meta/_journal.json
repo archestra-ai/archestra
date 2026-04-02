@@ -1419,15 +1419,8 @@
     {
       "idx": 202,
       "version": "7",
-      "when": 1775092832669,
-      "tag": "0202_special_spiral",
-      "breakpoints": true
-    },
-    {
-      "idx": 203,
-      "version": "7",
-      "when": 1775240898368,
-      "tag": "0203_last_killmonger",
+      "when": 1775149914971,
+      "tag": "0202_brainy_nico_minoru",
       "breakpoints": true
     }
   ]

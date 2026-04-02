@@ -37,6 +37,7 @@ describe("syncBuiltInAgents", () => {
     await db.insert(schema.agentsTable).values({
       organizationId: organization.id,
       name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+      slug: `policy-config-legacy-${crypto.randomUUID().slice(0, 6)}`,
       agentType: "agent",
       scope: "org",
       description:
@@ -67,6 +68,7 @@ describe("syncBuiltInAgents", () => {
     await db.insert(schema.agentsTable).values({
       organizationId: organization.id,
       name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+      slug: `policy-config-custom-${crypto.randomUUID().slice(0, 6)}`,
       agentType: "agent",
       scope: "org",
       description:

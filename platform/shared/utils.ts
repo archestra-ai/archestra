@@ -32,6 +32,22 @@ export function slugify(name: string): string {
 }
 
 /**
+ * Slugify a name to create a URL-friendly slug with hyphens.
+ * Used for generating human-readable URL identifiers (e.g., MCP gateway slugs).
+ */
+export function urlSlugify(name: string): string {
+  const slugified = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+
+  // Trim leading and trailing hyphens without backtracking regex
+  let start = 0;
+  let end = slugified.length;
+  while (start < end && slugified[start] === "-") start++;
+  while (end > start && slugified[end - 1] === "-") end--;
+
+  return slugified.slice(start, end);
+}
+
+/**
  * Parse a fully-qualified MCP tool name into server name and raw tool name.
  * Splits on the last separator so server names can themselves contain "__".
  */

@@ -10,7 +10,7 @@ import { z } from "zod";
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
 import { McpToolCallModel } from "@/models";
-import { UuidIdSchema } from "@/types";
+import { UuidOrSlugSchema } from "@/types";
 import {
   createAgentServer,
   createStatelessTransport,
@@ -160,7 +160,7 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: "mcpGatewayGet",
         tags: ["MCP Gateway"],
         params: z.object({
-          profileId: UuidIdSchema,
+          profileId: UuidOrSlugSchema,
         }),
         response: {
           200: z.object({
@@ -190,7 +190,7 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { profileId, token } =
-        extractProfileIdAndTokenFromRequest(request) ?? {};
+        (await extractProfileIdAndTokenFromRequest(request)) ?? {};
 
       if (!profileId || !token) {
         setWWWAuthenticateHeader(request, reply);
@@ -235,14 +235,14 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: "mcpGatewayPost",
         tags: ["MCP Gateway"],
         params: z.object({
-          profileId: UuidIdSchema,
+          profileId: UuidOrSlugSchema,
         }),
         body: z.record(z.string(), z.unknown()),
       },
     },
     async (request, reply) => {
       const { profileId, token } =
-        extractProfileIdAndTokenFromRequest(request) ?? {};
+        (await extractProfileIdAndTokenFromRequest(request)) ?? {};
 
       if (!profileId || !token) {
         setWWWAuthenticateHeader(request, reply);

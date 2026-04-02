@@ -37,12 +37,14 @@ async function createTestInternalAgent(
     scope?: "org" | "team" | "personal";
   },
 ) {
+  const suffix = crypto.randomUUID().substring(0, 8);
   const [agent] = await db
     .insert(schema.agentsTable)
     .values({
       id: crypto.randomUUID(),
       organizationId,
-      name: `Test Internal Agent ${crypto.randomUUID().substring(0, 8)}`,
+      name: `Test Internal Agent ${suffix}`,
+      slug: `test-internal-agent-${suffix}`,
       agentType: "agent",
       systemPrompt: "You are a helpful assistant",
       scope: options?.scope ?? "org",

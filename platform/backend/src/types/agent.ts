@@ -189,6 +189,7 @@ export const InsertAgentSchemaBase = createInsertSchema(
   })
   .omit({
     id: true,
+    slug: true,
     createdAt: true,
     updatedAt: true,
     authorId: true,
@@ -217,6 +218,7 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
   })
   .omit({
     id: true,
+    slug: true,
     createdAt: true,
     updatedAt: true,
     authorId: true,

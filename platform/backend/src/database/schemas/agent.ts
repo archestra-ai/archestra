@@ -7,6 +7,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import type { AgentScope, AgentType, BuiltInAgentConfig } from "@/types/agent";
@@ -43,6 +44,7 @@ const agentsTable = pgTable(
     }),
     scope: text("scope").$type<AgentScope>().notNull().default("personal"),
     name: text("name").notNull(),
+    slug: text("slug").notNull(),
     isDefault: boolean("is_default").notNull().default(false),
     considerContextUntrusted: boolean("consider_context_untrusted")
       .notNull()
@@ -107,6 +109,7 @@ const agentsTable = pgTable(
       .$onUpdate(() => new Date()),
   },
   (table) => [
+    uniqueIndex("agents_slug_idx").on(table.slug),
     index("agents_organization_id_idx").on(table.organizationId),
     index("agents_agent_type_idx").on(table.agentType),
     index("agents_identity_provider_id_idx").on(table.identityProviderId),

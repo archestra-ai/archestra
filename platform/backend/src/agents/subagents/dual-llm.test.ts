@@ -46,6 +46,7 @@ function makeBuiltInAgent(params: {
     authorId: null,
     scope: "org",
     name: params.name,
+    slug: params.name,
     isDefault: false,
     considerContextUntrusted: false,
     agentType: "agent",

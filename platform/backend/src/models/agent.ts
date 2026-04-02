@@ -3,6 +3,7 @@ import {
   DEFAULT_MCP_GATEWAY_NAME,
   type PaginationQuery,
   PLAYWRIGHT_MCP_CATALOG_ID,
+  urlSlugify,
 } from "@shared";
 import {
   and,
@@ -161,9 +162,16 @@ class AgentModel {
       organizationId = firstOrg?.id || "";
     }
 
+    const slug = await AgentModel.generateUniqueSlug(agent.name);
+
     const [createdAgent] = await db
       .insert(schema.agentsTable)
-      .values({ ...agent, organizationId, ...(authorId && { authorId }) })
+      .values({
+        ...agent,
+        organizationId,
+        slug,
+        ...(authorId && { authorId }),
+      })
       .returning();
 
     // Assign teams to the agent if provided
@@ -1499,6 +1507,45 @@ class AgentModel {
       { userId, organizationId, agentId: agent.id },
       "Created personal default chat agent",
     );
+  }
+
+  /**
+   * Resolve a UUID or slug to an agent ID.
+   * Returns the ID directly if the input is a valid UUID (fast path).
+   * Otherwise, looks up the agent by slug.
+   */
+  static async resolveIdFromIdOrSlug(idOrSlug: string): Promise<string | null> {
+    // Fast path: if it looks like a UUID, return as-is
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (uuidRegex.test(idOrSlug)) {
+      return idOrSlug;
+    }
+
+    const [row] = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(eq(schema.agentsTable.slug, idOrSlug))
+      .limit(1);
+
+    return row?.id ?? null;
+  }
+
+  private static async generateUniqueSlug(name: string): Promise<string> {
+    const baseSlug = urlSlugify(name) || "agent";
+    let slug = baseSlug;
+
+    const [existing] = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(eq(schema.agentsTable.slug, slug))
+      .limit(1);
+
+    if (existing) {
+      slug = `${baseSlug}-${crypto.randomUUID().slice(0, 6)}`;
+    }
+
+    return slug;
   }
 }
 

@@ -2524,4 +2524,68 @@ describe("AgentModel", () => {
       expect(result.get(agent.id)?.authorId).toBeNull();
     });
   });
+
+  describe("slug generation", () => {
+    test("generates slug from name on creation", async () => {
+      const agent = await AgentModel.create({
+        name: "My Test Gateway",
+        teams: [],
+        scope: "org",
+      });
+
+      expect(agent.slug).toBe("my-test-gateway");
+    });
+
+    test("generates unique slug when name collides", async () => {
+      const agent1 = await AgentModel.create({
+        name: "Duplicate Name",
+        teams: [],
+        scope: "org",
+      });
+      const agent2 = await AgentModel.create({
+        name: "Duplicate Name",
+        teams: [],
+        scope: "org",
+      });
+
+      expect(agent1.slug).toBe("duplicate-name");
+      expect(agent2.slug).not.toBe(agent1.slug);
+      expect(agent2.slug).toMatch(/^duplicate-name-[a-f0-9]{6}$/);
+    });
+
+    test("handles special characters in name", async () => {
+      const agent = await AgentModel.create({
+        name: "Test @#$ Gateway!",
+        teams: [],
+        scope: "org",
+      });
+
+      expect(agent.slug).toBe("test-gateway");
+    });
+  });
+
+  describe("resolveIdFromIdOrSlug", () => {
+    test("returns UUID as-is for valid UUID input", async () => {
+      const uuid = "f47ac10b-58cc-4372-a567-0e02b2c3d479";
+      const result = await AgentModel.resolveIdFromIdOrSlug(uuid);
+      expect(result).toBe(uuid);
+    });
+
+    test("resolves slug to agent ID", async () => {
+      const agent = await AgentModel.create({
+        name: "Slug Resolve Test",
+        teams: [],
+        scope: "org",
+      });
+
+      const result = await AgentModel.resolveIdFromIdOrSlug(agent.slug);
+      expect(result).toBe(agent.id);
+    });
+
+    test("returns null for non-existent slug", async () => {
+      const result =
+        await AgentModel.resolveIdFromIdOrSlug("non-existent-slug");
+      expect(result).toBeNull();
+    });
+  });
 });

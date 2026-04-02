@@ -1,4 +1,3 @@
-import { vi } from "vitest";
 import {
   EXTERNAL_AGENT_ID_HEADER,
   SESSION_ID_HEADER,
@@ -6,6 +5,7 @@ import {
   UNTRUSTED_CONTEXT_HEADER,
   USER_ID_HEADER,
 } from "@shared";
+import { vi } from "vitest";
 import { describe, expect, it, test } from "@/test";
 
 // Mock the gemini-client module before importing llm-client
@@ -27,8 +27,8 @@ vi.mock("@ai-sdk/anthropic", () => ({
 }));
 
 import {
-  createLLMModel,
   createDirectLLMModel,
+  createLLMModel,
   detectProviderFromModel,
   resolveProviderApiKey,
 } from "./llm-client";

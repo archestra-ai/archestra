@@ -93,7 +93,11 @@ import { InlineChatError } from "./inline-chat-error";
 import { hasKnowledgeBaseToolCall } from "./knowledge-graph-citations";
 import { McpAppSection, type McpToolOutput } from "./mcp-app-container";
 import { McpInstallDialogs } from "./mcp-install-dialogs";
-import { MessageBoundaryDivider } from "./message-boundary-divider";
+import {
+  MessageBoundaryDivider,
+  PreexistingUnsafeContextDivider,
+  UnsafeContextStartsHereDivider,
+} from "./message-boundary-divider";
 import { PolicyDeniedTool } from "./policy-denied-tool";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
@@ -367,10 +371,7 @@ export function ChatMessages({
       <ConversationContent>
         <div className="max-w-4xl mx-auto relative pb-8">
           {unsafeContextBoundary?.kind === "preexisting_untrusted" && (
-            <MessageBoundaryDivider
-              label="Sensitive context was already active when this request started"
-              tone="warning"
-            />
+            <PreexistingUnsafeContextDivider />
           )}
           {messages.map((message, idx) => {
             // Hide the auto-poke message sent after agent swap
@@ -1760,12 +1761,7 @@ function UnsafeContextDivider({
     return null;
   }
 
-  return (
-    <MessageBoundaryDivider
-      label="Sensitive context starts here"
-      tone="warning"
-    />
-  );
+  return <UnsafeContextStartsHereDivider />;
 }
 
 function getRenderedToolName(

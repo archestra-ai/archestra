@@ -33,3 +33,21 @@ export function MessageBoundaryDivider({
     </div>
   );
 }
+
+export function PreexistingUnsafeContextDivider() {
+  return (
+    <MessageBoundaryDivider
+      label="Sensitive context was already active when this request started"
+      tone="warning"
+    />
+  );
+}
+
+export function UnsafeContextStartsHereDivider() {
+  return (
+    <MessageBoundaryDivider
+      label="Sensitive context starts here"
+      tone="warning"
+    />
+  );
+}

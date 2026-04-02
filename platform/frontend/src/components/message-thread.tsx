@@ -41,7 +41,10 @@ import {
   KnowledgeGraphCitations,
 } from "@/components/chat/knowledge-graph-citations";
 import { MessageActions } from "@/components/chat/message-actions";
-import { MessageBoundaryDivider } from "@/components/chat/message-boundary-divider";
+import {
+  PreexistingUnsafeContextDivider,
+  UnsafeContextStartsHereDivider,
+} from "@/components/chat/message-boundary-divider";
 import { PolicyDeniedTool } from "@/components/chat/policy-denied-tool";
 import Divider from "@/components/divider";
 import { Button } from "@/components/ui/button";
@@ -89,10 +92,7 @@ const MessageThread = ({
           <ConversationContent>
             {topPart}
             {unsafeContextBoundary?.kind === "preexisting_untrusted" && (
-              <MessageBoundaryDivider
-                label="Sensitive context was already active when this request started"
-                tone="warning"
-              />
+              <PreexistingUnsafeContextDivider />
             )}
             {!hideDivider && <Divider className="my-4" />}
             <div className="max-w-4xl mx-auto">
@@ -599,12 +599,7 @@ const MessageThread = ({
                       (part) =>
                         "toolCallId" in part &&
                         part.toolCallId === unsafeContextBoundary.toolCallId,
-                    ) && (
-                      <MessageBoundaryDivider
-                        label="Sensitive context starts here"
-                        tone="warning"
-                      />
-                    )}
+                    ) && <UnsafeContextStartsHereDivider />}
                 </div>
               ))}
               {status === "submitted" && <Loader />}

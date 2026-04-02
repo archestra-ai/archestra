@@ -66,6 +66,7 @@ import {
   type SelectUserToken,
   UuidIdSchema,
 } from "@/types";
+import type { McpServerCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { estimateToolResultContentLength } from "@/utils/tool-result-preview";
 
@@ -125,18 +126,6 @@ const rawArchestraTokenCache =
     maxSize: TOKEN_AUTH_CACHE_MAX_ENTRIES,
     defaultTtl: TOKEN_AUTH_CACHE_TTL_MS,
   });
-
-/**
- * The MCP TypeScript SDK does not yet model `capabilities.extensions` on the
- * server constructor options, even though the initialize handshake needs it.
- * Track upstream here:
- * https://github.com/modelcontextprotocol/typescript-sdk/issues/1063
- */
-type McpServerCapabilitiesWithExtensions = NonNullable<
-  ConstructorParameters<typeof McpServer>[1]
->["capabilities"] & {
-  extensions?: Record<string, unknown>;
-};
 
 /**
  * Creates an MCP server for the given agent.

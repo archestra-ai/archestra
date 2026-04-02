@@ -7,7 +7,6 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasAnyAgentTypeAdminPermission } from "@/auth";
-import { userHasPermission } from "@/auth/utils";
 import { InteractionModel } from "@/models";
 import {
   ApiError,
@@ -95,12 +94,6 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
       });
-      const canReadToolPolicy = await userHasPermission(
-        user.id,
-        organizationId,
-        "toolPolicy",
-        "read",
-      );
 
       fastify.log.info(
         {
@@ -142,9 +135,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "GetInteractions result",
       );
 
-      return reply.send(
-        canReadToolPolicy ? result : stripUnsafeContextBoundaryFromPage(result),
-      );
+      return reply.send(result);
     },
   );
 
@@ -344,12 +335,6 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
       });
-      const canReadToolPolicy = await userHasPermission(
-        user.id,
-        organizationId,
-        "toolPolicy",
-        "read",
-      );
 
       const interaction = await InteractionModel.findById(
         interactionId,
@@ -361,33 +346,9 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Interaction not found");
       }
 
-      return reply.send(
-        canReadToolPolicy
-          ? interaction
-          : stripUnsafeContextBoundary(interaction),
-      );
+      return reply.send(interaction);
     },
   );
 };
 
 export default interactionRoutes;
-
-function stripUnsafeContextBoundary<
-  T extends { unsafeContextBoundary?: unknown },
->(interaction: T): T {
-  return {
-    ...interaction,
-    unsafeContextBoundary: undefined,
-  };
-}
-
-function stripUnsafeContextBoundaryFromPage<
-  T extends {
-    data: Array<{ unsafeContextBoundary?: unknown }>;
-  },
->(page: T): T {
-  return {
-    ...page,
-    data: page.data.map(stripUnsafeContextBoundary),
-  };
-}

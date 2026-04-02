@@ -8,7 +8,6 @@ import {
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type {
-  ClientCapabilities,
   ContentBlock,
   EmbeddedResource,
 } from "@modelcontextprotocol/sdk/types.js";
@@ -54,17 +53,8 @@ import type {
   GlobalToolPolicy,
   UnsafeContextBoundary,
 } from "@/types";
-
-/** Extended ClientCapabilities with UI extension support (replaces @mcp-ui/client re-export). */
-type ClientCapabilitiesWithExtensions = ClientCapabilities & {
-  extensions?: Record<string, unknown>;
-};
-
-const UI_EXTENSION_CAPABILITIES = {
-  "io.modelcontextprotocol/ui": {
-    mimeTypes: ["text/html;profile=mcp-app"] as const,
-  },
-} as const;
+import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
+import { buildMcpClientInfo } from "@/utils/mcp-client-info";
 
 /**
  * MIME types that indicate a renderable UI resource (SEP-1865).
@@ -568,15 +558,9 @@ export async function getChatMcpClient(
     };
 
     // Create MCP client
-    const client = new Client(
-      {
-        name: "chat-mcp-client",
-        version: "1.0.0",
-      },
-      {
-        capabilities,
-      },
-    );
+    const client = new Client(buildMcpClientInfo("chat-mcp-client"), {
+      capabilities,
+    });
 
     logger.info(
       { agentId, userId, url: mcpGatewayUrl },

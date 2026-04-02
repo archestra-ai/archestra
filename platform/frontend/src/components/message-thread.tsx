@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import type { ChatStatus, UIMessage } from "ai";
 import {
   Check,
@@ -40,6 +41,7 @@ import {
   KnowledgeGraphCitations,
 } from "@/components/chat/knowledge-graph-citations";
 import { MessageActions } from "@/components/chat/message-actions";
+import { MessageBoundaryDivider } from "@/components/chat/message-boundary-divider";
 import { PolicyDeniedTool } from "@/components/chat/policy-denied-tool";
 import Divider from "@/components/divider";
 import { Button } from "@/components/ui/button";
@@ -55,6 +57,7 @@ const MessageThread = ({
   topPart,
   hideDivider,
   profileId,
+  unsafeContextBoundary,
 }: {
   messages: PartialUIMessage[];
   reload?: () => void;
@@ -63,6 +66,7 @@ const MessageThread = ({
   topPart?: React.ReactNode;
   hideDivider?: boolean;
   profileId?: string;
+  unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
 }) => {
   const status: ChatStatus = "streaming" as ChatStatus;
 
@@ -84,6 +88,12 @@ const MessageThread = ({
         <Conversation className="h-full">
           <ConversationContent>
             {topPart}
+            {unsafeContextBoundary?.kind === "preexisting_untrusted" && (
+              <MessageBoundaryDivider
+                label="Sensitive context was already active when this request started"
+                tone="warning"
+              />
+            )}
             {!hideDivider && <Divider className="my-4" />}
             <div className="max-w-4xl mx-auto">
               {messages.map((message, idx) => (
@@ -584,6 +594,17 @@ const MessageThread = ({
                       }
                     });
                   })()}
+                  {unsafeContextBoundary?.kind === "tool_result" &&
+                    (message.parts ?? []).some(
+                      (part) =>
+                        "toolCallId" in part &&
+                        part.toolCallId === unsafeContextBoundary.toolCallId,
+                    ) && (
+                      <MessageBoundaryDivider
+                        label="Sensitive context starts here"
+                        tone="warning"
+                      />
+                    )}
                 </div>
               ))}
               {status === "submitted" && <Loader />}

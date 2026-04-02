@@ -159,6 +159,7 @@ export async function handleDelegation(
       // Propagate conversationId for browser tab isolation
       conversationId: context.conversationId,
       abortSignal: context.abortSignal,
+      parentContextIsTrusted: context.contextIsTrusted,
     });
 
     return successResult(result.text);

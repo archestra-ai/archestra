@@ -17,6 +17,7 @@ import {
   SESSION_ID_HEADER,
   SOURCE_HEADER,
   type SupportedProvider,
+  UNTRUSTED_CONTEXT_HEADER,
   USER_ID_HEADER,
 } from "@shared";
 import type { streamText } from "ai";
@@ -252,6 +253,7 @@ export function createLLMModel(params: {
   sessionId?: string;
   source?: InteractionSource;
   baseUrl: string | null;
+  contextIsTrusted?: boolean;
 }): LLMModel {
   const {
     provider,
@@ -263,6 +265,7 @@ export function createLLMModel(params: {
     sessionId,
     source,
     baseUrl,
+    contextIsTrusted,
   } = params;
 
   // Build headers for LLM Proxy
@@ -278,6 +281,9 @@ export function createLLMModel(params: {
   }
   if (source) {
     clientHeaders[SOURCE_HEADER] = source;
+  }
+  if (contextIsTrusted === false) {
+    clientHeaders[UNTRUSTED_CONTEXT_HEADER] = "true";
   }
   if (baseUrl) {
     clientHeaders[PROVIDER_BASE_URL_HEADER] = baseUrl;
@@ -317,6 +323,7 @@ export async function createLLMModelForAgent(params: {
   sessionId?: string;
   source?: InteractionSource;
   agentLlmApiKeyId?: string | null;
+  contextIsTrusted?: boolean;
 }): Promise<{
   model: LLMModel;
   provider: SupportedProvider;
@@ -333,6 +340,7 @@ export async function createLLMModelForAgent(params: {
     sessionId,
     source,
     agentLlmApiKeyId,
+    contextIsTrusted,
   } = params;
 
   const {
@@ -391,6 +399,7 @@ export async function createLLMModelForAgent(params: {
     sessionId,
     source,
     baseUrl,
+    contextIsTrusted,
   });
 
   return { model, provider, apiKeySource };

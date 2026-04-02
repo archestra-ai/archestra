@@ -119,6 +119,7 @@ import {
 import { useConfig } from "@/lib/config/config.query";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
+import { useInteractions } from "@/lib/interactions/interaction.query";
 import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import {
   type SupportedProvider,
@@ -195,6 +196,9 @@ export function ChatPageContent({
   });
   const { data: canReadLlmProvider } = useHasPermissions({
     llmProviderApiKey: ["read"],
+  });
+  const { data: canReadToolPolicy } = useHasPermissions({
+    toolPolicy: ["read"],
   });
   const { data: canReadTeams } = useHasPermissions({
     team: ["read"],
@@ -533,6 +537,16 @@ export function ChatPageContent({
     () => (conversation?.messages ?? []) as PartialUIMessage[],
     [conversation?.messages],
   );
+  const { data: latestConversationInteractions } = useInteractions({
+    ...(conversationId ? { sessionId: conversationId } : {}),
+    limit: 1,
+    sortBy: "createdAt",
+    sortDirection: "desc",
+    enabled: !!conversationId && !!canReadToolPolicy,
+  });
+  const latestUnsafeContextBoundary = canReadToolPolicy
+    ? latestConversationInteractions?.data?.[0]?.unsafeContextBoundary
+    : undefined;
   const effectiveForkAgentId = forkAgentId ?? internalAgents[0]?.id ?? null;
 
   // Track title generation for typing animation in the header
@@ -1777,6 +1791,7 @@ export function ChatPageContent({
                     containerClassName="h-full"
                     hideDivider
                     profileId={conversation?.agent?.id}
+                    unsafeContextBoundary={latestUnsafeContextBoundary}
                   />
                 ) : (
                   <ChatMessages
@@ -1795,6 +1810,7 @@ export function ChatPageContent({
                     }
                     selectedModel={conversation?.selectedModel ?? initialModel}
                     modelSource={conversationModelSource ?? initialModelSource}
+                    unsafeContextBoundary={latestUnsafeContextBoundary}
                     onUserMessageEdit={(
                       editedMessage,
                       updatedMessages,

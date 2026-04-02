@@ -29,6 +29,7 @@ export function useInteractions({
   sortBy,
   sortDirection = "desc",
   initialData,
+  enabled = true,
 }: {
   profileId?: string;
   externalAgentId?: string;
@@ -45,6 +46,7 @@ export function useInteractions({
     archestraApiTypes.GetInteractionsData["query"]
   >["sortDirection"];
   initialData?: archestraApiTypes.GetInteractionsResponses["200"];
+  enabled?: boolean;
 } = {}) {
   return useQuery({
     queryKey: [
@@ -106,6 +108,7 @@ export function useInteractions({
       !endDate
         ? initialData
         : undefined,
+    enabled,
     // refetchInterval: 3_000, // later we might want to switch to websockets or sse, polling for now
   });
 }

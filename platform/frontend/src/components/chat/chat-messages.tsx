@@ -1,6 +1,7 @@
 import type { UIMessage } from "@ai-sdk/react";
 import {
   type ArchestraToolShortName,
+  type archestraApiTypes,
   extractMcpToolError,
   parseFullToolName,
   SWAP_AGENT_FAILED_POKE_TEXT,
@@ -92,6 +93,7 @@ import { InlineChatError } from "./inline-chat-error";
 import { hasKnowledgeBaseToolCall } from "./knowledge-graph-citations";
 import { McpAppSection, type McpToolOutput } from "./mcp-app-container";
 import { McpInstallDialogs } from "./mcp-install-dialogs";
+import { MessageBoundaryDivider } from "./message-boundary-divider";
 import { PolicyDeniedTool } from "./policy-denied-tool";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
@@ -124,6 +126,7 @@ interface ChatMessagesProps {
   agentName?: string;
   selectedModel?: string;
   modelSource?: ModelSource | null;
+  unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
 }
 
 // Type guards for tool parts
@@ -162,6 +165,7 @@ export function ChatMessages({
   agentName,
   selectedModel,
   modelSource,
+  unsafeContextBoundary,
 }: ChatMessagesProps) {
   const isStreamingStalled = useStreamingStallDetection(messages, status);
   const { data: authSession } = useSession();
@@ -362,6 +366,12 @@ export function ChatMessages({
     >
       <ConversationContent>
         <div className="max-w-4xl mx-auto relative pb-8">
+          {unsafeContextBoundary?.kind === "preexisting_untrusted" && (
+            <MessageBoundaryDivider
+              label="Sensitive context was already active when this request started"
+              tone="warning"
+            />
+          )}
           {messages.map((message, idx) => {
             // Hide the auto-poke message sent after agent swap
             if (!isDebugging && isSwapAgentPokeMessage(message)) return null;
@@ -984,6 +994,10 @@ export function ChatMessages({
                 <SwapAgentDivider
                   message={message}
                   getToolShortName={getToolShortName}
+                />
+                <UnsafeContextDivider
+                  message={message}
+                  unsafeContextBoundary={unsafeContextBoundary}
                 />
               </div>
             );
@@ -1720,18 +1734,38 @@ function SwapAgentDivider({
       }
     }
 
-    return (
-      <div className="flex items-center gap-3 py-2">
-        <div className="h-px flex-1 bg-border" />
-        <span className="text-xs text-muted-foreground">
-          Switched to {agentName}
-        </span>
-        <div className="h-px flex-1 bg-border" />
-      </div>
-    );
+    return <MessageBoundaryDivider label={`Switched to ${agentName}`} />;
   }
 
   return null;
+}
+
+function UnsafeContextDivider({
+  message,
+  unsafeContextBoundary,
+}: {
+  message: UIMessage;
+  unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
+}) {
+  if (!unsafeContextBoundary || unsafeContextBoundary.kind !== "tool_result") {
+    return null;
+  }
+
+  const messageContainsBoundary = (message.parts ?? []).some(
+    (part) =>
+      isToolPart(part) && part.toolCallId === unsafeContextBoundary.toolCallId,
+  );
+
+  if (!messageContainsBoundary) {
+    return null;
+  }
+
+  return (
+    <MessageBoundaryDivider
+      label="Sensitive context starts here"
+      tone="warning"
+    />
+  );
 }
 
 function getRenderedToolName(

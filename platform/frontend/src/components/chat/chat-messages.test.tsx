@@ -207,6 +207,70 @@ describe("ChatMessages", () => {
     expect(screen.getByText("Switched to GitHub Agent")).toBeInTheDocument();
   });
 
+  it("renders the unsafe-context divider when a tool result marks the context unsafe", () => {
+    const messages = [
+      {
+        id: "assistant-unsafe",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-read_email",
+            toolCallId: "call-unsafe",
+            state: "output-available",
+            input: { folder: "inbox" },
+            output: { emails: [{ from: "ceo@external.com" }] },
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        unsafeContextBoundary={{
+          kind: "tool_result",
+          reason: "tool_result_marked_untrusted",
+          toolCallId: "call-unsafe",
+          toolName: "read_email",
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByText("Sensitive context starts here"),
+    ).toBeInTheDocument();
+  });
+
+  it("renders the preexisting unsafe-context divider when the request starts unsafe", () => {
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={
+          [
+            {
+              id: "assistant-1",
+              role: "assistant",
+              parts: [{ type: "text", text: "Continuing the workflow." }],
+            },
+          ] as UIMessage[]
+        }
+        status="ready"
+        unsafeContextBoundary={{
+          kind: "preexisting_untrusted",
+          reason: "inherited_from_parent",
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "Sensitive context was already active when this request started",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("keeps an expanded compact tool panel open when later tool calls append to the same message", () => {
     const initialMessages = [
       {

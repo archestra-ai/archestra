@@ -25,6 +25,7 @@ import type {
   InteractionResponse,
   ToolCompressionStats,
   ToonSkipReason,
+  UnsafeContextBoundary,
 } from "@/types";
 import * as utils from "./utils";
 import type { SessionSource } from "./utils/headers/session-id";
@@ -115,6 +116,7 @@ export function buildInteractionRecord(params: {
   toonStats: ToolCompressionStats;
   toonSkipReason: ToonSkipReason | null;
   dualLlmAnalyses: DualLlmAnalysis[];
+  unsafeContextBoundary?: UnsafeContextBoundary;
 }): InsertInteraction {
   return {
     profileId: params.agent.id,
@@ -129,6 +131,7 @@ export function buildInteractionRecord(params: {
     processedRequest: params.processedRequest as InteractionRequest,
     response: params.response as InteractionResponse,
     dualLlmAnalyses: params.dualLlmAnalyses,
+    unsafeContextBoundary: params.unsafeContextBoundary,
     model: params.actualModel,
     baselineModel: params.baselineModel,
     inputTokens: params.usage.inputTokens,

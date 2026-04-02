@@ -31,6 +31,7 @@ import {
   TimeInMs,
 } from "@shared";
 import { type JSONSchema7, jsonSchema, type Tool } from "ai";
+import { evaluateToolExecutionContextTrust } from "@/agents/context-trust";
 import {
   type ArchestraContext,
   archestraMcpBranding,
@@ -42,6 +43,7 @@ import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
 import {
+  AgentModel,
   AgentTeamModel,
   OrganizationModel,
   TeamModel,
@@ -825,9 +827,13 @@ export async function getChatMcpTools({
     );
 
     // Fetch globalToolPolicy for approval checks (needed for both chat and autonomous contexts).
-    const org = await OrganizationModel.getById(organizationId);
+    const [org, agent] = await Promise.all([
+      OrganizationModel.getById(organizationId),
+      AgentModel.findById(agentId),
+    ]);
     const globalToolPolicy: GlobalToolPolicy =
       org?.globalToolPolicy ?? "permissive";
+    const considerContextUntrusted = agent?.considerContextUntrusted ?? false;
 
     // Convert MCP tools to AI SDK Tool format
     const aiTools: Record<string, Tool> = {};
@@ -1045,7 +1051,7 @@ export async function getChatMcpTools({
                   },
                 }
               : {}),
-            execute: async (args: Record<string, unknown>) => {
+            execute: async (args: Record<string, unknown>, options) => {
               if (blockOnApprovalRequired) {
                 await throwIfApprovalRequired(
                   agentTool.name,
@@ -1079,10 +1085,25 @@ export async function getChatMcpTools({
                 callback: async (span) => {
                   try {
                     throwIfAborted(abortSignal);
+                    const toolExecutionContext =
+                      await evaluateToolExecutionContextTrust({
+                        messages: options.messages,
+                        agentId,
+                        organizationId,
+                        userId,
+                        considerContextUntrusted,
+                        globalToolPolicy,
+                        policyContext: {
+                          externalAgentId: getChatExternalAgentId(),
+                        },
+                      });
                     const response = await executeArchestraTool(
                       agentTool.name,
                       args,
-                      archestraContext,
+                      {
+                        ...archestraContext,
+                        contextIsTrusted: toolExecutionContext.contextIsTrusted,
+                      },
                     );
 
                     span.setAttribute(

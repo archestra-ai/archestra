@@ -452,6 +452,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 **Testing**:
 
 - **Backend**: Vitest with PGLite for in-memory PostgreSQL testing - never mock database interfaces, use real database operations via models for comprehensive integration testing
+- **Test What Matters**: Prefer behavior-focused tests over implementation-detail tests. Do not add tests that only assert class names, prop plumbing, or incidental markup unless that detail is itself the contract.
 - **E2E Tests**: Playwright with test fixtures pattern - import from `./fixtures` in API/UI test directories
 - **E2E Test Fixtures**:
   - API fixtures: `makeApiRequest`, `createAgent`, `deleteAgent`, `createApiKey`, `deleteApiKey`, `createToolInvocationPolicy`, `deleteToolInvocationPolicy`, `createTrustedDataPolicy`, `deleteTrustedDataPolicy`

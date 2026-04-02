@@ -74610,6 +74610,69 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "unsafeContextBoundary": {
+                                "nullable": true,
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "preexisting_untrusted"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "tool_result"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      },
+                                      "toolCallId": {
+                                        "type": "string"
+                                      },
+                                      "toolName": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason",
+                                      "toolCallId",
+                                      "toolName"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -74941,6 +75004,69 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "unsafeContextBoundary": {
+                                "nullable": true,
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "preexisting_untrusted"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "tool_result"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      },
+                                      "toolCallId": {
+                                        "type": "string"
+                                      },
+                                      "toolName": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason",
+                                      "toolCallId",
+                                      "toolName"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -75135,6 +75261,69 @@
                                   ],
                                   "additionalProperties": false
                                 }
+                              },
+                              "unsafeContextBoundary": {
+                                "nullable": true,
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "preexisting_untrusted"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "tool_result"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      },
+                                      "toolCallId": {
+                                        "type": "string"
+                                      },
+                                      "toolName": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason",
+                                      "toolCallId",
+                                      "toolName"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
                               },
                               "type": {
                                 "type": "string",
@@ -75341,6 +75530,69 @@
                                   ],
                                   "additionalProperties": false
                                 }
+                              },
+                              "unsafeContextBoundary": {
+                                "nullable": true,
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "preexisting_untrusted"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "tool_result"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      },
+                                      "toolCallId": {
+                                        "type": "string"
+                                      },
+                                      "toolName": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason",
+                                      "toolCallId",
+                                      "toolName"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
                               },
                               "type": {
                                 "type": "string",
@@ -77260,6 +77512,69 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "unsafeContextBoundary": {
+                                "nullable": true,
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "preexisting_untrusted"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "tool_result"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      },
+                                      "toolCallId": {
+                                        "type": "string"
+                                      },
+                                      "toolName": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason",
+                                      "toolCallId",
+                                      "toolName"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -77465,6 +77780,69 @@
                                   ],
                                   "additionalProperties": false
                                 }
+                              },
+                              "unsafeContextBoundary": {
+                                "nullable": true,
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "preexisting_untrusted"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "tool_result"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      },
+                                      "toolCallId": {
+                                        "type": "string"
+                                      },
+                                      "toolName": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason",
+                                      "toolCallId",
+                                      "toolName"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
                               },
                               "type": {
                                 "type": "string",
@@ -77672,6 +78050,69 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "unsafeContextBoundary": {
+                                "nullable": true,
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "preexisting_untrusted"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "tool_result"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      },
+                                      "toolCallId": {
+                                        "type": "string"
+                                      },
+                                      "toolName": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason",
+                                      "toolCallId",
+                                      "toolName"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -77877,6 +78318,69 @@
                                   ],
                                   "additionalProperties": false
                                 }
+                              },
+                              "unsafeContextBoundary": {
+                                "nullable": true,
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "preexisting_untrusted"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "tool_result"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      },
+                                      "toolCallId": {
+                                        "type": "string"
+                                      },
+                                      "toolName": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason",
+                                      "toolCallId",
+                                      "toolName"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
                               },
                               "type": {
                                 "type": "string",
@@ -78084,6 +78588,69 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "unsafeContextBoundary": {
+                                "nullable": true,
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "preexisting_untrusted"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "tool_result"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      },
+                                      "toolCallId": {
+                                        "type": "string"
+                                      },
+                                      "toolName": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason",
+                                      "toolCallId",
+                                      "toolName"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -78289,6 +78856,69 @@
                                   ],
                                   "additionalProperties": false
                                 }
+                              },
+                              "unsafeContextBoundary": {
+                                "nullable": true,
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "preexisting_untrusted"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "tool_result"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      },
+                                      "toolCallId": {
+                                        "type": "string"
+                                      },
+                                      "toolName": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason",
+                                      "toolCallId",
+                                      "toolName"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
                               },
                               "type": {
                                 "type": "string",
@@ -78496,6 +79126,69 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "unsafeContextBoundary": {
+                                "nullable": true,
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "preexisting_untrusted"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "tool_result"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      },
+                                      "toolCallId": {
+                                        "type": "string"
+                                      },
+                                      "toolName": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason",
+                                      "toolCallId",
+                                      "toolName"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -78702,6 +79395,69 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "unsafeContextBoundary": {
+                                "nullable": true,
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "preexisting_untrusted"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "tool_result"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      },
+                                      "toolCallId": {
+                                        "type": "string"
+                                      },
+                                      "toolName": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason",
+                                      "toolCallId",
+                                      "toolName"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -78897,6 +79653,69 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "unsafeContextBoundary": {
+                                "nullable": true,
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "preexisting_untrusted"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "tool_result"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      },
+                                      "toolCallId": {
+                                        "type": "string"
+                                      },
+                                      "toolName": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason",
+                                      "toolCallId",
+                                      "toolName"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -79091,6 +79910,69 @@
                                   ],
                                   "additionalProperties": false
                                 }
+                              },
+                              "unsafeContextBoundary": {
+                                "nullable": true,
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "preexisting_untrusted"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "tool_result"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      },
+                                      "toolCallId": {
+                                        "type": "string"
+                                      },
+                                      "toolName": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason",
+                                      "toolCallId",
+                                      "toolName"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
                               },
                               "type": {
                                 "type": "string",
@@ -79298,6 +80180,69 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "unsafeContextBoundary": {
+                                "nullable": true,
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "preexisting_untrusted"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "tool_result"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      },
+                                      "toolCallId": {
+                                        "type": "string"
+                                      },
+                                      "toolName": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason",
+                                      "toolCallId",
+                                      "toolName"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -79504,6 +80449,69 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "unsafeContextBoundary": {
+                                "nullable": true,
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "preexisting_untrusted"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "tool_result"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      },
+                                      "toolCallId": {
+                                        "type": "string"
+                                      },
+                                      "toolName": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason",
+                                      "toolCallId",
+                                      "toolName"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -79709,6 +80717,69 @@
                                   ],
                                   "additionalProperties": false
                                 }
+                              },
+                              "unsafeContextBoundary": {
+                                "nullable": true,
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "preexisting_untrusted"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "tool_result"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      },
+                                      "toolCallId": {
+                                        "type": "string"
+                                      },
+                                      "toolName": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason",
+                                      "toolCallId",
+                                      "toolName"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
                               },
                               "type": {
                                 "type": "string",
@@ -81268,6 +82339,69 @@
                             "additionalProperties": false
                           }
                         },
+                        "unsafeContextBoundary": {
+                          "nullable": true,
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "preexisting_untrusted"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "tool_result"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                },
+                                "toolCallId": {
+                                  "type": "string"
+                                },
+                                "toolName": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason",
+                                "toolCallId",
+                                "toolName"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -81599,6 +82733,69 @@
                             "additionalProperties": false
                           }
                         },
+                        "unsafeContextBoundary": {
+                          "nullable": true,
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "preexisting_untrusted"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "tool_result"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                },
+                                "toolCallId": {
+                                  "type": "string"
+                                },
+                                "toolName": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason",
+                                "toolCallId",
+                                "toolName"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -81793,6 +82990,69 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "unsafeContextBoundary": {
+                          "nullable": true,
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "preexisting_untrusted"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "tool_result"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                },
+                                "toolCallId": {
+                                  "type": "string"
+                                },
+                                "toolName": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason",
+                                "toolCallId",
+                                "toolName"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
                         },
                         "type": {
                           "type": "string",
@@ -81999,6 +83259,69 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "unsafeContextBoundary": {
+                          "nullable": true,
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "preexisting_untrusted"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "tool_result"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                },
+                                "toolCallId": {
+                                  "type": "string"
+                                },
+                                "toolName": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason",
+                                "toolCallId",
+                                "toolName"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
                         },
                         "type": {
                           "type": "string",
@@ -83918,6 +85241,69 @@
                             "additionalProperties": false
                           }
                         },
+                        "unsafeContextBoundary": {
+                          "nullable": true,
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "preexisting_untrusted"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "tool_result"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                },
+                                "toolCallId": {
+                                  "type": "string"
+                                },
+                                "toolName": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason",
+                                "toolCallId",
+                                "toolName"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -84123,6 +85509,69 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "unsafeContextBoundary": {
+                          "nullable": true,
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "preexisting_untrusted"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "tool_result"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                },
+                                "toolCallId": {
+                                  "type": "string"
+                                },
+                                "toolName": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason",
+                                "toolCallId",
+                                "toolName"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
                         },
                         "type": {
                           "type": "string",
@@ -84330,6 +85779,69 @@
                             "additionalProperties": false
                           }
                         },
+                        "unsafeContextBoundary": {
+                          "nullable": true,
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "preexisting_untrusted"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "tool_result"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                },
+                                "toolCallId": {
+                                  "type": "string"
+                                },
+                                "toolName": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason",
+                                "toolCallId",
+                                "toolName"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -84535,6 +86047,69 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "unsafeContextBoundary": {
+                          "nullable": true,
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "preexisting_untrusted"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "tool_result"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                },
+                                "toolCallId": {
+                                  "type": "string"
+                                },
+                                "toolName": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason",
+                                "toolCallId",
+                                "toolName"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
                         },
                         "type": {
                           "type": "string",
@@ -84742,6 +86317,69 @@
                             "additionalProperties": false
                           }
                         },
+                        "unsafeContextBoundary": {
+                          "nullable": true,
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "preexisting_untrusted"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "tool_result"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                },
+                                "toolCallId": {
+                                  "type": "string"
+                                },
+                                "toolName": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason",
+                                "toolCallId",
+                                "toolName"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -84947,6 +86585,69 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "unsafeContextBoundary": {
+                          "nullable": true,
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "preexisting_untrusted"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "tool_result"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                },
+                                "toolCallId": {
+                                  "type": "string"
+                                },
+                                "toolName": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason",
+                                "toolCallId",
+                                "toolName"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
                         },
                         "type": {
                           "type": "string",
@@ -85154,6 +86855,69 @@
                             "additionalProperties": false
                           }
                         },
+                        "unsafeContextBoundary": {
+                          "nullable": true,
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "preexisting_untrusted"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "tool_result"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                },
+                                "toolCallId": {
+                                  "type": "string"
+                                },
+                                "toolName": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason",
+                                "toolCallId",
+                                "toolName"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -85360,6 +87124,69 @@
                             "additionalProperties": false
                           }
                         },
+                        "unsafeContextBoundary": {
+                          "nullable": true,
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "preexisting_untrusted"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "tool_result"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                },
+                                "toolCallId": {
+                                  "type": "string"
+                                },
+                                "toolName": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason",
+                                "toolCallId",
+                                "toolName"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -85555,6 +87382,69 @@
                             "additionalProperties": false
                           }
                         },
+                        "unsafeContextBoundary": {
+                          "nullable": true,
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "preexisting_untrusted"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "tool_result"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                },
+                                "toolCallId": {
+                                  "type": "string"
+                                },
+                                "toolName": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason",
+                                "toolCallId",
+                                "toolName"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -85749,6 +87639,69 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "unsafeContextBoundary": {
+                          "nullable": true,
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "preexisting_untrusted"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "tool_result"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                },
+                                "toolCallId": {
+                                  "type": "string"
+                                },
+                                "toolName": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason",
+                                "toolCallId",
+                                "toolName"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
                         },
                         "type": {
                           "type": "string",
@@ -85956,6 +87909,69 @@
                             "additionalProperties": false
                           }
                         },
+                        "unsafeContextBoundary": {
+                          "nullable": true,
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "preexisting_untrusted"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "tool_result"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                },
+                                "toolCallId": {
+                                  "type": "string"
+                                },
+                                "toolName": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason",
+                                "toolCallId",
+                                "toolName"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -86162,6 +88178,69 @@
                             "additionalProperties": false
                           }
                         },
+                        "unsafeContextBoundary": {
+                          "nullable": true,
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "preexisting_untrusted"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "tool_result"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                },
+                                "toolCallId": {
+                                  "type": "string"
+                                },
+                                "toolName": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason",
+                                "toolCallId",
+                                "toolName"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -86367,6 +88446,69 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "unsafeContextBoundary": {
+                          "nullable": true,
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "preexisting_untrusted"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "tool_result"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                },
+                                "toolCallId": {
+                                  "type": "string"
+                                },
+                                "toolName": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason",
+                                "toolCallId",
+                                "toolName"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
                         },
                         "type": {
                           "type": "string",

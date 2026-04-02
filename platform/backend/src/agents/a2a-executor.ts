@@ -72,6 +72,8 @@ export interface A2AExecuteParams {
   abortSignal?: AbortSignal;
   /** Optional attachments to include in the message (e.g., images from email, Slack, Teams) */
   attachments?: A2AAttachment[];
+  /** Whether the parent execution context was still trusted at delegation time */
+  parentContextIsTrusted?: boolean;
 }
 
 export interface A2AExecuteResult {
@@ -102,6 +104,7 @@ export async function executeA2AMessage(
     parentDelegationChain,
     abortSignal,
     attachments,
+    parentContextIsTrusted,
   } = params;
 
   // Generate isolation key for browser tab isolation.
@@ -209,6 +212,7 @@ export async function executeA2AMessage(
       source,
       externalAgentId: delegationChain,
       agentLlmApiKeyId: agent.llmApiKeyId,
+      contextIsTrusted: parentContextIsTrusted,
     });
 
     // Execute with AI SDK using streamText (required for long-running requests)

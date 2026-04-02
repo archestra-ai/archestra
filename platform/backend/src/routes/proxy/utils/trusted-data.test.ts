@@ -101,6 +101,12 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         call_456:
           "[Content blocked by policy: Data blocked by policy: Block hacker emails]",
       });
+      expect(result.unsafeContextBoundary).toEqual({
+        kind: "tool_result",
+        reason: "tool_result_blocked",
+        toolCallId: "call_456",
+        toolName: "get_emails",
+      });
     });
 
     test("marks context as trusted when tool result matches allow policy", async () => {
@@ -374,6 +380,34 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       // Context should be untrusted when no policies match
       expect(result.contextIsTrusted).toBe(false);
       expect(result.toolResultUpdates).toEqual({});
+      expect(result.unsafeContextBoundary).toEqual({
+        kind: "tool_result",
+        reason: "tool_result_marked_untrusted",
+        toolCallId: "call_789",
+        toolName: "get_emails",
+      });
+    });
+
+    test("records a preexisting unsafe boundary when context starts untrusted", async () => {
+      const result = await evaluateIfContextIsTrusted(
+        [{ role: "user", content: "Summarize this thread" }],
+        agentId,
+        organizationId,
+        undefined,
+        true,
+        "restrictive",
+        { teamIds: [] },
+        undefined,
+        undefined,
+        "inherited_from_parent",
+      );
+
+      expect(result.contextIsTrusted).toBe(false);
+      expect(result.toolResultUpdates).toEqual({});
+      expect(result.unsafeContextBoundary).toEqual({
+        kind: "preexisting_untrusted",
+        reason: "inherited_from_parent",
+      });
     });
 
     test("handles multiple tool calls with mixed trust", async () => {

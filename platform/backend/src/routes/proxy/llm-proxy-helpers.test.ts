@@ -250,7 +250,15 @@ describe("buildInteractionRecord", () => {
   };
 
   test("builds correct record with all fields", () => {
-    const record = buildInteractionRecord(baseParams);
+    const record = buildInteractionRecord({
+      ...baseParams,
+      unsafeContextBoundary: {
+        kind: "tool_result",
+        reason: "tool_result_marked_untrusted",
+        toolCallId: "call-1",
+        toolName: "read_email",
+      },
+    });
 
     expect(record.profileId).toBe("agent-1");
     expect(record.externalAgentId).toBe("ext-1");
@@ -269,6 +277,12 @@ describe("buildInteractionRecord", () => {
     expect(record.toonTokensBefore).toBe(500);
     expect(record.toonTokensAfter).toBe(300);
     expect(record.toonSkipReason).toBeNull();
+    expect(record.unsafeContextBoundary).toEqual({
+      kind: "tool_result",
+      reason: "tool_result_marked_untrusted",
+      toolCallId: "call-1",
+      toolName: "read_email",
+    });
   });
 
   test("formats costs to 10 decimal places", () => {

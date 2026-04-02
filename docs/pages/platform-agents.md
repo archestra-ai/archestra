@@ -90,6 +90,10 @@ Response:
 
 A2A supports nested agent-to-agent calls. When one agent invokes another, the delegation chain tracks the call path for observability. This enables multi-step agent workflows where agents can use other agents as tools.
 
+Delegated sub-agents also inherit the current tool-guardrail trust state. If the parent agent has already crossed a sensitive-context boundary, the child starts in that same unsafe state, so downstream tool call policies continue to enforce the stricter rules instead of resetting during delegation.
+
+In Chat and LLM Logs, Archestra shows the exact boundary where context became sensitive. When the request already started in an unsafe state, the UI shows that as a preexisting boundary instead.
+
 ### Configuration
 
 A2A uses the same LLM configuration as Chat. See [Deployment - Environment Variables](/docs/platform-deployment#environment-variables) for the full list of `ARCHESTRA_CHAT_*` variables.

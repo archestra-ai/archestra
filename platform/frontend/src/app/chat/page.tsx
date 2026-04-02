@@ -113,7 +113,6 @@ import {
   getSavedModelOverride,
   type ModelSource,
   resolveInitialModel,
-  resolveModelForAgent,
   saveAgent,
   saveModelOverride,
 } from "@/lib/chat/use-chat-preferences";
@@ -128,6 +127,11 @@ import {
 import { useOrganization } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
+import {
+  getProviderForModelId,
+  resolveInitialAgentState,
+  shouldResetInitialChatState,
+} from "./chat-initial-state";
 import ArchestraPromptInput from "./prompt-input";
 
 const BROWSER_OPEN_KEY = "archestra-chat-browser-open";
@@ -234,6 +238,9 @@ export function ChatPageContent({
   const [initialApiKeyId, setInitialApiKeyId] = useState<string | null>(null);
   const [initialModelSource, setInitialModelSource] =
     useState<ModelSource | null>(null);
+  const previousRouteConversationIdRef = useRef<string | undefined>(
+    routeConversationId,
+  );
   // Track which agentId URL param has been consumed (so we don't re-apply the same one after user clears selection,
   // but do apply a new one when navigating from a different agent page)
   const urlParamsConsumedRef = useRef<string | null>(null);
@@ -241,6 +248,36 @@ export function ChatPageContent({
   // Resolve which agent to use on page load (URL param > localStorage > first available).
   // Stores the resolved agent in a ref so the model init effect can read it synchronously.
   const resolvedAgentRef = useRef<(typeof internalAgents)[number] | null>(null);
+
+  const applyInitialAgentSelection = useCallback(
+    (agent: (typeof internalAgents)[number]) => {
+      setInitialAgentId(agent.id);
+      resolvedAgentRef.current = agent;
+
+      const resolved = resolveInitialAgentState({
+        agent,
+        modelsByProvider,
+        chatApiKeys,
+        organization: organization
+          ? {
+              defaultLlmModel: organization.defaultLlmModel,
+              defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
+            }
+          : null,
+      });
+
+      if (resolved) {
+        setInitialModel(resolved.modelId);
+        setInitialApiKeyId(resolved.apiKeyId);
+        setInitialModelSource(resolved.modelSource);
+      } else {
+        setInitialModel("");
+        setInitialApiKeyId(null);
+        setInitialModelSource(null);
+      }
+    },
+    [modelsByProvider, chatApiKeys, organization],
+  );
 
   useEffect(() => {
     if (internalAgents.length === 0) return;
@@ -255,8 +292,7 @@ export function ChatPageContent({
     if (urlAgentId && urlAgentId !== urlParamsConsumedRef.current) {
       const matchingAgent = internalAgents.find((a) => a.id === urlAgentId);
       if (matchingAgent) {
-        setInitialAgentId(urlAgentId);
-        resolvedAgentRef.current = matchingAgent;
+        applyInitialAgentSelection(matchingAgent);
         urlParamsConsumedRef.current = urlAgentId;
         return;
       }
@@ -273,9 +309,8 @@ export function ChatPageContent({
           (a) => a.id === organization.defaultAgentId,
         );
         if (orgDefaultAgent) {
-          setInitialAgentId(organization.defaultAgentId);
+          applyInitialAgentSelection(orgDefaultAgent);
           saveAgent(organization.defaultAgentId);
-          resolvedAgentRef.current = orgDefaultAgent;
           return;
         }
       }
@@ -283,8 +318,7 @@ export function ChatPageContent({
       const savedAgentId = getSavedAgent();
       const savedAgent = internalAgents.find((a) => a.id === savedAgentId);
       if (savedAgent) {
-        setInitialAgentId(savedAgentId);
-        resolvedAgentRef.current = savedAgent;
+        applyInitialAgentSelection(savedAgent);
         return;
       }
       // Try member's default agent
@@ -293,17 +327,16 @@ export function ChatPageContent({
           (a) => a.id === defaultAgentId,
         );
         if (defaultAgent) {
-          setInitialAgentId(defaultAgentId);
+          applyInitialAgentSelection(defaultAgent);
           saveAgent(defaultAgentId);
-          resolvedAgentRef.current = defaultAgent;
           return;
         }
       }
-      setInitialAgentId(internalAgents[0].id);
+      applyInitialAgentSelection(internalAgents[0]);
       saveAgent(internalAgents[0].id);
-      resolvedAgentRef.current = internalAgents[0];
     }
   }, [
+    applyInitialAgentSelection,
     initialAgentId,
     searchParams,
     internalAgents,
@@ -441,9 +474,18 @@ export function ChatPageContent({
   useEffect(() => {
     setConversationId(routeConversationId);
 
-    if (!routeConversationId) {
+    const previousRouteConversationId = previousRouteConversationIdRef.current;
+    previousRouteConversationIdRef.current = routeConversationId;
+
+    if (
+      shouldResetInitialChatState({
+        previousRouteConversationId,
+        routeConversationId,
+      })
+    ) {
       setInitialAgentId(null);
       setInitialModel("");
+      setInitialApiKeyId(null);
       setInitialModelSource(null);
       modelInitializedRef.current = false;
     }
@@ -1156,12 +1198,18 @@ export function ChatPageContent({
         return;
       }
 
+      if (!initialModel) {
+        return;
+      }
+
       // Store the URL to navigate to after conversation is created
       setPendingBrowserUrl(url);
 
       // Find the provider for the initial model
-      const modelInfo = chatModels.find((m) => m.id === initialModel);
-      const selectedProvider = modelInfo?.provider;
+      const selectedProvider = getProviderForModelId({
+        modelId: initialModel,
+        chatModels,
+      });
 
       // Create conversation with the selected agent
       createConversationMutation.mutate(
@@ -1226,32 +1274,10 @@ export function ChatPageContent({
       // Resolve model/key for the new agent using the same priority chain
       const selectedAgent = internalAgents.find((a) => a.id === agentId);
       if (selectedAgent) {
-        resolvedAgentRef.current = selectedAgent;
-
-        const resolved = resolveModelForAgent({
-          agent: selectedAgent,
-          context: {
-            modelsByProvider,
-            chatApiKeys,
-            organization: organization
-              ? {
-                  defaultLlmModel: organization.defaultLlmModel,
-                  defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
-                }
-              : null,
-          },
-        });
-
-        if (resolved) {
-          setInitialModel(resolved.modelId);
-          setInitialApiKeyId(resolved.apiKeyId);
-          setInitialModelSource(
-            resolved.source === "fallback" ? null : resolved.source,
-          );
-        }
+        applyInitialAgentSelection(selectedAgent);
       }
     },
-    [internalAgents, modelsByProvider, chatApiKeys, organization],
+    [applyInitialAgentSelection, internalAgents],
   );
 
   // Core logic for starting a new conversation with a message
@@ -1264,7 +1290,7 @@ export function ChatPageContent({
       if (
         (!hasText && !hasFiles) ||
         !initialAgentId ||
-        // !initialModel ||
+        !initialModel ||
         createConversationMutation.isPending
       ) {
         return;
@@ -1278,8 +1304,10 @@ export function ChatPageContent({
       const pendingActions = getPendingActions(initialAgentId);
 
       // Find the provider for the initial model
-      const modelInfo = chatModels.find((m) => m.id === initialModel);
-      const selectedProvider = modelInfo?.provider;
+      const selectedProvider = getProviderForModelId({
+        modelId: initialModel,
+        chatModels,
+      });
 
       // Create conversation with the selected agent and prompt
       createConversationMutation.mutate(
@@ -1372,6 +1400,7 @@ export function ChatPageContent({
 
     // Wait for agent to be ready.
     if (!initialAgentId) return;
+    if (!initialModel) return;
 
     // Skip if mutation is already in progress
     if (createConversationMutation.isPending) return;
@@ -1383,8 +1412,10 @@ export function ChatPageContent({
     pendingPromptRef.current = initialUserPrompt;
 
     // Find the provider for the initial model
-    const modelInfo = chatModels.find((m) => m.id === initialModel);
-    const selectedProvider = modelInfo?.provider;
+    const selectedProvider = getProviderForModelId({
+      modelId: initialModel,
+      chatModels,
+    });
 
     // Create conversation and send message
     createConversationMutation.mutate(

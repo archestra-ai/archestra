@@ -19,6 +19,7 @@ interface ToolStatusRowProps {
   icon: ReactNode;
   title: string;
   description: ReactNode;
+  secondaryText?: ReactNode;
   actions?: ToolStatusRowAction[];
   tone?: "default" | "destructive";
 }
@@ -27,12 +28,13 @@ export function ToolStatusRow({
   icon,
   title,
   description,
+  secondaryText,
   actions = [],
   tone = "default",
 }: ToolStatusRowProps) {
   return (
     <div className="p-4 pt-0">
-      <div className="flex flex-wrap items-start gap-3 text-sm">
+      <div className="flex flex-wrap items-center gap-3 text-sm">
         <div
           className={tone === "destructive" ? "text-destructive" : undefined}
         >
@@ -55,9 +57,14 @@ export function ToolStatusRow({
             {title}:
           </span>{" "}
           <span>{description}</span>
+          {secondaryText ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {secondaryText}
+            </p>
+          ) : null}
         </div>
         {actions.length > 0 ? (
-          <div className="ml-1 flex items-center gap-2">
+          <div className="ml-1 flex items-center self-center gap-2">
             {actions.map((action) =>
               "href" in action ? (
                 <Button

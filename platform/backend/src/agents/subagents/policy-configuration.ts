@@ -1,5 +1,6 @@
 import {
   BUILT_IN_AGENT_IDS,
+  buildPolicyConfigSystemPromptContext,
   isSupportedProvider,
   type SupportedProvider,
 } from "@shared";
@@ -443,19 +444,21 @@ export class PolicyConfigurationService {
       | Record<string, unknown>
       | undefined;
     const prompt =
-      renderSystemPrompt(builtInAgent.systemPrompt, null, {
-        tool: {
-          name: tool.name,
-          description: tool.description || "No description provided",
-          parameters: tool.parameters
+      renderSystemPrompt(
+        builtInAgent.systemPrompt,
+        null,
+        buildPolicyConfigSystemPromptContext({
+          toolName: tool.name,
+          toolDescription: tool.description || "No description provided",
+          toolParameters: tool.parameters
             ? JSON.stringify(tool.parameters, null, 2)
             : "No parameters",
-          annotations: annotations
+          toolAnnotations: annotations
             ? JSON.stringify(annotations, null, 2)
             : "Not provided",
-        },
-        mcpServerName: mcpServerName || "Unknown",
-      }) ?? "";
+          mcpServerName: mcpServerName || "Unknown",
+        }),
+      ) ?? "";
 
     try {
       const result = await generateObject({

@@ -129,10 +129,10 @@ const contentNavGroups: NavGroup[] = [
           },
           {
             title: "Guardrails",
-            url: "/mcp/tool-policies",
+            url: "/mcp/tool-guardrails",
             testId: E2eTestId.SidebarNavGuardrails,
             customIsActive: (pathname: string) =>
-              pathname.startsWith("/mcp/tool-policies"),
+              pathname.startsWith("/mcp/tool-guardrails"),
           },
         ],
       },

@@ -76,6 +76,7 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
 const EMBEDDING_DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   ...DEFAULT_FORM_VALUES,
 };
+const KNOWLEDGE_SETTINGS_CONTROL_CLASS = "w-full max-w-[28rem]";
 
 function AddApiKeyDialog({
   open,
@@ -270,7 +271,7 @@ function ApiKeySelector({
       >
         <SelectTrigger
           className={cn(
-            "w-80",
+            "w-full",
             pulse && "animate-pulse ring-2 ring-primary/40",
           )}
         >
@@ -336,7 +337,7 @@ function RerankerModelSelector({
         onValueChange={() => {}}
         placeholder="Select a reranker API key first..."
         options={[]}
-        className={cn("w-80")}
+        className={cn("w-full")}
         disabled
       />
     );
@@ -358,7 +359,7 @@ function RerankerModelSelector({
       onValueChange={(v) => onChange(v || null)}
       options={rerankerItems}
       placeholder="Select reranking model..."
-      className={cn("w-80", pulse && "animate-pulse ring-2 ring-primary/40")}
+      className={cn("w-full", pulse && "animate-pulse ring-2 ring-primary/40")}
       disabled={disabled}
     />
   );
@@ -498,6 +499,17 @@ function KnowledgeSettingsContent() {
     !!embeddingChatApiKeyId &&
     !isEmbeddingModelLocked &&
     (embeddingModels?.length ?? 0) === 0;
+  const showSelectEmbeddingKeyHint =
+    !embeddingChatApiKeyId && !isEmbeddingModelLocked;
+  const showEmbeddingMeta = !!selectedEmbeddingModel || isEmbeddingModelLocked;
+  const showEmbeddingSupportText =
+    showEmbeddingMeta ||
+    showSelectEmbeddingKeyHint ||
+    showConfigureEmbeddingModelsLink;
+  const showEmbeddingActions =
+    isEmbeddingModelLocked || (!!embeddingChatApiKeyId && !!embeddingModel);
+  const showEmbeddingSupportPanel =
+    showEmbeddingSupportText || showEmbeddingActions;
 
   // Check if keys exist for pulsing logic
   const hasApiKeys = useMemo(() => (apiKeys ?? []).length > 0, [apiKeys]);
@@ -559,14 +571,19 @@ function KnowledgeSettingsContent() {
 
         <SettingsBlock
           title="Embedding Configuration"
-          description="Configure the API key and model used to generate vector embeddings for knowledge base documents. Any synced model with embedding dimensions configured can be selected here."
+          description="Choose the API key and embedding model used for knowledge base documents. Only synced models with configured embedding dimensions appear here."
           control={
             <WithPermissions
               permissions={{ knowledgeSettings: ["update"] }}
               noPermissionHandle="tooltip"
             >
               {({ hasPermission }) => (
-                <div className="flex w-80 flex-col gap-2">
+                <div
+                  className={cn(
+                    "flex flex-col gap-2.5",
+                    KNOWLEDGE_SETTINGS_CONTROL_CLASS,
+                  )}
+                >
                   <ApiKeySelector
                     value={embeddingChatApiKeyId}
                     onChange={setEmbeddingChatApiKeyId}
@@ -590,7 +607,7 @@ function KnowledgeSettingsContent() {
                     searchPlaceholder="Search embedding models..."
                     emptyMessage={embeddingEmptyMessage}
                     className={cn(
-                      "w-80",
+                      "w-full",
                       embeddingSetupStep === "select-model" &&
                         "animate-pulse ring-2 ring-primary/40",
                     )}
@@ -600,73 +617,99 @@ function KnowledgeSettingsContent() {
                       !embeddingChatApiKeyId
                     }
                   />
-                  {selectedEmbeddingModel && (
-                    <p className="flex items-start gap-1 text-xs text-muted-foreground">
-                      <Info className="mt-0.5 h-3 w-3 shrink-0" />
-                      Uses {selectedEmbeddingModel.embeddingDimensions}
-                      -dimensional vectors.
-                      {selectedEmbeddingProvider === "gemini" &&
-                        selectedEmbeddingModel.embeddingDimensions === 1536 &&
-                        " Gemini will truncate from its native 3072 dimensions via outputDimensionality."}
-                    </p>
-                  )}
-                  {isEmbeddingModelLocked && (
-                    <div className="flex items-center gap-2">
-                      <p className="text-xs text-muted-foreground">
-                        <Lock className="mr-1 inline h-3 w-3" />
-                        Locked — changing the embedding model requires
-                        re-embedding all documents.
-                      </p>
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        className="h-6 px-2 text-xs"
-                        onClick={() => setShowDropDialog(true)}
+                  {showEmbeddingSupportPanel && (
+                    <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                      <div
+                        className={cn(
+                          "flex flex-col gap-3",
+                          showEmbeddingSupportText &&
+                            showEmbeddingActions &&
+                            "md:flex-row md:items-start md:justify-between",
+                        )}
                       >
-                        <Trash2 className="mr-1 h-3 w-3" />
-                        Drop
-                      </Button>
+                        {showEmbeddingSupportText && (
+                          <div className="space-y-1.5">
+                            {selectedEmbeddingModel && (
+                              <p className="flex items-start gap-2 text-xs text-muted-foreground">
+                                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                <span>
+                                  Uses{" "}
+                                  {selectedEmbeddingModel.embeddingDimensions}
+                                  -dimensional vectors.
+                                  {selectedEmbeddingProvider === "gemini" &&
+                                    selectedEmbeddingModel.embeddingDimensions ===
+                                      1536 &&
+                                    " Gemini will truncate from its native 3072 dimensions via outputDimensionality."}
+                                </span>
+                              </p>
+                            )}
+                            {isEmbeddingModelLocked && (
+                              <p className="flex items-start gap-2 text-xs text-muted-foreground">
+                                <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                <span>
+                                  Locked — changing the embedding model requires
+                                  re-embedding all documents.
+                                </span>
+                              </p>
+                            )}
+                            {showSelectEmbeddingKeyHint && (
+                              <p className="text-xs text-muted-foreground">
+                                Select an embedding API key first.
+                              </p>
+                            )}
+                            {showConfigureEmbeddingModelsLink && (
+                              <p className="text-xs text-muted-foreground">
+                                Configure embedding dimensions for a synced
+                                model{" "}
+                                <Link
+                                  href="/llm/providers/models"
+                                  className="text-primary underline underline-offset-2"
+                                >
+                                  here
+                                </Link>
+                                .
+                              </p>
+                            )}
+                          </div>
+                        )}
+                        {showEmbeddingActions && (
+                          <div className="flex flex-wrap justify-end gap-2 md:shrink-0">
+                            {embeddingChatApiKeyId && embeddingModel && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={testConnection.isPending}
+                                onClick={() =>
+                                  testConnection.mutate({
+                                    embeddingChatApiKeyId,
+                                    embeddingModel,
+                                  })
+                                }
+                              >
+                                {testConnection.isPending ? (
+                                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Zap className="mr-1 h-3.5 w-3.5" />
+                                )}
+                                Test Connection
+                              </Button>
+                            )}
+                            {isEmbeddingModelLocked && (
+                              <Button
+                                type="button"
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => setShowDropDialog(true)}
+                              >
+                                <Trash2 className="mr-1 h-3.5 w-3.5" />
+                                Drop
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  )}
-                  {!embeddingChatApiKeyId && !isEmbeddingModelLocked && (
-                    <p className="text-xs text-muted-foreground">
-                      Select an embedding API key first.
-                    </p>
-                  )}
-                  {showConfigureEmbeddingModelsLink && (
-                    <p className="text-xs text-muted-foreground">
-                      Configure embedding dimensions for a synced model{" "}
-                      <Link
-                        href="/llm/providers/models"
-                        className="text-primary underline underline-offset-2"
-                      >
-                        here
-                      </Link>
-                      .
-                    </p>
-                  )}
-                  {embeddingChatApiKeyId && embeddingModel && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="self-end"
-                      disabled={testConnection.isPending}
-                      onClick={() =>
-                        testConnection.mutate({
-                          embeddingChatApiKeyId,
-                          embeddingModel,
-                        })
-                      }
-                    >
-                      {testConnection.isPending ? (
-                        <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                      ) : (
-                        <Zap className="mr-1 h-3 w-3" />
-                      )}
-                      Test Connection
-                    </Button>
                   )}
                   <DropEmbeddingConfigDialog
                     open={showDropDialog}
@@ -687,7 +730,12 @@ function KnowledgeSettingsContent() {
               noPermissionHandle="tooltip"
             >
               {({ hasPermission }) => (
-                <div className="flex w-80 flex-col gap-2">
+                <div
+                  className={cn(
+                    "flex flex-col gap-2",
+                    KNOWLEDGE_SETTINGS_CONTROL_CLASS,
+                  )}
+                >
                   <ApiKeySelector
                     value={rerankerChatApiKeyId}
                     onChange={handleRerankerKeyChange}

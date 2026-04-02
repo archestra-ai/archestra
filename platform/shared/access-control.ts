@@ -141,7 +141,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
 
   // MCP
   mcpGateway: ["read", "create", "update", "delete"],
-  toolPolicy: ["read", "create", "update", "delete"],
+  toolPolicy: ["read"],
   mcpRegistry: ["read"],
   mcpServerInstallation: ["read", "create", "delete"],
   mcpServerInstallationRequest: ["read", "create", "update"],
@@ -993,6 +993,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/mcp/registry": { mcpRegistry: ["read"] },
   "/mcp/gateways": { mcpGateway: ["read"] },
   "/mcp/tool-policies": { toolPolicy: ["read"] },
+  "/mcp/tool-guardrails": { toolPolicy: ["read"] },
   "/mcp/registry/installation-requests": {
     mcpServerInstallationRequest: ["read"],
   },

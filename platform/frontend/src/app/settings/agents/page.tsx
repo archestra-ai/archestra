@@ -359,7 +359,7 @@ export default function AgentSettingsPage() {
             <span className="text-green-600 dark:text-green-400">
               Policies apply to agents' tools.{" "}
               <Link
-                href="/mcp/tool-policies"
+                href="/mcp/tool-guardrails"
                 className="text-primary hover:underline"
               >
                 Configure policies

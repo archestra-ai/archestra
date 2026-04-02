@@ -187,6 +187,7 @@ describe("auth permissions", () => {
 
       // Members should have read access to agents
       expect(permissions.agent).toContain("read");
+      expect(permissions.toolPolicy).toEqual(["read"]);
 
       // Members should NOT have delete on organization
       expect(permissions.organization).not.toContain("delete");

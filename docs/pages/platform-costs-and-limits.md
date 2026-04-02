@@ -88,8 +88,8 @@ See the upstream TOON format project for the format specification and benchmarks
 
 ## Related Documentation
 
-- [Dual LLM](platform-dual-llm)
-- [Policy Configuration](platform-built-in-agents-policy-config)
+- [Dual LLM Agent](platform-dual-llm)
+- [Tool Policy Configuration Agent](platform-built-in-agents-policy-config)
 - [Profiles Configuration](platform-profiles)
 - [Observability](platform-observability)
 - [Deployment](platform-deployment)

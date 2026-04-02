@@ -17,11 +17,19 @@ import {
   LlmProviderApiKeyModelLinkModel,
   OrganizationModel,
 } from "@/models";
+import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 
 export interface ConversationLlmSelection {
   chatApiKeyId: string | null;
   selectedModel: string;
   selectedProvider: SupportedProvider;
+}
+
+export interface ResolvedLlmSelection {
+  provider: SupportedProvider;
+  apiKey: string | undefined;
+  modelName: string;
+  baseUrl: string | null;
 }
 
 /**
@@ -38,12 +46,7 @@ export interface ConversationLlmSelection {
 export async function resolveSmartDefaultLlm(params: {
   organizationId: string;
   userId?: string;
-}): Promise<{
-  provider: SupportedProvider;
-  apiKey: string | undefined;
-  modelName: string;
-  baseUrl: string | null;
-} | null> {
+}): Promise<ResolvedLlmSelection | null> {
   const { organizationId, userId } = params;
   const providers = SupportedProvidersSchema.options;
 
@@ -80,6 +83,58 @@ export async function resolveSmartDefaultLlm(params: {
   }
 
   return null;
+}
+
+export async function resolveConfiguredAgentLlm(agent: {
+  llmApiKeyId: string | null;
+  llmModel: string | null;
+}): Promise<ResolvedLlmSelection | null> {
+  if (agent.llmApiKeyId) {
+    const apiKeyRecord = await LlmProviderApiKeyModel.findById(
+      agent.llmApiKeyId,
+    );
+    if (!apiKeyRecord) {
+      return null;
+    }
+
+    const provider = isSupportedProvider(apiKeyRecord.provider)
+      ? apiKeyRecord.provider
+      : detectProviderFromModel(agent.llmModel ?? "");
+
+    let apiKey: string | undefined;
+    if (apiKeyRecord.secretId) {
+      const secret = await getSecretValueForLlmProviderApiKey(
+        apiKeyRecord.secretId,
+      );
+      apiKey = (secret as string) ?? undefined;
+    }
+
+    const modelName =
+      agent.llmModel ??
+      (await LlmProviderApiKeyModelLinkModel.getBestModel(apiKeyRecord.id))
+        ?.modelId;
+    if (!modelName) {
+      return null;
+    }
+
+    return {
+      provider,
+      apiKey,
+      modelName,
+      baseUrl: apiKeyRecord.baseUrl,
+    };
+  }
+
+  if (!agent.llmModel) {
+    return null;
+  }
+
+  return {
+    provider: detectProviderFromModel(agent.llmModel),
+    apiKey: undefined,
+    modelName: agent.llmModel,
+    baseUrl: null,
+  };
 }
 
 export async function resolveConversationLlmSelectionForAgent(params: {

@@ -17,6 +17,7 @@ vi.mock("ai", () => ({
 
 vi.mock("@/utils/llm-resolution", () => ({
   resolveSmartDefaultLlm: vi.fn(),
+  resolveConfiguredAgentLlm: vi.fn(),
 }));
 
 const MOCK_BUILT_IN_AGENT = {

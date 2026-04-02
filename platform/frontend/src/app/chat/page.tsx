@@ -93,6 +93,7 @@ import {
   useUpdateConversationEnabledTools,
 } from "@/lib/chat/chat.query";
 import { useChatAgentState } from "@/lib/chat/chat-agent-state.hook";
+import { chooseDisplayedMessages } from "@/lib/chat/chat-session-utils";
 import {
   useConversationShare,
   useForkSharedConversation,
@@ -821,14 +822,11 @@ export function ChatPageContent({
   }, [chatSession?.messages, persistedConversationMessages]);
 
   // Extract chat session properties (or use persisted / last visible state if session dips)
-  const messages =
-    (chatSession?.messages && chatSession.messages.length > 0
-      ? chatSession.messages
-      : undefined) ??
-    (persistedConversationMessages.length > 0
-      ? persistedConversationMessages
-      : undefined) ??
-    lastVisibleMessagesRef.current;
+  const messages = chooseDisplayedMessages({
+    liveMessages: chatSession?.messages,
+    persistedMessages: persistedConversationMessages,
+    lastVisibleMessages: lastVisibleMessagesRef.current,
+  });
   const sendMessage = chatSession?.sendMessage;
   const status = chatSession?.status ?? "ready";
   const setMessages = chatSession?.setMessages;

@@ -1,6 +1,10 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import {
+  type archestraApiTypes,
+  TOOL_SWAP_AGENT_SHORT_NAME,
+  TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME,
+} from "@shared";
 import type { ChatStatus, UIMessage } from "ai";
 import {
   Check,
@@ -9,7 +13,7 @@ import {
   ShieldCheck,
   TriangleAlert,
 } from "lucide-react";
-import { Fragment, useMemo } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   Conversation,
   ConversationContent,
@@ -42,10 +46,18 @@ import {
 } from "@/components/chat/knowledge-graph-citations";
 import { MessageActions } from "@/components/chat/message-actions";
 import {
+  findScrollContainer,
   PreexistingUnsafeContextDivider,
+  SensitiveContextStickyIndicator,
+  shouldShowStickyBoundaryIndicator,
   UnsafeContextStartsHereDivider,
 } from "@/components/chat/message-boundary-divider";
 import { PolicyDeniedTool } from "@/components/chat/policy-denied-tool";
+import {
+  getRenderedToolName,
+  getSwapToolShortName,
+  SwapAgentBoundaryDivider,
+} from "@/components/chat/swap-agent-boundary";
 import Divider from "@/components/divider";
 import { Button } from "@/components/ui/button";
 import { preserveNewlines } from "@/lib/chat/chat-utils";
@@ -79,6 +91,46 @@ const MessageThread = ({
     }
     return -1;
   }, [messages]);
+  const unsafeBoundaryRef = useRef<HTMLDivElement>(null);
+  const [showStickyUnsafeIndicator, setShowStickyUnsafeIndicator] =
+    useState(false);
+
+  useEffect(() => {
+    const boundaryElement = unsafeBoundaryRef.current;
+    if (!boundaryElement) {
+      setShowStickyUnsafeIndicator(false);
+      return;
+    }
+
+    const scrollContainer = findScrollContainer(boundaryElement);
+    if (!scrollContainer) {
+      setShowStickyUnsafeIndicator(false);
+      return;
+    }
+
+    const updateStickyState = () => {
+      const boundaryRect = boundaryElement.getBoundingClientRect();
+      const containerRect = scrollContainer.getBoundingClientRect();
+      setShowStickyUnsafeIndicator(
+        shouldShowStickyBoundaryIndicator({
+          boundaryTop: boundaryRect.top,
+          boundaryBottom: boundaryRect.bottom,
+          containerTop: containerRect.top,
+        }),
+      );
+    };
+
+    updateStickyState();
+    scrollContainer.addEventListener("scroll", updateStickyState, {
+      passive: true,
+    });
+    window.addEventListener("resize", updateStickyState);
+
+    return () => {
+      scrollContainer.removeEventListener("scroll", updateStickyState);
+      window.removeEventListener("resize", updateStickyState);
+    };
+  });
 
   return (
     <div
@@ -91,8 +143,11 @@ const MessageThread = ({
         <Conversation className="h-full">
           <ConversationContent>
             {topPart}
+            <SensitiveContextStickyIndicator
+              visible={showStickyUnsafeIndicator}
+            />
             {unsafeContextBoundary?.kind === "preexisting_untrusted" && (
-              <PreexistingUnsafeContextDivider />
+              <PreexistingUnsafeContextDivider dividerRef={unsafeBoundaryRef} />
             )}
             {!hideDivider && <Divider className="my-4" />}
             <div className="max-w-4xl mx-auto">
@@ -167,11 +222,28 @@ const MessageThread = ({
                       switch (part.type) {
                         case "text": {
                           const policyDenied = parsePolicyDenied(part.text);
+                          const shouldRenderUnsafeContextDivider =
+                            message.role === "assistant" &&
+                            shouldRenderToolResultUnsafeBoundary({
+                              message,
+                              partIndex: i,
+                              unsafeContextBoundary,
+                            });
+                          const shouldRenderPolicyDeniedUnsafeBoundary =
+                            policyDenied?.unsafeContextActiveAtRequestStart &&
+                            !hasUnsafeBoundaryBefore({
+                              messages,
+                              beforeMessageIndex: idx,
+                              beforePartIndex: i,
+                              unsafeContextBoundary,
+                            });
                           if (policyDenied) {
                             return (
                               <Fragment key={partKey}>
-                                {policyDenied.unsafeContextActiveAtRequestStart && (
-                                  <PreexistingUnsafeContextDivider />
+                                {shouldRenderPolicyDeniedUnsafeBoundary && (
+                                  <PreexistingUnsafeContextDivider
+                                    dividerRef={unsafeBoundaryRef}
+                                  />
                                 )}
                                 <PolicyDeniedTool
                                   policyDenied={policyDenied}
@@ -218,6 +290,11 @@ const MessageThread = ({
 
                           return (
                             <Fragment key={partKey}>
+                              {shouldRenderUnsafeContextDivider && (
+                                <UnsafeContextStartsHereDivider
+                                  dividerRef={unsafeBoundaryRef}
+                                />
+                              )}
                               <Message from={message.role}>
                                 <MessageContent>
                                   {message.role === "system" && (
@@ -288,6 +365,16 @@ const MessageThread = ({
                             part.type === "dynamic-tool"
                               ? part.toolName
                               : part.toolCallId;
+                          const swapToolShortName = getSwapToolShortName({
+                            toolName,
+                          });
+                          if (
+                            swapToolShortName === TOOL_SWAP_AGENT_SHORT_NAME ||
+                            swapToolShortName ===
+                              TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME
+                          ) {
+                            return null;
+                          }
                           const isDanger = [
                             "gather_sensitive_data",
                             "send_email",
@@ -472,6 +559,18 @@ const MessageThread = ({
 
                           // Handle tool-* prefixed parts (persisted tool calls from DB)
                           if (_isToolPrefixedPart(part)) {
+                            const toolName = getRenderedToolName(part);
+                            const swapToolShortName = toolName
+                              ? getSwapToolShortName({ toolName })
+                              : null;
+                            if (
+                              swapToolShortName ===
+                                TOOL_SWAP_AGENT_SHORT_NAME ||
+                              swapToolShortName ===
+                                TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME
+                            ) {
+                              return null;
+                            }
                             // Look ahead for tool result and dual LLM analysis
                             let toolResultPart = null;
                             let dualLlmPart: DualLlmPart | null = null;
@@ -598,12 +697,20 @@ const MessageThread = ({
                       }
                     });
                   })()}
-                  {unsafeContextBoundary?.kind === "tool_result" &&
-                    (message.parts ?? []).some(
-                      (part) =>
-                        "toolCallId" in part &&
-                        part.toolCallId === unsafeContextBoundary.toolCallId,
-                    ) && <UnsafeContextStartsHereDivider />}
+                  {shouldRenderUnsafeContextDividerAfterMessage({
+                    message,
+                    unsafeContextBoundary,
+                  }) && (
+                    <UnsafeContextStartsHereDivider
+                      dividerRef={unsafeBoundaryRef}
+                    />
+                  )}
+                  {message.role === "assistant" && (
+                    <SwapAgentBoundaryDivider
+                      parts={message.parts ?? []}
+                      hasToolError={hasSwapToolErrorInMessageThread}
+                    />
+                  )}
                 </div>
               ))}
               {status === "submitted" && <Loader />}
@@ -706,6 +813,195 @@ function _isBlockedToolPart(part: unknown): part is BlockedToolPart {
 }
 
 export default MessageThread;
+
+function shouldRenderToolResultUnsafeBoundary(params: {
+  message: PartialUIMessage;
+  partIndex: number;
+  unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
+}): boolean {
+  const { message, partIndex, unsafeContextBoundary } = params;
+
+  if (unsafeContextBoundary?.kind !== "tool_result") {
+    return false;
+  }
+
+  let sawBoundaryToolResult = false;
+  for (let i = 0; i < (message.parts?.length ?? 0); i++) {
+    const part = message.parts[i];
+    if (
+      "toolCallId" in part &&
+      "state" in part &&
+      part.state === "output-available" &&
+      toolPartMatchesUnsafeContextBoundary(part, unsafeContextBoundary)
+    ) {
+      sawBoundaryToolResult = true;
+      continue;
+    }
+
+    if (
+      sawBoundaryToolResult &&
+      part.type === "text" &&
+      typeof part.text === "string" &&
+      part.text.trim().length > 0
+    ) {
+      return i === partIndex;
+    }
+  }
+
+  return false;
+}
+
+function shouldRenderUnsafeContextDividerAfterMessage(params: {
+  message: PartialUIMessage;
+  unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
+}): boolean {
+  const { message, unsafeContextBoundary } = params;
+
+  if (unsafeContextBoundary?.kind !== "tool_result") {
+    return false;
+  }
+
+  let sawBoundaryToolResult = false;
+  for (const part of message.parts ?? []) {
+    if (
+      "toolCallId" in part &&
+      "state" in part &&
+      part.state === "output-available" &&
+      toolPartMatchesUnsafeContextBoundary(part, unsafeContextBoundary)
+    ) {
+      sawBoundaryToolResult = true;
+      continue;
+    }
+
+    if (
+      sawBoundaryToolResult &&
+      part.type === "text" &&
+      typeof part.text === "string" &&
+      part.text.trim().length > 0
+    ) {
+      return false;
+    }
+  }
+
+  return sawBoundaryToolResult;
+}
+
+function hasUnsafeBoundaryBefore(params: {
+  messages: PartialUIMessage[];
+  beforeMessageIndex: number;
+  beforePartIndex: number;
+  unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
+}): boolean {
+  if (params.unsafeContextBoundary?.kind === "preexisting_untrusted") {
+    return true;
+  }
+
+  for (
+    let messageIndex = 0;
+    messageIndex <= params.beforeMessageIndex;
+    messageIndex++
+  ) {
+    const message = params.messages[messageIndex];
+    const lastPartIndex =
+      messageIndex === params.beforeMessageIndex
+        ? params.beforePartIndex - 1
+        : (message.parts?.length ?? 0) - 1;
+
+    for (let partIndex = 0; partIndex <= lastPartIndex; partIndex++) {
+      const part = message.parts?.[partIndex];
+      if (!part) {
+        continue;
+      }
+
+      if (
+        part.type === "text" &&
+        parsePolicyDenied(part.text)?.unsafeContextActiveAtRequestStart
+      ) {
+        return true;
+      }
+
+      if (
+        "state" in part &&
+        part.state === "output-available" &&
+        toolPartMatchesUnsafeContextBoundaryInThread(
+          part,
+          params.unsafeContextBoundary,
+        )
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function toolPartMatchesUnsafeContextBoundaryInThread(
+  part: PartialUIMessage["parts"][number],
+  unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"],
+): boolean {
+  if (!("type" in part) || typeof part.type !== "string") {
+    return false;
+  }
+
+  if (unsafeContextBoundary?.kind !== "tool_result") {
+    return false;
+  }
+
+  return toolPartMatchesUnsafeContextBoundary(part, unsafeContextBoundary);
+}
+
+function toolPartMatchesUnsafeContextBoundary(
+  part: PartialUIMessage["parts"][number],
+  boundary: Extract<
+    NonNullable<
+      archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"]
+    >,
+    { kind: "tool_result" }
+  >,
+): boolean {
+  if ("toolCallId" in part && part.toolCallId === boundary.toolCallId) {
+    return true;
+  }
+
+  const partToolName = getToolNameFromPart(part);
+  return partToolName === boundary.toolName;
+}
+
+function hasSwapToolErrorInMessageThread(
+  part: { toolCallId?: string; errorText?: string },
+  allParts: Array<{ toolCallId?: string; errorText?: string }>,
+): boolean {
+  if (typeof part.errorText === "string" && part.errorText.length > 0) {
+    return true;
+  }
+
+  if (!part.toolCallId) {
+    return false;
+  }
+
+  return allParts.some(
+    (candidate) =>
+      candidate !== part &&
+      candidate.toolCallId === part.toolCallId &&
+      typeof candidate.errorText === "string" &&
+      candidate.errorText.length > 0,
+  );
+}
+
+function getToolNameFromPart(
+  part: PartialUIMessage["parts"][number],
+): string | undefined {
+  if ("toolName" in part && typeof part.toolName === "string") {
+    return part.toolName;
+  }
+
+  if (typeof part.type === "string" && part.type.startsWith("tool-")) {
+    return part.type.replace("tool-", "");
+  }
+
+  return undefined;
+}
 
 function getPartKey(
   messageId: string | undefined,

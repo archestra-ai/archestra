@@ -94,6 +94,27 @@ Ingests records from ServiceNow instances via the Table API. HTML descriptions a
 
 Authentication supports both basic auth (username + password) and OAuth bearer tokens. When using basic auth, provide the username in the Email field and the password in the API Token field. For OAuth, leave the Email field empty and provide the bearer token. Incidents are synced by default; enable additional entity types in the advanced configuration. States and assignment group filters apply to all entity types except business applications. Incremental sync uses the `sys_created_on` field to fetch only records created since the last run.
 
+## Notion
+
+Ingests pages from Notion workspaces using the Notion API. Page content is fetched from Notion blocks and converted to plain text.
+
+| Field        | Description                                                                                             |
+| ------------ | ------------------------------------------------------------------------------------------------------- |
+| Database IDs | Comma-separated Notion database IDs to sync (optional -- leave blank to sync all accessible pages)      |
+| Page IDs     | Comma-separated specific Notion page IDs to sync (optional -- takes precedence over Database IDs)       |
+
+Authentication uses a [Notion integration token](https://www.notion.so/my-integrations) (starts with `secret_`). Create an internal integration in your Notion workspace and share the relevant pages or databases with it. Incremental sync uses the `last_edited_time` field to fetch only pages modified since the last run.
+
+## Managing Connectors
+
+Connectors can be managed from either the **Connectors** page or a knowledge base's detail page. After creation you can:
+
+- **Toggle enabled/disabled** -- suspends or resumes the cron schedule
+- **Trigger sync** -- runs an immediate sync outside the schedule
+- **View runs** -- see sync history with status, document counts, and errors
+
+The knowledge base and connector list pages show which Agents and MCP Gateways are assigned to each connector.
+
 ## Adding New Connector Types
 
 See [Adding Knowledge Connectors](/docs/platform-adding-knowledge-connectors) for a developer guide on implementing new connector types.

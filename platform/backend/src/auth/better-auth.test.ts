@@ -18,6 +18,7 @@ vi.mock("@/config", async (importOriginal) => {
       enterpriseFeatures: { ...actual.default.enterpriseFeatures, core: true },
       auth: {
         ...actual.default.auth,
+        trustedOrigins: ["https://app.example.com"],
         get disableInvitations() {
           return mockDisableInvitations.value;
         },
@@ -28,7 +29,9 @@ vi.mock("@/config", async (importOriginal) => {
 
 // Import after mock setup (dynamic import needed because of the mock)
 const { default: config } = await import("@/config");
-const { handleAfterHook, handleBeforeHook } = await import("./better-auth");
+const { auth, handleAfterHook, handleBeforeHook } = await import(
+  "./better-auth"
+);
 
 /**
  * Creates a mock JWT idToken with the given claims.
@@ -300,6 +303,58 @@ describe("handleBeforeHook", () => {
       const result = await handleBeforeHook(ctx);
       expect(result).toBe(ctx);
     });
+  });
+});
+
+describe("trustedOrigins", () => {
+  test("widens trusted origins for internal auth.api registration calls", async () => {
+    const trustedOriginsOption = auth.options.trustedOrigins;
+
+    expect(typeof trustedOriginsOption).toBe("function");
+
+    const trustedOrigins = await trustedOriginsOption?.();
+
+    expect(trustedOrigins).toEqual(
+      expect.arrayContaining([
+        "https://app.example.com",
+        "http://*:*",
+        "https://*:*",
+        "http://*",
+        "https://*",
+      ]),
+    );
+  });
+
+  test("widens trusted origins for /sso/register requests", async () => {
+    const trustedOriginsOption = auth.options.trustedOrigins;
+
+    expect(typeof trustedOriginsOption).toBe("function");
+
+    const trustedOrigins = await trustedOriginsOption?.(
+      new Request("https://app.example.com/api/auth/sso/register"),
+    );
+
+    expect(trustedOrigins).toEqual(
+      expect.arrayContaining([
+        "https://app.example.com",
+        "http://*:*",
+        "https://*:*",
+        "http://*",
+        "https://*",
+      ]),
+    );
+  });
+
+  test("keeps regular auth requests on the configured trusted origins", async () => {
+    const trustedOriginsOption = auth.options.trustedOrigins;
+
+    expect(typeof trustedOriginsOption).toBe("function");
+
+    const trustedOrigins = await trustedOriginsOption?.(
+      new Request("https://app.example.com/api/auth/sign-in/email"),
+    );
+
+    expect(trustedOrigins).toEqual(["https://app.example.com"]);
   });
 });
 

@@ -5,10 +5,9 @@ type ClientCapabilitiesWithExtensions = ClientCapabilities & {
   extensions?: Record<string, unknown>;
 };
 
-const UI_EXTENSION_CAPABILITIES = {
-  "io.modelcontextprotocol/ui": {
-    mimeTypes: ["text/html;profile=mcp-app"] as const,
-  },
+const MCP_CLIENT_EXTENSION_CAPABILITIES = {
+  ...MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
+  ...MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
 } as const;
 
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
@@ -26,10 +25,12 @@ import type {
 import {
   type AuthExpiredMcpToolError,
   type AuthRequiredMcpToolError,
+  MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
   MCP_CATALOG_INSTALL_PATH,
   MCP_CATALOG_INSTALL_QUERY_PARAM,
   MCP_CATALOG_REAUTH_QUERY_PARAM,
   MCP_CATALOG_SERVER_QUERY_PARAM,
+  MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   type McpToolError,
   parseFullToolName,
@@ -703,7 +704,7 @@ class McpClient {
     // Create the client with UI extension capabilities
     const capabilities: ClientCapabilitiesWithExtensions = {
       roots: { listChanged: true },
-      extensions: UI_EXTENSION_CAPABILITIES,
+      extensions: MCP_CLIENT_EXTENSION_CAPABILITIES,
     };
 
     // Create new client
@@ -1829,7 +1830,7 @@ class McpClient {
 
         const capabilities: ClientCapabilitiesWithExtensions = {
           roots: { listChanged: true },
-          extensions: UI_EXTENSION_CAPABILITIES,
+          extensions: MCP_CLIENT_EXTENSION_CAPABILITIES,
         };
 
         // Create client with transport

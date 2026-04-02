@@ -15,6 +15,7 @@ import type {
 import {
   isAgentTool,
   isBrowserMcpTool,
+  MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
   parseFullToolName,
   TimeInMs,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
@@ -563,7 +564,7 @@ export async function getChatMcpClient(
 
     const capabilities: ClientCapabilitiesWithExtensions = {
       roots: { listChanged: true },
-      extensions: UI_EXTENSION_CAPABILITIES,
+      extensions: MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
     };
 
     // Create MCP client

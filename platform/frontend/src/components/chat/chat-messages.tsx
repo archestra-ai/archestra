@@ -1959,18 +1959,23 @@ function extractUnsafeContextBoundaryFromToolOutput(
   };
 }
 
+type UnsafeContextBoundaryReason = NonNullable<
+  archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"]
+>["reason"];
+
+const unsafeContextBoundaryReasonMap = {
+  agent_configured_untrusted: true,
+  inherited_from_parent: true,
+  tool_result_marked_untrusted: true,
+  tool_result_blocked: true,
+} as const satisfies Record<UnsafeContextBoundaryReason, true>;
+
 function isUnsafeContextBoundaryReason(
   reason: unknown,
-): reason is
-  | "agent_configured_untrusted"
-  | "inherited_from_parent"
-  | "tool_result_marked_untrusted"
-  | "tool_result_blocked" {
+): reason is UnsafeContextBoundaryReason {
   return (
-    reason === "agent_configured_untrusted" ||
-    reason === "inherited_from_parent" ||
-    reason === "tool_result_marked_untrusted" ||
-    reason === "tool_result_blocked"
+    typeof reason === "string" &&
+    reason in unsafeContextBoundaryReasonMap
   );
 }
 

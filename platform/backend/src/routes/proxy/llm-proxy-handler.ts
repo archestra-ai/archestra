@@ -52,6 +52,7 @@ import {
   type ToolCompressionStats,
   type ToonSkipReason,
   type UnsafeContextBoundary,
+  UNSAFE_CONTEXT_BOUNDARY_REASON,
 } from "@/types";
 import { isLoopbackAddress } from "@/utils/network";
 import {
@@ -429,9 +430,9 @@ export async function handleLLMProxy<
     const effectiveConsiderContextUntrusted =
       resolvedAgent.considerContextUntrusted || inheritedContextUntrusted;
     const initialUntrustedReason = resolvedAgent.considerContextUntrusted
-      ? "agent_configured_untrusted"
+      ? UNSAFE_CONTEXT_BOUNDARY_REASON.agentConfiguredUntrusted
       : inheritedContextUntrusted
-        ? "inherited_from_parent"
+        ? UNSAFE_CONTEXT_BOUNDARY_REASON.inheritedFromParent
         : undefined;
     const {
       toolResultUpdates,

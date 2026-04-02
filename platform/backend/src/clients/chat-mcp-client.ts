@@ -48,6 +48,7 @@ import {
   startActiveMcpSpan,
 } from "@/observability/tracing";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
+import { UNSAFE_CONTEXT_BOUNDARY_REASON } from "@/types";
 import type {
   AgentType,
   GlobalToolPolicy,
@@ -1685,7 +1686,7 @@ async function evaluateUnsafeContextBoundaryForToolResult(params: {
   if (!toolResultEvaluation) {
     return {
       kind: "tool_result",
-      reason: "tool_result_marked_untrusted",
+      reason: UNSAFE_CONTEXT_BOUNDARY_REASON.toolResultMarkedUntrusted,
       toolCallId: params.toolCallId,
       toolName: params.toolName,
     };
@@ -1694,7 +1695,7 @@ async function evaluateUnsafeContextBoundaryForToolResult(params: {
   if (toolResultEvaluation.isBlocked) {
     return {
       kind: "tool_result",
-      reason: "tool_result_blocked",
+      reason: UNSAFE_CONTEXT_BOUNDARY_REASON.toolResultBlocked,
       toolCallId: params.toolCallId,
       toolName: params.toolName,
     };
@@ -1703,7 +1704,7 @@ async function evaluateUnsafeContextBoundaryForToolResult(params: {
   if (!toolResultEvaluation.isTrusted) {
     return {
       kind: "tool_result",
-      reason: "tool_result_marked_untrusted",
+      reason: UNSAFE_CONTEXT_BOUNDARY_REASON.toolResultMarkedUntrusted,
       toolCallId: params.toolCallId,
       toolName: params.toolName,
     };

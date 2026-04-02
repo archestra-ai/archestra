@@ -10,6 +10,7 @@ import type {
   UnsafeContextBoundary,
   UnsafeContextBoundaryReason,
 } from "@/types";
+import { UNSAFE_CONTEXT_BOUNDARY_REASON } from "@/types";
 
 /**
  * Evaluate if context is trusted and return updates for tool results
@@ -76,7 +77,9 @@ export async function evaluateIfContextIsTrusted(
       dualLlmAnalyses: [],
       unsafeContextBoundary: {
         kind: "preexisting_untrusted",
-        reason: initialUntrustedReason ?? "agent_configured_untrusted",
+        reason:
+          initialUntrustedReason ??
+          UNSAFE_CONTEXT_BOUNDARY_REASON.agentConfiguredUntrusted,
       },
     };
   }

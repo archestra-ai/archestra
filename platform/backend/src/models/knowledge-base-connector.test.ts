@@ -123,6 +123,34 @@ describe("KnowledgeBaseConnectorModel", () => {
 
       expect(results.map((connector) => connector.name)).toEqual(["Org Wide"]);
     });
+
+    test("returns team-scoped connectors when canReadAll is true", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeTeam,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const kb = await makeKnowledgeBase(org.id);
+      const team = await makeTeam(org.id, user.id);
+      await makeKnowledgeBaseConnector(kb.id, org.id, {
+        name: "Restricted",
+        visibility: "team-scoped",
+        teamIds: [team.id],
+      });
+
+      const results = await KnowledgeBaseConnectorModel.findByOrganization({
+        organizationId: org.id,
+        canReadAll: true,
+        viewerTeamIds: [],
+      });
+
+      expect(results.map((connector) => connector.name)).toEqual([
+        "Restricted",
+      ]);
+    });
   });
 
   describe("countByOrganization", () => {
@@ -390,6 +418,33 @@ describe("KnowledgeBaseConnectorModel", () => {
 
       expect(results).toHaveLength(1);
       expect(results[0].knowledgeBaseId).toBe(kb1.id);
+    });
+
+    test("returns team-scoped connectors when viewer belongs to the team", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeTeam,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const kb = await makeKnowledgeBase(org.id);
+      const team = await makeTeam(org.id, user.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        name: "Team Connector",
+        visibility: "team-scoped",
+        teamIds: [team.id],
+      });
+
+      const results = await KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(
+        [kb.id],
+        { viewerTeamIds: [team.id] },
+      );
+
+      expect(results).toHaveLength(1);
+      expect(results[0].id).toBe(connector.id);
+      expect(results[0].knowledgeBaseId).toBe(kb.id);
     });
   });
 

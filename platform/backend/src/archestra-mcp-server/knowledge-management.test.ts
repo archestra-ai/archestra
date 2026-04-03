@@ -280,6 +280,163 @@ describe("knowledge-management tool execution", () => {
       querySpy.mockRestore();
     });
 
+    test("returns only results from knowledge sources visible to the caller", async ({
+      makeAgent,
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeTeam,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "member" });
+
+      const restrictedTeamOwner = await makeUser();
+      const restrictedTeam = await makeTeam(org.id, restrictedTeamOwner.id);
+
+      const visibleKb = await makeKnowledgeBase(org.id);
+      const visibleConnector = await makeKnowledgeBaseConnector(
+        visibleKb.id,
+        org.id,
+        {
+          name: "Visible Connector",
+        },
+      );
+      const hiddenKb = await makeKnowledgeBase(org.id);
+      const hiddenConnector = await makeKnowledgeBaseConnector(
+        hiddenKb.id,
+        org.id,
+        {
+          name: "Hidden Connector",
+          visibility: "team-scoped",
+          teamIds: [restrictedTeam.id],
+        },
+      );
+
+      const agentWithMixedSources = await makeAgent({
+        name: "Agent With Mixed Sources",
+        organizationId: org.id,
+        knowledgeBaseIds: [visibleKb.id, hiddenKb.id],
+      });
+
+      const querySpy = vi
+        .spyOn(queryService, "query")
+        .mockImplementation(async ({ connectorIds }) => {
+          const results = [];
+          if (connectorIds.includes(visibleConnector.id)) {
+            results.push({
+              content: "Visible connector result",
+              score: 0.95,
+              chunkIndex: 0,
+              metadata: { connector: "visible" },
+              citation: {
+                title: "Visible Doc",
+                sourceUrl: "https://example.com/visible",
+                documentId: "visible-doc",
+                connectorType: "confluence" as const,
+              },
+            });
+          }
+          if (connectorIds.includes(hiddenConnector.id)) {
+            results.push({
+              content: "Hidden connector result",
+              score: 0.99,
+              chunkIndex: 0,
+              metadata: { connector: "hidden" },
+              citation: {
+                title: "Hidden Doc",
+                sourceUrl: "https://example.com/hidden",
+                documentId: "hidden-doc",
+                connectorType: "confluence" as const,
+              },
+            });
+          }
+          return results as any;
+        });
+
+      const result = await executeArchestraTool(
+        t("query_knowledge_sources"),
+        { query: "test query" },
+        {
+          agent: {
+            id: agentWithMixedSources.id,
+            name: agentWithMixedSources.name,
+          },
+          organizationId: org.id,
+          userId: user.id,
+        },
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect(querySpy).toHaveBeenCalledOnce();
+      expect(querySpy.mock.calls[0][0].connectorIds).toEqual([
+        visibleConnector.id,
+      ]);
+      expect(result.structuredContent).toEqual({
+        results: [
+          expect.objectContaining({
+            content: "Visible connector result",
+          }),
+        ],
+        totalChunks: 1,
+      });
+      expect((result.content[0] as any).text).toContain(
+        "Visible connector result",
+      );
+      expect((result.content[0] as any).text).not.toContain(
+        "Hidden connector result",
+      );
+
+      querySpy.mockRestore();
+    });
+
+    test("passes ACL bypass to queryService for admin callers", async ({
+      makeAgent,
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+
+      const kb = await makeKnowledgeBase(org.id);
+      await makeKnowledgeBaseConnector(kb.id, org.id, {
+        visibility: "team-scoped",
+        teamIds: [crypto.randomUUID()],
+      });
+
+      const agentWithKb = await makeAgent({
+        name: "Admin Agent",
+        organizationId: org.id,
+        knowledgeBaseIds: [kb.id],
+      });
+
+      const querySpy = vi
+        .spyOn(queryService, "query")
+        .mockResolvedValueOnce([] as any);
+
+      const result = await executeArchestraTool(
+        t("query_knowledge_sources"),
+        { query: "test query" },
+        {
+          agent: { id: agentWithKb.id, name: agentWithKb.name },
+          organizationId: org.id,
+          userId: user.id,
+        },
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect(querySpy).toHaveBeenCalledOnce();
+      expect(querySpy.mock.calls[0][0].bypassAcl).toBe(true);
+
+      querySpy.mockRestore();
+    });
+
     test("returns error when no assigned knowledge source is visible to the caller", async ({
       makeAgent,
       makeOrganization,

@@ -326,6 +326,11 @@ describe("ConnectorSyncService", () => {
 
     const run = await ConnectorRunModel.findById(result.runId);
     expect(run?.status).toBe("partial");
+
+    const updatedConnector = await KnowledgeBaseConnectorModel.findById(
+      connector.id,
+    );
+    expect(updatedConnector?.checkpoint).toEqual({ page: 1 });
   });
 
   test("executeSync creates chunks for new documents", async ({

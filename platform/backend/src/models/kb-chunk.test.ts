@@ -394,6 +394,104 @@ describe("KbChunkModel", () => {
 
       expect(results).toEqual([]);
     });
+
+    test("bypasses ACL filtering when requested", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        connectorType: "github",
+      });
+      const alphaDoc = await KbDocumentModel.create(
+        createDocumentData(connector.id, org.id, {
+          title: "Alpha Doc",
+        }),
+      );
+      const betaDoc = await KbDocumentModel.create(
+        createDocumentData(connector.id, org.id, {
+          title: "Beta Doc",
+        }),
+      );
+
+      await KbChunkModel.insertMany([
+        {
+          documentId: alphaDoc.id,
+          content: "apple alpha",
+          chunkIndex: 0,
+          acl: ["team:alpha"],
+        },
+        {
+          documentId: betaDoc.id,
+          content: "apple beta",
+          chunkIndex: 0,
+          acl: ["team:beta"],
+        },
+      ]);
+
+      const results = await KbChunkModel.fullTextSearch({
+        connectorIds: [connector.id],
+        queryText: "apple",
+        userAcl: [],
+        bypassAcl: true,
+      });
+
+      expect(results).toHaveLength(2);
+      expect(results.map((result) => result.documentId).sort()).toEqual(
+        [alphaDoc.id, betaDoc.id].sort(),
+      );
+    });
+  });
+
+  describe("updateAclByConnector", () => {
+    test("updates chunks for the target connector only", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const targetConnector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        name: "Target Connector",
+      });
+      const otherConnector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        name: "Other Connector",
+      });
+
+      const targetDoc = await KbDocumentModel.create(
+        createDocumentData(targetConnector.id, org.id),
+      );
+      const otherDoc = await KbDocumentModel.create(
+        createDocumentData(otherConnector.id, org.id),
+      );
+
+      await KbChunkModel.insertMany([
+        {
+          documentId: targetDoc.id,
+          content: "Target chunk",
+          chunkIndex: 0,
+          acl: ["org:*"],
+        },
+        {
+          documentId: otherDoc.id,
+          content: "Other chunk",
+          chunkIndex: 0,
+          acl: ["org:*"],
+        },
+      ]);
+
+      await KbChunkModel.updateAclByConnector(targetConnector.id, [
+        "team:alpha",
+      ]);
+
+      const targetChunks = await KbChunkModel.findByDocument(targetDoc.id);
+      const otherChunks = await KbChunkModel.findByDocument(otherDoc.id);
+
+      expect(targetChunks.map((chunk) => chunk.acl)).toEqual([["team:alpha"]]);
+      expect(otherChunks.map((chunk) => chunk.acl)).toEqual([["org:*"]]);
+    });
   });
 
   describe("updateEmbeddings", () => {

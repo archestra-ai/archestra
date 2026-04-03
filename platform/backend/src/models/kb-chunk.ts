@@ -65,6 +65,7 @@ class KbChunkModel {
     queryEmbedding: number[];
     dimensions: number;
     userAcl: AclEntry[];
+    bypassAcl?: boolean;
     limit?: number;
   }): Promise<VectorSearchResult[]> {
     const {
@@ -72,18 +73,22 @@ class KbChunkModel {
       queryEmbedding,
       dimensions,
       userAcl,
+      bypassAcl = false,
       limit = 10,
     } = params;
-    if (connectorIds.length === 0 || userAcl.length === 0) return [];
+    if (connectorIds.length === 0) return [];
+    if (!bypassAcl && userAcl.length === 0) return [];
     const embeddingStr = `[${queryEmbedding.join(",")}]`;
     const ids = sql.join(
       connectorIds.map((id) => sql`${id}`),
       sql`, `,
     );
-    const aclEntries = sql.join(
-      userAcl.map((entry) => sql`${entry}`),
-      sql`, `,
-    );
+    const aclEntries = bypassAcl
+      ? null
+      : sql.join(
+          userAcl.map((entry) => sql`${entry}`),
+          sql`, `,
+        );
 
     const col = sql.raw(getEmbeddingColumnName(dimensions));
     const vectorCast = sql.raw(`::vector(${dimensions})`);
@@ -98,7 +103,7 @@ class KbChunkModel {
       LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
       WHERE d.connector_id IN (${ids})
         AND c.${col} IS NOT NULL
-        AND c.acl ?| ARRAY[${aclEntries}]
+        ${bypassAcl ? sql`` : sql`AND c.acl ?| ARRAY[${aclEntries}]`}
       ORDER BY c.${col} <=> ${embeddingStr}${vectorCast}
       LIMIT ${limit}
     `);
@@ -110,18 +115,28 @@ class KbChunkModel {
     connectorIds: string[];
     queryText: string;
     userAcl: AclEntry[];
+    bypassAcl?: boolean;
     limit?: number;
   }): Promise<VectorSearchResult[]> {
-    const { connectorIds, queryText, userAcl, limit = 10 } = params;
-    if (connectorIds.length === 0 || userAcl.length === 0) return [];
+    const {
+      connectorIds,
+      queryText,
+      userAcl,
+      bypassAcl = false,
+      limit = 10,
+    } = params;
+    if (connectorIds.length === 0) return [];
+    if (!bypassAcl && userAcl.length === 0) return [];
     const ids = sql.join(
       connectorIds.map((id) => sql`${id}`),
       sql`, `,
     );
-    const aclEntries = sql.join(
-      userAcl.map((entry) => sql`${entry}`),
-      sql`, `,
-    );
+    const aclEntries = bypassAcl
+      ? null
+      : sql.join(
+          userAcl.map((entry) => sql`${entry}`),
+          sql`, `,
+        );
 
     const orQuery = queryText.split(/\s+/).filter(Boolean).join(" OR ");
 
@@ -136,7 +151,7 @@ class KbChunkModel {
       LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
       WHERE d.connector_id IN (${ids})
         AND c.search_vector @@ websearch_to_tsquery('english', ${orQuery})
-        AND c.acl ?| ARRAY[${aclEntries}]
+        ${bypassAcl ? sql`` : sql`AND c.acl ?| ARRAY[${aclEntries}]`}
       ORDER BY score DESC
       LIMIT ${limit}
     `);

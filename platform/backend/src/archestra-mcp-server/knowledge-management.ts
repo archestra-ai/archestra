@@ -594,6 +594,7 @@ async function handleQueryKnowledgeSources(params: {
       organizationId,
       queryText: args.query,
       userAcl,
+      bypassAcl: access?.canReadAll ?? false,
       limit: 10,
     });
 

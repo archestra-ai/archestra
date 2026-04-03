@@ -4,6 +4,18 @@ templates:
 values:
   - ../ci/test-values.yaml
 tests:
+  - it: worker deployment uses percentage-based rolling update defaults
+    asserts:
+      - equal:
+          path: spec.strategy.type
+          value: RollingUpdate
+      - equal:
+          path: spec.strategy.rollingUpdate.maxSurge
+          value: "25%"
+      - equal:
+          path: spec.strategy.rollingUpdate.maxUnavailable
+          value: "25%"
+
   - it: worker deployment inherits global pod annotations
     set:
       archestra.podAnnotations:

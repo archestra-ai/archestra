@@ -83,7 +83,7 @@ tests:
           path: spec.replicas
           value: 3
 
-  - it: should configure RollingUpdate deployment strategy with zero-downtime defaults
+  - it: should configure RollingUpdate deployment strategy with percentage defaults
     documentIndex: 1
     asserts:
       - equal:
@@ -91,10 +91,10 @@ tests:
           value: RollingUpdate
       - equal:
           path: spec.strategy.rollingUpdate.maxSurge
-          value: 1
+          value: "25%"
       - equal:
           path: spec.strategy.rollingUpdate.maxUnavailable
-          value: 0
+          value: "25%"
 
   - it: should allow overriding deployment strategy
     documentIndex: 1

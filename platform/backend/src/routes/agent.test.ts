@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
 vi.mock("@/observability", () => ({
+  initializeObservabilityMetrics: vi.fn(),
   metrics: {
     llm: { initializeMetrics: vi.fn() },
     mcp: { initializeMcpMetrics: vi.fn() },

@@ -51,9 +51,8 @@ import { seedRequiredStartingData } from "@/database/seed";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import { enterpriseLicenseMiddleware } from "@/middleware";
-import AgentLabelModel from "@/models/agent-label";
 import OrganizationModel from "@/models/organization";
-import { metrics } from "@/observability";
+import { initializeObservabilityMetrics } from "@/observability";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { taskQueueService } from "@/task-queue";
@@ -722,12 +721,7 @@ const startWebServer = async () => {
       promClient.default.Registry.OPENMETRICS_CONTENT_TYPE,
     );
 
-    const labelKeys = await AgentLabelModel.getAllKeys();
-    metrics.llm.initializeMetrics(labelKeys);
-    metrics.mcp.initializeMcpMetrics(labelKeys);
-    metrics.agentExecution.initializeAgentExecutionMetrics(labelKeys);
-    metrics.rag.initializeRagMetrics();
-    metrics.taskQueue.initializeTaskQueueMetrics();
+    const labelKeys = await initializeObservabilityMetrics();
 
     // Start metrics server
     await startMetricsServer();
@@ -947,8 +941,10 @@ const startWorker = async () => {
       promClient.default.Registry.OPENMETRICS_CONTENT_TYPE,
     );
 
-    metrics.rag.initializeRagMetrics();
-    metrics.taskQueue.initializeTaskQueueMetrics();
+    const labelKeys = await initializeObservabilityMetrics({
+      includeMcpMetrics: false,
+      includeAgentExecutionMetrics: false,
+    });
 
     registerTaskHandlers(taskQueueService);
     await taskQueueService.seedPeriodicTasks();
@@ -972,7 +968,9 @@ const startWorker = async () => {
     });
 
     await healthServer.listen({ port: port, host });
-    logger.info(`Worker server started on port ${port}`);
+    logger.info(
+      `Worker server started on port ${port} with ${labelKeys.length} agent label keys`,
+    );
 
     const gracefulShutdown = async (signal: string) => {
       logger.info(`Worker received ${signal}, shutting down...`);

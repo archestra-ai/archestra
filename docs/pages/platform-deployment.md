@@ -377,7 +377,7 @@ The Helm chart deploys a separate worker `Deployment` for processing background 
 - `archestra.worker.nodeSelector` - Node selector (inherits from `archestra.nodeSelector` if not set)
 - `archestra.worker.tolerations` - Tolerations (inherits from `archestra.tolerations` if not set)
 
-When the worker is disabled (`archestra.worker.enabled: false`), background jobs run in-process within the main platform pods. In both modes, knowledge-base embedding and reranker spend is exported through the same `llm_*` Prometheus metrics used by the GenAI observability dashboard, so Grafana cost totals should align with `/llm/logs`.
+When the worker is disabled (`archestra.worker.enabled: false`), background jobs run in-process within the main platform pods.
 
 #### Database Configuration
 

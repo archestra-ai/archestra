@@ -290,7 +290,7 @@ describe("resolveToolAuthState", () => {
   it("parses policy-denied tool errors from errorText", () => {
     const authState = resolveToolAuthState({
       errorText:
-        '\nI tried to invoke the my-tool tool with the following arguments: {}.\n\nHowever, I was denied by a tool invocation policy:\n\nBlocked',
+        "\nI tried to invoke the my-tool tool with the following arguments: {}.\n\nHowever, I was denied by a tool invocation policy:\n\nBlocked",
     });
 
     expect(authState?.kind).toBe("policy-denied");
@@ -343,7 +343,7 @@ describe("hasToolPartsWithAuthErrors", () => {
       hasToolPartsWithAuthErrors([
         {
           errorText:
-            '\nI tried to invoke the my-tool tool with the following arguments: {}.\n\nHowever, I was denied by a tool invocation policy:\n\nBlocked',
+            "\nI tried to invoke the my-tool tool with the following arguments: {}.\n\nHowever, I was denied by a tool invocation policy:\n\nBlocked",
         },
       ]),
     ).toBe(false);

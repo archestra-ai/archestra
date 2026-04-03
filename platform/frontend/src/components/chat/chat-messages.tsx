@@ -527,9 +527,8 @@ export function ChatMessages({
                         }
 
                         // Anthropic sends policy denials as text blocks (see MessageTool for OpenAI path)
-                        const assistantAuthState = resolveAssistantTextAuthState(
-                          part.text,
-                        );
+                        const assistantAuthState =
+                          resolveAssistantTextAuthState(part.text);
                         const textToolAuthState = resolveToolAuthState({
                           errorText: part.text,
                         });

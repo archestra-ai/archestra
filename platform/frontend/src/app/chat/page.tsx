@@ -1136,9 +1136,7 @@ export function ChatPageContent({
 
   // Handle creating conversation from browser URL input (when no conversation exists)
   const createInitialConversation = useCallback(
-    (
-      onSuccess?: (newConversation: { id: string }) => void | Promise<void>,
-    ) => {
+    (onSuccess?: (newConversation: { id: string }) => void | Promise<void>) => {
       if (createConversationMutation.isPending) {
         return false;
       }
@@ -1307,6 +1305,7 @@ export function ChatPageContent({
       updateEnabledToolsMutation,
       selectConversation,
       queryClient,
+      createConversationMutation.isPending,
     ],
   );
 
@@ -1350,6 +1349,7 @@ export function ChatPageContent({
     initialModel,
     createInitialConversation,
     selectConversation,
+    createConversationMutation.isPending,
   ]);
 
   // Check if the conversation's agent was deleted

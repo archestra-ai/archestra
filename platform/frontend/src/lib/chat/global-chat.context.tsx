@@ -80,6 +80,7 @@ interface ChatSession {
   error: Error | undefined;
   setMessages: (messages: UIMessage[]) => void;
   addToolResult: ReturnType<typeof useChat>["addToolResult"];
+  regenerate: ReturnType<typeof useChat>["regenerate"];
   addToolApprovalResponse: ReturnType<
     typeof useChat
   >["addToolApprovalResponse"];
@@ -604,6 +605,7 @@ function ChatSessionHook({
     conversationId,
     messages: stableMessages,
     sendMessage,
+    regenerate,
     stop,
     status,
     error,
@@ -628,6 +630,7 @@ function ChatSessionHook({
     conversationId,
     stableMessages,
     sendMessage,
+    regenerate,
     stop,
     status,
     error,

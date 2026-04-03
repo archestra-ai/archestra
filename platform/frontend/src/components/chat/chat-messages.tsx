@@ -122,7 +122,6 @@ interface ChatMessagesProps {
   onUserMessageEdit?: (
     editedMessage: UIMessage,
     updatedMessages: UIMessage[],
-    editedPartIndex: number,
   ) => void;
   error?: Error | null;
   /** Callback for tool approval responses (approve/deny) */
@@ -312,8 +311,7 @@ export function ChatMessages({
       if (editedMessage) {
         onUserMessageEdit(
           editedMessage,
-          data.messages as UIMessage[],
-          partIndex,
+          data.messages as UIMessage[]
         );
       }
     }

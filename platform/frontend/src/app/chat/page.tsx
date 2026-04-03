@@ -804,6 +804,7 @@ export function ChatPageContent({
   // for read-only shared conversations that do not create a live chat session.
   const messages = chatSession?.messages ?? persistedConversationMessages;
   const sendMessage = chatSession?.sendMessage;
+  const regenerate = chatSession?.regenerate;
   const status = chatSession?.status ?? "ready";
   const setMessages = chatSession?.setMessages;
   const stop = chatSession?.stop;
@@ -1686,43 +1687,37 @@ export function ChatPageContent({
                     hideDivider
                     profileId={conversation?.agent?.id}
                   />
-                ) : (
-                  <ChatMessages
-                    conversationId={conversationId}
-                    agentId={currentProfileId || initialAgentId || undefined}
-                    messages={messages}
-                    status={status}
-                    optimisticToolCalls={optimisticToolCalls}
-                    isLoadingConversation={isLoadingConversation}
-                    onMessagesUpdate={setMessages}
-                    agentName={
-                      (currentProfileId
-                        ? internalAgents.find((a) => a.id === currentProfileId)
-                        : internalAgents.find((a) => a.id === initialAgentId)
-                      )?.name
-                    }
-                    selectedModel={conversation?.selectedModel ?? initialModel}
-                    modelSource={conversationModelSource ?? initialModelSource}
-                    onUserMessageEdit={(
-                      editedMessage,
-                      updatedMessages,
-                      editedPartIndex,
-                    ) => {
-                      if (setMessages && sendMessage) {
+                ) : (<ChatMessages
+                  conversationId={conversationId}
+                  agentId={currentProfileId || initialAgentId || undefined}
+                  messages={messages}
+                  status={status}
+                  optimisticToolCalls={optimisticToolCalls}
+                  isLoadingConversation={isLoadingConversation}
+                  onMessagesUpdate={setMessages}
+                  agentName={
+                    (currentProfileId
+                      ? internalAgents.find((a) => a.id === currentProfileId)
+                      : internalAgents.find((a) => a.id === initialAgentId)
+                    )?.name
+                  }
+                  selectedModel={conversation?.selectedModel ?? initialModel}
+                  modelSource={conversationModelSource ?? initialModelSource}
+                  onUserMessageEdit={(
+                    editedMessage,
+                    updatedMessages,
+                  ) => {
+                    if (setMessages && regenerate) {
                         userMessageJustEdited.current = true;
-                        const messagesWithoutEditedMessage =
-                          updatedMessages.slice(0, -1);
-                        setMessages(messagesWithoutEditedMessage);
-                        const editedPart =
-                          editedMessage.parts?.[editedPartIndex];
-                        const editedText =
-                          editedPart?.type === "text" ? editedPart.text : "";
-                        if (editedText?.trim()) {
-                          sendMessage({
-                            role: "user",
-                            parts: [{ type: "text", text: editedText }],
-                          });
-                        }
+                        // The PATCH already updated the message text and deleted
+                        // subsequent messages in the DB. Set local state to match
+                        // the DB (keeping the edited message with its original ID)
+                        // and use regenerate() to trigger a new AI completion.
+                      // regenerate() keeps user messages in the array (AI SDK
+                      // slices to messageIndex + 1 for user role), so the edited
+                      // text is sent as-is without creating a new message ID.
+                      setMessages(updatedMessages as UIMessage[]);
+                        regenerate({ messageId: editedMessage.id });
                       }
                     }}
                     error={error}

@@ -283,6 +283,136 @@ describe("MessageModel", () => {
     });
   });
 
+  describe("caller-specified UUID as row ID", () => {
+    test("create uses caller-provided UUID as the DB row ID", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const agent = await makeAgent({ name: "UUID Agent", teams: [] });
+
+      const conversation = await ConversationModel.create({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: "UUID Passthrough Test",
+        selectedModel: "claude-3-haiku-20240307",
+      });
+
+      const callerUuid = crypto.randomUUID();
+
+      const message = await MessageModel.create({
+        id: callerUuid,
+        conversationId: conversation.id,
+        role: "user",
+        content: {
+          id: callerUuid,
+          role: "user",
+          parts: [{ type: "text", text: "Hello" }],
+        },
+      });
+
+      expect(message.id).toBe(callerUuid);
+
+      const found = await MessageModel.findById(callerUuid);
+      expect(found).toBeDefined();
+      expect(found?.id).toBe(callerUuid);
+    });
+
+    test("bulkCreate uses caller-provided UUIDs as DB row IDs", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const agent = await makeAgent({
+        name: "Bulk UUID Agent",
+        teams: [],
+      });
+
+      const conversation = await ConversationModel.create({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: "Bulk UUID Test",
+        selectedModel: "claude-3-haiku-20240307",
+      });
+
+      const userUuid = crypto.randomUUID();
+      const assistantUuid = crypto.randomUUID();
+
+      await MessageModel.bulkCreate([
+        {
+          id: userUuid,
+          conversationId: conversation.id,
+          role: "user",
+          content: {
+            id: userUuid,
+            role: "user",
+            parts: [{ type: "text", text: "Hello" }],
+          },
+        },
+        {
+          id: assistantUuid,
+          conversationId: conversation.id,
+          role: "assistant",
+          content: {
+            id: assistantUuid,
+            role: "assistant",
+            parts: [{ type: "text", text: "Hi there" }],
+          },
+        },
+      ]);
+
+      const foundUser = await MessageModel.findById(userUuid);
+      const foundAssistant = await MessageModel.findById(assistantUuid);
+
+      expect(foundUser).toBeDefined();
+      expect(foundUser?.id).toBe(userUuid);
+      expect(foundAssistant).toBeDefined();
+      expect(foundAssistant?.id).toBe(assistantUuid);
+    });
+
+    test("create falls back to auto-generated UUID when id is omitted", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const agent = await makeAgent({
+        name: "Auto UUID Agent",
+        teams: [],
+      });
+
+      const conversation = await ConversationModel.create({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: "Auto UUID Test",
+        selectedModel: "claude-3-haiku-20240307",
+      });
+
+      const message = await MessageModel.create({
+        conversationId: conversation.id,
+        role: "user",
+        content: {
+          id: "content-id",
+          role: "user",
+          parts: [{ type: "text", text: "Hello" }],
+        },
+      });
+
+      expect(message.id).toBeDefined();
+      expect(message.id).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      );
+    });
+  });
+
   describe("updateTextPart", () => {
     test("updates text at valid part index", async ({
       makeUser,

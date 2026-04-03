@@ -53,16 +53,16 @@ import {
   UnsafeContextStartsHereDivider,
 } from "@/components/chat/message-boundary-divider";
 import { PolicyDeniedTool } from "@/components/chat/policy-denied-tool";
-import {
-  getRenderedToolName,
-  getSwapToolShortName,
-  SwapAgentBoundaryDivider,
-} from "@/components/chat/swap-agent-boundary";
+import { SwapAgentBoundaryDivider } from "@/components/chat/swap-agent-boundary";
 import Divider from "@/components/divider";
 import { Button } from "@/components/ui/button";
 import { getToolNameFromPart } from "@/lib/chat/chat-tools-display.utils";
 import { preserveNewlines } from "@/lib/chat/chat-utils";
 import { parsePolicyDenied } from "@/lib/chat/mcp-error-ui";
+import {
+  getRenderedToolName,
+  getSwapToolShortName,
+} from "@/lib/chat/swap-agent.utils";
 import { cn } from "@/lib/utils";
 
 const MessageThread = ({

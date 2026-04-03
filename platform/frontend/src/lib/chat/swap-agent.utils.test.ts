@@ -4,9 +4,9 @@ import {
   getRenderedToolName,
   getSwapToolShortName,
   hasSwapToolErrorInPart,
-} from "./swap-agent-boundary";
+} from "./swap-agent.utils";
 
-describe("swap-agent-boundary helpers", () => {
+describe("swap-agent utils", () => {
   test("extracts the target agent name from tool input", () => {
     expect(
       extractSwapTargetAgentName({

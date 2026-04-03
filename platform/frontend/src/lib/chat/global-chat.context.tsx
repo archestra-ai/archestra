@@ -37,7 +37,7 @@ import {
   getRenderedToolName,
   getSwapToolShortName,
   hasSwapToolErrorInPart,
-} from "@/components/chat/swap-agent-boundary";
+} from "@/lib/chat/swap-agent.utils";
 import { useGenerateConversationTitle } from "@/lib/chat/chat.query";
 import { restoreRenderableAssistantParts } from "@/lib/chat/chat-session-utils";
 import { getChatExternalAgentId } from "@/lib/chat/chat-utils";

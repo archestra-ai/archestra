@@ -1,4 +1,4 @@
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertMessage, Message } from "@/types";
 
@@ -67,10 +67,33 @@ class MessageModel {
   }
 
   static async findById(messageId: string): Promise<Message | null> {
+    if (!UUID_REGEX.test(messageId)) {
+      return null;
+    }
+
     const [message] = await db
       .select()
       .from(schema.messagesTable)
       .where(eq(schema.messagesTable.id, messageId));
+
+    return message || null;
+  }
+
+  /**
+   * @deprecated Use findById instead. Kept temporarily for stale browser tabs
+   * that may still hold nanoid IDs from before the UUID unification.
+   */
+  static async findByAnyId(id: string): Promise<Message | null> {
+    if (UUID_REGEX.test(id)) {
+      const byDbId = await MessageModel.findById(id);
+      if (byDbId) return byDbId;
+    }
+
+    // Fall back to content ID (AI SDK nanoid) for pre-unification messages
+    const [message] = await db
+      .select()
+      .from(schema.messagesTable)
+      .where(sql`${schema.messagesTable.content}->>'id' = ${id}`);
 
     return message || null;
   }
@@ -213,3 +236,6 @@ class MessageModel {
 }
 
 export default MessageModel;
+
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

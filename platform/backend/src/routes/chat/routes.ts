@@ -1553,8 +1553,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       reply,
     ) => {
       // Fetch the message to get its conversation ID.
-      // All message IDs are UUIDs (frontend generates UUIDs via crypto.randomUUID()).
-      const message = await MessageModel.findById(id);
+      // New messages use UUIDs, but stale browser tabs may still send nanoid IDs.
+      const message = await MessageModel.findByAnyId(id);
 
       if (!message) {
         throw new ApiError(404, "Message not found");

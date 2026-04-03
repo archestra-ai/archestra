@@ -33,7 +33,6 @@ import {
 } from "react";
 import { filterOptimisticToolCalls } from "@/components/chat/chat-messages.utils";
 import { useGenerateConversationTitle } from "@/lib/chat/chat.query";
-import { restoreRenderableAssistantParts } from "@/lib/chat/chat-session-utils";
 import { getChatExternalAgentId } from "@/lib/chat/chat-utils";
 import {
   extractSwapTargetAgentName,
@@ -341,7 +340,6 @@ function ChatSessionHook({
   const retryCountRef = useRef(0);
   const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastUserMessageIdRef = useRef<string | null>(null);
-  const previousMessagesRef = useRef<UIMessage[]>([]);
 
   // Track early UI data from data-tool-ui-start events (toolCallId → resource data)
   const [earlyToolUiStarts, setEarlyToolUiStarts] = useState<
@@ -527,21 +525,13 @@ function ChatSessionHook({
     },
   } as Parameters<typeof useChat>[0]);
 
-  const messagesWithRestoredAssistantParts = restoreRenderableAssistantParts({
-    previousMessages: previousMessagesRef.current,
-    nextMessages: messages,
-  });
-  previousMessagesRef.current = messagesWithRestoredAssistantParts;
-
   // Keep sendMessageRef up-to-date for onFinish callback
   sendMessageRef.current = sendMessage;
-
-  const stableMessages = messagesWithRestoredAssistantParts;
 
   // Reset retry counter only when the user sends a genuinely new message.
   // We track the last user message ID to avoid resetting during regenerate(),
   // which manipulates the messages array without a new user message.
-  const lastStableUserMessage = [...stableMessages]
+  const lastStableUserMessage = [...messages]
     .reverse()
     .find((m) => m.role === "user");
   if (
@@ -558,9 +548,9 @@ function ChatSessionHook({
     }
 
     setOptimisticToolCalls((current) =>
-      filterOptimisticToolCalls(stableMessages, current),
+      filterOptimisticToolCalls(messages, current),
     );
-  }, [stableMessages, optimisticToolCalls.length]);
+  }, [messages, optimisticToolCalls.length]);
 
   // Auto-generate title after first assistant response
   useEffect(() => {
@@ -573,8 +563,8 @@ function ChatSessionHook({
     }
 
     // Check if we have at least one user message and one assistant message
-    const userMessages = stableMessages.filter((m) => m.role === "user");
-    const assistantMessages = stableMessages.filter(
+    const userMessages = messages.filter((m) => m.role === "user");
+    const assistantMessages = messages.filter(
       (m) => m.role === "assistant",
     );
 
@@ -595,7 +585,7 @@ function ChatSessionHook({
         generateTitleMutation.mutate({ id: conversationId });
       }
     }
-  }, [stableMessages, status, conversationId, generateTitleMutation]);
+  }, [messages, status, conversationId, generateTitleMutation]);
 
   // Always keep the session ref up-to-date with the latest values (including
   // function references from useChat which change every render). This is a ref
@@ -603,7 +593,7 @@ function ChatSessionHook({
   const sessionRef = useRef<ChatSession>(null as unknown as ChatSession);
   sessionRef.current = {
     conversationId,
-    messages: stableMessages,
+    messages,
     sendMessage,
     regenerate,
     stop,
@@ -628,7 +618,7 @@ function ChatSessionHook({
     notifySessionUpdate();
   }, [
     conversationId,
-    stableMessages,
+    messages,
     sendMessage,
     regenerate,
     stop,

@@ -1708,17 +1708,27 @@ export function ChatPageContent({
                     updatedMessages,
                   ) => {
                     if (setMessages && regenerate) {
-                        userMessageJustEdited.current = true;
-                        // The PATCH already updated the message text and deleted
-                        // subsequent messages in the DB. Set local state to match
-                        // the DB (keeping the edited message with its original ID)
-                        // and use regenerate() to trigger a new AI completion.
-                      // regenerate() keeps user messages in the array (AI SDK
-                      // slices to messageIndex + 1 for user role), so the edited
-                      // text is sent as-is without creating a new message ID.
-                      setMessages(updatedMessages as UIMessage[]);
-                        regenerate({ messageId: editedMessage.id });
-                      }
+                      userMessageJustEdited.current = true;
+                      // The PATCH updated the edited message's text and deleted
+                      // subsequent messages in DB. Merge into the live AI SDK
+                      // state: keep earlier messages as-is (preserving streaming
+                      // parts/artifacts) and splice in the edited message from
+                      // the PATCH response. This avoids re-rendering earlier
+                      // messages whose DB-persisted parts differ from the live
+                      // AI SDK versions.
+                      const editedIdx = messages.findIndex(
+                        (m) => m.id === editedMessage.id,
+                      );
+                      const merged =
+                        editedIdx >= 0
+                          ? [
+                              ...messages.slice(0, editedIdx),
+                              editedMessage as UIMessage,
+                            ]
+                          : (updatedMessages as UIMessage[]);
+                      setMessages(merged);
+                      regenerate({ messageId: editedMessage.id });
+                    }
                     }}
                     error={error}
                     onToolApprovalResponse={

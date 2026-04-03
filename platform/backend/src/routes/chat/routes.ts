@@ -389,29 +389,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               // Preserve incoming message IDs so the client updates existing
               // assistant messages instead of rendering duplicate ones.
               originalMessages: messages as UIMessage[],
-              onFinish: async ({
-                messages: finalMessages,
-                responseMessage,
-              }) => {
-                removeAbortListeners();
-
-                // Only persist if not already persisted by onError
-                if (!messagesPersisted && conversationId) {
-                  try {
-                    await persistNewMessages(
-                      conversationId,
-                      finalMessages,
-                      "onFinish",
-                    );
-                    messagesPersisted = true;
-                  } catch (error) {
-                    logger.error(
-                      { error, conversationId },
-                      "Failed to persist messages during onFinish",
-                    );
-                  }
-                }
-              },
               onError: (error) => {
                 // Persist messages on stream-level errors (e.g. errors thrown
                 // in execute before writer.merge() is reached). Without this,
@@ -627,11 +604,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 }
 
                 const assistantMessageId = randomUUID();
-                writer.write({ type: "start", messageId: assistantMessageId });
-
                 writer.merge(
                   result.toUIMessageStream({
-                    sendStart: false,
+                    generateMessageId: () => assistantMessageId,
                     originalMessages: messages as UIMessage[],
                     onError: (error) => {
                       // Claim persistence before the async work below starts,
@@ -709,6 +684,26 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           isRetryable: mappedError.isRetryable,
                           ...traceCtx,
                         });
+                      }
+                    },
+                    onFinish: async ({ messages: finalMessages }) => {
+                      removeAbortListeners();
+
+                      // Only persist if not already persisted by onError
+                      if (!messagesPersisted && conversationId) {
+                        try {
+                          await persistNewMessages(
+                            conversationId,
+                            finalMessages,
+                            "onFinish",
+                          );
+                          messagesPersisted = true;
+                        } catch (error) {
+                          logger.error(
+                            { error, conversationId },
+                            "Failed to persist messages during onFinish",
+                          );
+                        }
                       }
                     },
                   }),
@@ -1896,7 +1891,7 @@ async function persistNewMessages(
   context: string,
 ): Promise<number> {
   try {
-    // Get existing messages count to know how many are new
+    // Get existing messages to determine which are new
     const existingMessages =
       await MessageModel.findByConversation(conversationId);
     const uiMessages = messages as ChatMessage[];

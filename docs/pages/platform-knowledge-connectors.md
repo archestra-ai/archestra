@@ -3,7 +3,7 @@ title: Knowledge Connectors
 category: Knowledge
 order: 2
 description: Supported connector types, configuration, and management
-lastUpdated: 2026-03-31
+lastUpdated: 2026-04-03
 ---
 
 <!--
@@ -13,16 +13,7 @@ Check ../docs_writer_prompt.md before changing this file.
 
 Connectors pull data from external tools into knowledge bases on a schedule. Sync is incremental by default, so only new or changed content is processed after the first run. A connector can also be assigned to multiple knowledge bases.
 
-Each connector also has its own visibility:
-
-- **Org-wide**: any user with `knowledgeBase:read` can view and use it
-- **Team-scoped**: only members of the assigned teams can view and use it
-
-When an Agent or MCP Gateway calls `query_knowledge_sources`, Archestra filters out connectors the calling user is not allowed to see before retrieval runs.
-
-In local development (no K8s), connector syncs run in-process. In production, connector syncs run as background tasks via the postgres queue worker.
-
-For large data sources, sync runs are time-bounded. When a run exceeds 90% of the configured max duration (`ARCHESTRA_CONNECTOR_SYNC_MAX_DURATION_SECONDS`, default 55 minutes), it saves its checkpoint and triggers a continuation job to resume from where it left off. This repeats automatically (up to 50 continuations) until all data is synced. The UI shows progress with estimated total item counts where available.
+Connector visibility is part of the broader knowledge source access model. See [Overview - Visibility Modes](/docs/platform-knowledge-bases#visibility-modes) for how connector visibility determines which connector data each user can query.
 
 ## Jira
 

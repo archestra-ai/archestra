@@ -1687,48 +1687,46 @@ export function ChatPageContent({
                     hideDivider
                     profileId={conversation?.agent?.id}
                   />
-                ) : (<ChatMessages
-                  conversationId={conversationId}
-                  agentId={currentProfileId || initialAgentId || undefined}
-                  messages={messages}
-                  status={status}
-                  optimisticToolCalls={optimisticToolCalls}
-                  isLoadingConversation={isLoadingConversation}
-                  onMessagesUpdate={setMessages}
-                  agentName={
-                    (currentProfileId
-                      ? internalAgents.find((a) => a.id === currentProfileId)
-                      : internalAgents.find((a) => a.id === initialAgentId)
-                    )?.name
-                  }
-                  selectedModel={conversation?.selectedModel ?? initialModel}
-                  modelSource={conversationModelSource ?? initialModelSource}
-                  onUserMessageEdit={(
-                    editedMessage,
-                    updatedMessages,
-                  ) => {
-                    if (setMessages && regenerate) {
-                      userMessageJustEdited.current = true;
-                      // The PATCH updated the edited message's text and deleted
-                      // subsequent messages in DB. Merge into the live AI SDK
-                      // state: keep earlier messages as-is (preserving streaming
-                      // parts/artifacts) and splice in the edited message from
-                      // the PATCH response. This avoids re-rendering earlier
-                      // messages whose DB-persisted parts differ from the live
-                      // AI SDK versions.
-                      const editedIdx = messages.findIndex(
-                        (m) => m.id === editedMessage.id,
-                      );
-                      const merged =
-                        editedIdx >= 0
-                          ? [
-                              ...messages.slice(0, editedIdx),
-                              editedMessage as UIMessage,
-                            ]
-                          : (updatedMessages as UIMessage[]);
-                      setMessages(merged);
-                      regenerate({ messageId: editedMessage.id });
+                ) : (
+                  <ChatMessages
+                    conversationId={conversationId}
+                    agentId={currentProfileId || initialAgentId || undefined}
+                    messages={messages}
+                    status={status}
+                    optimisticToolCalls={optimisticToolCalls}
+                    isLoadingConversation={isLoadingConversation}
+                    onMessagesUpdate={setMessages}
+                    agentName={
+                      (currentProfileId
+                        ? internalAgents.find((a) => a.id === currentProfileId)
+                        : internalAgents.find((a) => a.id === initialAgentId)
+                      )?.name
                     }
+                    selectedModel={conversation?.selectedModel ?? initialModel}
+                    modelSource={conversationModelSource ?? initialModelSource}
+                    onUserMessageEdit={(editedMessage, updatedMessages) => {
+                      if (setMessages && regenerate) {
+                        userMessageJustEdited.current = true;
+                        // The PATCH updated the edited message's text and deleted
+                        // subsequent messages in DB. Merge into the live AI SDK
+                        // state: keep earlier messages as-is (preserving streaming
+                        // parts/artifacts) and splice in the edited message from
+                        // the PATCH response. This avoids re-rendering earlier
+                        // messages whose DB-persisted parts differ from the live
+                        // AI SDK versions.
+                        const editedIdx = messages.findIndex(
+                          (m) => m.id === editedMessage.id,
+                        );
+                        const merged =
+                          editedIdx >= 0
+                            ? [
+                                ...messages.slice(0, editedIdx),
+                                editedMessage as UIMessage,
+                              ]
+                            : (updatedMessages as UIMessage[]);
+                        setMessages(merged);
+                        regenerate({ messageId: editedMessage.id });
+                      }
                     }}
                     error={error}
                     onToolApprovalResponse={

@@ -564,9 +564,7 @@ function ChatSessionHook({
 
     // Check if we have at least one user message and one assistant message
     const userMessages = messages.filter((m) => m.role === "user");
-    const assistantMessages = messages.filter(
-      (m) => m.role === "assistant",
-    );
+    const assistantMessages = messages.filter((m) => m.role === "assistant");
 
     // Only generate title after first exchange (1 user + 1 assistant message)
     // and when status is ready (not still streaming)

@@ -309,10 +309,7 @@ export function ChatMessages({
         (m) => m.id === messageId,
       );
       if (editedMessage) {
-        onUserMessageEdit(
-          editedMessage,
-          data.messages as UIMessage[]
-        );
+        onUserMessageEdit(editedMessage, data.messages as UIMessage[]);
       }
     }
   };

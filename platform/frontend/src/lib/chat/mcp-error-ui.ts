@@ -16,6 +16,25 @@ export interface ExpiredAuthResult {
   reauthUrl: string;
 }
 
+export type ToolAuthState =
+  | {
+      kind: "policy-denied";
+      policyDenied: PolicyDeniedPart;
+    }
+  | {
+      kind: "auth-required";
+      catalogName: string;
+      installUrl: string;
+      catalogId: string | null;
+    }
+  | {
+      kind: "auth-expired";
+      catalogName: string;
+      reauthUrl: string;
+      catalogId: string | null;
+      serverId: string | null;
+    };
+
 export function parsePolicyDenied(text: string): PolicyDeniedPart | null {
   const policyDenied = extractMcpToolError(text);
   if (policyDenied?.type !== "policy_denied") {
@@ -104,4 +123,134 @@ export function extractIdsFromReauthUrl(reauthUrl: string): {
   } catch {
     return { catalogId: null, serverId: null };
   }
+}
+
+export function resolveToolAuthState(params: {
+  errorText?: string;
+  rawOutput?: unknown;
+}): ToolAuthState | null {
+  const structuredError = extractMcpToolError(params.rawOutput);
+
+  if (structuredError?.type === "auth_expired") {
+    return {
+      kind: "auth-expired",
+      catalogName: structuredError.catalogName,
+      reauthUrl: structuredError.reauthUrl,
+      catalogId: structuredError.catalogId,
+      serverId: structuredError.serverId,
+    };
+  }
+
+  if (structuredError?.type === "auth_required") {
+    return {
+      kind: "auth-required",
+      catalogName: structuredError.catalogName,
+      installUrl: structuredError.installUrl,
+      catalogId: structuredError.catalogId,
+    };
+  }
+
+  if (params.errorText) {
+    const policyDenied = parsePolicyDenied(params.errorText);
+    if (policyDenied) {
+      return {
+        kind: "policy-denied",
+        policyDenied,
+      };
+    }
+
+    const expiredAuth = parseExpiredAuth(params.errorText);
+    if (expiredAuth) {
+      const ids = extractIdsFromReauthUrl(expiredAuth.reauthUrl);
+      return {
+        kind: "auth-expired",
+        catalogName: expiredAuth.catalogName,
+        reauthUrl: expiredAuth.reauthUrl,
+        catalogId: ids.catalogId,
+        serverId: ids.serverId,
+      };
+    }
+
+    const authRequired = parseAuthRequired(params.errorText);
+    if (authRequired) {
+      return {
+        kind: "auth-required",
+        catalogName: authRequired.catalogName,
+        installUrl: authRequired.installUrl,
+        catalogId: extractCatalogIdFromInstallUrl(authRequired.installUrl),
+      };
+    }
+  }
+
+  if (typeof params.rawOutput === "string") {
+    const expiredAuth = parseExpiredAuth(params.rawOutput);
+    if (expiredAuth) {
+      const ids = extractIdsFromReauthUrl(expiredAuth.reauthUrl);
+      return {
+        kind: "auth-expired",
+        catalogName: expiredAuth.catalogName,
+        reauthUrl: expiredAuth.reauthUrl,
+        catalogId: ids.catalogId,
+        serverId: ids.serverId,
+      };
+    }
+
+    const authRequired = parseAuthRequired(params.rawOutput);
+    if (authRequired) {
+      return {
+        kind: "auth-required",
+        catalogName: authRequired.catalogName,
+        installUrl: authRequired.installUrl,
+        catalogId: extractCatalogIdFromInstallUrl(authRequired.installUrl),
+      };
+    }
+  }
+
+  return null;
+}
+
+export function resolveAssistantTextAuthState(
+  text: string,
+): Extract<ToolAuthState, { kind: "auth-required" | "auth-expired" }> | null {
+  const authState = resolveToolAuthState({ errorText: text });
+  if (
+    authState?.kind === "auth-required" ||
+    authState?.kind === "auth-expired"
+  ) {
+    return authState;
+  }
+
+  return null;
+}
+
+export function hasToolPartsWithAuthErrors(
+  parts: Array<{ output?: unknown; errorText?: string }> | undefined,
+): boolean {
+  for (const part of parts ?? []) {
+    const authState = resolveToolAuthState({
+      errorText: part.errorText,
+      rawOutput: part.output,
+    });
+    if (
+      authState?.kind === "auth-required" ||
+      authState?.kind === "auth-expired"
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export function isAuthInstructionText(text: string): boolean {
+  if (resolveAssistantTextAuthState(text)) {
+    return true;
+  }
+
+  return (
+    /(authentication|credentials)/i.test(text) &&
+    /(install=|reauth=|re-authenticate|set up your credentials|visiting this url|visit this url)/i.test(
+      text,
+    )
+  );
 }

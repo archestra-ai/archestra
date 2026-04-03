@@ -32,15 +32,15 @@ import {
   useState,
 } from "react";
 import { filterOptimisticToolCalls } from "@/components/chat/chat-messages.utils";
+import { useGenerateConversationTitle } from "@/lib/chat/chat.query";
+import { restoreRenderableAssistantParts } from "@/lib/chat/chat-session-utils";
+import { getChatExternalAgentId } from "@/lib/chat/chat-utils";
 import {
   extractSwapTargetAgentName,
   getRenderedToolName,
   getSwapToolShortName,
   hasSwapToolErrorInPart,
 } from "@/lib/chat/swap-agent.utils";
-import { useGenerateConversationTitle } from "@/lib/chat/chat.query";
-import { restoreRenderableAssistantParts } from "@/lib/chat/chat-session-utils";
-import { getChatExternalAgentId } from "@/lib/chat/chat-utils";
 import appConfig from "@/lib/config/config";
 import { useAppName } from "@/lib/hooks/use-app-name";
 
@@ -668,10 +668,10 @@ function hasSwapToolError(message: UIMessage, appName: string): boolean {
     const shortName = getSwapToolShortName({
       toolName,
       getToolShortName: (fullToolName): ArchestraToolShortName | null =>
-        (getCurrentArchestraToolShortName(
+        getCurrentArchestraToolShortName(
           fullToolName,
           appName,
-        ) as ArchestraToolShortName | null),
+        ) as ArchestraToolShortName | null,
     });
     if (
       shortName !== TOOL_SWAP_AGENT_SHORT_NAME &&

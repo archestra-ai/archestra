@@ -17,18 +17,18 @@ describe("swap-agent utils", () => {
   });
 
   test("recognizes branded swap tool names", () => {
-    expect(
-      getSwapToolShortName({ toolName: "sparky__swap_agent" }),
-    ).toBe("swap_agent");
+    expect(getSwapToolShortName({ toolName: "sparky__swap_agent" })).toBe(
+      "swap_agent",
+    );
     expect(
       getSwapToolShortName({ toolName: "sparky__swap_to_default_agent" }),
     ).toBe("swap_to_default_agent");
   });
 
   test("extracts a rendered tool name from a tool part type", () => {
-    expect(
-      getRenderedToolName({ type: "tool-archestra__swap_agent" }),
-    ).toBe("archestra__swap_agent");
+    expect(getRenderedToolName({ type: "tool-archestra__swap_agent" })).toBe(
+      "archestra__swap_agent",
+    );
   });
 
   test("treats structured MCP errors as swap tool failures", () => {

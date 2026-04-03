@@ -2,6 +2,9 @@ import {
   CONTEXT_EXTERNAL_AGENT_ID,
   CONTEXT_TEAM_IDS,
   isAgentTool,
+  TOOL_INVOCATION_BLOCK_ALWAYS_REASON,
+  TOOL_INVOCATION_NO_POLICY_UNTRUSTED_REASON,
+  TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
 } from "@shared";
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { get } from "lodash-es";
@@ -23,13 +26,6 @@ export type PolicyEvaluationContext = {
   teamIds: string[];
   externalAgentId?: string;
 };
-
-const BLOCK_ALWAYS_REASON =
-  "Tool invocation blocked: policy is configured to always block tool call";
-const UNTRUSTED_CONTEXT_REASON =
-  "Tool invocation blocked: context contains sensitive data";
-const NO_POLICY_UNTRUSTED_REASON =
-  "Tool invocation blocked: forbidden in sensitive context by default";
 
 class ToolInvocationPolicyModel {
   static async create(
@@ -526,7 +522,7 @@ class ToolInvocationPolicyModel {
         if (policy.action === "block_always") {
           return {
             isAllowed: false,
-            reason: policy.reason || BLOCK_ALWAYS_REASON,
+            reason: policy.reason || TOOL_INVOCATION_BLOCK_ALWAYS_REASON,
             toolCallName,
           };
         }
@@ -536,7 +532,7 @@ class ToolInvocationPolicyModel {
           if (!isContextTrusted) {
             return {
               isAllowed: false,
-              reason: UNTRUSTED_CONTEXT_REASON,
+              reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
               toolCallName,
             };
           }
@@ -557,7 +553,7 @@ class ToolInvocationPolicyModel {
         if (!isContextTrusted && !specificAllowsUntrusted) {
           return {
             isAllowed: false,
-            reason: UNTRUSTED_CONTEXT_REASON,
+            reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
             toolCallName,
           };
         }
@@ -572,7 +568,7 @@ class ToolInvocationPolicyModel {
           if (policy.action === "block_always") {
             return {
               isAllowed: false,
-              reason: policy.reason || BLOCK_ALWAYS_REASON,
+              reason: policy.reason || TOOL_INVOCATION_BLOCK_ALWAYS_REASON,
               toolCallName,
             };
           }
@@ -582,7 +578,7 @@ class ToolInvocationPolicyModel {
             if (!isContextTrusted) {
               return {
                 isAllowed: false,
-                reason: UNTRUSTED_CONTEXT_REASON,
+                reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
                 toolCallName,
               };
             }
@@ -601,7 +597,7 @@ class ToolInvocationPolicyModel {
         if (!isContextTrusted && !defaultAllowsUntrusted) {
           return {
             isAllowed: false,
-            reason: UNTRUSTED_CONTEXT_REASON,
+            reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
             toolCallName,
           };
         }
@@ -612,7 +608,7 @@ class ToolInvocationPolicyModel {
       if (!isContextTrusted) {
         return {
           isAllowed: false,
-          reason: NO_POLICY_UNTRUSTED_REASON,
+          reason: TOOL_INVOCATION_NO_POLICY_UNTRUSTED_REASON,
           toolCallName,
         };
       }

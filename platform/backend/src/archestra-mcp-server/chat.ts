@@ -9,7 +9,7 @@ import { z } from "zod";
 import { isAgentTypeAdmin } from "@/auth/agent-type-permissions";
 import logger from "@/logging";
 import { AgentModel, ConversationModel, OrganizationModel } from "@/models";
-import { resolveConversationLlmSelectionForAgent } from "@/services/conversation-llm-selection";
+import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
 import {
   catchError,
   defineArchestraTool,

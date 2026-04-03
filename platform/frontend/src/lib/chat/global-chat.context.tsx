@@ -2,6 +2,7 @@
 
 import { type UIMessage, useChat } from "@ai-sdk/react";
 import {
+  type ArchestraToolShortName,
   EXTERNAL_AGENT_ID_HEADER,
   getArchestraToolShortName,
   isChatErrorResponse,
@@ -34,6 +35,12 @@ import { filterOptimisticToolCalls } from "@/components/chat/chat-messages.utils
 import { useGenerateConversationTitle } from "@/lib/chat/chat.query";
 import { restoreRenderableAssistantParts } from "@/lib/chat/chat-session-utils";
 import { getChatExternalAgentId } from "@/lib/chat/chat-utils";
+import {
+  extractSwapTargetAgentName,
+  getRenderedToolName,
+  getSwapToolShortName,
+  hasSwapToolErrorInPart,
+} from "@/lib/chat/swap-agent.utils";
 import appConfig from "@/lib/config/config";
 import { useAppName } from "@/lib/hooks/use-app-name";
 
@@ -110,7 +117,10 @@ interface ChatSession {
 }
 
 interface ChatContextValue {
-  registerSession: (conversationId: string) => void;
+  registerSession: (params: {
+    conversationId: string;
+    initialMessages?: UIMessage[];
+  }) => void;
   getSession: (conversationId: string) => ChatSession | undefined;
   clearSession: (conversationId: string) => void;
   notifySessionUpdate: () => void;
@@ -122,6 +132,7 @@ const ChatContext = createContext<ChatContextValue | null>(null);
 
 export function ChatProvider({ children }: { children: ReactNode }) {
   const sessionsRef = useRef(new Map<string, ChatSession>());
+  const initialMessagesRef = useRef(new Map<string, UIMessage[]>());
   const cleanupTimersRef = useRef(new Map<string, NodeJS.Timeout>());
   const usageCountRef = useRef(new Map<string, number>());
   const [sessions, setSessions] = useState<Set<string>>(new Set());
@@ -169,6 +180,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       const session = sessionsRef.current.get(conversationId);
       if (session) {
         sessionsRef.current.delete(conversationId);
+        initialMessagesRef.current.delete(conversationId);
         cleanupTimersRef.current.delete(conversationId);
         usageCountRef.current.delete(conversationId);
         setSessions((prev) => {
@@ -183,16 +195,33 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Register a new session (creates the useChat hook instance)
-  const registerSession = useCallback((conversationId: string) => {
-    setSessions((prev) => {
-      if (prev.has(conversationId)) {
-        return prev;
+  const registerSession = useCallback(
+    ({
+      conversationId,
+      initialMessages,
+    }: {
+      conversationId: string;
+      initialMessages?: UIMessage[];
+    }) => {
+      if (
+        initialMessages &&
+        !sessionsRef.current.has(conversationId) &&
+        !initialMessagesRef.current.has(conversationId)
+      ) {
+        initialMessagesRef.current.set(conversationId, initialMessages);
       }
-      const next = new Set(prev);
-      next.add(conversationId);
-      return next;
-    });
-  }, []);
+
+      setSessions((prev) => {
+        if (prev.has(conversationId)) {
+          return prev;
+        }
+        const next = new Set(prev);
+        next.add(conversationId);
+        return next;
+      });
+    },
+    [],
+  );
 
   // Get a session
   // biome-ignore lint/correctness/useExhaustiveDependencies: sessionVersion as dependency to make this reactive
@@ -208,6 +237,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const clearSession = useCallback(
     (conversationId: string) => {
       sessionsRef.current.delete(conversationId);
+      initialMessagesRef.current.delete(conversationId);
       usageCountRef.current.delete(conversationId);
       const timer = cleanupTimersRef.current.get(conversationId);
       if (timer) {
@@ -260,6 +290,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         <ChatSessionHook
           key={conversationId}
           conversationId={conversationId}
+          initialMessages={initialMessagesRef.current.get(conversationId) ?? []}
           sessionsRef={sessionsRef}
           notifySessionUpdate={notifySessionUpdate}
         />
@@ -271,10 +302,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
 function ChatSessionHook({
   conversationId,
+  initialMessages,
   sessionsRef,
   notifySessionUpdate,
 }: {
   conversationId: string;
+  initialMessages: UIMessage[];
   sessionsRef: React.MutableRefObject<Map<string, ChatSession>>;
   notifySessionUpdate: () => void;
 }) {
@@ -325,6 +358,7 @@ function ChatSessionHook({
     addToolResult,
     addToolApprovalResponse,
   } = useChat({
+    messages: initialMessages,
     transport: new DefaultChatTransport({
       api: "/api/chat",
       credentials: "include",
@@ -611,47 +645,42 @@ function ChatSessionHook({
 }
 
 function getSwapAgentName(toolCall: unknown): string | null {
-  if (
-    typeof toolCall !== "object" ||
-    toolCall === null ||
-    !("args" in toolCall) ||
-    typeof toolCall.args !== "object" ||
-    toolCall.args === null ||
-    !("agent_name" in toolCall.args)
-  ) {
+  if (typeof toolCall !== "object" || toolCall === null) {
     return null;
   }
 
-  return typeof toolCall.args.agent_name === "string"
-    ? toolCall.args.agent_name
-    : null;
+  const args =
+    "args" in toolCall && typeof toolCall.args === "object"
+      ? toolCall.args
+      : undefined;
+
+  return extractSwapTargetAgentName({
+    input: args,
+  });
 }
 
 function hasSwapToolError(message: UIMessage, appName: string): boolean {
   return (message.parts ?? []).some((part) => {
-    if (typeof part !== "object" || !part || !("type" in part)) return false;
-    const type = part.type as string;
-    const shortName = getCurrentArchestraToolShortName(
-      type.startsWith("tool-") ? type.slice("tool-".length) : type,
-      appName,
-    );
+    if (typeof part !== "object" || !part) return false;
+    const toolName = getRenderedToolName(part);
+    if (!toolName) return false;
+
+    const shortName = getSwapToolShortName({
+      toolName,
+      getToolShortName: (fullToolName): ArchestraToolShortName | null =>
+        getCurrentArchestraToolShortName(
+          fullToolName,
+          appName,
+        ) as ArchestraToolShortName | null,
+    });
     if (
       shortName !== TOOL_SWAP_AGENT_SHORT_NAME &&
       shortName !== TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME
     ) {
       return false;
     }
-    const toolPart = part as Record<string, unknown>;
-    if (toolPart.errorText) return true;
-    if (typeof toolPart.output === "string") {
-      try {
-        const parsed = JSON.parse(toolPart.output as string);
-        if (typeof parsed?.error === "string") return true;
-      } catch {
-        // ignore
-      }
-    }
-    return false;
+
+    return hasSwapToolErrorInPart(part);
   });
 }
 
@@ -674,20 +703,32 @@ export function useGlobalChat() {
   return context;
 }
 
-export function useChatSession(conversationId: string | undefined) {
+export function useChatSession(params: {
+  conversationId: string | undefined;
+  initialMessages?: UIMessage[];
+  enabled?: boolean;
+}) {
+  const { conversationId, initialMessages, enabled = true } = params;
   const { registerSession, getSession, scheduleCleanup, cancelCleanup } =
     useGlobalChat();
 
   useEffect(() => {
-    if (!conversationId) return;
+    if (!conversationId || !enabled) return;
 
-    registerSession(conversationId);
+    registerSession({ conversationId, initialMessages });
     cancelCleanup(conversationId);
 
     return () => {
       scheduleCleanup(conversationId);
     };
-  }, [conversationId, registerSession, scheduleCleanup, cancelCleanup]);
+  }, [
+    cancelCleanup,
+    conversationId,
+    enabled,
+    initialMessages,
+    registerSession,
+    scheduleCleanup,
+  ]);
 
   return conversationId ? getSession(conversationId) : null;
 }

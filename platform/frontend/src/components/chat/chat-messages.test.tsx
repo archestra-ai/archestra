@@ -207,6 +207,277 @@ describe("ChatMessages", () => {
     expect(screen.getByText("Switched to GitHub Agent")).toBeInTheDocument();
   });
 
+  it("renders the unsafe-context divider when a tool result marks the context unsafe", () => {
+    const messages = [
+      {
+        id: "assistant-unsafe",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-read_email",
+            toolCallId: "call-unsafe",
+            state: "output-available",
+            input: { folder: "inbox" },
+            output: { emails: [{ from: "ceo@external.com" }] },
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        unsafeContextBoundary={{
+          kind: "tool_result",
+          reason: "tool_result_marked_untrusted",
+          toolCallId: "call-unsafe",
+          toolName: "read_email",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Sensitive context below")).toBeInTheDocument();
+  });
+
+  it("renders the unsafe-context divider immediately after the unsafe tool result within the same message", () => {
+    const messages = [
+      {
+        id: "assistant-live-unsafe",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-read_email",
+            toolCallId: "call-live-unsafe",
+            state: "output-available",
+            input: { folder: "inbox" },
+            output: {
+              content: "ARCH_TEST = secret-value",
+              unsafeContextBoundary: {
+                kind: "tool_result",
+                reason: "tool_result_marked_untrusted",
+                toolCallId: "call-live-unsafe",
+                toolName: "read_email",
+              },
+            },
+          },
+          {
+            type: "text",
+            text: "Done.",
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    const divider = screen.getByText("Sensitive context below");
+    const assistantText = screen.getByText("Done.");
+
+    expect(divider).toBeInTheDocument();
+    expect(
+      divider.compareDocumentPosition(assistantText) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("matches persisted unsafe boundaries by tool name when tool call ids differ", () => {
+    const messages = [
+      {
+        id: "assistant-persisted-unsafe",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-internal-dev-test-server__print_archestra_test",
+            toolCallId: "ai-sdk-tool-call-id",
+            state: "output-available",
+            input: {},
+            output: { content: "ARCHESTRA_TEST = asdfasdfadsf" },
+          },
+          {
+            type: "text",
+            text: "Done.",
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        unsafeContextBoundary={{
+          kind: "tool_result",
+          reason: "tool_result_marked_untrusted",
+          toolCallId: "mcp-tool-call-id",
+          toolName: "internal-dev-test-server__print_archestra_test",
+        }}
+      />,
+    );
+
+    const divider = screen.getByText("Sensitive context below");
+    const assistantText = screen.getByText("Done.");
+
+    expect(
+      divider.compareDocumentPosition(assistantText) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("renders the preexisting unsafe-context divider when the request starts unsafe", () => {
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={
+          [
+            {
+              id: "assistant-1",
+              role: "assistant",
+              parts: [{ type: "text", text: "Continuing the workflow." }],
+            },
+          ] as UIMessage[]
+        }
+        status="ready"
+        unsafeContextBoundary={{
+          kind: "preexisting_untrusted",
+          reason: "inherited_from_parent",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Sensitive context below")).toBeInTheDocument();
+  });
+
+  it("renders the preexisting unsafe-context divider for policy-denied text caused by sensitive context", () => {
+    const messages = [
+      {
+        id: "assistant-denied",
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: "\nI tried to invoke the internal-dev-test-server__print_archestra_test tool with the following arguments: {}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: context contains sensitive data",
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(screen.getByText("Sensitive context below")).toBeInTheDocument();
+  });
+
+  it("infers the sensitive-context boundary before the first assistant text after an unsafe tool result", () => {
+    const messages = [
+      {
+        id: "assistant-sensitive",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-internal-dev-test-server__print_archestra_test",
+            toolCallId: "call-1",
+            state: "output-available",
+            output: "ARCHESTRA_TEST = asdfasdfadsf",
+          },
+          {
+            type: "text",
+            text: "Done.",
+          },
+        ],
+      },
+      {
+        id: "assistant-denied",
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: "\nI tried to invoke the internal-dev-test-server__print_archestra_test tool with the following arguments: {}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: context contains sensitive data",
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    const dividers = screen.getAllByText("Sensitive context below");
+    const firstDivider = dividers[0];
+    const assistantText = screen.getByText("Done.");
+
+    expect(dividers).toHaveLength(1);
+    expect(
+      firstDivider.compareDocumentPosition(assistantText) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("renders the sensitive-context divider only once after the thread becomes unsafe", () => {
+    const messages = [
+      {
+        id: "assistant-sensitive",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-internal-dev-test-server__print_archestra_test",
+            toolCallId: "ai-sdk-tool-call-id",
+            state: "output-available",
+            input: {},
+            output: { content: "ARCHESTRA_TEST = asdfasdfadsf" },
+          },
+          {
+            type: "text",
+            text: '"ARCHESTRA_TEST = asdfasdfadsf"',
+          },
+        ],
+      },
+      {
+        id: "assistant-denied",
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: "\nI tried to invoke the internal-dev-test-server__print_archestra_test tool with the following arguments: {}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: context contains sensitive data",
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        unsafeContextBoundary={{
+          kind: "tool_result",
+          reason: "tool_result_marked_untrusted",
+          toolCallId: "mcp-tool-call-id",
+          toolName: "internal-dev-test-server__print_archestra_test",
+        }}
+      />,
+    );
+
+    expect(screen.getAllByText("Sensitive context below")).toHaveLength(1);
+  });
+
   it("keeps an expanded compact tool panel open when later tool calls append to the same message", () => {
     const initialMessages = [
       {

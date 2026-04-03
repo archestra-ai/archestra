@@ -248,6 +248,7 @@ function LogDetail({
                 containerClassName="h-auto"
                 hideDivider={true}
                 profileId={agent?.id}
+                unsafeContextBoundary={dynamicInteraction.unsafeContextBoundary}
               />
             </div>
           </div>

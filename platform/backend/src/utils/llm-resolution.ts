@@ -1,12 +1,11 @@
 import {
   DEFAULT_MODELS,
   FAST_MODELS,
-  isSupportedProvider,
   type SupportedProvider,
   SupportedProvidersSchema,
 } from "@shared";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
-import { resolveProviderApiKey } from "@/clients/llm-client";
+import { detectProviderFromModel } from "@/clients/llm-client";
 import config, { getProviderEnvApiKey } from "@/config";
 import logger from "@/logging";
 import {
@@ -14,6 +13,21 @@ import {
   LlmProviderApiKeyModelLinkModel,
   OrganizationModel,
 } from "@/models";
+import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
+
+export interface ConversationLlmSelection {
+  chatApiKeyId: string | null;
+  selectedModel: string;
+  selectedProvider: SupportedProvider;
+}
+
+export interface ResolvedLlmSelection {
+  provider: SupportedProvider;
+  apiKey: string | undefined;
+  modelName: string;
+  baseUrl: string | null;
+}
 
 /**
  * Resolve the best available LLM provider, API key, model, and base URL
@@ -29,12 +43,7 @@ import {
 export async function resolveSmartDefaultLlm(params: {
   organizationId: string;
   userId?: string;
-}): Promise<{
-  provider: SupportedProvider;
-  apiKey: string | undefined;
-  modelName: string;
-  baseUrl: string | null;
-} | null> {
+}): Promise<ResolvedLlmSelection | null> {
   const { organizationId, userId } = params;
   const providers = SupportedProvidersSchema.options;
 
@@ -73,6 +82,87 @@ export async function resolveSmartDefaultLlm(params: {
   return null;
 }
 
+export async function resolveConfiguredAgentLlm(agent: {
+  llmApiKeyId: string | null;
+  llmModel: string | null;
+}): Promise<ResolvedLlmSelection | null> {
+  if (agent.llmApiKeyId) {
+    const apiKeyRecord = await LlmProviderApiKeyModel.findById(
+      agent.llmApiKeyId,
+    );
+    if (!apiKeyRecord) {
+      return null;
+    }
+
+    let apiKey: string | undefined;
+    if (apiKeyRecord.secretId) {
+      const secret = await getSecretValueForLlmProviderApiKey(
+        apiKeyRecord.secretId,
+      );
+      apiKey = (secret as string) ?? undefined;
+    }
+
+    const modelName =
+      agent.llmModel ??
+      (await LlmProviderApiKeyModelLinkModel.getBestModel(apiKeyRecord.id))
+        ?.modelId;
+    if (!modelName) {
+      return null;
+    }
+
+    return {
+      provider: apiKeyRecord.provider,
+      apiKey,
+      modelName,
+      baseUrl: apiKeyRecord.baseUrl,
+    };
+  }
+
+  if (!agent.llmModel) {
+    return null;
+  }
+
+  return {
+    provider: detectProviderFromModel(agent.llmModel),
+    apiKey: undefined,
+    modelName: agent.llmModel,
+    baseUrl: null,
+  };
+}
+
+export async function resolveConversationLlmSelectionForAgent(params: {
+  agent: {
+    llmApiKeyId: string | null;
+    llmModel: string | null;
+  };
+  organizationId: string;
+  userId: string;
+}): Promise<ConversationLlmSelection> {
+  const { agent, organizationId, userId } = params;
+
+  const agentSelection = await resolveAgentLlmSelection(agent);
+  if (agentSelection) {
+    return agentSelection;
+  }
+
+  const organizationSelection =
+    await resolveOrganizationLlmSelection(organizationId);
+  if (organizationSelection) {
+    return organizationSelection;
+  }
+
+  const smartDefault = await resolveSmartDefaultLlmForChat({
+    organizationId,
+    userId,
+  });
+
+  return {
+    chatApiKeyId: null,
+    selectedModel: smartDefault.model,
+    selectedProvider: smartDefault.provider,
+  };
+}
+
 /**
  * Resolve the best LLM for chat with full fallback chain.
  * Extends `resolveSmartDefaultLlm` with chat-specific fallbacks:
@@ -97,11 +187,7 @@ export async function resolveSmartDefaultLlmForChat(params: {
 
   // 2. Check organization-level default model
   const org = await OrganizationModel.getById(params.organizationId);
-  if (
-    org?.defaultLlmModel &&
-    org?.defaultLlmProvider &&
-    isSupportedProvider(org.defaultLlmProvider)
-  ) {
+  if (org?.defaultLlmModel && org?.defaultLlmProvider) {
     return { model: org.defaultLlmModel, provider: org.defaultLlmProvider };
   }
 
@@ -167,4 +253,69 @@ export async function resolveFastModelName(
   }
 
   return FAST_MODELS[provider];
+}
+
+async function resolveAgentLlmSelection(agent: {
+  llmApiKeyId: string | null;
+  llmModel: string | null;
+}): Promise<ConversationLlmSelection | null> {
+  if (agent.llmApiKeyId) {
+    const apiKey = await LlmProviderApiKeyModel.findById(agent.llmApiKeyId);
+    if (apiKey) {
+      const provider = apiKey.provider;
+
+      if (agent.llmModel) {
+        return {
+          chatApiKeyId: apiKey.id,
+          selectedModel: agent.llmModel,
+          selectedProvider: provider,
+        };
+      }
+
+      const bestModel = await LlmProviderApiKeyModelLinkModel.getBestModel(
+        apiKey.id,
+      );
+      if (bestModel) {
+        return {
+          chatApiKeyId: apiKey.id,
+          selectedModel: bestModel.modelId,
+          selectedProvider: provider,
+        };
+      }
+    }
+  }
+
+  if (!agent.llmModel) {
+    return null;
+  }
+
+  return {
+    chatApiKeyId: null,
+    selectedModel: agent.llmModel,
+    selectedProvider: detectProviderFromModel(agent.llmModel),
+  };
+}
+
+async function resolveOrganizationLlmSelection(
+  organizationId: string,
+): Promise<ConversationLlmSelection | null> {
+  const organization = await OrganizationModel.getById(organizationId);
+  if (!organization?.defaultLlmModel) {
+    return null;
+  }
+
+  const apiKey = organization.defaultLlmApiKeyId
+    ? await LlmProviderApiKeyModel.findById(organization.defaultLlmApiKeyId)
+    : null;
+
+  const selectedProvider =
+    apiKey?.provider ??
+    organization.defaultLlmProvider ??
+    detectProviderFromModel(organization.defaultLlmModel);
+
+  return {
+    chatApiKeyId: apiKey?.id ?? null,
+    selectedModel: organization.defaultLlmModel,
+    selectedProvider,
+  };
 }

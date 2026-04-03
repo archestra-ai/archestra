@@ -1,17 +1,4 @@
 import { randomUUID } from "node:crypto";
-import type { ClientCapabilities } from "@modelcontextprotocol/sdk/types.js";
-
-/** Extended ClientCapabilities with UI extension support (replaces @mcp-ui/client re-export). */
-type ClientCapabilitiesWithExtensions = ClientCapabilities & {
-  extensions?: Record<string, unknown>;
-};
-
-const UI_EXTENSION_CAPABILITIES = {
-  "io.modelcontextprotocol/ui": {
-    mimeTypes: ["text/html;profile=mcp-app"] as const,
-  },
-} as const;
-
 import {
   type McpUiResourceCsp,
   type McpUiResourcePermissions,
@@ -27,10 +14,13 @@ import type {
 import {
   isAgentTool,
   isBrowserMcpTool,
+  MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
   parseFullToolName,
   TimeInMs,
+  TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
 } from "@shared";
 import { type JSONSchema7, jsonSchema, type Tool } from "ai";
+import { evaluateToolExecutionContextTrust } from "@/agents/context-trust";
 import {
   type ArchestraContext,
   archestraMcpBranding,
@@ -42,11 +32,13 @@ import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
 import {
+  AgentModel,
   AgentTeamModel,
   OrganizationModel,
   TeamModel,
   TeamTokenModel,
   ToolModel,
+  TrustedDataPolicyModel,
   UserTokenModel,
 } from "@/models";
 import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
@@ -56,7 +48,14 @@ import {
   startActiveMcpSpan,
 } from "@/observability/tracing";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
-import type { AgentType, GlobalToolPolicy } from "@/types";
+import type {
+  AgentType,
+  GlobalToolPolicy,
+  UnsafeContextBoundary,
+} from "@/types";
+import { UNSAFE_CONTEXT_BOUNDARY_REASON } from "@/types";
+import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
+import { buildMcpClientInfo } from "@/utils/mcp-client-info";
 
 /**
  * MIME types that indicate a renderable UI resource (SEP-1865).
@@ -556,19 +555,13 @@ export async function getChatMcpClient(
 
     const capabilities: ClientCapabilitiesWithExtensions = {
       roots: { listChanged: true },
-      extensions: UI_EXTENSION_CAPABILITIES,
+      extensions: MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
     };
 
     // Create MCP client
-    const client = new Client(
-      {
-        name: "chat-mcp-client",
-        version: "1.0.0",
-      },
-      {
-        capabilities,
-      },
-    );
+    const client = new Client(buildMcpClientInfo("chat-mcp-client"), {
+      capabilities,
+    });
 
     logger.info(
       { agentId, userId, url: mcpGatewayUrl },
@@ -825,9 +818,13 @@ export async function getChatMcpTools({
     );
 
     // Fetch globalToolPolicy for approval checks (needed for both chat and autonomous contexts).
-    const org = await OrganizationModel.getById(organizationId);
+    const [org, agent] = await Promise.all([
+      OrganizationModel.getById(organizationId),
+      AgentModel.findById(agentId),
+    ]);
     const globalToolPolicy: GlobalToolPolicy =
       org?.globalToolPolicy ?? "permissive";
+    const considerContextUntrusted = agent?.considerContextUntrusted ?? false;
 
     // Convert MCP tools to AI SDK Tool format
     const aiTools: Record<string, Tool> = {};
@@ -944,6 +941,8 @@ export async function getChatMcpTools({
                     userIsAgentAdmin,
                     conversationId,
                     mcpGwToken,
+                    globalToolPolicy,
+                    considerContextUntrusted,
                     abortSignal,
                   });
                 } catch (error) {
@@ -1045,7 +1044,7 @@ export async function getChatMcpTools({
                   },
                 }
               : {}),
-            execute: async (args: Record<string, unknown>) => {
+            execute: async (args: Record<string, unknown>, options) => {
               if (blockOnApprovalRequired) {
                 await throwIfApprovalRequired(
                   agentTool.name,
@@ -1079,10 +1078,25 @@ export async function getChatMcpTools({
                 callback: async (span) => {
                   try {
                     throwIfAborted(abortSignal);
+                    const toolExecutionContext =
+                      await evaluateToolExecutionContextTrust({
+                        messages: options.messages,
+                        agentId,
+                        organizationId,
+                        userId,
+                        considerContextUntrusted,
+                        globalToolPolicy,
+                        policyContext: {
+                          externalAgentId: getChatExternalAgentId(),
+                        },
+                      });
                     const response = await executeArchestraTool(
                       agentTool.name,
                       args,
-                      archestraContext,
+                      {
+                        ...archestraContext,
+                        contextIsTrusted: toolExecutionContext.contextIsTrusted,
+                      },
                     );
 
                     span.setAttribute(
@@ -1332,6 +1346,8 @@ interface ToolExecutionContext {
     teamId: string | null;
     isOrganizationToken: boolean;
   } | null;
+  globalToolPolicy: GlobalToolPolicy;
+  considerContextUntrusted: boolean;
   abortSignal?: AbortSignal;
 }
 
@@ -1351,6 +1367,7 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
   _meta?: Record<string, unknown>;
   structuredContent?: Record<string, unknown>;
   rawContent?: ContentBlock[];
+  unsafeContextBoundary?: UnsafeContextBoundary;
 }> {
   const {
     toolName,
@@ -1452,7 +1469,15 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
       .join("\n");
     return {
       content: extractedError || result.error || "Tool execution failed",
-      _meta: result._meta,
+      ...(await buildUnsafeContextBoundaryResult({
+        resultMeta: result._meta,
+        toolCallId: toolCall.id,
+        toolName,
+        toolOutput: extractedError || result.error || "Tool execution failed",
+        agentId,
+        globalToolPolicy: ctx.globalToolPolicy,
+        considerContextUntrusted: ctx.considerContextUntrusted,
+      })),
       structuredContent: result.structuredContent,
       rawContent: Array.isArray(result.content)
         ? (result.content as ContentBlock[])
@@ -1586,10 +1611,106 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
 
   return {
     content: textContent,
-    _meta: Object.keys(mergedMeta).length > 0 ? mergedMeta : undefined,
+    ...(await buildUnsafeContextBoundaryResult({
+      resultMeta: Object.keys(mergedMeta).length > 0 ? mergedMeta : undefined,
+      toolCallId: toolCall.id,
+      toolName,
+      toolOutput: result.structuredContent ?? textContent,
+      agentId,
+      globalToolPolicy: ctx.globalToolPolicy,
+      considerContextUntrusted: ctx.considerContextUntrusted,
+    })),
     structuredContent: result.structuredContent,
     rawContent: mcpContent,
   };
+}
+
+async function buildUnsafeContextBoundaryResult(params: {
+  resultMeta?: Record<string, unknown>;
+  toolCallId: string;
+  toolName: string;
+  toolOutput: unknown;
+  agentId: string;
+  globalToolPolicy: GlobalToolPolicy;
+  considerContextUntrusted: boolean;
+}): Promise<{
+  _meta?: Record<string, unknown>;
+  unsafeContextBoundary?: UnsafeContextBoundary;
+}> {
+  const unsafeContextBoundary =
+    await evaluateUnsafeContextBoundaryForToolResult(params);
+  const mergedMeta = unsafeContextBoundary
+    ? {
+        ...params.resultMeta,
+        unsafeContextBoundary,
+      }
+    : params.resultMeta;
+
+  return {
+    ...(mergedMeta && Object.keys(mergedMeta).length > 0
+      ? { _meta: mergedMeta }
+      : {}),
+    ...(unsafeContextBoundary ? { unsafeContextBoundary } : {}),
+  };
+}
+
+async function evaluateUnsafeContextBoundaryForToolResult(params: {
+  toolCallId: string;
+  toolName: string;
+  toolOutput: unknown;
+  agentId: string;
+  globalToolPolicy: GlobalToolPolicy;
+  considerContextUntrusted: boolean;
+}): Promise<UnsafeContextBoundary | undefined> {
+  if (params.considerContextUntrusted) {
+    return undefined;
+  }
+
+  const teamIds = await AgentTeamModel.getTeamsForAgent(params.agentId);
+  const evaluation = await TrustedDataPolicyModel.evaluateBulk(
+    params.agentId,
+    [
+      {
+        toolName: params.toolName,
+        toolOutput: params.toolOutput,
+      },
+    ],
+    params.globalToolPolicy,
+    {
+      teamIds,
+      externalAgentId: getChatExternalAgentId(),
+    },
+  );
+
+  const toolResultEvaluation = evaluation.get("0");
+  if (!toolResultEvaluation) {
+    return {
+      kind: "tool_result",
+      reason: UNSAFE_CONTEXT_BOUNDARY_REASON.toolResultMarkedUntrusted,
+      toolCallId: params.toolCallId,
+      toolName: params.toolName,
+    };
+  }
+
+  if (toolResultEvaluation.isBlocked) {
+    return {
+      kind: "tool_result",
+      reason: UNSAFE_CONTEXT_BOUNDARY_REASON.toolResultBlocked,
+      toolCallId: params.toolCallId,
+      toolName: params.toolName,
+    };
+  }
+
+  if (!toolResultEvaluation.isTrusted) {
+    return {
+      kind: "tool_result",
+      reason: UNSAFE_CONTEXT_BOUNDARY_REASON.toolResultMarkedUntrusted,
+      toolCallId: params.toolCallId,
+      toolName: params.toolName,
+    };
+  }
+
+  return undefined;
 }
 
 /**
@@ -1702,9 +1823,7 @@ async function throwIfApprovalRequired(
       globalToolPolicy,
     );
   if (requiresApproval) {
-    throw new Error(
-      "Tool invocation blocked: this tool requires human approval which is not available in autonomous agent sessions (A2A, Slack, MS Teams, sub-agents)",
-    );
+    throw new Error(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);
   }
 }
 

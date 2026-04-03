@@ -1,16 +1,3 @@
-import type { ClientCapabilities } from "@modelcontextprotocol/sdk/types.js";
-
-/** Extended ClientCapabilities with UI extension support (replaces @mcp-ui/client re-export). */
-type ClientCapabilitiesWithExtensions = ClientCapabilities & {
-  extensions?: Record<string, unknown>;
-};
-
-const UI_EXTENSION_CAPABILITIES = {
-  "io.modelcontextprotocol/ui": {
-    mimeTypes: ["text/html;profile=mcp-app"] as const,
-  },
-} as const;
-
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import {
@@ -26,10 +13,12 @@ import type {
 import {
   type AuthExpiredMcpToolError,
   type AuthRequiredMcpToolError,
+  MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
   MCP_CATALOG_INSTALL_PATH,
   MCP_CATALOG_INSTALL_QUERY_PARAM,
   MCP_CATALOG_REAUTH_QUERY_PARAM,
   MCP_CATALOG_SERVER_QUERY_PARAM,
+  MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   type McpToolError,
   parseFullToolName,
@@ -62,9 +51,16 @@ import type {
   MCPGatewayAuthMethod,
   McpToolAssignment,
 } from "@/types";
+import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { deriveAuthMethod } from "@/utils/auth-method";
+import { buildMcpClientInfo } from "@/utils/mcp-client-info";
 import { previewToolResultContent } from "@/utils/tool-result-preview";
 import { K8sAttachTransport } from "./k8s-attach-transport";
+
+const MCP_CLIENT_EXTENSION_CAPABILITIES = {
+  ...MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
+  ...MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
+} as const;
 
 export class McpServerNotReadyError extends Error {
   constructor(message: string) {
@@ -703,20 +699,14 @@ class McpClient {
     // Create the client with UI extension capabilities
     const capabilities: ClientCapabilitiesWithExtensions = {
       roots: { listChanged: true },
-      extensions: UI_EXTENSION_CAPABILITIES,
+      extensions: MCP_CLIENT_EXTENSION_CAPABILITIES,
     };
 
     // Create new client
     logger.info({ connectionKey }, "Creating new MCP client");
-    const client = new Client(
-      {
-        name: "archestra-platform",
-        version: "1.0.0",
-      },
-      {
-        capabilities,
-      },
-    );
+    const client = new Client(buildMcpClientInfo("archestra-platform"), {
+      capabilities,
+    });
 
     // Track whether we're using a stored session ID (for stale session cleanup)
     const usedStoredSession =
@@ -1829,19 +1819,13 @@ class McpClient {
 
         const capabilities: ClientCapabilitiesWithExtensions = {
           roots: { listChanged: true },
-          extensions: UI_EXTENSION_CAPABILITIES,
+          extensions: MCP_CLIENT_EXTENSION_CAPABILITIES,
         };
 
         // Create client with transport
-        const client = new Client(
-          {
-            name: "archestra-platform",
-            version: "1.0.0",
-          },
-          {
-            capabilities,
-          },
-        );
+        const client = new Client(buildMcpClientInfo("archestra-platform"), {
+          capabilities,
+        });
 
         // Connect with timeout
         await this.raceWithTimeout(
@@ -1915,10 +1899,9 @@ class McpClient {
       secrets,
     );
 
-    const client = new Client(
-      { name: "archestra-inspector", version: "1.0.0" },
-      { capabilities: {} },
-    );
+    const client = new Client(buildMcpClientInfo("archestra-inspector"), {
+      capabilities: {},
+    });
 
     try {
       await this.raceWithTimeout(

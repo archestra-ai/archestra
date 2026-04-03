@@ -52,4 +52,36 @@ describe("Tool copy actions", () => {
       JSON.stringify({ result: "ok", count: 42 }, null, 2),
     );
   });
+
+  it("renders MCP tool output using content instead of dumping rawContent metadata", async () => {
+    mockUseTheme.mockReturnValue({ resolvedTheme: "light" });
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    mockClipboard(writeText);
+
+    render(
+      <ToolOutput
+        output={{
+          content: "ARCH_TEST = asdfasdfadsf",
+          unsafeContextBoundary: {
+            kind: "tool_result",
+            reason: "tool_result_marked_untrusted",
+            toolCallId: "call-1",
+            toolName: "test_tool",
+          },
+          rawContent: [{ type: "text", text: "ARCH_TEST = asdfasdfadsf" }],
+          _meta: {
+            ignored: true,
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getByText("ARCH_TEST = asdfasdfadsf")).toBeInTheDocument();
+    expect(screen.queryByText(/rawContent/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Copy to clipboard" }));
+
+    expect(writeText).toHaveBeenCalledWith("ARCH_TEST = asdfasdfadsf");
+  });
 });

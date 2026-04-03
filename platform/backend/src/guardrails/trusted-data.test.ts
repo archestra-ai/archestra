@@ -101,6 +101,12 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         call_456:
           "[Content blocked by policy: Data blocked by policy: Block hacker emails]",
       });
+      expect(result.unsafeContextBoundary).toEqual({
+        kind: "tool_result",
+        reason: "tool_result_blocked",
+        toolCallId: "call_456",
+        toolName: "get_emails",
+      });
     });
 
     test("marks context as trusted when tool result matches allow policy", async () => {
@@ -374,6 +380,34 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       // Context should be untrusted when no policies match
       expect(result.contextIsTrusted).toBe(false);
       expect(result.toolResultUpdates).toEqual({});
+      expect(result.unsafeContextBoundary).toEqual({
+        kind: "tool_result",
+        reason: "tool_result_marked_untrusted",
+        toolCallId: "call_789",
+        toolName: "get_emails",
+      });
+    });
+
+    test("records a preexisting unsafe boundary when context starts untrusted", async () => {
+      const result = await evaluateIfContextIsTrusted(
+        [{ role: "user", content: "Summarize this thread" }],
+        agentId,
+        organizationId,
+        undefined,
+        true,
+        "restrictive",
+        { teamIds: [] },
+        undefined,
+        undefined,
+        "inherited_from_parent",
+      );
+
+      expect(result.contextIsTrusted).toBe(false);
+      expect(result.toolResultUpdates).toEqual({});
+      expect(result.unsafeContextBoundary).toEqual({
+        kind: "preexisting_untrusted",
+        reason: "inherited_from_parent",
+      });
     });
 
     test("handles multiple tool calls with mixed trust", async () => {
@@ -434,6 +468,47 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       expect(result.toolResultUpdates).toEqual({
         call_002:
           "[Content blocked by policy: Data blocked by policy: Block malicious source]",
+      });
+    });
+
+    test("preserves the first unsafe boundary when multiple tool results are untrusted", async () => {
+      const commonMessages: CommonMessage[] = [
+        { role: "assistant" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_001",
+              name: "get_emails",
+              content: { source: "unknown", data: "first untrusted" },
+              isError: false,
+            },
+            {
+              id: "call_002",
+              name: "get_emails",
+              content: { source: "unknown", data: "second untrusted" },
+              isError: false,
+            },
+          ],
+        },
+      ];
+
+      const result = await evaluateIfContextIsTrusted(
+        commonMessages,
+        agentId,
+        organizationId,
+        undefined,
+        false,
+        "restrictive",
+        { teamIds: [] },
+      );
+
+      expect(result.contextIsTrusted).toBe(false);
+      expect(result.unsafeContextBoundary).toEqual({
+        kind: "tool_result",
+        reason: "tool_result_marked_untrusted",
+        toolCallId: "call_001",
+        toolName: "get_emails",
       });
     });
 
@@ -772,7 +847,9 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
 
   describe("adapter integration tests", () => {
     test("OpenAI adapter roundtrip", async () => {
-      const { openaiAdapterFactory } = await import("../adapterV2/openai");
+      const { openaiAdapterFactory } = await import(
+        "../routes/proxy/adapterV2/openai"
+      );
 
       const openAiRequest = {
         model: "gpt-4",
@@ -824,7 +901,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
 
     test("Anthropic adapter roundtrip", async () => {
       const { anthropicAdapterFactory } = await import(
-        "../adapterV2/anthropic"
+        "../routes/proxy/adapterV2/anthropic"
       );
 
       const anthropicRequest = {

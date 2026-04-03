@@ -4,7 +4,7 @@ import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import {
   getToolErrorText,
   isCompactEligible,
-} from "./chat-tools-display.utils";
+} from "@/lib/chat/chat-tools-display.utils";
 import type { FileAttachment } from "./editable-user-message";
 
 export type OptimisticToolCall = {

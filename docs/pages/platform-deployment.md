@@ -231,7 +231,7 @@ Chart-managed diagnostics PVCs are validated conservatively. If more than one di
 - `archestra.podAnnotations` - Annotations to add to pods (useful for Prometheus, Vault agent, service mesh sidecars, etc.)
 - `archestra.nodeSelector` - Node selector for scheduling pods on specific nodes (e.g., specific node pools or instance types). These values are also inherited by MCP server pods as defaults.
 - `archestra.tolerations` - Tolerations for scheduling pods on nodes with specific taints (e.g., dedicated nodes, GPU nodes, spot instances). These values are also inherited by MCP server pods as defaults. See [Kubernetes docs](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)
-- `archestra.deploymentStrategy` - Deployment strategy configuration (default: RollingUpdate with maxUnavailable: 0 for zero-downtime deployments)
+- `archestra.deploymentStrategy` - Deployment strategy configuration (default: RollingUpdate with `maxUnavailable: 25%` and `maxSurge: 25%`)
 - `archestra.resources` - CPU and memory requests/limits for the container (default: 2Gi request, 3Gi limit for memory)
 
 **Service Settings**:
@@ -372,7 +372,7 @@ The Helm chart deploys a separate worker `Deployment` for processing background 
 - `archestra.worker.enabled` - Deploy a separate worker Deployment (default: true)
 - `archestra.worker.replicaCount` - Number of worker pod replicas (default: 1)
 - `archestra.worker.resources` - Resource requests/limits for worker pods (default: 1Gi request, 2Gi limit)
-- `archestra.worker.deploymentStrategy` - Deployment strategy (default: RollingUpdate)
+- `archestra.worker.deploymentStrategy` - Deployment strategy (default: RollingUpdate with `maxUnavailable: 25%` and `maxSurge: 25%`)
 - `archestra.worker.podAnnotations` - Pod annotations (inherits from `archestra.podAnnotations` if not set)
 - `archestra.worker.nodeSelector` - Node selector (inherits from `archestra.nodeSelector` if not set)
 - `archestra.worker.tolerations` - Tolerations (inherits from `archestra.tolerations` if not set)

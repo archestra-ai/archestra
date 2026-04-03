@@ -45,7 +45,7 @@ const APP_NAME = DEFAULT_APP_NAME;
 const {
   api: { apiKeyAuthorizationHeaderName },
   frontendBaseUrl,
-  auth: { secret, cookieDomain, trustedOrigins },
+  auth: { secret, cookieDomain, trustedOrigins: staticTrustedOrigins },
 } = config;
 
 const ac = createAccessControl(allAvailableActions);
@@ -198,7 +198,7 @@ export const auth = betterAuth({
     },
   },
 
-  trustedOrigins,
+  trustedOrigins: getTrustedOriginsForAuthRequest,
 
   database: drizzleAdapter(db, {
     provider: "pg", // or "mysql", "sqlite"
@@ -395,6 +395,36 @@ function getBetterAuthLogLevel(
 
 export type BetterAuth = typeof auth;
 
+/**
+ * Better Auth applies `trustedOrigins` to OIDC discovery during SSO provider
+ * registration, which means custom IdP setup can fail before the provider is
+ * saved unless the discovery origin is already trusted:
+ * https://better-auth.com/docs/plugins/sso#trusted-origins
+ *
+ * Archestra admins are explicitly configuring their own IdPs, so we widen
+ * origin trust only for provider registration instead of requiring per-IdP
+ * allowlisting. Better Auth also invokes this callback with `request`
+ * undefined during internal `auth.api` calls, which is the registration path
+ * used by `IdentityProviderModel.create()`.
+ */
+async function getTrustedOriginsForAuthRequest(request?: Request) {
+  const trustedOrigins = [...staticTrustedOrigins];
+
+  if (!shouldTrustAllOriginsForSsoRegistration(request)) {
+    return trustedOrigins;
+  }
+
+  return [
+    ...new Set([
+      ...trustedOrigins,
+      "http://*:*",
+      "https://*:*",
+      "http://*",
+      "https://*",
+    ]),
+  ];
+}
+
 async function getTrustedAccountLinkingProviderIds(): Promise<string[]> {
   if (!config.enterpriseFeatures.core) {
     return [...IDENTITY_TRUSTED_PROVIDER_IDS];
@@ -406,6 +436,22 @@ async function getTrustedAccountLinkingProviderIds(): Promise<string[]> {
   );
 
   return IdentityProviderModel.getTrustedAccountLinkingProviderIds();
+}
+
+/**
+ * Keep the wildcard expansion scoped to SSO provider registration so every
+ * other auth request still uses the configured trusted origins unchanged.
+ */
+function shouldTrustAllOriginsForSsoRegistration(request?: Request) {
+  if (!request) {
+    return true;
+  }
+
+  try {
+    return new URL(request.url).pathname.endsWith("/sso/register");
+  } catch {
+    return false;
+  }
 }
 
 /**

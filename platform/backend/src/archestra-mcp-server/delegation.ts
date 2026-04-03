@@ -159,6 +159,10 @@ export async function handleDelegation(
       // Propagate conversationId for browser tab isolation
       conversationId: context.conversationId,
       abortSignal: context.abortSignal,
+      // We only need to propagate whether the parent was already unsafe at the
+      // delegation boundary. The child re-evaluates its own tool results and
+      // records its own unsafe boundary instead of inheriting the parent's.
+      parentContextIsTrusted: context.contextIsTrusted,
     });
 
     return successResult(result.text);

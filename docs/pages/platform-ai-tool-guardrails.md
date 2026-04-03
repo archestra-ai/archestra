@@ -126,6 +126,8 @@ This lets the same agent behave normally in safe contexts and become more restri
 
 Policies can also be scoped to specific agents. For example, you might allow an internal support agent to use `send_email` for `@mycompany.com` recipients while keeping the same tool blocked for a broader research agent.
 
+Subagent "delegation" does not reset that trust state. If a parent agent delegates to a subagent after the conversation has already become sensitive, the subagent inherits that unsafe context and the same tool call restrictions continue to apply.
+
 ## Policy Configuration Agent
 
 Archestra includes a built-in [Tool Policy Configuration Agent](/docs/platform-built-in-agents-policy-config) that analyzes tool metadata and proposes default tool call policies and tool result policies automatically.

@@ -13,6 +13,8 @@ import {
 import {
   ARCHESTRA_TOKEN_PREFIX,
   isAgentTool,
+  MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
+  MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
   OAUTH_TOKEN_ID_PREFIX,
   parseFullToolName,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
@@ -64,6 +66,7 @@ import {
   type SelectUserToken,
   UuidIdSchema,
 } from "@/types";
+import type { McpServerCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { estimateToolResultContentLength } from "@/utils/tool-result-preview";
 
@@ -134,6 +137,11 @@ export async function createAgentServer(
   tokenAuth?: TokenAuthContext,
   preloadedAgent?: AgentInfo,
 ): Promise<{ server: McpServer; agent: AgentInfo }> {
+  const extensionCapabilities = {
+    ...MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
+    ...MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
+  } as const;
+
   const mcpServer = new McpServer(
     {
       name: `archestra-agent-${agentId}`,
@@ -145,9 +153,10 @@ export async function createAgentServer(
           subscribe: true,
           listChanged: true,
         },
+        extensions: extensionCapabilities,
         prompts: {},
         tools: { listChanged: false },
-      },
+      } as McpServerCapabilitiesWithExtensions,
     },
   );
   const { server } = mcpServer;

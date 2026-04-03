@@ -1,22 +1,18 @@
 import {
   BUILT_IN_AGENT_IDS,
   buildPolicyConfigSystemPromptContext,
-  isSupportedProvider,
   type SupportedProvider,
 } from "@shared";
 import { generateObject } from "ai";
-import { createLLMModel, detectProviderFromModel } from "@/clients/llm-client";
+import { createLLMModel } from "@/clients/llm-client";
 import logger from "@/logging";
 import {
   AgentModel,
   InternalMcpCatalogModel,
-  LlmProviderApiKeyModel,
-  LlmProviderApiKeyModelLinkModel,
   ToolInvocationPolicyModel,
   ToolModel,
   TrustedDataPolicyModel,
 } from "@/models";
-import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { renderSystemPrompt } from "@/templating";
 import type { Tool } from "@/types";
 import {
@@ -25,14 +21,11 @@ import {
   type PolicyConfig,
   PolicyConfigSchema,
 } from "@/types";
-import { resolveSmartDefaultLlm } from "@/utils/llm-resolution";
-
-interface ResolvedLlm {
-  provider: SupportedProvider;
-  apiKey: string | undefined;
-  modelName: string;
-  baseUrl: string | null;
-}
+import {
+  type ResolvedLlmSelection,
+  resolveConfiguredAgentLlm,
+  resolveSmartDefaultLlm,
+} from "@/utils/llm-resolution";
 
 interface AutoPolicyResult {
   success: boolean;
@@ -60,7 +53,7 @@ export class PolicyConfigurationService {
   async resolveLlm(params: {
     organizationId: string;
     userId?: string;
-  }): Promise<ResolvedLlm | null> {
+  }): Promise<ResolvedLlmSelection | null> {
     const { organizationId } = params;
 
     // Check the built-in agent's own LLM configuration first
@@ -70,7 +63,7 @@ export class PolicyConfigurationService {
     );
 
     if (builtInAgent) {
-      const agentLlm = await resolveAgentLlm(builtInAgent);
+      const agentLlm = await resolveConfiguredAgentLlm(builtInAgent);
       if (agentLlm) return agentLlm;
     }
 
@@ -85,7 +78,7 @@ export class PolicyConfigurationService {
     toolId: string;
     organizationId: string;
     userId?: string;
-    resolvedLlm?: ResolvedLlm;
+    resolvedLlm?: ResolvedLlmSelection;
   }): Promise<AutoPolicyResult> {
     const { toolId, organizationId, userId, resolvedLlm } = params;
 
@@ -214,7 +207,7 @@ export class PolicyConfigurationService {
     toolId: string;
     organizationId: string;
     userId?: string;
-    resolvedLlm?: ResolvedLlm;
+    resolvedLlm?: ResolvedLlmSelection;
   }): Promise<AutoPolicyResult & { timedOut?: boolean }> {
     const { toolId, organizationId } = params;
 
@@ -495,56 +488,3 @@ export class PolicyConfigurationService {
 }
 
 export const policyConfigurationService = new PolicyConfigurationService();
-
-/**
- * Resolve LLM from the agent's own llmApiKeyId/llmModel configuration.
- * Mirrors the agent-level resolution in conversation-llm-selection.ts.
- */
-async function resolveAgentLlm(agent: {
-  llmApiKeyId: string | null;
-  llmModel: string | null;
-}): Promise<ResolvedLlm | null> {
-  if (agent.llmApiKeyId) {
-    const apiKeyRecord = await LlmProviderApiKeyModel.findById(
-      agent.llmApiKeyId,
-    );
-    if (!apiKeyRecord) return null;
-
-    const provider = isSupportedProvider(apiKeyRecord.provider)
-      ? apiKeyRecord.provider
-      : detectProviderFromModel(agent.llmModel ?? "");
-
-    // Resolve the actual API key secret
-    let apiKey: string | undefined;
-    if (apiKeyRecord.secretId) {
-      const secret = await getSecretValueForLlmProviderApiKey(
-        apiKeyRecord.secretId,
-      );
-      apiKey = (secret as string) ?? undefined;
-    }
-
-    const modelName =
-      agent.llmModel ??
-      (await LlmProviderApiKeyModelLinkModel.getBestModel(apiKeyRecord.id))
-        ?.modelId;
-    if (!modelName) return null;
-
-    return {
-      provider,
-      apiKey,
-      modelName,
-      baseUrl: apiKeyRecord.baseUrl,
-    };
-  }
-
-  if (agent.llmModel) {
-    return {
-      provider: detectProviderFromModel(agent.llmModel),
-      apiKey: undefined,
-      modelName: agent.llmModel,
-      baseUrl: null,
-    };
-  }
-
-  return null;
-}

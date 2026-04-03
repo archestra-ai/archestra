@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import {
+  MCP_APPS_EXTENSION_ID,
   MCP_CATALOG_INSTALL_PATH,
   MCP_CATALOG_REAUTH_QUERY_PARAM,
   MCP_CATALOG_SERVER_QUERY_PARAM,
+  MCP_ENTERPRISE_AUTH_EXTENSION_ID,
 } from "@shared";
 import { vi } from "vitest";
 import config from "@/config";
@@ -154,6 +156,50 @@ describe("McpClient", () => {
         id: "call_123",
         isError: true,
         error: expect.stringContaining("Tool not found"),
+      });
+    });
+
+    test("declares MCP Apps and enterprise auth extensions during initialize", async () => {
+      const tool = await ToolModel.createToolIfNotExists({
+        name: "github-mcp-server__declared_extensions",
+        description: "Extension declaration test",
+        parameters: {},
+        catalogId,
+      });
+
+      await AgentToolModel.create(agentId, tool.id, {
+        mcpServerId,
+        credentialResolutionMode: "static",
+      });
+
+      mockConnect.mockResolvedValue(undefined);
+      mockCallTool.mockResolvedValue({
+        content: [{ type: "text", text: "ok" }],
+      });
+
+      const result = await mcpClient.executeToolCall(
+        {
+          id: "call_extensions",
+          name: tool.name,
+          arguments: {},
+        },
+        agentId,
+      );
+
+      expect(result.isError).toBe(false);
+
+      const clientConstructor = vi.mocked(
+        (await import("@modelcontextprotocol/sdk/client/index.js")).Client,
+      );
+      expect(clientConstructor).toHaveBeenCalled();
+      const options = clientConstructor.mock.calls.at(-1)?.[1] as
+        | { capabilities?: { extensions?: Record<string, unknown> } }
+        | undefined;
+      expect(options?.capabilities?.extensions).toEqual({
+        [MCP_APPS_EXTENSION_ID]: {
+          mimeTypes: ["text/html;profile=mcp-app"],
+        },
+        [MCP_ENTERPRISE_AUTH_EXTENSION_ID]: {},
       });
     });
 

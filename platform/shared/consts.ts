@@ -65,6 +65,12 @@ export const SESSION_ID_HEADER = "X-Archestra-Session-Id";
 export const SOURCE_HEADER = "X-Archestra-Source";
 
 /**
+ * Header used by internal delegated agent calls to indicate that the parent
+ * execution context was already untrusted/sensitive.
+ */
+export const UNTRUSTED_CONTEXT_HEADER = "X-Archestra-Context-Untrusted";
+
+/**
  * Header name for execution ID.
  * Clients can pass this header to associate interactions with a specific execution run.
  */

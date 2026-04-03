@@ -4,6 +4,7 @@ import {
   getCurrentEnabledToolIds,
   getDefaultEnabledToolIds,
   getToolErrorText,
+  getToolNameFromPart,
   isCompactEligible,
 } from "./chat-tools-display.utils";
 
@@ -137,6 +138,15 @@ describe("getCurrentEnabledToolIds", () => {
 });
 
 describe("tool display helpers", () => {
+  it("extracts tool names from toolName or type", () => {
+    expect(
+      getToolNameFromPart({ toolName: "archestra__query_knowledge_sources" }),
+    ).toBe("archestra__query_knowledge_sources");
+    expect(
+      getToolNameFromPart({ type: "tool-archestra__query_knowledge_sources" }),
+    ).toBe("archestra__query_knowledge_sources");
+  });
+
   it("falls back to parsing JSON output errors", () => {
     expect(
       getToolErrorText({
@@ -267,31 +277,25 @@ describe("tool display helpers", () => {
     ).toBe(false);
   });
 
-  it("keeps branded built-in todo-write tools out of compact groups", () => {
+  it("computes compact tool state from output state", () => {
     expect(
-      isCompactEligible({
-        toolName: "sparky__todo_write",
-        getToolShortName: (toolName: string) =>
-          toolName === "sparky__todo_write" ? "todo_write" : null,
+      getCompactToolState({
         part: {
-          type: "tool-sparky__todo_write",
+          type: "tool-github__create_issue",
+          state: "input-available",
+        } as never,
+        toolResultPart: null,
+      }),
+    ).toBe("running");
+
+    expect(
+      getCompactToolState({
+        part: {
+          type: "tool-github__create_issue",
           state: "output-available",
         } as never,
         toolResultPart: null,
       }),
-    ).toBe(false);
-  });
-
-  it("reports compact error state for generic tool failures", () => {
-    expect(
-      getCompactToolState({
-        part: {
-          type: "tool-notion__create_page",
-          state: "input-available",
-          errorText: "Notion failed",
-        } as never,
-        toolResultPart: null,
-      }),
-    ).toBe("error");
+    ).toBe("completed");
   });
 });

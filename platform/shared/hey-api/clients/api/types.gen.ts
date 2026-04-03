@@ -20888,6 +20888,15 @@ export type GetInteractionsResponses = {
                 }>;
                 result: string;
             }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'openai:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -20944,6 +20953,15 @@ export type GetInteractionsResponses = {
                 }>;
                 result: string;
             }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'openai:embeddings';
             model: string | null;
             baselineModel: string | null;
@@ -20976,6 +20994,15 @@ export type GetInteractionsResponses = {
                 }>;
                 result: string;
             }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'gemini:generateContent';
             model: string | null;
             baselineModel: string | null;
@@ -21010,6 +21037,15 @@ export type GetInteractionsResponses = {
                 }>;
                 result: string;
             }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'anthropic:messages';
             model: string | null;
             baselineModel: string | null;
@@ -21418,6 +21454,15 @@ export type GetInteractionsResponses = {
                 }>;
                 result: string;
             }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'bedrock:converse';
             model: string | null;
             baselineModel: string | null;
@@ -21452,6 +21497,15 @@ export type GetInteractionsResponses = {
                 }>;
                 result: string;
             }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'cerebras:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -21486,6 +21540,15 @@ export type GetInteractionsResponses = {
                 }>;
                 result: string;
             }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'mistral:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -21520,6 +21583,15 @@ export type GetInteractionsResponses = {
                 }>;
                 result: string;
             }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'perplexity:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -21554,6 +21626,15 @@ export type GetInteractionsResponses = {
                 }>;
                 result: string;
             }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'groq:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -21588,6 +21669,15 @@ export type GetInteractionsResponses = {
                 }>;
                 result: string;
             }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'xai:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -21622,6 +21712,15 @@ export type GetInteractionsResponses = {
                 }>;
                 result: string;
             }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'openrouter:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -21656,6 +21755,15 @@ export type GetInteractionsResponses = {
                 }>;
                 result: string;
             }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'vllm:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -21688,6 +21796,15 @@ export type GetInteractionsResponses = {
                 }>;
                 result: string;
             }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'ollama:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -21720,6 +21837,15 @@ export type GetInteractionsResponses = {
                 }>;
                 result: string;
             }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'cohere:chat';
             model: string | null;
             baselineModel: string | null;
@@ -21754,6 +21880,15 @@ export type GetInteractionsResponses = {
                 }>;
                 result: string;
             }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'zhipuai:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -21788,6 +21923,15 @@ export type GetInteractionsResponses = {
                 }>;
                 result: string;
             }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'deepseek:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -21822,6 +21966,15 @@ export type GetInteractionsResponses = {
                 }>;
                 result: string;
             }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'minimax:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -22243,6 +22396,15 @@ export type GetInteractionResponses = {
             }>;
             result: string;
         }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'openai:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -22299,6 +22461,15 @@ export type GetInteractionResponses = {
             }>;
             result: string;
         }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'openai:embeddings';
         model: string | null;
         baselineModel: string | null;
@@ -22331,6 +22502,15 @@ export type GetInteractionResponses = {
             }>;
             result: string;
         }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'gemini:generateContent';
         model: string | null;
         baselineModel: string | null;
@@ -22365,6 +22545,15 @@ export type GetInteractionResponses = {
             }>;
             result: string;
         }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'anthropic:messages';
         model: string | null;
         baselineModel: string | null;
@@ -22773,6 +22962,15 @@ export type GetInteractionResponses = {
             }>;
             result: string;
         }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'bedrock:converse';
         model: string | null;
         baselineModel: string | null;
@@ -22807,6 +23005,15 @@ export type GetInteractionResponses = {
             }>;
             result: string;
         }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'cerebras:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -22841,6 +23048,15 @@ export type GetInteractionResponses = {
             }>;
             result: string;
         }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'mistral:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -22875,6 +23091,15 @@ export type GetInteractionResponses = {
             }>;
             result: string;
         }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'perplexity:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -22909,6 +23134,15 @@ export type GetInteractionResponses = {
             }>;
             result: string;
         }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'groq:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -22943,6 +23177,15 @@ export type GetInteractionResponses = {
             }>;
             result: string;
         }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'xai:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -22977,6 +23220,15 @@ export type GetInteractionResponses = {
             }>;
             result: string;
         }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'openrouter:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -23011,6 +23263,15 @@ export type GetInteractionResponses = {
             }>;
             result: string;
         }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'vllm:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -23043,6 +23304,15 @@ export type GetInteractionResponses = {
             }>;
             result: string;
         }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'ollama:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -23075,6 +23345,15 @@ export type GetInteractionResponses = {
             }>;
             result: string;
         }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'cohere:chat';
         model: string | null;
         baselineModel: string | null;
@@ -23109,6 +23388,15 @@ export type GetInteractionResponses = {
             }>;
             result: string;
         }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'zhipuai:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -23143,6 +23431,15 @@ export type GetInteractionResponses = {
             }>;
             result: string;
         }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'deepseek:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -23177,6 +23474,15 @@ export type GetInteractionResponses = {
             }>;
             result: string;
         }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'minimax:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -25134,7 +25440,7 @@ export type GetKnowledgeBasesResponses = {
             connectors: Array<{
                 id: string;
                 name: string;
-                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow';
+                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion';
             }>;
             totalDocsIndexed: number;
             assignedAgents: Array<{
@@ -25592,7 +25898,7 @@ export type GetConnectorsData = {
         offset?: number;
         knowledgeBaseId?: string;
         search?: string;
-        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow';
+        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion';
     };
     url: '/api/connectors';
 };
@@ -25666,7 +25972,7 @@ export type GetConnectorsResponses = {
             organizationId: string;
             name: string;
             description: string | null;
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion';
             config: {
                 type: 'jira';
                 jiraBaseUrl: unknown;
@@ -25714,6 +26020,11 @@ export type GetConnectorsResponses = {
                 assignmentGroups?: Array<string>;
                 batchSize?: number;
                 syncDataForLastMonths?: number;
+            } | {
+                type: 'notion';
+                databaseIds?: Array<string>;
+                pageIds?: Array<string>;
+                batchSize?: number;
             };
             secretId: string | null;
             schedule: string;
@@ -25749,7 +26060,7 @@ export type CreateConnectorData = {
     body: {
         name: string;
         description?: string | null;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion';
         config: {
             type: 'jira';
             jiraBaseUrl: string;
@@ -25797,6 +26108,11 @@ export type CreateConnectorData = {
             assignmentGroups?: Array<string>;
             batchSize?: number;
             syncDataForLastMonths?: number;
+        } | {
+            type: 'notion';
+            databaseIds?: Array<string>;
+            pageIds?: Array<string>;
+            batchSize?: number;
         };
         credentials: {
             email?: string;
@@ -25879,7 +26195,7 @@ export type CreateConnectorResponses = {
         organizationId: string;
         name: string;
         description: string | null;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -25927,6 +26243,11 @@ export type CreateConnectorResponses = {
             assignmentGroups?: Array<string>;
             batchSize?: number;
             syncDataForLastMonths?: number;
+        } | {
+            type: 'notion';
+            databaseIds?: Array<string>;
+            pageIds?: Array<string>;
+            batchSize?: number;
         };
         secretId: string | null;
         schedule: string;
@@ -26100,7 +26421,7 @@ export type GetConnectorResponses = {
         organizationId: string;
         name: string;
         description: string | null;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -26148,6 +26469,11 @@ export type GetConnectorResponses = {
             assignmentGroups?: Array<string>;
             batchSize?: number;
             syncDataForLastMonths?: number;
+        } | {
+            type: 'notion';
+            databaseIds?: Array<string>;
+            pageIds?: Array<string>;
+            batchSize?: number;
         };
         secretId: string | null;
         schedule: string;
@@ -26217,6 +26543,11 @@ export type UpdateConnectorData = {
             assignmentGroups?: Array<string>;
             batchSize?: number;
             syncDataForLastMonths?: number;
+        } | {
+            type: 'notion';
+            databaseIds?: Array<string>;
+            pageIds?: Array<string>;
+            batchSize?: number;
         };
         credentials?: {
             email?: string;
@@ -26300,7 +26631,7 @@ export type UpdateConnectorResponses = {
         organizationId: string;
         name: string;
         description: string | null;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -26348,6 +26679,11 @@ export type UpdateConnectorResponses = {
             assignmentGroups?: Array<string>;
             batchSize?: number;
             syncDataForLastMonths?: number;
+        } | {
+            type: 'notion';
+            databaseIds?: Array<string>;
+            pageIds?: Array<string>;
+            batchSize?: number;
         };
         secretId: string | null;
         schedule: string;
@@ -33225,7 +33561,7 @@ export type GetOrganizationResponses = {
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
         defaultLlmApiKeyId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
@@ -33447,7 +33783,7 @@ export type UpdateAppearanceSettingsResponses = {
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
         defaultLlmApiKeyId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
@@ -33563,7 +33899,7 @@ export type UpdateSecuritySettingsResponses = {
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
         defaultLlmApiKeyId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
@@ -33680,7 +34016,7 @@ export type UpdateLlmSettingsResponses = {
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
         defaultLlmApiKeyId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
@@ -33704,7 +34040,7 @@ export type UpdateLlmSettingsResponse = UpdateLlmSettingsResponses[keyof UpdateL
 export type UpdateAgentSettingsData = {
     body: {
         defaultLlmModel?: string | null;
-        defaultLlmProvider?: string | null;
+        defaultLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
         defaultLlmApiKeyId?: string | null;
         defaultAgentId?: string | null;
     };
@@ -33798,7 +34134,7 @@ export type UpdateAgentSettingsResponses = {
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
         defaultLlmApiKeyId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
@@ -33916,7 +34252,7 @@ export type UpdateKnowledgeSettingsResponses = {
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
         defaultLlmApiKeyId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
@@ -34029,7 +34365,7 @@ export type DropEmbeddingConfigResponses = {
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
         defaultLlmApiKeyId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
@@ -34225,7 +34561,7 @@ export type CompleteOnboardingResponses = {
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
         defaultLlmApiKeyId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;

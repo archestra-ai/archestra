@@ -20,7 +20,7 @@ import {
   MemberModel,
   TeamModel,
 } from "@/models";
-import { metrics } from "@/observability";
+import { initializeObservabilityMetrics } from "@/observability";
 import {
   type AgentScope,
   AgentScopeFilterSchema,
@@ -393,13 +393,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...(body.scope !== "team" && { teams: [] }),
       };
       const agent = await AgentModel.create(createData, user.id);
-      const labelKeys = await AgentLabelModel.getAllKeys();
-
       // We need to re-init metrics with the new label keys in case label keys changed.
       // Otherwise the newly added labels will not make it to metrics. The labels with new keys, that is.
-      metrics.llm.initializeMetrics(labelKeys);
-      metrics.mcp.initializeMcpMetrics(labelKeys);
-      metrics.agentExecution.initializeAgentExecutionMetrics(labelKeys);
+      await initializeObservabilityMetrics();
 
       return reply.send(agent);
     },
@@ -630,10 +626,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Only re-init metrics when labels were part of the update payload,
       // since that's the only field that can introduce new label keys.
       if (body.labels !== undefined) {
-        const labelKeys = await AgentLabelModel.getAllKeys();
-        metrics.llm.initializeMetrics(labelKeys);
-        metrics.mcp.initializeMcpMetrics(labelKeys);
-        metrics.agentExecution.initializeAgentExecutionMetrics(labelKeys);
+        await initializeObservabilityMetrics();
       }
 
       return reply.send(agent);

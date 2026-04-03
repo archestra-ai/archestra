@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { extractMcpToolError } from "./mcp-tool-error";
+import {
+  TOOL_INVOCATION_NO_POLICY_UNTRUSTED_REASON,
+  TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
+} from "./tool-invocation-policy-reasons";
 
 describe("extractMcpToolError", () => {
   it("extracts a direct MCP tool error object", () => {
@@ -82,6 +86,7 @@ Tool invocation blocked: sensitive data detected`),
       toolName: "github__delete_branch",
       input: { branch: "main" },
       reason: "Tool invocation blocked: sensitive data detected",
+      reasonType: "generic",
     });
   });
 
@@ -98,6 +103,43 @@ Tool invocation blocked: sensitive data detected`),
       toolName: "github__delete_branch",
       input: { branch: "main" },
       reason: "sensitive data detected",
+      reasonType: "generic",
+    });
+  });
+
+  it("classifies sensitive-context policy denials", () => {
+    expect(
+      extractMcpToolError(`I tried to invoke the github__delete_branch tool with the following arguments: {"branch":"main"}.
+
+However, I was denied by a tool invocation policy:
+
+${TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON}`),
+    ).toEqual({
+      type: "policy_denied",
+      message: expect.any(String),
+      toolName: "github__delete_branch",
+      input: { branch: "main" },
+      reason: "context contains sensitive data",
+      reasonType: "sensitive_context",
+    });
+  });
+
+  it("normalizes reasonType for direct structured policy-denied errors", () => {
+    expect(
+      extractMcpToolError({
+        type: "policy_denied",
+        message: "blocked",
+        toolName: "github__delete_branch",
+        input: { branch: "main" },
+        reason: TOOL_INVOCATION_NO_POLICY_UNTRUSTED_REASON,
+      }),
+    ).toEqual({
+      type: "policy_denied",
+      message: "blocked",
+      toolName: "github__delete_branch",
+      input: { branch: "main" },
+      reason: TOOL_INVOCATION_NO_POLICY_UNTRUSTED_REASON,
+      reasonType: "sensitive_context",
     });
   });
 });

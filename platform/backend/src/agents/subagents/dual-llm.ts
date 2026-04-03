@@ -4,7 +4,6 @@ import { z } from "zod";
 import {
   createDirectLLMModel,
   detectProviderFromModel,
-  resolveProviderApiKey,
 } from "@/clients/llm-client";
 import config, { getProviderEnvApiKey } from "@/config";
 import logger from "@/logging";
@@ -21,6 +20,7 @@ import type {
   DualLlmAnalysis,
   DualLlmMessage,
 } from "@/types";
+import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { resolveSmartDefaultLlm } from "@/utils/llm-resolution";
 
 export class DualLlmSubagent {

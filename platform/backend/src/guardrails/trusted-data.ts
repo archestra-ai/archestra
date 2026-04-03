@@ -7,7 +7,10 @@ import type {
   DualLlmAnalysis,
   GlobalToolPolicy,
   ToolResultUpdates,
+  UnsafeContextBoundary,
+  UnsafeContextBoundaryReason,
 } from "@/types";
+import { UNSAFE_CONTEXT_BOUNDARY_REASON } from "@/types";
 
 /**
  * Evaluate if context is trusted and return updates for tool results
@@ -36,11 +39,13 @@ export async function evaluateIfContextIsTrusted(
     options: string[];
     answer: string;
   }) => void,
+  initialUntrustedReason?: UnsafeContextBoundaryReason,
 ): Promise<{
   toolResultUpdates: ToolResultUpdates;
   contextIsTrusted: boolean;
   usedDualLlm: boolean;
   dualLlmAnalyses: DualLlmAnalysis[];
+  unsafeContextBoundary?: UnsafeContextBoundary;
 }> {
   logger.debug(
     {
@@ -56,6 +61,7 @@ export async function evaluateIfContextIsTrusted(
   const dualLlmAnalyses: DualLlmAnalysis[] = [];
   let hasUntrustedData = false;
   let usedDualLlm = false;
+  let unsafeContextBoundary: UnsafeContextBoundary | undefined;
 
   // If agent configured to consider context untrusted from the beginning,
   // mark context as untrusted immediately and skip evaluation
@@ -69,6 +75,12 @@ export async function evaluateIfContextIsTrusted(
       contextIsTrusted: false,
       usedDualLlm: false,
       dualLlmAnalyses: [],
+      unsafeContextBoundary: {
+        kind: "preexisting_untrusted",
+        reason:
+          initialUntrustedReason ??
+          UNSAFE_CONTEXT_BOUNDARY_REASON.agentConfiguredUntrusted,
+      },
     };
   }
 
@@ -107,6 +119,7 @@ export async function evaluateIfContextIsTrusted(
       contextIsTrusted: true,
       usedDualLlm: false,
       dualLlmAnalyses: [],
+      unsafeContextBoundary,
     };
   }
 
@@ -133,6 +146,8 @@ export async function evaluateIfContextIsTrusted(
   // Process evaluation results
   for (let i = 0; i < allToolCalls.length; i++) {
     const { toolCallId, toolResult, toolName } = allToolCalls[i];
+    // evaluateBulk() returns a Map keyed by the stringified input index, so we
+    // read results back using the same positional key we submitted above.
     const evaluation = evaluationResults.get(i.toString());
 
     if (!evaluation) {
@@ -142,6 +157,13 @@ export async function evaluateIfContextIsTrusted(
         "[trustedData] evaluateIfContextIsTrusted: no evaluation result, treating as untrusted",
       );
       hasUntrustedData = true;
+      // Preserve the first point where context became unsafe so the UI can show
+      // a stable boundary even if later tool results are also untrusted.
+      unsafeContextBoundary ??= createToolResultBoundary({
+        reason: "tool_result_marked_untrusted",
+        toolCallId,
+        toolName,
+      });
       continue;
     }
 
@@ -169,6 +191,13 @@ export async function evaluateIfContextIsTrusted(
       toolResultUpdates[toolCallId] =
         `[Content blocked by policy${reason ? `: ${reason}` : ""}]`;
       toolResultIsTrusted = false;
+      // Preserve the first point where context became unsafe so the UI can show
+      // a stable boundary even if later tool results are also untrusted.
+      unsafeContextBoundary ??= createToolResultBoundary({
+        reason: "tool_result_blocked",
+        toolCallId,
+        toolName,
+      });
     } else if (shouldSanitizeWithDualLlm) {
       if (!usedDualLlm && onDualLlmStart) {
         logger.debug(
@@ -214,6 +243,13 @@ export async function evaluateIfContextIsTrusted(
 
     if (!toolResultIsTrusted) {
       hasUntrustedData = true;
+      // Preserve the first point where context became unsafe so the UI can show
+      // a stable boundary even if later tool results are also untrusted.
+      unsafeContextBoundary ??= createToolResultBoundary({
+        reason: "tool_result_marked_untrusted",
+        toolCallId,
+        toolName,
+      });
     }
     // If not blocked or sanitized, no update needed (original content remains)
   }
@@ -234,6 +270,7 @@ export async function evaluateIfContextIsTrusted(
     contextIsTrusted: !hasUntrustedData,
     usedDualLlm,
     dualLlmAnalyses,
+    unsafeContextBoundary,
   };
 }
 
@@ -250,4 +287,17 @@ function extractUserRequest(messages: CommonMessage[]): string {
   }
 
   return "process this data";
+}
+
+function createToolResultBoundary(params: {
+  reason: UnsafeContextBoundaryReason;
+  toolCallId: string;
+  toolName: string;
+}): UnsafeContextBoundary {
+  return {
+    kind: "tool_result",
+    reason: params.reason,
+    toolCallId: params.toolCallId,
+    toolName: params.toolName,
+  };
 }

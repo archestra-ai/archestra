@@ -19,12 +19,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
-import { cn } from "@/lib/utils";
 import {
   getCompactToolState,
   getToolHeaderState,
-} from "./chat-tools-display.utils";
+} from "@/lib/chat/chat-tools-display.utils";
+import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
+import { cn } from "@/lib/utils";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
 import { ToolStatusRow } from "./tool-status-row";
 

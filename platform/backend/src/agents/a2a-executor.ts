@@ -3,7 +3,6 @@ import {
   buildUserSystemPromptContext,
   type InteractionSource,
   PLAYWRIGHT_MCP_CATALOG_ID,
-  type SupportedProvider,
 } from "@shared";
 import type { UserContent } from "ai";
 import { NoOutputGeneratedError, stepCountIs, streamText } from "ai";
@@ -12,22 +11,15 @@ import { subagentExecutionTracker } from "@/agents/subagent-execution-tracker";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import { createLLMModelForAgent } from "@/clients/llm-client";
 import mcpClient from "@/clients/mcp-client";
-import config from "@/config";
 import logger from "@/logging";
-import {
-  AgentModel,
-  LlmProviderApiKeyModel,
-  LlmProviderApiKeyModelLinkModel,
-  McpServerModel,
-  TeamModel,
-  UserModel,
-} from "@/models";
+import { AgentModel, McpServerModel, TeamModel, UserModel } from "@/models";
 import { mapProviderError, ProviderError } from "@/routes/chat/errors";
 import {
   promptNeedsRendering,
   renderSystemPrompt,
   type UserSystemPromptContext,
 } from "@/templating";
+import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
 
 /**
  * Source-agnostic attachment for A2A execution.
@@ -72,6 +64,8 @@ export interface A2AExecuteParams {
   abortSignal?: AbortSignal;
   /** Optional attachments to include in the message (e.g., images from email, Slack, Teams) */
   attachments?: A2AAttachment[];
+  /** Whether the parent execution context was still trusted at delegation time */
+  parentContextIsTrusted?: boolean;
 }
 
 export interface A2AExecuteResult {
@@ -102,6 +96,7 @@ export async function executeA2AMessage(
     parentDelegationChain,
     abortSignal,
     attachments,
+    parentContextIsTrusted,
   } = params;
 
   // Generate isolation key for browser tab isolation.
@@ -128,12 +123,15 @@ export async function executeA2AMessage(
     );
   }
 
-  // Resolve model using priority chain: agent config > best model for API key > best available > defaults
-  const { model: selectedModel, provider } = await resolveModelForAgent({
-    agent,
-    userId,
-    organizationId,
-  });
+  const { selectedModel, selectedProvider: provider } =
+    await resolveConversationLlmSelectionForAgent({
+      agent: {
+        llmApiKeyId: agent.llmApiKeyId,
+        llmModel: agent.llmModel,
+      },
+      organizationId,
+      userId,
+    });
 
   // Build system prompt from agent's systemPrompt field
   let systemPrompt: string | undefined;
@@ -209,6 +207,7 @@ export async function executeA2AMessage(
       source,
       externalAgentId: delegationChain,
       agentLlmApiKeyId: agent.llmApiKeyId,
+      contextIsTrusted: parentContextIsTrusted,
     });
 
     // Execute with AI SDK using streamText (required for long-running requests)
@@ -482,126 +481,4 @@ async function cleanupBrowserTab(params: {
       );
     }
   }
-}
-
-/**
- * Resolve the model and provider to use for an agent.
- *
- * Priority chain:
- * 1. Agent has llmApiKeyId with llmModel → use the model with provider from the key
- * 2. Agent has llmApiKeyId but no llmModel → use best model for that key
- * 3. Find best model across all available API keys (org > team > personal)
- * 4. Fallback → use config defaults
- */
-async function resolveModelForAgent(params: {
-  agent: { llmModel: string | null; llmApiKeyId: string | null };
-  userId: string;
-  organizationId: string;
-}): Promise<{ model: string; provider: SupportedProvider }> {
-  const { agent, userId, organizationId } = params;
-
-  // Priority 1 & 2: Agent has a configured API key
-  if (agent.llmApiKeyId) {
-    const agentApiKey = await LlmProviderApiKeyModel.findById(
-      agent.llmApiKeyId,
-    );
-    if (agentApiKey) {
-      const provider = agentApiKey.provider as SupportedProvider;
-
-      // Priority 1: Key + explicit model
-      if (agent.llmModel) {
-        logger.debug(
-          {
-            model: agent.llmModel,
-            provider,
-            apiKeyId: agent.llmApiKeyId,
-            source: "agent.llmApiKeyId+llmModel",
-          },
-          "Resolved model from agent config with provider from API key",
-        );
-        return { model: agent.llmModel, provider };
-      }
-
-      // Priority 2: Key without model — use best model for that key
-      const bestModel = await LlmProviderApiKeyModelLinkModel.getBestModel(
-        agent.llmApiKeyId,
-      );
-      if (bestModel) {
-        logger.debug(
-          {
-            model: bestModel.modelId,
-            provider,
-            apiKeyId: agent.llmApiKeyId,
-            source: "agent.llmApiKeyId.bestModel",
-          },
-          "Resolved best model from agent API key",
-        );
-        return { model: bestModel.modelId, provider };
-      }
-    }
-  }
-
-  // Priority 3: Find best model across all available API keys
-  const userTeamIds = await TeamModel.getUserTeamIds(userId);
-  const availableKeys = await LlmProviderApiKeyModel.getAvailableKeysForUser(
-    organizationId,
-    userId,
-    userTeamIds,
-  );
-
-  if (availableKeys.length > 0) {
-    const scopePriority = { org: 0, team: 1, personal: 2 } as const;
-
-    const keyModels = await Promise.all(
-      availableKeys.map(async (key) => ({
-        apiKey: key,
-        model: await LlmProviderApiKeyModelLinkModel.getBestModel(key.id),
-      })),
-    );
-
-    const withBestModels = keyModels
-      .filter(
-        (
-          km,
-        ): km is {
-          apiKey: (typeof km)["apiKey"];
-          model: NonNullable<(typeof km)["model"]>;
-        } => km.model !== null,
-      )
-      .sort(
-        (a, b) =>
-          (scopePriority[a.apiKey.scope as keyof typeof scopePriority] ?? 3) -
-          (scopePriority[b.apiKey.scope as keyof typeof scopePriority] ?? 3),
-      );
-
-    if (withBestModels.length > 0) {
-      const selected = withBestModels[0];
-      const provider = selected.apiKey.provider as SupportedProvider;
-      logger.debug(
-        {
-          model: selected.model.modelId,
-          provider,
-          apiKeyId: selected.apiKey.id,
-          scope: selected.apiKey.scope,
-          source: "available_keys",
-        },
-        "Resolved model from available API keys",
-      );
-      return { model: selected.model.modelId, provider };
-    }
-  }
-
-  // Priority 4: Fallback to config defaults
-  logger.debug(
-    {
-      model: config.chat.defaultModel,
-      provider: config.chat.defaultProvider,
-      source: "config_defaults",
-    },
-    "Resolved model from config defaults",
-  );
-  return {
-    model: config.chat.defaultModel,
-    provider: config.chat.defaultProvider,
-  };
 }

@@ -1,4 +1,8 @@
-import type { OrganizationCustomFont, OrganizationTheme } from "@shared";
+import type {
+  OrganizationCustomFont,
+  OrganizationTheme,
+  SupportedProvider,
+} from "@shared";
 import {
   boolean,
   integer,
@@ -86,7 +90,7 @@ const organizationsTable = pgTable("organization", {
   defaultLlmModel: text("default_llm_model"),
 
   /** Provider for the default LLM model (e.g. "openai") */
-  defaultLlmProvider: text("default_llm_provider"),
+  defaultLlmProvider: text("default_llm_provider").$type<SupportedProvider>(),
 
   /**
    * Chat API key used for the default LLM model.

@@ -15,6 +15,7 @@ import {
   type InteractionSource,
   InteractionSourceSchema,
   SOURCE_HEADER,
+  UNTRUSTED_CONTEXT_HEADER,
 } from "@shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { LRUCacheManager } from "@/cache-manager";
@@ -50,6 +51,8 @@ import {
   type LLMStreamAdapter,
   type ToolCompressionStats,
   type ToonSkipReason,
+  UNSAFE_CONTEXT_BOUNDARY_REASON,
+  type UnsafeContextBoundary,
 } from "@/types";
 import { isLoopbackAddress } from "@/utils/network";
 import {
@@ -103,6 +106,7 @@ export interface LLMProxyContext<TRequest> {
   toonStats: ToolCompressionStats;
   toonSkipReason: ToonSkipReason | null;
   dualLlmAnalyses: DualLlmAnalysis[];
+  unsafeContextBoundary?: UnsafeContextBoundary;
   externalAgentId?: string;
   userId?: string;
   resolvedUser?: { id: string; email: string; name: string } | null;
@@ -180,6 +184,11 @@ export async function handleLLMProxy<
   );
   const source: InteractionSource =
     InteractionSourceSchema.safeParse(rawSource).data ?? "api";
+  const inheritedContextUntrusted =
+    utils.headers.metaHeader.getHeaderValue(
+      headersForExtraction,
+      UNTRUSTED_CONTEXT_HEADER,
+    ) === "true";
 
   // Extract W3C trace context (traceparent/tracestate) from incoming request headers.
   // When the chat route calls the LLM proxy via localhost, the traced fetch injects these
@@ -411,50 +420,61 @@ export async function handleLLMProxy<
       {
         resolvedAgentId,
         considerContextUntrusted: resolvedAgent.considerContextUntrusted,
+        inheritedContextUntrusted,
         globalToolPolicy,
       },
       `[${providerName}Proxy] Evaluating trusted data policies`,
     );
 
     const commonMessages = requestAdapter.getMessages();
-    const { toolResultUpdates, contextIsTrusted, dualLlmAnalyses } =
-      await utils.trustedData.evaluateIfContextIsTrusted(
-        commonMessages,
-        resolvedAgentId,
-        resolvedAgent.organizationId,
-        userId,
-        resolvedAgent.considerContextUntrusted,
-        globalToolPolicy,
-        { teamIds, externalAgentId },
-        // Streaming callbacks for dual LLM progress
-        requestAdapter.isStreaming()
-          ? () => {
-              ensureStreamHeaders();
-              reply.raw.write(
-                streamAdapter.formatTextDeltaSSE(
-                  "Analyzing with Dual LLM:\n\n",
-                ),
-              );
-            }
-          : undefined,
-        requestAdapter.isStreaming()
-          ? (progress: {
-              question: string;
-              options: string[];
-              answer: string;
-            }) => {
-              const optionsText = progress.options
-                .map((opt: string, idx: number) => `  ${idx}: ${opt}`)
-                .join("\n");
-              ensureStreamHeaders();
-              reply.raw.write(
-                streamAdapter.formatTextDeltaSSE(
-                  `Question: ${progress.question}\nOptions:\n${optionsText}\nAnswer: ${progress.answer}\n\n`,
-                ),
-              );
-            }
-          : undefined,
-      );
+    const effectiveConsiderContextUntrusted =
+      resolvedAgent.considerContextUntrusted || inheritedContextUntrusted;
+    const initialUntrustedReason = resolvedAgent.considerContextUntrusted
+      ? UNSAFE_CONTEXT_BOUNDARY_REASON.agentConfiguredUntrusted
+      : inheritedContextUntrusted
+        ? UNSAFE_CONTEXT_BOUNDARY_REASON.inheritedFromParent
+        : undefined;
+    const {
+      toolResultUpdates,
+      contextIsTrusted,
+      dualLlmAnalyses,
+      unsafeContextBoundary,
+    } = await utils.trustedData.evaluateIfContextIsTrusted(
+      commonMessages,
+      resolvedAgentId,
+      resolvedAgent.organizationId,
+      userId,
+      effectiveConsiderContextUntrusted,
+      globalToolPolicy,
+      { teamIds, externalAgentId },
+      // Streaming callbacks for dual LLM progress
+      requestAdapter.isStreaming()
+        ? () => {
+            ensureStreamHeaders();
+            reply.raw.write(
+              streamAdapter.formatTextDeltaSSE("Analyzing with Dual LLM:\n\n"),
+            );
+          }
+        : undefined,
+      requestAdapter.isStreaming()
+        ? (progress: {
+            question: string;
+            options: string[];
+            answer: string;
+          }) => {
+            const optionsText = progress.options
+              .map((opt: string, idx: number) => `  ${idx}: ${opt}`)
+              .join("\n");
+            ensureStreamHeaders();
+            reply.raw.write(
+              streamAdapter.formatTextDeltaSSE(
+                `Question: ${progress.question}\nOptions:\n${optionsText}\nAnswer: ${progress.answer}\n\n`,
+              ),
+            );
+          }
+        : undefined,
+      initialUntrustedReason,
+    );
 
     // Apply tool result updates
     requestAdapter.applyToolResultUpdates(toolResultUpdates);
@@ -564,6 +584,7 @@ export async function handleLLMProxy<
       toonStats,
       toonSkipReason,
       dualLlmAnalyses,
+      unsafeContextBoundary,
       externalAgentId,
       userId,
       resolvedUser,
@@ -659,6 +680,7 @@ async function handleStreaming<
     toonStats,
     toonSkipReason,
     dualLlmAnalyses,
+    unsafeContextBoundary,
     externalAgentId,
     userId,
     resolvedUser,
@@ -992,6 +1014,7 @@ async function handleStreaming<
             toonStats,
             toonSkipReason,
             dualLlmAnalyses,
+            unsafeContextBoundary,
           }),
         );
       } catch (interactionError) {
@@ -1032,6 +1055,7 @@ async function handleNonStreaming<
     toonStats,
     toonSkipReason,
     dualLlmAnalyses,
+    unsafeContextBoundary,
     externalAgentId,
     userId,
     resolvedUser,
@@ -1194,6 +1218,7 @@ async function handleNonStreaming<
           toonStats,
           toonSkipReason,
           dualLlmAnalyses,
+          unsafeContextBoundary,
         }),
       );
 
@@ -1256,6 +1281,7 @@ async function handleNonStreaming<
         toonStats,
         toonSkipReason,
         dualLlmAnalyses,
+        unsafeContextBoundary,
       }),
     );
   } catch (interactionError) {

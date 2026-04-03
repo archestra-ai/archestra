@@ -1,16 +1,20 @@
+import { TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON } from "@shared";
 import { describe, expect, it } from "vitest";
 import {
   extractCatalogIdFromInstallUrl,
   extractIdsFromReauthUrl,
+  hasToolPartsWithAuthErrors,
+  isAuthInstructionText,
   parseAuthRequired,
   parseExpiredAuth,
   parsePolicyDenied,
+  resolveAssistantTextAuthState,
+  resolveToolAuthState,
 } from "./mcp-error-ui";
 
 describe("parsePolicyDenied", () => {
   it("parses a plain-text policy denial with tool name, args, and reason", () => {
-    const text =
-      '\nI tried to invoke the upstash__context7__get-library-docs tool with the following arguments: {"context7CompatibleLibraryID":"/websites/p5js_reference"}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: context contains sensitive data';
+    const text = `\nI tried to invoke the upstash__context7__get-library-docs tool with the following arguments: {"context7CompatibleLibraryID":"/websites/p5js_reference"}.\n\nHowever, I was denied by a tool invocation policy:\n\n${TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON}`;
     const result = parsePolicyDenied(text);
     expect(result).not.toBeNull();
     expect(result?.type).toBe("tool-upstash__context7__get-library-docs");
@@ -20,6 +24,7 @@ describe("parsePolicyDenied", () => {
     });
     const errorInfo = JSON.parse(result?.errorText ?? "");
     expect(errorInfo.reason).toContain("context contains sensitive data");
+    expect(result?.unsafeContextActiveAtRequestStart).toBe(true);
   });
 
   it("parses a JSON-wrapped policy denial (originalError.message)", () => {
@@ -33,6 +38,28 @@ describe("parsePolicyDenied", () => {
     expect(result).not.toBeNull();
     expect(result?.type).toBe("tool-my-tool");
     expect(result?.input).toEqual({ key: "value" });
+    expect(result?.unsafeContextActiveAtRequestStart).toBe(false);
+  });
+
+  it("uses structured reasonType for policy denials when available", () => {
+    const text = JSON.stringify({
+      _meta: {
+        archestraError: {
+          type: "policy_denied",
+          message: "blocked",
+          toolName: "some-tool",
+          input: {},
+          reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
+          reasonType: "sensitive_context",
+        },
+      },
+    });
+
+    const result = parsePolicyDenied(text);
+
+    expect(result).not.toBeNull();
+    expect(result?.type).toBe("tool-some-tool");
+    expect(result?.unsafeContextActiveAtRequestStart).toBe(true);
   });
 
   it("parses a JSON-wrapped policy denial (message)", () => {
@@ -234,6 +261,106 @@ describe("extractCatalogIdFromInstallUrl", () => {
         "http://localhost:3000/mcp/registry?search=jira&install=cat_xyz",
       ),
     ).toBe("cat_xyz");
+  });
+});
+
+describe("resolveToolAuthState", () => {
+  it("prefers structured auth-required MCP errors", () => {
+    expect(
+      resolveToolAuthState({
+        errorText: "some generic fallback",
+        rawOutput: {
+          archestraError: {
+            type: "auth_required",
+            message: "Authentication required",
+            catalogName: "github-remote",
+            installUrl: "http://localhost:3000/mcp/registry?install=cat_abc",
+            catalogId: "cat_abc",
+          },
+        },
+      }),
+    ).toEqual({
+      kind: "auth-required",
+      catalogName: "github-remote",
+      installUrl: "http://localhost:3000/mcp/registry?install=cat_abc",
+      catalogId: "cat_abc",
+    });
+  });
+
+  it("parses policy-denied tool errors from errorText", () => {
+    const authState = resolveToolAuthState({
+      errorText:
+        "\nI tried to invoke the my-tool tool with the following arguments: {}.\n\nHowever, I was denied by a tool invocation policy:\n\nBlocked",
+    });
+
+    expect(authState?.kind).toBe("policy-denied");
+  });
+
+  it("parses auth-required fallbacks from raw string output", () => {
+    expect(
+      resolveToolAuthState({
+        rawOutput:
+          'Authentication required for "jira-remote".\n\nNo credentials were found for your account (user: usr_123).\nTo set up your credentials, visit this URL: http://localhost:3000/mcp/registry?install=cat_123',
+      }),
+    ).toEqual({
+      kind: "auth-required",
+      catalogName: "jira-remote",
+      installUrl: "http://localhost:3000/mcp/registry?install=cat_123",
+      catalogId: "cat_123",
+    });
+  });
+});
+
+describe("resolveAssistantTextAuthState", () => {
+  it("returns auth state for assistant auth instructions", () => {
+    expect(
+      resolveAssistantTextAuthState(
+        'Authentication required for "slack-remote".\n\nTo set up your credentials, visit this URL: http://localhost:3000/mcp/registry?install=cat_slack',
+      ),
+    ).toEqual({
+      kind: "auth-required",
+      catalogName: "slack-remote",
+      installUrl: "http://localhost:3000/mcp/registry?install=cat_slack",
+      catalogId: "cat_slack",
+    });
+  });
+});
+
+describe("hasToolPartsWithAuthErrors", () => {
+  it("detects auth-related tool errors from message parts", () => {
+    expect(
+      hasToolPartsWithAuthErrors([
+        {
+          errorText:
+            'Expired or invalid authentication for "github-remote".\n\nTo re-authenticate, visit this URL: http://localhost:3000/mcp/registry?reauth=cat_abc&server=srv_xyz',
+        },
+      ]),
+    ).toBe(true);
+  });
+
+  it("ignores non-auth tool errors", () => {
+    expect(
+      hasToolPartsWithAuthErrors([
+        {
+          errorText:
+            "\nI tried to invoke the my-tool tool with the following arguments: {}.\n\nHowever, I was denied by a tool invocation policy:\n\nBlocked",
+        },
+      ]),
+    ).toBe(false);
+  });
+});
+
+describe("isAuthInstructionText", () => {
+  it("returns true for auth install instructions", () => {
+    expect(
+      isAuthInstructionText(
+        'Authentication required for "github-remote". Visit this URL: http://localhost:3000/mcp/registry?install=cat_abc',
+      ),
+    ).toBe(true);
+  });
+
+  it("returns false for unrelated text", () => {
+    expect(isAuthInstructionText("hello world")).toBe(false);
   });
 });
 

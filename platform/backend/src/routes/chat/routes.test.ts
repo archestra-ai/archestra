@@ -111,6 +111,91 @@ describe("prepareMessagesForProvider", () => {
   });
 });
 
+describe("getMessagesNotYetPersisted", () => {
+  it("keeps new messages even when the incoming thread is shorter than the persisted thread", () => {
+    const newMessages = __test.getMessagesNotYetPersisted({
+      existingMessages: [
+        {
+          id: "db-user-1",
+          content: {
+            id: "user-1",
+            role: "user",
+            parts: [{ type: "text", text: "draw something" }],
+          },
+        },
+        {
+          id: "db-assistant-1",
+          content: {
+            id: "assistant-1",
+            role: "assistant",
+            parts: [
+              {
+                type: "tool-archestra__swap_agent",
+                toolCallId: "swap-1",
+                state: "output-available",
+                output: { success: true },
+              },
+            ],
+          },
+        },
+      ],
+      uiMessages: [
+        {
+          id: "swap-poke-1",
+          role: "user",
+          parts: [
+            {
+              type: "text",
+              text: "(Switched to Drawing agent. Please continue the conversation.)",
+            },
+          ],
+        },
+        {
+          id: "assistant-2",
+          role: "assistant",
+          parts: [{ type: "text", text: "Hello! I am the child agent." }],
+        },
+      ],
+    });
+
+    expect(newMessages).toHaveLength(2);
+    expect(newMessages.map((message) => message.id)).toEqual([
+      "swap-poke-1",
+      "assistant-2",
+    ]);
+  });
+
+  it("does not re-persist messages whose temporary content ids were already saved with db uuids", () => {
+    const newMessages = __test.getMessagesNotYetPersisted({
+      existingMessages: [
+        {
+          id: "11111111-1111-1111-1111-111111111111",
+          content: {
+            id: "temp-user-1",
+            role: "user",
+            parts: [{ type: "text", text: "hello" }],
+          },
+        },
+      ],
+      uiMessages: [
+        {
+          id: "temp-user-1",
+          role: "user",
+          parts: [{ type: "text", text: "hello" }],
+        },
+        {
+          id: "assistant-1",
+          role: "assistant",
+          parts: [{ type: "text", text: "hi" }],
+        },
+      ],
+    });
+
+    expect(newMessages).toHaveLength(1);
+    expect(newMessages[0]?.id).toBe("assistant-1");
+  });
+});
+
 describe("extractFirstMessages", () => {
   it("extracts first user message from parts", () => {
     const messages = [

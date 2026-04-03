@@ -106,7 +106,6 @@ export function useInteractions({
       !endDate
         ? initialData
         : undefined,
-    // refetchInterval: 3_000, // later we might want to switch to websockets or sse, polling for now
   });
 }
 

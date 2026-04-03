@@ -18,6 +18,7 @@ export * from "./enterprise-managed-credentials";
 export * from "./identity-provider";
 export * from "./incoming-email";
 export * from "./interaction";
+export * from "./interaction-guardrails";
 export * from "./invitation";
 export * from "./kb-chunk";
 export * from "./kb-document";

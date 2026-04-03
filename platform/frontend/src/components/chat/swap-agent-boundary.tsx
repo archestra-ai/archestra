@@ -2,6 +2,7 @@
 
 import {
   type ArchestraToolShortName,
+  extractMcpToolError,
   parseFullToolName,
   TOOL_SWAP_AGENT_SHORT_NAME,
   TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME,
@@ -99,7 +100,7 @@ export function getRenderedToolName(part: ToolPart): string | null {
   return null;
 }
 
-function extractSwapTargetAgentName(part: ToolPart): string | null {
+export function extractSwapTargetAgentName(part: ToolPart): string | null {
   const input =
     typeof part.input === "object" && part.input !== null
       ? (part.input as Record<string, unknown>)
@@ -121,4 +122,17 @@ function extractSwapTargetAgentName(part: ToolPart): string | null {
   }
 
   return null;
+}
+
+export function hasSwapToolErrorInPart(part: ToolPart): boolean {
+  const errorText =
+    "errorText" in part && typeof part.errorText === "string"
+      ? part.errorText
+      : null;
+
+  if (errorText) {
+    return true;
+  }
+
+  return extractMcpToolError(part.output) !== null;
 }

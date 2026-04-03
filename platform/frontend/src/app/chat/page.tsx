@@ -93,15 +93,11 @@ import {
   useUpdateConversationEnabledTools,
 } from "@/lib/chat/chat.query";
 import { useChatAgentState } from "@/lib/chat/chat-agent-state.hook";
-import { chooseDisplayedMessages } from "@/lib/chat/chat-session-utils";
 import {
   useConversationShare,
   useForkSharedConversation,
 } from "@/lib/chat/chat-share.query";
-import {
-  conversationStorageKeys,
-  getConversationDisplayTitle,
-} from "@/lib/chat/chat-utils";
+import { conversationStorageKeys, getConversationDisplayTitle } from "@/lib/chat/chat-utils";
 import { useChatSession } from "@/lib/chat/global-chat.context";
 import {
   applyPendingActions,
@@ -156,16 +152,14 @@ export function ChatPageContent({
     return () => document.body.classList.remove("hide-version");
   }, []);
   const [isArtifactOpen, setIsArtifactOpen] = useState(false);
-  const loadedConversationRef = useRef<string | undefined>(undefined);
   const pendingPromptRef = useRef<string | undefined>(undefined);
   const pendingFilesRef = useRef<
     Array<{ url: string; mediaType: string; filename?: string }>
   >([]);
-  const lastVisibleMessagesRef = useRef<UIMessage[]>([]);
-  const lastVisibleMessagesConversationRef = useRef<string | undefined>(
-    routeConversationId,
-  );
   const userMessageJustEdited = useRef(false);
+  const pendingInitialSendConversationRef = useRef<string | undefined>(
+    undefined,
+  );
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const autoSendTriggeredRef = useRef(false);
   // Store pending URL for browser navigation after conversation is created
@@ -531,9 +525,19 @@ export function ChatPageContent({
     !!conversationId &&
     !!conversation?.share &&
     conversation.userId !== session?.user.id;
-  const chatSession = useChatSession(
-    isReadOnlySharedConversation ? undefined : conversationId,
+  const persistedConversationMessages = useMemo(
+    () => (conversation?.messages ?? []) as UIMessage[],
+    [conversation?.messages],
   );
+  const shouldEnableChatSession =
+    !!conversationId &&
+    !isReadOnlySharedConversation &&
+    (!routeConversationId || !!conversation);
+  const chatSession = useChatSession({
+    conversationId: shouldEnableChatSession ? conversationId : undefined,
+    initialMessages: persistedConversationMessages,
+    enabled: shouldEnableChatSession,
+  });
   const sharedConversationMessages = useMemo(
     () => (conversation?.messages ?? []) as PartialUIMessage[],
     [conversation?.messages],
@@ -796,37 +800,10 @@ export function ChatPageContent({
     previousArtifactRef.current = conversation?.artifact;
   }, [conversation?.artifact, isArtifactOpen, conversationId]);
 
-  useEffect(() => {
-    if (lastVisibleMessagesConversationRef.current !== conversationId) {
-      lastVisibleMessagesConversationRef.current = conversationId;
-      lastVisibleMessagesRef.current = [];
-    }
-  }, [conversationId]);
-
-  const persistedConversationMessages = useMemo(
-    () => (conversation?.messages ?? []) as UIMessage[],
-    [conversation?.messages],
-  );
-
-  // Keep the last visible thread around so brief session dropouts do not blank
-  // the chat while the backend/persistence layer catches up.
-  useEffect(() => {
-    if (chatSession?.messages && chatSession.messages.length > 0) {
-      lastVisibleMessagesRef.current = chatSession.messages;
-      return;
-    }
-
-    if (persistedConversationMessages.length > 0) {
-      lastVisibleMessagesRef.current = persistedConversationMessages;
-    }
-  }, [chatSession?.messages, persistedConversationMessages]);
-
-  // Extract chat session properties (or use persisted / last visible state if session dips)
-  const messages = chooseDisplayedMessages({
-    liveMessages: chatSession?.messages,
-    persistedMessages: persistedConversationMessages,
-    lastVisibleMessages: lastVisibleMessagesRef.current,
-  });
+  // While a conversation tab is open, useChat owns the thread.
+  // We only fall back to persisted messages before the session initializes or
+  // for read-only shared conversations that do not create a live chat session.
+  const messages = chatSession?.messages ?? persistedConversationMessages;
   const sendMessage = chatSession?.sendMessage;
   const status = chatSession?.status ?? "ready";
   const setMessages = chatSession?.setMessages;
@@ -956,74 +933,63 @@ export function ChatPageContent({
     openDialog,
   ]);
 
-  // Sync messages when conversation loads or changes
+  // Send a deferred initial prompt once the newly-created conversation's chat
+  // session is ready. Existing conversations seed useChat with persisted
+  // messages, so we do not rehydrate them via setMessages here.
   useEffect(() => {
     if (!setMessages || !sendMessage) {
       return;
-    }
-
-    // When switching to a different conversation, reset the loaded ref
-    if (loadedConversationRef.current !== conversationId) {
-      loadedConversationRef.current = undefined;
-    }
-
-    // Sync messages from backend only on the initial conversation load.
-    // Once a live chat session exists, the AI SDK session state is authoritative.
-    // Overwriting from the DB after that can race with persistence and temporarily
-    // replace streamed assistant content with stale user-only messages.
-    const shouldSync =
-      conversation?.messages &&
-      conversation.id === conversationId &&
-      status !== "submitted" &&
-      status !== "streaming" &&
-      !userMessageJustEdited.current &&
-      loadedConversationRef.current !== conversationId;
-
-    if (shouldSync) {
-      setMessages(conversation.messages as UIMessage[]);
-      loadedConversationRef.current = conversationId;
-
-      // If there's a pending prompt/files and the conversation is empty, send it
-      if (
-        (pendingPromptRef.current || pendingFilesRef.current.length > 0) &&
-        conversation.messages.length === 0
-      ) {
-        const promptToSend = pendingPromptRef.current;
-        const filesToSend = pendingFilesRef.current;
-        pendingPromptRef.current = undefined;
-        pendingFilesRef.current = [];
-
-        // Build message parts
-        const parts: Array<
-          | { type: "text"; text: string }
-          | { type: "file"; url: string; mediaType: string; filename?: string }
-        > = [];
-
-        if (promptToSend) {
-          parts.push({ type: "text", text: promptToSend });
-        }
-
-        for (const file of filesToSend) {
-          parts.push({
-            type: "file",
-            url: file.url,
-            mediaType: file.mediaType,
-            filename: file.filename,
-          });
-        }
-
-        sendMessage({
-          role: "user",
-          parts,
-        });
-      }
     }
 
     // Clear the edit flag when status changes to ready (streaming finished)
     if (status === "ready" && userMessageJustEdited.current) {
       userMessageJustEdited.current = false;
     }
-  }, [conversationId, conversation, setMessages, sendMessage, status]);
+
+    const hasPendingInitialMessage =
+      !!pendingPromptRef.current || pendingFilesRef.current.length > 0;
+    const shouldSendPendingInitialMessage =
+      conversationId &&
+      conversation?.id === conversationId &&
+      conversation.messages.length === 0 &&
+      messages.length === 0 &&
+      status === "ready" &&
+      hasPendingInitialMessage &&
+      pendingInitialSendConversationRef.current !== conversationId;
+
+    if (!shouldSendPendingInitialMessage) {
+      return;
+    }
+
+    pendingInitialSendConversationRef.current = conversationId;
+    const promptToSend = pendingPromptRef.current;
+    const filesToSend = pendingFilesRef.current;
+    pendingPromptRef.current = undefined;
+    pendingFilesRef.current = [];
+
+    const parts: Array<
+      | { type: "text"; text: string }
+      | { type: "file"; url: string; mediaType: string; filename?: string }
+    > = [];
+
+    if (promptToSend) {
+      parts.push({ type: "text", text: promptToSend });
+    }
+
+    for (const file of filesToSend) {
+      parts.push({
+        type: "file",
+        url: file.url,
+        mediaType: file.mediaType,
+        filename: file.filename,
+      });
+    }
+
+    sendMessage({
+      role: "user",
+      parts,
+    });
+  }, [conversation, conversationId, messages.length, sendMessage, setMessages, status]);
 
   // Poll for the assistant response when the page was reloaded mid-stream.
   // After reload the DB may only contain the user message (persisted early by
@@ -1053,63 +1019,6 @@ export function ChatPageContent({
     messages.length,
     status,
     queryClient,
-  ]);
-
-  // Merge database UUIDs from backend into local message state
-  // This runs after streaming completes and backend query has fetched
-  useEffect(() => {
-    if (
-      !setMessages ||
-      !conversation?.messages ||
-      conversation.id !== conversationId ||
-      status === "streaming" ||
-      status === "submitted"
-    ) {
-      return;
-    }
-
-    // Only merge IDs if backend has same or more messages than local state
-    if (conversation.messages.length < messages.length) {
-      return;
-    }
-
-    // Check if any message has a non-UUID ID that needs updating
-    const needsIdUpdate = messages.some((localMsg, idx) => {
-      const backendMsg = conversation.messages[idx] as UIMessage | undefined;
-      return (
-        backendMsg &&
-        backendMsg.id !== localMsg.id &&
-        // Check if backend ID looks like a UUID (has dashes)
-        backendMsg.id.includes("-")
-      );
-    });
-
-    if (!needsIdUpdate) {
-      return;
-    }
-
-    // Merge IDs from backend into local messages
-    const mergedMessages = messages.map((localMsg, idx) => {
-      const backendMsg = conversation.messages[idx] as UIMessage | undefined;
-      if (
-        backendMsg &&
-        backendMsg.id !== localMsg.id &&
-        backendMsg.id.includes("-")
-      ) {
-        // Update only the ID, keep everything else from local state
-        return { ...localMsg, id: backendMsg.id };
-      }
-      return localMsg;
-    });
-
-    setMessages(mergedMessages as UIMessage[]);
-  }, [
-    conversationId,
-    conversation?.messages,
-    conversation?.id,
-    messages,
-    setMessages,
-    status,
   ]);
 
   // Auto-focus textarea when status becomes ready (message sent or stream finished)

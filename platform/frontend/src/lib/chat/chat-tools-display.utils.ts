@@ -77,6 +77,21 @@ export function getToolErrorText({
     : (part.errorText ?? outputError);
 }
 
+export function getToolNameFromPart(part: {
+  type?: string;
+  toolName?: string;
+}): string | undefined {
+  if (typeof part.toolName === "string") {
+    return part.toolName;
+  }
+
+  if (typeof part.type === "string" && part.type.startsWith("tool-")) {
+    return part.type.replace("tool-", "");
+  }
+
+  return undefined;
+}
+
 export function getToolHeaderState({
   state,
   toolResultPart,

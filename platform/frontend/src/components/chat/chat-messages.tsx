@@ -55,6 +55,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  getToolHeaderState,
+  getToolNameFromPart,
+} from "@/lib/chat/chat-tools-display.utils";
 import { useProfileToolsWithIds } from "@/lib/chat/chat.query";
 import { useUpdateChatMessage } from "@/lib/chat/chat-message.query";
 import { useGlobalChat } from "@/lib/chat/global-chat.context";
@@ -83,8 +87,7 @@ import {
 import {
   getCompactToolState,
   getToolErrorText,
-  getToolHeaderState,
-} from "./chat-tools-display.utils";
+} from "@/lib/chat/chat-tools-display.utils";
 import { CompactToolGroup, type ToolIconMap } from "./compact-tool-call";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
@@ -1991,20 +1994,6 @@ function toolPartMatchesUnsafeContextBoundary(
 
   const partToolName = getToolNameFromPart(part);
   return partToolName === boundary.toolName;
-}
-
-function getToolNameFromPart(
-  part: DynamicToolUIPart | ToolUIPart,
-): string | undefined {
-  if ("toolName" in part && typeof part.toolName === "string") {
-    return part.toolName;
-  }
-
-  if (typeof part.type === "string" && part.type.startsWith("tool-")) {
-    return part.type.replace("tool-", "");
-  }
-
-  return undefined;
 }
 
 function inferUnsafeTextBoundary(params: {

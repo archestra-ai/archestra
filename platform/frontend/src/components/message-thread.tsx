@@ -60,6 +60,7 @@ import {
 } from "@/components/chat/swap-agent-boundary";
 import Divider from "@/components/divider";
 import { Button } from "@/components/ui/button";
+import { getToolNameFromPart } from "@/lib/chat/chat-tools-display.utils";
 import { preserveNewlines } from "@/lib/chat/chat-utils";
 import { parsePolicyDenied } from "@/lib/chat/mcp-error-ui";
 import { cn } from "@/lib/utils";
@@ -987,20 +988,6 @@ function hasSwapToolErrorInMessageThread(
       typeof candidate.errorText === "string" &&
       candidate.errorText.length > 0,
   );
-}
-
-function getToolNameFromPart(
-  part: PartialUIMessage["parts"][number],
-): string | undefined {
-  if ("toolName" in part && typeof part.toolName === "string") {
-    return part.toolName;
-  }
-
-  if (typeof part.type === "string" && part.type.startsWith("tool-")) {
-    return part.type.replace("tool-", "");
-  }
-
-  return undefined;
 }
 
 function getPartKey(

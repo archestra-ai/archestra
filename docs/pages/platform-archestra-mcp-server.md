@@ -14,7 +14,7 @@ The Archestra MCP Server is a built-in MCP server that ships with the platform a
 
 Most tools require explicit assignment to Agents or MCP Gateways before they can be used. The following tools are pre-installed on all new agents by default: [`artifact_write`](#artifact_write), [`todo_write`](#todo_write).
 
-Additionally, [`query_knowledge_sources`](#query_knowledge_sources) is automatically assigned to Agents and MCP Gateways that have at least one [knowledge base](/platform-knowledge-bases) or [knowledge connector](/platform-knowledge-connectors) attached. To use it, the user must have `knowledgeBase:query`.
+Additionally, [`query_knowledge_sources`](#query_knowledge_sources) is automatically assigned to Agents and MCP Gateways that have at least one [knowledge base](/platform-knowledge-bases) or [knowledge connector](/platform-knowledge-connectors) attached. To use it, the user must have `knowledgeSource:query`.
 
 All Archestra tools are prefixed with `archestra__` and are always trusted — they bypass tool invocation and trusted data policies.
 
@@ -22,7 +22,7 @@ All Archestra tools are prefixed with `archestra__` and are always trusted — t
 
 Archestra tools are **trusted**, meaning they bypass [tool invocation policies](/platform-tool-invocation-policies) and [trusted data policies](/platform-trusted-data-policies) — the tool will always execute without policy evaluation.
 
-However, **RBAC (role-based access control) is still enforced**. Every tool is mapped to a required permission (resource + action). The `tools/list` endpoint dynamically filters tools so users only see tools they have permission to use. For example, a user without `knowledgeBase:create` permission will not see [`create_knowledge_base`](#create_knowledge_base) in their tool list and cannot execute it.
+However, **RBAC (role-based access control) is still enforced**. Every tool is mapped to a required permission (resource + action). The `tools/list` endpoint dynamically filters tools so users only see tools they have permission to use. For example, a user without `knowledgeSource:create` permission will not see [`create_knowledge_base`](#create_knowledge_base) in their tool list and cannot execute it.
 
 ## Tools Reference
 
@@ -1109,27 +1109,27 @@ Required RBAC permission: `mcpGateway:update`
 
 | Tool | Description | Required RBAC Permission |
 |------|-------------|--------------------------|
-| `query_knowledge_sources` | Query the organization's knowledge sources to retrieve relevant information. | `knowledgeBase:query` |
-| `create_knowledge_base` | Create a new knowledge base for organizing knowledge connectors. | `knowledgeBase:create` |
-| `get_knowledge_bases` | List all knowledge bases in the organization. | `knowledgeBase:read` |
-| `get_knowledge_base` | Get details of a specific knowledge base by ID. | `knowledgeBase:read` |
-| `update_knowledge_base` | Update an existing knowledge base. | `knowledgeBase:update` |
-| `delete_knowledge_base` | Delete a knowledge base by ID. | `knowledgeBase:delete` |
-| `create_knowledge_connector` | Create a new knowledge connector for ingesting data from external sources. | `knowledgeBase:create` |
-| `get_knowledge_connectors` | List all knowledge connectors in the organization. | `knowledgeBase:read` |
-| `get_knowledge_connector` | Get details of a specific knowledge connector by ID. | `knowledgeBase:read` |
-| `update_knowledge_connector` | Update an existing knowledge connector. | `knowledgeBase:update` |
-| `delete_knowledge_connector` | Delete a knowledge connector by ID. | `knowledgeBase:delete` |
-| `assign_knowledge_connector_to_knowledge_base` | Assign a knowledge connector to a knowledge base. | `knowledgeBase:update` |
-| `unassign_knowledge_connector_from_knowledge_base` | Remove a knowledge connector from a knowledge base. | `knowledgeBase:update` |
-| `assign_knowledge_base_to_agent` | Assign a knowledge base to an agent. | `knowledgeBase:update` |
-| `unassign_knowledge_base_from_agent` | Remove a knowledge base from an agent. | `knowledgeBase:update` |
-| `assign_knowledge_connector_to_agent` | Directly assign a knowledge connector to an agent (bypassing knowledge base). | `knowledgeBase:update` |
-| `unassign_knowledge_connector_from_agent` | Remove a directly-assigned knowledge connector from an agent. | `knowledgeBase:update` |
+| `query_knowledge_sources` | Query the organization's knowledge sources to retrieve relevant information. | `knowledgeSource:query` |
+| `create_knowledge_base` | Create a new knowledge base for organizing knowledge connectors. | `knowledgeSource:create` |
+| `get_knowledge_bases` | List all knowledge bases in the organization. | `knowledgeSource:read` |
+| `get_knowledge_base` | Get details of a specific knowledge base by ID. | `knowledgeSource:read` |
+| `update_knowledge_base` | Update an existing knowledge base. | `knowledgeSource:update` |
+| `delete_knowledge_base` | Delete a knowledge base by ID. | `knowledgeSource:delete` |
+| `create_knowledge_connector` | Create a new knowledge connector for ingesting data from external sources. | `knowledgeSource:create` |
+| `get_knowledge_connectors` | List all knowledge connectors in the organization. | `knowledgeSource:read` |
+| `get_knowledge_connector` | Get details of a specific knowledge connector by ID. | `knowledgeSource:read` |
+| `update_knowledge_connector` | Update an existing knowledge connector. | `knowledgeSource:update` |
+| `delete_knowledge_connector` | Delete a knowledge connector by ID. | `knowledgeSource:delete` |
+| `assign_knowledge_connector_to_knowledge_base` | Assign a knowledge connector to a knowledge base. | `knowledgeSource:update` |
+| `unassign_knowledge_connector_from_knowledge_base` | Remove a knowledge connector from a knowledge base. | `knowledgeSource:update` |
+| `assign_knowledge_base_to_agent` | Assign a knowledge base to an agent. | `knowledgeSource:update` |
+| `unassign_knowledge_base_from_agent` | Remove a knowledge base from an agent. | `knowledgeSource:update` |
+| `assign_knowledge_connector_to_agent` | Directly assign a knowledge connector to an agent (bypassing knowledge base). | `knowledgeSource:update` |
+| `unassign_knowledge_connector_from_agent` | Remove a directly-assigned knowledge connector from an agent. | `knowledgeSource:update` |
 
 #### query_knowledge_sources
 
-Required RBAC permission: `knowledgeBase:query`
+Required RBAC permission: `knowledgeSource:query`
 
 ##### Input
 
@@ -1146,7 +1146,7 @@ Required RBAC permission: `knowledgeBase:query`
 
 #### create_knowledge_base
 
-Required RBAC permission: `knowledgeBase:create`
+Required RBAC permission: `knowledgeSource:create`
 
 ##### Input
 
@@ -1168,7 +1168,7 @@ Required RBAC permission: `knowledgeBase:create`
 
 #### get_knowledge_bases
 
-Required RBAC permission: `knowledgeBase:read`
+Required RBAC permission: `knowledgeSource:read`
 
 This tool takes no arguments.
 
@@ -1185,7 +1185,7 @@ This tool takes no arguments.
 
 #### get_knowledge_base
 
-Required RBAC permission: `knowledgeBase:read`
+Required RBAC permission: `knowledgeSource:read`
 
 ##### Input
 
@@ -1206,7 +1206,7 @@ Required RBAC permission: `knowledgeBase:read`
 
 #### update_knowledge_base
 
-Required RBAC permission: `knowledgeBase:update`
+Required RBAC permission: `knowledgeSource:update`
 
 ##### Input
 
@@ -1229,7 +1229,7 @@ Required RBAC permission: `knowledgeBase:update`
 
 #### delete_knowledge_base
 
-Required RBAC permission: `knowledgeBase:delete`
+Required RBAC permission: `knowledgeSource:delete`
 
 ##### Input
 
@@ -1240,7 +1240,7 @@ Required RBAC permission: `knowledgeBase:delete`
 
 #### create_knowledge_connector
 
-Required RBAC permission: `knowledgeBase:create`
+Required RBAC permission: `knowledgeSource:create`
 
 ##### Input
 
@@ -1269,7 +1269,7 @@ Required RBAC permission: `knowledgeBase:create`
 
 #### get_knowledge_connectors
 
-Required RBAC permission: `knowledgeBase:read`
+Required RBAC permission: `knowledgeSource:read`
 
 This tool takes no arguments.
 
@@ -1289,7 +1289,7 @@ This tool takes no arguments.
 
 #### get_knowledge_connector
 
-Required RBAC permission: `knowledgeBase:read`
+Required RBAC permission: `knowledgeSource:read`
 
 ##### Input
 
@@ -1313,7 +1313,7 @@ Required RBAC permission: `knowledgeBase:read`
 
 #### update_knowledge_connector
 
-Required RBAC permission: `knowledgeBase:update`
+Required RBAC permission: `knowledgeSource:update`
 
 ##### Input
 
@@ -1343,7 +1343,7 @@ Required RBAC permission: `knowledgeBase:update`
 
 #### delete_knowledge_connector
 
-Required RBAC permission: `knowledgeBase:delete`
+Required RBAC permission: `knowledgeSource:delete`
 
 ##### Input
 
@@ -1354,7 +1354,7 @@ Required RBAC permission: `knowledgeBase:delete`
 
 #### assign_knowledge_connector_to_knowledge_base
 
-Required RBAC permission: `knowledgeBase:update`
+Required RBAC permission: `knowledgeSource:update`
 
 ##### Input
 
@@ -1366,7 +1366,7 @@ Required RBAC permission: `knowledgeBase:update`
 
 #### unassign_knowledge_connector_from_knowledge_base
 
-Required RBAC permission: `knowledgeBase:update`
+Required RBAC permission: `knowledgeSource:update`
 
 ##### Input
 
@@ -1378,7 +1378,7 @@ Required RBAC permission: `knowledgeBase:update`
 
 #### assign_knowledge_base_to_agent
 
-Required RBAC permission: `knowledgeBase:update`
+Required RBAC permission: `knowledgeSource:update`
 
 ##### Input
 
@@ -1390,7 +1390,7 @@ Required RBAC permission: `knowledgeBase:update`
 
 #### unassign_knowledge_base_from_agent
 
-Required RBAC permission: `knowledgeBase:update`
+Required RBAC permission: `knowledgeSource:update`
 
 ##### Input
 
@@ -1402,7 +1402,7 @@ Required RBAC permission: `knowledgeBase:update`
 
 #### assign_knowledge_connector_to_agent
 
-Required RBAC permission: `knowledgeBase:update`
+Required RBAC permission: `knowledgeSource:update`
 
 ##### Input
 
@@ -1414,7 +1414,7 @@ Required RBAC permission: `knowledgeBase:update`
 
 #### unassign_knowledge_connector_from_agent
 
-Required RBAC permission: `knowledgeBase:update`
+Required RBAC permission: `knowledgeSource:update`
 
 ##### Input
 

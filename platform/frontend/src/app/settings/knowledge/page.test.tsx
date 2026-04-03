@@ -488,6 +488,29 @@ describe("KnowledgeSettingsPage", () => {
         ),
       ).not.toBeInTheDocument();
     });
+
+    it("disables the embedding API key selector when embedding config is locked", () => {
+      mockOrganization = {
+        embeddingChatApiKeyId: "key-1",
+        embeddingModel: "text-embedding-3-small",
+        rerankerChatApiKeyId: null,
+        rerankerModel: null,
+      };
+      mockApiKeys = [
+        {
+          id: "key-1",
+          name: "OpenAI Key",
+          provider: "openai",
+          scope: "org",
+        },
+      ];
+
+      renderPage();
+
+      const triggers = screen.getAllByRole("combobox");
+      const embeddingKeyTrigger = triggers[0];
+      expect(embeddingKeyTrigger).toBeDisabled();
+    });
   });
 
   describe("embedding dimensions requirement", () => {

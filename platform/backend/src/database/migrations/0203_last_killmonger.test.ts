@@ -50,26 +50,26 @@ async function getRolePermission(
   return JSON.parse(role.permission);
 }
 
-describe("0203 migration: knowledgeBase RBAC normalization", () => {
-  test("renames knowledgeBases to knowledgeBase", async ({
+describe("0203 migration: knowledgeSource RBAC normalization", () => {
+  test("renames knowledgeBase to knowledgeSource", async ({
     makeOrganization,
   }) => {
     const org = await makeOrganization();
     await insertRole({
       organizationId: org.id,
-      roleId: "test-knowledge-bases-rename",
-      roleName: "test_knowledge_bases_rename",
+      roleId: "test-knowledge-base-rename",
+      roleName: "test_knowledge_base_rename",
       permission: {
-        knowledgeBases: ["read", "create", "update"],
+        knowledgeBase: ["read", "create", "update"],
         agent: ["read"],
       },
     });
 
     await runPermissionMigrationStatements();
 
-    const permission = await getRolePermission("test-knowledge-bases-rename");
-    expect(permission.knowledgeBases).toBeUndefined();
-    expect(permission.knowledgeBase.sort()).toEqual([
+    const permission = await getRolePermission("test-knowledge-base-rename");
+    expect(permission.knowledgeBase).toBeUndefined();
+    expect(permission.knowledgeSource.sort()).toEqual([
       "create",
       "read",
       "update",
@@ -77,29 +77,30 @@ describe("0203 migration: knowledgeBase RBAC normalization", () => {
     expect(permission.agent).toEqual(["read"]);
   });
 
-  test("renames knowledgeSources to knowledgeBase", async ({
+  test("preserves an existing knowledgeSource key", async ({
     makeOrganization,
   }) => {
     const org = await makeOrganization();
     await insertRole({
       organizationId: org.id,
-      roleId: "test-knowledge-sources-rename",
-      roleName: "test_knowledge_sources_rename",
+      roleId: "test-knowledge-source-preserve",
+      roleName: "test_knowledge_source_preserve",
       permission: {
-        knowledgeSources: ["read", "query"],
+        knowledgeSource: ["read", "query"],
         log: ["read"],
       },
     });
 
     await runPermissionMigrationStatements();
 
-    const permission = await getRolePermission("test-knowledge-sources-rename");
-    expect(permission.knowledgeSources).toBeUndefined();
-    expect(permission.knowledgeBase.sort()).toEqual(["query", "read"]);
+    const permission = await getRolePermission(
+      "test-knowledge-source-preserve",
+    );
+    expect(permission.knowledgeSource.sort()).toEqual(["query", "read"]);
     expect(permission.log).toEqual(["read"]);
   });
 
-  test("unions legacy knowledge keys into existing knowledgeBase", async ({
+  test("unions knowledgeBase into existing knowledgeSource", async ({
     makeOrganization,
   }) => {
     const org = await makeOrganization();
@@ -108,21 +109,17 @@ describe("0203 migration: knowledgeBase RBAC normalization", () => {
       roleId: "test-knowledge-union",
       roleName: "test_knowledge_union",
       permission: {
-        knowledgeBases: ["create", "delete"],
-        knowledgeSources: ["query", "read"],
-        knowledgeBase: ["admin", "update"],
+        knowledgeBase: ["query", "update"],
+        knowledgeSource: ["admin", "read"],
       },
     });
 
     await runPermissionMigrationStatements();
 
     const permission = await getRolePermission("test-knowledge-union");
-    expect(permission.knowledgeBases).toBeUndefined();
-    expect(permission.knowledgeSources).toBeUndefined();
-    expect(permission.knowledgeBase.sort()).toEqual([
+    expect(permission.knowledgeBase).toBeUndefined();
+    expect(permission.knowledgeSource.sort()).toEqual([
       "admin",
-      "create",
-      "delete",
       "query",
       "read",
       "update",

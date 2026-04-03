@@ -958,21 +958,21 @@ describe("knowledge base routes", () => {
 // This is the declarative layer that the auth middleware enforces at runtime.
 
 describe("knowledge base permission configuration", () => {
-  test("member permissions only allow read and query for knowledgeBase", async () => {
+  test("member permissions only allow read and query for knowledgeSource", async () => {
     const { memberPermissions } = await import("@shared/access-control");
-    expect(memberPermissions.knowledgeBase).toEqual(["read", "query"]);
-    expect(memberPermissions.knowledgeBase).not.toContain("create");
-    expect(memberPermissions.knowledgeBase).not.toContain("update");
-    expect(memberPermissions.knowledgeBase).not.toContain("delete");
+    expect(memberPermissions.knowledgeSource).toEqual(["read", "query"]);
+    expect(memberPermissions.knowledgeSource).not.toContain("create");
+    expect(memberPermissions.knowledgeSource).not.toContain("update");
+    expect(memberPermissions.knowledgeSource).not.toContain("delete");
   });
 
-  test("admin permissions include full CRUD for knowledgeBase", async () => {
+  test("admin permissions include full CRUD for knowledgeSource", async () => {
     const { adminPermissions } = await import("@shared/access-control");
-    expect(adminPermissions.knowledgeBase).toContain("read");
-    expect(adminPermissions.knowledgeBase).toContain("create");
-    expect(adminPermissions.knowledgeBase).toContain("update");
-    expect(adminPermissions.knowledgeBase).toContain("delete");
-    expect(adminPermissions.knowledgeBase).toContain("query");
+    expect(adminPermissions.knowledgeSource).toContain("read");
+    expect(adminPermissions.knowledgeSource).toContain("create");
+    expect(adminPermissions.knowledgeSource).toContain("update");
+    expect(adminPermissions.knowledgeSource).toContain("delete");
+    expect(adminPermissions.knowledgeSource).toContain("query");
   });
 
   test("knowledge base routes require correct permissions", async () => {
@@ -981,55 +981,55 @@ describe("knowledge base permission configuration", () => {
     );
     const { RouteId } = await import("@shared");
 
-    // Read routes require knowledgeBase:read
+    // Read routes require knowledgeSource:read
     expect(requiredEndpointPermissionsMap[RouteId.GetKnowledgeBases]).toEqual({
-      knowledgeBase: ["read"],
+      knowledgeSource: ["read"],
     });
     expect(requiredEndpointPermissionsMap[RouteId.GetKnowledgeBase]).toEqual({
-      knowledgeBase: ["read"],
+      knowledgeSource: ["read"],
     });
     expect(
       requiredEndpointPermissionsMap[RouteId.GetKnowledgeBaseHealth],
-    ).toEqual({ knowledgeBase: ["read"] });
+    ).toEqual({ knowledgeSource: ["read"] });
 
-    // Create route requires knowledgeBase:create
+    // Create route requires knowledgeSource:create
     expect(requiredEndpointPermissionsMap[RouteId.CreateKnowledgeBase]).toEqual(
-      { knowledgeBase: ["create"] },
+      { knowledgeSource: ["create"] },
     );
 
-    // Update route requires knowledgeBase:update
+    // Update route requires knowledgeSource:update
     expect(requiredEndpointPermissionsMap[RouteId.UpdateKnowledgeBase]).toEqual(
-      { knowledgeBase: ["update"] },
+      { knowledgeSource: ["update"] },
     );
 
-    // Delete route requires knowledgeBase:delete
+    // Delete route requires knowledgeSource:delete
     expect(requiredEndpointPermissionsMap[RouteId.DeleteKnowledgeBase]).toEqual(
-      { knowledgeBase: ["delete"] },
+      { knowledgeSource: ["delete"] },
     );
 
-    // Connector read routes require knowledgeBase:read
+    // Connector read routes require knowledgeSource:read
     expect(requiredEndpointPermissionsMap[RouteId.GetConnectors]).toEqual({
-      knowledgeBase: ["read"],
+      knowledgeSource: ["read"],
     });
     expect(requiredEndpointPermissionsMap[RouteId.GetConnector]).toEqual({
-      knowledgeBase: ["read"],
+      knowledgeSource: ["read"],
     });
     expect(requiredEndpointPermissionsMap[RouteId.GetConnectorRuns]).toEqual({
-      knowledgeBase: ["read"],
+      knowledgeSource: ["read"],
     });
     expect(requiredEndpointPermissionsMap[RouteId.GetConnectorRun]).toEqual({
-      knowledgeBase: ["read"],
+      knowledgeSource: ["read"],
     });
 
-    // Connector write routes require knowledgeBase:create/update/delete
+    // Connector write routes require knowledgeSource:create/update/delete
     expect(requiredEndpointPermissionsMap[RouteId.CreateConnector]).toEqual({
-      knowledgeBase: ["create"],
+      knowledgeSource: ["create"],
     });
     expect(requiredEndpointPermissionsMap[RouteId.UpdateConnector]).toEqual({
-      knowledgeBase: ["update"],
+      knowledgeSource: ["update"],
     });
     expect(requiredEndpointPermissionsMap[RouteId.DeleteConnector]).toEqual({
-      knowledgeBase: ["delete"],
+      knowledgeSource: ["delete"],
     });
   });
 
@@ -1039,7 +1039,7 @@ describe("knowledge base permission configuration", () => {
     );
     const { RouteId } = await import("@shared");
 
-    const memberKbActions = memberPermissions.knowledgeBase;
+    const memberKbActions = memberPermissions.knowledgeSource;
 
     // Verify member lacks permissions for write routes
     const writeRoutes = [
@@ -1053,8 +1053,8 @@ describe("knowledge base permission configuration", () => {
 
     for (const routeId of writeRoutes) {
       const required = requiredEndpointPermissionsMap[routeId];
-      expect(required?.knowledgeBase).toBeDefined();
-      const requiredActions = required?.knowledgeBase ?? [];
+      expect(required?.knowledgeSource).toBeDefined();
+      const requiredActions = required?.knowledgeSource ?? [];
       const hasAll = requiredActions.every((action: string) =>
         memberKbActions.includes(action as never),
       );
@@ -1074,8 +1074,8 @@ describe("knowledge base permission configuration", () => {
 
     for (const routeId of readRoutes) {
       const required = requiredEndpointPermissionsMap[routeId];
-      expect(required?.knowledgeBase).toBeDefined();
-      const requiredActions = required?.knowledgeBase ?? [];
+      expect(required?.knowledgeSource).toBeDefined();
+      const requiredActions = required?.knowledgeSource ?? [];
       const hasAll = requiredActions.every((action: string) =>
         memberKbActions.includes(action as never),
       );

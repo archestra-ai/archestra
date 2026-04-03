@@ -75,7 +75,7 @@ describe("knowledgeSourceAccessControlService", () => {
     ).toBe(false);
   });
 
-  test("knowledgeSources:admin bypasses source visibility restrictions", async ({
+  test("knowledgeSource:admin bypasses source visibility restrictions", async ({
     makeOrganization,
     makeUser,
     makeMember,

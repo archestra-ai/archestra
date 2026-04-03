@@ -3,34 +3,30 @@ ALTER TABLE "knowledge_base_connectors" ADD COLUMN "team_ids" jsonb DEFAULT '[]'
 ALTER TABLE "knowledge_bases" DROP COLUMN "visibility";--> statement-breakpoint
 ALTER TABLE "knowledge_bases" DROP COLUMN "team_ids";--> statement-breakpoint
 
--- Data migration: normalize legacy knowledge RBAC resource keys to "knowledgeBase".
--- This preserves any existing actions from "knowledgeBases", "knowledgeSources",
--- and "knowledgeBase" by unioning them into the current key.
+-- Data migration: rename the knowledge RBAC resource key from
+-- "knowledgeBase" to "knowledgeSource", preserving any existing
+-- "knowledgeSource" actions by unioning them into the final key.
 --
 -- Note: Uses text LIKE checks instead of jsonb ? operator for PGlite compatibility.
 UPDATE "organization_role"
 SET "permission" = (
   (
-    "permission"::jsonb - 'knowledgeBases' - 'knowledgeSources' - 'knowledgeBase'
+    "permission"::jsonb - 'knowledgeBase' - 'knowledgeSource'
   ) || jsonb_build_object(
-    'knowledgeBase',
+    'knowledgeSource',
     (
       SELECT jsonb_agg(DISTINCT val)
       FROM (
         SELECT jsonb_array_elements_text(
+          COALESCE("permission"::jsonb->'knowledgeSource', '[]'::jsonb)
+        ) AS val
+        UNION
+        SELECT jsonb_array_elements_text(
           COALESCE("permission"::jsonb->'knowledgeBase', '[]'::jsonb)
-        ) AS val
-        UNION
-        SELECT jsonb_array_elements_text(
-          COALESCE("permission"::jsonb->'knowledgeSources', '[]'::jsonb)
-        ) AS val
-        UNION
-        SELECT jsonb_array_elements_text(
-          COALESCE("permission"::jsonb->'knowledgeBases', '[]'::jsonb)
         ) AS val
       ) combined
     )
   )
 )::text
-WHERE "permission"::text LIKE '%"knowledgeBases":%'
-   OR "permission"::text LIKE '%"knowledgeSources":%';--> statement-breakpoint
+WHERE "permission"::text LIKE '%"knowledgeBase":%'
+   OR "permission"::text LIKE '%"knowledgeSource":%';--> statement-breakpoint

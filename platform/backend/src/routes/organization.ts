@@ -206,17 +206,27 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const currentOrg = await OrganizationModel.getById(organizationId);
 
       // Embedding model is locked once both key and model have been saved
+      const isEmbeddingConfigLocked =
+        !!currentOrg?.embeddingChatApiKeyId && !!currentOrg?.embeddingModel;
+
       if (body.embeddingModel) {
-        if (
-          currentOrg?.embeddingChatApiKeyId &&
-          currentOrg?.embeddingModel &&
-          body.embeddingModel !== currentOrg.embeddingModel
-        ) {
+        if (isEmbeddingConfigLocked && body.embeddingModel !== currentOrg.embeddingModel) {
           throw new ApiError(
             400,
             "Embedding model cannot be changed once configured. Changing models requires re-embedding all documents.",
           );
         }
+      }
+
+      if (
+        isEmbeddingConfigLocked &&
+        body.embeddingChatApiKeyId !== undefined &&
+        body.embeddingChatApiKeyId !== currentOrg.embeddingChatApiKeyId
+      ) {
+        throw new ApiError(
+          400,
+          "Embedding API key cannot be changed once configured. Drop the embedding configuration before selecting a different key.",
+        );
       }
 
       // Validate embedding API key exists

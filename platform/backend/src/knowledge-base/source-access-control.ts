@@ -61,7 +61,7 @@ class KnowledgeSourceAccessControlService {
       userHasPermission(
         params.userId,
         params.organizationId,
-        "knowledgeBase",
+        "knowledgeSource",
         "admin",
       ),
       TeamModel.getUserTeamIds(params.userId),

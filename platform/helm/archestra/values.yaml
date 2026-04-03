@@ -226,6 +226,14 @@ archestra:
       # Each entry: envVar (env var name), path (Vault API path after /v1/), key (key within secret data)
       secrets: []
 
+    # Image used by the wait-for-postgres init container.
+    # Override to pull from a private registry when Docker Hub is inaccessible.
+    busyboxImage: "busybox:1.36"
+
+    # Resource requests/limits applied to ALL init containers.
+    # Required on clusters that enforce ResourceQuota (e.g., OpenShift restricted-v2 SCC).
+    resources: {}
+
   # Resource requests and limits for the Archestra container
   # See: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
   resources:

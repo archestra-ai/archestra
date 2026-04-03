@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.2.3](https://github.com/archestra-ai/archestra/compare/platform-v1.2.2...platform-v1.2.3) (2026-04-03)
+
+
+### Features
+
+* add Notion knowledge connector ([#3555](https://github.com/archestra-ai/archestra/issues/3555)) ([808f5b7](https://github.com/archestra-ai/archestra/commit/808f5b7f7e7060a31c82b1929bc676b85f35619f))
+* propagate tool guardrails through subagent delegation and clarify scoped access control docs ([#3627](https://github.com/archestra-ai/archestra/issues/3627)) ([1ad51ca](https://github.com/archestra-ai/archestra/commit/1ad51cab702acb1fbaebb8d5ca2b76f323ef8fc3))
+
+
+### Bug Fixes
+
+* add MCP auth extensions and streamline self-hosted auth flows ([#3633](https://github.com/archestra-ai/archestra/issues/3633)) ([95c3db9](https://github.com/archestra-ai/archestra/commit/95c3db99b028f8f517979a3ccdb90a8168ab804a))
+* align KB observability metrics and rollout defaults ([#3635](https://github.com/archestra-ai/archestra/issues/3635)) ([de571d3](https://github.com/archestra-ai/archestra/commit/de571d30cd99ca52517a031012936e78dd78ef9f))
+* format playwright.config.ts to pass biome CI ([#3631](https://github.com/archestra-ai/archestra/issues/3631)) ([6f0df4d](https://github.com/archestra-ai/archestra/commit/6f0df4d5d4721bb56131104eff8d7dbb046f7169))
+* simplify chat state and swap-agent handling ([#3636](https://github.com/archestra-ai/archestra/issues/3636)) ([e2d70c1](https://github.com/archestra-ai/archestra/commit/e2d70c11a2af3e695f05f255fba0c22896d9564a))
+
+
+### Miscellaneous Chores
+
+* change playwright workers ([#3618](https://github.com/archestra-ai/archestra/issues/3618)) ([bd4836d](https://github.com/archestra-ai/archestra/commit/bd4836d8b9fb5260a3baf0476109bb52df6dc5ed))
+
 ## [1.2.2](https://github.com/archestra-ai/archestra/compare/platform-v1.2.1...platform-v1.2.2) (2026-04-01)
 
 

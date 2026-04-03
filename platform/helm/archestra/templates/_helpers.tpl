@@ -242,6 +242,10 @@ Handles Vault secret injection, pgvector extension setup, and PostgreSQL readine
 # Ensure the pgvector extension exists in the application database.
 - name: setup-postgres-extensions
   image: {{ printf "%s:%s" (.Values.postgresql.image.repository | default "bitnami/postgresql") (.Values.postgresql.image.tag | default "latest") }}
+  {{- with .Values.archestra.initContainers.resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   env:
     - name: PGPASSWORD
       valueFrom:
@@ -259,7 +263,11 @@ Handles Vault secret injection, pgvector extension setup, and PostgreSQL readine
       psql -h {{ include "archestra-platform.fullname" . }}-postgresql -U postgres -d {{ .Values.postgresql.auth.database }} -c "CREATE EXTENSION IF NOT EXISTS vector;"
 {{- end }}
 - name: wait-for-postgres
-  image: busybox:1.36
+  image: {{ .Values.archestra.initContainers.busyboxImage | default "busybox:1.36" }}
+  {{- with .Values.archestra.initContainers.resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   env:
     {{- include "archestra-platform.env" . | nindent 4 }}
   {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}

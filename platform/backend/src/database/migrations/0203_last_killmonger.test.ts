@@ -5,15 +5,19 @@ import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 
 const migrationSql = fs.readFileSync(
-  path.join(__dirname, "0191_uneven_pepper_potts.sql"),
+  path.join(__dirname, "0203_last_killmonger.sql"),
   "utf-8",
 );
 
-async function runMigration() {
+async function runPermissionMigrationStatements() {
   const statements = migrationSql
     .split(";")
     .map((statement) => statement.trim())
-    .filter((statement) => statement.includes("UPDATE"));
+    .filter(
+      (statement) =>
+        statement.includes('UPDATE "organization_role"') &&
+        statement.includes('"permission"'),
+    );
 
   for (const statement of statements) {
     await db.execute(sql.raw(`${statement};`));
@@ -46,8 +50,8 @@ async function getRolePermission(
   return JSON.parse(role.permission);
 }
 
-describe("0191 migration: knowledge source RBAC rename", () => {
-  test("renames knowledgeBases to knowledgeSources and grants admin when create exists", async ({
+describe("0203 migration: knowledgeBase RBAC normalization", () => {
+  test("renames knowledgeBases to knowledgeBase", async ({
     makeOrganization,
   }) => {
     const org = await makeOrganization();
@@ -61,12 +65,11 @@ describe("0191 migration: knowledge source RBAC rename", () => {
       },
     });
 
-    await runMigration();
+    await runPermissionMigrationStatements();
 
     const permission = await getRolePermission("test-knowledge-bases-rename");
     expect(permission.knowledgeBases).toBeUndefined();
-    expect(permission.knowledgeSources.sort()).toEqual([
-      "admin",
+    expect(permission.knowledgeBase.sort()).toEqual([
       "create",
       "read",
       "update",
@@ -74,55 +77,55 @@ describe("0191 migration: knowledge source RBAC rename", () => {
     expect(permission.agent).toEqual(["read"]);
   });
 
-  test("unions knowledgeBases into existing knowledgeSources before granting admin", async ({
+  test("renames knowledgeSources to knowledgeBase", async ({
     makeOrganization,
   }) => {
     const org = await makeOrganization();
     await insertRole({
       organizationId: org.id,
-      roleId: "test-knowledge-sources-union",
-      roleName: "test_knowledge_sources_union",
+      roleId: "test-knowledge-sources-rename",
+      roleName: "test_knowledge_sources_rename",
       permission: {
-        knowledgeBases: ["create", "delete"],
-        knowledgeSources: ["read", "update"],
+        knowledgeSources: ["read", "query"],
+        log: ["read"],
       },
     });
 
-    await runMigration();
+    await runPermissionMigrationStatements();
 
-    const permission = await getRolePermission("test-knowledge-sources-union");
+    const permission = await getRolePermission("test-knowledge-sources-rename");
+    expect(permission.knowledgeSources).toBeUndefined();
+    expect(permission.knowledgeBase.sort()).toEqual(["query", "read"]);
+    expect(permission.log).toEqual(["read"]);
+  });
+
+  test("unions legacy knowledge keys into existing knowledgeBase", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    await insertRole({
+      organizationId: org.id,
+      roleId: "test-knowledge-union",
+      roleName: "test_knowledge_union",
+      permission: {
+        knowledgeBases: ["create", "delete"],
+        knowledgeSources: ["query", "read"],
+        knowledgeBase: ["admin", "update"],
+      },
+    });
+
+    await runPermissionMigrationStatements();
+
+    const permission = await getRolePermission("test-knowledge-union");
     expect(permission.knowledgeBases).toBeUndefined();
-    expect(permission.knowledgeSources.sort()).toEqual([
+    expect(permission.knowledgeSources).toBeUndefined();
+    expect(permission.knowledgeBase.sort()).toEqual([
       "admin",
       "create",
       "delete",
+      "query",
       "read",
       "update",
-    ]);
-  });
-
-  test("grants admin to existing knowledgeSources roles with create", async ({
-    makeOrganization,
-  }) => {
-    const org = await makeOrganization();
-    await insertRole({
-      organizationId: org.id,
-      roleId: "test-knowledge-sources-admin-grant",
-      roleName: "test_knowledge_sources_admin_grant",
-      permission: {
-        knowledgeSources: ["create", "read"],
-      },
-    });
-
-    await runMigration();
-
-    const permission = await getRolePermission(
-      "test-knowledge-sources-admin-grant",
-    );
-    expect(permission.knowledgeSources.sort()).toEqual([
-      "admin",
-      "create",
-      "read",
     ]);
   });
 });

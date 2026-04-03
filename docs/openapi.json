@@ -126735,7 +126735,25 @@
                     },
                     "defaultLlmProvider": {
                       "nullable": true,
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "openai",
+                        "gemini",
+                        "anthropic",
+                        "bedrock",
+                        "cohere",
+                        "cerebras",
+                        "mistral",
+                        "perplexity",
+                        "groq",
+                        "xai",
+                        "openrouter",
+                        "vllm",
+                        "ollama",
+                        "zhipuai",
+                        "deepseek",
+                        "minimax"
+                      ]
                     },
                     "defaultLlmApiKeyId": {
                       "nullable": true,
@@ -127339,7 +127357,25 @@
                     },
                     "defaultLlmProvider": {
                       "nullable": true,
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "openai",
+                        "gemini",
+                        "anthropic",
+                        "bedrock",
+                        "cohere",
+                        "cerebras",
+                        "mistral",
+                        "perplexity",
+                        "groq",
+                        "xai",
+                        "openrouter",
+                        "vllm",
+                        "ollama",
+                        "zhipuai",
+                        "deepseek",
+                        "minimax"
+                      ]
                     },
                     "defaultLlmApiKeyId": {
                       "nullable": true,
@@ -128189,7 +128225,25 @@
                     },
                     "defaultLlmProvider": {
                       "nullable": true,
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "openai",
+                        "gemini",
+                        "anthropic",
+                        "bedrock",
+                        "cohere",
+                        "cerebras",
+                        "mistral",
+                        "perplexity",
+                        "groq",
+                        "xai",
+                        "openrouter",
+                        "vllm",
+                        "ollama",
+                        "zhipuai",
+                        "deepseek",
+                        "minimax"
+                      ]
                     },
                     "defaultLlmApiKeyId": {
                       "nullable": true,
@@ -128701,7 +128755,25 @@
                     },
                     "defaultLlmProvider": {
                       "nullable": true,
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "openai",
+                        "gemini",
+                        "anthropic",
+                        "bedrock",
+                        "cohere",
+                        "cerebras",
+                        "mistral",
+                        "perplexity",
+                        "groq",
+                        "xai",
+                        "openrouter",
+                        "vllm",
+                        "ollama",
+                        "zhipuai",
+                        "deepseek",
+                        "minimax"
+                      ]
                     },
                     "defaultLlmApiKeyId": {
                       "nullable": true,
@@ -129056,7 +129128,25 @@
                   },
                   "defaultLlmProvider": {
                     "nullable": true,
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                      "openai",
+                      "gemini",
+                      "anthropic",
+                      "bedrock",
+                      "cohere",
+                      "cerebras",
+                      "mistral",
+                      "perplexity",
+                      "groq",
+                      "xai",
+                      "openrouter",
+                      "vllm",
+                      "ollama",
+                      "zhipuai",
+                      "deepseek",
+                      "minimax"
+                    ]
                   },
                   "defaultLlmApiKeyId": {
                     "nullable": true,
@@ -129212,7 +129302,25 @@
                     },
                     "defaultLlmProvider": {
                       "nullable": true,
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "openai",
+                        "gemini",
+                        "anthropic",
+                        "bedrock",
+                        "cohere",
+                        "cerebras",
+                        "mistral",
+                        "perplexity",
+                        "groq",
+                        "xai",
+                        "openrouter",
+                        "vllm",
+                        "ollama",
+                        "zhipuai",
+                        "deepseek",
+                        "minimax"
+                      ]
                     },
                     "defaultLlmApiKeyId": {
                       "nullable": true,
@@ -129724,7 +129832,25 @@
                     },
                     "defaultLlmProvider": {
                       "nullable": true,
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "openai",
+                        "gemini",
+                        "anthropic",
+                        "bedrock",
+                        "cohere",
+                        "cerebras",
+                        "mistral",
+                        "perplexity",
+                        "groq",
+                        "xai",
+                        "openrouter",
+                        "vllm",
+                        "ollama",
+                        "zhipuai",
+                        "deepseek",
+                        "minimax"
+                      ]
                     },
                     "defaultLlmApiKeyId": {
                       "nullable": true,
@@ -130203,7 +130329,25 @@
                     },
                     "defaultLlmProvider": {
                       "nullable": true,
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "openai",
+                        "gemini",
+                        "anthropic",
+                        "bedrock",
+                        "cohere",
+                        "cerebras",
+                        "mistral",
+                        "perplexity",
+                        "groq",
+                        "xai",
+                        "openrouter",
+                        "vllm",
+                        "ollama",
+                        "zhipuai",
+                        "deepseek",
+                        "minimax"
+                      ]
                     },
                     "defaultLlmApiKeyId": {
                       "nullable": true,
@@ -130977,7 +131121,25 @@
                     },
                     "defaultLlmProvider": {
                       "nullable": true,
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "openai",
+                        "gemini",
+                        "anthropic",
+                        "bedrock",
+                        "cohere",
+                        "cerebras",
+                        "mistral",
+                        "perplexity",
+                        "groq",
+                        "xai",
+                        "openrouter",
+                        "vllm",
+                        "ollama",
+                        "zhipuai",
+                        "deepseek",
+                        "minimax"
+                      ]
                     },
                     "defaultLlmApiKeyId": {
                       "nullable": true,

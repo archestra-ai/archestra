@@ -1,7 +1,6 @@
 import {
   DEFAULT_MODELS,
   FAST_MODELS,
-  isSupportedProvider,
   type SupportedProvider,
   SupportedProvidersSchema,
 } from "@shared";
@@ -95,10 +94,6 @@ export async function resolveConfiguredAgentLlm(agent: {
       return null;
     }
 
-    const provider = isSupportedProvider(apiKeyRecord.provider)
-      ? apiKeyRecord.provider
-      : detectProviderFromModel(agent.llmModel ?? "");
-
     let apiKey: string | undefined;
     if (apiKeyRecord.secretId) {
       const secret = await getSecretValueForLlmProviderApiKey(
@@ -116,7 +111,7 @@ export async function resolveConfiguredAgentLlm(agent: {
     }
 
     return {
-      provider,
+      provider: apiKeyRecord.provider,
       apiKey,
       modelName,
       baseUrl: apiKeyRecord.baseUrl,
@@ -192,11 +187,7 @@ export async function resolveSmartDefaultLlmForChat(params: {
 
   // 2. Check organization-level default model
   const org = await OrganizationModel.getById(params.organizationId);
-  if (
-    org?.defaultLlmModel &&
-    org?.defaultLlmProvider &&
-    isSupportedProvider(org.defaultLlmProvider)
-  ) {
+  if (org?.defaultLlmModel && org?.defaultLlmProvider) {
     return { model: org.defaultLlmModel, provider: org.defaultLlmProvider };
   }
 
@@ -271,9 +262,7 @@ async function resolveAgentLlmSelection(agent: {
   if (agent.llmApiKeyId) {
     const apiKey = await LlmProviderApiKeyModel.findById(agent.llmApiKeyId);
     if (apiKey) {
-      const provider = isSupportedProvider(apiKey.provider)
-        ? apiKey.provider
-        : detectProviderFromModel(agent.llmModel ?? "");
+      const provider = apiKey.provider;
 
       if (agent.llmModel) {
         return {
@@ -319,13 +308,14 @@ async function resolveOrganizationLlmSelection(
     ? await LlmProviderApiKeyModel.findById(organization.defaultLlmApiKeyId)
     : null;
 
+  const selectedProvider =
+    apiKey?.provider ??
+    organization.defaultLlmProvider ??
+    detectProviderFromModel(organization.defaultLlmModel);
+
   return {
     chatApiKeyId: apiKey?.id ?? null,
     selectedModel: organization.defaultLlmModel,
-    selectedProvider:
-      organization.defaultLlmProvider &&
-      isSupportedProvider(organization.defaultLlmProvider)
-        ? organization.defaultLlmProvider
-        : detectProviderFromModel(organization.defaultLlmModel),
+    selectedProvider,
   };
 }

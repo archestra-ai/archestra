@@ -1,3 +1,4 @@
+import { SupportedProvidersSchema } from "@shared";
 import { vi } from "vitest";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config from "@/config";
@@ -9,6 +10,7 @@ import {
 import { beforeEach, describe, expect, test } from "@/test";
 import * as llmApiKeyResolution from "@/utils/llm-api-key-resolution";
 import {
+  resolveConfiguredAgentLlm,
   resolveConversationLlmSelectionForAgent,
   resolveFastModelName,
   resolveSmartDefaultLlm,
@@ -513,15 +515,10 @@ describe("resolveConversationLlmSelectionForAgent", () => {
     });
   });
 
-  test("falls back to the model provider when the agent key provider is unsupported", async () => {
-    vi.spyOn(LlmProviderApiKeyModel, "findById").mockResolvedValue({
-      id: "key-unknown",
-      provider: "not-a-provider",
-    } as never);
-
+  test("falls back to the model provider when the agent is model-only", async () => {
     const result = await resolveConversationLlmSelectionForAgent({
       agent: {
-        llmApiKeyId: "key-unknown",
+        llmApiKeyId: null,
         llmModel: "gpt-4o-mini",
       },
       organizationId: "org-1",
@@ -529,9 +526,31 @@ describe("resolveConversationLlmSelectionForAgent", () => {
     });
 
     expect(result).toEqual({
-      chatApiKeyId: "key-unknown",
+      chatApiKeyId: null,
       selectedModel: "gpt-4o-mini",
       selectedProvider: "openai",
+    });
+  });
+
+  test("uses the agent key provider directly when a key is configured", async () => {
+    vi.spyOn(LlmProviderApiKeyModel, "findById").mockResolvedValue({
+      id: "key-anthropic",
+      provider: "anthropic",
+    } as never);
+
+    const result = await resolveConversationLlmSelectionForAgent({
+      agent: {
+        llmApiKeyId: "key-anthropic",
+        llmModel: "gpt-4o-mini",
+      },
+      organizationId: "org-1",
+      userId: "user-1",
+    });
+
+    expect(result).toEqual({
+      chatApiKeyId: "key-anthropic",
+      selectedModel: "gpt-4o-mini",
+      selectedProvider: "anthropic",
     });
   });
 
@@ -563,37 +582,109 @@ describe("resolveConversationLlmSelectionForAgent", () => {
     });
   });
 
-  test("falls back to the smart chat default when neither agent nor org is configured", async ({
-    makeOrganization,
-  }) => {
-    const org = await makeOrganization();
-
-    vi.mocked(llmApiKeyResolution.resolveProviderApiKey).mockResolvedValue(
-      NO_KEY,
-    );
+  test("prefers the organization key provider over inferring from the model", async () => {
     vi.spyOn(OrganizationModel, "getById").mockResolvedValue({
-      id: org.id,
-      defaultLlmModel: null,
+      id: "org-1",
+      defaultLlmModel: "gpt-4o",
       defaultLlmProvider: null,
-      defaultLlmApiKeyId: null,
+      defaultLlmApiKeyId: "org-key",
     } as never);
-    vi.spyOn(LlmProviderApiKeyModelLinkModel, "getBestModel").mockResolvedValue(
-      null,
-    );
+    vi.spyOn(LlmProviderApiKeyModel, "findById").mockResolvedValue({
+      id: "org-key",
+      provider: "anthropic",
+    } as never);
 
     const result = await resolveConversationLlmSelectionForAgent({
       agent: {
         llmApiKeyId: null,
         llmModel: null,
       },
-      organizationId: org.id,
+      organizationId: "org-1",
       userId: "user-1",
     });
 
     expect(result).toEqual({
-      chatApiKeyId: null,
-      selectedModel: config.chat.defaultModel,
-      selectedProvider: config.chat.defaultProvider,
+      chatApiKeyId: "org-key",
+      selectedModel: "gpt-4o",
+      selectedProvider: "anthropic",
+    });
+  });
+
+  test("falls back to the smart chat default when neither agent nor org is configured", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const originalApiKeys = Object.fromEntries(
+      SupportedProvidersSchema.options.map((provider) => [
+        provider,
+        config.chat[provider].apiKey,
+      ]),
+    );
+
+    for (const provider of SupportedProvidersSchema.options) {
+      config.chat[provider].apiKey = "";
+    }
+
+    try {
+      vi.mocked(llmApiKeyResolution.resolveProviderApiKey).mockResolvedValue(
+        NO_KEY,
+      );
+      vi.spyOn(OrganizationModel, "getById").mockResolvedValue({
+        id: org.id,
+        defaultLlmModel: null,
+        defaultLlmProvider: null,
+        defaultLlmApiKeyId: null,
+      } as never);
+      vi.spyOn(
+        LlmProviderApiKeyModelLinkModel,
+        "getBestModel",
+      ).mockResolvedValue(null);
+
+      const result = await resolveConversationLlmSelectionForAgent({
+        agent: {
+          llmApiKeyId: null,
+          llmModel: null,
+        },
+        organizationId: org.id,
+        userId: "user-1",
+      });
+
+      expect(result).toEqual({
+        chatApiKeyId: null,
+        selectedModel: config.chat.defaultModel,
+        selectedProvider: config.chat.defaultProvider,
+      });
+    } finally {
+      for (const provider of SupportedProvidersSchema.options) {
+        config.chat[provider].apiKey = originalApiKeys[provider];
+      }
+    }
+  });
+});
+
+describe("resolveConfiguredAgentLlm", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("uses the configured API key provider instead of inferring from model name", async () => {
+    vi.spyOn(LlmProviderApiKeyModel, "findById").mockResolvedValue({
+      id: "key-anthropic",
+      provider: "anthropic",
+      secretId: null,
+      baseUrl: null,
+    } as never);
+
+    const result = await resolveConfiguredAgentLlm({
+      llmApiKeyId: "key-anthropic",
+      llmModel: "gpt-4o-mini",
+    });
+
+    expect(result).toEqual({
+      provider: "anthropic",
+      apiKey: undefined,
+      modelName: "gpt-4o-mini",
+      baseUrl: null,
     });
   });
 });

@@ -1,4 +1,8 @@
-import { OrganizationCustomFontSchema, OrganizationThemeSchema } from "@shared";
+import {
+  OrganizationCustomFontSchema,
+  OrganizationThemeSchema,
+  SupportedProvidersSchema,
+} from "@shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
@@ -115,7 +119,7 @@ const extendedFields = {
   embeddingModel: z.string().nullable(),
   embeddingDimensions: z.number().nullable(),
   defaultLlmModel: z.string().nullable(),
-  defaultLlmProvider: z.string().nullable(),
+  defaultLlmProvider: SupportedProvidersSchema.nullable(),
   defaultAgentId: z.string().uuid().nullable(),
   favicon: z.string().nullable(),
   iconLogo: z.string().nullable(),
@@ -167,7 +171,7 @@ export const UpdateLlmSettingsSchema = z.object({
 
 export const UpdateAgentSettingsSchema = z.object({
   defaultLlmModel: z.string().nullable().optional(),
-  defaultLlmProvider: z.string().nullable().optional(),
+  defaultLlmProvider: SupportedProvidersSchema.nullable().optional(),
   defaultLlmApiKeyId: z.string().uuid().nullable().optional(),
   defaultAgentId: z.string().uuid().nullable().optional(),
 });

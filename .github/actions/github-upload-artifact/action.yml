@@ -1,0 +1,32 @@
+name: GitHub Upload Artifact
+description: Wrapper around actions/upload-artifact pinned to a vetted version.
+inputs:
+  name:
+    description: Artifact name.
+    required: true
+  path:
+    description: Files, directories, or wildcard patterns describing what to upload.
+    required: true
+  if-no-files-found:
+    description: Desired behavior if no files are found using the provided path.
+    required: false
+    default: "warn"
+  retention-days:
+    description: Artifact retention period in days.
+    required: false
+    default: "90"
+  compression-level:
+    description: Zlib compression level for the artifact archive.
+    required: false
+    default: "6"
+runs:
+  using: composite
+  steps:
+    - name: Upload artifact
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ inputs.path }}
+        if-no-files-found: ${{ inputs.if-no-files-found }}
+        retention-days: ${{ inputs.retention-days }}
+        compression-level: ${{ inputs.compression-level }}

@@ -1,0 +1,21 @@
+{
+  "scenarioName": "gemini-auth-ui-e2e",
+  "requiredScenarioState": "tool_result_received",
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPathPattern": "/gemini/v1beta/models/[^:]+:streamGenerateContent",
+    "bodyPatterns": [
+      { "contains": "auth-calltime-ui-e2e" }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive"
+    },
+    "body": "data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"It seems you need to set up credentials first.\"}],\"role\":\"model\"},\"finishReason\":\"STOP\",\"index\":0}],\"usageMetadata\":{\"promptTokenCount\":100,\"candidatesTokenCount\":15,\"totalTokenCount\":115},\"modelVersion\":\"gemini-1.5-pro-002\"}\n\n"
+  }
+}

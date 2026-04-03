@@ -19,15 +19,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import {
   useInteractionSessions,
   useInteractions,
-} from "@/lib/interaction.query";
+} from "@/lib/interactions/interaction.query";
 import {
   calculateCostSavings,
   DynamicInteraction,
-} from "@/lib/interaction.utils";
-import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
+} from "@/lib/interactions/interaction.utils";
+import { formatDate } from "@/lib/utils";
 
 export default function SessionDetailPage({
   paramsPromise,

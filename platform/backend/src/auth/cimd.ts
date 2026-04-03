@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import ipaddr from "ipaddr.js";
+import { LRUCacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { OAuthClientModel } from "@/models";
 import type { CimdMetadata } from "@/types";
@@ -95,8 +96,7 @@ export async function ensureCimdClientRegistered(
   clientIdUrl: string,
 ): Promise<void> {
   // Check cache first
-  const cached = cimdCache.get(clientIdUrl);
-  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+  if (cimdCache.has(clientIdUrl)) {
     return;
   }
 
@@ -129,11 +129,7 @@ export async function ensureCimdClientRegistered(
     softwareVersion: metadata.software_version,
   });
 
-  // Update cache, evicting stale entries if it grows too large
-  if (cimdCache.size >= MAX_CACHE_SIZE) {
-    evictStaleEntries();
-  }
-  cimdCache.set(clientIdUrl, { fetchedAt: Date.now() });
+  cimdCache.set(clientIdUrl, true);
 
   logger.info(
     { clientIdUrl, clientName: metadata.client_name },
@@ -159,8 +155,10 @@ const MAX_CACHE_SIZE = 10_000;
 /** Max CIMD document body size: 1 MB */
 const MAX_CIMD_BODY_SIZE = 1_024 * 1_024;
 
-/** In-memory cache to avoid re-fetching on every request */
-const cimdCache = new Map<string, { fetchedAt: number }>();
+const cimdCache = new LRUCacheManager<boolean>({
+  maxSize: MAX_CACHE_SIZE,
+  defaultTtl: CACHE_TTL_MS,
+});
 
 export function validateCimdDocument(
   clientIdUrl: string,
@@ -259,14 +257,4 @@ function isPrivateHost(hostname: string): boolean {
 
   const addr = ipaddr.parse(normalized);
   return BLOCKED_RANGES.has(addr.range());
-}
-
-/** Evict expired entries from the CIMD cache */
-function evictStaleEntries(): void {
-  const now = Date.now();
-  for (const [key, entry] of cimdCache) {
-    if (now - entry.fetchedAt >= CACHE_TTL_MS) {
-      cimdCache.delete(key);
-    }
-  }
 }

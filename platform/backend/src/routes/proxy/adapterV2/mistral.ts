@@ -25,7 +25,6 @@ import type {
   LLMStreamAdapter,
   Mistral,
 } from "@/types";
-import { MockOpenAIClient } from "../mock-openai-client";
 import {
   OpenAIRequestAdapter,
   OpenAIResponseAdapter,
@@ -228,10 +227,6 @@ export const mistralAdapterFactory: LLMProvider<
     apiKey: string | undefined,
     options: CreateClientOptions,
   ): OpenAIProvider {
-    if (options.mockMode) {
-      return new MockOpenAIClient() as unknown as OpenAIProvider;
-    }
-
     const customFetch = options.agent
       ? metrics.llm.getObservableFetch(
           "mistral",

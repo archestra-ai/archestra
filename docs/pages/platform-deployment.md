@@ -1,7 +1,7 @@
 ---
 title: Deployment
 category: Archestra Platform
-order: 2
+order: 3
 ---
 
 <!--
@@ -28,7 +28,7 @@ Run the platform with a single command:
 
 ```bash
 docker pull archestra/platform:latest;
-docker run -p 9000:9000 -p 3000:3000 \
+docker run -p 9000:9000 -p 3000:3000\
    -e ARCHESTRA_QUICKSTART=true \
    -v /var/run/docker.sock:/var/run/docker.sock \
    -v archestra-postgres-data:/var/lib/postgresql/data \
@@ -40,7 +40,7 @@ docker run -p 9000:9000 -p 3000:3000 \
 
 ```powershell
 docker pull archestra/platform:latest;
-docker run -p 9000:9000 -p 3000:3000 `
+docker run -p 9000:9000 -p 3000:3000`
    -e ARCHESTRA_QUICKSTART=true `
    -v /var/run/docker.sock:/var/run/docker.sock `
    -v archestra-postgres-data:/var/lib/postgresql/data `
@@ -62,7 +62,7 @@ This will start the platform with:
 If you have Kubernetes installed locally, you can use it for the MCP orchestrator. Make sure `kubectl` points to the right cluster and run the container without the socket and without `ARCHESTRA_QUICKSTART`. The orchestrator will create a cluster in the current context. See [Development with Standalone Kubernetes](./platform-orchestrator#local-development-with-docker-and-standalone-kubernetes)
 
 ```diff
-docker run -p 9000:9000 -p 3000:3000 \
+docker run -p 9000:9000 -p 3000:3000\
 -  -e ARCHESTRA_QUICKSTART=true \
 -  -v /var/run/docker.sock:/var/run/docker.sock \
    -v archestra-postgres-data:/var/lib/postgresql/data \
@@ -171,6 +171,33 @@ openssl rand -base64 32
 --set archestra.env.ARCHESTRA_AUTH_SECRET=<your-generated-secret>
 ```
 
+#### Diagnostics Storage
+
+To persist Node fatal error reports from the backend, enable chart-managed diagnostics storage. This mounts a persistent volume at `/var/diagnostics` in both the platform and worker pods and configures the backend to write diagnostic reports there automatically.
+
+```yaml
+archestra:
+  diagnostics:
+    enabled: true
+    size: 10Gi
+    storageClassName: standard-rwo
+    accessModes:
+      - ReadWriteOnce
+```
+
+Available values:
+
+- `archestra.diagnostics.enabled` - Enable diagnostics storage for backend reports
+- `archestra.diagnostics.existingClaimName` - Use an existing PVC instead of creating one
+- `archestra.diagnostics.storageClassName` - StorageClass for the chart-managed PVC
+- `archestra.diagnostics.size` - PVC storage request
+- `archestra.diagnostics.accessModes` - PVC access modes
+- `archestra.diagnostics.heapSnapshotsNearHeapLimit` - Optional Node heap snapshot count for near-OOM investigations
+
+If you run both the platform and worker pods and want them to write to the same claim concurrently, choose a storage class and access mode combination your cluster supports for that pattern.
+
+Chart-managed diagnostics PVCs are validated conservatively. If more than one diagnostics-writing pod can run at the same time, including during rolling updates, the chart requires `ReadWriteMany`. A single `ReadWriteOnce` claim is only safe for single-pod deployments with non-overlapping updates.
+
 #### MCP Server Runtime Configuration
 
 **Orchestrator Settings**:
@@ -204,7 +231,7 @@ openssl rand -base64 32
 - `archestra.podAnnotations` - Annotations to add to pods (useful for Prometheus, Vault agent, service mesh sidecars, etc.)
 - `archestra.nodeSelector` - Node selector for scheduling pods on specific nodes (e.g., specific node pools or instance types). These values are also inherited by MCP server pods as defaults.
 - `archestra.tolerations` - Tolerations for scheduling pods on nodes with specific taints (e.g., dedicated nodes, GPU nodes, spot instances). These values are also inherited by MCP server pods as defaults. See [Kubernetes docs](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)
-- `archestra.deploymentStrategy` - Deployment strategy configuration (default: RollingUpdate with maxUnavailable: 0 for zero-downtime deployments)
+- `archestra.deploymentStrategy` - Deployment strategy configuration (default: RollingUpdate with `maxUnavailable: 25%` and `maxSurge: 25%`)
 - `archestra.resources` - CPU and memory requests/limits for the container (default: 2Gi request, 3Gi limit for memory)
 
 **Service Settings**:
@@ -345,7 +372,7 @@ The Helm chart deploys a separate worker `Deployment` for processing background 
 - `archestra.worker.enabled` - Deploy a separate worker Deployment (default: true)
 - `archestra.worker.replicaCount` - Number of worker pod replicas (default: 1)
 - `archestra.worker.resources` - Resource requests/limits for worker pods (default: 1Gi request, 2Gi limit)
-- `archestra.worker.deploymentStrategy` - Deployment strategy (default: RollingUpdate)
+- `archestra.worker.deploymentStrategy` - Deployment strategy (default: RollingUpdate with `maxUnavailable: 25%` and `maxSurge: 25%`)
 - `archestra.worker.podAnnotations` - Pod annotations (inherits from `archestra.podAnnotations` if not set)
 - `archestra.worker.nodeSelector` - Node selector (inherits from `archestra.nodeSelector` if not set)
 - `archestra.worker.tolerations` - Tolerations (inherits from `archestra.tolerations` if not set)
@@ -459,7 +486,7 @@ archestra:
 After installation, access the platform using port forwarding:
 
 ```bash
-# Forward the API (port 9000) and the Admin UI (port 3000)
+# Forward the API (port 9000) and Admin UI (port 3000)
 kubectl --namespace archestra port-forward svc/archestra-platform 9000:9000 3000:3000
 ```
 
@@ -554,6 +581,11 @@ The following environment variables can be used to configure Archestra Platform.
   - Multiple URLs example: `http://archestra.default.svc:9000,https://api.archestra.example.com`
   - Use case: Set this when your external access URL differs from the internal service URL (common in Kubernetes with ingress/load balancers)
 
+- **`ARCHESTRA_TRUST_PROXY`** - Set this when Archestra runs behind a TLS-terminating reverse proxy (e.g. AWS ALB, nginx, Cloudflare) so that generated OAuth metadata and auth URLs use the external `https://` scheme rather than the internal `http://` scheme seen by the backend.
+  - Default: `false` (no proxy trust)
+  - Values: `true`, `false`, or a comma-separated list of trusted proxy IPs/CIDRs (e.g. `10.0.0.0/8,172.16.0.0/12`)
+  - Example: `ARCHESTRA_TRUST_PROXY=true`
+
 - **`ARCHESTRA_API_BODY_LIMIT`** - Maximum request body size for LLM proxy and chat routes.
   - Default: `50MB` (52428800 bytes)
   - Format: Numeric bytes (e.g., `52428800`) or human-readable (e.g., `50MB`, `100KB`, `1GB`)
@@ -563,6 +595,11 @@ The following environment variables can be used to configure Archestra Platform.
   - Example: `https://frontend.example.com`
   - Highly recommended for production.
   - If users access the platform via a LAN IP (e.g., `http://192.168.1.5:3000`), set this to that URL
+
+- **`ARCHESTRA_MCP_SANDBOX_DOMAIN`** - Wildcard domain for MCP App sandbox isolation. Gives each MCP server a unique subdomain origin, enabling localStorage, CORS, and OAuth for MCP Apps. Not needed for local development (automatic localhost swap provides isolation).
+  - Example: `mcp.example.com`
+  - Requires wildcard DNS (`*.mcp.example.com`) and wildcard TLS certificate pointing to the backend
+  - See [MCP Apps Sandbox](#mcp-apps-sandbox) for setup instructions
 
 - **`ARCHESTRA_GLOBAL_TOOL_POLICY`** - Controls how tool invocation is treated across the LLM proxy.
   - Default: `permissive`
@@ -691,6 +728,25 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Set to `0` to create virtual keys that never expire by default
   - Users can override this per-key when creating virtual keys via the UI
 
+- **`ARCHESTRA_BEDROCK_IAM_AUTH_ENABLED`** - Enable AWS IAM authentication for Bedrock.
+  - Default: `false`
+  - Set to `true` to use the AWS credential chain (IRSA, instance profiles, env vars) instead of API keys
+  - See: [Bedrock IAM setup guide](/docs/platform-supported-llm-providers#iam-authentication-setup-irsa)
+
+- **`ARCHESTRA_BEDROCK_REGION`** - Explicit AWS region for Bedrock.
+  - Optional: Falls back to extracting from `ARCHESTRA_BEDROCK_BASE_URL`
+  - Example: `us-east-1`
+
+- **`ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS`** - Filter Bedrock inference profiles by provider.
+  - Optional: When empty, all inference profiles are returned
+  - Comma-separated list of provider prefixes (e.g., `anthropic,amazon`)
+  - See: [Filtering Models by Provider](/docs/platform-supported-llm-providers#filtering-models-by-provider)
+
+- **`ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS`** - Filter Bedrock inference profiles by region.
+  - Optional: When empty, all inference regions are returned
+  - Comma-separated list of region prefixes (e.g., `us,global`)
+  - See: [Filtering Models by Inference Region](/docs/platform-supported-llm-providers#filtering-models-by-inference-region)
+
 - **`ARCHESTRA_GEMINI_VERTEX_AI_ENABLED`** - Enable Vertex AI mode for Gemini.
   - Default: `false`
   - Set to `true` to use Vertex AI instead of the Google AI Studio API
@@ -705,6 +761,7 @@ These environment variables set the default base URL for each LLM provider. Per-
 - **`ARCHESTRA_GEMINI_VERTEX_AI_LOCATION`** - Google Cloud location/region for Vertex AI.
   - Default: `us-central1`
   - Example: `us-central1`, `europe-west1`, `asia-northeast1`
+  - In our testing, `us-central1` and `global` returned the most reliable Gemini publisher model listings. Some regions, including `us-east1`, may return incomplete model catalogs from Vertex AI model discovery APIs.
 
 - **`ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE`** - Path to Google Cloud service account JSON key file.
   - Optional: Only needed when running outside of GCP or without Workload Identity
@@ -722,6 +779,48 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: `anthropic`
   - Options: `anthropic`, `openai`, `gemini`
   - Used when no profile-specific provider is configured
+
+### MCP Apps Sandbox
+
+MCP Apps run inside sandboxed iframes with cross-origin isolation, CSP enforcement, and a double-iframe architecture. The sandbox proxy is served from the main backend under `/_sandbox/` — no separate port or service is needed.
+
+#### How It Works by Environment
+
+| Environment | Isolation method | Config needed | MCP App capabilities |
+|---|---|---|---|
+| **Local dev / Quickstart** (`localhost`) | `localhost` ↔ `127.0.0.1` origin swap (same port, different origin) | None | Full (localStorage, CORS, etc.) |
+| **Production with sandbox domain** | Dedicated subdomain per MCP server | `ARCHESTRA_MCP_SANDBOX_DOMAIN` + wildcard DNS/TLS | Full |
+| **Production without sandbox domain** | Opaque origin (iframe `sandbox` attribute) | None | Limited (no localStorage, no origin-restricted CORS) |
+
+**Local development and Quickstart** work out of the box with no configuration. The platform automatically swaps `localhost` to `127.0.0.1` (or vice versa) to create a different origin on the same port. This gives MCP Apps full browser API access while maintaining security isolation.
+
+**Production deployments** can optionally configure `ARCHESTRA_MCP_SANDBOX_DOMAIN` for full MCP App functionality. Without it, MCP Apps still render and function, but cannot use `localStorage`, cookies, or APIs that check `Access-Control-Allow-Origin` against a specific origin. Most MCP Apps work fine without it.
+
+#### Configuring a Sandbox Domain (Production)
+
+Set `ARCHESTRA_MCP_SANDBOX_DOMAIN` when MCP Apps need persistent state or origin-restricted API access.
+
+1. Choose a subdomain for the sandbox (e.g., `mcp.example.com`)
+
+2. Create a **wildcard DNS record**:
+   ```
+   *.mcp.example.com → <backend IP or load balancer>
+   ```
+
+3. Obtain a **wildcard TLS certificate** for `*.mcp.example.com` (e.g., via Let's Encrypt DNS challenge, or your CA)
+
+4. Configure the reverse proxy (nginx, Caddy, etc.) to route `*.mcp.example.com` to the backend (port 9000), applying the wildcard certificate
+
+5. Set the environment variable:
+   ```yaml
+   ARCHESTRA_MCP_SANDBOX_DOMAIN: mcp.example.com
+   ```
+
+Each MCP server automatically gets a unique hash-based subdomain (e.g., `a1b2c3d4.mcp.example.com`). The backend validates the `Host` header on sandbox requests to prevent abuse.
+
+#### Origin Restrictions
+
+The sandbox inherits origin restrictions from `ARCHESTRA_FRONTEND_URL` and `ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS` (the same variables that control CORS). When set, only those origins can embed the sandbox iframe. When neither is set (local dev), all origins are accepted.
 
 ### MCP Server Orchestrator
 

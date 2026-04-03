@@ -11,7 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import websocketService from "@/lib/websocket";
+import websocketService from "@/lib/websocket/websocket";
 
 type ConnectionStatus =
   | "idle"

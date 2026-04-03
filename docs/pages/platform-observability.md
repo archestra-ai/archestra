@@ -18,7 +18,11 @@ Archestra exposes Prometheus metrics and OpenTelemetry traces for monitoring sys
 
 ## Metrics
 
-The endpoint `http://localhost:9050/metrics` exposes Prometheus-formatted metrics including:
+The web process exposes Prometheus-formatted metrics at `http://localhost:9050/metrics`.
+
+When the separate worker deployment is enabled (`ARCHESTRA_PROCESS_TYPE=worker`, which is the default for [Helm deployments](/docs/platform-deployment)), the worker process exposes its own metrics endpoint at `http://<worker-host>:9000/metrics`. Task queue metrics and background [Knowledge Base](/docs/platform-knowledge-bases) pipeline metrics such as connector syncs and embedding batches are emitted from the worker process, so production scrape configs should collect both endpoints.
+
+Combined, these endpoints expose metrics including:
 
 ### Generative AI Metrics
 

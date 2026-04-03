@@ -19,11 +19,13 @@ import { SESSION_ID_KEY } from "@/observability/request-context";
 import type { SpanUserInfo } from "@/observability/tracing";
 import type {
   Agent,
+  DualLlmAnalysis,
   InsertInteraction,
   InteractionRequest,
   InteractionResponse,
   ToolCompressionStats,
   ToonSkipReason,
+  UnsafeContextBoundary,
 } from "@/types";
 import * as utils from "./utils";
 import type { SessionSource } from "./utils/headers/session-id";
@@ -113,6 +115,8 @@ export function buildInteractionRecord(params: {
   costs: { baselineCost: number | undefined; actualCost: number | undefined };
   toonStats: ToolCompressionStats;
   toonSkipReason: ToonSkipReason | null;
+  dualLlmAnalyses: DualLlmAnalysis[];
+  unsafeContextBoundary?: UnsafeContextBoundary;
 }): InsertInteraction {
   return {
     profileId: params.agent.id,
@@ -126,6 +130,8 @@ export function buildInteractionRecord(params: {
     request: params.request as InteractionRequest,
     processedRequest: params.processedRequest as InteractionRequest,
     response: params.response as InteractionResponse,
+    dualLlmAnalyses: params.dualLlmAnalyses,
+    unsafeContextBoundary: params.unsafeContextBoundary,
     model: params.actualModel,
     baselineModel: params.baselineModel,
     inputTokens: params.usage.inputTokens,

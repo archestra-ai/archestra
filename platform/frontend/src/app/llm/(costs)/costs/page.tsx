@@ -7,7 +7,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import { useSetCostsAction } from "@/app/llm/(costs)/layout";
-import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -18,13 +17,7 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
-import { DateTimePicker } from "@/components/ui/date-time-picker";
-import {
-  DialogBody,
-  DialogForm,
-  DialogStickyFooter,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
+import { CustomDateTimeRangeDialog } from "@/components/ui/custom-date-time-range-dialog";
 import {
   Select,
   SelectContent,
@@ -505,53 +498,17 @@ export default function StatisticsPage() {
 
   return (
     <div className="space-y-6">
-      <FormDialog
+      <CustomDateTimeRangeDialog
         open={isCustomDialogOpen}
         onOpenChange={setIsCustomDialogOpen}
+        startDate={customFrom}
+        endDate={customTo}
+        onStartDateChange={setCustomFrom}
+        onEndDateChange={setCustomTo}
+        onApply={handleCustomTimeframe}
         title="Custom timeframe"
         description="Set a custom time period for the statistics view."
-        size="small"
-      >
-        <DialogForm
-          className="flex min-h-0 flex-1 flex-col"
-          onSubmit={handleCustomTimeframe}
-        >
-          <DialogBody>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">From</Label>
-                <DateTimePicker
-                  value={customFrom}
-                  onChange={(date) => setCustomFrom(date)}
-                  placeholder="Start date & time"
-                  className="w-full"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">To</Label>
-                <DateTimePicker
-                  value={customTo}
-                  onChange={(date) => setCustomTo(date)}
-                  placeholder="End date & time"
-                  className="w-full"
-                />
-              </div>
-            </div>
-          </DialogBody>
-          <DialogStickyFooter className="mt-0">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setIsCustomDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={!customFrom || !customTo}>
-              Apply
-            </Button>
-          </DialogStickyFooter>
-        </DialogForm>
-      </FormDialog>
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>

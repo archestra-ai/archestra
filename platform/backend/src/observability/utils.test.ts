@@ -1,5 +1,5 @@
 import { describe, expect, test } from "@/test";
-import { isNoiseRoute } from "./utils";
+import { isNoiseRoute, isNoisyMcpGatewayGetRoute } from "./utils";
 
 describe("isNoiseRoute", () => {
   test("should match /health", () => {
@@ -42,5 +42,34 @@ describe("isNoiseRoute", () => {
 
   test("should not match non-oauth well-known routes", () => {
     expect(isNoiseRoute("/.well-known/acme-challenge/token")).toBe(false);
+  });
+});
+
+describe("isNoisyMcpGatewayGetRoute", () => {
+  test("matches GET requests to the MCP gateway", () => {
+    expect(
+      isNoisyMcpGatewayGetRoute({
+        method: "GET",
+        url: "/v1/mcp/some-profile-id",
+      }),
+    ).toBe(true);
+  });
+
+  test("does not match POST requests to the MCP gateway", () => {
+    expect(
+      isNoisyMcpGatewayGetRoute({
+        method: "POST",
+        url: "/v1/mcp/some-profile-id",
+      }),
+    ).toBe(false);
+  });
+
+  test("does not match unrelated GET requests", () => {
+    expect(
+      isNoisyMcpGatewayGetRoute({
+        method: "GET",
+        url: "/api/agents",
+      }),
+    ).toBe(false);
   });
 });

@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   getDefaultArchestraToolIds,
   sortAndFilterTools,
+  sortCatalogItems,
 } from "./agent-tools-editor.utils";
 
 const OTHER_CATALOG_ID = "other-catalog-id";
@@ -89,6 +90,21 @@ describe("getDefaultArchestraToolIds", () => {
     expect(result).not.toBeNull();
     expect(result?.toolIds.has("extra")).toBe(false);
     expect(result?.toolIds.size).toBe(defaultTools.length);
+  });
+
+  it("matches branded default tool names under white-labeling", () => {
+    const catalogs = [makeCatalog(ARCHESTRA_MCP_CATALOG_ID, "Sparky")];
+    const brandedDefaultTools = DEFAULT_ARCHESTRA_TOOL_NAMES.map((name, i) => {
+      const toolName = name.replace("archestra__", "sparky__");
+      return makeTool(`branded-tool-${i}`, toolName);
+    });
+
+    const result = getDefaultArchestraToolIds(catalogs, [brandedDefaultTools]);
+
+    expect(result).not.toBeNull();
+    expect(result?.toolIds).toEqual(
+      new Set(brandedDefaultTools.map((tool) => tool.id)),
+    );
   });
 });
 
@@ -179,5 +195,70 @@ describe("sortAndFilterTools", () => {
     const result = sortAndFilterTools(tools, selected, "alpha");
 
     expect(result.map((t) => t.id)).toEqual(["2", "1"]);
+  });
+
+  it("ranks name matches ahead of description-only matches within selected tools", () => {
+    const tools = [
+      tool("1", "server__get_mcp_servers", "Use create_agent here"),
+      tool("2", "server__create_agent", "Creates an agent"),
+      tool("3", "server__deploy_mcp_server", "Create a deployment"),
+    ];
+    const selected = new Set(["1", "2"]);
+
+    const result = sortAndFilterTools(tools, selected, "create");
+
+    expect(result.map((t) => t.id)).toEqual(["2", "1", "3"]);
+  });
+});
+
+describe("sortCatalogItems", () => {
+  it("keeps the built-in MCP catalog first even when other catalogs are assigned", () => {
+    const catalogs = [
+      { id: "github", name: "GitHub" },
+      { id: ARCHESTRA_MCP_CATALOG_ID, name: "Sparky" },
+      { id: "local", name: "internal-dev-test-server" },
+    ];
+
+    const result = sortCatalogItems(
+      catalogs,
+      (catalog) => (catalog.id === "github" ? 3 : 0),
+      (catalog) => (catalog.id === "github" ? 41 : 1),
+    );
+
+    expect(result.map((catalog) => catalog.id)).toEqual([
+      ARCHESTRA_MCP_CATALOG_ID,
+      "github",
+      "local",
+    ]);
+  });
+
+  it("falls back to assigned count and tool count ordering after the built-in catalog", () => {
+    const catalogs = [
+      { id: ARCHESTRA_MCP_CATALOG_ID, name: "Archestra" },
+      { id: "github", name: "GitHub" },
+      { id: "empty", name: "Empty" },
+      { id: "slack", name: "Slack" },
+    ];
+
+    const result = sortCatalogItems(
+      catalogs,
+      (catalog) => {
+        if (catalog.id === "github") return 2;
+        if (catalog.id === "slack") return 1;
+        return 0;
+      },
+      (catalog) => {
+        if (catalog.id === "github") return 41;
+        if (catalog.id === "slack") return 10;
+        return 0;
+      },
+    );
+
+    expect(result.map((catalog) => catalog.id)).toEqual([
+      ARCHESTRA_MCP_CATALOG_ID,
+      "github",
+      "slack",
+      "empty",
+    ]);
   });
 });

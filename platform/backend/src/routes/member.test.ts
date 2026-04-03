@@ -107,3 +107,89 @@ describe("member routes", () => {
     });
   });
 });
+
+describe("GET /api/organization/members/:idOrEmail", () => {
+  let app: FastifyInstanceWithZod;
+  let user: User;
+  let organizationId: string;
+
+  beforeEach(async ({ makeAdmin, makeMember, makeOrganization }) => {
+    user = await makeAdmin();
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    await makeMember(user.id, organizationId, { role: "admin" });
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (request as typeof request & { user: unknown }).user = user;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
+    });
+
+    const { default: organizationRoutes } = await import("./organization");
+    await app.register(organizationRoutes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("gets member by user ID", async ({ makeUser, makeMember }) => {
+    const member = await makeUser({
+      name: "Jane Doe",
+      email: "jane@example.com",
+    });
+    await makeMember(member.id, organizationId, { role: "member" });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/organization/members/${member.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.id).toBe(member.id);
+    expect(body.email).toBe("jane@example.com");
+    expect(body.name).toBe("Jane Doe");
+    expect(body.role).toBeDefined();
+  });
+
+  test("gets member by email", async ({ makeUser, makeMember }) => {
+    const member = await makeUser({
+      name: "John Smith",
+      email: "john@example.com",
+    });
+    await makeMember(member.id, organizationId, { role: "member" });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/organization/members/${encodeURIComponent("john@example.com")}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.id).toBe(member.id);
+    expect(body.email).toBe("john@example.com");
+    expect(body.role).toBeDefined();
+  });
+
+  test("returns 404 for non-existent user ID", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/organization/members/non-existent-id",
+    });
+
+    expect(response.statusCode).toBe(404);
+    const body = response.json();
+    expect(body.error.message).toBe("Member not found");
+  });
+
+  test("returns 404 for non-existent email", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/organization/members/${encodeURIComponent("nobody@nowhere.com")}`,
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+});

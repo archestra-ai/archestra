@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
 import { createContext, useContext, useRef, useState } from "react";
+import { CopyButton } from "@/components/copy-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,11 +29,12 @@ const ToolContext = createContext<{ hasOpened: boolean }>({ hasOpened: false });
 export const Tool = ({
   className,
   onOpenChange,
+  open,
   children,
   ...props
 }: ToolProps) => {
-  const [hasOpened, setHasOpened] = useState(
-    props.defaultOpen || props.open || false,
+  const [hasOpened, setHasOpened] = useState<boolean>(
+    open ?? Boolean((props as Record<string, unknown>).defaultOpen) ?? true,
   );
 
   const handleOpenChange = (open: boolean) => {
@@ -41,9 +43,10 @@ export const Tool = ({
   };
 
   return (
-    <ToolContext.Provider value={{ hasOpened }}>
+    <ToolContext.Provider value={{ hasOpened: hasOpened || !!open }}>
       <Collapsible
         defaultOpen={false}
+        open={open}
         className={cn("not-prose mb-4 w-full rounded-md border", className)}
         onOpenChange={handleOpenChange}
         {...props}
@@ -143,23 +146,39 @@ export const ToolHeader = ({
   </CollapsibleTrigger>
 );
 
-export type ToolContentProps = ComponentProps<typeof CollapsibleContent>;
+export type ToolContentProps = Omit<
+  ComponentProps<typeof CollapsibleContent>,
+  "forceMount"
+> & {
+  /** Keep children mounted even when closed (useful for MCP apps that need to preserve iframe state) */
+  forceMount?: boolean;
+};
 
 export const ToolContent = ({
   className,
   children,
+  forceMount = false,
   ...props
 }: ToolContentProps) => {
   const { hasOpened } = useContext(ToolContext);
 
+  const resolvedClassName = cn(
+    "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
+    forceMount &&
+      "overflow-hidden data-[state=closed]:max-h-0 data-[state=open]:max-h-[5000px]",
+    className,
+  );
+
+  if (forceMount) {
+    return (
+      <CollapsibleContent className={resolvedClassName} forceMount {...props}>
+        {children}
+      </CollapsibleContent>
+    );
+  }
+
   return (
-    <CollapsibleContent
-      className={cn(
-        "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
-        className,
-      )}
-      {...props}
-    >
+    <CollapsibleContent className={resolvedClassName} {...props}>
       {hasOpened ? children : null}
     </CollapsibleContent>
   );
@@ -169,16 +188,33 @@ export type ToolInputProps = ComponentProps<"div"> & {
   input: ToolUIPart["input"];
 };
 
-export const ToolInput = ({ className, input, ...props }: ToolInputProps) => (
-  <div className={cn("space-y-2 overflow-hidden p-4", className)} {...props}>
-    <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-      Parameters
-    </h4>
-    <div className="rounded-md bg-muted/50">
-      <CodeBlock code={JSON.stringify(input, null, 2)} language="json" />
-    </div>
-  </div>
-);
+export const ToolInput = ({ className, input, ...props }: ToolInputProps) => {
+  const serializedInput = JSON.stringify(input, null, 2);
+
+  return (
+    <Collapsible
+      defaultOpen={false}
+      className={cn("space-y-2 overflow-hidden p-4", className)}
+      {...props}
+    >
+      <div className="space-y-2">
+        <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 cursor-pointer">
+          <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+            Parameters
+          </h4>
+          <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in">
+          <div className="rounded-md bg-muted/50 mt-2">
+            <CodeBlock code={serializedInput} language="json">
+              <CopyButton text={serializedInput} />
+            </CodeBlock>
+          </div>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
+  );
+};
 
 export type ToolErrorDetailsProps = ComponentProps<"div"> & {
   errorText: string;
@@ -219,6 +255,7 @@ export const ToolOutput = ({
 }: ToolOutputProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const labelText = label ?? (errorText ? "Error" : "Result");
 
   if (!(output || errorText || conversations)) {
     return null;
@@ -268,13 +305,15 @@ export const ToolOutput = ({
   }
 
   let Output: ReactNode;
+  let copyText: string | undefined;
+  const displayOutput = normalizeToolOutput(output);
 
-  if (typeof output === "object" || typeof output === "string") {
+  if (typeof displayOutput === "object" || typeof displayOutput === "string") {
     // If output is a string, try to parse it as JSON for proper formatting
-    let formattedOutput = output;
-    if (typeof output === "string") {
+    let formattedOutput = displayOutput;
+    if (typeof displayOutput === "string") {
       try {
-        formattedOutput = JSON.parse(output);
+        formattedOutput = JSON.parse(displayOutput);
       } catch {
         // Not valid JSON, use as-is
       }
@@ -283,6 +322,7 @@ export const ToolOutput = ({
       typeof formattedOutput === "object"
         ? JSON.stringify(formattedOutput, null, 2)
         : String(formattedOutput);
+    copyText = codeString;
     const lines = codeString.split("\n");
     const MAX_LINES = 20;
     const isLarge = lines.length > MAX_LINES;
@@ -296,7 +336,9 @@ export const ToolOutput = ({
 
     Output = (
       <div className="relative group">
-        <CodeBlock code={displayCode} language="json" />
+        <CodeBlock code={displayCode} language="json">
+          <CopyButton text={copyText} />
+        </CodeBlock>
         {isLarge && (
           <div
             className={cn(
@@ -333,7 +375,8 @@ export const ToolOutput = ({
       </div>
     );
   } else {
-    Output = <div>{String(output)}</div>;
+    copyText = String(displayOutput);
+    Output = <div>{String(displayOutput)}</div>;
   }
 
   return (
@@ -343,7 +386,7 @@ export const ToolOutput = ({
       {...props}
     >
       <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-        {label ?? (errorText ? "Error" : "Result")}
+        {labelText}
       </h4>
       <div
         className={cn(
@@ -358,3 +401,33 @@ export const ToolOutput = ({
     </div>
   );
 };
+
+function normalizeToolOutput(output: ToolUIPart["output"]): unknown {
+  if (!isMcpToolOutput(output)) {
+    return output;
+  }
+
+  if (output.content) {
+    return output.content;
+  }
+
+  if (output.structuredContent !== undefined) {
+    return output.structuredContent;
+  }
+
+  return output;
+}
+
+function isMcpToolOutput(value: unknown): value is {
+  content: string;
+  structuredContent?: unknown;
+  rawContent?: unknown;
+  _meta?: unknown;
+} {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "content" in value &&
+    typeof value.content === "string"
+  );
+}

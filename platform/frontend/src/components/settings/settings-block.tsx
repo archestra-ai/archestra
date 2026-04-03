@@ -34,12 +34,12 @@ export function SettingsCardHeader({
 }: SettingsCardHeaderProps) {
   return (
     <CardHeader>
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 flex-1 space-y-1.5">
           <CardTitle>{title}</CardTitle>
           {description && <CardDescription>{description}</CardDescription>}
         </div>
-        {action && <div className="shrink-0">{action}</div>}
+        {action && <div className="flex shrink-0 items-center">{action}</div>}
       </div>
       {notice && <div className="text-sm mt-2">{notice}</div>}
     </CardHeader>

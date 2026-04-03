@@ -3,8 +3,8 @@
 import { Settings } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { useHasPermissions } from "@/lib/auth.query";
-import { useKnowledgeBaseConfigStatus } from "@/lib/knowledge-base.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useKnowledgeBaseConfigStatus } from "@/lib/knowledge/knowledge-base.query";
 
 export function EmbeddingRequiredPlaceholder() {
   const router = useRouter();

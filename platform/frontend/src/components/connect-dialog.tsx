@@ -1,13 +1,15 @@
 "use client";
 
 import type { AgentType, DocsPage } from "@shared";
-import { getDocsUrl } from "@shared";
 import type { LucideIcon } from "lucide-react";
 import { ArrowRight, Bot, ExternalLink, Network, Route } from "lucide-react";
 import type { ReactNode } from "react";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { cn } from "@/lib/utils";
 
 const AGENT_TYPE_CONFIG: Record<
   string,
@@ -37,6 +39,7 @@ export function ConnectDialog({
   docsPage,
   children,
 }: ConnectDialogProps) {
+  const docsUrl = getFrontendDocsUrl(docsPage);
   const config = AGENT_TYPE_CONFIG[agent.agentType] ?? AGENT_TYPE_CONFIG.agent;
   const Icon = config.icon;
 
@@ -55,23 +58,27 @@ export function ConnectDialog({
         </div>
       }
       size="large"
+      className="h-auto max-h-[90vh]"
     >
       <DialogBody className="pb-4">{children}</DialogBody>
 
       <DialogStickyFooter className="mt-0 sm:justify-between sm:[&>*:first-child]:mr-auto">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-          <span>
-            Need help? Check our{" "}
-            <a
-              href={getDocsUrl(docsPage)}
-              target="_blank"
-              className="text-primary hover:underline font-medium"
-              rel="noopener"
-            >
-              documentation
-            </a>
-          </span>
+          {docsUrl && (
+            <>
+              <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+              <span>
+                Need help? Check our{" "}
+                <ExternalDocsLink
+                  href={docsUrl}
+                  className="font-medium text-primary"
+                  showIcon={false}
+                >
+                  documentation
+                </ExternalDocsLink>
+              </span>
+            </>
+          )}
         </div>
         <Button
           type="button"
@@ -84,5 +91,29 @@ export function ConnectDialog({
         </Button>
       </DialogStickyFooter>
     </FormDialog>
+  );
+}
+
+export function ConnectDialogSection({
+  title,
+  description,
+  className,
+  children,
+}: {
+  title: string;
+  description?: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className={cn("space-y-4", className)}>
+      <div className="space-y-1">
+        <h3 className="text-sm font-semibold">{title}</h3>
+        {description ? (
+          <p className="text-sm text-muted-foreground">{description}</p>
+        ) : null}
+      </div>
+      {children}
+    </section>
   );
 }

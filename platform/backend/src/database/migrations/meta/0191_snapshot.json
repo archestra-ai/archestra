@@ -1,5 +1,5 @@
 {
-  "id": "7a1eb5f3-0ac1-42f5-b36d-be0598d8916c",
+  "id": "1990bfa4-c42b-498b-97aa-fa99c5d8ef16",
   "prevId": "58563d79-37a5-4aad-8af7-494143cb1fae",
   "version": "7",
   "dialect": "postgresql",
@@ -2263,153 +2263,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.dual_llm_config": {
-      "name": "dual_llm_config",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "enabled": {
-          "name": "enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "main_agent_prompt": {
-          "name": "main_agent_prompt",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "quarantined_agent_prompt": {
-          "name": "quarantined_agent_prompt",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "summary_prompt": {
-          "name": "summary_prompt",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "max_rounds": {
-          "name": "max_rounds",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 5
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.dual_llm_results": {
-      "name": "dual_llm_results",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "agent_id": {
-          "name": "agent_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "tool_call_id": {
-          "name": "tool_call_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "conversations": {
-          "name": "conversations",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "result": {
-          "name": "result",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "dual_llm_results_agent_id_idx": {
-          "name": "dual_llm_results_agent_id_idx",
-          "columns": [
-            {
-              "expression": "agent_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "dual_llm_results_agent_id_agents_id_fk": {
-          "name": "dual_llm_results_agent_id_agents_id_fk",
-          "tableFrom": "dual_llm_results",
-          "tableTo": "agents",
-          "columnsFrom": [
-            "agent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.identity_provider": {
       "name": "identity_provider",
       "schema": "",
@@ -2645,6 +2498,12 @@
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true
+        },
+        "dual_llm_analyses": {
+          "name": "dual_llm_analyses",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
         },
         "type": {
           "name": "type",
@@ -3665,20 +3524,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "visibility": {
-          "name": "visibility",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'org-wide'"
-        },
-        "team_ids": {
-          "name": "team_ids",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
         "connector_type": {
           "name": "connector_type",
           "type": "text",
@@ -3816,6 +3661,20 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "visibility": {
+          "name": "visibility",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'org-wide'"
+        },
+        "team_ids": {
+          "name": "team_ids",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
         },
         "status": {
           "name": "status",

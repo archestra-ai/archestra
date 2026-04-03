@@ -104,9 +104,11 @@ function SelectItem({
   className,
   children,
   description,
+  icon,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Item> & {
   description?: React.ReactNode;
+  icon?: React.ReactNode;
 }) {
   return (
     <SelectPrimitive.Item
@@ -125,6 +127,7 @@ function SelectItem({
           <CheckIcon className="size-4" />
         </SelectPrimitive.ItemIndicator>
       </span>
+      {icon}
       <div className="flex flex-col">
         <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
         {description && (

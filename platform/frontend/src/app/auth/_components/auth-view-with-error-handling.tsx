@@ -1,6 +1,7 @@
 "use client";
 
 import { AuthView } from "@daveyplate/better-auth-ui";
+import { GITHUB_REPO_NEW_ISSUE_URL } from "@shared";
 import {
   AlertCircle,
   ExternalLink,
@@ -19,7 +20,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import config from "@/lib/config";
+import config from "@/lib/config/config";
+import { usePublicConfig } from "@/lib/config/config.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { SignOutWithIdpLogout } from "./sign-out-with-idp-logout";
 
 const { IdentityProviderSelector } = config.enterpriseFeatures.core
@@ -31,7 +34,7 @@ const { IdentityProviderSelector } = config.enterpriseFeatures.core
 
 const { usePublicIdentityProviders } = config.enterpriseFeatures.core
   ? // biome-ignore lint/style/noRestrictedImports: Conditional EE query import
-    await import("@/lib/identity-provider.query.ee")
+    await import("@/lib/auth/identity-provider.query.ee")
   : {
       usePublicIdentityProviders: () => ({
         data: [],
@@ -126,6 +129,7 @@ export function AuthViewWithErrorHandling({
   path,
   callbackURL,
 }: AuthViewWithErrorHandlingProps) {
+  const appName = useAppName();
   const searchParams = useSearchParams();
   const [serverError, setServerError] = useState(false);
   const [originError, setOriginError] = useState<string | null>(null);
@@ -133,10 +137,12 @@ export function AuthViewWithErrorHandling({
     title: string;
     message: string;
   } | null>(null);
+  const { data: publicConfig, isLoading: isLoadingPublicConfig } =
+    usePublicConfig();
   const { data: identityProvidersData, isLoading: isLoadingIdentityProviders } =
     usePublicIdentityProviders();
 
-  const isBasicAuthDisabled = config.disableBasicAuth;
+  const isBasicAuthDisabled = publicConfig?.disableBasicAuth ?? false;
   // Extract providers array - data can be null or an array of providers
   const identityProviders = Array.isArray(identityProvidersData)
     ? identityProvidersData
@@ -248,6 +254,10 @@ export function AuthViewWithErrorHandling({
   // (callback, error, etc. are handled by better-auth-ui)
   const alwaysShowAuthView = !isSignInPage && path !== "sign-up";
 
+  if (isLoadingPublicConfig && isSignInPage) {
+    return null;
+  }
+
   // When basic auth is disabled and SSO providers are still loading, wait (only for sign-in)
   if (isBasicAuthDisabled && isLoadingIdentityProviders && isSignInPage) {
     return null;
@@ -336,7 +346,7 @@ export function AuthViewWithErrorHandling({
       </AlertTitle>
       <AlertDescription className="text-amber-700 dark:text-amber-300">
         <p className="text-sm mb-2">
-          You are accessing Archestra from <code>{originError}</code>, which is
+          You are accessing {appName} from <code>{originError}</code>, which is
           not in the list of trusted origins.
         </p>
         <p className="text-sm mb-2">
@@ -395,7 +405,7 @@ export function AuthViewWithErrorHandling({
                 asChild
               >
                 <a
-                  href="https://github.com/archestra-ai/archestra/issues/new"
+                  href={GITHUB_REPO_NEW_ISSUE_URL}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center"

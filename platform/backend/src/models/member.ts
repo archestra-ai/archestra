@@ -1,5 +1,5 @@
 import type { AnyRoleName } from "@shared";
-import { and, count, eq, ilike, or } from "drizzle-orm";
+import { and, count, eq, ilike, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import logger from "@/logging";
@@ -187,6 +187,27 @@ class MemberModel {
       "MemberModel.findAllByOrganization: completed",
     );
     return results;
+  }
+
+  static async findUserIdsInOrganization(params: {
+    organizationId: string;
+    userIds: string[];
+  }): Promise<string[]> {
+    if (params.userIds.length === 0) {
+      return [];
+    }
+
+    const rows = await db
+      .select({ userId: schema.membersTable.userId })
+      .from(schema.membersTable)
+      .where(
+        and(
+          eq(schema.membersTable.organizationId, params.organizationId),
+          inArray(schema.membersTable.userId, params.userIds),
+        ),
+      );
+
+    return rows.map((row) => row.userId);
   }
 
   /**

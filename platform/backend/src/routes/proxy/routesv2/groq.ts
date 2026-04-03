@@ -40,7 +40,7 @@ const groqProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GroqChatCompletionsWithDefaultAgent,
         description: "Create a chat completion with Groq (uses default agent)",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         body: Groq.API.ChatCompletionRequestSchema,
         headers: Groq.API.ChatCompletionsHeadersSchema,
         response: constructResponseSchema(
@@ -64,7 +64,7 @@ const groqProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GroqChatCompletionsWithAgent,
         description: "Create a chat completion with Groq for a specific agent",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
         }),

@@ -14,9 +14,11 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import type {
+  DualLlmAnalysis,
   InteractionRequest,
   InteractionResponse,
   ToonSkipReason,
+  UnsafeContextBoundary,
 } from "@/types";
 import agentsTable from "./agent";
 import usersTable from "./user";
@@ -71,6 +73,10 @@ const interactionsTable = pgTable(
     request: jsonb("request").$type<InteractionRequest>().notNull(),
     processedRequest: jsonb("processed_request").$type<InteractionRequest>(),
     response: jsonb("response").$type<InteractionResponse>().notNull(),
+    dualLlmAnalyses: jsonb("dual_llm_analyses").$type<DualLlmAnalysis[]>(),
+    unsafeContextBoundary: jsonb(
+      "unsafe_context_boundary",
+    ).$type<UnsafeContextBoundary>(),
     type: varchar("type").$type<SupportedProviderDiscriminator>().notNull(),
     model: varchar("model"),
     /**

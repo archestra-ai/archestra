@@ -22,7 +22,7 @@ import type {
   ToolCompressionStats,
   UsageView,
 } from "@/types";
-import { MockAnthropicClient } from "../mock-anthropic-client";
+import { extractCommonMessageText } from "@/types";
 import {
   hasImageContent,
   isImageTooLarge,
@@ -284,6 +284,7 @@ class AnthropicRequestAdapter
     for (const message of messages) {
       const commonMessage: CommonMessage = {
         role: message.role as CommonMessage["role"],
+        content: extractCommonMessageText(message),
       };
 
       // Handle user messages that may contain tool results
@@ -1137,10 +1138,6 @@ export const anthropicAdapterFactory: LLMProvider<
     apiKey: string | undefined,
     options: CreateClientOptions,
   ): AnthropicProvider {
-    if (options.mockMode) {
-      return new MockAnthropicClient() as unknown as AnthropicProvider;
-    }
-
     // Use observable fetch for request duration metrics if agent is provided
     const customFetch = options.agent
       ? metrics.llm.getObservableFetch(

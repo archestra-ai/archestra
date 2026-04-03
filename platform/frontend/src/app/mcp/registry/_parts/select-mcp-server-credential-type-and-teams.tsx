@@ -14,10 +14,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useHasPermissions } from "@/lib/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { useMcpServers } from "@/lib/mcp-server.query";
-import { useTeams } from "@/lib/team.query";
+import { useMcpServers } from "@/lib/mcp/mcp-server.query";
+import { useTeams } from "@/lib/teams/team.query";
 
 const PERSONAL_VALUE = "personal";
 

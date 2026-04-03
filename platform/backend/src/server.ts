@@ -16,9 +16,11 @@ if (isMainModule) {
   await import("./observability/tracing/sdk");
 }
 
+import { readFileSync } from "node:fs";
 import fastifyCors from "@fastify/cors";
 import fastifyFormbody from "@fastify/formbody";
 import fastifySwagger from "@fastify/swagger";
+import type { McpUiResourceCsp } from "@modelcontextprotocol/ext-apps";
 import * as Sentry from "@sentry/node";
 import Fastify from "fastify";
 import metricsPlugin from "fastify-metrics";
@@ -49,9 +51,9 @@ import { seedRequiredStartingData } from "@/database/seed";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import { enterpriseLicenseMiddleware } from "@/middleware";
-import AgentLabelModel from "@/models/agent-label";
 import OrganizationModel from "@/models/organization";
-import { metrics } from "@/observability";
+import { initializeObservabilityMetrics } from "@/observability";
+import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { taskQueueService } from "@/task-queue";
 import { registerTaskHandlers } from "@/task-queue/handlers";
@@ -248,6 +250,7 @@ export const createFastifyInstance = () =>
   Fastify({
     loggerInstance: logger,
     disableRequestLogging: true,
+    trustProxy: config.api.trustProxy,
   })
     .withTypeProvider<ZodTypeProvider>()
     .setValidatorCompiler(validatorCompiler)
@@ -382,6 +385,53 @@ const registerMetricsPlugin = async (
   });
 };
 
+const addMetricsAuthenticationHook = (
+  fastify: FastifyInstanceWithZod,
+): void => {
+  const { secret: metricsSecret } = observability.metrics;
+
+  if (!metricsSecret) {
+    return;
+  }
+
+  fastify.addHook("preHandler", async (request, reply) => {
+    if (
+      request.url === HEALTH_PATH ||
+      request.url === READY_PATH ||
+      request.url.startsWith(`${HEALTH_PATH}?`) ||
+      request.url.startsWith(`${READY_PATH}?`)
+    ) {
+      return;
+    }
+
+    const authHeader = request.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      reply.code(401).send({ error: "Unauthorized: Bearer token required" });
+      return;
+    }
+
+    const token = authHeader.slice(7);
+    if (token !== metricsSecret) {
+      reply.code(401).send({ error: "Unauthorized: Invalid token" });
+      return;
+    }
+  });
+};
+
+const registerStandaloneMetricsEndpoint = async (params: {
+  fastify: FastifyInstanceWithZod;
+  enableDefaultMetrics: boolean;
+}): Promise<void> => {
+  const { fastify, enableDefaultMetrics } = params;
+  addMetricsAuthenticationHook(fastify);
+
+  await fastify.register(metricsPlugin, {
+    endpoint: observability.metrics.endpoint,
+    defaultMetrics: { enabled: enableDefaultMetrics },
+    routeMetrics: { enabled: false },
+  });
+};
+
 /**
  * Create separate Fastify instance for metrics on a separate port
  *
@@ -392,36 +442,17 @@ let metricsServerInstance: Awaited<
 > | null = null;
 
 const startMetricsServer = async () => {
-  const { secret: metricsSecret } = observability.metrics;
-
   const metricsServer = createFastifyInstance();
   metricsServerInstance = metricsServer;
 
-  // Add authentication hook for metrics endpoint if secret is configured
-  if (metricsSecret) {
-    metricsServer.addHook("preHandler", async (request, reply) => {
-      // Skip auth for health and readiness endpoints
-      if (request.url === HEALTH_PATH || request.url === READY_PATH) {
-        return;
-      }
-
-      const authHeader = request.headers.authorization;
-      if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        reply.code(401).send({ error: "Unauthorized: Bearer token required" });
-        return;
-      }
-
-      const token = authHeader.slice(7); // Remove 'Bearer ' prefix
-      if (token !== metricsSecret) {
-        reply.code(401).send({ error: "Unauthorized: Invalid token" });
-        return;
-      }
-    });
-  }
-
   metricsServer.get(HEALTH_PATH, () => ({ status: "ok" }));
 
-  await registerMetricsPlugin(metricsServer, true);
+  await registerStandaloneMetricsEndpoint({
+    fastify: metricsServer,
+    // The web process already registers default metrics on its main Fastify
+    // instance. The dedicated metrics server must only expose that registry.
+    enableDefaultMetrics: false,
+  });
 
   // Start metrics server on dedicated port
   await metricsServer.listen({
@@ -430,9 +461,133 @@ const startMetricsServer = async () => {
   });
   metricsServer.log.info(
     `Metrics server started on port ${observability.metrics.port}${
-      metricsSecret ? " (with authentication)" : " (no authentication)"
+      observability.metrics.secret
+        ? " (with authentication)"
+        : " (no authentication)"
     }`,
   );
+};
+
+// ============ MCP Sandbox Server ============
+
+/**
+ * Allowlist-validate CSP domain entries.
+ * Only permits valid hostnames and wildcard-subdomain patterns (e.g. *.example.com).
+ * Blocks dangerous CSP sources like *, data:, blob:, https: that a denylist would miss.
+ */
+// Matches bare domains (esm.sh), wildcard subdomains (*.esm.sh),
+// scheme-prefixed domains (https://esm.sh, wss://esm.sh), and optional port (:8443).
+const VALID_CSP_DOMAIN =
+  /^(wss?:\/\/|https?:\/\/)?(\*\.)?[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+(:\d{1,5})?$/;
+
+export function sanitizeCspDomains(domains?: string[]): string[] {
+  if (!domains) return [];
+  return domains.filter(
+    (d) => typeof d === "string" && VALID_CSP_DOMAIN.test(d),
+  );
+}
+
+export function buildCspHeader(csp?: McpUiResourceCsp): string {
+  const resourceDomains = sanitizeCspDomains(csp?.resourceDomains).join(" ");
+  const connectDomains = sanitizeCspDomains(csp?.connectDomains).join(" ");
+  const frameDomains = sanitizeCspDomains(csp?.frameDomains).join(" ") || null;
+  const baseUriDomains =
+    sanitizeCspDomains(csp?.baseUriDomains).join(" ") || null;
+
+  const directives = [
+    "default-src 'none'",
+    `script-src 'self' 'unsafe-inline' blob: data: ${resourceDomains}`.trim(),
+    `style-src 'self' 'unsafe-inline' blob: data: ${resourceDomains}`.trim(),
+    `img-src 'self' data: blob: ${resourceDomains}`.trim(),
+    `font-src 'self' data: blob: ${resourceDomains}`.trim(),
+    `connect-src 'self' ${connectDomains}`.trim(),
+    `worker-src 'self' blob: ${resourceDomains}`.trim(),
+    frameDomains ? `frame-src ${frameDomains}` : "frame-src 'none'",
+    "object-src 'none'",
+    baseUriDomains ? `base-uri ${baseUriDomains}` : "base-uri 'none'",
+  ];
+
+  return directives.join("; ");
+}
+
+/**
+ * Read and prepare the sandbox proxy HTML at startup.
+ * Returns null if the file is not found (non-fatal — sandbox route won't be registered).
+ */
+const loadSandboxHtml = (): string | null => {
+  const { filePath } = config.mcpSandbox;
+  try {
+    const rawHtml = readFileSync(filePath, "utf-8");
+    // Inject allowed origins at startup (comes from env config, doesn't change at runtime).
+    // The placeholder is replaced with a JSON array; empty array = allow any origin (dev/open mode).
+    // Escape < and > to prevent </script> breakout when embedded in HTML.
+    const safeJson = JSON.stringify(config.mcpSandbox.allowedOrigins)
+      .replace(/</g, "\\u003c")
+      .replace(/>/g, "\\u003e");
+    return rawHtml.replace("__ARCHESTRA_ALLOWED_ORIGINS__", safeJson);
+  } catch (err) {
+    logger.warn(
+      { err, filePath },
+      "MCP sandbox proxy HTML not found — /_sandbox/ route will not be registered",
+    );
+    return null;
+  }
+};
+
+const sandboxHtml = loadSandboxHtml();
+
+/**
+ * Register the sandbox proxy route on the main Fastify instance.
+ *
+ * Serves the sandbox proxy HTML under /_sandbox/ with frame-ancestors header.
+ * CSP for guest content is handled entirely by the proxy HTML (meta tag injection).
+ * Isolation comes from cross-origin (localhost swap or domain) or opaque origin fallback.
+ */
+const registerSandboxRoute = (
+  fastify: ReturnType<typeof createFastifyInstance>,
+) => {
+  if (!sandboxHtml) return;
+
+  if (process.env.ARCHESTRA_MCP_SANDBOX_PORT) {
+    logger.warn(
+      "ARCHESTRA_MCP_SANDBOX_PORT is deprecated and no longer used. " +
+        "The sandbox is now served from the main backend on /_sandbox/. " +
+        "Remove this env var from your configuration.",
+    );
+  }
+
+  fastify.get("/_sandbox/mcp-sandbox-proxy.html", async (request, reply) => {
+    // When a sandbox domain is configured, validate the Host header matches
+    // *.{domain} to prevent the sandbox route from being abused on the main origin.
+    if (config.mcpSandbox.domain) {
+      const host = request.hostname;
+      if (!host.endsWith(`.${config.mcpSandbox.domain}`)) {
+        return reply.status(403).send("Invalid sandbox host");
+      }
+    }
+
+    // frame-ancestors restricts which origins can embed this sandbox iframe.
+    // This is the only CSP directive set via HTTP header — it cannot be set via meta tag.
+    // Guest content CSP is handled by the proxy HTML (meta tag injection from sandbox-resource-ready message).
+    const frameAncestorsList = [...config.mcpSandbox.allowedOrigins];
+    if (config.mcpSandbox.domain) {
+      frameAncestorsList.push(`*.${config.mcpSandbox.domain}`);
+    }
+    const frameAncestors =
+      frameAncestorsList.length > 0 ? frameAncestorsList.join(" ") : "*";
+    void reply.header(
+      "Content-Security-Policy",
+      `frame-ancestors ${frameAncestors}`,
+    );
+
+    // Prevent caching to ensure fresh CSP on each load
+    void reply.header("Cache-Control", "no-cache, no-store, must-revalidate");
+    void reply.header("Pragma", "no-cache");
+    void reply.header("Expires", "0");
+
+    void reply.type("text/html");
+    return reply.send(sandboxHtml);
+  });
 };
 
 const startMcpServerRuntime = async (
@@ -566,15 +721,14 @@ const startWebServer = async () => {
       promClient.default.Registry.OPENMETRICS_CONTENT_TYPE,
     );
 
-    const labelKeys = await AgentLabelModel.getAllKeys();
-    metrics.llm.initializeMetrics(labelKeys);
-    metrics.mcp.initializeMcpMetrics(labelKeys);
-    metrics.agentExecution.initializeAgentExecutionMetrics(labelKeys);
-    metrics.rag.initializeRagMetrics();
-    metrics.taskQueue.initializeTaskQueueMetrics();
+    const labelKeys = await initializeObservabilityMetrics();
 
     // Start metrics server
     await startMetricsServer();
+
+    // Register sandbox proxy route on the main server (single-port setup).
+    // Iframe isolation comes from the sandbox attribute (no allow-same-origin → opaque origin).
+    registerSandboxRoute(fastify);
 
     logger.info(
       `Observability initialized with ${labelKeys.length} agent label keys`,
@@ -663,7 +817,9 @@ const startWebServer = async () => {
     await registerSwaggerPlugin(fastify);
 
     // Register routes
-    fastify.get("/openapi.json", async () => fastify.swagger());
+    fastify.get("/openapi.json", async () =>
+      enrichOpenApiWithRbac(fastify.swagger()),
+    );
 
     if (enableE2eTestEndpoints) {
       fastify.get("/test", async () => ({
@@ -785,15 +941,18 @@ const startWorker = async () => {
       promClient.default.Registry.OPENMETRICS_CONTENT_TYPE,
     );
 
-    metrics.rag.initializeRagMetrics();
-    metrics.taskQueue.initializeTaskQueueMetrics();
+    const labelKeys = await initializeObservabilityMetrics({
+      includeMcpMetrics: false,
+      includeAgentExecutionMetrics: false,
+    });
 
     registerTaskHandlers(taskQueueService);
     await taskQueueService.seedPeriodicTasks();
     taskQueueService.startWorker();
 
-    // Minimal health server for Kubernetes probes
-    const healthServer = Fastify();
+    // Minimal worker server for Kubernetes probes and Prometheus scraping
+    const healthServer = createFastifyInstance();
+
     healthServer.get("/health", async () => ({ status: "ok" }));
     healthServer.get("/ready", async (_request, reply) => {
       const dbHealthy = await isDatabaseHealthy();
@@ -802,8 +961,16 @@ const startWorker = async () => {
       }
       return { status: "ok" };
     });
+
+    await registerStandaloneMetricsEndpoint({
+      fastify: healthServer,
+      enableDefaultMetrics: true,
+    });
+
     await healthServer.listen({ port: port, host });
-    logger.info(`Worker health server started on port ${port}`);
+    logger.info(
+      `Worker server started on port ${port} with ${labelKeys.length} agent label keys`,
+    );
 
     const gracefulShutdown = async (signal: string) => {
       logger.info(`Worker received ${signal}, shutting down...`);

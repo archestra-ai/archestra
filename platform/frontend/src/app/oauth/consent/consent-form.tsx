@@ -14,7 +14,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { useOAuthClientInfo, useSubmitOAuthConsent } from "@/lib/oauth.query";
+import {
+  useOAuthClientInfo,
+  useSubmitOAuthConsent,
+} from "@/lib/auth/oauth.query";
 
 export function ConsentForm() {
   const searchParams = useSearchParams();

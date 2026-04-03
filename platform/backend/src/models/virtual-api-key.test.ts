@@ -10,11 +10,11 @@ describe("VirtualApiKeyModel", () => {
   test("create: creates a virtual key and returns the token value", async ({
     makeOrganization,
     makeSecret,
-    makeChatApiKey,
+    makeLlmProviderApiKey,
   }) => {
     const org = await makeOrganization();
     const secret = await makeSecret({ secret: { apiKey: "sk-real-key" } });
-    const chatApiKey = await makeChatApiKey(org.id, secret.id);
+    const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id);
 
     const { virtualKey, value } = await VirtualApiKeyModel.create({
       chatApiKeyId: chatApiKey.id,
@@ -32,11 +32,11 @@ describe("VirtualApiKeyModel", () => {
   test("create: stores expiresAt when provided", async ({
     makeOrganization,
     makeSecret,
-    makeChatApiKey,
+    makeLlmProviderApiKey,
   }) => {
     const org = await makeOrganization();
     const secret = await makeSecret({ secret: { apiKey: "sk-real-key" } });
-    const chatApiKey = await makeChatApiKey(org.id, secret.id);
+    const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id);
 
     const futureDate = new Date(Date.now() + 86400_000);
     const { virtualKey } = await VirtualApiKeyModel.create({
@@ -49,6 +49,36 @@ describe("VirtualApiKeyModel", () => {
     expect(virtualKey.expiresAt?.getTime()).toBe(futureDate.getTime());
   });
 
+  test("create: stores scope, author, and team assignments", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeUser,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const secret = await makeSecret({ secret: { apiKey: "sk-real-key" } });
+    const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id);
+
+    const { virtualKey, teams, authorName } = await VirtualApiKeyModel.create({
+      chatApiKeyId: chatApiKey.id,
+      name: "Team Virtual Key",
+      scope: "team",
+      authorId: user.id,
+      teamIds: [team.id],
+    });
+
+    expect(virtualKey.scope).toBe("team");
+    expect(virtualKey.authorId).toBe(user.id);
+    expect(teams).toEqual([{ id: team.id, name: team.name }]);
+    expect(authorName).toBe(user.name);
+    expect(
+      await VirtualApiKeyModel.getTeamIdsForVirtualApiKey(virtualKey.id),
+    ).toEqual([team.id]);
+  });
+
   // =========================================================================
   // findByChatApiKeyId
   // =========================================================================
@@ -56,11 +86,11 @@ describe("VirtualApiKeyModel", () => {
   test("findByChatApiKeyId: returns all virtual keys for a chat API key", async ({
     makeOrganization,
     makeSecret,
-    makeChatApiKey,
+    makeLlmProviderApiKey,
   }) => {
     const org = await makeOrganization();
     const secret = await makeSecret({ secret: { apiKey: "sk-key" } });
-    const chatApiKey = await makeChatApiKey(org.id, secret.id);
+    const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id);
 
     await VirtualApiKeyModel.create({
       chatApiKeyId: chatApiKey.id,
@@ -84,6 +114,35 @@ describe("VirtualApiKeyModel", () => {
     expect(keys).toHaveLength(0);
   });
 
+  test("findByChatApiKeyId: respects organization boundary for access-controlled lookups", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeUser,
+  }) => {
+    const orgA = await makeOrganization();
+    const orgB = await makeOrganization();
+    const user = await makeUser();
+    const secret = await makeSecret({ secret: { apiKey: "sk-key" } });
+    const chatApiKey = await makeLlmProviderApiKey(orgB.id, secret.id);
+
+    await VirtualApiKeyModel.create({
+      chatApiKeyId: chatApiKey.id,
+      name: "Other Org Key",
+      scope: "org",
+    });
+
+    const keys = await VirtualApiKeyModel.findByChatApiKeyId({
+      chatApiKeyId: chatApiKey.id,
+      organizationId: orgA.id,
+      userId: user.id,
+      userTeamIds: [],
+      isAdmin: true,
+    });
+
+    expect(keys).toEqual([]);
+  });
+
   // =========================================================================
   // findById
   // =========================================================================
@@ -91,11 +150,11 @@ describe("VirtualApiKeyModel", () => {
   test("findById: returns the virtual key", async ({
     makeOrganization,
     makeSecret,
-    makeChatApiKey,
+    makeLlmProviderApiKey,
   }) => {
     const org = await makeOrganization();
     const secret = await makeSecret({ secret: { apiKey: "sk-key" } });
-    const chatApiKey = await makeChatApiKey(org.id, secret.id);
+    const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id);
 
     const { virtualKey } = await VirtualApiKeyModel.create({
       chatApiKeyId: chatApiKey.id,
@@ -121,11 +180,11 @@ describe("VirtualApiKeyModel", () => {
   test("delete: removes a virtual key", async ({
     makeOrganization,
     makeSecret,
-    makeChatApiKey,
+    makeLlmProviderApiKey,
   }) => {
     const org = await makeOrganization();
     const secret = await makeSecret({ secret: { apiKey: "sk-key" } });
-    const chatApiKey = await makeChatApiKey(org.id, secret.id);
+    const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id);
 
     const { virtualKey } = await VirtualApiKeyModel.create({
       chatApiKeyId: chatApiKey.id,
@@ -153,11 +212,11 @@ describe("VirtualApiKeyModel", () => {
   test("countByChatApiKeyId: returns correct count", async ({
     makeOrganization,
     makeSecret,
-    makeChatApiKey,
+    makeLlmProviderApiKey,
   }) => {
     const org = await makeOrganization();
     const secret = await makeSecret({ secret: { apiKey: "sk-key" } });
-    const chatApiKey = await makeChatApiKey(org.id, secret.id);
+    const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id);
 
     expect(await VirtualApiKeyModel.countByChatApiKeyId(chatApiKey.id)).toBe(0);
 
@@ -180,11 +239,11 @@ describe("VirtualApiKeyModel", () => {
   test("validateToken: validates a correct token and returns key + chat API key", async ({
     makeOrganization,
     makeSecret,
-    makeChatApiKey,
+    makeLlmProviderApiKey,
   }) => {
     const org = await makeOrganization();
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
-    const chatApiKey = await makeChatApiKey(org.id, secret.id);
+    const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id);
 
     const { value } = await VirtualApiKeyModel.create({
       chatApiKeyId: chatApiKey.id,
@@ -216,11 +275,11 @@ describe("VirtualApiKeyModel", () => {
   test("findAllByOrganization: returns virtual keys with parent API key info", async ({
     makeOrganization,
     makeSecret,
-    makeChatApiKey,
+    makeLlmProviderApiKey,
   }) => {
     const org = await makeOrganization();
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
-    const chatApiKey = await makeChatApiKey(org.id, secret.id, {
+    const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id, {
       name: "Parent Key",
       provider: "anthropic",
     });
@@ -261,15 +320,15 @@ describe("VirtualApiKeyModel", () => {
   test("findAllByOrganization: filters by search and parent chat api key", async ({
     makeOrganization,
     makeSecret,
-    makeChatApiKey,
+    makeLlmProviderApiKey,
   }) => {
     const org = await makeOrganization();
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
-    const anthropicKey = await makeChatApiKey(org.id, secret.id, {
+    const anthropicKey = await makeLlmProviderApiKey(org.id, secret.id, {
       name: "Anthropic Parent",
       provider: "anthropic",
     });
-    const openAiKey = await makeChatApiKey(org.id, secret.id, {
+    const openAiKey = await makeLlmProviderApiKey(org.id, secret.id, {
       name: "OpenAI Parent",
       provider: "openai",
     });
@@ -294,5 +353,180 @@ describe("VirtualApiKeyModel", () => {
     expect(result.data[0].name).toBe("Primary Virtual Key");
     expect(result.data[0].parentKeyName).toBe("Anthropic Parent");
     expect(result.pagination.total).toBe(1);
+  });
+
+  test("findAllByOrganization: treats LIKE wildcard characters in search as literals", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
+    const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      name: "Parent Key",
+      provider: "anthropic",
+    });
+
+    await VirtualApiKeyModel.create({
+      chatApiKeyId: chatApiKey.id,
+      name: "Virtual%Key",
+    });
+    await VirtualApiKeyModel.create({
+      chatApiKeyId: chatApiKey.id,
+      name: "Virtual Alpha Key",
+    });
+
+    const result = await VirtualApiKeyModel.findAllByOrganization({
+      organizationId: org.id,
+      pagination: { limit: 20, offset: 0 },
+      search: "%",
+    });
+
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0].name).toBe("Virtual%Key");
+    expect(result.pagination.total).toBe(1);
+  });
+
+  test("findAllByOrganization: applies scope visibility for non-admin users", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeUser,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser({ email: "owner@test.com" });
+    const otherUser = await makeUser({ email: "other@test.com" });
+    const team = await makeTeam(org.id, owner.id, { name: "Platform Team" });
+    const outsiderTeam = await makeTeam(org.id, owner.id, {
+      name: "Other Team",
+    });
+    const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
+    const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id);
+
+    await VirtualApiKeyModel.create({
+      chatApiKeyId: chatApiKey.id,
+      name: "Org Key",
+      scope: "org",
+    });
+    await VirtualApiKeyModel.create({
+      chatApiKeyId: chatApiKey.id,
+      name: "My Personal Key",
+      scope: "personal",
+      authorId: owner.id,
+    });
+    await VirtualApiKeyModel.create({
+      chatApiKeyId: chatApiKey.id,
+      name: "Other Personal Key",
+      scope: "personal",
+      authorId: otherUser.id,
+    });
+    await VirtualApiKeyModel.create({
+      chatApiKeyId: chatApiKey.id,
+      name: "My Team Key",
+      scope: "team",
+      authorId: owner.id,
+      teamIds: [team.id],
+    });
+    await VirtualApiKeyModel.create({
+      chatApiKeyId: chatApiKey.id,
+      name: "Other Team Key",
+      scope: "team",
+      authorId: owner.id,
+      teamIds: [outsiderTeam.id],
+    });
+
+    const result = await VirtualApiKeyModel.findAllByOrganization({
+      organizationId: org.id,
+      pagination: { limit: 20, offset: 0 },
+      userId: owner.id,
+      userTeamIds: [team.id],
+      isAdmin: false,
+    });
+
+    expect(result.data.map((item) => item.name)).toEqual(
+      expect.arrayContaining(["Org Key", "My Personal Key", "My Team Key"]),
+    );
+    expect(result.data.map((item) => item.name)).not.toContain(
+      "Other Personal Key",
+    );
+    expect(result.data.map((item) => item.name)).not.toContain(
+      "Other Team Key",
+    );
+  });
+
+  test("findAllByOrganization: admin can see all scopes", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const otherUser = await makeUser({ email: "other-admin@test.com" });
+    const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
+    const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id);
+
+    await VirtualApiKeyModel.create({
+      chatApiKeyId: chatApiKey.id,
+      name: "Org Key",
+      scope: "org",
+    });
+    await VirtualApiKeyModel.create({
+      chatApiKeyId: chatApiKey.id,
+      name: "Other Personal Key",
+      scope: "personal",
+      authorId: otherUser.id,
+    });
+
+    const result = await VirtualApiKeyModel.findAllByOrganization({
+      organizationId: org.id,
+      pagination: { limit: 20, offset: 0 },
+      userId: user.id,
+      userTeamIds: [],
+      isAdmin: true,
+    });
+
+    expect(result.data.map((item) => item.name)).toEqual(
+      expect.arrayContaining(["Org Key", "Other Personal Key"]),
+    );
+  });
+
+  test("update: updates scope, teams, and expiration", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeUser,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
+    const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id);
+    const futureDate = new Date(Date.now() + 3600_000);
+
+    const { virtualKey } = await VirtualApiKeyModel.create({
+      chatApiKeyId: chatApiKey.id,
+      name: "Before",
+      scope: "personal",
+      authorId: user.id,
+    });
+
+    const updated = await VirtualApiKeyModel.update({
+      id: virtualKey.id,
+      name: "After",
+      expiresAt: futureDate,
+      scope: "team",
+      authorId: user.id,
+      teamIds: [team.id],
+    });
+
+    expect(updated?.name).toBe("After");
+    expect(updated?.scope).toBe("team");
+    expect(updated?.expiresAt?.getTime()).toBe(futureDate.getTime());
+    expect(
+      await VirtualApiKeyModel.getTeamIdsForVirtualApiKey(virtualKey.id),
+    ).toEqual([team.id]);
   });
 });

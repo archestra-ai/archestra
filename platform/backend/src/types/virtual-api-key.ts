@@ -1,22 +1,36 @@
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { ResourceVisibilityScopeSchema } from "./visibility";
+
+const VirtualApiKeyTeamSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+});
 
 export const SelectVirtualApiKeySchema = createSelectSchema(
   schema.virtualApiKeysTable,
-);
+).extend({
+  scope: ResourceVisibilityScopeSchema,
+});
 
 export const InsertVirtualApiKeySchema = createInsertSchema(
   schema.virtualApiKeysTable,
-).omit({
-  id: true,
-  createdAt: true,
-  lastUsedAt: true,
-});
+)
+  .omit({
+    id: true,
+    createdAt: true,
+    lastUsedAt: true,
+  })
+  .extend({
+    scope: ResourceVisibilityScopeSchema.optional(),
+  });
 
 /** Schema for virtual key response at creation time (includes full token value) */
 export const VirtualApiKeyWithValueSchema = SelectVirtualApiKeySchema.extend({
   value: z.string(),
+  teams: z.array(VirtualApiKeyTeamSchema),
+  authorName: z.string().nullable(),
 });
 
 /** Schema for virtual key with parent API key info (for org-wide listing) */
@@ -25,6 +39,8 @@ export const VirtualApiKeyWithParentInfoSchema =
     parentKeyName: z.string(),
     parentKeyProvider: z.string(),
     parentKeyBaseUrl: z.string().nullable(),
+    teams: z.array(VirtualApiKeyTeamSchema),
+    authorName: z.string().nullable(),
   });
 
 export type SelectVirtualApiKey = z.infer<typeof SelectVirtualApiKeySchema>;

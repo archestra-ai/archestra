@@ -4,6 +4,7 @@ import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsBlock,
@@ -19,11 +20,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import {
   useOrganization,
   useUpdateLlmSettings,
 } from "@/lib/organization.query";
-import { useTeams } from "@/lib/team.query";
+import { useTeams } from "@/lib/teams/team.query";
 
 type LimitCleanupInterval = NonNullable<
   NonNullable<
@@ -63,6 +65,10 @@ export default function LlmSettingsPage() {
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
   const [cleanupInterval, setCleanupInterval] =
     useState<LimitCleanupInterval>("1h");
+  const toonDocsUrl = getFrontendDocsUrl(
+    "platform-costs-and-limits",
+    "toon-compression",
+  );
 
   const updateLlmSettingsMutation = useUpdateLlmSettings(
     "LLM settings updated",
@@ -200,7 +206,25 @@ export default function LlmSettingsPage() {
     <SettingsSectionStack>
       <SettingsBlock
         title="Apply compression to tool results"
-        description="Reduce LLM token usage up to 60% by using TOON (Token-Oriented Object Notation) compression for tool results."
+        description={
+          <>
+            Reduce LLM token usage up to 60% by using TOON (Token-Oriented
+            Object Notation) compression for tool results.
+            {toonDocsUrl && (
+              <>
+                {" "}
+                <ExternalDocsLink
+                  href={toonDocsUrl}
+                  className="text-inherit underline underline-offset-4"
+                  showIcon={false}
+                >
+                  Learn how TOON compression works
+                </ExternalDocsLink>
+                .
+              </>
+            )}
+          </>
+        }
         control={
           <WithPermissions
             permissions={{ llmSettings: ["update"] }}

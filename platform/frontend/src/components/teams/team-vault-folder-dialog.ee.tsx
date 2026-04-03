@@ -8,6 +8,7 @@ import {
   Vault,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { StandardDialog } from "@/components/standard-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,13 +21,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useFeature } from "@/lib/config.query";
+import { useFeature } from "@/lib/config/config.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useCheckTeamVaultFolderConnectivity,
   useDeleteTeamVaultFolder,
   useSetTeamVaultFolder,
   useTeamVaultFolder,
-} from "@/lib/team-vault-folder.query.ee";
+} from "@/lib/teams/team-vault-folder.query.ee";
 
 interface Team {
   id: string;
@@ -45,6 +47,7 @@ export default function TeamVaultFolderDialog({
   onOpenChange,
   team,
 }: TeamVaultFolderDialogProps) {
+  const appName = useAppName();
   const [vaultPath, setVaultPath] = useState("");
   const [connectivityResult, setConnectivityResult] = useState<{
     connected: boolean;
@@ -109,33 +112,28 @@ export default function TeamVaultFolderDialog({
   // Readonly Vault feature requires both enterprise license and ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT
   if (!byosEnabled) {
     return (
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-[550px]">
-          <DialogHeader>
-            <DialogTitle>Team Vault Folder</DialogTitle>
-            <DialogDescription>
-              Connect a HashiCorp Vault folder to enable team secrets
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Readonly Vault Not Enabled</AlertTitle>
-              <AlertDescription>
-                Team Vault Folders require Readonly Vault to be enabled. Contact
-                your administrator to configure
-                ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT with an enterprise
-                license.
-              </AlertDescription>
-            </Alert>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <StandardDialog
+        open={open}
+        onOpenChange={onOpenChange}
+        title="Team Vault Folder"
+        description="Connect a HashiCorp Vault folder to enable team secrets"
+        size="small"
+        footer={
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Close
+          </Button>
+        }
+      >
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Readonly Vault Not Enabled</AlertTitle>
+          <AlertDescription>
+            Team Vault Folders require Readonly Vault to be enabled. Contact
+            your administrator to configure
+            ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT with an enterprise license.
+          </AlertDescription>
+        </Alert>
+      </StandardDialog>
     );
   }
 
@@ -181,7 +179,7 @@ export default function TeamVaultFolderDialog({
                 />
                 <div className="space-y-1 text-xs text-muted-foreground">
                   <p>
-                    Archestra is configured to use{" "}
+                    {appName} is configured to use{" "}
                     <strong>
                       {vaultKvVersion === "1"
                         ? "Key-Value Secrets Engine V1"
@@ -340,7 +338,7 @@ export default function TeamVaultFolderDialog({
                     </li>
                   </ul>
                   <p className="text-muted-foreground">
-                    Ensure Archestra has read access to the specified Vault
+                    Ensure {appName} has read access to the specified Vault
                     path.
                   </p>
                 </AlertDescription>

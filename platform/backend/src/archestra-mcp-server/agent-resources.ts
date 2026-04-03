@@ -22,7 +22,6 @@ import {
   UuidIdSchema,
 } from "@/types";
 import {
-  assignMcpServerTools,
   assignSubAgentDelegations,
   assignToolAssignments,
   catchError,
@@ -60,18 +59,13 @@ export const ToolAssignmentToolInputSchema =
     toolId: AgentToolAssignmentInputSchema.shape.toolId.describe(
       "The ID of the tool to assign to the agent.",
     ),
-    credentialSourceMcpServerId:
-      AgentToolAssignmentInputSchema.shape.credentialSourceMcpServerId.describe(
-        "For remote MCP tools, the deployed MCP server ID that should supply credentials.",
+    resolveAtCallTime:
+      AgentToolAssignmentInputSchema.shape.resolveAtCallTime.describe(
+        "When true, resolve credentials and execution target at tool call time. Prefer this for builder flows.",
       ),
-    executionSourceMcpServerId:
-      AgentToolAssignmentInputSchema.shape.executionSourceMcpServerId.describe(
-        "For local MCP tools, the deployed MCP server ID that should execute the tool.",
-      ),
-    useDynamicTeamCredential:
-      AgentToolAssignmentInputSchema.shape.useDynamicTeamCredential.describe(
-        "When true, resolve credentials dynamically from the invoking team instead of pinning a deployment.",
-      ),
+    mcpServerId: AgentToolAssignmentInputSchema.shape.mcpServerId.describe(
+      "Optional MCP server installation to pin the tool to when using static credential resolution.",
+    ),
   }).strict();
 
 export const KnowledgeBaseIdsToolInputSchema =
@@ -189,7 +183,6 @@ export async function handleCreateResource<
     connectorIds?: string[];
     systemPrompt?: string | null;
     suggestedPrompts?: Array<{ summaryTitle: string; prompt: string }>;
-    mcpServerIds?: string[];
     subAgentIds?: string[];
     toolAssignments?: ToolAssignmentInput[];
   },
@@ -302,10 +295,6 @@ export async function handleCreateResource<
       scope === "personal" ? context.userId : undefined,
     );
 
-    const mcpServerResults =
-      targetAgentType === "agent" && (args.mcpServerIds?.length ?? 0) > 0
-        ? await assignMcpServerTools(created.id, args.mcpServerIds ?? [])
-        : [];
     const toolAssignmentResults =
       targetAgentType === "agent" && (args.toolAssignments?.length ?? 0) > 0
         ? await assignToolAssignments(created.id, args.toolAssignments ?? [])
@@ -326,12 +315,7 @@ export async function handleCreateResource<
       `Teams: ${created.teams.length > 0 ? created.teams.map((team) => team.name).join(", ") : "None"}`,
       `Labels: ${created.labels.length > 0 ? created.labels.map((label) => `${label.key}: ${label.value}`).join(", ") : "None"}`,
     ];
-    formatAssignmentSummary(
-      lines,
-      mcpServerResults,
-      subAgentResults,
-      toolAssignmentResults,
-    );
+    formatAssignmentSummary(lines, subAgentResults, toolAssignmentResults);
 
     return successResult(lines.join("\n"));
   } catch (error) {
@@ -377,6 +361,18 @@ export async function handleGetResource<
 
     if (args.id) {
       record = await AgentModel.findById(args.id, context.userId, isAdmin);
+      // findById doesn't support excludeOtherPersonalAgents, so we guard here.
+      // swap_agent is the primary Archestra MCP use-case and requires only the
+      // caller's own personal agents to be visible, even though admins can see
+      // all personal agents in the UI.
+      if (
+        record &&
+        record.scope === "personal" &&
+        context.userId &&
+        record.authorId !== context.userId
+      ) {
+        record = null;
+      }
     } else if (args.name) {
       const results = await AgentModel.findAllPaginated(
         { limit: 1, offset: 0 },
@@ -384,9 +380,14 @@ export async function handleGetResource<
         {
           name: args.name,
           agentType: expectedType,
+          // Hide other users' personal agents from MCP tools. swap_agent is
+          // the primary Archestra MCP use-case and requires only the caller's
+          // own personal agents to be visible, even though admins can see all
+          // personal agents in the UI.
+          excludeOtherPersonalAgents: true,
         },
         context.userId,
-        true,
+        isAdmin,
       );
 
       if (results.data.length > 0) {
@@ -423,7 +424,6 @@ export async function handleEditResource<
     connectorIds?: string[];
     systemPrompt?: string | null;
     suggestedPrompts?: Array<{ summaryTitle: string; prompt: string }>;
-    mcpServerIds?: string[];
     subAgentIds?: string[];
     toolAssignments?: ToolAssignmentInput[];
   },
@@ -519,10 +519,6 @@ export async function handleEditResource<
       return errorResult(`failed to update ${toolLabel}.`);
     }
 
-    const mcpServerResults =
-      expectedType === "agent" && (args.mcpServerIds?.length ?? 0) > 0
-        ? await assignMcpServerTools(args.id, args.mcpServerIds ?? [])
-        : [];
     const toolAssignmentResults =
       expectedType === "agent" && (args.toolAssignments?.length ?? 0) > 0
         ? await assignToolAssignments(args.id, args.toolAssignments ?? [])
@@ -543,12 +539,7 @@ export async function handleEditResource<
       `Teams: ${updated.teams.length > 0 ? updated.teams.map((team) => team.name).join(", ") : "None"}`,
       `Labels: ${updated.labels.length > 0 ? updated.labels.map((label) => `${label.key}: ${label.value}`).join(", ") : "None"}`,
     ];
-    formatAssignmentSummary(
-      lines,
-      mcpServerResults,
-      subAgentResults,
-      toolAssignmentResults,
-    );
+    formatAssignmentSummary(lines, subAgentResults, toolAssignmentResults);
 
     return successResult(lines.join("\n"));
   } catch (error) {

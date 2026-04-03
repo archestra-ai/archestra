@@ -6,12 +6,19 @@ import { type APIRequestContext, test as base } from "@playwright/test";
 import type { SupportedProvider } from "@shared";
 import {
   API_BASE_URL,
+  adminAuthFile,
   editorAuthFile,
   KEYCLOAK_OIDC,
   memberAuthFile,
   UI_BASE_URL,
   WIREMOCK_BASE_URL,
 } from "../../consts";
+
+export const LLM_PROVIDER_API_KEYS_ROUTE = "/api/llm-provider-api-keys";
+export const LLM_PROVIDER_API_KEYS_AVAILABLE_ROUTE =
+  "/api/llm-provider-api-keys/available";
+export const LLM_MODELS_ROUTE = "/api/llm-models";
+export const SYNC_LLM_MODELS_ROUTE = "/api/llm-models/sync";
 
 /**
  * Playwright test extension with fixtures
@@ -236,6 +243,22 @@ const deleteApiKey = async (request: APIRequestContext, keyId: string) =>
 const createIdentityProvider = async (
   request: APIRequestContext,
   providerId: string,
+  options?: {
+    domain?: string;
+    enterpriseManagedCredentials?: {
+      clientId?: string;
+      clientSecret?: string;
+      tokenEndpoint?: string;
+      tokenEndpointAuthentication?:
+        | "client_secret_post"
+        | "client_secret_basic"
+        | "private_key_jwt";
+      subjectTokenType?:
+        | "urn:ietf:params:oauth:token-type:access_token"
+        | "urn:ietf:params:oauth:token-type:id_token"
+        | "urn:ietf:params:oauth:token-type:jwt";
+    };
+  },
 ): Promise<string> => {
   const response = await makeApiRequest({
     request,
@@ -244,7 +267,7 @@ const createIdentityProvider = async (
     data: {
       providerId,
       issuer: KEYCLOAK_OIDC.issuer,
-      domain: "jwks-test.example.com",
+      domain: options?.domain ?? "jwks-test.example.com",
       oidcConfig: {
         issuer: KEYCLOAK_OIDC.issuer,
         pkce: true,
@@ -252,6 +275,12 @@ const createIdentityProvider = async (
         clientSecret: KEYCLOAK_OIDC.clientSecret,
         discoveryEndpoint: KEYCLOAK_OIDC.discoveryEndpoint,
         jwksEndpoint: KEYCLOAK_OIDC.jwksEndpoint,
+        ...(options?.enterpriseManagedCredentials
+          ? {
+              enterpriseManagedCredentials:
+                options.enterpriseManagedCredentials,
+            }
+          : {}),
       },
     },
   });
@@ -805,7 +834,7 @@ const getModels = async (request: APIRequestContext) =>
   makeApiRequest({
     request,
     method: "get",
-    urlSuffix: "/api/models",
+    urlSuffix: LLM_MODELS_ROUTE,
   });
 
 /**
@@ -818,7 +847,7 @@ const syncModels = async (request: APIRequestContext) =>
   makeApiRequest({
     request,
     method: "post",
-    urlSuffix: "/api/chat/models/sync",
+    urlSuffix: SYNC_LLM_MODELS_ROUTE,
   });
 
 /**
@@ -837,7 +866,7 @@ const updateModelPricing = async (
   makeApiRequest({
     request,
     method: "patch",
-    urlSuffix: `/api/models/${modelId}`,
+    urlSuffix: `${LLM_MODELS_ROUTE}/${modelId}`,
     data: pricing,
   });
 
@@ -896,7 +925,7 @@ const updateSecuritySettings = async (
 const updateKnowledgeSettings = async (
   request: APIRequestContext,
   updates: {
-    embeddingModel?: "text-embedding-3-small" | "text-embedding-3-large";
+    embeddingModel?: string | null;
     embeddingChatApiKeyId?: string | null;
     rerankerChatApiKeyId?: string | null;
     rerankerModel?: string | null;
@@ -1229,11 +1258,14 @@ export const test = base.extend<TestFixtures>({
     await use(deleteConnector);
   },
   /**
-   * Admin request - same auth as default `request` fixture
+   * Admin request - creates a new request context with admin auth
    */
-  adminRequest: async ({ request }, use) => {
-    // Default request is already admin (via storageState in config)
-    await use(request);
+  adminRequest: async ({ playwright }, use) => {
+    const context = await playwright.request.newContext({
+      storageState: adminAuthFile,
+    });
+    await use(context);
+    await context.dispose();
   },
   /**
    * Editor request - creates a new request context with editor auth

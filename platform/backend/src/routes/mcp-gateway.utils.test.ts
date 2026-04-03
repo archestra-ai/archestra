@@ -1,8 +1,15 @@
 import { createHash } from "node:crypto";
 import { OAUTH_TOKEN_ID_PREFIX } from "@shared";
 import { vi } from "vitest";
+import { archestraMcpBranding } from "@/archestra-mcp-server";
 import type * as originalConfigModule from "@/config";
-import { TeamTokenModel, UserTokenModel } from "@/models";
+import {
+  AgentTeamModel,
+  TeamTokenModel,
+  ToolModel,
+  UserTokenModel,
+} from "@/models";
+import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import type { JwksValidationResult } from "@/services/jwks-validator";
 import { describe, expect, test } from "@/test";
 
@@ -25,6 +32,7 @@ vi.mock("@/services/jwks-validator", () => ({
 }));
 
 const {
+  createAgentServer,
   validateMCPGatewayToken,
   validateOAuthToken,
   validateExternalIdpToken,
@@ -113,6 +121,34 @@ describe("validateMCPGatewayToken", () => {
 
       const result = await validateMCPGatewayToken(agent.id, value);
       expect(result).toBeNull();
+    });
+
+    test("reuses resolved team tokens across profiles", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const { value } = await TeamTokenModel.create({
+        organizationId: org.id,
+        name: "Org Token",
+        teamId: null,
+        isOrganizationToken: true,
+      });
+      const validateTeamTokenSpy = vi.spyOn(TeamTokenModel, "validateToken");
+
+      const firstResult = await validateMCPGatewayToken(
+        crypto.randomUUID(),
+        value,
+      );
+      const secondResult = await validateMCPGatewayToken(
+        crypto.randomUUID(),
+        value,
+      );
+
+      expect(firstResult).not.toBeNull();
+      expect(secondResult).not.toBeNull();
+      expect(validateTeamTokenSpy).toHaveBeenCalledTimes(1);
+
+      validateTeamTokenSpy.mockRestore();
     });
   });
 
@@ -215,6 +251,41 @@ describe("validateMCPGatewayToken", () => {
       expect(result?.tokenId).toBe(token.id);
       expect(result?.isUserToken).toBe(true);
       expect(result?.userId).toBe(adminUser.id);
+    });
+
+    test("passes preloaded access context into user access checks", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeTeam,
+      makeTeamMember,
+      makeAgent,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "member" });
+
+      const team = await makeTeam(org.id, user.id, { name: "Dev Team" });
+      await makeTeamMember(team.id, user.id);
+      const agent = await makeAgent({ teams: [team.id], scope: "team" });
+      const { value } = await UserTokenModel.create(user.id, org.id);
+      const userHasAgentAccessSpy = vi.spyOn(
+        AgentTeamModel,
+        "userHasAgentAccess",
+      );
+
+      const result = await validateMCPGatewayToken(agent.id, value);
+
+      expect(result).not.toBeNull();
+      expect(userHasAgentAccessSpy).toHaveBeenCalledTimes(1);
+      expect(userHasAgentAccessSpy.mock.calls[0]?.[3]).toMatchObject({
+        id: agent.id,
+        organizationId: agent.organizationId,
+        scope: "team",
+        authorId: agent.authorId,
+      });
+
+      userHasAgentAccessSpy.mockRestore();
     });
   });
 
@@ -449,6 +520,37 @@ describe("validateMCPGatewayToken", () => {
       expect(result?.organizationId).toBe(org.id);
     });
 
+    test("validateOAuthToken returns null when token is bound to another MCP resource", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeOAuthClient,
+      makeOAuthAccessToken,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "admin" });
+
+      const client = await makeOAuthClient({ userId: user.id });
+      const otherAgent = await makeAgent({ organizationId: org.id });
+      const targetAgent = await makeAgent({ organizationId: org.id });
+
+      const rawToken = `test-bound-resource-token-${crypto.randomUUID()}`;
+      const tokenHash = createHash("sha256")
+        .update(rawToken)
+        .digest("base64url");
+
+      await makeOAuthAccessToken(client.clientId, user.id, {
+        token: tokenHash,
+        referenceId: `${MCP_RESOURCE_REFERENCE_PREFIX}${otherAgent.id}`,
+      });
+
+      const result = await validateOAuthToken(targetAgent.id, rawToken);
+
+      expect(result).toBeNull();
+    });
+
     test("validateOAuthToken returns valid result when refresh token is not revoked", async ({
       makeUser,
       makeOrganization,
@@ -485,6 +587,41 @@ describe("validateMCPGatewayToken", () => {
 
       expect(result).not.toBeNull();
       expect(result?.tokenId).toBe(`${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`);
+      expect(result?.userId).toBe(user.id);
+    });
+
+    test("validateOAuthToken uses the target agent organization for multi-org users", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeOAuthClient,
+      makeOAuthAccessToken,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const firstOrg = await makeOrganization();
+      const targetOrg = await makeOrganization();
+
+      await makeMember(user.id, firstOrg.id, { role: "member" });
+      await makeMember(user.id, targetOrg.id, { role: "admin" });
+
+      const client = await makeOAuthClient({ userId: user.id });
+
+      const rawToken = `test-multi-org-token-${crypto.randomUUID()}`;
+      const tokenHash = createHash("sha256")
+        .update(rawToken)
+        .digest("base64url");
+
+      const accessToken = await makeOAuthAccessToken(client.clientId, user.id, {
+        token: tokenHash,
+      });
+
+      const agent = await makeAgent({ organizationId: targetOrg.id });
+      const result = await validateOAuthToken(agent.id, rawToken);
+
+      expect(result).not.toBeNull();
+      expect(result?.tokenId).toBe(`${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`);
+      expect(result?.organizationId).toBe(targetOrg.id);
       expect(result?.userId).toBe(user.id);
     });
   });
@@ -527,6 +664,35 @@ describe("validateExternalIdpToken", () => {
 
     const result = await validateExternalIdpToken(agent.id, FAKE_JWT);
     expect(result).toBeNull();
+  });
+
+  test("returns null when the identity provider OIDC config has no clientId for audience validation", async ({
+    makeOrganization,
+    makeIdentityProvider,
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    mockValidateJwt.mockClear();
+
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+
+    const idp = await makeIdentityProvider(org.id, {
+      oidcConfig: {
+        jwksEndpoint: "https://example.com/.well-known/jwks.json",
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      identityProviderId: idp.id,
+    });
+
+    const result = await validateExternalIdpToken(agent.id, FAKE_JWT);
+
+    expect(result).toBeNull();
+    expect(mockValidateJwt).not.toHaveBeenCalled();
   });
 
   test("returns null when email does not match any Archestra user", async ({
@@ -1034,5 +1200,61 @@ describe("buildKnowledgeSourcesDescription", () => {
     const match = result?.match(/Connected sources: (.+?)\./);
     expect(match).not.toBeNull();
     expect(match?.[1]).toBe("jira");
+  });
+});
+
+describe("createAgentServer tools/list", () => {
+  test("returns branded built-in tool names through the MCP tools/list handler", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+
+    await ToolModel.syncArchestraBuiltInCatalog({
+      organization: {
+        appName: "Acme Control Plane",
+        iconLogo: null,
+      },
+    });
+    await ToolModel.assignArchestraToolsToAgent(
+      agent.id,
+      "00000000-0000-4000-8000-000000000001",
+    );
+
+    archestraMcpBranding.syncFromOrganization({
+      appName: "Acme Control Plane",
+      iconLogo: null,
+    });
+
+    const { server } = await createAgentServer(agent.id);
+    const listToolsHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<
+          string,
+          (request: unknown) => Promise<{
+            tools: Array<{ name: string; description?: string }>;
+          }>
+        >;
+      }
+    )._requestHandlers.get("tools/list");
+
+    expect(listToolsHandler).toBeDefined();
+    if (!listToolsHandler) {
+      throw new Error("Expected tools/list handler to be registered");
+    }
+
+    const response = await listToolsHandler({
+      method: "tools/list",
+      params: {},
+    });
+
+    expect(
+      response.tools.some((tool) =>
+        tool.name.startsWith("acme_control_plane__"),
+      ),
+    ).toBe(true);
+
+    archestraMcpBranding.syncFromOrganization(null);
   });
 });

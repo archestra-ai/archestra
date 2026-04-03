@@ -3,7 +3,7 @@ import { ManageUsersDialog } from "@/app/mcp/registry/_parts/manage-users-dialog
 import { NoAuthInstallDialog } from "@/app/mcp/registry/_parts/no-auth-install-dialog";
 import { RemoteServerInstallDialog } from "@/app/mcp/registry/_parts/remote-server-install-dialog";
 import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
-import type { McpInstallOrchestrator } from "@/lib/mcp-install-orchestrator.hook";
+import type { McpInstallOrchestrator } from "@/lib/mcp/mcp-install-orchestrator.hook";
 
 interface McpInstallDialogsProps {
   orchestrator: McpInstallOrchestrator;

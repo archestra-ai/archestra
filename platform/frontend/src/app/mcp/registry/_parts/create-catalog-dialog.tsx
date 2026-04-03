@@ -9,7 +9,7 @@ import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 import {
   useCreateInternalMcpCatalogItem,
   useInternalMcpCatalog,
-} from "@/lib/internal-mcp-catalog.query";
+} from "@/lib/mcp/internal-mcp-catalog.query";
 import { ArchestraCatalogTab } from "./archestra-catalog-tab";
 import { McpCatalogForm } from "./mcp-catalog-form";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";

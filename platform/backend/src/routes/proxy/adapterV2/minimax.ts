@@ -19,6 +19,7 @@ import type {
   StreamAccumulatorState,
   UsageView,
 } from "@/types";
+import { extractCommonMessageText } from "@/types";
 import type { Minimax } from "@/types/llm-providers";
 import type { ToolCompressionStats } from "../utils/toon-conversion";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
@@ -380,6 +381,7 @@ class MinimaxRequestAdapter
     for (const message of messages) {
       const commonMessage: CommonMessage = {
         role: message.role as CommonMessage["role"],
+        content: extractCommonMessageText(message),
       };
 
       if (message.role === "tool") {

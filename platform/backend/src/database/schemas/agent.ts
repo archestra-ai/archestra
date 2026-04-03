@@ -10,9 +10,8 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type { AgentScope, AgentType, BuiltInAgentConfig } from "@/types/agent";
-
-import chatApiKeysTable from "./chat-api-key";
 import identityProvidersTable from "./identity-provider";
+import llmProviderApiKeysTable from "./llm-provider-api-key";
 import usersTable from "./user";
 
 /**
@@ -76,9 +75,12 @@ const agentsTable = pgTable(
 
     // LLM configuration (allows per-agent model selection)
     /** API key ID for LLM calls */
-    llmApiKeyId: uuid("llm_api_key_id").references(() => chatApiKeysTable.id, {
-      onDelete: "set null",
-    }),
+    llmApiKeyId: uuid("llm_api_key_id").references(
+      () => llmProviderApiKeysTable.id,
+      {
+        onDelete: "set null",
+      },
+    ),
     /** Model ID for LLM calls */
     llmModel: text("llm_model"),
 

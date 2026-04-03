@@ -1,13 +1,22 @@
 import type { Page } from "@playwright/test";
-import { archestraApiSdk, DEFAULT_VAULT_TOKEN, E2eTestId } from "@shared";
-import { DEFAULT_TEAM_NAME } from "../../consts";
+import {
+  archestraApiSdk,
+  DEFAULT_VAULT_TOKEN,
+  E2eTestId,
+  SecretsManagerType,
+} from "@shared";
+import { testMcpServerCommand } from "@shared/test-mcp-server";
+import { ADMIN_EMAIL, DEFAULT_TEAM_NAME } from "../../consts";
 import { expect, goToPage, test } from "../../fixtures";
 import {
   addCustomSelfHostedCatalogItem,
+  assignCatalogCredentialToGateway,
   clickButton,
   expandTablePagination,
-  goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect,
+  goToMcpRegistry,
+  settleRegistryAfterInstall,
   verifyToolCallResultViaApi,
+  waitForMcpServerToolsDiscovered,
 } from "../../utils";
 
 /**
@@ -19,7 +28,7 @@ async function goToApiKeysPage(page: Page) {
 }
 
 const vaultAddr =
-  process.env.ARCHESTRA_HASHICORP_VAULT_ADDR ?? "http://127.0.0.1:8200";
+  process.env.ARCHESTRA_HASHICORP_VAULT_ADDR ?? "http://127.0.0.1:30200";
 const teamFolderPath = "secret/data/teams";
 const secretName = "default-team";
 const secretKey = "api_key";
@@ -41,48 +50,17 @@ test("Check if BYOS Vault is enabled", async ({
   const { data: config } = await archestraApiSdk.getConfig({
     headers: { Cookie: cookieHeaders },
   });
-  byosEnabled = !!config?.features?.byosEnabled;
+  const secretsTypeResponse = await archestraApiSdk.getSecretsType({
+    headers: { Cookie: cookieHeaders },
+  });
+  byosEnabled =
+    !!config?.features?.byosEnabled &&
+    secretsTypeResponse.data?.type === SecretsManagerType.BYOS_VAULT;
 });
 
 test("Then we create folder in Vault for Default Team and exemplary secret", async () => {
   test.skip(!byosEnabled, "BYOS Vault is not enabled in this environment.");
-  // Define the path for Default Team secrets
-  // Using the format: secret/data/teams/default-team
-  const fullSecretPath = `${teamFolderPath}/${secretName}`;
-
-  // Create an exemplary secret in Vault using KV v2 format
-  const secretData = {
-    data: {
-      [secretKey]: secretValue,
-      description: "Example API credentials for Default Team",
-    },
-  };
-
-  // Write secret to Vault using HTTP API
-  const response = await fetch(`${vaultAddr}/v1/${fullSecretPath}`, {
-    method: "POST",
-    headers: {
-      "X-Vault-Token": DEFAULT_VAULT_TOKEN,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(secretData),
-  });
-
-  expect(response.ok).toBeTruthy();
-
-  // Verify the secret was created by reading it back
-  const readResponse = await fetch(`${vaultAddr}/v1/${fullSecretPath}`, {
-    method: "GET",
-    headers: {
-      "X-Vault-Token": DEFAULT_VAULT_TOKEN,
-    },
-  });
-
-  expect(readResponse.ok).toBeTruthy();
-  const readData = await readResponse.json();
-
-  // Verify the secret data matches what we wrote
-  expect(readData.data.data[secretKey]).toBe(secretValue);
+  await ensureVaultSecretExists();
 });
 
 // TODO: Fix flaky test
@@ -193,183 +171,240 @@ test.describe("Chat API Keys with Readonly Vault", () => {
   });
 });
 
-// Skipped after redesign, needs to be updated
-test.describe
-  .skip("Test self-hosted MCP server with Readonly Vault", () => {
-    test("Test self-hosted MCP server with Vault - with prompt on installation", async ({
-      adminPage,
-      extractCookieHeaders,
-      makeRandomString,
-    }) => {
-      test.skip(!byosEnabled, "BYOS Vault is not enabled in this environment.");
-      test.setTimeout(90_000);
-      const cookieHeaders = await extractCookieHeaders(adminPage);
-      const catalogItemName = makeRandomString(10, "mcp");
-      const newCatalogItem = await addCustomSelfHostedCatalogItem({
-        page: adminPage,
-        cookieHeaders,
-        catalogItemName,
-        envVars: {
-          key: "ARCHESTRA_TEST",
-          promptOnInstallation: true,
-          isSecret: true,
-        },
-      });
-
-      // Go to MCP Registry page
-      await goToPage(adminPage, "/mcp/registry");
-      await adminPage.waitForLoadState("domcontentloaded");
-
-      // Click connect button for the catalog item
-      await adminPage
-        .getByTestId(
-          `${E2eTestId.ConnectCatalogItemButton}-${newCatalogItem.name}`,
-        )
-        .click();
-      await adminPage.waitForTimeout(2_000);
-
-      // Select team credential type (defaults to personal now, but vault secrets need a team)
-      await adminPage
-        .getByTestId(E2eTestId.SelectCredentialTypeTeamDropdown)
-        .click();
-      await adminPage.getByRole("option", { name: DEFAULT_TEAM_NAME }).click();
-
-      // Select secret from vault
-      await adminPage
-        .getByTestId(E2eTestId.InlineVaultSecretSelectorSecretTrigger)
-        .click();
-      await adminPage.getByRole("option", { name: secretName }).click();
-      await adminPage.waitForLoadState("domcontentloaded");
-      await adminPage
-        .getByTestId(E2eTestId.InlineVaultSecretSelectorSecretTriggerKey)
-        .click();
-      await adminPage.getByRole("option", { name: secretKey }).click();
-
-      // install server
-      await clickButton({ page: adminPage, options: { name: "Install" } });
-
-      await adminPage.waitForLoadState("domcontentloaded");
-
-      // Assign tool to profiles using default team credential
-      await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
-        page: adminPage,
-        catalogItemName: newCatalogItem.name,
-      });
-      // Select default team credential from dropdown
-      await adminPage.getByRole("option", { name: DEFAULT_TEAM_NAME }).click();
-      // Close the popover by pressing Escape
-      await adminPage.keyboard.press("Escape");
-      await adminPage.waitForTimeout(200);
-      // Click Save button at the bottom of the McpAssignmentsDialog
-      await clickButton({ page: adminPage, options: { name: "Save" } });
-      await adminPage.waitForLoadState("domcontentloaded");
-
-      // Verify tool call result using default team credential
-      await verifyToolCallResultViaApi({
-        request: adminPage.request,
-        expectedResult: secretValue,
-        tokenToUse: "org-token",
-        toolName: `${newCatalogItem.name}__print_archestra_test`,
-        cookieHeaders,
-      });
-
-      // CLEANUP: Delete the catalog item
-      await archestraApiSdk.deleteInternalMcpCatalogItem({
-        path: { id: newCatalogItem.id },
-        headers: { Cookie: cookieHeaders },
-      });
-
-      // CLEANUP: Delete the folder in Vault
-      await fetch(`${vaultAddr}/v1/${teamFolderPath}`, {
-        method: "DELETE",
-        headers: {
-          "X-Vault-Token": DEFAULT_VAULT_TOKEN,
-        },
-      });
+test.describe("Test self-hosted MCP server with Readonly Vault", () => {
+  test("Test self-hosted MCP server with Vault - with prompt on installation", async ({
+    adminPage,
+    extractCookieHeaders,
+    makeRandomString,
+  }) => {
+    test.skip(!byosEnabled, "BYOS Vault is not enabled in this environment.");
+    test.setTimeout(90_000);
+    const cookieHeaders = await extractCookieHeaders(adminPage);
+    const catalogItemName = makeRandomString(10, "mcp");
+    const newCatalogItem = await addCustomSelfHostedCatalogItem({
+      page: adminPage,
+      cookieHeaders,
+      catalogItemName,
+      envVars: {
+        key: "ARCHESTRA_TEST",
+        promptOnInstallation: true,
+        isSecret: true,
+      },
     });
 
-    test("Test self-hosted MCP server with Vault - without prompt on installation", async ({
-      adminPage,
-      extractCookieHeaders,
-      makeRandomString,
-    }) => {
-      test.skip(!byosEnabled, "BYOS Vault is not enabled in this environment.");
-      const cookieHeaders = await extractCookieHeaders(adminPage);
-      const catalogItemName = makeRandomString(10, "mcp");
+    await ensureVaultSecretExists();
+    await ensureDefaultTeamVaultFolder(cookieHeaders);
 
-      const newCatalogItem = await addCustomSelfHostedCatalogItem({
-        page: adminPage,
-        cookieHeaders,
-        catalogItemName,
-        envVars: {
-          key: "ARCHESTRA_TEST",
-          promptOnInstallation: false,
-          isSecret: true,
-          vaultSecret: {
-            teamName: DEFAULT_TEAM_NAME,
-            name: secretName,
-            key: secretKey,
-            value: secretValue,
+    const installResponse = await archestraApiSdk.installMcpServer({
+      headers: { Cookie: cookieHeaders },
+      body: {
+        name: newCatalogItem.name,
+        catalogId: newCatalogItem.id,
+        environmentValues: {
+          ARCHESTRA_TEST: `${teamFolderPath}/${secretName}#${secretKey}`,
+        },
+        isByosVault: true,
+      },
+    });
+
+    if (installResponse.error) {
+      throw new Error(
+        `Failed to install prompt-on-install Vault MCP server: ${JSON.stringify(installResponse.error)}`,
+      );
+    }
+
+    await goToMcpRegistry(adminPage);
+    await waitForMcpServerToolsDiscovered(adminPage, newCatalogItem.name);
+    await settleRegistryAfterInstall(adminPage);
+
+    // The current prompt-on-install flow creates a personal connection.
+    await assignCatalogCredentialToGateway({
+      page: adminPage,
+      catalogItemName: newCatalogItem.name,
+      credentialName: ADMIN_EMAIL,
+    });
+
+    // Verify tool call result using default team credential
+    await verifyToolCallResultViaApi({
+      request: adminPage.request,
+      expectedResult: secretValue,
+      tokenToUse: "org-token",
+      toolName: `${newCatalogItem.name}__print_archestra_test`,
+      cookieHeaders,
+    });
+
+    // CLEANUP: Delete the catalog item
+    await archestraApiSdk.deleteInternalMcpCatalogItem({
+      path: { id: newCatalogItem.id },
+      headers: { Cookie: cookieHeaders },
+    });
+
+    // Best-effort local cleanup. The Vault sidecar may already be gone by teardown.
+    await fetch(`${vaultAddr}/v1/${teamFolderPath}/${secretName}`, {
+      method: "DELETE",
+      headers: {
+        "X-Vault-Token": DEFAULT_VAULT_TOKEN,
+      },
+    }).catch(() => undefined);
+  });
+
+  test("Test self-hosted MCP server with Vault - without prompt on installation", async ({
+    adminPage,
+    extractCookieHeaders,
+    makeRandomString,
+  }) => {
+    test.skip(!byosEnabled, "BYOS Vault is not enabled in this environment.");
+    const cookieHeaders = await extractCookieHeaders(adminPage);
+    const catalogItemName = makeRandomString(10, "mcp");
+
+    await ensureVaultSecretExists();
+    await ensureDefaultTeamVaultFolder(cookieHeaders);
+
+    const createCatalogResponse =
+      await archestraApiSdk.createInternalMcpCatalogItem({
+        headers: { Cookie: cookieHeaders },
+        body: {
+          name: catalogItemName,
+          serverType: "local",
+          scope: "personal",
+          localConfig: {
+            command: "sh",
+            arguments: ["-c", testMcpServerCommand.replace(/\n/g, " ")],
+            environment: [
+              {
+                key: "ARCHESTRA_TEST",
+                type: "secret",
+                value: `${teamFolderPath}/${secretName}#${secretKey}`,
+                promptOnInstallation: false,
+              },
+            ],
           },
         },
       });
+    if (createCatalogResponse.error || !createCatalogResponse.data) {
+      throw new Error(
+        `Failed to create readonly-vault catalog item: ${JSON.stringify(createCatalogResponse.error)}`,
+      );
+    }
 
-      // Go to MCP Registry page
-      await goToPage(adminPage, "/mcp/registry");
-      await adminPage.waitForLoadState("domcontentloaded");
+    const newCatalogItem = {
+      id: createCatalogResponse.data.id,
+      name: createCatalogResponse.data.name,
+    };
 
-      // Click connect button for the catalog item
-      await adminPage
-        .getByTestId(
-          `${E2eTestId.ConnectCatalogItemButton}-${newCatalogItem.name}`,
-        )
-        .click();
+    const teamsResponse = await archestraApiSdk.getTeams({
+      headers: { Cookie: cookieHeaders },
+    });
+    const defaultTeamId = teamsResponse.data?.data.find(
+      (team) => team.name === DEFAULT_TEAM_NAME,
+    )?.id;
+    if (!defaultTeamId) {
+      throw new Error(`Team "${DEFAULT_TEAM_NAME}" not found`);
+    }
 
-      // Select team credential type (defaults to personal now, but we need team for vault secrets)
-      await adminPage
-        .getByTestId(E2eTestId.SelectCredentialTypeTeamDropdown)
-        .click();
-      await adminPage.getByRole("option", { name: DEFAULT_TEAM_NAME }).click();
+    const installResponse = await archestraApiSdk.installMcpServer({
+      headers: { Cookie: cookieHeaders },
+      body: {
+        name: newCatalogItem.name,
+        catalogId: newCatalogItem.id,
+        teamId: defaultTeamId,
+      },
+    });
+    if (installResponse.error) {
+      throw new Error(
+        `Failed to install readonly-vault MCP server: ${JSON.stringify(installResponse.error)}`,
+      );
+    }
 
-      // install server
-      await clickButton({ page: adminPage, options: { name: "Install" } });
-      await adminPage.waitForLoadState("domcontentloaded");
+    await goToMcpRegistry(adminPage);
+    await waitForMcpServerToolsDiscovered(adminPage, newCatalogItem.name);
+    await settleRegistryAfterInstall(adminPage);
 
-      // Assign tool to profiles using default team credential
-      await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
-        page: adminPage,
-        catalogItemName: newCatalogItem.name,
-      });
-      // Select default team credential from dropdown
-      await adminPage.getByRole("option", { name: DEFAULT_TEAM_NAME }).click();
-      // Close the popover by pressing Escape
-      await adminPage.keyboard.press("Escape");
-      await adminPage.waitForTimeout(200);
-      // Click Save button at the bottom of the McpAssignmentsDialog
-      await clickButton({ page: adminPage, options: { name: "Save" } });
-      await adminPage.waitForLoadState("domcontentloaded");
+    // Assign tool to profiles using default team credential
+    await assignCatalogCredentialToGateway({
+      page: adminPage,
+      catalogItemName: newCatalogItem.name,
+      credentialName: DEFAULT_TEAM_NAME,
+    });
 
-      // Verify tool call result using default team credential
-      await verifyToolCallResultViaApi({
-        request: adminPage.request,
-        expectedResult: secretValue,
-        tokenToUse: "org-token",
-        toolName: `${newCatalogItem.name}__print_archestra_test`,
-        cookieHeaders,
-      });
+    // Verify tool call result using default team credential
+    await verifyToolCallResultViaApi({
+      request: adminPage.request,
+      expectedResult: secretValue,
+      tokenToUse: "org-token",
+      toolName: `${newCatalogItem.name}__print_archestra_test`,
+      cookieHeaders,
+    });
 
-      // CLEANUP: Delete the catalog item
-      await archestraApiSdk.deleteInternalMcpCatalogItem({
-        path: { id: newCatalogItem.id },
-        headers: { Cookie: cookieHeaders },
-      });
+    // CLEANUP: Delete the catalog item
+    await archestraApiSdk.deleteInternalMcpCatalogItem({
+      path: { id: newCatalogItem.id },
+      headers: { Cookie: cookieHeaders },
+    });
 
-      // CLEANUP: Delete the folder in Vault
-      await fetch(`${vaultAddr}/v1/${teamFolderPath}`, {
-        method: "DELETE",
-        headers: {
-          "X-Vault-Token": DEFAULT_VAULT_TOKEN,
-        },
-      });
+    // CLEANUP: Delete the folder in Vault
+    await fetch(`${vaultAddr}/v1/${teamFolderPath}`, {
+      method: "DELETE",
+      headers: {
+        "X-Vault-Token": DEFAULT_VAULT_TOKEN,
+      },
     });
   });
+});
+
+async function ensureDefaultTeamVaultFolder(cookieHeaders: string) {
+  const teamsResponse = await archestraApiSdk.getTeams({
+    headers: { Cookie: cookieHeaders },
+  });
+  const defaultTeamId = teamsResponse.data?.data.find(
+    (team) => team.name === DEFAULT_TEAM_NAME,
+  )?.id;
+
+  if (!defaultTeamId) {
+    throw new Error(`Could not find team "${DEFAULT_TEAM_NAME}"`);
+  }
+
+  const upsertResponse = await archestraApiSdk.setTeamVaultFolder({
+    path: { teamId: defaultTeamId },
+    headers: { Cookie: cookieHeaders },
+    body: { vaultPath: teamFolderPath },
+  });
+
+  if (upsertResponse.error) {
+    throw new Error(
+      `Failed to configure default team vault folder: ${JSON.stringify(upsertResponse.error)}`,
+    );
+  }
+}
+
+async function ensureVaultSecretExists() {
+  const fullSecretPath = `${teamFolderPath}/${secretName}`;
+  const secretData = {
+    data: {
+      [secretKey]: secretValue,
+      description: "Example API credentials for Default Team",
+    },
+  };
+
+  const response = await fetch(`${vaultAddr}/v1/${fullSecretPath}`, {
+    method: "POST",
+    headers: {
+      "X-Vault-Token": DEFAULT_VAULT_TOKEN,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(secretData),
+  });
+
+  expect(response.ok).toBeTruthy();
+
+  const readResponse = await fetch(`${vaultAddr}/v1/${fullSecretPath}`, {
+    method: "GET",
+    headers: {
+      "X-Vault-Token": DEFAULT_VAULT_TOKEN,
+    },
+  });
+
+  expect(readResponse.ok).toBeTruthy();
+  const readData = await readResponse.json();
+  expect(readData.data.data[secretKey]).toBe(secretValue);
+}

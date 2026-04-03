@@ -1,32 +1,28 @@
 "use client";
 
-import {
-  EMBEDDING_COMPATIBLE_PROVIDERS,
-  EMBEDDING_MODELS,
-  PROVIDERS_WITH_OPTIONAL_API_KEY,
-  SUPPORTED_EMBEDDING_DIMENSIONS,
-} from "@shared";
+import { PROVIDERS_WITH_OPTIONAL_API_KEY } from "@shared";
 import {
   AlertTriangle,
   Info,
   Loader2,
   Lock,
   Plus,
-  Settings,
   Trash2,
   Zap,
 } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import {
-  ChatApiKeyForm,
-  type ChatApiKeyFormValues,
-  PLACEHOLDER_KEY,
-  PROVIDER_CONFIG,
-} from "@/components/chat-api-key-form";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
+import { LlmModelSearchableSelect } from "@/components/llm-model-select";
+import {
+  LLM_PROVIDER_API_KEY_PLACEHOLDER,
+  LlmProviderApiKeyForm,
+  type LlmProviderApiKeyFormValues,
+  PROVIDER_CONFIG,
+} from "@/components/llm-provider-api-key-form";
 import {
   LlmProviderApiKeyOptionLabel,
   LlmProviderApiKeySelectItems,
@@ -45,20 +41,18 @@ import {
   DialogForm,
   DialogStickyFooter,
 } from "@/components/ui/dialog";
-import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
   SelectContent,
-  SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useChatModels } from "@/lib/chat-models.query";
+import { useFeature } from "@/lib/config/config.query";
+import { useEmbeddingModels, useLlmModels } from "@/lib/llm-models.query";
 import {
-  useAvailableChatApiKeys,
-  useCreateChatApiKey,
-} from "@/lib/chat-settings.query";
-import { useFeature } from "@/lib/config.query";
+  useAvailableLlmProviderApiKeys,
+  useCreateLlmProviderApiKey,
+} from "@/lib/llm-provider-api-keys.query";
 import {
   useDropEmbeddingConfig,
   useOrganization,
@@ -67,21 +61,22 @@ import {
 } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
 
-const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
+const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   name: "",
   provider: "openai",
   apiKey: null,
   baseUrl: null,
-  scope: "org_wide",
+  scope: "org",
   teamId: null,
   vaultSecretPath: null,
   vaultSecretKey: null,
   isPrimary: true,
 };
 
-const EMBEDDING_DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
+const EMBEDDING_DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   ...DEFAULT_FORM_VALUES,
 };
+const KNOWLEDGE_SETTINGS_CONTROL_CLASS = "w-full max-w-[28rem]";
 
 function AddApiKeyDialog({
   open,
@@ -92,15 +87,16 @@ function AddApiKeyDialog({
   onOpenChange: (open: boolean) => void;
   forEmbedding?: boolean;
 }) {
-  const createMutation = useCreateChatApiKey();
+  const createMutation = useCreateLlmProviderApiKey();
   const byosEnabled = useFeature("byosEnabled");
+  const bedrockIamAuthEnabled = useFeature("bedrockIamAuthEnabled");
   const geminiVertexAiEnabled = useFeature("geminiVertexAiEnabled");
 
   const defaults = forEmbedding
     ? EMBEDDING_DEFAULT_FORM_VALUES
     : DEFAULT_FORM_VALUES;
 
-  const form = useForm<ChatApiKeyFormValues>({
+  const form = useForm<LlmProviderApiKeyFormValues>({
     defaultValues: defaults,
   });
 
@@ -112,7 +108,7 @@ function AddApiKeyDialog({
 
   const formValues = form.watch();
   const isValid =
-    formValues.apiKey !== PLACEHOLDER_KEY &&
+    formValues.apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER &&
     formValues.name &&
     (formValues.scope !== "team" || formValues.teamId) &&
     (byosEnabled
@@ -153,7 +149,7 @@ function AddApiKeyDialog({
       title="Add LLM Provider Key"
       description={
         forEmbedding
-          ? "Add an API key for knowledge base embeddings (OpenAI or Ollama)."
+          ? "Add an API key for knowledge base embeddings."
           : "Add an LLM provider API key for knowledge base reranking."
       }
       size="small"
@@ -167,23 +163,18 @@ function AddApiKeyDialog({
             <Alert variant="default">
               <Info className="h-4 w-4" />
               <AlertDescription className="text-xs">
-                OpenAI and Ollama are supported for embeddings. The key must
-                have access to at least one of the following models:
-                <ul className="mt-1 list-inside list-disc">
-                  {Object.keys(EMBEDDING_MODELS).map((model) => (
-                    <li key={model}>{model}</li>
-                  ))}
-                </ul>
+                After adding the key, sync models and mark an embedding model
+                via the model catalog (LLM Providers &gt; Models).
               </AlertDescription>
             </Alert>
           )}
-          <ChatApiKeyForm
+          <LlmProviderApiKeyForm
             mode="full"
             showConsoleLink={false}
             form={form}
             isPending={createMutation.isPending}
+            bedrockIamAuthEnabled={bedrockIamAuthEnabled}
             geminiVertexAiEnabled={geminiVertexAiEnabled}
-            allowedProviders={forEmbedding ? ["openai", "ollama"] : undefined}
             hideScopeAndPrimary
           />
         </DialogBody>
@@ -211,49 +202,41 @@ function ApiKeySelector({
   value,
   onChange,
   disabled,
-  filterEmbeddingProviders,
+  forEmbedding,
   label,
   pulse,
 }: {
   value: string | null;
   onChange: (value: string | null) => void;
   disabled: boolean;
-  filterEmbeddingProviders?: boolean;
+  forEmbedding?: boolean;
   label: string;
   pulse?: boolean;
 }) {
-  const { data: apiKeys, isPending } = useAvailableChatApiKeys();
+  const { data: apiKeys, isPending } = useAvailableLlmProviderApiKeys();
   const [showAddDialog, setShowAddDialog] = useState(false);
   const prevSelectableCountRef = useRef<number | null>(null);
 
   const keys = apiKeys ?? [];
-  const compatibleKeys = keys.filter((k) =>
-    EMBEDDING_COMPATIBLE_PROVIDERS.has(k.provider),
-  );
-  const incompatibleKeys = keys.filter(
-    (k) => !EMBEDDING_COMPATIBLE_PROVIDERS.has(k.provider),
-  );
-  const isEmbeddingSelector = !!filterEmbeddingProviders;
-  const selectableKeys = isEmbeddingSelector ? compatibleKeys : keys;
-  const hasSelectableKeys = selectableKeys.length > 0;
+  const hasKeys = keys.length > 0;
   const selectedKey = keys.find((key) => key.id === value) ?? null;
 
   // Auto-select the first key when transitioning from 0 → N selectable keys
   useEffect(() => {
     if (isPending) return;
     const prevCount = prevSelectableCountRef.current;
-    prevSelectableCountRef.current = selectableKeys.length;
+    prevSelectableCountRef.current = keys.length;
 
-    if (prevCount === 0 && selectableKeys.length > 0 && !value) {
-      onChange(selectableKeys[0].id);
+    if (prevCount === 0 && keys.length > 0 && !value) {
+      onChange(keys[0].id);
     }
-  }, [selectableKeys, value, onChange, isPending]);
+  }, [keys, value, onChange, isPending]);
 
   if (isPending) {
     return <LoadingSpinner />;
   }
 
-  if (!hasSelectableKeys) {
+  if (!hasKeys) {
     return (
       <div className="space-y-2">
         {!disabled && (
@@ -271,7 +254,7 @@ function ApiKeySelector({
             <AddApiKeyDialog
               open={showAddDialog}
               onOpenChange={setShowAddDialog}
-              forEmbedding={isEmbeddingSelector}
+              forEmbedding={forEmbedding}
             />
           </>
         )}
@@ -288,7 +271,7 @@ function ApiKeySelector({
       >
         <SelectTrigger
           className={cn(
-            "w-80",
+            "w-full",
             pulse && "animate-pulse ring-2 ring-primary/40",
           )}
         >
@@ -306,46 +289,15 @@ function ApiKeySelector({
           </SelectValue>
         </SelectTrigger>
         <SelectContent>
-          {isEmbeddingSelector ? (
-            <>
-              <LlmProviderApiKeySelectItems
-                options={compatibleKeys.map((key) => ({
-                  value: key.id,
-                  icon: PROVIDER_CONFIG[key.provider].icon,
-                  providerName: PROVIDER_CONFIG[key.provider].name,
-                  keyName: key.name,
-                  secondaryLabel: `${key.provider} - ${key.scope}`,
-                }))}
-              />
-              {incompatibleKeys.length > 0 && (
-                <>
-                  <div className="px-2 py-1.5 text-xs text-muted-foreground border-t mt-1 pt-2">
-                    Only OpenAI and Ollama are supported for embeddings
-                  </div>
-                  <LlmProviderApiKeySelectItems
-                    options={incompatibleKeys.map((key) => ({
-                      value: key.id,
-                      icon: PROVIDER_CONFIG[key.provider].icon,
-                      providerName: PROVIDER_CONFIG[key.provider].name,
-                      keyName: key.name,
-                      secondaryLabel: key.provider,
-                      disabled: true,
-                    }))}
-                  />
-                </>
-              )}
-            </>
-          ) : (
-            <LlmProviderApiKeySelectItems
-              options={keys.map((key) => ({
-                value: key.id,
-                icon: PROVIDER_CONFIG[key.provider].icon,
-                providerName: PROVIDER_CONFIG[key.provider].name,
-                keyName: key.name,
-                secondaryLabel: `${key.provider} - ${key.scope}`,
-              }))}
-            />
-          )}
+          <LlmProviderApiKeySelectItems
+            options={keys.map((key) => ({
+              value: key.id,
+              icon: PROVIDER_CONFIG[key.provider].icon,
+              providerName: PROVIDER_CONFIG[key.provider].name,
+              keyName: key.name,
+              secondaryLabel: `${key.provider} - ${key.scope}`,
+            }))}
+          />
         </SelectContent>
       </Select>
     </div>
@@ -365,8 +317,8 @@ function RerankerModelSelector({
   selectedKeyId: string | null;
   pulse?: boolean;
 }) {
-  const { data: apiKeys } = useAvailableChatApiKeys();
-  const { data: allModels, isPending: modelsLoading } = useChatModels();
+  const { data: apiKeys } = useAvailableLlmProviderApiKeys();
+  const { data: allModels, isPending: modelsLoading } = useLlmModels();
 
   const selectedProvider = useMemo(() => {
     if (!selectedKeyId || !apiKeys) return null;
@@ -380,12 +332,12 @@ function RerankerModelSelector({
 
   if (!selectedKeyId) {
     return (
-      <SearchableSelect
+      <LlmModelSearchableSelect
         value=""
         onValueChange={() => {}}
         placeholder="Select a reranker API key first..."
-        items={[]}
-        className={cn("w-80")}
+        options={[]}
+        className={cn("w-full")}
         disabled
       />
     );
@@ -397,17 +349,17 @@ function RerankerModelSelector({
 
   const rerankerItems = models.map((model) => ({
     value: model.id,
-    label: model.displayName ?? model.id,
+    model: model.displayName ?? model.id,
+    provider: model.provider,
   }));
 
   return (
-    <SearchableSelect
+    <LlmModelSearchableSelect
       value={value ?? ""}
       onValueChange={(v) => onChange(v || null)}
+      options={rerankerItems}
       placeholder="Select reranking model..."
-      searchPlaceholder="Search models..."
-      items={rerankerItems}
-      className={cn("w-80", pulse && "animate-pulse ring-2 ring-primary/40")}
+      className={cn("w-full", pulse && "animate-pulse ring-2 ring-primary/40")}
       disabled={disabled}
     />
   );
@@ -420,20 +372,15 @@ function RerankerModelSelector({
 function useSetupStep({
   selectedKeyId,
   selectedModel,
-  selectedDimensions,
   hasSelectableKeys,
 }: {
   selectedKeyId: string | null;
   selectedModel: string | null;
-  selectedDimensions?: number | null;
   hasSelectableKeys: boolean;
-}): "add-key" | "select-key" | "select-model" | "select-dimensions" | null {
+}): "add-key" | "select-key" | "select-model" | null {
   if (!hasSelectableKeys) return "add-key";
   if (!selectedKeyId) return "select-key";
   if (!selectedModel) return "select-model";
-  if (selectedDimensions !== undefined && selectedDimensions === null) {
-    return "select-dimensions";
-  }
   return null;
 }
 
@@ -483,7 +430,7 @@ function DropEmbeddingConfigDialog({
 function KnowledgeSettingsContent() {
   const { data: organization, isPending } = useOrganization();
   const { data: apiKeys, isPending: areApiKeysPending } =
-    useAvailableChatApiKeys();
+    useAvailableLlmProviderApiKeys();
   const updateKnowledgeSettings = useUpdateKnowledgeSettings(
     "Knowledge settings updated",
     "Failed to update knowledge settings",
@@ -499,9 +446,24 @@ function KnowledgeSettingsContent() {
     string | null
   >(null);
   const [rerankerModel, setRerankerModel] = useState<string | null>(null);
-  const [embeddingDimensions, setEmbeddingDimensions] = useState<number | null>(
-    null,
+
+  const { data: embeddingModels } = useEmbeddingModels(embeddingChatApiKeyId);
+  const selectedEmbeddingApiKey = useMemo(
+    () =>
+      apiKeys?.find((apiKey) => apiKey.id === embeddingChatApiKeyId) ?? null,
+    [apiKeys, embeddingChatApiKeyId],
   );
+  const selectedEmbeddingModel = useMemo(
+    () => embeddingModels?.find((model) => model.id === embeddingModel) ?? null,
+    [embeddingModels, embeddingModel],
+  );
+  const selectedEmbeddingProvider =
+    selectedEmbeddingApiKey?.provider ??
+    selectedEmbeddingModel?.provider ??
+    null;
+  const embeddingEmptyMessage = selectedEmbeddingApiKey
+    ? `No embedding models detected for "${selectedEmbeddingApiKey.name}".`
+    : "Select an embedding API key first.";
 
   useEffect(() => {
     if (organization) {
@@ -514,7 +476,6 @@ function KnowledgeSettingsContent() {
       setEmbeddingChatApiKeyId(organization.embeddingChatApiKeyId ?? null);
       setRerankerChatApiKeyId(organization.rerankerChatApiKeyId ?? null);
       setRerankerModel(organization.rerankerModel ?? null);
-      setEmbeddingDimensions(organization.embeddingDimensions ?? null);
     }
   }, [organization]);
 
@@ -524,55 +485,53 @@ function KnowledgeSettingsContent() {
     : null;
   const serverRerankerKeyId = organization?.rerankerChatApiKeyId ?? null;
   const serverRerankerModel = organization?.rerankerModel ?? null;
-  const serverEmbeddingDimensions = organization?.embeddingDimensions ?? null;
 
   const hasChanges =
     embeddingModel !== serverEmbeddingModel ||
     embeddingChatApiKeyId !== serverEmbeddingKeyId ||
     rerankerChatApiKeyId !== serverRerankerKeyId ||
-    rerankerModel !== serverRerankerModel ||
-    embeddingDimensions !== serverEmbeddingDimensions;
+    rerankerModel !== serverRerankerModel;
 
   // Embedding model is locked once both key and model have been saved
   const isEmbeddingModelLocked =
     !!serverEmbeddingKeyId && !!serverEmbeddingModel;
+  const showConfigureEmbeddingModelsLink =
+    !!embeddingChatApiKeyId &&
+    !isEmbeddingModelLocked &&
+    (embeddingModels?.length ?? 0) === 0;
+  const showSelectEmbeddingKeyHint =
+    !embeddingChatApiKeyId && !isEmbeddingModelLocked;
+  const showEmbeddingMeta = !!selectedEmbeddingModel || isEmbeddingModelLocked;
+  const showEmbeddingSupportText =
+    showEmbeddingMeta ||
+    showSelectEmbeddingKeyHint ||
+    showConfigureEmbeddingModelsLink;
+  const showEmbeddingActions =
+    isEmbeddingModelLocked || (!!embeddingChatApiKeyId && !!embeddingModel);
+  const showEmbeddingSupportPanel =
+    showEmbeddingSupportText || showEmbeddingActions;
 
   // Check if keys exist for pulsing logic
-  const hasEmbeddingKeys = useMemo(
-    () =>
-      (apiKeys ?? []).some((k) =>
-        EMBEDDING_COMPATIBLE_PROVIDERS.has(k.provider),
-      ),
-    [apiKeys],
-  );
-  const hasAnyKeys = useMemo(() => (apiKeys ?? []).length > 0, [apiKeys]);
+  const hasApiKeys = useMemo(() => (apiKeys ?? []).length > 0, [apiKeys]);
   const isInitialLoading = isPending || areApiKeysPending;
 
   const embeddingSetupStep = useSetupStep({
     selectedKeyId: embeddingChatApiKeyId,
     selectedModel: embeddingModel,
-    selectedDimensions: embeddingDimensions,
-    hasSelectableKeys: isInitialLoading ? true : hasEmbeddingKeys,
+    hasSelectableKeys: isInitialLoading ? true : hasApiKeys,
   });
 
   const rerankerSetupStep = useSetupStep({
     selectedKeyId: rerankerChatApiKeyId,
     selectedModel: rerankerModel,
-    hasSelectableKeys: isInitialLoading ? true : hasAnyKeys,
+    hasSelectableKeys: isInitialLoading ? true : hasApiKeys,
   });
 
   const isFullyConfigured = !embeddingSetupStep && !rerankerSetupStep;
-  const requiresEmbeddingDimensions =
-    !!embeddingChatApiKeyId &&
-    !!embeddingModel &&
-    embeddingDimensions === null &&
-    !isEmbeddingModelLocked;
 
   const handleSave = async () => {
     await updateKnowledgeSettings.mutateAsync({
       embeddingModel: embeddingModel ?? undefined,
-      embeddingDimensions:
-        (embeddingDimensions as 1536 | 768 | null) ?? undefined,
       embeddingChatApiKeyId: embeddingChatApiKeyId ?? null,
       rerankerChatApiKeyId: rerankerChatApiKeyId ?? null,
       rerankerModel: rerankerModel ?? null,
@@ -582,7 +541,6 @@ function KnowledgeSettingsContent() {
   const handleCancel = () => {
     setEmbeddingModel(serverEmbeddingModel);
     setEmbeddingChatApiKeyId(serverEmbeddingKeyId);
-    setEmbeddingDimensions(serverEmbeddingDimensions);
     setRerankerChatApiKeyId(serverRerankerKeyId);
     setRerankerModel(serverRerankerModel);
   };
@@ -611,206 +569,173 @@ function KnowledgeSettingsContent() {
           </Alert>
         )}
 
-        {/* Embedding Configuration */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Settings className="h-5 w-5 text-muted-foreground" />
-            <h3 className="text-lg font-semibold">Embedding Configuration</h3>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Configure the API key and model used to generate vector embeddings
-            for knowledge base documents. OpenAI and Ollama providers are
-            supported.
-          </p>
-
-          <SettingsBlock
-            title="LLM Provider API Key"
-            description="Select an API key for generating embeddings (OpenAI or Ollama)."
-            control={
-              <WithPermissions
-                permissions={{ knowledgeSettings: ["update"] }}
-                noPermissionHandle="tooltip"
-              >
-                {({ hasPermission }) => (
+        <SettingsBlock
+          title="Embedding Configuration"
+          description="Choose the API key and embedding model used for knowledge base documents. Only synced models with configured embedding dimensions appear here."
+          control={
+            <WithPermissions
+              permissions={{ knowledgeSettings: ["update"] }}
+              noPermissionHandle="tooltip"
+            >
+              {({ hasPermission }) => (
+                <div
+                  className={cn(
+                    "flex flex-col gap-2.5",
+                    KNOWLEDGE_SETTINGS_CONTROL_CLASS,
+                  )}
+                >
                   <ApiKeySelector
                     value={embeddingChatApiKeyId}
                     onChange={setEmbeddingChatApiKeyId}
                     disabled={!hasPermission}
-                    filterEmbeddingProviders
+                    forEmbedding
                     label="embedding API key"
                     pulse={
                       embeddingSetupStep === "add-key" ||
                       embeddingSetupStep === "select-key"
                     }
                   />
-                )}
-              </WithPermissions>
-            }
-          />
-
-          <SettingsBlock
-            title="Embedding Model"
-            description={
-              isEmbeddingModelLocked
-                ? "The embedding model cannot be changed after it has been saved. Changing models requires re-embedding all documents."
-                : "Select the model used to generate vector embeddings. This choice is permanent once saved."
-            }
-            control={
-              <WithPermissions
-                permissions={{ knowledgeSettings: ["update"] }}
-                noPermissionHandle="tooltip"
-              >
-                {({ hasPermission }) => (
-                  <div className="space-y-2 w-80">
-                    <SearchableSelect
-                      value={embeddingModel ?? ""}
-                      onValueChange={(v) => setEmbeddingModel(v || null)}
-                      placeholder="Select embedding model..."
-                      searchPlaceholder="Search or type model name..."
-                      items={Object.entries(EMBEDDING_MODELS).map(
-                        ([value, model]) => ({
-                          value,
-                          label: model.label,
-                          description: model.description,
-                        }),
-                      )}
-                      className={cn(
-                        "w-80",
-                        embeddingSetupStep === "select-model" &&
-                          "animate-pulse ring-2 ring-primary/40",
-                      )}
-                      disabled={
-                        !hasPermission ||
-                        isEmbeddingModelLocked ||
-                        !embeddingChatApiKeyId
-                      }
-                      allowCustom
-                    />
-                    {isEmbeddingModelLocked && (
-                      <div className="flex items-center gap-2">
-                        <p className="text-xs text-muted-foreground">
-                          <Lock className="h-3 w-3 inline mr-1" />
-                          Locked — changing the embedding model requires
-                          re-embedding all documents.
-                        </p>
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="sm"
-                          className="h-6 text-xs px-2"
-                          onClick={() => setShowDropDialog(true)}
-                        >
-                          <Trash2 className="h-3 w-3 mr-1" />
-                          Drop
-                        </Button>
-                        <DropEmbeddingConfigDialog
-                          open={showDropDialog}
-                          onOpenChange={setShowDropDialog}
-                        />
-                      </div>
+                  <LlmModelSearchableSelect
+                    value={embeddingModel ?? ""}
+                    onValueChange={(v) => setEmbeddingModel(v || null)}
+                    options={(embeddingModels ?? []).map((model) => ({
+                      value: model.id,
+                      model: model.id,
+                      provider: model.provider,
+                    }))}
+                    placeholder="Select embedding model..."
+                    searchPlaceholder="Search embedding models..."
+                    emptyMessage={embeddingEmptyMessage}
+                    className={cn(
+                      "w-full",
+                      embeddingSetupStep === "select-model" &&
+                        "animate-pulse ring-2 ring-primary/40",
                     )}
-                    {!embeddingChatApiKeyId && !isEmbeddingModelLocked && (
-                      <p className="text-xs text-muted-foreground">
-                        Select an embedding API key first.
-                      </p>
-                    )}
-                  </div>
-                )}
-              </WithPermissions>
-            }
-          />
-
-          <SettingsBlock
-            title="Embedding Dimensions"
-            description={
-              isEmbeddingModelLocked
-                ? "Embedding dimensions cannot be changed after configuration is saved."
-                : "Select the vector dimensions for embeddings. Must match the model's output dimensions (e.g. 1536 for OpenAI, 768 for nomic-embed-text)."
-            }
-            control={
-              <WithPermissions
-                permissions={{ knowledgeSettings: ["update"] }}
-                noPermissionHandle="tooltip"
-              >
-                {({ hasPermission }) => (
-                  <Select
-                    value={embeddingDimensions?.toString() ?? ""}
-                    onValueChange={(v) =>
-                      setEmbeddingDimensions(v ? Number(v) : null)
-                    }
                     disabled={
                       !hasPermission ||
                       isEmbeddingModelLocked ||
                       !embeddingChatApiKeyId
                     }
-                  >
-                    <SelectTrigger
-                      className={cn(
-                        "w-80",
-                        embeddingSetupStep === "select-dimensions" &&
-                          "animate-pulse ring-2 ring-primary/40",
-                      )}
-                    >
-                      <SelectValue placeholder="Select dimensions..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {SUPPORTED_EMBEDDING_DIMENSIONS.map((dim) => (
-                        <SelectItem key={dim} value={dim.toString()}>
-                          {dim}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </WithPermissions>
-            }
-          />
+                  />
+                  {showEmbeddingSupportPanel && (
+                    <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                      <div
+                        className={cn(
+                          "flex flex-col gap-3",
+                          showEmbeddingSupportText &&
+                            showEmbeddingActions &&
+                            "md:flex-row md:items-start md:justify-between",
+                        )}
+                      >
+                        {showEmbeddingSupportText && (
+                          <div className="space-y-1.5">
+                            {selectedEmbeddingModel && (
+                              <p className="flex items-start gap-2 text-xs text-muted-foreground">
+                                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                <span>
+                                  Uses{" "}
+                                  {selectedEmbeddingModel.embeddingDimensions}
+                                  -dimensional vectors.
+                                  {selectedEmbeddingProvider === "gemini" &&
+                                    selectedEmbeddingModel.embeddingDimensions ===
+                                      1536 &&
+                                    " Gemini will truncate from its native 3072 dimensions via outputDimensionality."}
+                                </span>
+                              </p>
+                            )}
+                            {isEmbeddingModelLocked && (
+                              <p className="flex items-start gap-2 text-xs text-muted-foreground">
+                                <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                <span>
+                                  Locked — changing the embedding model requires
+                                  re-embedding all documents.
+                                </span>
+                              </p>
+                            )}
+                            {showSelectEmbeddingKeyHint && (
+                              <p className="text-xs text-muted-foreground">
+                                Select an embedding API key first.
+                              </p>
+                            )}
+                            {showConfigureEmbeddingModelsLink && (
+                              <p className="text-xs text-muted-foreground">
+                                Configure embedding dimensions for a synced
+                                model{" "}
+                                <Link
+                                  href="/llm/providers/models"
+                                  className="text-primary underline underline-offset-2"
+                                >
+                                  here
+                                </Link>
+                                .
+                              </p>
+                            )}
+                          </div>
+                        )}
+                        {showEmbeddingActions && (
+                          <div className="flex flex-wrap justify-end gap-2 md:shrink-0">
+                            {embeddingChatApiKeyId && embeddingModel && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={testConnection.isPending}
+                                onClick={() =>
+                                  testConnection.mutate({
+                                    embeddingChatApiKeyId,
+                                    embeddingModel,
+                                  })
+                                }
+                              >
+                                {testConnection.isPending ? (
+                                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Zap className="mr-1 h-3.5 w-3.5" />
+                                )}
+                                Test Connection
+                              </Button>
+                            )}
+                            {isEmbeddingModelLocked && (
+                              <Button
+                                type="button"
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => setShowDropDialog(true)}
+                              >
+                                <Trash2 className="mr-1 h-3.5 w-3.5" />
+                                Drop
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  <DropEmbeddingConfigDialog
+                    open={showDropDialog}
+                    onOpenChange={setShowDropDialog}
+                  />
+                </div>
+              )}
+            </WithPermissions>
+          }
+        />
 
-          {embeddingChatApiKeyId && embeddingModel && (
-            <div className="flex items-center">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={testConnection.isPending}
-                onClick={() =>
-                  testConnection.mutate({
-                    embeddingChatApiKeyId,
-                    embeddingModel,
-                  })
-                }
-              >
-                {testConnection.isPending ? (
-                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                ) : (
-                  <Zap className="h-3 w-3 mr-1" />
-                )}
-                Test Connection
-              </Button>
-            </div>
-          )}
-        </div>
-
-        {/* Reranking Configuration */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Settings className="h-5 w-5 text-muted-foreground" />
-            <h3 className="text-lg font-semibold">Reranking Configuration</h3>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Configure the LLM used to rerank knowledge base search results for
-            improved relevance. Any LLM provider and model can be used.
-          </p>
-
-          <SettingsBlock
-            title="LLM Provider API Key"
-            description="Select an API key from any provider for the reranker LLM."
-            control={
-              <WithPermissions
-                permissions={{ knowledgeSettings: ["update"] }}
-                noPermissionHandle="tooltip"
-              >
-                {({ hasPermission }) => (
+        <SettingsBlock
+          title="Reranking Configuration"
+          description="Configure the LLM used to rerank knowledge base search results for improved relevance. Any LLM provider and model can be used."
+          control={
+            <WithPermissions
+              permissions={{ knowledgeSettings: ["update"] }}
+              noPermissionHandle="tooltip"
+            >
+              {({ hasPermission }) => (
+                <div
+                  className={cn(
+                    "flex flex-col gap-2",
+                    KNOWLEDGE_SETTINGS_CONTROL_CLASS,
+                  )}
+                >
                   <ApiKeySelector
                     value={rerankerChatApiKeyId}
                     onChange={handleRerankerKeyChange}
@@ -822,20 +747,6 @@ function KnowledgeSettingsContent() {
                         rerankerSetupStep === "select-key")
                     }
                   />
-                )}
-              </WithPermissions>
-            }
-          />
-
-          <SettingsBlock
-            title="Reranking Model"
-            description="The LLM model used to score and rerank search results. Should support structured output."
-            control={
-              <WithPermissions
-                permissions={{ knowledgeSettings: ["update"] }}
-                noPermissionHandle="tooltip"
-              >
-                {({ hasPermission }) => (
                   <RerankerModelSelector
                     value={rerankerModel}
                     onChange={setRerankerModel}
@@ -846,17 +757,16 @@ function KnowledgeSettingsContent() {
                       rerankerSetupStep === "select-model"
                     }
                   />
-                )}
-              </WithPermissions>
-            }
-          />
-        </div>
+                </div>
+              )}
+            </WithPermissions>
+          }
+        />
 
         <SettingsSaveBar
           hasChanges={hasChanges}
           isSaving={updateKnowledgeSettings.isPending}
           permissions={{ knowledgeSettings: ["update"] }}
-          disabledSave={requiresEmbeddingDimensions}
           onSave={handleSave}
           onCancel={handleCancel}
         />

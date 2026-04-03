@@ -16,7 +16,7 @@ import {
  *
  * Tests the "Resolve at call time" credential resolution flow:
  * 1. Admin installs a remote MCP server (owns the credential)
- * 2. A tool is assigned to a profile with useDynamicTeamCredential: true
+ * 2. A tool is assigned to a profile with resolveAtCallTime enabled
  * 3. A team token (for a team admin is NOT in) is used to call the tool
  * 4. The gateway returns an auth-required error with an install URL
  *
@@ -105,12 +105,12 @@ test.describe("MCP Gateway - Auth at Call Time", () => {
         data: { teams: [marketingTeam.id] },
       });
 
-      // 6. Assign tool to profile with useDynamicTeamCredential: true
+      // 6. Assign tool to profile with resolveAtCallTime enabled
       await makeApiRequest({
         request,
         method: "post",
         urlSuffix: `/api/agents/${profileId}/tools/${discoveredTool.id}`,
-        data: { useDynamicTeamCredential: true },
+        data: { resolveAtCallTime: true, credentialResolutionMode: "dynamic" },
       });
 
       // 7. Get Marketing Team token

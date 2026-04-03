@@ -1,0 +1,28 @@
+name: GitHub App Token
+description: Wrapper around actions/create-github-app-token pinned to a vetted version.
+inputs:
+  app-id:
+    description: GitHub App ID.
+    required: true
+  private-key:
+    description: GitHub App private key.
+    required: true
+outputs:
+  token:
+    description: Generated GitHub App token.
+    value: ${{ steps.create-token.outputs.token }}
+  installation-id:
+    description: Installation ID used to generate the token.
+    value: ${{ steps.create-token.outputs.installation-id }}
+  app-slug:
+    description: Slug of the GitHub App.
+    value: ${{ steps.create-token.outputs.app-slug }}
+runs:
+  using: composite
+  steps:
+    - name: Create GitHub App token
+      id: create-token
+      uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.private-key }}

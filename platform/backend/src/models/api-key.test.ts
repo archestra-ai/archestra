@@ -13,9 +13,10 @@ describe("ApiKeyModel", () => {
       await db.insert(schema.apikeysTable).values([
         {
           id: crypto.randomUUID(),
+          configId: "default",
           name: "Older key",
           key: "hashed-older",
-          userId: user.id,
+          referenceId: user.id,
           enabled: true,
           createdAt: new Date("2026-01-01T00:00:00.000Z"),
           updatedAt: new Date("2026-01-01T00:00:00.000Z"),
@@ -24,18 +25,20 @@ describe("ApiKeyModel", () => {
         },
         {
           id: crypto.randomUUID(),
+          configId: "default",
           name: "Newest key",
           key: "hashed-newest",
-          userId: user.id,
+          referenceId: user.id,
           enabled: true,
           createdAt: new Date("2026-02-01T00:00:00.000Z"),
           updatedAt: new Date("2026-02-01T00:00:00.000Z"),
         },
         {
           id: crypto.randomUUID(),
+          configId: "default",
           name: "Other user's key",
           key: "hashed-other",
-          userId: otherUser.id,
+          referenceId: otherUser.id,
           enabled: true,
           createdAt: new Date("2026-03-01T00:00:00.000Z"),
           updatedAt: new Date("2026-03-01T00:00:00.000Z"),
@@ -60,9 +63,10 @@ describe("ApiKeyModel", () => {
 
       await db.insert(schema.apikeysTable).values({
         id: crypto.randomUUID(),
+        configId: "default",
         name: "Broken key",
         key: "hashed-broken",
-        userId: user.id,
+        referenceId: user.id,
         enabled: true,
         createdAt: new Date("2026-02-01T00:00:00.000Z"),
         updatedAt: new Date("2026-02-01T00:00:00.000Z"),
@@ -87,9 +91,10 @@ describe("ApiKeyModel", () => {
 
       await db.insert(schema.apikeysTable).values({
         id: apiKeyId,
+        configId: "default",
         name: "Owner key",
         key: "hashed-owner",
-        userId: owner.id,
+        referenceId: owner.id,
         enabled: true,
         createdAt: new Date(),
         updatedAt: new Date(),

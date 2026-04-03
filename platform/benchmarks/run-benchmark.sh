@@ -43,7 +43,7 @@ fi
 
 # Configuration
 ARCHESTRA_API_URL="$ARCHESTRA_API_URL"
-OPENAI_API_KEY="sk-mock-key"  # Any value works in mock mode
+OPENAI_API_KEY="${ARCHESTRA_BENCHMARK_API_KEY:-benchmark-openai-tools}"
 NUM_REQUESTS="$NUM_REQUESTS"
 CONCURRENCY="$CONCURRENCY"
 RESULTS_DIR="results"
@@ -111,7 +111,7 @@ cat > "$RESULTS_DIR/summary_${TIMESTAMP}.md" <<EOF
 **API URL**: $ARCHESTRA_API_URL
 **Total Requests**: $NUM_REQUESTS
 **Concurrency**: $CONCURRENCY
-**Mock Mode**: Enabled (no real OpenAI API calls)
+**Upstream**: WireMock (`helm/e2e-tests/mappings/openai-benchmark-chat-with-tools.json`)
 
 ---
 
@@ -132,7 +132,7 @@ echo "---" >> "$RESULTS_DIR/summary_${TIMESTAMP}.md"
 echo "" >> "$RESULTS_DIR/summary_${TIMESTAMP}.md"
 echo "## Notes" >> "$RESULTS_DIR/summary_${TIMESTAMP}.md"
 echo "" >> "$RESULTS_DIR/summary_${TIMESTAMP}.md"
-echo "- All tests run with mock OpenAI responses (no network latency)" >> "$RESULTS_DIR/summary_${TIMESTAMP}.md"
+echo "- All tests run against the WireMock OpenAI stub (no real provider calls)" >> "$RESULTS_DIR/summary_${TIMESTAMP}.md"
 echo "- Metrics show pure Archestra platform overhead" >> "$RESULTS_DIR/summary_${TIMESTAMP}.md"
 echo "- Full Apache Bench output available in individual result files" >> "$RESULTS_DIR/summary_${TIMESTAMP}.md"
 

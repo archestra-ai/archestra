@@ -25,15 +25,22 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import config from "@/config";
+import { vi } from "vitest";
 import { ModelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import { MockGeminiClient } from "../mock-gemini-client";
+import { createGeminiTestClient } from "@/test/llm-provider-stubs";
+import { geminiAdapterFactory } from "../adapterV2/gemini";
 import geminiProxyRoutesV2 from "./gemini";
 
 describe("Gemini V2 streaming format", () => {
+  beforeEach(() => {
+    vi.spyOn(geminiAdapterFactory, "createClient").mockImplementation(
+      () => createGeminiTestClient() as never,
+    );
+  });
+
   afterEach(() => {
-    config.benchmark.mockMode = false;
+    vi.restoreAllMocks();
   });
 
   test("streaming response has correct SSE format", async ({ makeAgent }) => {
@@ -42,7 +49,6 @@ describe("Gemini V2 streaming format", () => {
     app.setSerializerCompiler(serializerCompiler);
 
     await app.register(geminiProxyRoutesV2);
-    config.benchmark.mockMode = true;
 
     const agent = await makeAgent({ name: "Test Streaming Format Agent" });
 
@@ -73,8 +79,14 @@ describe("Gemini V2 streaming format", () => {
 });
 
 describe("Gemini V2 cost tracking", () => {
+  beforeEach(() => {
+    vi.spyOn(geminiAdapterFactory, "createClient").mockImplementation(
+      () => createGeminiTestClient() as never,
+    );
+  });
+
   afterEach(() => {
-    config.benchmark.mockMode = false;
+    vi.restoreAllMocks();
   });
 
   test("stores cost and baselineCost in interaction", async ({ makeAgent }) => {
@@ -83,7 +95,6 @@ describe("Gemini V2 cost tracking", () => {
     app.setSerializerCompiler(serializerCompiler);
 
     await app.register(geminiProxyRoutesV2);
-    config.benchmark.mockMode = true;
 
     await ModelModel.upsert({
       externalId: "gemini/gemini-2.5-pro",
@@ -132,9 +143,17 @@ describe("Gemini V2 cost tracking", () => {
 });
 
 describe("Gemini V2 streaming mode", () => {
+  let geminiStubOptions: { interruptAtChunk?: number };
+
+  beforeEach(() => {
+    geminiStubOptions = {};
+    vi.spyOn(geminiAdapterFactory, "createClient").mockImplementation(
+      () => createGeminiTestClient(geminiStubOptions) as never,
+    );
+  });
+
   afterEach(() => {
-    config.benchmark.mockMode = false;
-    MockGeminiClient.resetStreamOptions();
+    vi.restoreAllMocks();
   });
 
   test("streaming mode completes normally and records interaction", async ({
@@ -145,7 +164,6 @@ describe("Gemini V2 streaming mode", () => {
     app.setSerializerCompiler(serializerCompiler);
 
     await app.register(geminiProxyRoutesV2);
-    config.benchmark.mockMode = true;
 
     await ModelModel.upsert({
       externalId: "gemini/gemini-2.5-pro",
@@ -215,54 +233,48 @@ describe("Gemini V2 streaming mode", () => {
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
 
-    config.benchmark.mockMode = true;
+    // Configure stub to interrupt at chunk 2 (before final usage chunk).
+    geminiStubOptions.interruptAtChunk = 2;
 
-    // Configure mock to interrupt at chunk 2 (before final usage chunk)
-    MockGeminiClient.setStreamOptions({ interruptAtChunk: 2 });
+    await app.register(geminiProxyRoutesV2);
 
-    try {
-      await app.register(geminiProxyRoutesV2);
+    await ModelModel.upsert({
+      externalId: "gemini/gemini-2.5-pro",
+      provider: "gemini",
+      modelId: "gemini-2.5-pro",
+      inputModalities: null,
+      outputModalities: null,
+      customPricePerMillionInput: "1.25",
+      customPricePerMillionOutput: "5.00",
+      lastSyncedAt: new Date(),
+    });
 
-      await ModelModel.upsert({
-        externalId: "gemini/gemini-2.5-pro",
-        provider: "gemini",
-        modelId: "gemini-2.5-pro",
-        inputModalities: null,
-        outputModalities: null,
-        customPricePerMillionInput: "1.25",
-        customPricePerMillionOutput: "5.00",
-        lastSyncedAt: new Date(),
-      });
+    const agent = await makeAgent({
+      name: "Test Interrupted Streaming Agent",
+    });
 
-      const agent = await makeAgent({
-        name: "Test Interrupted Streaming Agent",
-      });
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/gemini/${agent.id}/v1beta/models/gemini-2.5-pro:streamGenerateContent`,
+      headers: {
+        "content-type": "application/json",
+        "x-goog-api-key": "test-key",
+      },
+      payload: {
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: "Hello!" }],
+          },
+        ],
+      },
+    });
 
-      const response = await app.inject({
-        method: "POST",
-        url: `/v1/gemini/${agent.id}/v1beta/models/gemini-2.5-pro:streamGenerateContent`,
-        headers: {
-          "content-type": "application/json",
-          "x-goog-api-key": "test-key",
-        },
-        payload: {
-          contents: [
-            {
-              role: "user",
-              parts: [{ text: "Hello!" }],
-            },
-          ],
-        },
-      });
+    // Request should complete without error even when stream is interrupted
+    expect(response.statusCode).toBe(200);
 
-      // Request should complete without error even when stream is interrupted
-      expect(response.statusCode).toBe(200);
-
-      // Response should have partial SSE data
-      expect(response.body).toContain("data: ");
-    } finally {
-      MockGeminiClient.resetStreamOptions();
-    }
+    // Response should have partial SSE data
+    expect(response.body).toContain("data: ");
   });
 
   test("streaming mode interrupted before usage handles gracefully", {
@@ -272,54 +284,48 @@ describe("Gemini V2 streaming mode", () => {
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
 
-    config.benchmark.mockMode = true;
+    // Configure stub to interrupt at chunk 1 (before any usage data).
+    geminiStubOptions.interruptAtChunk = 1;
 
-    // Configure mock to interrupt at chunk 1 (before any usage data)
-    MockGeminiClient.setStreamOptions({ interruptAtChunk: 1 });
+    await app.register(geminiProxyRoutesV2);
 
-    try {
-      await app.register(geminiProxyRoutesV2);
+    await ModelModel.upsert({
+      externalId: "gemini/gemini-2.5-pro",
+      provider: "gemini",
+      modelId: "gemini-2.5-pro",
+      inputModalities: null,
+      outputModalities: null,
+      customPricePerMillionInput: "1.25",
+      customPricePerMillionOutput: "5.00",
+      lastSyncedAt: new Date(),
+    });
 
-      await ModelModel.upsert({
-        externalId: "gemini/gemini-2.5-pro",
-        provider: "gemini",
-        modelId: "gemini-2.5-pro",
-        inputModalities: null,
-        outputModalities: null,
-        customPricePerMillionInput: "1.25",
-        customPricePerMillionOutput: "5.00",
-        lastSyncedAt: new Date(),
-      });
+    const agent = await makeAgent({
+      name: "Test Interrupted Before Usage Agent",
+    });
 
-      const agent = await makeAgent({
-        name: "Test Interrupted Before Usage Agent",
-      });
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/gemini/${agent.id}/v1beta/models/gemini-2.5-pro:streamGenerateContent`,
+      headers: {
+        "content-type": "application/json",
+        "x-goog-api-key": "test-key",
+      },
+      payload: {
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: "Hello!" }],
+          },
+        ],
+      },
+    });
 
-      const response = await app.inject({
-        method: "POST",
-        url: `/v1/gemini/${agent.id}/v1beta/models/gemini-2.5-pro:streamGenerateContent`,
-        headers: {
-          "content-type": "application/json",
-          "x-goog-api-key": "test-key",
-        },
-        payload: {
-          contents: [
-            {
-              role: "user",
-              parts: [{ text: "Hello!" }],
-            },
-          ],
-        },
-      });
+    // Request should complete without error even when stream is interrupted
+    expect(response.statusCode).toBe(200);
 
-      // Request should complete without error even when stream is interrupted
-      expect(response.statusCode).toBe(200);
-
-      // Response should have partial SSE data
-      expect(response.body).toContain("data: ");
-    } finally {
-      MockGeminiClient.resetStreamOptions();
-    }
+    // Response should have partial SSE data
+    expect(response.body).toContain("data: ");
   });
 });
 
@@ -450,8 +456,14 @@ describe("Gemini V2 proxy routing", () => {
 });
 
 describe("Gemini V2 non-streaming mode", () => {
+  beforeEach(() => {
+    vi.spyOn(geminiAdapterFactory, "createClient").mockImplementation(
+      () => createGeminiTestClient() as never,
+    );
+  });
+
   afterEach(() => {
-    config.benchmark.mockMode = false;
+    vi.restoreAllMocks();
   });
 
   test("non-streaming mode completes and records interaction", async ({
@@ -462,7 +474,6 @@ describe("Gemini V2 non-streaming mode", () => {
     app.setSerializerCompiler(serializerCompiler);
 
     await app.register(geminiProxyRoutesV2);
-    config.benchmark.mockMode = true;
 
     await ModelModel.upsert({
       externalId: "gemini/gemini-2.5-pro",

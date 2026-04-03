@@ -1,6 +1,6 @@
 "use client";
 
-import type { McpDeploymentStatusEntry } from "@shared";
+import { E2eTestId, type McpDeploymentStatusEntry } from "@shared";
 import { AlertCircle, PlugZap, RefreshCw, XIcon } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
@@ -256,6 +256,11 @@ export function McpServerSettingsDialog({
                       "bg-accent text-accent-foreground font-medium",
                   )}
                   onClick={() => navigateTo(navItem.id)}
+                  data-testid={
+                    navItem.id === "connections"
+                      ? E2eTestId.McpServerSettingsConnectionsNavButton
+                      : undefined
+                  }
                 >
                   {navItem.label}
                   {navItem.badge != null && navItem.badge > 0 && (

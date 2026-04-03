@@ -1,16 +1,25 @@
 import type { UIMessage } from "@ai-sdk/react";
 import {
+  type ArchestraToolShortName,
+  type archestraApiTypes,
+  parseFullToolName,
   SWAP_AGENT_FAILED_POKE_TEXT,
   SWAP_AGENT_POKE_PREFIX,
   SWAP_AGENT_POKE_TEXT,
   SWAP_TO_DEFAULT_AGENT_POKE_TEXT,
   TOOL_SWAP_AGENT_FULL_NAME,
+  TOOL_SWAP_AGENT_SHORT_NAME,
   TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
+  TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
+  TOOL_TODO_WRITE_SHORT_NAME,
 } from "@shared";
 import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
+import { BotIcon, CheckCircleIcon, ClockIcon } from "lucide-react";
 import {
   Fragment,
+  memo,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -37,40 +46,77 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
-import { Button } from "@/components/ui/button";
-import { useHasPermissions, useSession } from "@/lib/auth.query";
-import { useProfileToolsWithIds } from "@/lib/chat.query";
-import { useUpdateChatMessage } from "@/lib/chat-message.query";
-import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
+import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import {
-  extractCatalogIdFromInstallUrl,
-  extractIdsFromReauthUrl,
-  parseAuthRequired,
-  parseExpiredAuth,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useProfileToolsWithIds } from "@/lib/chat/chat.query";
+import { useUpdateChatMessage } from "@/lib/chat/chat-message.query";
+import {
+  getCompactToolState,
+  getToolErrorText,
+  getToolHeaderState,
+  getToolNameFromPart,
+} from "@/lib/chat/chat-tools-display.utils";
+import { useGlobalChat } from "@/lib/chat/global-chat.context";
+import {
+  hasToolPartsWithAuthErrors,
+  isAuthInstructionText,
   parsePolicyDenied,
-} from "@/lib/llmProviders/common";
-import { useMcpInstallOrchestrator } from "@/lib/mcp-install-orchestrator.hook";
+  resolveAssistantTextAuthState,
+  resolveToolAuthState,
+} from "@/lib/chat/mcp-error-ui";
+import { hasThinkingTags, parseThinkingTags } from "@/lib/chat/parse-thinking";
+import { getSwapToolShortName } from "@/lib/chat/swap-agent.utils";
+import type { ModelSource } from "@/lib/chat/use-chat-preferences";
+import { useAppIconLogo } from "@/lib/hooks/use-app-name";
+import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
+import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpInstallOrchestrator } from "@/lib/mcp/mcp-install-orchestrator.hook";
 import { useOrganization } from "@/lib/organization.query";
-import { hasThinkingTags, parseThinkingTags } from "@/lib/parse-thinking";
 import { cn } from "@/lib/utils";
 import { AuthRequiredTool } from "./auth-required-tool";
-import { extractFileAttachments, hasTextPart } from "./chat-messages.utils";
-import { CompactToolGroup } from "./compact-tool-call";
+import {
+  extractFileAttachments,
+  filterOptimisticToolCalls,
+  hasTextPart,
+  identifyCompactToolGroups,
+} from "./chat-messages.utils";
+import { CompactToolGroup, type ToolIconMap } from "./compact-tool-call";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
 import { ExpiredAuthTool } from "./expired-auth-tool";
 import { InlineChatError } from "./inline-chat-error";
 import { hasKnowledgeBaseToolCall } from "./knowledge-graph-citations";
+import { McpAppSection, type McpToolOutput } from "./mcp-app-container";
 import { McpInstallDialogs } from "./mcp-install-dialogs";
+import {
+  findScrollContainer,
+  PreexistingUnsafeContextDivider,
+  SensitiveContextStickyIndicator,
+  shouldShowStickyBoundaryIndicator,
+  UnsafeContextStartsHereDivider,
+} from "./message-boundary-divider";
 import { PolicyDeniedTool } from "./policy-denied-tool";
+import { SwapAgentBoundaryDivider } from "./swap-agent-boundary";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
+import { ToolStatusRow } from "./tool-status-row";
 
 interface ChatMessagesProps {
   conversationId: string | undefined;
   agentId?: string;
   messages: UIMessage[];
   status: ChatStatus;
+  optimisticToolCalls?: Array<{
+    toolCallId: string;
+    toolName: string;
+    input: unknown;
+  }>;
   isLoadingConversation?: boolean;
   onMessagesUpdate?: (messages: UIMessage[]) => void;
   onUserMessageEdit?: (
@@ -79,16 +125,16 @@ interface ChatMessagesProps {
     editedPartIndex: number,
   ) => void;
   error?: Error | null;
-  // Empty state customization
-  agentName?: string;
-  suggestedPrompt?: string | null;
-  onSuggestedPromptClick?: () => void;
   /** Callback for tool approval responses (approve/deny) */
   onToolApprovalResponse?: (params: {
     id: string;
     approved: boolean;
     reason?: string;
   }) => void;
+  agentName?: string;
+  selectedModel?: string;
+  modelSource?: ModelSource | null;
+  unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
 }
 
 // Type guards for tool parts
@@ -107,42 +153,60 @@ function isToolPart(part: any): part is {
     typeof part === "object" &&
     part !== null &&
     "type" in part &&
-    (part.type?.startsWith("tool-") || part.type === "dynamic-tool")
+    (part.type?.startsWith("tool-") ||
+      part.type?.startsWith("data-tool-ui-start") ||
+      part.type === "dynamic-tool")
   );
 }
 
 export function ChatMessages({
   conversationId,
   agentId,
-  agentName,
-  suggestedPrompt,
-  onSuggestedPromptClick,
   messages,
   status,
+  optimisticToolCalls = [],
   isLoadingConversation = false,
   onMessagesUpdate,
   onUserMessageEdit,
   error = null,
   onToolApprovalResponse,
+  agentName,
+  selectedModel,
+  modelSource,
+  unsafeContextBoundary,
 }: ChatMessagesProps) {
   const isStreamingStalled = useStreamingStallDetection(messages, status);
-  const { data: session } = useSession();
-  const isDebugging = session?.user?.name?.endsWith("(debugging)") ?? false;
+  const { data: authSession } = useSession();
+  const isDebugging = authSession?.user?.name?.endsWith("(debugging)") ?? false;
 
   // Track editing by messageId-partIndex to support multiple text parts per message
   const [editingPartKey, setEditingPartKey] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
-  const { data: userCanCreateAgent } = useHasPermissions({
-    agent: ["create"],
-  });
   const { data: canExpandToolCalls } = useHasPermissions({
     chatExpandToolCalls: ["enable"],
+  });
+  const { data: canReadToolPolicy } = useHasPermissions({
+    toolPolicy: ["read"],
   });
   const { data: canReadMcpRegistry } = useHasPermissions({
     mcpRegistry: ["read"],
   });
   const { data: organization } = useOrganization();
+  const appIconLogo = useAppIconLogo();
+  const { getToolName, getToolShortName } = useArchestraMcpIdentity();
   const orchestrator = useMcpInstallOrchestrator();
+  const nonCompactToolNames = useMemo(
+    () =>
+      new Set([
+        TOOL_SWAP_AGENT_FULL_NAME,
+        TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
+        TOOL_TODO_WRITE_FULL_NAME,
+        getToolName(TOOL_SWAP_AGENT_SHORT_NAME),
+        getToolName(TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME),
+        getToolName(TOOL_TODO_WRITE_SHORT_NAME),
+      ]),
+    [getToolName],
+  );
 
   // Build tool name → icon map from agent tools + catalog data
   const { data: agentTools } = useProfileToolsWithIds(agentId);
@@ -167,12 +231,27 @@ export function ChatMessages({
     return map;
   }, [agentTools, catalogItems]);
 
-  // Initialize mutation hook with conversationId (use empty string as fallback for hook rules)
-  const updateChatMessageMutation = useUpdateChatMessage(conversationId || "");
+  const updateChatMessageMutation = useUpdateChatMessage(conversationId);
+
+  // Get early UI data from the chat session
+  const { getSession } = useGlobalChat();
+  const session = conversationId ? getSession(conversationId) : null;
+  const earlyToolUiStarts = session?.earlyToolUiStarts || {};
 
   // Debounce resize mode change when exiting edit mode to let DOM settle
   const isEditing = editingPartKey !== null;
   const [instantResize, setInstantResize] = useState(false);
+  // Track initial message load to use instant resize (avoids visible scroll-to-bottom)
+  const hasLoadedMessagesRef = useRef(false);
+  const [initialLoad, setInitialLoad] = useState(true);
+  useLayoutEffect(() => {
+    if (messages.length > 0 && !hasLoadedMessagesRef.current) {
+      hasLoadedMessagesRef.current = true;
+      // Keep instant resize for the first render with messages, then switch to smooth
+      const timeout = setTimeout(() => setInitialLoad(false), 100);
+      return () => clearTimeout(timeout);
+    }
+  }, [messages.length]);
   useLayoutEffect(() => {
     if (isEditing) {
       setInstantResize(true);
@@ -242,60 +321,77 @@ export function ChatMessages({
     }
   };
 
+  const pendingToolCalls = useMemo(
+    () => filterOptimisticToolCalls(messages, optimisticToolCalls),
+    [messages, optimisticToolCalls],
+  );
+  const unsafeBoundaryRef = useRef<HTMLDivElement>(null);
+  const [showStickyUnsafeIndicator, setShowStickyUnsafeIndicator] =
+    useState(false);
+
+  const isResponseInProgress = status === "streaming" || status === "submitted";
+  const inferredUnsafeTextBoundary = useMemo(
+    () =>
+      inferUnsafeTextBoundary({
+        messages,
+        canReadToolPolicy: !!canReadToolPolicy,
+        unsafeContextBoundary,
+      }),
+    [messages, canReadToolPolicy, unsafeContextBoundary],
+  );
+
+  useEffect(() => {
+    const boundaryElement = unsafeBoundaryRef.current;
+    if (!boundaryElement) {
+      setShowStickyUnsafeIndicator(false);
+      return;
+    }
+
+    const scrollContainer = findScrollContainer(boundaryElement);
+    if (!scrollContainer) {
+      setShowStickyUnsafeIndicator(false);
+      return;
+    }
+
+    const updateStickyState = () => {
+      const boundaryRect = boundaryElement.getBoundingClientRect();
+      const containerRect = scrollContainer.getBoundingClientRect();
+      setShowStickyUnsafeIndicator(
+        shouldShowStickyBoundaryIndicator({
+          boundaryTop: boundaryRect.top,
+          boundaryBottom: boundaryRect.bottom,
+          containerTop: containerRect.top,
+        }),
+      );
+    };
+
+    updateStickyState();
+    scrollContainer.addEventListener("scroll", updateStickyState, {
+      passive: true,
+    });
+    window.addEventListener("resize", updateStickyState);
+
+    return () => {
+      scrollContainer.removeEventListener("scroll", updateStickyState);
+      window.removeEventListener("resize", updateStickyState);
+    };
+  });
+
+  // Only auto-scroll on content resize during streaming.
+  // When idle, user interactions like expanding tool calls should not
+  // trigger scroll — returning the current scrollTop keeps position stable.
+  const preventResizeScroll = useCallback(
+    (_target: number, { scrollElement }: { scrollElement: HTMLElement }) =>
+      scrollElement.scrollTop,
+    [],
+  );
+
   if (messages.length === 0) {
     // Don't show "start conversation" message while loading - prevents flash of empty state
     if (isLoadingConversation) {
       return null;
     }
-
-    // Unified empty state for both new chat and existing chat with no messages
-    if (agentName) {
-      return (
-        <div className="flex items-center justify-center h-full relative">
-          <div className="text-center space-y-6 max-w-2xl px-4 relative">
-            <p className="text-lg text-muted-foreground relative">
-              Chat with{" "}
-              <span className="font-medium text-foreground truncate inline-block max-w-sm align-bottom">
-                {agentName}
-              </span>{" "}
-              agent,
-              <br />
-              {userCanCreateAgent && (
-                <>
-                  or{" "}
-                  <a
-                    href="/agents?create=true"
-                    className="text-primary hover:underline"
-                  >
-                    create a new one
-                  </a>
-                </>
-              )}
-            </p>
-            {suggestedPrompt && onSuggestedPromptClick && (
-              <button
-                type="button"
-                onClick={onSuggestedPromptClick}
-                className="w-full text-left cursor-pointer hover:opacity-80 transition-opacity"
-              >
-                <Message from="assistant" className="max-w-none justify-center">
-                  <MessageContent className="max-w-none text-left">
-                    <Response>{suggestedPrompt}</Response>
-                  </MessageContent>
-                </Message>
-              </button>
-            )}
-          </div>
-        </div>
-      );
-    }
-
-    // Fallback for when no agent name is provided
-    return (
-      <div className="flex-1 flex h-full items-center justify-center text-center text-muted-foreground">
-        <p className="text-sm">Start a conversation by sending a message</p>
-      </div>
-    );
+    return null;
   }
 
   // Find the index of the message being edited
@@ -322,30 +418,41 @@ export function ChatMessages({
     return nextMessage.role !== "assistant";
   });
 
-  const isResponseInProgress = status === "streaming" || status === "submitted";
-
   return (
     <Conversation
       className="h-full"
-      resize={instantResize ? "instant" : "smooth"}
+      resize={instantResize || initialLoad ? "instant" : "smooth"}
+      targetScrollTop={isResponseInProgress ? undefined : preventResizeScroll}
     >
       <ConversationContent>
         <div className="max-w-4xl mx-auto relative pb-8">
+          <SensitiveContextStickyIndicator
+            visible={showStickyUnsafeIndicator}
+          />
+          {unsafeContextBoundary?.kind === "preexisting_untrusted" && (
+            <PreexistingUnsafeContextDivider dividerRef={unsafeBoundaryRef} />
+          )}
           {messages.map((message, idx) => {
             // Hide the auto-poke message sent after agent swap
             if (!isDebugging && isSwapAgentPokeMessage(message)) return null;
 
             const isDimmed =
               editingMessageIndex !== -1 && idx > editingMessageIndex;
+
             return (
               <div
                 key={message.id || idx}
                 className={cn(isDimmed && "opacity-40 transition-opacity")}
               >
                 {(() => {
-                  const { groupMap, consumedIndices } = identifyCompactGroups(
-                    message.parts,
-                  );
+                  const { groupMap, consumedIndices } =
+                    identifyCompactToolGroups(message.parts, {
+                      nonCompactToolNames,
+                      getToolShortName,
+                      mcpAppToolCallIds: new Set(
+                        Object.keys(earlyToolUiStarts),
+                      ),
+                    });
                   const partKeyTracker = new Map<string, number>();
                   return message.parts?.map((part, i) => {
                     const partKey = getMessagePartKey(
@@ -357,21 +464,36 @@ export function ChatMessages({
                     if (groupMap.has(i)) {
                       const group = groupMap.get(i);
                       if (!group) return null;
-                      return (
-                        <CompactToolGroup
-                          key={getCompactGroupKey(message.id, group.entries)}
-                          tools={group.entries.map((entry) => ({
-                            key: getToolEntryKey(message.id, entry),
-                            toolName: entry.toolName,
-                            part: entry.part,
-                            toolResultPart: entry.toolResultPart,
-                            errorText: entry.errorText,
-                          }))}
-                          toolIconMap={toolIconMap}
-                          canExpandToolCalls={canExpandToolCalls}
-                          onToolApprovalResponse={onToolApprovalResponse}
-                        />
-                      );
+                      return renderCompactGroupWithUnsafeContextDivider({
+                        partKey: getCompactGroupKey(
+                          message.id,
+                          group.startIndex,
+                        ),
+                        parts: group.entries.map(
+                          (entry) => entry.toolResultPart ?? entry.part,
+                        ),
+                        dividerRef: unsafeBoundaryRef,
+                        unsafeContextBoundary,
+                        canReadToolPolicy: !!canReadToolPolicy,
+                        renderedPart: (
+                          <CompactToolGroup
+                            key={getCompactGroupKey(
+                              message.id,
+                              group.startIndex,
+                            )}
+                            tools={group.entries.map((entry) => ({
+                              key: getToolEntryKey(message.id, entry),
+                              toolName: entry.toolName,
+                              part: entry.part,
+                              toolResultPart: entry.toolResultPart,
+                              errorText: entry.errorText,
+                            }))}
+                            toolIconMap={toolIconMap}
+                            canExpandToolCalls={canExpandToolCalls}
+                            onToolApprovalResponse={onToolApprovalResponse}
+                          />
+                        ),
+                      });
                     }
 
                     // Skip parts consumed by compact groups
@@ -405,21 +527,70 @@ export function ChatMessages({
                         }
 
                         // Anthropic sends policy denials as text blocks (see MessageTool for OpenAI path)
-                        const policyDenied = parsePolicyDenied(part.text);
-                        if (policyDenied) {
+                        const assistantAuthState =
+                          resolveAssistantTextAuthState(part.text);
+                        const textToolAuthState = resolveToolAuthState({
+                          errorText: part.text,
+                        });
+                        if (textToolAuthState?.kind === "policy-denied") {
+                          const shouldRenderPolicyDeniedUnsafeBoundary =
+                            !!canReadToolPolicy &&
+                            textToolAuthState.policyDenied
+                              .unsafeContextActiveAtRequestStart &&
+                            !hasUnsafeBoundaryBefore({
+                              messages,
+                              beforeMessageIndex: idx,
+                              beforePartIndex: i,
+                              unsafeContextBoundary,
+                              inferredUnsafeTextBoundary,
+                            });
                           return (
-                            <PolicyDeniedTool
-                              key={partKey}
-                              policyDenied={policyDenied}
-                              {...(agentId
-                                ? { editable: true, profileId: agentId }
-                                : { editable: false })}
-                            />
+                            <Fragment key={partKey}>
+                              {shouldRenderPolicyDeniedUnsafeBoundary && (
+                                <PreexistingUnsafeContextDivider
+                                  dividerRef={unsafeBoundaryRef}
+                                />
+                              )}
+                              <PolicyDeniedTool
+                                policyDenied={textToolAuthState.policyDenied}
+                                {...(agentId
+                                  ? { editable: true, profileId: agentId }
+                                  : { editable: false })}
+                              />
+                            </Fragment>
                           );
                         }
 
                         // Use editable component for assistant messages
                         if (message.role === "assistant") {
+                          const shouldRenderInferredUnsafeBoundary =
+                            inferredUnsafeTextBoundary?.messageId ===
+                              message.id &&
+                            inferredUnsafeTextBoundary.partIndex === i;
+                          if (
+                            hasMessageAuthToolError(message) &&
+                            isAuthInstructionText(part.text)
+                          ) {
+                            return null;
+                          }
+
+                          const authToolPart = renderAssistantAuthPart({
+                            toolName: "authentication",
+                            authState: assistantAuthState,
+                            onInstallMcp:
+                              orchestrator.triggerInstallByCatalogId,
+                            onReauthMcp:
+                              orchestrator.triggerReauthByCatalogIdAndServerId,
+                          });
+                          if (authToolPart) {
+                            if (hasMessageAuthToolError(message)) {
+                              return null;
+                            }
+                            return (
+                              <Fragment key={partKey}>{authToolPart}</Fragment>
+                            );
+                          }
+
                           // Only show actions if this is the last assistant message in sequence
                           // AND this is the last text part in the message
                           const isLastAssistantInSequence =
@@ -544,6 +715,11 @@ export function ChatMessages({
 
                           return (
                             <Fragment key={partKey}>
+                              {shouldRenderInferredUnsafeBoundary && (
+                                <UnsafeContextStartsHereDivider
+                                  dividerRef={unsafeBoundaryRef}
+                                />
+                              )}
                               <EditableAssistantMessage
                                 messageId={message.id}
                                 partIndex={i}
@@ -743,32 +919,144 @@ export function ChatMessages({
                           toolResultPart = nextPart;
                         }
 
-                        return (
-                          <MessageTool
-                            part={part}
-                            key={partKey}
-                            toolResultPart={toolResultPart}
-                            toolName={toolName}
-                            agentId={agentId}
-                            isDebugging={isDebugging}
-                            canExpandToolCalls={canExpandToolCalls}
-                            onToolApprovalResponse={onToolApprovalResponse}
-                            onInstallMcp={
-                              orchestrator.triggerInstallByCatalogId
-                            }
-                            onReauthMcp={
-                              orchestrator.triggerReauthByCatalogIdAndServerId
-                            }
-                          />
-                        );
+                        return renderPartWithUnsafeContextDivider({
+                          partKey,
+                          part: toolResultPart ?? part,
+                          dividerRef: unsafeBoundaryRef,
+                          unsafeContextBoundary,
+                          canReadToolPolicy: !!canReadToolPolicy,
+                          renderedPart: (
+                            <MessageTool
+                              part={part}
+                              key={partKey}
+                              toolResultPart={toolResultPart}
+                              toolName={toolName}
+                              agentId={agentId}
+                              isDebugging={isDebugging}
+                              canExpandToolCalls={canExpandToolCalls}
+                              onToolApprovalResponse={onToolApprovalResponse}
+                              onInstallMcp={
+                                orchestrator.triggerInstallByCatalogId
+                              }
+                              onReauthMcp={
+                                orchestrator.triggerReauthByCatalogIdAndServerId
+                              }
+                              getToolShortName={getToolShortName}
+                              toolIconMap={toolIconMap}
+                              earlyToolUiData={
+                                part.toolCallId
+                                  ? earlyToolUiStarts[part.toolCallId]
+                                  : undefined
+                              }
+                              onSendMessage={(text) =>
+                                session?.sendMessage({
+                                  role: "user",
+                                  parts: [{ type: "text", text }],
+                                })
+                              }
+                            />
+                          ),
+                        });
                       }
 
                       default: {
-                        // Handle tool invocations (type is "tool-{toolName}")
+                        // data-tool-ui-start: early MCP App initialisation.
+                        // This is the canonical render for the tool UI. It looks ahead
+                        // in the parts array to find the matching input/output parts so
+                        // a single <MessageTool> covers the full lifecycle.
+                        if (part.type?.startsWith("data-tool-ui-start")) {
+                          // biome-ignore lint/suspicious/noExplicitAny: data-tool-ui-start shape is dynamic
+                          const earlyPart = part as any;
+                          const tcId = earlyPart.data?.toolCallId as
+                            | string
+                            | undefined;
+                          const toolName = earlyPart.data?.toolName as
+                            | string
+                            | undefined;
+                          if (!tcId || !toolName) return null;
+
+                          // Find the matching tool-* parts (may or may not exist yet)
+                          // biome-ignore lint/suspicious/noExplicitAny: part shape varies
+                          const allParts = (message.parts ?? []) as any[];
+                          const inputPart = allParts.find(
+                            (p) =>
+                              isToolPart(p) &&
+                              p.toolCallId === tcId &&
+                              p.state !== "output-available",
+                          ) as ToolUIPart | undefined;
+
+                          const outputPart = (allParts.find(
+                            (p) =>
+                              isToolPart(p) &&
+                              p.toolCallId === tcId &&
+                              p.state === "output-available",
+                          ) ?? null) as ToolUIPart | null;
+
+                          // Synthetic part used until the real tool-* part appears.
+                          // If only outputPart exists (tool already done), borrow its input.
+                          const effectivePart = (inputPart ?? {
+                            type: `tool-${toolName}` as `tool-${string}`,
+                            toolCallId: tcId,
+                            state: outputPart
+                              ? ("output-available" as const)
+                              : ("input-streaming" as const),
+                            input: outputPart?.input ?? {},
+                            output: outputPart?.output,
+                          }) as ToolUIPart;
+
+                          return renderPartWithUnsafeContextDivider({
+                            partKey,
+                            part: outputPart ?? effectivePart,
+                            dividerRef: unsafeBoundaryRef,
+                            unsafeContextBoundary,
+                            canReadToolPolicy: !!canReadToolPolicy,
+                            renderedPart: (
+                              <MessageTool
+                                key={`${message.id}-${tcId}`}
+                                part={effectivePart}
+                                toolResultPart={outputPart}
+                                toolName={toolName}
+                                agentId={agentId}
+                                isDebugging={isDebugging}
+                                canExpandToolCalls={canExpandToolCalls}
+                                onToolApprovalResponse={onToolApprovalResponse}
+                                onInstallMcp={
+                                  orchestrator.triggerInstallByCatalogId
+                                }
+                                onReauthMcp={
+                                  orchestrator.triggerReauthByCatalogIdAndServerId
+                                }
+                                getToolShortName={getToolShortName}
+                                toolIconMap={toolIconMap}
+                                onSendMessage={(text) =>
+                                  session?.sendMessage({
+                                    role: "user",
+                                    parts: [{ type: "text", text }],
+                                  })
+                                }
+                                earlyToolUiData={earlyToolUiStarts[tcId]}
+                              />
+                            ),
+                          });
+                        }
+
+                        // Regular tool-* parts: skip if a data-tool-ui-start already
+                        // rendered this toolCallId (it owns the full lifecycle above).
                         if (
                           isToolPart(part) &&
                           part.type?.startsWith("tool-")
                         ) {
+                          const tcId = part.toolCallId;
+                          const hasEarlyStart =
+                            tcId &&
+                            (message.parts ?? []).some(
+                              (p) =>
+                                p.type?.startsWith("data-tool-ui-start") &&
+                                (p as { data?: { toolCallId?: string } }).data
+                                  ?.toolCallId === tcId,
+                            );
+                          if (hasEarlyStart) return null;
+
                           const toolName = part.type.replace("tool-", "");
 
                           // Look ahead for tool result (same tool call ID)
@@ -785,23 +1073,42 @@ export function ChatMessages({
                             toolResultPart = nextPart;
                           }
 
-                          return (
-                            <MessageTool
-                              part={part}
-                              key={partKey}
-                              toolResultPart={toolResultPart}
-                              toolName={toolName}
-                              agentId={agentId}
-                              isDebugging={isDebugging}
-                              onToolApprovalResponse={onToolApprovalResponse}
-                              onInstallMcp={
-                                orchestrator.triggerInstallByCatalogId
-                              }
-                              onReauthMcp={
-                                orchestrator.triggerReauthByCatalogIdAndServerId
-                              }
-                            />
-                          );
+                          return renderPartWithUnsafeContextDivider({
+                            partKey,
+                            part: toolResultPart ?? part,
+                            dividerRef: unsafeBoundaryRef,
+                            unsafeContextBoundary,
+                            canReadToolPolicy: !!canReadToolPolicy,
+                            renderedPart: (
+                              <MessageTool
+                                part={part}
+                                key={partKey}
+                                toolResultPart={toolResultPart}
+                                toolName={toolName}
+                                agentId={agentId}
+                                isDebugging={isDebugging}
+                                canExpandToolCalls={canExpandToolCalls}
+                                onToolApprovalResponse={onToolApprovalResponse}
+                                onInstallMcp={
+                                  orchestrator.triggerInstallByCatalogId
+                                }
+                                onReauthMcp={
+                                  orchestrator.triggerReauthByCatalogIdAndServerId
+                                }
+                                getToolShortName={getToolShortName}
+                                toolIconMap={toolIconMap}
+                                earlyToolUiData={
+                                  tcId ? earlyToolUiStarts[tcId] : undefined
+                                }
+                                onSendMessage={(text) =>
+                                  session?.sendMessage({
+                                    role: "user",
+                                    parts: [{ type: "text", text }],
+                                  })
+                                }
+                              />
+                            ),
+                          });
                         }
 
                         // Skip step-start and other non-renderable parts
@@ -810,7 +1117,13 @@ export function ChatMessages({
                     }
                   });
                 })()}
-                <SwapAgentDivider message={message} />
+                {message.role === "assistant" && (
+                  <SwapAgentBoundaryDivider
+                    parts={message.parts ?? []}
+                    getToolShortName={getToolShortName}
+                    hasToolError={hasSwapToolError}
+                  />
+                )}
               </div>
             );
           })}
@@ -820,14 +1133,39 @@ export function ChatMessages({
               error={error}
               conversationId={conversationId}
               supportMessage={organization?.chatErrorSupportMessage}
+              agentName={agentName}
+              selectedModel={selectedModel}
+              modelSource={modelSource}
             />
           )}
+          {pendingToolCalls.map((toolCall) => (
+            <MessageTool
+              part={{
+                type: "dynamic-tool",
+                toolName: toolCall.toolName,
+                toolCallId: toolCall.toolCallId,
+                state: "input-available",
+                input: toolCall.input,
+              }}
+              key={`optimistic-tool-${toolCall.toolCallId}`}
+              toolResultPart={null}
+              toolName={toolCall.toolName}
+              agentId={agentId}
+              isDebugging={isDebugging}
+              canExpandToolCalls={canExpandToolCalls}
+              onToolApprovalResponse={onToolApprovalResponse}
+              onInstallMcp={orchestrator.triggerInstallByCatalogId}
+              onReauthMcp={orchestrator.triggerReauthByCatalogIdAndServerId}
+              getToolShortName={getToolShortName}
+              toolIconMap={toolIconMap}
+            />
+          ))}
           {(status === "submitted" ||
             (status === "streaming" && isStreamingStalled)) && (
             <div className="absolute bottom-[-10] left-0">
               <Message from="assistant">
                 <img
-                  src={organization?.iconLogo || "/logo.png"}
+                  src={appIconLogo}
                   alt="Loading logo"
                   className="object-contain h-6 w-auto animate-[bounce_700ms_ease_200ms_infinite]"
                 />
@@ -842,17 +1180,8 @@ export function ChatMessages({
   );
 }
 
-function getCompactGroupKey(
-  messageId: string,
-  entries: Array<{
-    toolName: string;
-    part: DynamicToolUIPart | ToolUIPart;
-  }>,
-): string {
-  const signature = entries
-    .map((entry) => entry.part.toolCallId ?? entry.toolName)
-    .join(":");
-  return `${messageId}-compact-${signature}`;
+function getCompactGroupKey(messageId: string, startIndex: number): string {
+  return `${messageId}-compact-${startIndex}`;
 }
 
 function getToolEntryKey(
@@ -883,9 +1212,9 @@ function getMessagePartSignature(part: UIMessage["parts"][number]): string {
 
   switch (part.type) {
     case "text":
-      return `text:${part.text}`;
+      return "text";
     case "reasoning":
-      return `reasoning:${part.text}`;
+      return "reasoning";
     case "file":
       return `file:${part.url}:${part.mediaType}:${part.filename ?? ""}`;
     default:
@@ -932,45 +1261,107 @@ function useStreamingStallDetection(
   return isStreamingStalled;
 }
 
-function MessageTool({
-  part,
-  toolResultPart,
-  toolName,
-  agentId,
-  isDebugging,
-  canExpandToolCalls = true,
-  onToolApprovalResponse,
-  onInstallMcp,
-  onReauthMcp,
-}: {
-  part: ToolUIPart | DynamicToolUIPart;
-  toolResultPart: ToolUIPart | DynamicToolUIPart | null;
-  toolName: string;
-  agentId?: string;
-  isDebugging?: boolean;
-  canExpandToolCalls?: boolean;
-  onToolApprovalResponse?: (params: {
-    id: string;
-    approved: boolean;
-    reason?: string;
-  }) => void;
-  onInstallMcp?: (catalogId: string) => void;
-  onReauthMcp?: (catalogId: string, serverId: string) => void;
-}) {
-  const outputError = toolResultPart
-    ? tryToExtractErrorFromOutput(toolResultPart.output)
-    : tryToExtractErrorFromOutput(part.output);
-  const errorText = toolResultPart
-    ? (toolResultPart.errorText ?? outputError)
-    : (part.errorText ?? outputError);
+const MessageTool = memo(
+  function MessageTool({
+    part,
+    toolResultPart,
+    toolName,
+    agentId,
+    isDebugging,
+    canExpandToolCalls = true,
+    onToolApprovalResponse,
+    onInstallMcp,
+    onReauthMcp,
+    getToolShortName,
+    onSendMessage,
+    earlyToolUiData,
+    toolIconMap,
+  }: {
+    part: ToolUIPart | DynamicToolUIPart;
+    toolResultPart: ToolUIPart | DynamicToolUIPart | null;
+    toolName: string;
+    agentId?: string;
+    isDebugging?: boolean;
+    canExpandToolCalls?: boolean;
+    onToolApprovalResponse?: (params: {
+      id: string;
+      approved: boolean;
+      reason?: string;
+    }) => void;
+    onInstallMcp?: (catalogId: string) => void;
+    onReauthMcp?: (catalogId: string, serverId: string) => void;
+    getToolShortName: (toolName: string) => ArchestraToolShortName | null;
+    onSendMessage?: (text: string) => void;
+    toolIconMap?: ToolIconMap;
+    earlyToolUiData?: {
+      uiResourceUri: string;
+      html?: string;
+      csp?: { connectDomains?: string[]; resourceDomains?: string[] };
+      permissions?: {
+        camera?: boolean;
+        microphone?: boolean;
+        geolocation?: boolean;
+        clipboardWrite?: boolean;
+      };
+    };
+  }) {
+    const rawOutput = toolResultPart ? toolResultPart.output : part.output;
+    const mcpOutput = rawOutput as McpToolOutput | undefined;
+    const uiResourceUri =
+      (mcpOutput?._meta?.ui as { resourceUri?: string } | undefined)
+        ?.resourceUri ?? earlyToolUiData?.uiResourceUri;
 
-  // OpenAI sends policy denials as tool errors (see case "text" above for Anthropic path)
-  if (errorText) {
-    const policyDenied = parsePolicyDenied(errorText);
-    if (policyDenied) {
+    // Use the text content string when available; fall back to the raw output for non-MCP tools.
+    const output = mcpOutput?.content ?? rawOutput;
+    const errorText = getToolErrorText({ part, toolResultPart });
+
+    const isApprovalRequested = part.state === "approval-requested";
+    const isToolDenied = part.state === "output-denied";
+    const hasInput = part.input && Object.keys(part.input).length > 0;
+    const hasContent = Boolean(
+      hasInput ||
+        errorText ||
+        isApprovalRequested ||
+        (toolResultPart && Boolean(toolResultPart.output)) ||
+        (!toolResultPart && Boolean(part.output)),
+    );
+    const shouldDefaultOpen = isApprovalRequested;
+
+    // Hooks must be called before any early returns
+    const [isOpen, setIsOpen] = useState(shouldDefaultOpen);
+    const [userDenied, setUserDenied] = useState(false);
+    const [userHasInteracted, setUserHasInteracted] = useState(false);
+    const prevShouldDefaultOpenRef = useRef(shouldDefaultOpen);
+
+    useEffect(() => {
+      const prev = prevShouldDefaultOpenRef.current;
+      if (!userHasInteracted) {
+        setIsOpen(shouldDefaultOpen);
+      } else if (shouldDefaultOpen && !prev) {
+        // shouldDefaultOpen changed from false to true -> auto-open
+        setIsOpen(true);
+      }
+      prevShouldDefaultOpenRef.current = shouldDefaultOpen;
+    }, [shouldDefaultOpen, userHasInteracted]);
+    const handleOpenChange = useCallback(
+      (open: boolean) => {
+        setIsOpen(open);
+        if (open !== shouldDefaultOpen) {
+          setUserHasInteracted(true);
+        }
+      },
+      [shouldDefaultOpen],
+    );
+
+    const toolAuthState = resolveToolAuthState({
+      errorText,
+      rawOutput,
+    });
+
+    if (toolAuthState?.kind === "policy-denied") {
       return (
         <PolicyDeniedTool
-          policyDenied={policyDenied}
+          policyDenied={toolAuthState.policyDenied}
           {...(agentId
             ? { editable: true, profileId: agentId }
             : { editable: false })}
@@ -978,201 +1369,305 @@ function MessageTool({
       );
     }
 
-    const expiredAuth = parseExpiredAuth(errorText);
-    if (expiredAuth) {
-      const ids = extractIdsFromReauthUrl(expiredAuth.reauthUrl);
+    const authToolBody = renderToolAuthPart({
+      toolName,
+      authState: toolAuthState,
+      onInstallMcp,
+      onReauthMcp,
+    });
+
+    // swap_agent / swap_to_default_agent are rendered as dividers after all message parts (see SwapAgentDivider below)
+    // Show the raw tool call when the user's name ends with "(debugging)"
+    const swapToolShortName = getSwapToolShortName({
+      toolName,
+      getToolShortName,
+    });
+    if (
+      !isDebugging &&
+      (swapToolShortName === TOOL_SWAP_AGENT_SHORT_NAME ||
+        swapToolShortName === TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME)
+    ) {
+      return null;
+    }
+
+    if (getToolShortName(toolName) === TOOL_TODO_WRITE_SHORT_NAME) {
       return (
-        <ExpiredAuthTool
-          toolName={toolName}
-          catalogName={expiredAuth.catalogName}
-          reauthUrl={expiredAuth.reauthUrl}
-          onReauth={
-            onReauthMcp && ids.catalogId && ids.serverId
-              ? () =>
-                  onReauthMcp(ids.catalogId as string, ids.serverId as string)
-              : undefined
-          }
+        <TodoWriteTool
+          part={part}
+          toolResultPart={toolResultPart}
+          errorText={errorText}
+          onToolApprovalResponse={onToolApprovalResponse}
         />
       );
     }
 
-    const authRequired = parseAuthRequired(errorText);
-    if (authRequired) {
-      const catalogId = extractCatalogIdFromInstallUrl(authRequired.installUrl);
-      return (
-        <AuthRequiredTool
-          toolName={toolName}
-          catalogName={authRequired.catalogName}
-          installUrl={authRequired.installUrl}
-          onInstall={
-            onInstallMcp && catalogId
-              ? () => onInstallMcp(catalogId)
-              : undefined
-          }
-        />
-      );
-    }
-  }
+    if (authToolBody) {
+      const shortName = parseFullToolName(toolName).toolName.replace(/_/g, " ");
+      const iconInfo = toolIconMap?.get(toolName);
 
-  // Also check tool output for auth-related patterns (tool errors returned as
-  // successful results to avoid crashing the AI SDK stream still need the UI)
-  const rawOutput = toolResultPart?.output ?? part.output;
-  if (typeof rawOutput === "string") {
-    const expiredAuth = parseExpiredAuth(rawOutput);
-    if (expiredAuth) {
-      const ids = extractIdsFromReauthUrl(expiredAuth.reauthUrl);
       return (
-        <ExpiredAuthTool
-          toolName={toolName}
-          catalogName={expiredAuth.catalogName}
-          reauthUrl={expiredAuth.reauthUrl}
-          onReauth={
-            onReauthMcp && ids.catalogId && ids.serverId
-              ? () =>
-                  onReauthMcp(ids.catalogId as string, ids.serverId as string)
-              : undefined
-          }
-        />
+        <div className="mb-1">
+          <div className="flex items-center gap-1.5">
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="relative inline-flex size-8 items-center justify-center rounded-full border bg-background">
+                    {iconInfo?.icon || iconInfo?.catalogId ? (
+                      <McpCatalogIcon
+                        icon={iconInfo.icon}
+                        catalogId={iconInfo.catalogId}
+                        size={16}
+                      />
+                    ) : (
+                      <BotIcon className="size-3.5 text-muted-foreground" />
+                    )}
+                    <span className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background bg-destructive" />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  {shortName} (error)
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+          {authToolBody}
+        </div>
       );
     }
 
-    const authRequired = parseAuthRequired(rawOutput);
-    if (authRequired) {
-      const catalogId = extractCatalogIdFromInstallUrl(authRequired.installUrl);
+    // Show logs button for failed tool calls
+    const logsButton = errorText ? (
+      <ToolErrorLogsButton toolName={toolName} />
+    ) : null;
+
+    // MCP App tools: compact circle + canvas below (no collapsible wrapper)
+    if (uiResourceUri && !isApprovalRequested && !errorText) {
+      const compactState = getCompactToolState({ part, toolResultPart });
+      const shortName = parseFullToolName(toolName).toolName.replace(/_/g, " ");
+      const iconInfo = toolIconMap?.get(toolName);
+
       return (
-        <AuthRequiredTool
-          toolName={toolName}
-          catalogName={authRequired.catalogName}
-          installUrl={authRequired.installUrl}
-          onInstall={
-            onInstallMcp && catalogId
-              ? () => onInstallMcp(catalogId)
-              : undefined
-          }
-        />
-      );
-    }
-  }
-
-  // swap_agent / swap_to_default_agent are rendered as dividers after all message parts (see SwapAgentDivider below)
-  // Show the raw tool call when the user's name ends with "(debugging)"
-  if (
-    !isDebugging &&
-    (toolName === TOOL_SWAP_AGENT_FULL_NAME ||
-      toolName === TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME)
-  ) {
-    return null;
-  }
-
-  if (toolName === TOOL_TODO_WRITE_FULL_NAME) {
-    return (
-      <TodoWriteTool
-        part={part}
-        toolResultPart={toolResultPart}
-        errorText={errorText}
-        onToolApprovalResponse={onToolApprovalResponse}
-      />
-    );
-  }
-
-  const isApprovalRequested = part.state === "approval-requested";
-  const hasInput = part.input && Object.keys(part.input).length > 0;
-  const hasContent = Boolean(
-    hasInput ||
-      errorText ||
-      isApprovalRequested ||
-      (toolResultPart && Boolean(toolResultPart.output)) ||
-      (!toolResultPart && Boolean(part.output)),
-  );
-
-  // Show logs button for failed tool calls
-  const logsButton = errorText ? (
-    <ToolErrorLogsButton toolName={toolName} />
-  ) : null;
-
-  const isExpandable =
-    hasContent && (canExpandToolCalls || isApprovalRequested);
-
-  return (
-    <Tool
-      className={isExpandable ? "cursor-pointer" : ""}
-      defaultOpen={isApprovalRequested}
-    >
-      <ToolHeader
-        type={`tool-${toolName}`}
-        state={getHeaderState({
-          state: part.state || "input-available",
-          toolResultPart,
-          errorText,
-        })}
-        isCollapsible={isExpandable}
-        actionButton={logsButton}
-      />
-      <ToolContent>
-        {hasInput ? <ToolInput input={part.input} /> : null}
-        {isApprovalRequested &&
-          onToolApprovalResponse &&
-          "approval" in part &&
-          part.approval?.id && (
-            <div className="flex items-center gap-2 px-4 pb-4">
-              <Button
-                size="sm"
-                variant="default"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToolApprovalResponse({
-                    id: (part as { approval: { id: string } }).approval.id,
-                    approved: true,
-                  });
-                }}
-              >
-                Approve
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToolApprovalResponse({
-                    id: (part as { approval: { id: string } }).approval.id,
-                    approved: false,
-                    reason: "User denied",
-                  });
-                }}
-              >
-                Deny
-              </Button>
+        <div className="mb-1">
+          <div className="flex items-center gap-1.5">
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenChange(!isOpen)}
+                    className={cn(
+                      "relative inline-flex items-center justify-center size-8 rounded-full border transition-all hover:bg-accent hover:border-accent-foreground/20",
+                      isOpen &&
+                        "bg-accent border-accent-foreground/20 ring-2 ring-primary/20",
+                      !isOpen && "bg-background",
+                    )}
+                  >
+                    {iconInfo?.icon || iconInfo?.catalogId ? (
+                      <McpCatalogIcon
+                        icon={iconInfo.icon}
+                        catalogId={iconInfo.catalogId}
+                        size={16}
+                      />
+                    ) : (
+                      <BotIcon className="size-3.5 text-muted-foreground" />
+                    )}
+                    <span
+                      className={cn(
+                        "absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background",
+                        compactState === "completed" && "bg-green-500",
+                        compactState === "running" &&
+                          "bg-blue-500 animate-pulse",
+                        compactState === "error" && "bg-destructive",
+                      )}
+                    />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  {shortName}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+          {isOpen && (
+            <div className="mt-2">
+              <Tool defaultOpen={true}>
+                <ToolHeader
+                  type={`tool-${toolName}`}
+                  state={getHeaderState({
+                    state: part.state || "input-available",
+                    toolResultPart,
+                    errorText,
+                  })}
+                  isCollapsible={!!hasInput}
+                />
+                <ToolContent>
+                  {hasInput ? <ToolInput input={part.input} /> : null}
+                  {toolResultPart && (
+                    <ToolOutput
+                      label="Result"
+                      output={mcpOutput?.content ?? toolResultPart.output}
+                    />
+                  )}
+                </ToolContent>
+              </Tool>
             </div>
           )}
-        {errorText ? <ToolErrorDetails errorText={errorText} /> : null}
-        {toolResultPart && (
-          <ToolOutput
-            label={errorText ? "Error" : "Result"}
-            output={toolResultPart.output}
-            errorText={errorText}
-          />
-        )}
-        {!toolResultPart && Boolean(part.output) && (
-          <ToolOutput
-            label={errorText ? "Error" : "Result"}
-            output={part.output}
-            errorText={errorText}
-          />
-        )}
-      </ToolContent>
-    </Tool>
-  );
-}
+          {agentId && (
+            <div className="mt-3">
+              <McpAppSection
+                uiResourceUri={uiResourceUri}
+                agentId={agentId}
+                toolName={toolName}
+                toolInput={part.input as Record<string, unknown>}
+                rawOutput={mcpOutput}
+                preloadedResource={
+                  earlyToolUiData?.html
+                    ? {
+                        html: earlyToolUiData.html,
+                        csp: earlyToolUiData.csp,
+                        permissions: earlyToolUiData.permissions,
+                      }
+                    : undefined
+                }
+                onSendMessage={onSendMessage}
+              />
+            </div>
+          )}
+        </div>
+      );
+    }
 
-const tryToExtractErrorFromOutput = (output: unknown) => {
-  try {
-    if (typeof output !== "string") return undefined;
-    const json = JSON.parse(output);
-    return typeof json.error === "string" ? json.error : undefined;
-  } catch (_error) {
-    return undefined;
-  }
-};
+    const isExpandable =
+      hasContent && (canExpandToolCalls || isApprovalRequested);
+
+    return (
+      <Tool
+        className={isExpandable ? "cursor-pointer" : ""}
+        open={isOpen}
+        onOpenChange={handleOpenChange}
+        defaultOpen={shouldDefaultOpen}
+      >
+        <ToolHeader
+          type={`tool-${toolName}`}
+          state={getHeaderState({
+            state: part.state || "input-available",
+            toolResultPart,
+            errorText,
+          })}
+          isCollapsible={isExpandable}
+          actionButton={logsButton}
+        />
+        <ToolContent forceMount={uiResourceUri ? true : undefined}>
+          {hasInput ? <ToolInput input={part.input} /> : null}
+          {isApprovalRequested &&
+            onToolApprovalResponse &&
+            "approval" in part &&
+            part.approval?.id && (
+              <ToolStatusRow
+                icon={
+                  <ClockIcon className="mt-0.5 size-4 flex-none text-amber-600" />
+                }
+                title="Approval required"
+                description="Review this tool call before it can continue."
+                actions={[
+                  {
+                    label: "Approve",
+                    variant: "secondary",
+                    icon: <CheckCircleIcon className="size-4" />,
+                    onClick: () =>
+                      onToolApprovalResponse({
+                        id: (part as { approval: { id: string } }).approval.id,
+                        approved: true,
+                      }),
+                  },
+                  {
+                    label: "Decline",
+                    variant: "outline",
+                    onClick: () => {
+                      setUserDenied(true);
+                      onToolApprovalResponse({
+                        id: (part as { approval: { id: string } }).approval.id,
+                        approved: false,
+                        reason: "User denied",
+                      });
+                    },
+                  },
+                ]}
+              />
+            )}
+          {errorText && !authToolBody ? (
+            <ToolErrorDetails errorText={errorText} />
+          ) : null}
+          {authToolBody}
+
+          {/* Standard MCP Apps flow: tool definition has _meta.ui.resourceUri → AppBridge + AppFrame */}
+          {!isApprovalRequested &&
+            !isToolDenied &&
+            !userDenied &&
+            !errorText &&
+            uiResourceUri &&
+            agentId && (
+              <McpAppSection
+                uiResourceUri={uiResourceUri}
+                agentId={agentId}
+                toolName={toolName}
+                toolInput={part.input as Record<string, unknown>}
+                rawOutput={mcpOutput}
+                preloadedResource={
+                  earlyToolUiData?.html
+                    ? {
+                        html: earlyToolUiData.html,
+                        csp: earlyToolUiData.csp,
+                        permissions: earlyToolUiData.permissions,
+                      }
+                    : undefined
+                }
+                onSendMessage={onSendMessage}
+              />
+            )}
+          {/* Show error output even when UI resource is present - errors take priority */}
+          {!authToolBody && errorText && uiResourceUri && toolResultPart && (
+            <ToolOutput label="Error" output={output} errorText={errorText} />
+          )}
+          {/* Show text output when NOT rendering a UI resource */}
+          {!authToolBody && !uiResourceUri && toolResultPart && (
+            <ToolOutput
+              label={errorText ? "Error" : "Result"}
+              output={output}
+              errorText={errorText}
+            />
+          )}
+          {!authToolBody &&
+            !uiResourceUri &&
+            !toolResultPart &&
+            Boolean(part.output) && (
+              <ToolOutput
+                label={errorText ? "Error" : "Result"}
+                output={output}
+                errorText={errorText}
+              />
+            )}
+        </ToolContent>
+      </Tool>
+    );
+  },
+  (prev, next) =>
+    // Skip re-render unless identity, state, or UI-relevant data actually changed.
+    // AI SDK recreates part/toolResultPart objects every streaming tick — compare
+    // by value, not reference. During input-streaming, also re-render on input growth.
+    prev.toolName === next.toolName &&
+    prev.agentId === next.agentId &&
+    prev.part.toolCallId === next.part.toolCallId &&
+    prev.part.state === next.part.state &&
+    (prev.part.state !== "input-streaming" ||
+      prev.part.input === next.part.input) &&
+    prev.toolResultPart?.state === next.toolResultPart?.state &&
+    prev.earlyToolUiData?.uiResourceUri ===
+      next.earlyToolUiData?.uiResourceUri &&
+    !!prev.earlyToolUiData?.html === !!next.earlyToolUiData?.html &&
+    prev.toolIconMap === next.toolIconMap,
+);
+
 const getHeaderState = ({
   state,
   toolResultPart,
@@ -1182,193 +1677,8 @@ const getHeaderState = ({
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
   errorText: string | undefined;
 }) => {
-  if (errorText) return "output-error";
-  if (toolResultPart) return "output-available";
-  return state;
+  return getToolHeaderState({ state, toolResultPart, errorText });
 };
-
-/**
- * Determines if a tool part should render as a compact circle rather than a full card.
- * Returns false for errors, special tools, and approval-requested states.
- */
-function isCompactEligible(params: {
-  // biome-ignore lint/suspicious/noExplicitAny: Tool parts have dynamic structure from AI SDK
-  part: any;
-  // biome-ignore lint/suspicious/noExplicitAny: Tool result parts have dynamic structure from AI SDK
-  toolResultPart: any;
-  toolName: string;
-}): boolean {
-  const { part, toolResultPart, toolName } = params;
-
-  // Special tools always render as full cards or are hidden
-  if (
-    toolName === TOOL_SWAP_AGENT_FULL_NAME ||
-    toolName === TOOL_TODO_WRITE_FULL_NAME
-  ) {
-    return false;
-  }
-
-  // Approval states need full card for approve/deny buttons
-  if (part.state === "approval-requested") {
-    return false;
-  }
-
-  // Check for errors
-  const outputError = toolResultPart
-    ? tryToExtractErrorFromOutput(toolResultPart.output)
-    : tryToExtractErrorFromOutput(part.output);
-  const errorText = toolResultPart
-    ? (toolResultPart.errorText ?? outputError)
-    : (part.errorText ?? outputError);
-
-  if (errorText) {
-    // Check for policy denied, expired auth, auth required patterns
-    if (
-      parsePolicyDenied(errorText) ||
-      parseExpiredAuth(errorText) ||
-      parseAuthRequired(errorText)
-    ) {
-      return false;
-    }
-    // Any error = full card
-    return false;
-  }
-
-  // Check output for auth patterns
-  const rawOutput = toolResultPart?.output ?? part.output;
-  if (typeof rawOutput === "string") {
-    if (parseExpiredAuth(rawOutput) || parseAuthRequired(rawOutput)) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-type CompactGroup = {
-  startIndex: number;
-  entries: Array<{
-    partIndex: number;
-    toolName: string;
-    // biome-ignore lint/suspicious/noExplicitAny: Tool parts have dynamic structure
-    part: any;
-    // biome-ignore lint/suspicious/noExplicitAny: Tool result parts have dynamic structure
-    toolResultPart: any;
-    // biome-ignore lint/suspicious/noExplicitAny: Error text extraction is dynamic
-    errorText: any;
-  }>;
-};
-
-/**
- * Pre-processes message parts to identify groups of consecutive compact-eligible tools.
- * Returns a map from the first part index of each group to the group data,
- * and a set of all part indices consumed by compact groups.
- *
- * Pass 1: Build a map from toolCallId → result part index, and identify invocation indices.
- * Pass 2: Walk invocations in order, skipping result-only parts and non-tool parts,
- *          grouping consecutive compact-eligible invocations together.
- */
-function identifyCompactGroups(
-  // biome-ignore lint/suspicious/noExplicitAny: Message parts have dynamic structure
-  parts: any[] | undefined,
-): { groupMap: Map<number, CompactGroup>; consumedIndices: Set<number> } {
-  const groupMap = new Map<number, CompactGroup>();
-  const consumedIndices = new Set<number>();
-
-  if (!parts) return { groupMap, consumedIndices };
-
-  // Pass 1: Identify which parts are "duplicate result" parts (a result that
-  // immediately follows its invocation with the same toolCallId) vs primary
-  // tool parts. A tool part is primary if it's the first occurrence of its
-  // toolCallId. The second occurrence (the result) is a duplicate.
-  const seenToolCallIds = new Set<string>();
-  const duplicateResultIndices = new Set<number>();
-  const invocationIndices: number[] = [];
-  // Map from toolCallId to the index of the duplicate result part
-  const resultByCallId = new Map<string, number>();
-
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i];
-    if (!isToolPart(part)) continue;
-
-    const callId = part.toolCallId;
-    if (callId && seenToolCallIds.has(callId)) {
-      // This is a duplicate result part
-      duplicateResultIndices.add(i);
-      resultByCallId.set(callId, i);
-    } else {
-      // Primary tool part (may have state "output-available" if combined)
-      if (callId) seenToolCallIds.add(callId);
-      invocationIndices.push(i);
-    }
-  }
-
-  // Pass 2: Group consecutive compact-eligible invocations
-  let currentGroup: CompactGroup | null = null;
-
-  for (const idx of invocationIndices) {
-    // biome-ignore lint/suspicious/noExplicitAny: Dynamic tool parts have toolName property
-    const rawPart = parts[idx] as any;
-
-    const toolName: string | null =
-      rawPart.type === "dynamic-tool"
-        ? rawPart.toolName
-        : rawPart.type?.startsWith("tool-")
-          ? rawPart.type.replace("tool-", "")
-          : null;
-
-    if (!toolName) {
-      if (currentGroup && currentGroup.entries.length > 0) {
-        groupMap.set(currentGroup.startIndex, currentGroup);
-        currentGroup = null;
-      }
-      continue;
-    }
-
-    // Find matching result part
-    const resultIdx = rawPart.toolCallId
-      ? resultByCallId.get(rawPart.toolCallId)
-      : undefined;
-    const toolResultPart = resultIdx !== undefined ? parts[resultIdx] : null;
-
-    const outputError = toolResultPart
-      ? tryToExtractErrorFromOutput(toolResultPart.output)
-      : tryToExtractErrorFromOutput(rawPart.output);
-    const errorText = toolResultPart
-      ? (toolResultPart.errorText ?? outputError)
-      : (rawPart.errorText ?? outputError);
-
-    if (isCompactEligible({ part: rawPart, toolResultPart, toolName })) {
-      if (!currentGroup) {
-        currentGroup = { startIndex: idx, entries: [] };
-      }
-      currentGroup.entries.push({
-        partIndex: idx,
-        toolName,
-        part: rawPart,
-        toolResultPart,
-        errorText,
-      });
-      consumedIndices.add(idx);
-      if (resultIdx !== undefined) {
-        consumedIndices.add(resultIdx);
-      }
-    } else {
-      // Non-compact tool breaks the group
-      if (currentGroup && currentGroup.entries.length > 0) {
-        groupMap.set(currentGroup.startIndex, currentGroup);
-        currentGroup = null;
-      }
-    }
-  }
-
-  // Finalize last group
-  if (currentGroup && currentGroup.entries.length > 0) {
-    groupMap.set(currentGroup.startIndex, currentGroup);
-  }
-
-  return { groupMap, consumedIndices };
-}
 
 /**
  * Renders a "Switched to {agent}" divider after all parts of a message
@@ -1388,70 +1698,486 @@ function isSwapAgentPokeMessage(message: UIMessage): boolean {
   );
 }
 
-const SWAP_TOOL_NAMES = new Set([
-  TOOL_SWAP_AGENT_FULL_NAME,
-  `tool-${TOOL_SWAP_AGENT_FULL_NAME}`,
-  TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
-  `tool-${TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME}`,
-]);
+function renderPartWithUnsafeContextDivider({
+  partKey,
+  part,
+  renderedPart,
+  dividerRef,
+  unsafeContextBoundary,
+  canReadToolPolicy,
+}: {
+  partKey: string;
+  part: DynamicToolUIPart | ToolUIPart;
+  renderedPart: React.ReactNode;
+  dividerRef: React.Ref<HTMLDivElement>;
+  unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
+  canReadToolPolicy: boolean;
+}) {
+  if (!canReadToolPolicy) {
+    return renderedPart;
+  }
 
-function SwapAgentDivider({ message }: { message: UIMessage }) {
-  if (message.role !== "assistant") return null;
+  const resolvedUnsafeContextBoundary =
+    extractUnsafeContextBoundaryFromToolOutput(part.output) ??
+    unsafeContextBoundary;
 
-  for (const part of message.parts ?? []) {
-    if (!isToolPart(part)) continue;
-    const type = part.type as string;
-    if (!SWAP_TOOL_NAMES.has(type)) continue;
+  if (
+    !resolvedUnsafeContextBoundary ||
+    resolvedUnsafeContextBoundary.kind !== "tool_result"
+  ) {
+    return renderedPart;
+  }
 
-    // Don't show divider if the swap tool errored
-    if (hasSwapToolError(part, message.parts ?? [])) return null;
+  if (
+    !toolPartMatchesUnsafeContextBoundary(part, resolvedUnsafeContextBoundary)
+  ) {
+    return renderedPart;
+  }
 
-    // Determine agent name for the divider
-    let agentName = "another agent";
-    const isSwapToDefault =
-      type === TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME ||
-      type === `tool-${TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME}`;
+  return (
+    <Fragment key={`${partKey}-unsafe-context-boundary`}>
+      {renderedPart}
+      <UnsafeContextStartsHereDivider dividerRef={dividerRef} />
+    </Fragment>
+  );
+}
 
-    if (isSwapToDefault) {
-      agentName = "default agent";
-    } else {
-      // Try tool call input first (always available), then fall back to output
-      const input = (part as Record<string, unknown>).input as
-        | Record<string, unknown>
-        | undefined;
-      if (input?.agent_name && typeof input.agent_name === "string") {
-        agentName = input.agent_name;
-      } else {
-        const output = part.output ?? part.state;
-        if (typeof output === "string") {
-          try {
-            const parsed = JSON.parse(output);
-            if (parsed?.agent_name) agentName = parsed.agent_name;
-          } catch {
-            // ignore
-          }
-        }
-      }
+function renderCompactGroupWithUnsafeContextDivider({
+  partKey,
+  parts,
+  renderedPart,
+  dividerRef,
+  unsafeContextBoundary,
+  canReadToolPolicy,
+}: {
+  partKey: string;
+  parts: Array<DynamicToolUIPart | ToolUIPart>;
+  renderedPart: React.ReactNode;
+  dividerRef: React.Ref<HTMLDivElement>;
+  unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
+  canReadToolPolicy: boolean;
+}) {
+  if (!canReadToolPolicy) {
+    return renderedPart;
+  }
+
+  const resolvedUnsafeContextBoundary =
+    parts
+      .map((part) => extractUnsafeContextBoundaryFromToolOutput(part.output))
+      .find((boundary) => boundary?.kind === "tool_result") ??
+    unsafeContextBoundary;
+
+  if (
+    !resolvedUnsafeContextBoundary ||
+    resolvedUnsafeContextBoundary.kind !== "tool_result"
+  ) {
+    return renderedPart;
+  }
+
+  if (
+    !parts.some((part) =>
+      toolPartMatchesUnsafeContextBoundary(part, resolvedUnsafeContextBoundary),
+    )
+  ) {
+    return renderedPart;
+  }
+
+  return (
+    <Fragment key={`${partKey}-unsafe-context-boundary`}>
+      {renderedPart}
+      <UnsafeContextStartsHereDivider dividerRef={dividerRef} />
+    </Fragment>
+  );
+}
+
+function extractUnsafeContextBoundaryFromToolOutput(
+  output: unknown,
+): archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"] {
+  if (
+    typeof output === "object" &&
+    output !== null &&
+    "unsafeContextBoundary" in output
+  ) {
+    const topLevelUnsafeContextBoundary = output.unsafeContextBoundary;
+    if (
+      typeof topLevelUnsafeContextBoundary === "object" &&
+      topLevelUnsafeContextBoundary !== null &&
+      "kind" in topLevelUnsafeContextBoundary &&
+      topLevelUnsafeContextBoundary.kind === "tool_result" &&
+      "toolCallId" in topLevelUnsafeContextBoundary &&
+      typeof topLevelUnsafeContextBoundary.toolCallId === "string" &&
+      "toolName" in topLevelUnsafeContextBoundary &&
+      typeof topLevelUnsafeContextBoundary.toolName === "string" &&
+      "reason" in topLevelUnsafeContextBoundary &&
+      isUnsafeContextBoundaryReason(topLevelUnsafeContextBoundary.reason)
+    ) {
+      return {
+        kind: "tool_result",
+        reason: topLevelUnsafeContextBoundary.reason,
+        toolCallId: topLevelUnsafeContextBoundary.toolCallId,
+        toolName: topLevelUnsafeContextBoundary.toolName,
+      };
+    }
+  }
+
+  if (
+    typeof output !== "object" ||
+    output === null ||
+    !("_meta" in output) ||
+    typeof output._meta !== "object" ||
+    output._meta === null ||
+    !("unsafeContextBoundary" in output._meta)
+  ) {
+    return undefined;
+  }
+
+  const unsafeContextBoundary = output._meta.unsafeContextBoundary;
+  if (
+    typeof unsafeContextBoundary !== "object" ||
+    unsafeContextBoundary === null ||
+    !("kind" in unsafeContextBoundary) ||
+    unsafeContextBoundary.kind !== "tool_result" ||
+    !("toolCallId" in unsafeContextBoundary) ||
+    typeof unsafeContextBoundary.toolCallId !== "string" ||
+    !("toolName" in unsafeContextBoundary) ||
+    typeof unsafeContextBoundary.toolName !== "string" ||
+    !("reason" in unsafeContextBoundary) ||
+    !isUnsafeContextBoundaryReason(unsafeContextBoundary.reason)
+  ) {
+    return undefined;
+  }
+
+  return {
+    kind: "tool_result",
+    reason: unsafeContextBoundary.reason,
+    toolCallId: unsafeContextBoundary.toolCallId,
+    toolName: unsafeContextBoundary.toolName,
+  };
+}
+
+type UnsafeContextBoundaryReason = NonNullable<
+  archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"]
+>["reason"];
+
+const unsafeContextBoundaryReasonMap = {
+  agent_configured_untrusted: true,
+  inherited_from_parent: true,
+  tool_result_marked_untrusted: true,
+  tool_result_blocked: true,
+} as const satisfies Record<UnsafeContextBoundaryReason, true>;
+
+function isUnsafeContextBoundaryReason(
+  reason: unknown,
+): reason is UnsafeContextBoundaryReason {
+  return typeof reason === "string" && reason in unsafeContextBoundaryReasonMap;
+}
+
+function toolPartMatchesUnsafeContextBoundary(
+  part: DynamicToolUIPart | ToolUIPart,
+  boundary: Extract<
+    NonNullable<
+      archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"]
+    >,
+    { kind: "tool_result" }
+  >,
+): boolean {
+  if (part.toolCallId === boundary.toolCallId) {
+    return true;
+  }
+
+  const partToolName = getToolNameFromPart(part);
+  return partToolName === boundary.toolName;
+}
+
+function inferUnsafeTextBoundary(params: {
+  messages: UIMessage[];
+  canReadToolPolicy: boolean;
+  unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
+}): { messageId: string; partIndex: number } | undefined {
+  if (!params.canReadToolPolicy) {
+    return undefined;
+  }
+
+  if (params.unsafeContextBoundary?.kind === "tool_result") {
+    return undefined;
+  }
+
+  const hasExplicitToolBoundary = params.messages.some((message) =>
+    (message.parts ?? []).some(
+      (part) =>
+        isToolPart(part) &&
+        extractUnsafeContextBoundaryFromToolOutput(part.output)?.kind ===
+          "tool_result",
+    ),
+  );
+  if (hasExplicitToolBoundary) {
+    return undefined;
+  }
+
+  const firstSensitiveDenialIndex = params.messages.findIndex((message) =>
+    (message.parts ?? []).some(
+      (part) =>
+        part.type === "text" &&
+        parsePolicyDenied(part.text)?.unsafeContextActiveAtRequestStart,
+    ),
+  );
+  if (firstSensitiveDenialIndex <= 0) {
+    return undefined;
+  }
+
+  for (
+    let messageIndex = 0;
+    messageIndex < firstSensitiveDenialIndex;
+    messageIndex++
+  ) {
+    const message = params.messages[messageIndex];
+    if (message.role !== "assistant" || !message.id) {
+      continue;
     }
 
+    let sawToolOutput = false;
+    for (
+      let partIndex = 0;
+      partIndex < (message.parts?.length ?? 0);
+      partIndex++
+    ) {
+      const part = message.parts[partIndex];
+      if (isToolPart(part) && part.state === "output-available") {
+        sawToolOutput = true;
+        continue;
+      }
+
+      if (
+        sawToolOutput &&
+        part.type === "text" &&
+        typeof part.text === "string" &&
+        part.text.trim().length > 0
+      ) {
+        return {
+          messageId: message.id,
+          partIndex,
+        };
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function hasUnsafeBoundaryBefore(params: {
+  messages: UIMessage[];
+  beforeMessageIndex: number;
+  beforePartIndex: number;
+  unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
+  inferredUnsafeTextBoundary?: { messageId: string; partIndex: number };
+}): boolean {
+  if (params.unsafeContextBoundary?.kind === "preexisting_untrusted") {
+    return true;
+  }
+
+  if (
+    params.inferredUnsafeTextBoundary &&
+    isMessagePositionBefore({
+      messages: params.messages,
+      boundaryMessageId: params.inferredUnsafeTextBoundary.messageId,
+      boundaryPartIndex: params.inferredUnsafeTextBoundary.partIndex,
+      beforeMessageIndex: params.beforeMessageIndex,
+      beforePartIndex: params.beforePartIndex,
+    })
+  ) {
+    return true;
+  }
+
+  for (
+    let messageIndex = 0;
+    messageIndex <= params.beforeMessageIndex;
+    messageIndex++
+  ) {
+    const message = params.messages[messageIndex];
+    const lastPartIndex =
+      messageIndex === params.beforeMessageIndex
+        ? params.beforePartIndex - 1
+        : (message.parts?.length ?? 0) - 1;
+
+    for (let partIndex = 0; partIndex <= lastPartIndex; partIndex++) {
+      const part = message.parts?.[partIndex];
+      if (!part) {
+        continue;
+      }
+
+      if (
+        part.type === "text" &&
+        parsePolicyDenied(part.text)?.unsafeContextActiveAtRequestStart
+      ) {
+        return true;
+      }
+
+      if (
+        isToolPart(part) &&
+        part.state === "output-available" &&
+        matchesThreadUnsafeBoundary({
+          part,
+          unsafeContextBoundary: params.unsafeContextBoundary,
+        })
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function matchesThreadUnsafeBoundary(params: {
+  part: DynamicToolUIPart | ToolUIPart;
+  unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
+}): boolean {
+  const boundaryFromOutput = extractUnsafeContextBoundaryFromToolOutput(
+    params.part.output,
+  );
+  if (boundaryFromOutput?.kind === "tool_result") {
+    return true;
+  }
+
+  if (params.unsafeContextBoundary?.kind !== "tool_result") {
+    return false;
+  }
+
+  return toolPartMatchesUnsafeContextBoundary(
+    params.part,
+    params.unsafeContextBoundary,
+  );
+}
+
+function isMessagePositionBefore(params: {
+  messages: UIMessage[];
+  boundaryMessageId: string;
+  boundaryPartIndex: number;
+  beforeMessageIndex: number;
+  beforePartIndex: number;
+}): boolean {
+  const boundaryMessageIndex = params.messages.findIndex(
+    (message) => message.id === params.boundaryMessageId,
+  );
+
+  if (boundaryMessageIndex === -1) {
+    return false;
+  }
+
+  if (boundaryMessageIndex < params.beforeMessageIndex) {
+    return true;
+  }
+
+  if (boundaryMessageIndex > params.beforeMessageIndex) {
+    return false;
+  }
+
+  return params.boundaryPartIndex < params.beforePartIndex;
+}
+
+function renderToolAuthPart(params: {
+  toolName: string;
+  authState: ReturnType<typeof resolveToolAuthState>;
+  onInstallMcp?: (catalogId: string) => void;
+  onReauthMcp?: (catalogId: string, serverId: string) => void;
+}) {
+  const { authState, toolName, onInstallMcp, onReauthMcp } = params;
+
+  if (authState?.kind === "auth-expired") {
+    const { catalogId, serverId } = authState;
     return (
-      <div className="flex items-center gap-3 py-2">
-        <div className="h-px flex-1 bg-border" />
-        <span className="text-xs text-muted-foreground">
-          Switched to {agentName}
-        </span>
-        <div className="h-px flex-1 bg-border" />
-      </div>
+      <ExpiredAuthTool
+        toolName={toolName}
+        catalogName={authState.catalogName}
+        reauthUrl={authState.reauthUrl}
+        onReauth={
+          onReauthMcp && catalogId && serverId
+            ? () => onReauthMcp(catalogId, serverId)
+            : undefined
+        }
+      />
+    );
+  }
+
+  if (authState?.kind === "auth-required") {
+    const { catalogId } = authState;
+    return (
+      <AuthRequiredTool
+        toolName={toolName}
+        catalogName={authState.catalogName}
+        installUrl={authState.installUrl}
+        onInstall={
+          onInstallMcp && catalogId ? () => onInstallMcp(catalogId) : undefined
+        }
+      />
     );
   }
 
   return null;
 }
 
+function renderAssistantAuthPart(params: {
+  toolName: string;
+  authState: ReturnType<typeof resolveAssistantTextAuthState>;
+  onInstallMcp?: (catalogId: string) => void;
+  onReauthMcp?: (catalogId: string, serverId: string) => void;
+}) {
+  const { authState, toolName, onInstallMcp, onReauthMcp } = params;
+
+  if (authState?.kind === "auth-expired") {
+    const { catalogId, serverId } = authState;
+    return (
+      <ExpiredAuthTool
+        toolName={toolName}
+        catalogName={authState.catalogName}
+        reauthUrl={authState.reauthUrl}
+        onReauth={
+          onReauthMcp && catalogId && serverId
+            ? () => onReauthMcp(catalogId, serverId)
+            : undefined
+        }
+      />
+    );
+  }
+
+  if (authState?.kind === "auth-required") {
+    const { catalogId } = authState;
+    return (
+      <AuthRequiredTool
+        toolName={toolName}
+        catalogName={authState.catalogName}
+        installUrl={authState.installUrl}
+        onInstall={
+          onInstallMcp && catalogId ? () => onInstallMcp(catalogId) : undefined
+        }
+      />
+    );
+  }
+
+  return null;
+}
+
+function hasMessageAuthToolError(message: UIMessage): boolean {
+  return hasToolPartsWithAuthErrors(
+    (message.parts ?? []).flatMap((part) => {
+      if (!isToolPart(part)) {
+        return [];
+      }
+
+      return [
+        {
+          output: part.output,
+          errorText: getToolErrorText({ part, toolResultPart: null }),
+        },
+      ];
+    }),
+  );
+}
+
 // biome-ignore lint/suspicious/noExplicitAny: Tool parts have dynamic structure
 function hasSwapToolError(part: any, allParts: any[]): boolean {
   // Check the part itself for errors
-  if (part.errorText || tryToExtractErrorFromOutput(part.output)) return true;
+  if (getToolErrorText({ part, toolResultPart: null })) return true;
 
   // Check the paired result part (same toolCallId, different instance)
   if (part.toolCallId) {
@@ -1459,11 +2185,9 @@ function hasSwapToolError(part: any, allParts: any[]): boolean {
       (p) => p !== part && isToolPart(p) && p.toolCallId === part.toolCallId,
     );
     if (resultPart) {
-      if (
-        resultPart.errorText ||
-        tryToExtractErrorFromOutput(resultPart.output)
-      )
+      if (getToolErrorText({ part: resultPart, toolResultPart: null })) {
         return true;
+      }
     }
   }
   return false;

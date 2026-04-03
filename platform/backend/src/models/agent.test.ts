@@ -1907,7 +1907,7 @@ describe("AgentModel", () => {
         agentType: "agent",
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolAssignment: false,
+          autoConfigureOnToolDiscovery: false,
         },
       });
 
@@ -1919,7 +1919,32 @@ describe("AgentModel", () => {
       expect(result?.builtInAgentConfig).toEqual(
         expect.objectContaining({
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolAssignment: false,
+          autoConfigureOnToolDiscovery: false,
+        }),
+      );
+    });
+
+    test("supports dual LLM built-in config variants", async () => {
+      await AgentModel.create({
+        name: BUILT_IN_AGENT_NAMES.DUAL_LLM_MAIN,
+        teams: [],
+        scope: "org",
+        agentType: "agent",
+        builtInAgentConfig: {
+          name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+          maxRounds: 7,
+        },
+      });
+
+      const result = await AgentModel.getBuiltInAgent(
+        BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+      );
+
+      expect(result).not.toBeNull();
+      expect(result?.builtInAgentConfig).toEqual(
+        expect.objectContaining({
+          name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+          maxRounds: 7,
         }),
       );
     });
@@ -1954,7 +1979,7 @@ describe("AgentModel", () => {
         agentType: "agent",
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolAssignment: false,
+          autoConfigureOnToolDiscovery: false,
         },
       });
 
@@ -1979,7 +2004,7 @@ describe("AgentModel", () => {
         agentType: "agent",
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolAssignment: false,
+          autoConfigureOnToolDiscovery: false,
         },
       });
 
@@ -2004,7 +2029,7 @@ describe("AgentModel", () => {
         agentType: "agent",
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolAssignment: false,
+          autoConfigureOnToolDiscovery: false,
         },
       });
 
@@ -2040,7 +2065,7 @@ describe("AgentModel", () => {
         agentType: "agent",
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolAssignment: false,
+          autoConfigureOnToolDiscovery: false,
         },
       });
 
@@ -2147,7 +2172,7 @@ describe("AgentModel", () => {
         agentType: "agent",
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolAssignment: false,
+          autoConfigureOnToolDiscovery: false,
         },
       });
 

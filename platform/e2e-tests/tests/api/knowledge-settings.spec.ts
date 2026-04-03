@@ -1,4 +1,9 @@
-import { expect, test } from "./fixtures";
+import {
+  expect,
+  LLM_PROVIDER_API_KEYS_AVAILABLE_ROUTE,
+  LLM_PROVIDER_API_KEYS_ROUTE,
+  test,
+} from "./fixtures";
 
 test.describe("Knowledge Settings API", () => {
   // Run serially since tests modify shared organization settings
@@ -49,26 +54,40 @@ test.describe("Knowledge Settings API", () => {
 
   test("should reject changing embedding model once locked (key + model configured)", async ({
     request,
+    getModels,
     makeApiRequest,
+    syncModels,
     updateKnowledgeSettings,
   }) => {
-    // Create a chat API key to use as the embedding key
-    const createKeyResponse = await makeApiRequest({
+    const availableKeysResponse = await makeApiRequest({
       request,
-      method: "post",
-      urlSuffix: "/api/chat-api-keys",
-      data: {
-        name: "Embedding Lock Test Key",
-        provider: "openai",
-        apiKey: "sk-openai-embedding-lock-test",
-        scope: "org_wide",
-      },
+      method: "get",
+      urlSuffix: `${LLM_PROVIDER_API_KEYS_AVAILABLE_ROUTE}?provider=openai`,
     });
-    const chatApiKey = await createKeyResponse.json();
+    const availableOpenAiKeys = await availableKeysResponse.json();
+    const openAiKey = availableOpenAiKeys.find(
+      (apiKey: { provider: string }) => apiKey.provider === "openai",
+    );
+
+    expect(openAiKey).toBeTruthy();
+
+    await syncModels(request);
+
+    const modelsResponse = await getModels(request);
+    const allModels = await modelsResponse.json();
+    const availableEmbeddingModels = allModels
+      .filter(
+        (model: { provider: string; embeddingDimensions: number | null }) =>
+          model.provider === "openai" && model.embeddingDimensions !== null,
+      )
+      .map((model: { modelId: string }) => model.modelId);
+
+    expect(availableEmbeddingModels).toContain("text-embedding-3-small");
+    expect(availableEmbeddingModels).toContain("text-embedding-3-large");
 
     // Set both embedding key and model — this locks the model
     await updateKnowledgeSettings(request, {
-      embeddingChatApiKeyId: chatApiKey.id,
+      embeddingChatApiKeyId: openAiKey.id,
       embeddingModel: "text-embedding-3-small",
     });
 
@@ -92,16 +111,9 @@ test.describe("Knowledge Settings API", () => {
       embeddingModel: "text-embedding-3-small",
     });
     expect(sameModelResponse.ok()).toBe(true);
-
     // Cleanup: clear the key reference first (unlocks), then reset model
     await updateKnowledgeSettings(request, {
       embeddingChatApiKeyId: null,
-    });
-
-    await makeApiRequest({
-      request,
-      method: "delete",
-      urlSuffix: `/api/chat-api-keys/${chatApiKey.id}`,
     });
   });
 
@@ -114,12 +126,12 @@ test.describe("Knowledge Settings API", () => {
     const createKeyResponse = await makeApiRequest({
       request,
       method: "post",
-      urlSuffix: "/api/chat-api-keys",
+      urlSuffix: LLM_PROVIDER_API_KEYS_ROUTE,
       data: {
         name: "Embedding Delete Protection Key",
         provider: "openai",
         apiKey: "sk-openai-delete-protection-test",
-        scope: "org_wide",
+        scope: "org",
       },
     });
     const chatApiKey = await createKeyResponse.json();
@@ -133,7 +145,7 @@ test.describe("Knowledge Settings API", () => {
     const deleteResponse = await makeApiRequest({
       request,
       method: "delete",
-      urlSuffix: `/api/chat-api-keys/${chatApiKey.id}`,
+      urlSuffix: `/api/llm-provider-api-keys/${chatApiKey.id}`,
       ignoreStatusCheck: true,
     });
     expect(deleteResponse.status()).toBe(400);
@@ -151,7 +163,7 @@ test.describe("Knowledge Settings API", () => {
     await makeApiRequest({
       request,
       method: "delete",
-      urlSuffix: `/api/chat-api-keys/${chatApiKey.id}`,
+      urlSuffix: `/api/llm-provider-api-keys/${chatApiKey.id}`,
     });
   });
 
@@ -164,12 +176,12 @@ test.describe("Knowledge Settings API", () => {
     const createKeyResponse = await makeApiRequest({
       request,
       method: "post",
-      urlSuffix: "/api/chat-api-keys",
+      urlSuffix: LLM_PROVIDER_API_KEYS_ROUTE,
       data: {
         name: "Reranker Delete Protection Key",
         provider: "openai",
         apiKey: "sk-openai-reranker-delete-test",
-        scope: "org_wide",
+        scope: "org",
       },
     });
     const chatApiKey = await createKeyResponse.json();
@@ -183,7 +195,7 @@ test.describe("Knowledge Settings API", () => {
     const deleteResponse = await makeApiRequest({
       request,
       method: "delete",
-      urlSuffix: `/api/chat-api-keys/${chatApiKey.id}`,
+      urlSuffix: `/api/llm-provider-api-keys/${chatApiKey.id}`,
       ignoreStatusCheck: true,
     });
     expect(deleteResponse.status()).toBe(400);
@@ -198,49 +210,7 @@ test.describe("Knowledge Settings API", () => {
     await makeApiRequest({
       request,
       method: "delete",
-      urlSuffix: `/api/chat-api-keys/${chatApiKey.id}`,
-    });
-  });
-
-  // TODO: Fix test - error message was updated to support Ollama as embedding provider
-  test.skip("should reject non-OpenAI API key for embedding", async ({
-    request,
-    makeApiRequest,
-  }) => {
-    // Create a non-OpenAI chat API key (e.g. anthropic)
-    const createKeyResponse = await makeApiRequest({
-      request,
-      method: "post",
-      urlSuffix: "/api/chat-api-keys",
-      data: {
-        name: "Anthropic Key For Embedding Test",
-        provider: "anthropic",
-        apiKey: "sk-ant-embedding-provider-test",
-        scope: "org_wide",
-      },
-    });
-    const chatApiKey = await createKeyResponse.json();
-
-    // Attempt to set it as the embedding key — should be rejected
-    const response = await makeApiRequest({
-      request,
-      method: "patch",
-      urlSuffix: "/api/organization/knowledge-settings",
-      data: { embeddingChatApiKeyId: chatApiKey.id },
-      ignoreStatusCheck: true,
-    });
-    expect(response.status()).toBe(400);
-
-    const errorBody = await response.json();
-    expect(errorBody.error.message).toContain(
-      "Embedding API key must be an OpenAI provider key",
-    );
-
-    // Cleanup
-    await makeApiRequest({
-      request,
-      method: "delete",
-      urlSuffix: `/api/chat-api-keys/${chatApiKey.id}`,
+      urlSuffix: `/api/llm-provider-api-keys/${chatApiKey.id}`,
     });
   });
 

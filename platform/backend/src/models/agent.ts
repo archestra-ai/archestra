@@ -586,6 +586,7 @@ class AgentModel {
       teamIds?: string[];
       authorIds?: string[];
       excludeAuthorIds?: string[];
+      excludeOtherPersonalAgents?: boolean;
       labels?: Record<string, string[]>;
     },
     userId?: string,
@@ -664,6 +665,17 @@ class AgentModel {
       const condition = or(
         isNull(schema.agentsTable.authorId),
         notInArray(schema.agentsTable.authorId, filters.excludeAuthorIds),
+      );
+      if (condition) {
+        whereConditions.push(condition);
+      }
+    }
+
+    // Exclude other users' personal agents (show non-personal + own personal)
+    if (filters?.excludeOtherPersonalAgents && userId) {
+      const condition = or(
+        ne(schema.agentsTable.scope, "personal"),
+        eq(schema.agentsTable.authorId, userId),
       );
       if (condition) {
         whereConditions.push(condition);
@@ -1427,10 +1439,11 @@ class AgentModel {
   }
 
   static async delete(id: string): Promise<boolean> {
-    const result = await db
+    const rows = await db
       .delete(schema.agentsTable)
-      .where(eq(schema.agentsTable.id, id));
-    return result.rowCount !== null && result.rowCount > 0;
+      .where(eq(schema.agentsTable.id, id))
+      .returning({ id: schema.agentsTable.id });
+    return rows.length > 0;
   }
 
   /** Check if an agent has any Playwright tools assigned via agent_tools. */

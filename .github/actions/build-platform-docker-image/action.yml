@@ -66,11 +66,11 @@ runs:
         INPUT_CONTEXT: ${{ inputs.context }}
 
     - name: Setup Blacksmith Builder
-      uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
+      uses: ./.github/actions/setup-blacksmith-builder
 
     - name: Build Docker image
       id: build
-      uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
+      uses: ./.github/actions/blacksmith-build-push
       with:
         context: ${{ inputs.context }}
         file: ${{ inputs.dockerfile != '' && inputs.dockerfile || format('{0}/Dockerfile', inputs.context) }}

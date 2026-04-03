@@ -12,8 +12,8 @@ import db, { schema } from "@/database";
 import {
   AgentModel,
   AgentToolModel,
-  ChatApiKeyModel,
   InternalMcpCatalogModel,
+  LlmProviderApiKeyModel,
   SecretModel,
   SessionModel,
   TeamModel,
@@ -27,7 +27,6 @@ import type {
   ConnectorRun,
   InsertAccount,
   InsertAgent,
-  InsertChatApiKey,
   InsertConnectorRun,
   InsertConversation,
   InsertInteraction,
@@ -35,6 +34,7 @@ import type {
   InsertInvitation,
   InsertKnowledgeBase,
   InsertKnowledgeBaseConnector,
+  InsertLlmProviderApiKey,
   InsertMcpServer,
   InsertMember,
   InsertOrganization,
@@ -85,7 +85,7 @@ interface TestFixtures {
   makeConversation: typeof makeConversation;
   makeInteraction: typeof makeInteraction;
   makeSecret: typeof makeSecret;
-  makeChatApiKey: typeof makeChatApiKey;
+  makeLlmProviderApiKey: typeof makeLlmProviderApiKey;
   makeIdentityProvider: typeof makeIdentityProvider;
   makeOAuthClient: typeof makeOAuthClient;
   makeOAuthAccessToken: typeof makeOAuthAccessToken;
@@ -268,13 +268,13 @@ async function makeAgentTool(
   agentId: string,
   toolId: string,
   overrides: Partial<
-    Pick<
-      AgentTool,
-      "credentialSourceMcpServerId" | "executionSourceMcpServerId"
-    >
+    Pick<AgentTool, "mcpServerId" | "credentialResolutionMode">
   > = {},
 ) {
-  return await AgentToolModel.create(agentId, toolId, overrides);
+  return await AgentToolModel.create(agentId, toolId, {
+    mcpServerId: overrides.mcpServerId,
+    credentialResolutionMode: overrides.credentialResolutionMode,
+  });
 }
 
 /**
@@ -431,6 +431,7 @@ async function makeInternalMcpCatalog(
       | "localConfig"
       | "userConfig"
       | "oauthConfig"
+      | "enterpriseManagedConfig"
       | "scope"
       | "teams"
     >
@@ -495,7 +496,16 @@ async function makeInvitation(
 async function makeAccount(
   userId: string,
   overrides: Partial<
-    Pick<InsertAccount, "accountId" | "providerId" | "accessToken" | "idToken">
+    Pick<
+      InsertAccount,
+      | "accountId"
+      | "providerId"
+      | "accessToken"
+      | "refreshToken"
+      | "idToken"
+      | "accessTokenExpiresAt"
+      | "refreshTokenExpiresAt"
+    >
   > = {},
 ) {
   const [account] = await db
@@ -688,20 +698,23 @@ async function makeSecret(
  * Creates a test chat API key in the database.
  * Used for testing features that require LLM API keys (e.g., auto-policy configuration).
  */
-async function makeChatApiKey(
+async function makeLlmProviderApiKey(
   organizationId: string,
   secretId: string,
   overrides: Partial<
-    Pick<InsertChatApiKey, "name" | "provider" | "scope" | "userId" | "teamId">
+    Pick<
+      InsertLlmProviderApiKey,
+      "name" | "provider" | "scope" | "userId" | "teamId"
+    >
   > = {},
 ) {
-  return await ChatApiKeyModel.create({
+  return await LlmProviderApiKeyModel.create({
     organizationId,
     secretId,
     name:
       overrides.name ?? `Test API Key ${crypto.randomUUID().substring(0, 8)}`,
     provider: overrides.provider ?? "anthropic",
-    scope: overrides.scope ?? "org_wide",
+    scope: overrides.scope ?? "org",
     userId: overrides.userId ?? null,
     teamId: overrides.teamId ?? null,
   });
@@ -800,6 +813,7 @@ async function makeOAuthAccessToken(
     expiresAt?: Date;
     scopes?: string[];
     refreshId?: string;
+    referenceId?: string | null;
   } = {},
 ) {
   const id = crypto.randomUUID();
@@ -813,6 +827,7 @@ async function makeOAuthAccessToken(
       expiresAt: overrides.expiresAt ?? new Date(Date.now() + 3600000),
       scopes: overrides.scopes ?? ["mcp"],
       refreshId: overrides.refreshId ?? null,
+      referenceId: overrides.referenceId ?? null,
       createdAt: new Date(),
     })
     .returning();
@@ -1036,8 +1051,8 @@ export const test = baseTest.extend<TestFixtures>({
   makeSecret: async ({}, use) => {
     await use(makeSecret);
   },
-  makeChatApiKey: async ({}, use) => {
-    await use(makeChatApiKey);
+  makeLlmProviderApiKey: async ({}, use) => {
+    await use(makeLlmProviderApiKey);
   },
   makeIdentityProvider: async ({}, use) => {
     await use(makeIdentityProvider);

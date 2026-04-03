@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Radix Popper / floating-ui needs ResizeObserver
@@ -79,20 +80,26 @@ let mockApiKeys: Array<{
   provider: string;
   scope: string;
 }> = [];
+let mockEmbeddingModels: Array<{
+  id: string;
+  provider: string;
+  displayName: string;
+  embeddingDimensions: 3072 | 1536 | 768 | null;
+}> = [];
 
-vi.mock("@/lib/chat-settings.query", () => ({
-  useAvailableChatApiKeys: () => ({
+vi.mock("@/lib/llm-provider-api-keys.query", () => ({
+  useAvailableLlmProviderApiKeys: () => ({
     data: mockApiKeys,
     isPending: false,
   }),
-  useCreateChatApiKey: () => ({
+  useCreateLlmProviderApiKey: () => ({
     mutateAsync: vi.fn(),
     isPending: false,
   }),
 }));
 
-vi.mock("@/lib/chat-models.query", () => ({
-  useChatModels: () => ({
+vi.mock("@/lib/llm-models.query", () => ({
+  useLlmModels: () => ({
     data: [
       { id: "gpt-4o", provider: "openai", displayName: "GPT-4o" },
       {
@@ -103,9 +110,13 @@ vi.mock("@/lib/chat-models.query", () => ({
     ],
     isPending: false,
   }),
+  useEmbeddingModels: () => ({
+    data: mockEmbeddingModels,
+    isPending: false,
+  }),
 }));
 
-vi.mock("@/lib/config.query", () => ({
+vi.mock("@/lib/config/config.query", () => ({
   useFeature: () => false,
   useProviderBaseUrls: () => ({
     data: {},
@@ -119,7 +130,7 @@ vi.mock("@/lib/team.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/auth.query", () => ({
+vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => ({ data: true, isPending: false }),
   useMissingPermissions: () => [],
 }));
@@ -149,11 +160,31 @@ function renderPage() {
   );
 }
 
+function getEmbeddingModelTrigger() {
+  const modelTrigger = screen
+    .getAllByRole("combobox")
+    .find((el) => el.textContent?.includes("Select embedding model"));
+
+  if (!modelTrigger) {
+    throw new Error("Embedding model trigger not found");
+  }
+
+  return modelTrigger;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mockOrganization = null;
   mockOrgPending = false;
   mockApiKeys = [];
+  mockEmbeddingModels = [
+    {
+      id: "text-embedding-3-small",
+      provider: "openai",
+      displayName: "text-embedding-3-small",
+      embeddingDimensions: 1536,
+    },
+  ];
 });
 
 describe("KnowledgeSettingsPage", () => {
@@ -186,7 +217,7 @@ describe("KnowledgeSettingsPage", () => {
           id: "key-1",
           name: "OpenAI Key",
           provider: "openai",
-          scope: "org_wide",
+          scope: "org",
         },
       ];
       renderPage();
@@ -210,7 +241,7 @@ describe("KnowledgeSettingsPage", () => {
           id: "key-1",
           name: "OpenAI Key",
           provider: "openai",
-          scope: "org_wide",
+          scope: "org",
         },
       ];
       renderPage();
@@ -235,7 +266,7 @@ describe("KnowledgeSettingsPage", () => {
           id: "key-1",
           name: "OpenAI Key",
           provider: "openai",
-          scope: "org_wide",
+          scope: "org",
         },
       ];
       renderPage();
@@ -276,12 +307,120 @@ describe("KnowledgeSettingsPage", () => {
           id: "key-1",
           name: "OpenAI Key",
           provider: "openai",
-          scope: "org_wide",
+          scope: "org",
         },
       ];
       renderPage();
 
       expect(screen.getByText("text-embedding-3-large")).toBeInTheDocument();
+    });
+
+    it("shows the configured embedding dimensions from model metadata", () => {
+      mockOrganization = {
+        embeddingChatApiKeyId: "key-1",
+        embeddingModel: "gemini-embedding-001",
+        rerankerChatApiKeyId: null,
+        rerankerModel: null,
+      };
+      mockApiKeys = [
+        {
+          id: "key-1",
+          name: "Vertex AI",
+          provider: "gemini",
+          scope: "org",
+        },
+      ];
+      mockEmbeddingModels = [
+        {
+          id: "gemini-embedding-001",
+          provider: "gemini",
+          displayName: "gemini-embedding-001",
+          embeddingDimensions: 1536,
+        },
+      ];
+      renderPage();
+
+      expect(
+        screen.getByText(/Uses 1536-dimensional vectors/),
+      ).toBeInTheDocument();
+    });
+
+    it("shows embedding model descriptions in the dropdown", async () => {
+      const user = userEvent.setup();
+
+      mockOrganization = {
+        embeddingChatApiKeyId: "key-1",
+        embeddingModel: null,
+        rerankerChatApiKeyId: null,
+        rerankerModel: null,
+      };
+      mockApiKeys = [
+        {
+          id: "key-1",
+          name: "OpenAI Key",
+          provider: "openai",
+          scope: "org",
+        },
+      ];
+      renderPage();
+
+      await user.click(getEmbeddingModelTrigger());
+
+      expect(
+        screen.getAllByText("text-embedding-3-small").length,
+      ).toBeGreaterThanOrEqual(1);
+    });
+
+    it("preserves a previously saved embedding model even if it is no longer detected", () => {
+      mockOrganization = {
+        embeddingChatApiKeyId: "key-1",
+        embeddingModel: "legacy-embedding-model",
+        rerankerChatApiKeyId: null,
+        rerankerModel: null,
+      };
+      mockApiKeys = [
+        {
+          id: "key-1",
+          name: "OpenAI Key",
+          provider: "openai",
+          scope: "org",
+        },
+      ];
+      mockEmbeddingModels = [];
+      renderPage();
+
+      expect(screen.getByText("legacy-embedding-model")).toBeInTheDocument();
+    });
+
+    it("shows a helpful empty state when the selected key has no embedding models", async () => {
+      const user = userEvent.setup();
+
+      mockOrganization = {
+        embeddingChatApiKeyId: "key-1",
+        embeddingModel: null,
+        rerankerChatApiKeyId: null,
+        rerankerModel: null,
+      };
+      mockApiKeys = [
+        {
+          id: "key-1",
+          name: "Vertex AI",
+          provider: "gemini",
+          scope: "org",
+        },
+      ];
+      mockEmbeddingModels = [];
+      renderPage();
+
+      await user.click(getEmbeddingModelTrigger());
+
+      expect(
+        screen.getByText('No embedding models detected for "Vertex AI".'),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "here" })).toHaveAttribute(
+        "href",
+        "/llm/providers/models",
+      );
     });
   });
 
@@ -298,7 +437,7 @@ describe("KnowledgeSettingsPage", () => {
           id: "key-1",
           name: "OpenAI Key",
           provider: "openai",
-          scope: "org_wide",
+          scope: "org",
         },
       ];
       renderPage();
@@ -310,7 +449,7 @@ describe("KnowledgeSettingsPage", () => {
       ).toBeInTheDocument();
     });
 
-    it("shows permanent choice description when model is locked", () => {
+    it("shows lock message when model is locked", () => {
       mockOrganization = {
         embeddingChatApiKeyId: "key-1",
         embeddingModel: "text-embedding-3-small",
@@ -322,14 +461,14 @@ describe("KnowledgeSettingsPage", () => {
           id: "key-1",
           name: "OpenAI Key",
           provider: "openai",
-          scope: "org_wide",
+          scope: "org",
         },
       ];
       renderPage();
 
       expect(
         screen.getByText(
-          /The embedding model cannot be changed after it has been saved/,
+          /Locked — changing the embedding model requires re-embedding all documents/,
         ),
       ).toBeInTheDocument();
     });
@@ -434,7 +573,7 @@ describe("KnowledgeSettingsPage", () => {
           id: "key-1",
           name: "OpenAI Key",
           provider: "openai",
-          scope: "org_wide",
+          scope: "org",
         },
       ];
       renderPage();
@@ -458,7 +597,7 @@ describe("KnowledgeSettingsPage", () => {
           id: "key-1",
           name: "OpenAI Key",
           provider: "openai",
-          scope: "org_wide",
+          scope: "org",
         },
       ];
       renderPage();
@@ -485,7 +624,7 @@ describe("KnowledgeSettingsPage", () => {
           id: "key-1",
           name: "OpenAI Key",
           provider: "openai",
-          scope: "org_wide",
+          scope: "org",
         },
       ];
       renderPage();
@@ -557,7 +696,7 @@ describe("KnowledgeSettingsPage", () => {
           id: "key-1",
           name: "OpenAI Key",
           provider: "openai",
-          scope: "org_wide",
+          scope: "org",
         },
       ];
       renderPage();

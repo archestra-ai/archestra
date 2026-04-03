@@ -8,9 +8,11 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AppLogo } from "@/components/app-logo";
 import { CommunityLinks } from "@/components/community-links";
 import { LoadingSpinner } from "@/components/loading";
-import { useInvitationCheck } from "@/lib/invitation.query";
+import { useInvitationCheck } from "@/lib/auth/invitation.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 
 function SignUpWithInvitationContent() {
+  const appName = useAppName();
   const router = useRouter();
   const searchParams = useSearchParams();
   const invitationId = searchParams.get("invitationId");
@@ -96,7 +98,7 @@ function SignUpWithInvitationContent() {
             {invitationId && (
               <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4 text-center space-y-2">
                 <p className="text-sm text-blue-900 dark:text-blue-100 font-medium">
-                  You've been invited to join Archestra workspace
+                  You've been invited to join the {appName} workspace
                 </p>
                 {email && (
                   <p className="text-xs text-blue-700 dark:text-blue-300">

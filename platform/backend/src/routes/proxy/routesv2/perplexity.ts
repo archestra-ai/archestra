@@ -50,7 +50,7 @@ const perplexityProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.PerplexityChatCompletionsWithDefaultAgent,
         description:
           "Create a chat completion with Perplexity (uses default agent). Note: Perplexity does not support external tool calling.",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         body: Perplexity.API.ChatCompletionRequestSchema,
         headers: Perplexity.API.ChatCompletionsHeadersSchema,
         response: constructResponseSchema(
@@ -83,7 +83,7 @@ const perplexityProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.PerplexityChatCompletionsWithAgent,
         description:
           "Create a chat completion with Perplexity for a specific agent. Note: Perplexity does not support external tool calling.",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
         }),

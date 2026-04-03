@@ -26,10 +26,6 @@ vi.mock("@shared", async () => {
   };
 });
 
-vi.mock("@/lib/auth.utils", () => ({
-  hasPermission: vi.fn(),
-}));
-
 let mockSecretsType = "DB";
 
 vi.mock("@/lib/secrets.query", () => ({
@@ -40,7 +36,7 @@ vi.mock("@/lib/secrets.query", () => ({
 
 let mockEnterpriseFeatures = false;
 
-vi.mock("@/lib/config", () => ({
+vi.mock("@/lib/config/config", () => ({
   default: {
     get enterpriseFeatures() {
       return { core: mockEnterpriseFeatures };
@@ -90,7 +86,6 @@ describe("useSettingsTabs", () => {
 
   it("shows admin tabs when user has all permissions", async () => {
     mockPermissions = {
-      dualLlmConfig: ["read"],
       member: ["read"],
       team: ["read"],
       ac: ["read"],
@@ -106,7 +101,6 @@ describe("useSettingsTabs", () => {
 
     await waitFor(() => {
       const labels = getTabLabels(result.current);
-      expect(labels).toContain("Dual LLM");
       expect(labels).toContain("API Keys");
       expect(labels).toContain("Agents");
       expect(labels).toContain("LLM");
@@ -147,7 +141,6 @@ describe("useSettingsTabs", () => {
 
   it("hides Users tab when user lacks member:read permission", async () => {
     mockPermissions = {
-      dualLlmConfig: ["read"],
       team: ["read"],
       ac: ["read"],
     };
@@ -250,7 +243,6 @@ describe("useSettingsTabs", () => {
     mockEnterpriseFeatures = true;
     mockSecretsType = "Vault";
     mockPermissions = {
-      dualLlmConfig: ["read"],
       member: ["read"],
       team: ["read"],
       ac: ["read"],
@@ -279,7 +271,6 @@ describe("useSettingsTabs", () => {
         "Identity Providers",
         "Secrets",
         "Organization",
-        "Dual LLM",
       ]);
     });
   });

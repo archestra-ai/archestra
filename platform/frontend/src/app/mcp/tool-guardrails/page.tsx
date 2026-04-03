@@ -1,0 +1,86 @@
+import { archestraApiSdk, type ErrorExtended } from "@shared";
+
+import { ServerErrorFallback } from "@/components/error-fallback";
+import {
+  DEFAULT_SORT_BY,
+  DEFAULT_SORT_DIRECTION,
+  DEFAULT_TABLE_LIMIT,
+} from "@/consts";
+import {
+  transformToolInvocationPolicies,
+  transformToolResultPolicies,
+} from "@/lib/policy.utils";
+import { handleApiError } from "@/lib/utils";
+import { getServerApiHeaders } from "@/lib/utils/server";
+import { ToolGuardrailsClient } from "./page.client";
+import type { ToolsInitialData } from "./types";
+
+export const dynamic = "force-dynamic";
+
+export default async function ToolGuardrailsPage() {
+  let initialData: ToolsInitialData = {
+    toolsWithAssignments: {
+      data: [],
+      pagination: {
+        currentPage: 1,
+        limit: DEFAULT_TABLE_LIMIT,
+        total: 0,
+        totalPages: 0,
+        hasNext: false,
+        hasPrev: false,
+      },
+    },
+    internalMcpCatalog: [],
+    toolInvocationPolicies: { all: [], byProfileToolId: {} },
+    toolResultPolicies: { all: [], byProfileToolId: {} },
+  };
+  try {
+    const headers = await getServerApiHeaders();
+    const [
+      toolsResponse,
+      catalogResponse,
+      invocationPoliciesResponse,
+      trustedDataPoliciesResponse,
+    ] = await Promise.all([
+      archestraApiSdk.getToolsWithAssignments({
+        headers,
+        query: {
+          limit: DEFAULT_TABLE_LIMIT,
+          offset: 0,
+          sortBy: DEFAULT_SORT_BY,
+          sortDirection: DEFAULT_SORT_DIRECTION,
+          excludeArchestraTools: true,
+        },
+      }),
+      archestraApiSdk.getInternalMcpCatalog({ headers }),
+      archestraApiSdk.getToolInvocationPolicies({ headers }),
+      archestraApiSdk.getTrustedDataPolicies({ headers }),
+    ]);
+    if (toolsResponse.error) {
+      handleApiError(toolsResponse.error);
+    }
+    if (catalogResponse.error) {
+      handleApiError(catalogResponse.error);
+    }
+    if (invocationPoliciesResponse.error) {
+      handleApiError(invocationPoliciesResponse.error);
+    }
+    if (trustedDataPoliciesResponse.error) {
+      handleApiError(trustedDataPoliciesResponse.error);
+    }
+    initialData = {
+      toolsWithAssignments:
+        toolsResponse.data || initialData.toolsWithAssignments,
+      internalMcpCatalog: catalogResponse.data || [],
+      toolInvocationPolicies: transformToolInvocationPolicies(
+        invocationPoliciesResponse.data || [],
+      ),
+      toolResultPolicies: transformToolResultPolicies(
+        trustedDataPoliciesResponse.data || [],
+      ),
+    };
+  } catch (error) {
+    return <ServerErrorFallback error={error as ErrorExtended} />;
+  }
+  return <ToolGuardrailsClient initialData={initialData} />;
+}

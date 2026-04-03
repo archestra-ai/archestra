@@ -3,12 +3,13 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   type archestraApiTypes,
+  E2eTestId,
+  getAgentToolCatalogPillTestId,
   isPlaywrightCatalogItem,
   parseFullToolName,
 } from "@shared";
 import { useQueries } from "@tanstack/react-query";
-import { Loader2, Pencil, Search, Server, X } from "lucide-react";
-import Image from "next/image";
+import { Loader2, Pencil, Search, X } from "lucide-react";
 import {
   forwardRef,
   useCallback,
@@ -38,17 +39,21 @@ import {
   useProfileToolPatchMutation,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
+import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import {
   fetchCatalogTools,
   useCatalogTools,
   useInternalMcpCatalog,
-} from "@/lib/internal-mcp-catalog.query";
-import { useMcpServersGroupedByCatalog } from "@/lib/mcp-server.query";
+} from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpServersGroupedByCatalog } from "@/lib/mcp/mcp-server.query";
 import { cn } from "@/lib/utils";
 import {
   getDefaultArchestraToolIds,
   sortAndFilterTools,
+  sortCatalogItems,
 } from "./agent-tools-editor.utils";
+import { CatalogDocsLink } from "./catalog-docs-link";
+import { McpCatalogIcon } from "./mcp-catalog-icon";
 import { DYNAMIC_CREDENTIAL_VALUE, TokenSelect } from "./token-select";
 
 type InternalMcpCatalogItem =
@@ -104,6 +109,7 @@ const AgentToolsEditorContent = forwardRef<
   { agentId, onSelectedCountChange, layout = "pills" },
   ref,
 ) {
+  const { catalogName } = useArchestraMcpIdentity();
   const invalidateAllQueries = useInvalidateToolAssignmentQueries();
   const assignTool = useAssignTool();
   const unassignTool = useUnassignTool();
@@ -158,24 +164,11 @@ const AgentToolsEditorContent = forwardRef<
 
   // Sort catalog items: assigned tools first (by count desc), then servers with tools, then 0 tools
   const sortedCatalogItems = useMemo(() => {
-    return [...catalogItems].sort((a, b) => {
-      const aAssigned = assignedToolsByCatalog.get(a.id)?.length ?? 0;
-      const bAssigned = assignedToolsByCatalog.get(b.id)?.length ?? 0;
-
-      // Items with assigned tools come first, sorted by assigned count descending
-      if (aAssigned > 0 && bAssigned === 0) return -1;
-      if (aAssigned === 0 && bAssigned > 0) return 1;
-      if (aAssigned !== bAssigned) return bAssigned - aAssigned;
-
-      // Among items with same assigned count, sort by total tools available
-      const aCount = toolCountByCatalog.get(a.id) ?? 0;
-      const bCount = toolCountByCatalog.get(b.id) ?? 0;
-      if (aCount > 0 && bCount === 0) return -1;
-      if (aCount === 0 && bCount > 0) return 1;
-
-      // Finally, sort alphabetically by name
-      return a.name.localeCompare(b.name);
-    });
+    return sortCatalogItems(
+      catalogItems,
+      (catalog) => assignedToolsByCatalog.get(catalog.id)?.length ?? 0,
+      (catalog) => toolCountByCatalog.get(catalog.id) ?? 0,
+    );
   }, [catalogItems, assignedToolsByCatalog, toolCountByCatalog]);
 
   // State counter to force re-renders when pendingChangesRef updates
@@ -277,12 +270,16 @@ const AgentToolsEditorContent = forwardRef<
           hasChanges = true;
         }
 
-        const isLocal = changes.catalogItem.serverType === "local";
+        const _isLocal = changes.catalogItem.serverType === "local";
+        const prefersEnterpriseManaged =
+          changes.catalogItem.enterpriseManagedConfig != null;
 
         // Remove and add tools in parallel (skip invalidation, will do it once at the end)
         const useDynamicCredential =
           isPlaywrightCatalogItem(changes.catalogItem.id) ||
           changes.credentialSourceId === DYNAMIC_CREDENTIAL_VALUE;
+        const useEnterpriseManagedCredential =
+          prefersEnterpriseManaged && useDynamicCredential;
 
         const results = await Promise.allSettled([
           ...toRemove.map((toolId) =>
@@ -296,18 +293,16 @@ const AgentToolsEditorContent = forwardRef<
             assignTool.mutateAsync({
               agentId: targetAgentId,
               toolId,
-              // When using dynamic credentials, omit server IDs — they are mutually
-              // exclusive with useDynamicTeamCredential. Otherwise, set the appropriate
-              // field based on whether the server is local (execution) or remote (credential).
-              credentialSourceMcpServerId:
-                !isLocal && !useDynamicCredential
+              mcpServerId:
+                !useDynamicCredential && !useEnterpriseManagedCredential
                   ? changes.credentialSourceId
                   : undefined,
-              executionSourceMcpServerId:
-                isLocal && !useDynamicCredential
-                  ? changes.credentialSourceId
-                  : undefined,
-              useDynamicTeamCredential: useDynamicCredential,
+              resolveAtCallTime: useDynamicCredential,
+              credentialResolutionMode: useEnterpriseManagedCredential
+                ? "enterprise_managed"
+                : useDynamicCredential
+                  ? "dynamic"
+                  : "static",
               skipInvalidation: true,
             }),
           ),
@@ -323,24 +318,25 @@ const AgentToolsEditorContent = forwardRef<
           changes.selectedToolIds.has(at.tool.id),
         );
         for (const agentTool of toKeep) {
-          const currentCred = agentTool.useDynamicTeamCredential
-            ? DYNAMIC_CREDENTIAL_VALUE
-            : (agentTool.credentialSourceMcpServerId ??
-              agentTool.executionSourceMcpServerId ??
-              null);
+          const currentCred =
+            agentTool.credentialResolutionMode === "dynamic"
+              ? DYNAMIC_CREDENTIAL_VALUE
+              : agentTool.credentialResolutionMode === "enterprise_managed"
+                ? DYNAMIC_CREDENTIAL_VALUE
+                : (agentTool.mcpServerId ?? null);
           if (currentCred !== changes.credentialSourceId) {
             hasChanges = true;
             await patchTool.mutateAsync({
               id: agentTool.id,
-              credentialSourceMcpServerId:
-                !isLocal && !useDynamicCredential
+              mcpServerId:
+                !useDynamicCredential && !useEnterpriseManagedCredential
                   ? (changes.credentialSourceId ?? undefined)
                   : null,
-              executionSourceMcpServerId:
-                isLocal && !useDynamicCredential
-                  ? (changes.credentialSourceId ?? undefined)
-                  : null,
-              useDynamicTeamCredential: useDynamicCredential,
+              credentialResolutionMode: useEnterpriseManagedCredential
+                ? "enterprise_managed"
+                : useDynamicCredential
+                  ? "dynamic"
+                  : "static",
               skipInvalidation: true,
             });
           }
@@ -439,10 +435,13 @@ const AgentToolsEditorContent = forwardRef<
         catalog.serverType !== "builtin" &&
         !allCredentials?.[catalog.id]?.length;
       const isDisabled = hasNoTools || hasNoCredentials;
+      const displayName =
+        catalog.id === ARCHESTRA_MCP_CATALOG_ID ? catalogName : catalog.name;
       return {
         id: catalog.id,
-        name: catalog.name,
+        name: displayName,
         description: catalog.description || undefined,
+        sortRank: catalog.id === ARCHESTRA_MCP_CATALOG_ID ? 1 : 0,
         icon: (
           <McpCatalogIcon
             icon={catalog.icon}
@@ -514,6 +513,11 @@ const AgentToolsEditorContent = forwardRef<
             <McpServerCard
               key={catalog.id}
               catalog={catalog}
+              displayName={
+                catalog.id === ARCHESTRA_MCP_CATALOG_ID
+                  ? catalogName
+                  : catalog.name
+              }
               isSelected={isSelected}
               isDisabled={isDisabled}
               assignedCount={assignedCount}
@@ -532,6 +536,9 @@ const AgentToolsEditorContent = forwardRef<
         <McpServerPill
           key={catalog.id}
           catalogItem={catalog}
+          displayName={
+            catalog.id === ARCHESTRA_MCP_CATALOG_ID ? catalogName : catalog.name
+          }
           assignedTools={assignedToolsByCatalog.get(catalog.id) ?? []}
           initialPendingChanges={pendingChangesRef.current.get(catalog.id)}
           onPendingChanges={registerPendingChanges}
@@ -548,6 +555,7 @@ const AgentToolsEditorContent = forwardRef<
         onItemAdded={setAutoOpenCatalogId}
         placeholder="Search MCP servers..."
         emptyMessage="No MCP servers found."
+        testId={E2eTestId.AgentToolsAddButton}
         createAction={{
           label: "Install New MCP Server",
           href: "/mcp/registry",
@@ -559,6 +567,7 @@ const AgentToolsEditorContent = forwardRef<
 
 function McpServerCard({
   catalog,
+  displayName,
   isSelected,
   isDisabled,
   assignedCount,
@@ -566,6 +575,7 @@ function McpServerCard({
   onToggle,
 }: {
   catalog: InternalMcpCatalogItem;
+  displayName: string;
   isSelected: boolean;
   isDisabled: boolean;
   assignedCount: number;
@@ -585,9 +595,7 @@ function McpServerCard({
       )}
     >
       <McpCatalogIcon icon={catalog.icon} catalogId={catalog.id} size={24} />
-      <span className="text-xs font-medium truncate w-full">
-        {catalog.name}
-      </span>
+      <span className="text-xs font-medium truncate w-full">{displayName}</span>
       <span className="text-[10px] text-muted-foreground">
         {isDisabled
           ? "Not installed"
@@ -601,6 +609,7 @@ function McpServerCard({
 
 interface McpServerPillProps {
   catalogItem: InternalMcpCatalogItem;
+  displayName: string;
   assignedTools: AgentTool[];
   initialPendingChanges?: PendingCatalogChanges;
   onPendingChanges: (catalogId: string, changes: PendingCatalogChanges) => void;
@@ -615,6 +624,7 @@ interface McpServerPillProps {
 
 function McpServerPill({
   catalogItem,
+  displayName,
   assignedTools,
   initialPendingChanges,
   onPendingChanges,
@@ -644,16 +654,15 @@ function McpServerPill({
     catalogId: catalogItem.id,
   });
   const mcpServers = credentials?.[catalogItem.id] ?? [];
+  const prefersEnterpriseManaged = catalogItem.enterpriseManagedConfig != null;
 
-  // Resolve which credential to show as selected in the dropdown. Dynamic credentials
-  // store no server ID, so we must check the flag first to avoid falling through to a
-  // static server and misrepresenting the saved state.
-  const currentCredentialSource = assignedTools[0]?.useDynamicTeamCredential
-    ? DYNAMIC_CREDENTIAL_VALUE
-    : (assignedTools[0]?.credentialSourceMcpServerId ??
-      assignedTools[0]?.executionSourceMcpServerId ??
-      mcpServers[0]?.id ??
-      null);
+  const currentCredentialSource =
+    assignedTools[0]?.credentialResolutionMode === "dynamic"
+      ? DYNAMIC_CREDENTIAL_VALUE
+      : assignedTools[0]?.credentialResolutionMode === "enterprise_managed"
+        ? DYNAMIC_CREDENTIAL_VALUE
+        : (assignedTools[0]?.mcpServerId ?? mcpServers[0]?.id ?? null);
+  const _currentEnterpriseManagedConfig = null;
 
   // Currently assigned tool IDs - use sorted string for stable comparison
   const currentAssignedToolIds = useMemo(
@@ -745,7 +754,6 @@ function McpServerPill({
     catalogItem.serverType !== "builtin" &&
     !isPlaywright &&
     mcpServers.length > 0;
-
   return (
     <Popover
       open={open}
@@ -766,13 +774,14 @@ function McpServerPill({
               isEmpty && "rounded-r-none border-r-0",
               hasPendingChanges && "border-primary opacity-100",
             )}
+            data-testid={getAgentToolCatalogPillTestId(catalogItem.name)}
           >
             <McpCatalogIcon
               icon={catalogItem.icon}
               catalogId={catalogItem.id}
               size={14}
             />
-            <span className="font-medium">{catalogItem.name}</span>
+            <span className="font-medium">{displayName}</span>
             <span className="text-muted-foreground">({displayedCount})</span>
             <Pencil className="h-3 w-3 shrink-0 text-muted-foreground" />
           </Button>
@@ -802,10 +811,19 @@ function McpServerPill({
       >
         <div className="p-4 border-b flex items-start justify-between gap-2 shrink-0">
           <div>
-            <h4 className="font-semibold">{catalogItem.name}</h4>
+            <h4 className="font-semibold">{displayName}</h4>
             {catalogItem.description && (
               <p className="text-sm text-muted-foreground mt-1">
                 {catalogItem.description}
+                {catalogItem.docsUrl ? (
+                  <>
+                    {" "}
+                    <CatalogDocsLink
+                      url={catalogItem.docsUrl}
+                      className="inline-flex items-center gap-1 text-primary hover:underline"
+                    />
+                  </>
+                ) : null}
               </p>
             )}
           </div>
@@ -823,11 +841,16 @@ function McpServerPill({
         {showCredentialSelector && (
           <div className="p-4 border-b space-y-2 shrink-0">
             <Label className="text-sm font-medium">Connect on behalf of</Label>
+            <p className="text-xs text-muted-foreground">
+              Choose whether this tool uses a fixed server connection or
+              resolves credentials for the current caller at runtime.
+            </p>
             <TokenSelect
               catalogId={catalogItem.id}
               value={selectedCredential}
               onValueChange={setSelectedCredential}
               shouldSetDefaultValue={false}
+              prefersEnterpriseManaged={prefersEnterpriseManaged}
             />
           </div>
         )}
@@ -864,55 +887,6 @@ function McpServerPill({
         )}
       </PopoverContent>
     </Popover>
-  );
-}
-
-export function McpCatalogIcon({
-  icon,
-  catalogId,
-  size = 14,
-}: {
-  icon?: string | null;
-  catalogId?: string;
-  size?: number;
-}) {
-  if (!icon && catalogId === ARCHESTRA_MCP_CATALOG_ID) {
-    return (
-      <Image
-        src="/logo.png"
-        alt="Archestra"
-        width={size}
-        height={size}
-        className="shrink-0 rounded-sm object-contain"
-      />
-    );
-  }
-
-  if (!icon) {
-    return (
-      <Server
-        className="shrink-0 text-muted-foreground"
-        style={{ width: size, height: size }}
-      />
-    );
-  }
-
-  if (icon.startsWith("data:")) {
-    return (
-      <Image
-        src={icon}
-        alt="MCP server icon"
-        width={size}
-        height={size}
-        className="shrink-0 rounded-sm object-contain"
-      />
-    );
-  }
-
-  return (
-    <span className="shrink-0 leading-none" style={{ fontSize: size }}>
-      {icon}
-    </span>
   );
 }
 

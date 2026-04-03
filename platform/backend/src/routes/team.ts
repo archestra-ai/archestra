@@ -17,6 +17,7 @@ import {
   constructResponseSchema,
   DeleteObjectResponseSchema,
   SelectTeamExternalGroupSchema,
+  SelectTeamMemberListItemSchema,
   SelectTeamMemberSchema,
   SelectTeamSchema,
   UpdateTeamBodySchema,
@@ -240,7 +241,9 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: z.string(),
         }),
-        response: constructResponseSchema(z.array(SelectTeamMemberSchema)),
+        response: constructResponseSchema(
+          z.array(SelectTeamMemberListItemSchema),
+        ),
       },
     },
     async ({ params: { id }, organizationId, user, headers }, reply) => {
@@ -262,7 +265,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      return reply.send(await TeamModel.getTeamMembers(id));
+      return reply.send(await TeamModel.getTeamMembersWithUsers(id));
     },
   );
 

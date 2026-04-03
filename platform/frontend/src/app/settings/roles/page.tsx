@@ -1,7 +1,7 @@
 "use client";
 
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import config from "@/lib/config";
+import config from "@/lib/config/config";
 
 const { RolesList } = config.enterpriseFeatures.core
   ? // biome-ignore lint/style/noRestrictedImports: conditional ee component with roles

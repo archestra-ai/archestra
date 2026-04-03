@@ -186,6 +186,45 @@ describe("TeamModel", () => {
     });
   });
 
+  describe("getTeamMembersWithUsers", () => {
+    test("returns hydrated team members with user details", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const owner = await makeUser();
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, owner.id);
+      const alpha = await makeUser({
+        name: "Alpha Example",
+        email: "alpha@example.com",
+      });
+      const beta = await makeUser({
+        name: "Beta Example",
+        email: "beta@example.com",
+      });
+
+      await TeamModel.addMember(team.id, beta.id);
+      await TeamModel.addMember(team.id, alpha.id);
+
+      const members = await TeamModel.getTeamMembersWithUsers(team.id);
+
+      expect(members).toHaveLength(2);
+      expect(members).toEqual([
+        expect.objectContaining({
+          userId: alpha.id,
+          name: "Alpha Example",
+          email: "alpha@example.com",
+        }),
+        expect.objectContaining({
+          userId: beta.id,
+          name: "Beta Example",
+          email: "beta@example.com",
+        }),
+      ]);
+    });
+  });
+
   describe("findByName", () => {
     test("should find a team by name and organization", async ({
       makeUser,

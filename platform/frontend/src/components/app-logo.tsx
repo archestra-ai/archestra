@@ -1,8 +1,10 @@
 "use client";
 
+import { DEFAULT_APP_NAME } from "@shared";
 import Image from "next/image";
 import { useTheme } from "next-themes";
-import config from "@/lib/config";
+import config from "@/lib/config/config";
+import { DEFAULT_APP_LOGO } from "@/lib/hooks/use-app-name";
 import { useOrgTheme } from "@/lib/theme.hook";
 
 interface AppLogoProps {
@@ -35,7 +37,7 @@ export function AppLogo({ centered = true }: AppLogoProps) {
           />
           {!config.enterpriseFeatures.fullWhiteLabeling && (
             <p className="text-[10px] text-muted-foreground">
-              Powered by Archestra
+              Powered by {DEFAULT_APP_NAME}
             </p>
           )}
         </div>
@@ -48,13 +50,13 @@ export function AppLogo({ centered = true }: AppLogoProps) {
       className={`flex items-center gap-2 ${centered ? "justify-center" : "pl-8"}`}
     >
       <Image
-        src="/logo.png"
+        src={DEFAULT_APP_LOGO}
         alt="Logo"
         width={28}
         height={28}
         className="h-auto w-auto"
       />
-      <span className="text-base font-semibold">Archestra.AI</span>
+      <span className="text-base font-semibold">{DEFAULT_APP_NAME}</span>
     </div>
   );
 }

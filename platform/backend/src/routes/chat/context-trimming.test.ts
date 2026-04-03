@@ -2,6 +2,7 @@ import type { ModelMessage } from "ai";
 import { describe, expect, test } from "vitest";
 import {
   parseMaxInputTokens,
+  shouldProbeTextStreamForContextTrimRetry,
   trimMessagesToTokenLimit,
 } from "./context-trimming";
 
@@ -24,6 +25,17 @@ describe("parseMaxInputTokens", () => {
     expect(parseMaxInputTokens(null)).toBeNull();
     expect(parseMaxInputTokens(undefined)).toBeNull();
     expect(parseMaxInputTokens(42)).toBeNull();
+  });
+});
+
+describe("shouldProbeTextStreamForContextTrimRetry", () => {
+  test("skips the textStream probe for Gemini", () => {
+    expect(shouldProbeTextStreamForContextTrimRetry("gemini")).toBe(false);
+  });
+
+  test("keeps the textStream probe enabled for OpenAI-compatible flows", () => {
+    expect(shouldProbeTextStreamForContextTrimRetry("openai")).toBe(true);
+    expect(shouldProbeTextStreamForContextTrimRetry("vllm")).toBe(true);
   });
 });
 

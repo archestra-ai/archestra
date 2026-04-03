@@ -85,45 +85,7 @@ describe("agent tool execution", () => {
     expect(created?.connectorIds).toEqual([connector.id]);
   });
 
-  test("create_agent does not write invalid remote MCP tool assignments from mcpServerIds", async ({
-    makeInternalMcpCatalog,
-    makeTool,
-  }) => {
-    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
-    await makeTool({
-      name: "remote_catalog_tool",
-      catalogId: catalog.id,
-    });
-
-    const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
-      {
-        name: "Agent With Invalid Catalog Assignment",
-        mcpServerIds: [catalog.id],
-      },
-      mockContext,
-    );
-
-    expect(result.isError).toBe(false);
-    expect((result.content[0] as any).text).toContain("validation_failed");
-
-    const createdAgentId = ((result.content[0] as any).text as string)
-      .split("\n")
-      .find((line) => line.startsWith("ID: "))
-      ?.replace("ID: ", "");
-    expect(createdAgentId).toBeDefined();
-    if (!createdAgentId) {
-      throw new Error("Expected created agent id in tool output");
-    }
-
-    const createdAssignments = await db
-      .select()
-      .from(schema.agentToolsTable)
-      .where(eq(schema.agentToolsTable.agentId, createdAgentId));
-    expect(createdAssignments).toEqual([]);
-  });
-
-  test("create_agent supports validated toolAssignments with dynamic credentials", async ({
+  test("create_agent supports validated toolAssignments with late-bound resolution", async ({
     makeInternalMcpCatalog,
     makeTool,
   }) => {
@@ -140,7 +102,7 @@ describe("agent tool execution", () => {
         toolAssignments: [
           {
             toolId: tool.id,
-            useDynamicTeamCredential: true,
+            resolveAtCallTime: true,
           },
         ],
       },
@@ -170,7 +132,80 @@ describe("agent tool execution", () => {
         ),
       );
     expect(assignment).toBeDefined();
-    expect(assignment.useDynamicTeamCredential).toBe(true);
+    expect(assignment.credentialResolutionMode).toBe("dynamic");
+  });
+
+  test("create_agent reports invalid remote toolAssignments without credentials", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const tool = await makeTool({
+      name: "remote_catalog_tool",
+      catalogId: catalog.id,
+    });
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
+      {
+        name: "Agent With Invalid Tool Assignment",
+        toolAssignments: [
+          {
+            toolId: tool.id,
+          },
+        ],
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+    expect((result.content[0] as any).text).toContain("Tool Assignments:");
+    expect((result.content[0] as any).text).toContain(`${tool.id}: error`);
+    expect((result.content[0] as any).text).toContain(
+      "An MCP server installation or non-static credential resolution is required for remote MCP server tools",
+    );
+  });
+
+  test("create_agent assigns local MCP tools with late-bound resolution via toolAssignments", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({ serverType: "local" });
+    const tool = await makeTool({
+      name: "local_dynamic_catalog_tool",
+      catalogId: catalog.id,
+    });
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
+      {
+        name: "Agent With Local Dynamic Tool Assignment",
+        toolAssignments: [
+          {
+            toolId: tool.id,
+            resolveAtCallTime: true,
+          },
+        ],
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+    expect((result.content[0] as any).text).toContain("Tool Assignments:");
+    expect((result.content[0] as any).text).toContain(`${tool.id}: success`);
+
+    const createdAgentId = extractCreatedId(result);
+    const [assignment] = await db
+      .select()
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, createdAgentId),
+          eq(schema.agentToolsTable.toolId, tool.id),
+        ),
+      );
+    expect(assignment).toBeDefined();
+    expect(assignment.credentialResolutionMode).toBe("dynamic");
   });
 
   test("edit_agent replaces assigned knowledge bases and connectors", async ({
@@ -224,6 +259,58 @@ describe("agent tool execution", () => {
     );
     expect(updated?.knowledgeBaseIds).toEqual([replacementKb.id]);
     expect(updated?.connectorIds).toEqual([replacementConnector.id]);
+  });
+
+  test("edit_agent assigns MCP tools with late-bound resolution via toolAssignments", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const organizationId = mockContext.organizationId;
+    if (!organizationId) {
+      throw new Error("Expected organizationId in test context");
+    }
+
+    const agent = await makeAgent({
+      name: "Editable Dynamic Assignment Agent",
+      agentType: "agent",
+      organizationId,
+    });
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const tool = await makeTool({
+      name: "remote_dynamic_edit_catalog_tool",
+      catalogId: catalog.id,
+    });
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_agent`,
+      {
+        id: agent.id,
+        toolAssignments: [
+          {
+            toolId: tool.id,
+            resolveAtCallTime: true,
+          },
+        ],
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+    expect((result.content[0] as any).text).toContain("Tool Assignments:");
+    expect((result.content[0] as any).text).toContain(`${tool.id}: success`);
+
+    const [assignment] = await db
+      .select()
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agent.id),
+          eq(schema.agentToolsTable.toolId, tool.id),
+        ),
+      );
+    expect(assignment).toBeDefined();
+    expect(assignment.credentialResolutionMode).toBe("dynamic");
   });
 
   test("get_agent requires id or name", async () => {
@@ -315,6 +402,97 @@ describe("agent tool execution", () => {
       description: null,
       type: "knowledge_connector",
     });
+  });
+});
+
+describe("agent RBAC visibility", () => {
+  test("list_agents only returns agents accessible to non-admin member", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "member" });
+
+    const teamA = await makeTeam(org.id, user.id, { name: "Team A" });
+    const teamB = await makeTeam(org.id, user.id, { name: "Team B" });
+    await makeTeamMember(teamA.id, user.id);
+    // user is NOT a member of teamB
+
+    const visibleAgent = await makeAgent({
+      name: "Visible Agent",
+      agentType: "agent",
+      organizationId: org.id,
+      scope: "team",
+      teams: [teamA.id],
+    });
+    await makeAgent({
+      name: "Hidden Agent",
+      agentType: "agent",
+      organizationId: org.id,
+      scope: "team",
+      teams: [teamB.id],
+    });
+
+    const memberContext: ArchestraContext = {
+      agent: { id: visibleAgent.id, name: visibleAgent.name },
+      userId: user.id,
+      organizationId: org.id,
+    };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}list_agents`,
+      {},
+      memberContext,
+    );
+
+    expect(result.isError).toBe(false);
+    const parsed = JSON.parse((result.content[0] as any).text);
+    const agentNames = parsed.agents.map((a: any) => a.name);
+    expect(agentNames).toContain("Visible Agent");
+    expect(agentNames).not.toContain("Hidden Agent");
+  });
+
+  test("get_agent by name does not return inaccessible team-scoped agent", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeTeam,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "member" });
+
+    const teamB = await makeTeam(org.id, user.id, { name: "Team B" });
+    // user is NOT a member of teamB
+
+    const inaccessibleAgent = await makeAgent({
+      name: "Secret Agent",
+      agentType: "agent",
+      organizationId: org.id,
+      scope: "team",
+      teams: [teamB.id],
+    });
+
+    const memberContext: ArchestraContext = {
+      agent: { id: inaccessibleAgent.id, name: inaccessibleAgent.name },
+      userId: user.id,
+      organizationId: org.id,
+    };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_agent`,
+      { name: "Secret Agent" },
+      memberContext,
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("not found");
   });
 });
 

@@ -1,7 +1,10 @@
 import { E2eTestId, MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import { MARKETING_TEAM_NAME, WIREMOCK_INTERNAL_URL } from "../../consts";
 import { expect, test } from "../../fixtures";
-import { getTeamByName } from "../api/fixtures";
+import {
+  getTeamByName,
+  LLM_PROVIDER_API_KEYS_AVAILABLE_ROUTE,
+} from "../api/fixtures";
 import { makeApiRequest } from "../api/mcp-gateway-utils";
 
 /**
@@ -13,7 +16,7 @@ import { makeApiRequest } from "../api/mcp-gateway-utils";
  *
  * Flow:
  * 1. Admin installs a remote MCP server (owns the credential)
- * 2. A tool is assigned to an agent with useDynamicTeamCredential: true
+ * 2. A tool is assigned to an agent with resolveAtCallTime enabled
  * 3. Member user (in Marketing Team, but admin is NOT) uses the chat
  * 4. LLM (WireMock) returns a tool_use block for the test tool
  * 5. MCP Gateway resolves dynamic credential -> no match -> auth-required error
@@ -21,7 +24,7 @@ import { makeApiRequest } from "../api/mcp-gateway-utils";
  *
  * Uses static WireMock mappings:
  * - helm/e2e-tests/mappings/mcp-auth-ui-e2e-*.json (mock MCP server)
- * - helm/e2e-tests/mappings/anthropic-chat-auth-ui-e2e-*.json (mock LLM responses)
+ * - helm/e2e-tests/mappings/gemini-chat-auth-ui-e2e-*.json (mock LLM responses)
  */
 test.describe.configure({ mode: "serial" });
 
@@ -37,7 +40,7 @@ test.describe("Chat - Auth Required Tool", () => {
   let catalogItemId: string;
   let serverId: string;
   let profileId: string;
-  let profileName: string;
+  let chatApiKeyId: string;
 
   test.beforeAll(async ({ request }) => {
     // 1. Create remote catalog item pointing to WireMock (static stubs pre-loaded)
@@ -94,14 +97,38 @@ test.describe("Chat - Auth Required Tool", () => {
     // 4. Get Marketing Team (admin is NOT a member of this team)
     const marketingTeam = await getTeamByName(request, MARKETING_TEAM_NAME);
 
-    // 5. Create agent (agentType: "agent" so it appears in chat selector)
-    //    and assign Marketing Team so the member can access it
-    profileName = "Auth UI Test E2E";
+    // 5. Use an already-available Gemini key so the test does not depend on
+    // provider-key creation/validation. The WireMock mappings match the prompt tag.
+    const availableKeysResponse = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: LLM_PROVIDER_API_KEYS_AVAILABLE_ROUTE,
+    });
+    const availableKeys = (await availableKeysResponse.json()) as Array<{
+      id: string;
+      provider: string;
+      bestModelId?: string | null;
+    }>;
+    const geminiKey = availableKeys.find((key) => key.provider === "gemini");
+    if (!geminiKey) {
+      throw new Error(
+        "Expected an available Gemini key for chat auth-required e2e",
+      );
+    }
+    chatApiKeyId = geminiKey.id;
+
+    // 6. Create agent and assign Marketing Team so the member can access it.
     const profileResponse = await makeApiRequest({
       request,
       method: "post",
       urlSuffix: "/api/agents",
-      data: { name: profileName, teams: [], agentType: "agent", scope: "team" },
+      data: {
+        name: "Auth UI Test E2E",
+        teams: [],
+        agentType: "agent",
+        scope: "team",
+        llmApiKeyId: chatApiKeyId,
+      },
     });
     const profile = await profileResponse.json();
     profileId = profile.id;
@@ -113,12 +140,12 @@ test.describe("Chat - Auth Required Tool", () => {
       data: { teams: [marketingTeam.id] },
     });
 
-    // 6. Assign tool to agent with useDynamicTeamCredential: true
+    // 7. Assign tool to agent with resolveAtCallTime enabled
     await makeApiRequest({
       request,
       method: "post",
       urlSuffix: `/api/agents/${profileId}/tools/${discoveredTool.id}`,
-      data: { useDynamicTeamCredential: true },
+      data: { resolveAtCallTime: true, credentialResolutionMode: "dynamic" },
     });
   });
 
@@ -150,92 +177,35 @@ test.describe("Chat - Auth Required Tool", () => {
     }
   });
 
-  // TODO: Fix flaky test
-  test.skip("renders AuthRequiredTool when tool call fails due to missing credentials", async ({
+  test("surfaces missing credentials guidance when tool call fails due to missing credentials", async ({
     memberPage,
     goToMemberPage,
   }) => {
-    // Navigate to chat as member user
-    await goToMemberPage("/chat");
+    // Navigate directly to chat with the test agent selected. The chat page
+    // supports agentId in the URL, which is more stable than driving the
+    // selector UI and keeps this test focused on the auth-required flow.
+    await goToMemberPage(`/chat?agentId=${profileId}`);
     await memberPage.waitForLoadState("domcontentloaded");
 
     // Wait for the chat page to load
     const textarea = memberPage.getByTestId(E2eTestId.ChatPromptTextarea);
     await expect(textarea).toBeVisible({ timeout: 15_000 });
 
-    // Select our test agent via the agent selector dialog
-    const agentSelector = memberPage.getByRole("combobox").first();
-    await expect(agentSelector).toBeVisible({ timeout: 5_000 });
-    await agentSelector.click();
-
-    // The dialog opens to "settings" view. Click "Change" to go to the agent list.
-    const changeButton = memberPage.getByRole("button", { name: "Change" });
-    await expect(changeButton).toBeVisible({ timeout: 5_000 });
-    await changeButton.click();
-
-    // Search for our test agent
-    const searchInput = memberPage.getByPlaceholder("Search agents...");
-    await expect(searchInput).toBeVisible({ timeout: 3_000 });
-    await searchInput.fill(profileName);
-
-    // Select the test agent from the grid (AgentCard is a button)
-    const profileButton = memberPage.getByRole("button", {
-      name: new RegExp(profileName),
-    });
-    await expect(profileButton).toBeVisible({ timeout: 5_000 });
-    await profileButton.click();
-
-    // Close the agent selector dialog (goes back to settings view, need to dismiss)
-    await memberPage.keyboard.press("Escape");
-    await memberPage.waitForTimeout(500);
-
-    // Select an Anthropic model — the member's default may be a different
-    // provider (e.g. Cohere in CI) whose WireMock stubs won't return our
-    // tool_use response. Only the Anthropic stubs are configured for this test.
-    // Use the exact model ID with parentheses to avoid matching Bedrock models
-    // whose IDs contain the same base name (e.g. "us.anthropic.claude-...").
-    const modelTrigger = memberPage.getByTestId(
-      E2eTestId.ChatModelSelectorTrigger,
-    );
-    await expect(modelTrigger).toBeVisible({ timeout: 5_000 });
-    await modelTrigger.click();
-
-    const modelSearch = memberPage.getByPlaceholder("Search models...");
-    await expect(modelSearch).toBeVisible({ timeout: 3_000 });
-    await modelSearch.fill("claude-3");
-
-    // Pick the Anthropic Claude model (not the Bedrock variant)
-    const claudeOption = memberPage
-      .getByRole("option")
-      .filter({ hasText: /\(claude-3[^)]*\)/ })
-      .first();
-    await expect(claudeOption).toBeVisible({ timeout: 5_000 });
-    await claudeOption.click();
-
     // Send a message containing the unique tag for WireMock matching
     const testMessage = `Test message ${TEST_MESSAGE_TAG}: Please use the test tool.`;
     await textarea.fill(testMessage);
     await memberPage.keyboard.press("Enter");
 
-    // Wait for the AuthRequiredTool component to render
-    // The flow: LLM returns tool_use -> MCP Gateway returns auth-required error -> UI renders AuthRequiredTool
-    await expect(memberPage.getByText("Authentication Required")).toBeVisible({
+    const authRequiredCard = memberPage.getByText(
+      /Authentication Required: No credentials found/i,
+    );
+    const setupCredentialsButton = memberPage.getByRole("button", {
+      name: /set up credentials/i,
+    });
+
+    await expect(authRequiredCard).toBeVisible({
       timeout: 45_000,
     });
-
-    // Verify the catalog name is displayed in the alert description
-    await expect(
-      memberPage.getByText(
-        new RegExp(`No credentials found for .*${CATALOG_NAME}`),
-      ),
-    ).toBeVisible();
-
-    // Verify the "Set up credentials" button is visible
-    // When the chat orchestrator is available, the button opens the install dialog
-    // inline instead of navigating to an external link
-    const button = memberPage.getByRole("button", {
-      name: /Set up credentials/i,
-    });
-    await expect(button).toBeVisible();
+    await expect(setupCredentialsButton).toBeVisible();
   });
 });

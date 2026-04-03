@@ -4,6 +4,8 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
+import { parseTrustProxy } from "@/config";
+import { JWT_BEARER_GRANT_TYPE } from "@/services/identity-providers/enterprise-managed/authorization";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import oauthServerRoutes from "./oauth-server";
 
@@ -87,6 +89,7 @@ describe("OAuth Server - Well-Known Endpoints", () => {
       expect(body.grant_types_supported).toEqual([
         "authorization_code",
         "refresh_token",
+        JWT_BEARER_GRANT_TYPE,
       ]);
       expect(body.code_challenge_methods_supported).toEqual(["S256"]);
       expect(body.token_endpoint_auth_methods_supported).toContain("none");
@@ -137,6 +140,74 @@ describe("OAuth Server - Well-Known Endpoints", () => {
       expect(body.token_endpoint).toBe(
         "http://host.docker.internal:9000/api/auth/oauth2/token",
       );
+    });
+
+    describe("reverse proxy (trustProxy enabled)", () => {
+      let proxyApp: FastifyInstance;
+      const originalEnv = process.env;
+
+      beforeEach(async () => {
+        process.env = { ...originalEnv, ARCHESTRA_TRUST_PROXY: "true" };
+        proxyApp = Fastify({
+          trustProxy: parseTrustProxy(process.env.ARCHESTRA_TRUST_PROXY),
+        }).withTypeProvider<ZodTypeProvider>();
+        proxyApp.setValidatorCompiler(validatorCompiler);
+        proxyApp.setSerializerCompiler(serializerCompiler);
+        await proxyApp.register(oauthServerRoutes);
+      });
+
+      afterEach(async () => {
+        process.env = originalEnv;
+        await proxyApp.close();
+      });
+
+      test("uses https:// for token_endpoint when X-Forwarded-Proto is https", async () => {
+        const response = await proxyApp.inject({
+          method: "GET",
+          url: "/.well-known/oauth-authorization-server",
+          headers: {
+            host: "archestra.example.com",
+            "x-forwarded-proto": "https",
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = response.json();
+
+        expect(body.token_endpoint).toMatch(/^https:\/\//);
+        expect(body.registration_endpoint).toMatch(/^https:\/\//);
+        expect(body.jwks_uri).toMatch(/^https:\/\//);
+      });
+
+      test("uses https:// for resource and authorization_servers in oauth-protected-resource when X-Forwarded-Proto is https", async () => {
+        const response = await proxyApp.inject({
+          method: "GET",
+          url: "/.well-known/oauth-protected-resource/v1/mcp/some-profile-id",
+          headers: {
+            host: "archestra.example.com",
+            "x-forwarded-proto": "https",
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = response.json();
+
+        expect(body.resource).toMatch(/^https:\/\//);
+        expect(body.authorization_servers[0]).toMatch(/^https:\/\//);
+      });
+
+      test("falls back to http:// when X-Forwarded-Proto is not set", async () => {
+        const response = await proxyApp.inject({
+          method: "GET",
+          url: "/.well-known/oauth-authorization-server",
+          headers: { host: "archestra.example.com" },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = response.json();
+
+        expect(body.token_endpoint).toMatch(/^http:\/\//);
+      });
     });
   });
 });

@@ -41,7 +41,49 @@ const ImageBlockParamSchema = z.object({
   }),
   cache_control: z.any().nullable().optional(),
 });
-// const DocumentBlockParamSchema = z.any();
+
+const ContentBlockSourceSchema = z.object({
+  type: z.enum(["content"]),
+  content: z.union([
+    z.string(),
+    z.array(z.union([TextBlockParamSchema, ImageBlockParamSchema])),
+  ]),
+});
+
+const DocumentBlockParamSchema = z
+  .object({
+    type: z.enum(["document"]),
+    source: z.union([
+      z.object({
+        type: z.enum(["base64"]),
+        media_type: z.enum(["application/pdf"]),
+        data: z.string(),
+      }),
+      z.object({
+        type: z.enum(["text"]),
+        media_type: z.enum(["text/plain"]),
+        data: z.string(),
+      }),
+      z.object({
+        type: z.enum(["url"]),
+        url: z.string().url(),
+      }),
+      ContentBlockSourceSchema,
+    ]),
+    title: z.string().nullable().optional(),
+    context: z.string().nullable().optional(),
+    citations: z
+      .object({
+        enabled: z.boolean(),
+      })
+      .nullable()
+      .optional(),
+    cache_control: z.any().nullable().optional(),
+  })
+  .describe(
+    'Anthropic Messages API request `DocumentBlockParam`. This models a user `content` item with `type: "document"` and supports the source union exposed by Anthropic: `Base64PDFSource | PlainTextSource | ContentBlockSource | URLPDFSource`. API reference: https://platform.claude.com/docs/en/api/messages#document_block_param',
+  );
+
 // const SearchResultBlockParamSchema = z.any();
 const ToolUseBlockParamSchema = z.object({
   id: z.string(),
@@ -61,8 +103,8 @@ const ToolResultBlockParamSchema = z.object({
         z.union([
           TextBlockParamSchema,
           ImageBlockParamSchema,
+          DocumentBlockParamSchema,
           // SearchResultBlockParamSchema,
-          // DocumentBlockParamSchema,
         ]),
       ),
     ])
@@ -75,7 +117,7 @@ const ToolResultBlockParamSchema = z.object({
 const ContentBlockParamSchema = z.union([
   TextBlockParamSchema,
   ImageBlockParamSchema,
-  // DocumentBlockParamSchema,
+  DocumentBlockParamSchema,
   // SearchResultBlockParamSchema,
   ToolUseBlockParamSchema,
   ToolResultBlockParamSchema,

@@ -1,0 +1,107 @@
+suite: archestra worker deployment
+templates:
+  - archestra-worker.yaml
+values:
+  - ../ci/test-values.yaml
+tests:
+  - it: worker deployment uses percentage-based rolling update defaults
+    asserts:
+      - equal:
+          path: spec.strategy.type
+          value: RollingUpdate
+      - equal:
+          path: spec.strategy.rollingUpdate.maxSurge
+          value: "25%"
+      - equal:
+          path: spec.strategy.rollingUpdate.maxUnavailable
+          value: "25%"
+
+  - it: worker deployment inherits global pod annotations
+    set:
+      archestra.podAnnotations:
+        sidecar.istio.io/inject: "true"
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["sidecar.istio.io/inject"]
+          value: "true"
+
+  - it: worker deployment merges global and worker pod annotations
+    set:
+      archestra.podAnnotations:
+        sidecar.istio.io/inject: "true"
+      archestra.worker.podAnnotations:
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["sidecar.istio.io/inject"]
+          value: "true"
+      - equal:
+          path: spec.template.metadata.annotations["cluster-autoscaler.kubernetes.io/safe-to-evict"]
+          value: "true"
+
+  - it: worker deployment forces prometheus scrape port and path to worker metrics endpoint
+    set:
+      archestra.podAnnotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9050"
+        prometheus.io/path: "/custom"
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/scrape"]
+          value: "true"
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/port"]
+          value: "9000"
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/path"]
+          value: "/metrics"
+
+  - it: worker-specific prometheus scrape annotation also forces worker metrics endpoint
+    set:
+      archestra.worker.podAnnotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9050"
+        prometheus.io/path: "/custom"
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/scrape"]
+          value: "true"
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/port"]
+          value: "9000"
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/path"]
+          value: "/metrics"
+
+  - it: worker mounts diagnostics volume and env var when diagnostics are enabled
+    set:
+      archestra.diagnostics.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_NODE_DIAGNOSTIC_DIR
+            value: /var/diagnostics
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: diagnostics
+            persistentVolumeClaim:
+              claimName: RELEASE-NAME-archestra-platform-diagnostics
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: diagnostics
+            mountPath: /var/diagnostics
+            readOnly: false
+
+  - it: worker sets heap snapshot env var when diagnostics heap snapshots are enabled
+    set:
+      archestra.diagnostics.enabled: true
+      archestra.diagnostics.heapSnapshotsNearHeapLimit: 1
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_NODE_HEAPSNAPSHOT_NEAR_HEAP_LIMIT
+            value: "1"

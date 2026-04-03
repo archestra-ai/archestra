@@ -13,7 +13,7 @@ describe("AuthRequiredTool", () => {
   it("renders the Authentication Required alert", () => {
     render(<AuthRequiredTool {...defaultProps} />);
 
-    expect(screen.getByText("Authentication Required")).toBeInTheDocument();
+    expect(screen.getByText(/Authentication Required/i)).toBeInTheDocument();
   });
 
   it("displays the catalog name in the description", () => {

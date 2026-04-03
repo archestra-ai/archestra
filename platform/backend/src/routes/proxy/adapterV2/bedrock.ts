@@ -3,6 +3,11 @@ import { EventStreamCodec } from "@smithy/eventstream-codec";
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
 import { encode as toonEncode } from "@toon-format/toon";
 import { BedrockClient } from "@/clients/bedrock-client";
+import {
+  getBedrockCredentialProvider,
+  getBedrockRegion,
+  isBedrockIamAuthEnabled,
+} from "@/clients/bedrock-credentials";
 import config from "@/config";
 import logger from "@/logging";
 import { ModelModel } from "@/models";
@@ -23,6 +28,7 @@ import type {
   ToolCompressionStats,
   UsageView,
 } from "@/types";
+import { extractCommonMessageText } from "@/types";
 
 // ToolCompressionStats imported from @/types
 
@@ -377,6 +383,7 @@ class BedrockRequestAdapter
     for (const message of messages) {
       const commonMessage: CommonMessage = {
         role: message.role as CommonMessage["role"],
+        content: extractCommonMessageText(message),
       };
 
       // Handle user messages that may contain tool results
@@ -588,6 +595,13 @@ class BedrockResponseAdapter implements LLMResponseAdapter<BedrockResponse> {
   }
 
   getOriginalResponse(): BedrockResponse {
+    // Ensure totalTokens is present — the AWS Bedrock API doesn't return it,
+    // but @ai-sdk/amazon-bedrock requires it in its response schema.
+    if (this.response.usage && this.response.usage.totalTokens == null) {
+      this.response.usage.totalTokens =
+        (this.response.usage.inputTokens ?? 0) +
+        (this.response.usage.outputTokens ?? 0);
+    }
     return this.response;
   }
 
@@ -1293,24 +1307,26 @@ export const bedrockAdapterFactory: LLMProvider<
       "[BedrockAdapter] createClient called",
     );
     const baseUrl = config.llm.bedrock.baseUrl;
+    const region = getBedrockRegion(baseUrl);
 
-    // Extract region from baseUrl (e.g., https://bedrock-runtime.us-east-1.amazonaws.com)
-    // or use a default region
-    const regionMatch = baseUrl.match(/bedrock-runtime\.([a-z0-9-]+)\./);
-    const region = regionMatch?.[1] || "us-east-1";
-
-    logger.info({ region }, "[BedrockAdapter] region extracted from baseUrl");
+    logger.info({ region }, "[BedrockAdapter] region");
     logger.info({ endpoint: baseUrl }, "[BedrockAdapter] baseUrl");
     logger.info({ hasApiKey: !!apiKey }, "[BedrockAdapter] apiKey");
 
-    // Create fetch-based client with Bearer token auth when apiKey is provided
-    const client = new BedrockClient({
+    if (!apiKey && isBedrockIamAuthEnabled()) {
+      logger.info("[BedrockAdapter] using IAM credential provider");
+      return new BedrockClient({
+        baseUrl,
+        region,
+        credentialProvider: getBedrockCredentialProvider(),
+      });
+    }
+
+    return new BedrockClient({
       baseUrl,
       region,
       apiKey,
     });
-
-    return client;
   },
 
   async execute(

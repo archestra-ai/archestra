@@ -5,6 +5,7 @@ import { Bot, Loader2, Pencil, X } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ToolChecklist } from "@/components/agent-tools-editor";
+import { StandardDialog } from "@/components/standard-dialog";
 import {
   DYNAMIC_CREDENTIAL_VALUE,
   TokenSelect,
@@ -14,13 +15,6 @@ import {
   type AssignmentComboboxItem,
 } from "@/components/ui/assignment-combobox";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import {
   Popover,
@@ -35,9 +29,12 @@ import {
   useProfileToolPatchMutation,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
-import { useAllPermissions } from "@/lib/auth.query";
-import { useCatalogTools } from "@/lib/internal-mcp-catalog.query";
-import { useMcpServersGroupedByCatalog } from "@/lib/mcp-server.query";
+import { useAllPermissions } from "@/lib/auth/auth.query";
+import {
+  useCatalogTools,
+  useInternalMcpCatalog,
+} from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpServersGroupedByCatalog } from "@/lib/mcp/mcp-server.query";
 import { cn } from "@/lib/utils";
 
 type CatalogTool =
@@ -70,6 +67,12 @@ export function McpAssignmentsDialog({
   // Fetch all tools for this MCP server
   const { data: allTools = [], isLoading: isLoadingTools } =
     useCatalogTools(catalogId);
+  const { data: catalogItems = [] } = useInternalMcpCatalog();
+  const catalogItem = useMemo(
+    () => catalogItems.find((item) => item.id === catalogId) ?? null,
+    [catalogId, catalogItems],
+  );
+  const prefersEnterpriseManaged = catalogItem?.enterpriseManagedConfig != null;
 
   // Fetch assignments for this server
   const { data: assignedToolsData, isLoading: isLoadingAssignments } =
@@ -101,13 +104,16 @@ export function McpAssignmentsDialog({
   const mcpServers = credentials?.[catalogId] ?? [];
 
   // Determine if this is a local server
-  const isLocalServer = mcpServers[0]?.serverType === "local";
+  const _isLocalServer = mcpServers[0]?.serverType === "local";
 
   // Group assignments by profile
   const assignmentsByProfile = useMemo(() => {
     const map = new Map<
       string,
-      { tools: AgentTool[]; credentialId: string | null }
+      {
+        tools: AgentTool[];
+        credentialId: string | null;
+      }
     >();
 
     for (const at of assignmentsForCatalog) {
@@ -115,11 +121,12 @@ export function McpAssignmentsDialog({
       if (!map.has(profileId)) {
         map.set(profileId, {
           tools: [],
-          credentialId: at.useDynamicTeamCredential
-            ? DYNAMIC_CREDENTIAL_VALUE
-            : (at.credentialSourceMcpServerId ??
-              at.executionSourceMcpServerId ??
-              null),
+          credentialId:
+            at.credentialResolutionMode === "dynamic"
+              ? DYNAMIC_CREDENTIAL_VALUE
+              : at.credentialResolutionMode === "enterprise_managed"
+                ? DYNAMIC_CREDENTIAL_VALUE
+                : (at.mcpServerId ?? null),
         });
       }
       map.get(profileId)?.tools.push(at);
@@ -193,6 +200,16 @@ export function McpAssignmentsDialog({
         const useDynamicCredential =
           isPlaywrightCatalogItem(catalogId) ||
           changes.credentialId === DYNAMIC_CREDENTIAL_VALUE;
+        const useEnterpriseManagedCredential =
+          catalogItem?.enterpriseManagedConfig != null && useDynamicCredential;
+        const credentialResolutionMode:
+          | "static"
+          | "dynamic"
+          | "enterprise_managed" = useEnterpriseManagedCredential
+          ? "enterprise_managed"
+          : useDynamicCredential
+            ? "dynamic"
+            : "static";
 
         // Track affected agents for invalidation
         if (toAdd.length > 0 || toRemove.length > 0) {
@@ -213,15 +230,12 @@ export function McpAssignmentsDialog({
           const assignments = toAdd.map((toolId) => ({
             agentId: profileId,
             toolId,
-            credentialSourceMcpServerId:
-              !isLocalServer && !useDynamicCredential
+            mcpServerId:
+              !useDynamicCredential && !useEnterpriseManagedCredential
                 ? changes.credentialId
                 : null,
-            executionSourceMcpServerId:
-              isLocalServer && !useDynamicCredential
-                ? changes.credentialId
-                : null,
-            useDynamicTeamCredential: useDynamicCredential,
+            resolveAtCallTime: useDynamicCredential,
+            credentialResolutionMode,
           }));
 
           await bulkAssign.mutateAsync({ assignments, skipInvalidation: true });
@@ -240,15 +254,11 @@ export function McpAssignmentsDialog({
           for (const at of toolsToUpdate) {
             await patchTool.mutateAsync({
               id: at.id,
-              credentialSourceMcpServerId:
-                !isLocalServer && !useDynamicCredential
+              mcpServerId:
+                !useDynamicCredential && !useEnterpriseManagedCredential
                   ? changes.credentialId
                   : null,
-              executionSourceMcpServerId:
-                isLocalServer && !useDynamicCredential
-                  ? changes.credentialId
-                  : null,
-              useDynamicTeamCredential: useDynamicCredential,
+              credentialResolutionMode,
               skipInvalidation: true,
             });
           }
@@ -328,8 +338,9 @@ export function McpAssignmentsDialog({
         const defaultCredential =
           pending?.credentialId ??
           assignment?.credentialId ??
+          (prefersEnterpriseManaged ? DYNAMIC_CREDENTIAL_VALUE : null) ??
           mcpServers[0]?.id ??
-          null;
+          DYNAMIC_CREDENTIAL_VALUE;
         updatePendingChanges(profileId, {
           selectedToolIds: allToolIds,
           credentialId: defaultCredential,
@@ -341,6 +352,7 @@ export function McpAssignmentsDialog({
       assignmentsByProfile,
       allTools,
       mcpServers,
+      prefersEnterpriseManaged,
       updatePendingChanges,
     ],
   );
@@ -398,124 +410,120 @@ export function McpAssignmentsDialog({
   );
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>{serverName} - Assignments</DialogTitle>
-          <DialogDescription>
-            Manage which agents and MCP gateways have access to tools from this
-            MCP server
-          </DialogDescription>
-        </DialogHeader>
-
-        {isLoading ? (
-          <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span>Loading...</span>
+    <StandardDialog
+      open={open}
+      onOpenChange={handleOpenChange}
+      title={`${serverName} - Assignments`}
+      description="Manage which agents and MCP gateways have access to tools from this MCP server"
+      size="medium"
+      className="max-h-[80vh]"
+      bodyClassName="space-y-4"
+      footer={
+        <Button
+          onClick={handleSaveAll}
+          disabled={!hasAnyChanges || isSaving}
+          className="w-full sm:w-auto"
+        >
+          {isSaving ? "Saving..." : "Save"}
+        </Button>
+      }
+    >
+      {isLoading ? (
+        <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>Loading...</span>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {/* MCP Gateways Section */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">MCP Gateways</Label>
+            {mcpProfiles.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No MCP gateways available.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {selectedMcpProfiles.map((profile) => {
+                  const assignment = assignmentsByProfile.get(profile.id);
+                  const pending = pendingChanges.get(profile.id);
+                  return (
+                    <ProfileAssignmentPill
+                      key={profile.id}
+                      profile={profile}
+                      assignedTools={assignment?.tools ?? []}
+                      allTools={allTools}
+                      catalogId={catalogId}
+                      isBuiltin={isBuiltin}
+                      currentCredentialId={assignment?.credentialId ?? null}
+                      prefersEnterpriseManaged={prefersEnterpriseManaged}
+                      pendingChanges={pending}
+                      onPendingChanges={updatePendingChanges}
+                      onRemove={handleProfileToggle}
+                    />
+                  );
+                })}
+                <AssignmentCombobox
+                  items={mcpCombobox.items}
+                  selectedIds={mcpCombobox.selectedIds}
+                  onToggle={handleProfileToggle}
+                  placeholder="Search MCP gateways..."
+                  emptyMessage="No MCP gateways found."
+                  createAction={{
+                    label: "Create New MCP Gateway",
+                    href: "/mcp/gateways?create=true",
+                  }}
+                />
+              </div>
+            )}
           </div>
-        ) : (
-          <>
-            <div className="flex-1 overflow-y-auto space-y-4">
-              {/* MCP Gateways Section */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">MCP Gateways</Label>
-                {mcpProfiles.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No MCP gateways available.
-                  </p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {selectedMcpProfiles.map((profile) => {
-                      const assignment = assignmentsByProfile.get(profile.id);
-                      const pending = pendingChanges.get(profile.id);
-                      return (
-                        <ProfileAssignmentPill
-                          key={profile.id}
-                          profile={profile}
-                          assignedTools={assignment?.tools ?? []}
-                          allTools={allTools}
-                          catalogId={catalogId}
-                          isBuiltin={isBuiltin}
-                          currentCredentialId={assignment?.credentialId ?? null}
-                          pendingChanges={pending}
-                          onPendingChanges={updatePendingChanges}
-                          onRemove={handleProfileToggle}
-                        />
-                      );
-                    })}
-                    <AssignmentCombobox
-                      items={mcpCombobox.items}
-                      selectedIds={mcpCombobox.selectedIds}
-                      onToggle={handleProfileToggle}
-                      placeholder="Search MCP gateways..."
-                      emptyMessage="No MCP gateways found."
-                      createAction={{
-                        label: "Create New MCP Gateway",
-                        href: "/mcp/gateways?create=true",
-                      }}
-                    />
-                  </div>
-                )}
-              </div>
 
-              {/* Agents Section */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Agents</Label>
-                {agents.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No agents available.
-                  </p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {selectedAgents.map((agent) => {
-                      const assignment = assignmentsByProfile.get(agent.id);
-                      const pending = pendingChanges.get(agent.id);
-                      return (
-                        <ProfileAssignmentPill
-                          key={agent.id}
-                          profile={agent}
-                          assignedTools={assignment?.tools ?? []}
-                          allTools={allTools}
-                          catalogId={catalogId}
-                          isBuiltin={isBuiltin}
-                          currentCredentialId={assignment?.credentialId ?? null}
-                          pendingChanges={pending}
-                          onPendingChanges={updatePendingChanges}
-                          onRemove={handleProfileToggle}
-                          showStatusDot
-                        />
-                      );
-                    })}
-                    <AssignmentCombobox
-                      items={agentCombobox.items}
-                      selectedIds={agentCombobox.selectedIds}
-                      onToggle={handleProfileToggle}
-                      placeholder="Search agents..."
-                      emptyMessage="No agents found."
-                      createAction={{
-                        label: "Create New Agent",
-                        href: "/agents?create=true",
-                      }}
+          {/* Agents Section */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Agents</Label>
+            {agents.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No agents available.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {selectedAgents.map((agent) => {
+                  const assignment = assignmentsByProfile.get(agent.id);
+                  const pending = pendingChanges.get(agent.id);
+                  return (
+                    <ProfileAssignmentPill
+                      key={agent.id}
+                      profile={agent}
+                      assignedTools={assignment?.tools ?? []}
+                      allTools={allTools}
+                      catalogId={catalogId}
+                      isBuiltin={isBuiltin}
+                      currentCredentialId={assignment?.credentialId ?? null}
+                      prefersEnterpriseManaged={prefersEnterpriseManaged}
+                      pendingChanges={pending}
+                      onPendingChanges={updatePendingChanges}
+                      onRemove={handleProfileToggle}
+                      showStatusDot
                     />
-                  </div>
-                )}
+                  );
+                })}
+                <AssignmentCombobox
+                  items={agentCombobox.items}
+                  selectedIds={agentCombobox.selectedIds}
+                  onToggle={handleProfileToggle}
+                  placeholder="Search agents..."
+                  emptyMessage="No agents found."
+                  createAction={{
+                    label: "Create New Agent",
+                    href: "/agents?create=true",
+                  }}
+                />
               </div>
-            </div>
-
-            {/* Sticky Save Button */}
-            <div className="pt-4 border-t mt-4">
-              <Button
-                onClick={handleSaveAll}
-                disabled={!hasAnyChanges || isSaving}
-                className="w-full"
-              >
-                {isSaving ? "Saving..." : "Save"}
-              </Button>
-            </div>
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
+            )}
+          </div>
+        </div>
+      )}
+    </StandardDialog>
   );
 }
 
@@ -526,6 +534,7 @@ interface ProfileAssignmentPillProps {
   catalogId: string;
   isBuiltin: boolean;
   currentCredentialId: string | null;
+  prefersEnterpriseManaged: boolean;
   pendingChanges?: PendingChanges;
   onPendingChanges: (profileId: string, changes: PendingChanges) => void;
   /** Called when the user clicks the remove button on the pill */
@@ -540,6 +549,7 @@ function ProfileAssignmentPill({
   catalogId,
   isBuiltin,
   currentCredentialId,
+  prefersEnterpriseManaged,
   pendingChanges,
   onPendingChanges,
   onRemove,
@@ -557,7 +567,6 @@ function ProfileAssignmentPill({
   );
 
   const credentialId = pendingChanges?.credentialId ?? currentCredentialId;
-
   // Fetch credentials for this catalog
   const credentials = useMcpServersGroupedByCatalog({ catalogId });
   const mcpServers = credentials?.[catalogId] ?? [];
@@ -682,11 +691,16 @@ function ProfileAssignmentPill({
         {showCredentialSelector && (
           <div className="p-4 border-b space-y-2 shrink-0">
             <Label className="text-sm font-medium">Connect on behalf of</Label>
+            <p className="text-xs text-muted-foreground">
+              Choose whether this tool uses a fixed server connection or
+              resolves credentials for the current caller at runtime.
+            </p>
             <TokenSelect
               catalogId={catalogId}
               value={credentialId}
               onValueChange={handleCredentialChange}
               shouldSetDefaultValue={hasNoAssignments && !pendingChanges}
+              prefersEnterpriseManaged={prefersEnterpriseManaged}
             />
           </div>
         )}

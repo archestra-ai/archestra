@@ -66,7 +66,7 @@ jobs:
 
       - name: Checkout repository
         if: steps.check-context.outputs.should_check == 'true' && steps.check-freeze.outputs.frozen == 'true'
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -94,43 +94,17 @@ jobs:
       contents: read
     steps:
       - name: Checkout project
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
           fetch-depth: 1
 
       - name: Lint PR title
-        uses: grafana/shared-workflows/actions/lint-pr-title@19d8fb5687bb386849f7f53673c5f429e6387cf5 # v1.2.0
+        uses: grafana/shared-workflows/actions/lint-pr-title@5f4c48c03125ef179c36a821d5b801fc876e672c # v1.2.1
         with:
           config-path: "${{ github.workspace }}/.github/commitlint.config.js"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  zizmor:
-    name: Zizmor GitHub Actions static analysis
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    permissions:
-      security-events: write
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-
-      # From zizmor action docs:
-      # https://github.com/zizmorcore/zizmor-action?tab=readme-ov-file#usage-with-github-advanced-security-recommended
-      #
-      # In this mode, the action will not fail when zizmor produces findings.
-      # This is because Advanced Security encourages workflows to only fail on internal errors.
-      #
-      # To use workflow failure as a blocking signal, you can use GitHub's rulesets feature.
-      # For more information, see:
-      # https://docs.github.com/en/code-security/code-scanning/managing-code-scanning-alerts/about-code-scanning-alerts#pull-request-check-failures-for-code-scanning-alerts
-      - name: Run zizmor 🌈
-        uses: zizmorcore/zizmor-action@e639db99335bc9038abc0e066dfcd72e23d26fb4 # v0.3.0
-        with:
-          config: .github/zizmor.yml
 
   license-compliance-check:
     name: License Compliance Check
@@ -142,7 +116,7 @@ jobs:
         working-directory: ./platform
     steps:
       - name: Checkout code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -196,6 +170,8 @@ jobs:
       TURBOREPO_REMOTE_CACHING_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
       # Pass GitHub App credentials for release-please PRs to enable codegen commit pushes
       # that trigger workflow re-runs (pushes with GITHUB_TOKEN don't trigger workflows)
       ARCHESTRA_RELEASER_GITHUB_APP_ID: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
@@ -221,3 +197,5 @@ jobs:
       TURBOREPO_REMOTE_CACHING_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}

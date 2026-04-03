@@ -3,7 +3,7 @@
 import type { archestraCatalogTypes } from "@shared";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { useMcpServerCategories } from "@/lib/external-mcp-catalog.query";
+import { useMcpServerCategories } from "@/lib/mcp/external-mcp-catalog.query";
 
 export type ServerType = "all" | "remote" | "local";
 

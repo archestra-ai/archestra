@@ -22,6 +22,8 @@ interface SearchableSelectProps {
     searchText?: string;
     content?: React.ReactNode;
     selectedContent?: React.ReactNode;
+    disabled?: boolean;
+    checked?: boolean;
   }>;
   className?: string;
   disabled?: boolean;
@@ -119,7 +121,7 @@ export function SearchableSelect({
           />
         </div>
         {hint && (
-          <div className="px-3 pb-1.5 text-xs text-muted-foreground">
+          <div className="mt-2 px-3 pb-1.5 text-xs text-muted-foreground">
             {hint}
           </div>
         )}
@@ -146,7 +148,12 @@ export function SearchableSelect({
               <button
                 type="button"
                 key={item.value}
+                disabled={item.disabled}
+                aria-disabled={item.disabled}
                 onClick={() => {
+                  if (item.disabled) {
+                    return;
+                  }
                   onValueChange(item.value);
                   setOpen(false);
                   setSearchQuery("");
@@ -154,6 +161,8 @@ export function SearchableSelect({
                 className={cn(
                   "relative flex w-full cursor-default select-none items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground",
                   value === item.value && "bg-accent text-accent-foreground",
+                  item.disabled &&
+                    "cursor-not-allowed opacity-60 hover:bg-transparent hover:text-inherit",
                 )}
               >
                 <span className="min-w-0 flex-1">
@@ -167,7 +176,9 @@ export function SearchableSelect({
                 <Check
                   className={cn(
                     "ml-2 h-4 w-4 shrink-0",
-                    value === item.value ? "opacity-100" : "opacity-0",
+                    value === item.value || item.checked
+                      ? "opacity-100"
+                      : "opacity-0",
                   )}
                 />
               </button>

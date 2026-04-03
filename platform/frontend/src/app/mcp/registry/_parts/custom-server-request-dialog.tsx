@@ -34,7 +34,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { useCreateMcpServerInstallationRequest } from "@/lib/mcp-server-installation-request.query";
+import { useCreateMcpServerInstallationRequest } from "@/lib/mcp/mcp-server-installation-request.query";
 
 const customServerRequestSchema = z
   .object({

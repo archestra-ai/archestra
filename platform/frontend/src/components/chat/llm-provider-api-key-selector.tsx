@@ -1,0 +1,335 @@
+"use client";
+
+import {
+  E2eTestId,
+  getChatApiKeySelectorOptionTestId,
+  getChatApiKeySelectorProviderGroupTestId,
+  providerDisplayNames,
+  type ResourceVisibilityScope,
+  type SupportedProvider,
+} from "@shared";
+import { Building2, CheckIcon, Key, User, Users } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { PromptInputButton } from "@/components/ai-elements/prompt-input";
+import { Badge } from "@/components/ui/badge";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { useUpdateConversation } from "@/lib/chat/chat.query";
+import {
+  type LlmProviderApiKey,
+  useAvailableLlmProviderApiKeys,
+} from "@/lib/llm-provider-api-keys.query";
+
+interface LlmProviderApiKeySelectorProps {
+  /** Conversation ID for persisting selection (optional for initial chat) */
+  conversationId?: string;
+  /** Current Conversation Chat API key ID set on the backend */
+  currentConversationChatApiKeyId: string | null;
+  /** Whether the selector should be disabled */
+  disabled?: boolean;
+  /** Callback for initial chat mode when no conversationId is available */
+  onApiKeyChange?: (apiKeyId: string) => void;
+  /** Current provider (derived from selected model) - used for auto-selection */
+  currentProvider?: SupportedProvider;
+  /** Callback when user explicitly selects a key with different provider */
+  onProviderChange?: (provider: SupportedProvider, apiKeyId: string) => void;
+  /** Callback when the selector opens or closes */
+  onOpenChange?: (open: boolean) => void;
+  /** Whether models are still loading - don't render until models are loaded */
+  isModelsLoading?: boolean;
+  /** Agent's configured LLM API key ID - included in available keys even if user lacks direct access */
+  agentLlmApiKeyId?: string | null;
+}
+
+const SCOPE_ICONS: Record<ResourceVisibilityScope, React.ReactNode> = {
+  personal: <User className="h-3 w-3" />,
+  team: <Users className="h-3 w-3" />,
+  org: <Building2 className="h-3 w-3" />,
+};
+
+// Note: This stores the API key's database ID (UUID), NOT the actual API key secret.
+// The actual API key value is never exposed to the frontend - it's stored securely on the server.
+// This ID is just a reference to select which key configuration to use, similar to a userId.
+
+/**
+ * API Key selector for chat - allows users to select which API key to use for the conversation.
+ * Shows available keys for the current provider, grouped by scope.
+ */
+export function LlmProviderApiKeySelector({
+  conversationId,
+  currentConversationChatApiKeyId,
+  disabled = false,
+  onApiKeyChange,
+  currentProvider,
+  onProviderChange,
+  onOpenChange,
+  isModelsLoading = false,
+  agentLlmApiKeyId,
+}: LlmProviderApiKeySelectorProps) {
+  // Fetch ALL API keys (not filtered by provider) so user can switch providers
+  // Include agent's configured key even if user doesn't have direct access
+  const { data: availableKeys = [], isLoading: isLoadingKeys } =
+    useAvailableLlmProviderApiKeys({
+      includeKeyId: agentLlmApiKeyId ?? undefined,
+    });
+
+  // Combined loading state - wait for both API keys and models
+  const isLoading = isLoadingKeys || isModelsLoading;
+  const updateConversationMutation = useUpdateConversation();
+  const [open, setOpen] = useState(false);
+  const handleOpenChange = (newOpen: boolean) => {
+    setOpen(newOpen);
+    onOpenChange?.(newOpen);
+  };
+  // Track which provider we last auto-selected for to prevent infinite loops.
+  // Using the provider value (not a boolean) so we can re-run auto-select when
+  // the provider genuinely changes (e.g., user picks a model from a different provider)
+  // without looping when our own mutations cause provider changes.
+  const autoSelectedForProviderRef = useRef<string | null>(null);
+
+  // Group keys by provider for display
+  const keysByProvider = useMemo(() => {
+    const grouped = {} as Record<SupportedProvider, LlmProviderApiKey[]>;
+
+    for (const key of availableKeys) {
+      if (!grouped[key.provider]) {
+        grouped[key.provider] = [];
+      }
+      grouped[key.provider].push(key);
+    }
+
+    return grouped;
+  }, [availableKeys]);
+
+  // Get available providers sorted (current provider first)
+  const availableProviders = useMemo(() => {
+    const providers = Object.keys(keysByProvider) as SupportedProvider[];
+    // Sort: current provider first, then alphabetically
+    return providers.sort((a, b) => {
+      if (a === currentProvider) return -1;
+      if (b === currentProvider) return 1;
+      return a.localeCompare(b);
+    });
+  }, [keysByProvider, currentProvider]);
+
+  // Group keys by scope (personal, team, org) for auto-selection priority
+  const keysByScope = useMemo(() => {
+    const grouped: Record<ResourceVisibilityScope, LlmProviderApiKey[]> = {
+      personal: [],
+      team: [],
+      org: [],
+    };
+
+    for (const key of availableKeys) {
+      grouped[key.scope].push(key);
+    }
+
+    return grouped;
+  }, [availableKeys]);
+
+  // Find selected key
+  const currentConversationChatApiKey = useMemo(() => {
+    return availableKeys.find((k) => k.id === currentConversationChatApiKeyId);
+  }, [availableKeys, currentConversationChatApiKeyId]);
+
+  // Reset auto-select tracking when conversation changes so auto-selection
+  // re-runs for the new conversation.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally only resetting on conversationId
+  useEffect(() => {
+    autoSelectedForProviderRef.current = null;
+  }, [conversationId]);
+
+  // Auto-select first key when no key is selected or current key doesn't match provider.
+  // Uses provider-based tracking instead of a boolean flag to allow re-selection when the
+  // provider genuinely changes (e.g., user picks a model from a different provider) while
+  // preventing infinite loops from our own mutations causing provider changes.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: adding updateConversationMutation as a dependency would cause a infinite loop
+  useEffect(() => {
+    // Skip if loading or no keys available
+    if (isLoading || availableKeys.length === 0) return;
+
+    const providerKey = currentProvider ?? null;
+
+    // Skip if we already handled this exact provider
+    if (autoSelectedForProviderRef.current === providerKey) return;
+
+    // Check if current key is valid AND matches the current provider
+    const currentKeyValid =
+      currentConversationChatApiKey &&
+      availableKeys.some((k) => k.id === currentConversationChatApiKeyId) &&
+      currentConversationChatApiKey.provider === currentProvider;
+
+    // If current key is valid, mark as handled without firing a mutation
+    if (currentKeyValid) {
+      autoSelectedForProviderRef.current = providerKey;
+      return;
+    }
+
+    // Get keys for the current provider (prefer matching provider)
+    const providerKeys = currentProvider
+      ? (keysByProvider[currentProvider] ?? [])
+      : [];
+
+    // Priority: personal > team > org (within current provider)
+    const personalKeys = providerKeys.filter((k) => k.scope === "personal");
+    const teamKeys = providerKeys.filter((k) => k.scope === "team");
+    const orgWideKeys = providerKeys.filter((k) => k.scope === "org");
+
+    const keyToSelect =
+      personalKeys[0] ||
+      teamKeys[0] ||
+      orgWideKeys[0] ||
+      // Fall back to any key if no provider-specific key found
+      keysByScope.personal[0] ||
+      keysByScope.team[0] ||
+      keysByScope.org[0];
+
+    const keyToSelectValid =
+      keyToSelect && availableKeys.some((k) => k.id === keyToSelect.id);
+
+    // Auto-select key if no valid key is selected
+    if (keyToSelectValid) {
+      // Mark as handled BEFORE calling callbacks to prevent loops
+      autoSelectedForProviderRef.current = providerKey;
+
+      if (conversationId) {
+        updateConversationMutation.mutate({
+          id: conversationId,
+          chatApiKeyId: keyToSelect.id,
+        });
+      } else if (onApiKeyChange) {
+        onApiKeyChange(keyToSelect.id);
+      }
+    }
+  }, [
+    availableKeys,
+    currentConversationChatApiKeyId,
+    currentConversationChatApiKey,
+    isLoading,
+    conversationId,
+    currentProvider,
+    keysByProvider,
+    keysByScope,
+    onApiKeyChange,
+  ]);
+
+  const handleSelectKey = (keyId: string) => {
+    if (keyId === currentConversationChatApiKeyId) {
+      handleOpenChange(false);
+      return;
+    }
+
+    applyKeyChange(keyId);
+    handleOpenChange(false);
+  };
+
+  const applyKeyChange = (keyId: string) => {
+    // Find the selected key to get its provider
+    const selectedKey = availableKeys.find((k) => k.id === keyId);
+    const selectedKeyProvider = selectedKey?.provider;
+
+    if (conversationId) {
+      // For existing conversations, let onProviderChange handle both the API key
+      // update and model selection in a single mutation to avoid race conditions.
+      if (selectedKeyProvider && onProviderChange) {
+        onProviderChange(selectedKeyProvider, keyId);
+      } else {
+        updateConversationMutation.mutate({
+          id: conversationId,
+          chatApiKeyId: keyId,
+        });
+      }
+    } else {
+      // For initial (no conversation) state, update key state and notify parent
+      if (onApiKeyChange) {
+        onApiKeyChange(keyId);
+      }
+      if (selectedKeyProvider && onProviderChange) {
+        onProviderChange(selectedKeyProvider, keyId);
+      }
+    }
+  };
+
+  // Don't render until models are loaded (prevents flashing)
+  if (isModelsLoading) {
+    return null;
+  }
+
+  // If no keys available for this provider
+  if (!isLoading && availableKeys.length === 0) {
+    return null;
+  }
+
+  return (
+    <Popover open={open} onOpenChange={handleOpenChange}>
+      <PopoverTrigger asChild>
+        <PromptInputButton
+          disabled={disabled}
+          className="max-w-[220px] min-w-0"
+          data-testid={E2eTestId.ChatApiKeySelectorTrigger}
+        >
+          <Key className="size-4 shrink-0" />
+        </PromptInputButton>
+      </PopoverTrigger>
+      <PopoverContent className="w-80 p-0" align="start">
+        <Command>
+          <CommandInput
+            placeholder="Search API Keys..."
+            data-testid={E2eTestId.ChatApiKeySelectorSearchInput}
+          />
+          <CommandList>
+            <CommandEmpty>No API keys found.</CommandEmpty>
+            {/* Group keys by provider */}
+            {availableProviders.map((provider) => (
+              <CommandGroup
+                key={provider}
+                data-testid={getChatApiKeySelectorProviderGroupTestId(provider)}
+                heading={
+                  providerDisplayNames[provider as SupportedProvider] ??
+                  provider
+                }
+              >
+                {keysByProvider[provider]?.map((key) => (
+                  <CommandItem
+                    key={key.id}
+                    data-testid={getChatApiKeySelectorOptionTestId(key.id)}
+                    value={`${provider} ${key.name} ${key.teamName || ""}`}
+                    onSelect={() => handleSelectKey(key.id)}
+                    className="cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      {SCOPE_ICONS[key.scope]}
+                      <span className="truncate">{key.name}</span>
+                      {key.scope === "team" && key.teamName && (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] px-1 py-0"
+                        >
+                          {key.teamName}
+                        </Badge>
+                      )}
+                    </div>
+                    {currentConversationChatApiKeyId === key.id && (
+                      <CheckIcon className="h-4 w-4 shrink-0" />
+                    )}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ))}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}

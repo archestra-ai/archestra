@@ -5,6 +5,8 @@ import {
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { DualLlmAnalysisSchema } from "./dual-llm";
+import { UnsafeContextBoundarySchema } from "./interaction-guardrails";
 import {
   Anthropic,
   Bedrock,
@@ -79,6 +81,8 @@ export const InteractionResponseSchema = z.union([
 const extendedFields = {
   source: InteractionSourceSchema.nullable().optional(),
   toonSkipReason: ToonSkipReasonSchema.nullable().optional(),
+  dualLlmAnalyses: z.array(DualLlmAnalysisSchema).nullable().optional(),
+  unsafeContextBoundary: UnsafeContextBoundarySchema.nullable().optional(),
 };
 
 /**

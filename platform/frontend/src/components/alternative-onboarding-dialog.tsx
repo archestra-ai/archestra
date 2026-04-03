@@ -19,6 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { useCompleteOnboarding } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +30,7 @@ interface AlternativeOnboardingDialogProps {
 export function AlternativeOnboardingDialog({
   open,
 }: AlternativeOnboardingDialogProps) {
+  const appName = useAppName();
   const [selectedOption, setSelectedOption] = useState<"proxy" | "chat" | null>(
     null,
   );
@@ -74,7 +76,7 @@ export function AlternativeOnboardingDialog({
                   <Sparkles className="h-5 w-5 text-primary" />
                 </div>
                 <DialogTitle className="text-3xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
-                  Welcome to Archestra
+                  Welcome to {appName}
                 </DialogTitle>
               </div>
               <DialogDescription className="text-base text-muted-foreground">
@@ -143,7 +145,7 @@ export function AlternativeOnboardingDialog({
                       unified MCP Gateway
                     </h3>
                     <p className="text-sm text-muted-foreground leading-relaxed">
-                      Route your existing AI agents through Archestra's secure
+                      Route your existing AI agents through {appName}'s secure
                       infrastructure. Perfect for teams using N8N, Cursor, or
                       custom integrations.
                     </p>

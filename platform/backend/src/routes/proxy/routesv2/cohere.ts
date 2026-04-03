@@ -52,7 +52,7 @@ const cohereProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.CohereChatWithDefaultAgent,
         description: "Send a chat request to Cohere using the default agent",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         body: Cohere.API.ChatRequestSchema,
         headers: Cohere.API.ChatHeadersSchema,
         response: constructResponseSchema(Cohere.API.ChatResponseSchema),
@@ -74,7 +74,7 @@ const cohereProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.CohereChatWithAgent,
         description: "Send a chat request to Cohere using a specific agent",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
         }),

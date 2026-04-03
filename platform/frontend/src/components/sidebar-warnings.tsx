@@ -7,10 +7,9 @@ import { DefaultCredentialsWarning } from "@/components/default-credentials-warn
 import {
   useDefaultCredentialsEnabled,
   useHasPermissions,
-} from "@/lib/auth.query";
+} from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import config from "@/lib/config";
-import { useFeature } from "@/lib/config.query";
+import { useDisableBasicAuth, useFeature } from "@/lib/config/config.query";
 
 export function SidebarWarnings() {
   const { data: session } = authClient.useSession();
@@ -18,17 +17,22 @@ export function SidebarWarnings() {
   const { data: defaultCredentialsEnabled, isLoading: isLoadingCreds } =
     useDefaultCredentialsEnabled();
   const globalToolPolicy = useFeature("globalToolPolicy");
+  const disableBasicAuth = useDisableBasicAuth();
   const { data: canUpdateOrg } = useHasPermissions({
+    organization: ["update"],
+  });
+  const { data: canUpdateAgentSettings } = useHasPermissions({
     agentSettings: ["update"],
   });
 
   const isPermissive = globalToolPolicy === "permissive";
 
-  // Determine which warnings should be shown (only for authenticated users with org update permission)
-  const showSecurityEngineWarning = !!session && canUpdateOrg && isPermissive;
+  // Security-engine fixes live under Agent Settings; default-credential fixes remain org-scoped.
+  const showSecurityEngineWarning =
+    !!session && canUpdateAgentSettings === true && isPermissive;
   const showDefaultCredsWarning =
-    canUpdateOrg &&
-    !config.disableBasicAuth &&
+    canUpdateOrg === true &&
+    disableBasicAuth === false &&
     !isLoadingCreds &&
     defaultCredentialsEnabled !== undefined &&
     defaultCredentialsEnabled &&
@@ -48,7 +52,10 @@ export function SidebarWarnings() {
             <span>
               Security engine off
               {" - "}
-              <Link href="/mcp/tool-policies" className="underline font-medium">
+              <Link
+                href="/mcp/tool-guardrails"
+                className="underline font-medium"
+              >
                 Fix
               </Link>
             </span>

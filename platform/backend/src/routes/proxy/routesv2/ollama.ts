@@ -125,7 +125,7 @@ const ollamaProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.OllamaChatCompletionsWithDefaultAgent,
         description:
           "Create a chat completion with Ollama (uses default agent)",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         body: Ollama.API.ChatCompletionRequestSchema,
         headers: Ollama.API.ChatCompletionsHeadersSchema,
         response: constructResponseSchema(
@@ -159,7 +159,7 @@ const ollamaProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.OllamaChatCompletionsWithAgent,
         description:
           "Create a chat completion with Ollama for a specific agent",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
         }),

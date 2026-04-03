@@ -15,7 +15,7 @@ describe("ExpiredAuthTool", () => {
     render(<ExpiredAuthTool {...defaultProps} />);
 
     expect(
-      screen.getByText("Expired / Invalid Authentication"),
+      screen.getByText(/Expired \/ Invalid Authentication/i),
     ).toBeInTheDocument();
   });
 
@@ -56,11 +56,11 @@ describe("ExpiredAuthTool", () => {
     );
   });
 
-  it("renders an alert element", () => {
+  it("renders the inline status row", () => {
     const { container } = render(<ExpiredAuthTool {...defaultProps} />);
 
-    const alert = container.querySelector('[role="alert"]');
-    expect(alert).toBeInTheDocument();
+    const statusRow = container.querySelector(".flex.flex-wrap.items-start");
+    expect(statusRow).toBeInTheDocument();
   });
 
   it("renders a Re-authenticate button when onReauth is provided", () => {

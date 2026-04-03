@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import {
   useResetDeploymentYaml,
   useValidateDeploymentYaml,
-} from "@/lib/internal-mcp-catalog.query";
+} from "@/lib/mcp/internal-mcp-catalog.query";
 
 interface K8sYamlEditorProps {
   /** The catalog item ID to fetch the default YAML template for reset */

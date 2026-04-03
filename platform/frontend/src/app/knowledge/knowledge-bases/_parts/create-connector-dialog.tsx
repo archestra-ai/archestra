@@ -36,12 +36,13 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { useCreateConnector } from "@/lib/connector.query";
+import { useCreateConnector } from "@/lib/knowledge/connector.query";
 import { ConfluenceConfigFields } from "./confluence-config-fields";
 import { ConnectorTypeIcon } from "./connector-icons";
 import { GithubConfigFields } from "./github-config-fields";
 import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
+import { NotionConfigFields } from "./notion-config-fields";
 import { SchedulePicker } from "./schedule-picker";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
 import { transformConfigArrayFields } from "./transform-config-array-fields";
@@ -78,6 +79,11 @@ const CONNECTOR_OPTIONS: {
     type: "servicenow",
     label: "ServiceNow",
     description: "Sync incidents from ServiceNow",
+  },
+  {
+    type: "notion",
+    label: CONNECTOR_TYPE_LABELS.notion,
+    description: "Sync pages and databases from Notion",
   },
 ];
 
@@ -135,6 +141,7 @@ export function CreateConnectorDialog({
       github: { type, githubUrl: "https://api.github.com" },
       gitlab: { type, gitlabUrl: "https://gitlab.com" },
       servicenow: { type, syncDataForLastMonths: 6 },
+      notion: { type },
     };
     form.setValue("config", defaultConfigs[type]);
     setStep("configure");
@@ -328,26 +335,30 @@ export function CreateConnectorDialog({
                   showTeamRequired
                 />
 
-                <FormField
-                  control={form.control}
-                  // biome-ignore lint/suspicious/noExplicitAny: dynamic field name for connector-specific URL
-                  name={urlConfig.fieldName as any}
-                  rules={{ required: `${urlConfig.label} is required` }}
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{urlConfig.label}</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder={urlConfig.placeholder}
-                          {...field}
-                          value={(field.value as string) ?? ""}
-                        />
-                      </FormControl>
-                      <FormDescription>{urlConfig.description}</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {urlConfig && (
+                  <FormField
+                    control={form.control}
+                    // biome-ignore lint/suspicious/noExplicitAny: dynamic field name for connector-specific URL
+                    name={urlConfig.fieldName as any}
+                    rules={{ required: `${urlConfig.label} is required` }}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{urlConfig.label}</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder={urlConfig.placeholder}
+                            {...field}
+                            value={(field.value as string) ?? ""}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          {urlConfig.description}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
 
                 {(connectorType === "jira" ||
                   connectorType === "confluence") && (
@@ -467,18 +478,22 @@ export function CreateConnectorDialog({
                         : "API token or personal access token is required"
                       : connectorType === "servicenow"
                         ? "Password is required"
-                        : "Personal access token is required",
+                        : connectorType === "notion"
+                          ? "Integration token is required"
+                          : "Personal access token is required",
                   }}
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
                         {connectorType === "servicenow"
                           ? "Password"
-                          : needsEmail
-                            ? emailRequired
-                              ? "API Token"
-                              : "API Token / Personal Access Token"
-                            : "Personal Access Token"}
+                          : connectorType === "notion"
+                            ? "Integration Token"
+                            : needsEmail
+                              ? emailRequired
+                                ? "API Token"
+                                : "API Token / Personal Access Token"
+                              : "Personal Access Token"}
                       </FormLabel>
                       <FormControl>
                         <Input
@@ -486,15 +501,24 @@ export function CreateConnectorDialog({
                           placeholder={
                             connectorType === "servicenow"
                               ? "Your ServiceNow password"
-                              : needsEmail
-                                ? emailRequired
-                                  ? "Your API token"
-                                  : "Your API token or personal access token"
-                                : "Your personal access token"
+                              : connectorType === "notion"
+                                ? "secret_..."
+                                : needsEmail
+                                  ? emailRequired
+                                    ? "Your API token"
+                                    : "Your API token or personal access token"
+                                  : "Your personal access token"
                           }
                           {...field}
                         />
                       </FormControl>
+                      {connectorType === "notion" && (
+                        <p className="text-[0.8rem] text-muted-foreground">
+                          Your Notion integration token (starts with{" "}
+                          <code>secret_</code>). Create one at
+                          notion.so/my-integrations.
+                        </p>
+                      )}
                       <FormMessage />
                     </FormItem>
                   )}
@@ -521,6 +545,9 @@ export function CreateConnectorDialog({
                     )}
                     {connectorType === "servicenow" && (
                       <ServiceNowConfigFields form={form} hideUrl />
+                    )}
+                    {connectorType === "notion" && (
+                      <NotionConfigFields form={form} />
                     )}
                   </CollapsibleContent>
                 </Collapsible>
@@ -549,7 +576,7 @@ function getUrlConfig(type: ConnectorType): {
   label: string;
   placeholder: string;
   description: string;
-} {
+} | null {
   switch (type) {
     case "jira":
       return {
@@ -587,5 +614,7 @@ function getUrlConfig(type: ConnectorType): {
         placeholder: "https://your-instance.service-now.com",
         description: "Your ServiceNow instance URL.",
       };
+    case "notion":
+      return null;
   }
 }

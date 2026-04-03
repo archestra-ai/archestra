@@ -1,7 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { useHasPermissions } from "./auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { handleApiError, toApiError } from "./utils";
 
 export type UserApiKey = archestraApiTypes.GetApiKeysResponses["200"][number];

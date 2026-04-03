@@ -5,7 +5,7 @@ subcategory: Security Concepts
 order: 2
 ---
 
-<!-- 
+<!--
 Check ../docs_writer_prompt.md before changing this file.
 
 This document is human-built, shouldn't be updated with AI. Don't change anything here.
@@ -97,17 +97,17 @@ The most straightforward way to break the trifecta is to ensure your AI system o
 - ❌ Only processes trusted, validated content
 - ✅ Can communicate externally
 
-### Dynamic Tool Access
+### AI Tool Guardrails
 
-Dynamic Tool Access is a security mechanism where Archestra monitors the context state and automatically adjusts the scope of available tools based on trust levels and data sensitivity.
+AI tool guardrails are Archestra's deterministic enforcement layer for tool execution. Archestra monitors context state and tool output trust levels, then applies tool call policies and tool result policies to tighten or relax what the agent can do next.
 
-[Learn more about Dynamic Tool Access →](/docs/platform-dynamic-tools)
+[Learn more about AI Tool Guardrails →](/docs/platform-ai-tool-guardrails)
 
-### Archestra Dual LLM
+### Archestra Dual LLM Agent
 
-Archestra's dual LLM guardrail system provides an independent security validation layer. A separate LLM reviews all tool invocations without passing the untrusted data to the context, ensuring malicious prompts cannot bypass security policies.
+Archestra's dual LLM Agent provides an independent security validation layer. A separate LLM reviews all tool invocations without passing the untrusted data to the context, ensuring malicious prompts cannot bypass security policies.
 
-[Learn more about Archestra Dual LLM →](/docs/platform-dual-llm)
+[Learn more about Archestra Dual LLM Agent →](/docs/platform-dual-llm)
 
 ## References
 

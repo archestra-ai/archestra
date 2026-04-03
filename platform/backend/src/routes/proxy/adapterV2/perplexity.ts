@@ -35,7 +35,7 @@ import type {
   ToolCompressionStats,
   UsageView,
 } from "@/types";
-import { MockOpenAIClient } from "../mock-openai-client";
+import { extractCommonMessageText } from "@/types";
 
 // =============================================================================
 // TYPE ALIASES
@@ -160,6 +160,7 @@ class PerplexityRequestAdapter
     for (const message of messages) {
       const commonMessage: CommonMessage = {
         role: message.role as CommonMessage["role"],
+        content: extractCommonMessageText(message),
       };
       commonMessages.push(commonMessage);
     }
@@ -472,10 +473,6 @@ export const perplexityAdapterFactory: LLMProvider<
     apiKey: string | undefined,
     options: CreateClientOptions,
   ): OpenAIProvider {
-    if (options.mockMode) {
-      return new MockOpenAIClient() as unknown as OpenAIProvider;
-    }
-
     // Use observable fetch for request duration metrics if agent is provided
     const customFetch = options.agent
       ? metrics.llm.getObservableFetch(

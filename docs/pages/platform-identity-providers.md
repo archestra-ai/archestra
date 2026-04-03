@@ -1,9 +1,9 @@
 ---
 title: "Identity Providers"
 category: Administration
-description: "Configure Identity Providers for SSO authentication and MCP Gateway JWKS validation"
+description: "Configure Identity Providers for SSO authentication, MCP Gateway JWKS validation, and enterprise-managed credential brokerage"
 order: 2
-lastUpdated: 2025-02-12
+lastUpdated: 2026-03-30
 ---
 
 <!--
@@ -20,10 +20,11 @@ This document covers Identity Provider configuration for Archestra Platform. Inc
 
 ![Identity Providers Overview](/docs/automated_screenshots/platform-identity-providers_sso-providers-overview.png)
 
-Archestra supports Identity Provider (IdP) configuration for two purposes:
+Archestra supports Identity Provider (IdP) configuration for three purposes:
 
 1. **Single Sign-On (SSO)** — Users authenticate with their existing IdP credentials using OpenID Connect (OIDC) or SAML 2.0
 2. **MCP Gateway JWKS Authentication** — External MCP clients authenticate using JWTs issued by configured IdPs, validated via JWKS. See [MCP Authentication - External IdP JWKS](/docs/mcp-authentication#external-idp-jwks) for details.
+3. **Enterprise-Managed Credentials** — Archestra can exchange a signed-in user's IdP token for a downstream credential at tool-call time.
 
 > **Enterprise feature:** Please reach out to sales@archestra.ai for instructions about how to enable the feature.
 
@@ -102,6 +103,7 @@ Okta is an enterprise identity management platform. To configure Okta SSO:
 
 - Disable **DPoP** (Demonstrating Proof of Possession) in your Okta application settings. Archestra does not support DPoP.
 - The issuer URL is automatically set to `https://your-domain.okta.com`
+- If you also use enterprise-managed credentials, configure the exchange client details in the optional **Enterprise-Managed Credentials** section of the OIDC provider form. See [Okta's AI agent token exchange guide](https://developer.okta.com/docs/guides/ai-agent-token-exchange/authserver/main/).
 
 ### Google
 
@@ -199,6 +201,21 @@ Optional configuration:
 - **JWKS Endpoint**: For token validation
 - **Scopes**: Additional OAuth scopes (default: `openid`, `email`, `profile`)
 - **PKCE**: Enable if your provider requires it
+- **Enable RP-Initiated Logout**: Sends the `post_logout_redirect_uri` parameter during sign-out. This is enabled by default and can be turned off for providers that reject RP-initiated logout requests
+
+### Enterprise-Managed Credential Settings
+
+OIDC providers include an optional **Enterprise-Managed Credentials** section. Use it when your identity provider can issue or broker downstream credentials on behalf of the signed-in user.
+
+The key fields are:
+
+- **Exchange Client ID** and **Exchange Client Secret**: The client Archestra uses when calling the IdP's token exchange endpoint
+- **Exchange Token Endpoint**: The token exchange endpoint
+- **Exchange Client Authentication**: The client authentication method the IdP expects
+- **User Token To Exchange**: Which signed-in user token Archestra should exchange
+- **Private Key / Key ID**: Only needed when the IdP requires signed client assertions
+
+These settings do not change the SSO login flow. They are used when an MCP server is configured to resolve downstream credentials through the identity provider.
 
 ### Generic SAML
 
@@ -498,7 +515,7 @@ Subsequent logins automatically link to the existing account based on email addr
 If a user already has an account (created via email/password), SSO authentication will automatically link to that account when:
 
 - The email addresses match
-- The SSO provider is in the trusted providers list (Okta, Google, GitHub, GitLab, Entra ID, and all SAML providers are trusted by default)
+- The SSO provider is trusted for account linking. Archestra trusts the built-in providers (Okta, Google, GitHub, GitLab, Entra ID) plus any custom generic OIDC or generic SAML provider configured in Identity Providers
 
 ## Troubleshooting
 
@@ -515,7 +532,7 @@ The identity provider didn't return required user information. For GitHub, ensur
 
 ### "account not linked" Error
 
-The SSO provider is not in the trusted providers list. Contact your administrator to add the provider to the trusted list.
+The SSO provider is not trusted for automatic account linking, or the provider returned an email that does not match the existing account. Verify the provider is configured in Identity Providers and that the user is signing in with the same email address as their existing account.
 
 ### "invalid_dpop_proof" Error (Okta)
 

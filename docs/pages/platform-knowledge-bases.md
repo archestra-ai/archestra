@@ -3,7 +3,7 @@ title: Overview
 category: Knowledge
 order: 1
 description: Built-in RAG with pgvector for document ingestion, hybrid search, and retrieval
-lastUpdated: 2026-03-17
+lastUpdated: 2026-03-31
 ---
 
 <!--
@@ -27,7 +27,7 @@ Connectors run on a cron schedule, pulling documents that are chunked and embedd
 flowchart LR
     C[Connectors] -->|cron schedule| D[Documents]
     D --> CH[Chunking]
-    CH -->|OpenAI API| E[Embedding]
+    CH -->|Embedding provider API| E[Embedding]
     E --> PG[(PostgreSQL + pgvector)]
 ```
 
@@ -37,7 +37,7 @@ At runtime, the agent's query is embedded, then vector and optional full-text se
 
 ```mermaid
 flowchart LR
-    Q[Agent Query] -->|OpenAI API| QE[Query Embedding]
+    Q[Agent Query] -->|Embedding provider API| QE[Query Embedding]
     QE --> VS[Vector Search]
     QE --> FTS["Full-Text Search (configurable)"]
     VS --> RRF[Reciprocal Rank Fusion]
@@ -47,25 +47,43 @@ flowchart LR
     ACL --> R[Results]
 ```
 
-## LLM Provider Configuration
+## Knowledge Settings
 
-Embedding and reranking require LLM provider API keys. These are configured in **Settings > Knowledge** by selecting existing LLM Provider Keys -- no environment variables are needed. Both must be configured before knowledge bases and connectors can be used.
+Embedding and reranking are configured in **Settings > Knowledge** by selecting existing LLM Provider Keys. Both must be configured before knowledge bases and connectors can be used.
 
 ### Embedding
 
-Only OpenAI embedding models are supported. The selected API key must have access to the configured embedding model (`text-embedding-3-small` or `text-embedding-3-large`; both models are reduced to 1536 dimensions for the `pgvector` index).
+The embedding model can be any synced model with embedding dimensions configured in **LLM Providers > Models**. The selected API key must expose at least one such model.
 
-The embedding model is locked after documents have been embedded, and changing it is not currently supported (as changing models requires re-embedding all documents).
+The embedding model is locked after it has been saved. Changing it requires dropping the embedding configuration and re-embedding documents.
 
 ### Reranking
 
-The reranker uses an LLM to score and reorder search results by relevance. Any LLM provider and model can be used -- the model should support structured output.
+The reranker uses an LLM to score and reorder search results by relevance. Any synced chat model can be used. In practice, the model should support structured output.
 
 ## Connectors
 
 Connectors pull data from external tools (Jira, Confluence, etc.) on a schedule. Each connector tracks a checkpoint for incremental sync -- only changes since the last run are processed. A connector can be assigned to multiple knowledge bases.
 
 See [Knowledge Connectors](/docs/platform-knowledge-connectors) for supported connector types, configuration, and management.
+
+### Sync Behavior
+
+Connector sync has two simple phases:
+
+1. **Ingestion**: pull new or changed source documents and chunk them.
+2. **Embedding**: generate vectors for those chunks so the content becomes searchable.
+
+Syncs can start on schedule or manually. Archestra prevents overlapping runs for the same connector, keeps an incremental checkpoint, and resumes large syncs from the last saved position instead of starting over.
+
+In practice this means:
+
+- new documents are inserted, chunked, and embedded
+- unchanged documents are skipped
+- changed documents are reprocessed so search stays current
+- large syncs can continue over multiple runs without losing progress
+
+Use **Force Re-sync** when you want to clear the checkpoint and rebuild the indexed content from the beginning.
 
 ## Assigning Knowledge Bases
 
@@ -85,4 +103,4 @@ Source visibility is enforced in three places:
 - Knowledge source pickers in Agent and MCP Gateway forms only include visible sources
 - `query_knowledge_sources` only searches connectors that are visible to the calling user
 
-Users with `knowledgeSources:admin` can view all knowledge bases and connectors regardless of org or team scope.
+Users with `knowledgeBase:admin` can view all knowledge bases and connectors regardless of org or team scope.

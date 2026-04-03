@@ -106,9 +106,7 @@ test.describe("Invitation functionality", {
 
       // Verify we're on the invitation sign-up page
       await expect(
-        newUserPage.getByText(
-          "You've been invited to join Archestra workspace",
-        ),
+        newUserPage.getByText(/You've been invited to join the .* workspace/i),
       ).toBeVisible();
       await expect(newUserPage.getByText(`Email: ${TEST_EMAIL}`)).toBeVisible();
 

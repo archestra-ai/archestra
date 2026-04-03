@@ -3,7 +3,8 @@
 // https://docs.sentry.io/platforms/javascript/guides/nextjs/
 
 import * as Sentry from "@sentry/nextjs";
-import config from "@/lib/config";
+import config from "@/lib/config/config";
+import { getFrontendBrowserSentryOptions } from "../sentry.shared";
 
 const {
   sentry: { dsn, environment },
@@ -11,29 +12,15 @@ const {
 
 // Only initialize Sentry if DSN is configured
 if (dsn) {
+  const browserOptions = getFrontendBrowserSentryOptions({ dsn, environment });
+
   Sentry.init({
-    dsn,
-    environment,
-
-    // Add optional integrations for additional features
-    integrations: [Sentry.replayIntegration()],
-
-    // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
-    tracesSampleRate: 1,
-    // Enable logs to be sent to Sentry
-    enableLogs: true,
-
-    // Define how likely Replay events are sampled.
-    // This sets the sample rate to be 10%. You may want this to be 100% while
-    // in development and sample at a lower rate in production
-    replaysSessionSampleRate: 0.1,
-
-    // Define how likely Replay events are sampled when an error occurs.
-    replaysOnErrorSampleRate: 1.0,
-
-    // Enable sending user PII (Personally Identifiable Information)
-    // https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/options/#sendDefaultPii
-    sendDefaultPii: true,
+    ...browserOptions,
+    // Preserve the default browser integrations and add Replay on top.
+    integrations: [
+      ...Sentry.getDefaultIntegrations(browserOptions),
+      Sentry.replayIntegration(),
+    ],
   });
 }
 

@@ -53,14 +53,14 @@ jobs:
       id-token: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
           persist-credentials: false
 
       - name: Log in to Docker Hub
         if: inputs.push_image
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        uses: ./.github/actions/docker-login
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
@@ -68,7 +68,7 @@ jobs:
       - name: Extract previous version static assets
         run: |
           mkdir -p "${INPUT_IMAGE_DIRECTORY}/prev-static-assets"
-          PREV_IMAGE="docker.io/archestra/${INPUT_IMAGE_NAME}:latest"
+          PREV_IMAGE="docker.io/archestra/${INPUT_IMAGE_NAME}:latest" # supply-chain-policy: allow-latest internal release channel
           echo "Pulling previous image: $PREV_IMAGE"
           docker pull "$PREV_IMAGE" || { echo "Warning: Failed to pull previous image"; true; }
           CID=$(docker create "$PREV_IMAGE" 2>/dev/null) || true
@@ -108,7 +108,7 @@ jobs:
 
       - name: Upload digest
         if: inputs.push_image
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: ./.github/actions/github-upload-artifact
         with:
           name: digests-${{ strategy.job-index }}
           path: /tmp/digests/*
@@ -125,18 +125,24 @@ jobs:
       contents: read
       id-token: write
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Download digests
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        uses: ./.github/actions/github-download-artifact
         with:
           path: /tmp/digests
           pattern: digests-*
           merge-multiple: true
 
       - name: Setup Blacksmith Builder
-        uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
+        uses: ./.github/actions/setup-blacksmith-builder
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        uses: ./.github/actions/docker-login
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
@@ -151,6 +157,7 @@ jobs:
               $(printf "docker.io/archestra/${IMAGE_NAME}@sha256:%s " *)
           else
             # For non-dev versions, tag with both version and latest
+            # supply-chain-policy: allow-latest internal release channel
             docker buildx imagetools create \
               -t "docker.io/archestra/${IMAGE_NAME}:${VERSION}" \
               -t "docker.io/archestra/${IMAGE_NAME}:latest" \

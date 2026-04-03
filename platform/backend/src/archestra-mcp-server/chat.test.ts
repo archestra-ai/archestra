@@ -1,9 +1,15 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
+
 import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
-import { OrganizationModel } from "@/models";
+import { vi } from "vitest";
+import {
+  ConversationModel,
+  LlmProviderApiKeyModel,
+  OrganizationModel,
+} from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -14,23 +20,48 @@ describe("chat tool execution", () => {
   let userId: string;
   let organizationId: string;
 
-  beforeEach(async ({ makeAgent, makeUser, makeOrganization, makeMember }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-    userId = user.id;
-    organizationId = org.id;
-    testAgent = await makeAgent({
-      name: "Test Agent",
-      agentType: "agent",
-      organizationId,
-    });
-    mockContext = {
-      agent: { id: testAgent.id, name: testAgent.name },
-      userId,
-      organizationId,
-    };
-  });
+  beforeEach(
+    async ({
+      makeAgent,
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      userId = user.id;
+      organizationId = org.id;
+      const secret = await makeSecret();
+      const orgWideApiKey = await makeLlmProviderApiKey(
+        organizationId,
+        secret.id,
+        {
+          provider: "openai",
+        },
+      );
+      vi.spyOn(LlmProviderApiKeyModel, "findById").mockImplementation(
+        async (id) => {
+          if (id === orgWideApiKey.id) {
+            return orgWideApiKey;
+          }
+          return null;
+        },
+      );
+      testAgent = await makeAgent({
+        name: "Test Agent",
+        agentType: "agent",
+        organizationId,
+      });
+      mockContext = {
+        agent: { id: testAgent.id, name: testAgent.name },
+        userId,
+        organizationId,
+      };
+    },
+  );
 
   test("todo_write returns error when todos is missing", async () => {
     const result = await executeArchestraTool(
@@ -144,11 +175,32 @@ describe("chat tool execution", () => {
   test("swap_agent succeeds with real conversation and target agent", async ({
     makeAgent,
     makeConversation,
+    makeSecret,
+    makeLlmProviderApiKey,
   }) => {
+    const secret = await makeSecret();
+    const targetApiKey = await makeLlmProviderApiKey(
+      organizationId,
+      secret.id,
+      {
+        provider: "anthropic",
+      },
+    );
+    vi.spyOn(LlmProviderApiKeyModel, "findById").mockImplementation(
+      async (id) => {
+        if (id === targetApiKey.id) {
+          return targetApiKey;
+        }
+        return null;
+      },
+    );
+
     const targetAgent = await makeAgent({
       name: "Swap Target Agent",
       agentType: "agent",
       organizationId: organizationId,
+      llmApiKeyId: targetApiKey.id,
+      llmModel: "claude-3-5-sonnet",
     });
 
     const conversation = await makeConversation(testAgent.id, {
@@ -180,6 +232,16 @@ describe("chat tool execution", () => {
     expect(parsed.success).toBe(true);
     expect(parsed.agent_id).toBe(targetAgent.id);
     expect(parsed.agent_name).toBe("Swap Target Agent");
+
+    const updatedConversation = await ConversationModel.findById({
+      id: conversation.id,
+      userId,
+      organizationId,
+    });
+    expect(updatedConversation?.agentId).toBe(targetAgent.id);
+    expect(updatedConversation?.selectedModel).toBe("claude-3-5-sonnet");
+    expect(updatedConversation?.selectedProvider).toBe("anthropic");
+    expect(updatedConversation?.chatApiKeyId).toBe(targetApiKey.id);
   });
 
   test("swap_agent returns error when swapping to same agent", async ({
@@ -243,11 +305,32 @@ describe("chat tool execution", () => {
   test("swap_to_default_agent succeeds when on non-default agent", async ({
     makeAgent,
     makeConversation,
+    makeSecret,
+    makeLlmProviderApiKey,
   }) => {
+    const secret = await makeSecret();
+    const defaultApiKey = await makeLlmProviderApiKey(
+      organizationId,
+      secret.id,
+      {
+        provider: "openai",
+      },
+    );
+    vi.spyOn(LlmProviderApiKeyModel, "findById").mockImplementation(
+      async (id) => {
+        if (id === defaultApiKey.id) {
+          return defaultApiKey;
+        }
+        return null;
+      },
+    );
+
     const defaultAgent = await makeAgent({
       name: "Default Router Agent",
       agentType: "agent",
       organizationId: organizationId,
+      llmApiKeyId: defaultApiKey.id,
+      llmModel: "gpt-4o",
     });
     await OrganizationModel.patch(organizationId, {
       defaultAgentId: defaultAgent.id,
@@ -284,6 +367,89 @@ describe("chat tool execution", () => {
     expect(parsed.success).toBe(true);
     expect(parsed.agent_id).toBe(defaultAgent.id);
     expect(parsed.agent_name).toBe("Default Router Agent");
+
+    const updatedConversation = await ConversationModel.findById({
+      id: conversation.id,
+      userId,
+      organizationId,
+    });
+    expect(updatedConversation?.agentId).toBe(defaultAgent.id);
+    expect(updatedConversation?.selectedModel).toBe("gpt-4o");
+    expect(updatedConversation?.selectedProvider).toBe("openai");
+    expect(updatedConversation?.chatApiKeyId).toBe(defaultApiKey.id);
+  });
+
+  test("swap_agent cannot swap to inaccessible team-scoped agent", async ({
+    makeAgent,
+    makeConversation,
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    // Create a separate non-admin member for this test
+    const memberOrg = await makeOrganization();
+    const memberUser = await makeUser();
+    await makeMember(memberUser.id, memberOrg.id, { role: "member" });
+
+    const secret = await makeSecret();
+    const apiKey = await makeLlmProviderApiKey(memberOrg.id, secret.id, {
+      provider: "openai",
+    });
+    vi.spyOn(LlmProviderApiKeyModel, "findById").mockImplementation(
+      async (id) => {
+        if (id === apiKey.id) return apiKey;
+        return null;
+      },
+    );
+
+    const teamA = await makeTeam(memberOrg.id, memberUser.id, {
+      name: "Team A",
+    });
+    const teamB = await makeTeam(memberOrg.id, memberUser.id, {
+      name: "Team B",
+    });
+    await makeTeamMember(teamA.id, memberUser.id);
+    // memberUser is NOT a member of teamB
+
+    const accessibleAgent = await makeAgent({
+      name: "Accessible Agent",
+      agentType: "agent",
+      organizationId: memberOrg.id,
+      scope: "team",
+      teams: [teamA.id],
+    });
+
+    await makeAgent({
+      name: "Inaccessible Agent",
+      agentType: "agent",
+      organizationId: memberOrg.id,
+      scope: "team",
+      teams: [teamB.id],
+    });
+
+    const conversation = await makeConversation(accessibleAgent.id, {
+      userId: memberUser.id,
+      organizationId: memberOrg.id,
+    });
+
+    const memberContext: ArchestraContext = {
+      agent: { id: accessibleAgent.id, name: accessibleAgent.name },
+      userId: memberUser.id,
+      organizationId: memberOrg.id,
+      conversationId: conversation.id,
+    };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}swap_agent`,
+      { agent_name: "Inaccessible Agent" },
+      memberContext,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("No agent found");
   });
 
   test("swap_to_default_agent returns error when already on default agent", async ({

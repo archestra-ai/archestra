@@ -28,7 +28,7 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.BedrockConverseWithDefaultAgent,
         description: "Send a message to Amazon Bedrock using the default agent",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         body: Bedrock.API.ConverseRequestSchema,
         headers: Bedrock.API.ConverseHeadersSchema,
         response: constructResponseSchema(Bedrock.API.ConverseResponseSchema),
@@ -61,7 +61,7 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.BedrockConverseWithAgent,
         description: "Send a message to Amazon Bedrock for a specific agent",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
         }),
@@ -98,7 +98,7 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.BedrockConverseStreamWithDefaultAgent,
         description:
           "Stream a message response from Amazon Bedrock using the default agent",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         body: Bedrock.API.ConverseRequestSchema,
         headers: Bedrock.API.ConverseHeadersSchema,
         // Streaming responses don't have a schema
@@ -132,7 +132,7 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.BedrockConverseStreamWithAgent,
         description:
           "Stream a message response from Amazon Bedrock for a specific agent",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
         }),
@@ -175,7 +175,7 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.BedrockConverseWithAgentAndModel,
         description:
           "Send a message to Amazon Bedrock for a specific agent (AI SDK format)",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
           modelId: z.string(),
@@ -226,7 +226,7 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.BedrockConverseStreamWithAgentAndModel,
         description:
           "Stream a message response from Amazon Bedrock for a specific agent (AI SDK format)",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
           modelId: z.string(),

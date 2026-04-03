@@ -1,4 +1,8 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import {
+  MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
+  MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
+} from "@shared";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -91,6 +95,10 @@ async function handleMcpPostRequest(
           toolCall: null,
           toolResult: {
             capabilities: {
+              extensions: {
+                ...MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
+                ...MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
+              },
               tools: { listChanged: false },
             },
             serverInfo: {
@@ -149,7 +157,8 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
     `${endpoint}/:profileId`,
     {
       schema: {
-        tags: ["mcp-gateway"],
+        operationId: "mcpGatewayGet",
+        tags: ["MCP Gateway"],
         params: z.object({
           profileId: UuidIdSchema,
         }),
@@ -223,7 +232,8 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
     `${endpoint}/:profileId`,
     {
       schema: {
-        tags: ["mcp-gateway"],
+        operationId: "mcpGatewayPost",
+        tags: ["MCP Gateway"],
         params: z.object({
           profileId: UuidIdSchema,
         }),

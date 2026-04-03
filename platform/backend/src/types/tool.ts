@@ -5,6 +5,7 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { CredentialResolutionModeSchema } from "@/types/enterprise-managed-credentials";
 
 import { OpenAi } from "./llm-providers";
 
@@ -59,11 +60,10 @@ export const ToolAssignmentSchema = z.object({
     id: z.string(),
     name: z.string(),
   }),
-  credentialSourceMcpServerId: z.string().nullable(),
+  mcpServerId: z.string().nullable(),
   credentialOwnerEmail: z.string().nullable(),
-  executionSourceMcpServerId: z.string().nullable(),
   executionOwnerEmail: z.string().nullable(),
-  useDynamicTeamCredential: z.boolean(),
+  credentialResolutionMode: CredentialResolutionModeSchema,
 });
 
 // Tool with embedded assignments schema
@@ -85,7 +85,10 @@ export const ToolWithAssignmentsSchema = z.object({
 // Filter schema for tools with assignments
 export const ToolFilterSchema = z.object({
   search: z.string().optional(),
-  origin: z.string().optional().describe("Can be 'llm-proxy' or a catalogId"),
+  origin: z
+    .string()
+    .optional()
+    .describe("Can be 'llm-proxy', 'agent', or a catalogId"),
   excludeArchestraTools: z.coerce
     .boolean()
     .optional()

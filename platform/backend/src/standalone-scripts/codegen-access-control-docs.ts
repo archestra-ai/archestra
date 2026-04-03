@@ -103,6 +103,58 @@ function generateCustomRolesPermissionsTable(): string {
   return table;
 }
 
+function generateScopedResourcesSection(): string {
+  return `## Scoped Resources
+
+Some resources use a two-step authorization model:
+
+1. RBAC grants a base action such as \`read\`, \`create\`, \`update\`, or \`delete\`
+2. Runtime scope rules further restrict which records a user can see or modify
+
+The most common scopes are:
+
+- \`personal\`: owned by one user
+- \`team\`: shared with one or more teams
+- \`org\`: shared across the organization
+
+The elevated actions \`:admin\` and \`:team-admin\` are not global shortcuts with identical meaning on every resource. Their effect depends on the resource's runtime authorization rules.
+
+### Agents, MCP Gateways, and LLM Proxies
+
+\`agent\`, \`mcpGateway\`, and \`llmProxy\` share the same scope model:
+
+- \`personal\`: the author can manage their own records
+- \`team\`: requires \`<resource>:team-admin\` and membership in at least one assigned team
+- \`org\`: requires \`<resource>:admin\`
+
+Examples:
+
+- \`agent:delete\` alone does **not** allow deleting every agent
+- \`agent:team-admin\` allows managing team-scoped agents only in teams the user belongs to
+- \`agent:admin\` bypasses those scope restrictions
+
+### Visibility-Scoped Credentials
+
+\`llmProviderApiKey\` and \`llmVirtualKey\` also support \`personal\`, \`team\`, and \`org\` scope, but they use different elevated permissions:
+
+- Personal records are limited to their owner
+- Team records require membership in the selected team, with some routes also allowing \`team:admin\`
+- Organization-wide records require the resource-specific admin permission such as \`llmProviderApiKey:admin\` or \`llmVirtualKey:admin\`
+
+These resources do **not** use \`:team-admin\`.
+
+### MCP Registry And Installation Records
+
+Some MCP-related resources also apply runtime scope checks in addition to RBAC, but their rules differ from agents, MCP gateways, and LLM proxies:
+
+- Internal MCP catalog items can be \`personal\`, \`team\`, or \`org\`
+- Organization-wide catalog items require \`mcpServerInstallation:admin\`
+- Team MCP server installations depend on team membership, with broader control for users who have \`team:admin\`
+
+When designing custom roles, treat the permission matrix as the first gate and the resource's scope rules as the second gate.
+`;
+}
+
 /**
  * Generate the frontmatter for the markdown file.
  * @param lastUpdated - The date string for the lastUpdated field
@@ -152,6 +204,8 @@ Users with \`ac:create\` permission can create custom roles by selecting specifi
 The following table lists all available permissions that can be assigned to custom roles:
 
 ${generateCustomRolesPermissionsTable()}
+
+${generateScopedResourcesSection()}
 
 ## Best Practices
 

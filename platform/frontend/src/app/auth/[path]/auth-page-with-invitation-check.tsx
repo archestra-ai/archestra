@@ -15,8 +15,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import config from "@/lib/config";
-import { useInvitationCheck } from "@/lib/invitation.query";
+import { useInvitationCheck } from "@/lib/auth/invitation.query";
+import { usePublicConfig } from "@/lib/config/config.query";
 import { getValidatedRedirectPath } from "@/lib/utils/redirect-validation";
 
 export function AuthPageWithInvitationCheck({ path }: { path: string }) {
@@ -26,7 +26,9 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
   const redirectTo = searchParams.get("redirectTo");
 
   const { data: invitationData, isLoading } = useInvitationCheck(invitationId);
-  const isBasicAuthDisabled = config.disableBasicAuth;
+  const { data: publicConfig, isLoading: isLoadingPublicConfig } =
+    usePublicConfig();
+  const isBasicAuthDisabled = publicConfig?.disableBasicAuth ?? false;
 
   // Check if this is a sign-up path (includes "sign-up-with-invitation")
   const isSignUpPath = path.startsWith("sign-up");
@@ -101,7 +103,10 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
 
   // Only show default credentials warning when basic auth is enabled
   const showDefaultCredentialsWarning =
-    path === "sign-in" && !invitationId && !isBasicAuthDisabled;
+    path === "sign-in" &&
+    !invitationId &&
+    !isLoadingPublicConfig &&
+    !isBasicAuthDisabled;
 
   const isSignInOrSignUp = path === "sign-in" || isSignUpPath;
 

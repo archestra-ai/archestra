@@ -98,8 +98,8 @@ vi.mock("@/components/chat/agent-tools-display", () => ({
   AgentToolsDisplay: () => <div data-testid="agent-tools-display" />,
 }));
 
-vi.mock("@/components/chat/chat-api-key-selector", () => ({
-  ChatApiKeySelector: () => <div data-testid="chat-api-key-selector" />,
+vi.mock("@/components/chat/llm-provider-api-key-selector", () => ({
+  LlmProviderApiKeySelector: () => <div data-testid="chat-api-key-selector" />,
 }));
 
 vi.mock("@/components/chat/chat-tools-display", () => ({
@@ -147,7 +147,7 @@ vi.mock("@/lib/agent-tools.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/chat.query", () => ({
+vi.mock("@/lib/chat/chat.query", () => ({
   useProfileToolsWithIds: () => ({
     data: [],
     isLoading: false,
@@ -159,7 +159,7 @@ vi.mock("@/lib/organization.query", () => ({
   useOrganization: () => mockUseOrganization(),
 }));
 
-vi.mock("@/lib/chat-placeholder.hook", () => ({
+vi.mock("@/lib/chat/chat-placeholder.hook", () => ({
   useChatPlaceholder: (...args: unknown[]) => mockUseChatPlaceholder(...args),
 }));
 
@@ -170,7 +170,7 @@ const mockUseHasPermissions = vi.fn().mockReturnValue({
   isLoading: false,
 });
 
-vi.mock("@/lib/auth.query", () => ({
+vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => mockUseHasPermissions(),
 }));
 
@@ -245,7 +245,7 @@ describe("ArchestraPromptInput", () => {
         <ArchestraPromptInput
           {...defaultProps}
           allowFileUploads={true}
-          inputModalities={["text"]}
+          inputModalities={null}
         />,
       );
 
@@ -259,6 +259,23 @@ describe("ArchestraPromptInput", () => {
       const tooltip = screen.getByTestId("tooltip-content");
       expect(tooltip).toHaveTextContent(
         "This model does not support file uploads",
+      );
+    });
+
+    it("should render enabled file upload button for text-only models", () => {
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          allowFileUploads={true}
+          inputModalities={["text"]}
+        />,
+      );
+
+      expect(
+        screen.getByTestId(E2eTestId.ChatFileUploadButton),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId("tooltip-content")).toHaveTextContent(
+        "Supports: chat prompts, .txt, .csv, and .md uploads",
       );
     });
 

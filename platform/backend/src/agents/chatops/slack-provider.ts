@@ -3,7 +3,12 @@ import { SLACK_REQUIRED_BOT_SCOPES, TimeInMs } from "@shared";
 import { SocketModeClient } from "@slack/socket-mode";
 import { WebClient } from "@slack/web-api";
 import { slackifyMarkdown } from "slackify-markdown";
-import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
+import {
+  type AllowedCacheKey,
+  CacheKey,
+  cacheManager,
+  LRUCacheManager,
+} from "@/cache-manager";
 import logger from "@/logging";
 import { AgentModel, ChatOpsChannelBindingModel, UserModel } from "@/models";
 import type {
@@ -52,6 +57,10 @@ class SlackProvider implements ChatOpsProvider {
   private eventHandler: ChatOpsEventHandler | null = null;
   private socketDedup = new EventDedupMap();
   private missingScopes: string[] = [];
+  private userNameCache = new LRUCacheManager<string>({
+    maxSize: 500,
+    defaultTtl: TimeInMs.Hour,
+  });
 
   constructor(slackConfig: SlackDbConfig) {
     this.config = slackConfig;
@@ -466,39 +475,72 @@ class SlackProvider implements ChatOpsProvider {
     );
 
     try {
-      const result = await this.client.conversations.replies({
-        channel: params.channelId,
-        ts: params.threadId,
-        limit,
+      // Fetch all messages using cursor-based pagination
+      const allMessages: NonNullable<
+        Awaited<ReturnType<WebClient["conversations"]["replies"]>>["messages"]
+      > = [];
+      let cursor: string | undefined;
+
+      do {
+        const result = await this.client.conversations.replies({
+          channel: params.channelId,
+          ts: params.threadId,
+          limit,
+          cursor,
+        });
+        allMessages.push(...(result.messages || []));
+        cursor = result.response_metadata?.next_cursor || undefined;
+      } while (cursor && allMessages.length < limit);
+
+      // Trim to the requested limit
+      const trimmedMessages = allMessages.slice(0, limit);
+
+      const filtered = trimmedMessages.filter(
+        (msg) => msg.ts && msg.ts !== params.excludeMessageId && msg.text,
+      );
+
+      // Batch-resolve unique non-bot user IDs to display names
+      const userIds = [
+        ...new Set(
+          filtered
+            .filter(
+              (msg) => msg.user && !msg.bot_id && msg.user !== this.botUserId,
+            )
+            .map((msg) => msg.user as string),
+        ),
+      ];
+      const userNameMap = await this.resolveUserNames(userIds);
+
+      const threadMessages = filtered.map((msg) => {
+        // Extract file metadata from Slack message files
+        const files = (msg.files as SlackFile[] | undefined)
+          ?.filter((f) => f.url_private_download || f.url_private)
+          .map((f) => ({
+            url: (f.url_private_download || f.url_private) as string,
+            mimetype: f.mimetype || "application/octet-stream",
+            name: f.name,
+            size: f.size,
+          }));
+
+        const isFromBot = Boolean(msg.bot_id) || msg.user === this.botUserId;
+        const senderName = isFromBot
+          ? msg.user || "Unknown"
+          : userNameMap.get(msg.user as string) || msg.user || "Unknown";
+
+        return {
+          messageId: msg.ts as string,
+          senderId: msg.user || msg.bot_id || "unknown",
+          senderName,
+          text: msg.text || "",
+          timestamp: new Date(Number.parseFloat(msg.ts as string) * 1000),
+          isFromBot,
+          ...(files && files.length > 0 && { files }),
+        };
       });
 
-      const messages = result.messages || [];
-      return messages
-        .filter(
-          (msg) => msg.ts && msg.ts !== params.excludeMessageId && msg.text,
-        )
-        .map((msg) => {
-          // Extract file metadata from Slack message files
-          const files = (msg.files as SlackFile[] | undefined)
-            ?.filter((f) => f.url_private_download || f.url_private)
-            .map((f) => ({
-              url: (f.url_private_download || f.url_private) as string,
-              mimetype: f.mimetype || "application/octet-stream",
-              name: f.name,
-              size: f.size,
-            }));
-
-          return {
-            messageId: msg.ts as string,
-            senderId: msg.user || msg.bot_id || "unknown",
-            senderName: msg.user || "Unknown",
-            text: msg.text || "",
-            timestamp: new Date(Number.parseFloat(msg.ts as string) * 1000),
-            isFromBot: Boolean(msg.bot_id) || msg.user === this.botUserId,
-            ...(files && files.length > 0 && { files }),
-          };
-        })
-        .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+      return threadMessages.sort(
+        (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
+      );
     } catch (error) {
       logger.warn(
         { error: errorMessage(error), channelId: params.channelId },
@@ -1317,6 +1359,46 @@ class SlackProvider implements ChatOpsProvider {
     } else {
       logger.debug("[SlackProvider] All required scopes are granted");
     }
+  }
+
+  /**
+   * Batch-resolve Slack user IDs to display names using the LRU cache.
+   * Falls back to the raw user ID if resolution fails.
+   */
+  private async resolveUserNames(
+    userIds: string[],
+  ): Promise<Map<string, string>> {
+    const result = new Map<string, string>();
+    const uncachedIds: string[] = [];
+
+    // Check cache first
+    for (const id of userIds) {
+      const cached = this.userNameCache.get(id);
+      if (cached) {
+        result.set(id, cached);
+      } else {
+        uncachedIds.push(id);
+      }
+    }
+
+    // Resolve uncached IDs via Slack API
+    const resolutions = await Promise.allSettled(
+      uncachedIds.map(async (id) => {
+        const name = await this.getUserName(id);
+        return { id, name };
+      }),
+    );
+
+    for (const resolution of resolutions) {
+      if (resolution.status === "fulfilled") {
+        const { id, name } = resolution.value;
+        const displayName = name || id;
+        this.userNameCache.set(id, displayName);
+        result.set(id, displayName);
+      }
+    }
+
+    return result;
   }
 
   private cleanBotMention(text: string): string {

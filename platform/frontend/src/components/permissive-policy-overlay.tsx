@@ -3,8 +3,8 @@
 import { ShieldOff } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { useHasPermissions } from "@/lib/auth.query";
-import { useFeature } from "@/lib/config.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 
 interface PermissivePolicyOverlayProps {
   children: ReactNode;
@@ -38,7 +38,7 @@ export function PermissivePolicyOverlay({
                 </h3>
                 <p className="text-sm text-muted-foreground mb-4">
                   For now, all agent tool calls are allowed and all results are
-                  trusted. Individual policies are bypassed. <br />
+                  safe. Individual policies are bypassed. <br />
                   {userCanUpdateOrganization && (
                     <>
                       <br />

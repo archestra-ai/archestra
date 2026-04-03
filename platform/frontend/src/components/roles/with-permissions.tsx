@@ -5,8 +5,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useHasPermissions, useMissingPermissions } from "@/lib/auth.query";
-import { formatMissingPermissions } from "@/lib/auth.utils";
+import {
+  useHasPermissions,
+  useMissingPermissions,
+} from "@/lib/auth/auth.query";
+import { formatMissingPermissions } from "@/lib/auth/auth.utils";
 
 type WithPermissionsProps = {
   permissions: Permissions;

@@ -515,4 +515,21 @@ describe("renderSystemPrompt with null handling", () => {
       "Hello {{user.name}}",
     );
   });
+
+  test("renders with additionalContext when user context is null", () => {
+    expect(
+      renderSystemPrompt("Tool: {{tool.name}} on {{mcpServerName}}", null, {
+        tool: { name: "my-tool" },
+        mcpServerName: "TestServer",
+      }),
+    ).toBe("Tool: my-tool on TestServer");
+  });
+
+  test("merges user context and additionalContext", () => {
+    expect(
+      renderSystemPrompt("{{user.name}} analyzing {{tool.name}}", context, {
+        tool: { name: "my-tool" },
+      }),
+    ).toBe("Alice analyzing my-tool");
+  });
 });

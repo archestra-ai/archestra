@@ -34,6 +34,16 @@ on:
         required: false
       ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY:
         required: false
+      GCP_SERVICE_ACCOUNT_NAME:
+        required: false
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
+        required: false
+
+env:
+  PLATFORM_IMAGE_REGISTRY: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
+  PLATFORM_IMAGE_NAME: platform
+  MCP_SERVER_BASE_IMAGE_REGISTRY: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
+  MCP_SERVER_BASE_IMAGE_NAME: mcp-server-base
 
 jobs:
   platform-linting-and-tests:
@@ -48,23 +58,32 @@ jobs:
       TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
     steps:
+      - name: Checkout project
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: ${{ inputs.is-release-please-pr }} # zizmor: ignore[artipacked]
+          ref: ${{ inputs.is-release-please-pr && github.head_ref || '' }}
+          token: ${{ github.token }}
+          fetch-depth: 1
+
       # Generate GitHub App token for release-please PRs to push codegen changes
       # (pushes made with GITHUB_TOKEN do not trigger workflows by design)
       - name: Generate token for release-please PR
         if: ${{ inputs.should-skip-running-and-always-succeed != true && inputs.is-release-please-pr == true }}
         id: generate-token
-        uses: actions/create-github-app-token@df432ceedc7162793a195dd1713ff69aefc7379e # v2.0.6
+        uses: ./.github/actions/github-app-token
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
 
-      - name: Checkout project
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Update checkout credentials for release-please PR
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && inputs.is-release-please-pr == true }}
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          persist-credentials: ${{ inputs.is-release-please-pr }} # zizmor: ignore[artipacked]
-          ref: ${{ inputs.is-release-please-pr && github.head_ref || '' }}
-          token: ${{ steps.generate-token.outputs.token || github.token }}
+          persist-credentials: true # zizmor: ignore[artipacked]
+          ref: ${{ github.head_ref }}
+          token: ${{ steps.generate-token.outputs.token }}
           fetch-depth: 1
 
       - name: Setup environment
@@ -155,14 +174,17 @@ jobs:
 
           echo "✅ All validation checks passed"
 
-  # Build Docker images for e2e tests (platform and MCP server base)
-  # Images are exported as artifacts for fast co-located downloads in E2E jobs.
+  # Build Docker images for e2e tests (platform and MCP server base).
+  # Trusted PRs and merge queue runs push the platform image to Artifact Registry so
+  # each E2E shard can pull layers directly instead of downloading a tarball artifact.
+  # Fork PRs still fall back to artifacts because they do not receive OIDC-backed secrets.
   platform-e2e-build:
     name: Build ${{ matrix.name }} Image
     runs-on: ${{ matrix.runner }}
     if: ${{ inputs.should-skip-running-and-always-succeed != true }}
     permissions:
       contents: read
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
@@ -185,7 +207,7 @@ jobs:
             use-build-action: false
     steps:
       - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -197,7 +219,7 @@ jobs:
           working-directory: ./platform
 
       - name: Build Platform image
-        if: ${{ matrix.use-build-action }}
+        if: ${{ matrix.use-build-action && inputs.is-fork-pr }}
         uses: ./.github/actions/build-platform-docker-image
         with:
           context: ${{ matrix.context }}
@@ -206,22 +228,48 @@ jobs:
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 
+      - name: Authenticate to Google Artifact Registry
+        if: ${{ matrix.use-build-action && !inputs.is-fork-pr }}
+        uses: ./.github/actions/auth-to-gar
+        with:
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+      - name: Build Platform image and push to Artifact Registry
+        if: ${{ matrix.use-build-action && !inputs.is-fork-pr }}
+        uses: ./.github/actions/build-platform-docker-image
+        with:
+          context: ${{ matrix.context }}
+          push: "true"
+          tags: ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:${{ github.sha }}
+          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+
       - name: Setup Blacksmith Builder
         if: ${{ !matrix.use-build-action }}
-        uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
+        uses: ./.github/actions/setup-blacksmith-builder
+
+      - name: Authenticate to Google Artifact Registry
+        if: ${{ !matrix.use-build-action && !inputs.is-fork-pr }}
+        uses: ./.github/actions/auth-to-gar
+        with:
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
       - name: Build MCP server base image
         if: ${{ !matrix.use-build-action }}
-        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
+        uses: ./.github/actions/blacksmith-build-push
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
-          load: true
-          tags: ${{ matrix.local-tag-prefix }}:${{ github.sha }}
+          push: ${{ !inputs.is-fork-pr && 'true' || 'false' }}
+          load: ${{ inputs.is-fork-pr && 'true' || 'false' }}
+          tags: ${{ !inputs.is-fork-pr && format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) || format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
 
       # Export as artifact for fast co-located downloads in E2E jobs
       - name: Export Docker image as tarball
+        if: ${{ !matrix.use-build-action || inputs.is-fork-pr }}
         env:
           GIT_SHA: ${{ github.sha }}
           LOCAL_TAG_PREFIX: ${{ matrix.local-tag-prefix }}
@@ -231,7 +279,8 @@ jobs:
           ls -lh "/tmp/${TARBALL_NAME}"
 
       - name: Upload Docker image artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: ${{ !matrix.use-build-action || inputs.is-fork-pr }}
+        uses: ./.github/actions/github-upload-artifact
         with:
           name: ${{ matrix.artifact-name }}
           path: /tmp/${{ matrix.tarball-name }}
@@ -248,6 +297,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
@@ -260,28 +310,30 @@ jobs:
             shard: ""
             extra_args: ""
             artifact: blob-report-api
-          # UI tests - sharded across 3 parallel jobs
+          # UI tests - sharded across 2 parallel jobs
           # Tests tagged @firefox/@webkit/@quickstart are excluded here:
           # - @firefox/@webkit run in dedicated sequential jobs
           # - @quickstart runs in the dedicated Quickstart job (needs a fresh env with no API keys)
-          - name: UI 1/3
+          - name: UI 1/2
             runner: blacksmith-16vcpu-ubuntu-2404
-            projects: chromium --project=identity-providers
-            shard: "--shard=1/3"
+            projects: chromium
+            shard: "--shard=1/2"
             extra_args: "--grep-invert '@firefox|@webkit|@quickstart'"
             artifact: blob-report-ui-1
-          - name: UI 2/3
+          - name: UI 2/2
             runner: blacksmith-16vcpu-ubuntu-2404
-            projects: chromium --project=identity-providers
-            shard: "--shard=2/3"
+            projects: chromium
+            shard: "--shard=2/2"
             extra_args: "--grep-invert '@firefox|@webkit|@quickstart'"
             artifact: blob-report-ui-2
-          - name: UI 3/3
+          # Identity provider tests manipulate shared SSO backend state and are
+          # more reliable when isolated from the generic Chromium shards.
+          - name: UI Identity Providers
             runner: blacksmith-16vcpu-ubuntu-2404
-            projects: chromium --project=identity-providers
-            shard: "--shard=3/3"
-            extra_args: "--grep-invert '@firefox|@webkit|@quickstart'"
-            artifact: blob-report-ui-3
+            projects: identity-providers
+            shard: ""
+            extra_args: "--workers=1"
+            artifact: blob-report-ui-identity-providers
           # Firefox tests - run sequentially to avoid race conditions on shared backend state
           - name: UI Firefox
             runner: blacksmith-16vcpu-ubuntu-2404
@@ -309,7 +361,7 @@ jobs:
     steps:
       - name: Checkout repository
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -324,11 +376,17 @@ jobs:
         id: load-platform-image
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: ./.github/actions/load-platform-image
+        with:
+          source: ${{ inputs.is-fork-pr && 'artifact' || 'registry' }}
+          image-tag: ${{ inputs.is-fork-pr && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
 
       - name: Load MCP server base image
         id: load-mcp-server-base-image
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: ./.github/actions/load-mcp-server-base-image
+        with:
+          source: ${{ inputs.is-fork-pr && 'artifact' || 'registry' }}
+          image-tag: ${{ inputs.is-fork-pr && format('mcp-server-base:{0}', github.sha) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
 
       - name: Setup Archestra Platform
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -355,7 +413,7 @@ jobs:
 
       - name: Upload blob report
         if: ${{ inputs.should-skip-running-and-always-succeed != true && !cancelled() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: ./.github/actions/github-upload-artifact
         with:
           name: ${{ matrix.artifact }}
           path: platform/e2e-tests/blob-report/
@@ -397,10 +455,11 @@ jobs:
     runs-on: blacksmith-16vcpu-ubuntu-2404
     permissions:
       contents: read
+      id-token: write
     steps:
       - name: Checkout repository
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -415,6 +474,9 @@ jobs:
         id: load-platform-image
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: ./.github/actions/load-platform-image
+        with:
+          source: ${{ inputs.is-fork-pr && 'artifact' || 'registry' }}
+          image-tag: ${{ inputs.is-fork-pr && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
 
       # Note: We intentionally don't load/use a custom MCP server base image for quickstart tests.
       # The embedded Kind cluster inside the quickstart container cannot easily access images
@@ -465,6 +527,7 @@ jobs:
           #    causing failures when running on release PRs (the new version doesn't exist yet)
           # Using 'latest' ensures the image is always available regardless of version bumps
           #
+          # supply-chain-policy: allow-latest quickstart needs a published public fallback
           # Provider base URLs point to WireMock so quickstart tests can mock LLM responses
           docker run -d \
             --name archestra-quickstart \
@@ -548,7 +611,7 @@ jobs:
 
       - name: Upload blob report
         if: ${{ inputs.should-skip-running-and-always-succeed != true && !cancelled() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: ./.github/actions/github-upload-artifact
         with:
           name: blob-report-quickstart
           path: platform/e2e-tests/blob-report/
@@ -586,10 +649,11 @@ jobs:
     runs-on: blacksmith-16vcpu-ubuntu-2404
     permissions:
       contents: read
+      id-token: write
     steps:
       - name: Checkout repository
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -604,6 +668,9 @@ jobs:
         id: load-platform-image
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: ./.github/actions/load-platform-image
+        with:
+          source: ${{ inputs.is-fork-pr && 'artifact' || 'registry' }}
+          image-tag: ${{ inputs.is-fork-pr && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
 
       - name: Install Kind cluster
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -668,7 +735,7 @@ jobs:
 
       - name: Upload blob report
         if: ${{ inputs.should-skip-running-and-always-succeed != true && !cancelled() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: ./.github/actions/github-upload-artifact
         with:
           name: blob-report-vault-k8s
           path: platform/e2e-tests/blob-report/
@@ -698,7 +765,12 @@ jobs:
   # Merge all Playwright reports into a single HTML report
   platform-e2e-merge-reports:
     name: Merge E2E Test Reports
-    needs: [platform-e2e-tests, platform-quickstart-e2e-tests, platform-vault-k8s-e2e-tests]
+    needs:
+      [
+        platform-e2e-tests,
+        platform-quickstart-e2e-tests,
+        platform-vault-k8s-e2e-tests,
+      ]
     if: ${{ always() && !cancelled() && inputs.should-skip-running-and-always-succeed != true }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
@@ -706,7 +778,7 @@ jobs:
       pull-requests: write # Required for playwright-report-summary to comment on PRs
     steps:
       - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -717,7 +789,7 @@ jobs:
           working-directory: ./platform
 
       - name: Download all blob reports
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        uses: ./.github/actions/github-download-artifact
         with:
           path: platform/e2e-tests/blob-reports
           pattern: blob-report-*
@@ -738,7 +810,7 @@ jobs:
 
       - name: Upload merged Playwright report
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: ./.github/actions/github-upload-artifact
         with:
           name: playwright-report
           path: platform/e2e-tests/playwright-report/
@@ -747,7 +819,7 @@ jobs:
 
       - name: Write test summary
         if: always()
-        uses: daun/playwright-report-summary@be9e270edd5ad86038604d3caa84a819a6ff6fed # v3.10.0
+        uses: daun/playwright-report-summary@1229105480a2a4bdd91598d8a146fbab41343fce # v3.11.0
         with:
           report-file: platform/e2e-tests/results.json
           job-summary: true
@@ -780,26 +852,29 @@ jobs:
     steps:
       - name: Checkout repository
         if: ${{ github.event_name == 'merge_group' }}
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
           fetch-depth: 1
 
-      # Platform image: Load from artifact (already built by platform-e2e-build)
+      # Platform image: pull from registry on trusted runs, fall back to artifacts for forks
       - name: Load platform image
         id: load-platform-image
         if: ${{ github.event_name == 'merge_group' && matrix.image-source == 'platform-e2e-build' }}
         uses: ./.github/actions/load-platform-image
+        with:
+          source: registry
+          image-tag: ${{ format('{0}/{1}:{2}', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
 
       # Other images: Build locally for scanning (single arch, no push)
       - name: Setup Blacksmith Builder
         if: ${{ github.event_name == 'merge_group' && matrix.image-source == 'build' }}
-        uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
+        uses: ./.github/actions/setup-blacksmith-builder
 
       - name: Build image for scanning
         id: build-image
         if: ${{ github.event_name == 'merge_group' && matrix.image-source == 'build' }}
-        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
+        uses: ./.github/actions/blacksmith-build-push
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
@@ -842,7 +917,7 @@ jobs:
     steps:
       - name: Checkout project
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -854,7 +929,24 @@ jobs:
       - name: Tests
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: |
-          helm plugin install https://github.com/helm-unittest/helm-unittest --version v1.0.3
+          HELM_UNITTEST_VERSION="1.0.3"
+          HELM_UNITTEST_ARCHIVE="helm-unittest-linux-amd64-${HELM_UNITTEST_VERSION}.tgz"
+          HELM_UNITTEST_BASE_URL="https://github.com/helm-unittest/helm-unittest/releases/download/v${HELM_UNITTEST_VERSION}"
+          curl -fsSL -o /tmp/helm-unittest-checksum.sha "${HELM_UNITTEST_BASE_URL}/helm-unittest-checksum.sha"
+          curl -fsSL -o "/tmp/${HELM_UNITTEST_ARCHIVE}" "${HELM_UNITTEST_BASE_URL}/${HELM_UNITTEST_ARCHIVE}"
+          (
+            cd /tmp
+            awk -v archive="${HELM_UNITTEST_ARCHIVE}" '
+              $2 ~ ("/" archive "$") {
+                print $1 " *" archive
+              }
+            ' helm-unittest-checksum.sha | sha256sum -c -
+          )
+          HELM_UNITTEST_EXTRACT_DIR="$(mktemp -d)"
+          HELM_PLUGINS_DIR="$(helm env HELM_PLUGINS)"
+          mkdir -p "${HELM_PLUGINS_DIR}/unittest"
+          tar -xzf "/tmp/${HELM_UNITTEST_ARCHIVE}" -C "${HELM_UNITTEST_EXTRACT_DIR}"
+          cp -R "${HELM_UNITTEST_EXTRACT_DIR}/." "${HELM_PLUGINS_DIR}/unittest"
           helm unittest .
 
       - name: helm package

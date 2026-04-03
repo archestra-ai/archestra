@@ -1,9 +1,9 @@
 "use client";
 
+import { ARCHESTRA_MCP_CATALOG_ID, parseFullToolName } from "@shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
-import { BotIcon } from "lucide-react";
+import { BotIcon, CheckCircleIcon, ClockIcon } from "lucide-react";
 import { useState } from "react";
-import { McpCatalogIcon } from "@/components/agent-tools-editor";
 import {
   Tool,
   ToolContent,
@@ -12,15 +12,21 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
-import { Button } from "@/components/ui/button";
+import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  getCompactToolState,
+  getToolHeaderState,
+} from "@/lib/chat/chat-tools-display.utils";
+import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { cn } from "@/lib/utils";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
+import { ToolStatusRow } from "./tool-status-row";
 
 type CompactToolEntry = {
   key: string;
@@ -29,20 +35,6 @@ type CompactToolEntry = {
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
   errorText: string | undefined;
 };
-
-function getToolState(
-  part: ToolUIPart | DynamicToolUIPart,
-  toolResultPart: ToolUIPart | DynamicToolUIPart | null,
-): "running" | "completed" {
-  if (toolResultPart || part.state === "output-available") return "completed";
-  return "running";
-}
-
-function formatToolName(toolName: string): string {
-  // Remove MCP server prefix (e.g. "server__tool" -> "tool")
-  const parts = toolName.split("__");
-  return parts[parts.length - 1].replace(/_/g, " ");
-}
 
 function CompactCircle({
   toolName,
@@ -54,7 +46,7 @@ function CompactCircle({
   catalogId,
 }: {
   toolName: string;
-  state: "running" | "completed";
+  state: "running" | "completed" | "error";
   isExpanded: boolean;
   isExpandable?: boolean;
   onClick: () => void;
@@ -89,13 +81,18 @@ function CompactCircle({
                 "absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background",
                 state === "completed" && "bg-green-500",
                 state === "running" && "bg-blue-500 animate-pulse",
+                state === "error" && "bg-destructive",
               )}
             />
           </button>
         </TooltipTrigger>
         <TooltipContent side="top" className="text-xs">
-          {formatToolName(toolName)}
-          {state === "running" ? " (running)" : ""}
+          {parseFullToolName(toolName).toolName.replace(/_/g, " ")}
+          {state === "running"
+            ? " (running)"
+            : state === "error"
+              ? " (error)"
+              : ""}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
@@ -123,6 +120,7 @@ export function CompactToolGroup({
   }) => void;
 }) {
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const { isToolName } = useArchestraMcpIdentity();
 
   const handleToggle = (key: string) => {
     if (!canExpandToolCalls) return;
@@ -132,20 +130,26 @@ export function CompactToolGroup({
   const expandedTool = tools.find((t) => t.key === expandedKey);
 
   return (
-    <div className="mb-4">
+    <div className="mb-1">
       <div className="flex flex-wrap gap-1.5 items-center">
         {tools.map((tool) => {
           const iconInfo = toolIconMap?.get(tool.toolName);
+          const fallbackCatalogId =
+            iconInfo?.catalogId ??
+            (isToolName(tool.toolName) ? ARCHESTRA_MCP_CATALOG_ID : undefined);
           return (
             <CompactCircle
               key={tool.key}
               toolName={tool.toolName}
-              state={getToolState(tool.part, tool.toolResultPart)}
+              state={getCompactToolState({
+                part: tool.part,
+                toolResultPart: tool.toolResultPart,
+              })}
               isExpanded={expandedKey === tool.key}
               isExpandable={canExpandToolCalls}
               onClick={() => handleToggle(tool.key)}
               icon={iconInfo?.icon}
-              catalogId={iconInfo?.catalogId}
+              catalogId={fallbackCatalogId}
             />
           );
         })}
@@ -187,12 +191,11 @@ function ExpandedToolCard({
   const logsButton = errorText ? (
     <ToolErrorLogsButton toolName={toolName} />
   ) : null;
-
-  const headerState = errorText
-    ? "output-error"
-    : toolResultPart
-      ? "output-available"
-      : part.state || "input-available";
+  const headerState = getToolHeaderState({
+    state: part.state || "input-available",
+    toolResultPart,
+    errorText,
+  });
 
   return (
     <Tool defaultOpen={true}>
@@ -208,35 +211,35 @@ function ExpandedToolCard({
           onToolApprovalResponse &&
           "approval" in part &&
           part.approval?.id && (
-            <div className="flex items-center gap-2 px-4 pb-4">
-              <Button
-                size="sm"
-                variant="default"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToolApprovalResponse({
-                    id: (part as { approval: { id: string } }).approval.id,
-                    approved: true,
-                  });
-                }}
-              >
-                Approve
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToolApprovalResponse({
-                    id: (part as { approval: { id: string } }).approval.id,
-                    approved: false,
-                    reason: "User denied",
-                  });
-                }}
-              >
-                Deny
-              </Button>
-            </div>
+            <ToolStatusRow
+              icon={
+                <ClockIcon className="mt-0.5 size-4 flex-none text-amber-600" />
+              }
+              title="Approval required"
+              description="Review this tool call before it can continue."
+              actions={[
+                {
+                  label: "Approve",
+                  variant: "secondary",
+                  icon: <CheckCircleIcon className="size-4" />,
+                  onClick: () =>
+                    onToolApprovalResponse({
+                      id: (part as { approval: { id: string } }).approval.id,
+                      approved: true,
+                    }),
+                },
+                {
+                  label: "Decline",
+                  variant: "outline",
+                  onClick: () =>
+                    onToolApprovalResponse({
+                      id: (part as { approval: { id: string } }).approval.id,
+                      approved: false,
+                      reason: "User denied",
+                    }),
+                },
+              ]}
+            />
           )}
         {errorText ? <ToolErrorDetails errorText={errorText} /> : null}
         {toolResultPart && (

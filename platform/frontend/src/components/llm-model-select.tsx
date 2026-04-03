@@ -28,6 +28,7 @@ export type LlmModelSelectOption = {
   value: string;
   model: string;
   provider: SupportedProvider;
+  description?: string;
   pricePerMillionInput?: string | null;
   pricePerMillionOutput?: string | null;
 };
@@ -53,6 +54,11 @@ export function LlmModelOptionLabel({
         {showPricing && (
           <div className="truncate text-xs text-muted-foreground">
             {formatPricing(option)}
+          </div>
+        )}
+        {!showPricing && option.description && (
+          <div className="truncate text-xs text-muted-foreground">
+            {option.description}
           </div>
         )}
       </div>
@@ -113,6 +119,9 @@ export function LlmModelSearchableSelect({
   disabled = false,
   includeAllOption = false,
   allLabel = "All models",
+  searchPlaceholder = "Search models...",
+  allowCustom = false,
+  emptyMessage,
 }: {
   value: string;
   onValueChange: (value: string) => void;
@@ -123,16 +132,21 @@ export function LlmModelSearchableSelect({
   disabled?: boolean;
   includeAllOption?: boolean;
   allLabel?: string;
+  searchPlaceholder?: string;
+  allowCustom?: boolean;
+  emptyMessage?: string;
 }) {
   return (
     <SearchableSelect
       value={value}
       onValueChange={onValueChange}
       placeholder={placeholder}
-      searchPlaceholder="Search models..."
+      searchPlaceholder={searchPlaceholder}
       disabled={disabled}
       className={cn("w-full", className)}
       multiline={showPricing}
+      allowCustom={allowCustom}
+      emptyMessage={emptyMessage}
       items={[
         ...(includeAllOption
           ? [{ value: "all", label: allLabel, searchText: allLabel }]
@@ -141,7 +155,7 @@ export function LlmModelSearchableSelect({
           value: option.value,
           label: option.model,
           searchText: `${providerDisplayNames[option.provider]} ${option.model}`,
-          description: undefined,
+          description: option.description,
           content: (
             <LlmModelOptionLabel option={option} showPricing={showPricing} />
           ),

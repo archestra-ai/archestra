@@ -26,4 +26,6 @@ export interface ArchestraContext {
   delegationChain?: string;
   /** Optional cancellation signal from parent chat/tool execution */
   abortSignal?: AbortSignal;
+  /** Whether the current caller context is still trusted/safe */
+  contextIsTrusted?: boolean;
 }

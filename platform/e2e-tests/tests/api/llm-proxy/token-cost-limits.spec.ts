@@ -416,11 +416,11 @@ for (const config of testConfigs) {
       // 3. Sync models from providers to ensure WireMock-backed providers are linked.
       //    On CI, the backend seed may run before WireMock is ready, causing some
       //    providers (e.g. bedrock) to have zero linked models. This sync ensures
-      //    the provider appears in configuredProviders so GET /api/models returns
+      //    the provider appears in configuredProviders so GET /api/llm-models returns
       //    unlinked models created by ensureModelExists.
       await syncModels(request);
 
-      // 4. Find the model by modelId via GET /api/models and set custom pricing
+      // 4. Find the model by modelId via GET /api/llm-models and set custom pricing
       const modelsResponse = await getModels(request);
       const allModels = await modelsResponse.json();
       const targetModel = allModels.find(

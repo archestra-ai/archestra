@@ -143,7 +143,7 @@ N8N is not able to execute the second call once the untrusted content got inject
 
 ![N8N](/docs/platfrom/n8n-3.png)
 
-Here, Archestra's "Dynamic Tools" feature is reducing the context trustworthiness and preventing the following tool calls. Read about it [here](/docs/platform-dynamic-tools).
+Here, Archestra's AI tool guardrails reduce the context trustworthiness and prevent the following tool calls. Read about them [here](/docs/platform-ai-tool-guardrails).
 
 ### 5. Tracking N8N Executions (Optional)
 

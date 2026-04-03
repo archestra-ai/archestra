@@ -66,6 +66,8 @@ export interface A2AExecuteParams {
   attachments?: A2AAttachment[];
   /** Whether the parent execution context was still trusted at delegation time */
   parentContextIsTrusted?: boolean;
+  /** Optional: Last execution time for scheduled runs (Temporal Awareness) */
+  lastRunAt?: Date;
 }
 
 export interface A2AExecuteResult {
@@ -154,6 +156,12 @@ export async function executeA2AMessage(
 
   if (renderedPrompt) {
     systemPrompt = renderedPrompt;
+  }
+
+  // Temporal Awareness: Inject last run data for scheduled autonomous runs
+  if (params.lastRunAt) {
+    const temporalContext = `\n\n[Temporal Data | Last run: ${params.lastRunAt.toISOString()} | Current time: ${new Date().toISOString()}]`;
+    systemPrompt = (systemPrompt || "") + temporalContext;
   }
 
   // Track subagent execution so the browser preview can skip screenshots

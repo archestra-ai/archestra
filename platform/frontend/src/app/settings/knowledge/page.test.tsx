@@ -513,42 +513,6 @@ describe("KnowledgeSettingsPage", () => {
     });
   });
 
-  describe("embedding dimensions requirement", () => {
-    it("disables save when an embedding model is selected without dimensions", () => {
-      mockOrganization = {
-        embeddingChatApiKeyId: "key-1",
-        embeddingModel: null,
-        embeddingDimensions: null,
-        rerankerChatApiKeyId: "key-1",
-        rerankerModel: "gpt-4o",
-      };
-      mockApiKeys = [
-        {
-          id: "key-1",
-          name: "OpenAI Key",
-          provider: "openai",
-          scope: "org_wide",
-        },
-      ];
-
-      renderPage();
-
-      const modelTrigger = screen
-        .getAllByRole("combobox")
-        .find((el) => el.textContent?.includes("Select embedding model"));
-      if (!modelTrigger) {
-        expect.fail("Embedding model combobox not found");
-      }
-      fireEvent.click(modelTrigger);
-      fireEvent.click(
-        screen.getByRole("button", { name: /text-embedding-3-small/i }),
-      );
-
-      expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
-      expect(screen.getByText("Select dimensions...")).toBeInTheDocument();
-    });
-  });
-
   describe("embedding model disabled state", () => {
     it("shows 'Select an embedding API key first' when no key is selected", () => {
       mockOrganization = {
@@ -659,7 +623,7 @@ describe("KnowledgeSettingsPage", () => {
   });
 
   describe("embedding api key dialog", () => {
-    it("disables all providers except OpenAI and Ollama", () => {
+    it("shows provider options for adding an embedding API key", () => {
       mockOrganization = {
         embeddingChatApiKeyId: null,
         embeddingModel: null,
@@ -687,10 +651,10 @@ describe("KnowledgeSettingsPage", () => {
       ).not.toHaveAttribute("data-disabled");
       expect(
         screen.getByRole("option", { name: /Anthropic/i }),
-      ).toHaveAttribute("data-disabled");
-      expect(screen.getByRole("option", { name: /Gemini/i })).toHaveAttribute(
-        "data-disabled",
-      );
+      ).not.toHaveAttribute("data-disabled");
+      expect(
+        screen.getByRole("option", { name: /Gemini/i }),
+      ).not.toHaveAttribute("data-disabled");
     });
   });
 

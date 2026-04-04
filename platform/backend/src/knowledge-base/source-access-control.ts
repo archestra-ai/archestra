@@ -95,6 +95,8 @@ class KnowledgeSourceAccessControlService {
     _accessControl: KnowledgeSourceAccessControlContext,
     _knowledgeBase: KnowledgeBase,
   ) {
+    // Knowledge bases are just collections of connectors now. Visibility is
+    // enforced at the connector layer, so KB-level access is always allowed.
     return true;
   }
 

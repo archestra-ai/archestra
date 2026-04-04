@@ -372,6 +372,8 @@ function buildVisibilityFilter(params: {
     return undefined;
   }
 
+  // No access context means "org-wide only" by default; callers must opt into
+  // team-scoped connectors by passing the viewer's team IDs or canReadAll.
   if (!params.teamIds || params.teamIds.length === 0) {
     return sql`${schema.knowledgeBaseConnectorsTable.visibility} != 'team-scoped'`;
   }

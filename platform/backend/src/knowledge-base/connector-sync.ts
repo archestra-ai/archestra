@@ -14,6 +14,7 @@ import type {
   AclEntry,
   ConnectorCredentials,
   ConnectorDocument,
+  KnowledgeBaseConnector,
 } from "@/types";
 import { chunkDocument } from "./chunker";
 import {
@@ -49,7 +50,7 @@ class ConnectorSyncService {
     // Load credentials from secrets manager
     const [credentials, documentAcl] = await Promise.all([
       this.loadCredentials(connector.secretId, log),
-      this.buildDocumentAccessControlList(connector.id),
+      this.buildDocumentAccessControlList(connector),
     ]);
 
     // Get the connector implementation
@@ -506,14 +507,9 @@ class ConnectorSyncService {
     };
   }
 
-  private async buildDocumentAccessControlList(
-    connectorId: string,
-  ): Promise<AclEntry[]> {
-    const connector = await KnowledgeBaseConnectorModel.findById(connectorId);
-    if (!connector) {
-      throw new Error(`Connector not found: ${connectorId}`);
-    }
-
+  private buildDocumentAccessControlList(
+    connector: KnowledgeBaseConnector,
+  ): AclEntry[] {
     return knowledgeSourceAccessControlService.buildConnectorDocumentAccessControlList(
       { connector },
     );

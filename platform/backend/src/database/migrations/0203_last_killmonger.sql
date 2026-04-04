@@ -28,5 +28,4 @@ SET "permission" = (
     )
   )
 )::text
-WHERE "permission"::text LIKE '%"knowledgeBase":%'
-   OR "permission"::text LIKE '%"knowledgeSource":%';--> statement-breakpoint
+WHERE "permission"::text LIKE '%"knowledgeBase":%';--> statement-breakpoint

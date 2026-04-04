@@ -511,11 +511,7 @@ async function handleQueryKnowledgeSources(params: {
         : null;
 
     const validKbs = hasKbs
-      ? (
-          await Promise.all(
-            agent.knowledgeBaseIds.map((id) => KnowledgeBaseModel.findById(id)),
-          )
-        ).filter((kb): kb is NonNullable<typeof kb> => kb !== null)
+      ? await KnowledgeBaseModel.findByIds(agent.knowledgeBaseIds)
       : [];
     const visibleKbs = access
       ? knowledgeSourceAccessControlService.filterKnowledgeBases(
@@ -525,16 +521,7 @@ async function handleQueryKnowledgeSources(params: {
       : validKbs;
 
     const directConnectors = directConnectorIds.length
-      ? (
-          await Promise.all(
-            directConnectorIds.map((id) =>
-              KnowledgeBaseConnectorModel.findById(id),
-            ),
-          )
-        ).filter(
-          (connector): connector is NonNullable<typeof connector> =>
-            connector !== null,
-        )
+      ? await KnowledgeBaseConnectorModel.findByIds(directConnectorIds)
       : [];
     const visibleDirectConnectors = access
       ? knowledgeSourceAccessControlService.filterConnectors(

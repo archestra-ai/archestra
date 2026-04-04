@@ -963,11 +963,6 @@ async function handleAssignKnowledgeConnectorToKnowledgeBase(params: {
       args.connector_id,
       args.knowledge_base_id,
     );
-    // Assignment can change the connector's effective visibility, so we
-    // eagerly rewrite stored ACLs to keep existing documents/chunks aligned.
-    await knowledgeSourceAccessControlService.refreshConnectorDocumentAccessControlLists(
-      args.connector_id,
-    );
     return successResult(
       `Knowledge connector ${args.connector_id} assigned to knowledge base ${args.knowledge_base_id}`,
     );
@@ -994,11 +989,6 @@ async function handleUnassignKnowledgeConnectorFromKnowledgeBase(params: {
     await KnowledgeBaseConnectorModel.unassignFromKnowledgeBase(
       args.connector_id,
       args.knowledge_base_id,
-    );
-    // Unassignment can change the connector's effective visibility, so we
-    // eagerly rewrite stored ACLs to keep existing documents/chunks aligned.
-    await knowledgeSourceAccessControlService.refreshConnectorDocumentAccessControlLists(
-      args.connector_id,
     );
     return successResult(
       `Knowledge connector ${args.connector_id} unassigned from knowledge base ${args.knowledge_base_id}`,

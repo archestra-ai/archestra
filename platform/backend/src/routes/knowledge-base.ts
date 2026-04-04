@@ -821,12 +821,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await KnowledgeBaseConnectorModel.assignToKnowledgeBase(id, kbId);
       }
 
-      // Assignment can change the connector's effective visibility, so we
-      // eagerly rewrite stored ACLs to keep existing documents/chunks aligned.
-      await knowledgeSourceAccessControlService.refreshConnectorDocumentAccessControlLists(
-        id,
-      );
-
       return reply.send({ success: true });
     },
   );
@@ -859,12 +853,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!success) {
         throw new ApiError(404, "Assignment not found");
       }
-
-      // Unassignment can change the connector's effective visibility, so we
-      // eagerly rewrite stored ACLs to keep existing documents/chunks aligned.
-      await knowledgeSourceAccessControlService.refreshConnectorDocumentAccessControlLists(
-        id,
-      );
 
       return reply.send({ success: true });
     },

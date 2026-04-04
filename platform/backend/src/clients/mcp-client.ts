@@ -177,7 +177,7 @@ const HTTP_CONCURRENCY_LIMIT = 4;
 // want them to age out after inactivity instead of accumulating forever.
 // Fifteen minutes keeps sequential tool calls in an active chat warm while
 // reclaiming abandoned connections on a reasonable operational timescale.
-const ACTIVE_CONNECTION_CACHE_TTL_MS = 15 * 60 * 1000;
+const ACTIVE_CONNECTION_CACHE_TTL_MS = 15 * TimeInMs.Minute;
 const ACTIVE_CONNECTION_CACHE_MAX_SIZE = 500;
 
 const RESOURCE_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 1 day

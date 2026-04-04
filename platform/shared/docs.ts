@@ -37,6 +37,7 @@ export const DocsPage = {
   PlatformObservability: "platform-observability",
   PlatformOpenwebuiExample: "platform-openwebui-example",
   PlatformOrchestrator: "platform-orchestrator",
+  PlatformOverview: "platform-overview",
   PlatformPerformanceBenchmarks: "platform-performance-benchmarks",
   PlatformPrivateRegistry: "platform-private-registry",
   PlatformPydanticExample: "platform-pydantic-example",

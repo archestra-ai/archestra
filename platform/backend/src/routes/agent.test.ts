@@ -20,16 +20,25 @@ describe("agent routes", () => {
   let organizationId: string;
 
   beforeEach(async ({ makeOrganization, makeAdmin, makeMember }) => {
-    user = await makeAdmin();
     const organization = await makeOrganization();
     organizationId = organization.id;
+    user = await makeAdmin();
     await makeMember(user.id, organizationId, { role: "admin" });
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
-      (request as typeof request & { user: unknown }).user = user;
-      (request as typeof request & { organizationId: string }).organizationId =
-        organizationId;
+      (
+        request as typeof request & {
+          user: User;
+          organizationId: string;
+        }
+      ).user = user;
+      (
+        request as typeof request & {
+          user: User;
+          organizationId: string;
+        }
+      ).organizationId = organizationId;
     });
 
     const { default: agentRoutes } = await import("./agent");
@@ -396,5 +405,134 @@ describe("agent routes", () => {
       expect(Array.isArray(agent.tools)).toBe(true);
       expect(Array.isArray(agent.teams)).toBe(true);
     });
+  });
+
+  test("POST /api/agents returns 404 when assigning a hidden connector", async ({
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+    makeTeam,
+    makeUser,
+    makeMember,
+  }) => {
+    const memberUser = await makeUser();
+    await makeMember(memberUser.id, organizationId, { role: "member" });
+    const hiddenOwner = await makeUser();
+    const hiddenTeam = await makeTeam(organizationId, hiddenOwner.id);
+    const kb = await makeKnowledgeBase(organizationId);
+    const hiddenConnector = await makeKnowledgeBaseConnector(
+      kb.id,
+      organizationId,
+      {
+        name: "Hidden Connector",
+        visibility: "team-scoped",
+        teamIds: [hiddenTeam.id],
+      },
+    );
+
+    const memberApp = createFastifyInstance();
+    memberApp.addHook("onRequest", async (request) => {
+      (
+        request as typeof request & {
+          user: User;
+          organizationId: string;
+        }
+      ).user = memberUser;
+      (
+        request as typeof request & {
+          user: User;
+          organizationId: string;
+        }
+      ).organizationId = organizationId;
+    });
+    const { default: agentRoutes } = await import("./agent");
+    await memberApp.register(agentRoutes);
+
+    const response = await memberApp.inject({
+      method: "POST",
+      url: "/api/agents",
+      payload: {
+        name: "Connector Assignment Test Agent",
+        scope: "personal",
+        teams: [],
+        knowledgeBaseIds: [],
+        connectorIds: [hiddenConnector.id],
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({
+      error: {
+        message: `Connector not found: ${hiddenConnector.id}`,
+        type: "api_not_found_error",
+      },
+    });
+
+    await memberApp.close();
+  });
+
+  test("PUT /api/agents/:id returns 404 when updating with a hidden connector", async ({
+    makeAgent,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+    makeTeam,
+    makeUser,
+    makeMember,
+  }) => {
+    const memberUser = await makeUser();
+    await makeMember(memberUser.id, organizationId, { role: "member" });
+    const hiddenOwner = await makeUser();
+    const hiddenTeam = await makeTeam(organizationId, hiddenOwner.id);
+    const kb = await makeKnowledgeBase(organizationId);
+    const hiddenConnector = await makeKnowledgeBaseConnector(
+      kb.id,
+      organizationId,
+      {
+        visibility: "team-scoped",
+        teamIds: [hiddenTeam.id],
+      },
+    );
+    const agent = await makeAgent({
+      organizationId,
+      authorId: memberUser.id,
+      scope: "personal",
+      agentType: "mcp_gateway",
+      teams: [],
+    });
+
+    const memberApp = createFastifyInstance();
+    memberApp.addHook("onRequest", async (request) => {
+      (
+        request as typeof request & {
+          user: User;
+          organizationId: string;
+        }
+      ).user = memberUser;
+      (
+        request as typeof request & {
+          user: User;
+          organizationId: string;
+        }
+      ).organizationId = organizationId;
+    });
+    const { default: agentRoutes } = await import("./agent");
+    await memberApp.register(agentRoutes);
+
+    const response = await memberApp.inject({
+      method: "PUT",
+      url: `/api/agents/${agent.id}`,
+      payload: {
+        connectorIds: [hiddenConnector.id],
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({
+      error: {
+        message: `Connector not found: ${hiddenConnector.id}`,
+        type: "api_not_found_error",
+      },
+    });
+
+    await memberApp.close();
   });
 });

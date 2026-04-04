@@ -12,6 +12,7 @@ import {
   hasAnyAgentTypeReadPermission,
   requireAgentModifyPermission,
 } from "@/auth";
+import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import {
   AgentLabelModel,
   AgentModel,
@@ -362,11 +363,17 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Knowledge bases cannot be assigned to LLM Proxy agents",
           );
         }
+        const knowledgeSourceAccess =
+          await knowledgeSourceAccessControlService.buildAccessControlContext({
+            userId: user.id,
+            organizationId,
+          });
         for (const kbId of body.knowledgeBaseIds) {
-          const kb = await KnowledgeBaseModel.findById(kbId);
-          if (!kb || kb.organizationId !== organizationId) {
-            throw new ApiError(404, `Knowledge base not found: ${kbId}`);
-          }
+          await validateKnowledgeBaseAccess({
+            kbId,
+            organizationId,
+            access: knowledgeSourceAccess,
+          });
         }
       }
 
@@ -378,12 +385,17 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Connectors cannot be assigned to LLM Proxy agents",
           );
         }
+        const knowledgeSourceAccess =
+          await knowledgeSourceAccessControlService.buildAccessControlContext({
+            userId: user.id,
+            organizationId,
+          });
         for (const connectorId of body.connectorIds) {
-          const connector =
-            await KnowledgeBaseConnectorModel.findById(connectorId);
-          if (!connector || connector.organizationId !== organizationId) {
-            throw new ApiError(404, `Connector not found: ${connectorId}`);
-          }
+          await validateConnectorAccess({
+            connectorId,
+            organizationId,
+            access: knowledgeSourceAccess,
+          });
         }
       }
 
@@ -555,11 +567,17 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Knowledge bases cannot be assigned to LLM Proxy agents",
           );
         }
+        const knowledgeSourceAccess =
+          await knowledgeSourceAccessControlService.buildAccessControlContext({
+            userId: user.id,
+            organizationId,
+          });
         for (const kbId of body.knowledgeBaseIds) {
-          const kb = await KnowledgeBaseModel.findById(kbId);
-          if (!kb || kb.organizationId !== organizationId) {
-            throw new ApiError(404, `Knowledge base not found: ${kbId}`);
-          }
+          await validateKnowledgeBaseAccess({
+            kbId,
+            organizationId,
+            access: knowledgeSourceAccess,
+          });
         }
       }
 
@@ -571,12 +589,17 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Connectors cannot be assigned to LLM Proxy agents",
           );
         }
+        const knowledgeSourceAccess =
+          await knowledgeSourceAccessControlService.buildAccessControlContext({
+            userId: user.id,
+            organizationId,
+          });
         for (const connectorId of body.connectorIds) {
-          const connector =
-            await KnowledgeBaseConnectorModel.findById(connectorId);
-          if (!connector || connector.organizationId !== organizationId) {
-            throw new ApiError(404, `Connector not found: ${connectorId}`);
-          }
+          await validateConnectorAccess({
+            connectorId,
+            organizationId,
+            access: knowledgeSourceAccess,
+          });
         }
       }
 
@@ -775,6 +798,52 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default agentRoutes;
+
+async function validateKnowledgeBaseAccess(params: {
+  kbId: string;
+  organizationId: string;
+  access: Awaited<
+    ReturnType<
+      typeof knowledgeSourceAccessControlService.buildAccessControlContext
+    >
+  >;
+}) {
+  const kb = await KnowledgeBaseModel.findById(params.kbId);
+  if (
+    !kb ||
+    kb.organizationId !== params.organizationId ||
+    !knowledgeSourceAccessControlService.canAccessKnowledgeBase(
+      params.access,
+      kb,
+    )
+  ) {
+    throw new ApiError(404, `Knowledge base not found: ${params.kbId}`);
+  }
+}
+
+async function validateConnectorAccess(params: {
+  connectorId: string;
+  organizationId: string;
+  access: Awaited<
+    ReturnType<
+      typeof knowledgeSourceAccessControlService.buildAccessControlContext
+    >
+  >;
+}) {
+  const connector = await KnowledgeBaseConnectorModel.findById(
+    params.connectorId,
+  );
+  if (
+    !connector ||
+    connector.organizationId !== params.organizationId ||
+    !knowledgeSourceAccessControlService.canAccessConnector(
+      params.access,
+      connector,
+    )
+  ) {
+    throw new ApiError(404, `Connector not found: ${params.connectorId}`);
+  }
+}
 
 function parseLabelsParam(
   labels: string | undefined,

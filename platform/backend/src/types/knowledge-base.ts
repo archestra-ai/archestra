@@ -1,13 +1,12 @@
 import { z } from "zod";
 
 /**
- * Knowledge base visibility
+ * Object-level visibility for knowledge sources.
  */
-export const KnowledgeBaseVisibilitySchema = z.enum([
+export const KnowledgeSourceVisibilitySchema = z.enum([
   "org-wide",
   "team-scoped",
-  "auto-sync-permissions",
 ]);
-export type KnowledgeBaseVisibility = z.infer<
-  typeof KnowledgeBaseVisibilitySchema
+export type KnowledgeSourceVisibility = z.infer<
+  typeof KnowledgeSourceVisibilitySchema
 >;

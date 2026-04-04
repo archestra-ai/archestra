@@ -1925,7 +1925,7 @@ export const checkInvitation = <ThrowOnError extends boolean = false>(options: O
  *
  * Authorization:
  *
- * `knowledgeBase:read`: View knowledge bases and connectors
+ * `knowledgeSource:read`: View knowledge bases and connectors
  */
 export const getKnowledgeBases = <ThrowOnError extends boolean = false>(options?: Options<GetKnowledgeBasesData, ThrowOnError>) => (options?.client ?? client).get<GetKnowledgeBasesResponses, GetKnowledgeBasesErrors, ThrowOnError>({ url: '/api/knowledge-bases', ...options });
 
@@ -1938,7 +1938,7 @@ export const getKnowledgeBases = <ThrowOnError extends boolean = false>(options?
  *
  * Authorization:
  *
- * `knowledgeBase:create`: Create knowledge bases and connectors
+ * `knowledgeSource:create`: Create knowledge bases and connectors
  */
 export const createKnowledgeBase = <ThrowOnError extends boolean = false>(options: Options<CreateKnowledgeBaseData, ThrowOnError>) => (options.client ?? client).post<CreateKnowledgeBaseResponses, CreateKnowledgeBaseErrors, ThrowOnError>({
     url: '/api/knowledge-bases',
@@ -1958,7 +1958,7 @@ export const createKnowledgeBase = <ThrowOnError extends boolean = false>(option
  *
  * Authorization:
  *
- * `knowledgeBase:delete`: Delete knowledge bases and connectors
+ * `knowledgeSource:delete`: Delete knowledge bases and connectors
  */
 export const deleteKnowledgeBase = <ThrowOnError extends boolean = false>(options: Options<DeleteKnowledgeBaseData, ThrowOnError>) => (options.client ?? client).delete<DeleteKnowledgeBaseResponses, DeleteKnowledgeBaseErrors, ThrowOnError>({ url: '/api/knowledge-bases/{id}', ...options });
 
@@ -1971,7 +1971,7 @@ export const deleteKnowledgeBase = <ThrowOnError extends boolean = false>(option
  *
  * Authorization:
  *
- * `knowledgeBase:read`: View knowledge bases and connectors
+ * `knowledgeSource:read`: View knowledge bases and connectors
  */
 export const getKnowledgeBase = <ThrowOnError extends boolean = false>(options: Options<GetKnowledgeBaseData, ThrowOnError>) => (options.client ?? client).get<GetKnowledgeBaseResponses, GetKnowledgeBaseErrors, ThrowOnError>({ url: '/api/knowledge-bases/{id}', ...options });
 
@@ -1984,7 +1984,7 @@ export const getKnowledgeBase = <ThrowOnError extends boolean = false>(options: 
  *
  * Authorization:
  *
- * `knowledgeBase:update`: Modify knowledge bases and connectors
+ * `knowledgeSource:update`: Modify knowledge bases and connectors
  */
 export const updateKnowledgeBase = <ThrowOnError extends boolean = false>(options: Options<UpdateKnowledgeBaseData, ThrowOnError>) => (options.client ?? client).put<UpdateKnowledgeBaseResponses, UpdateKnowledgeBaseErrors, ThrowOnError>({
     url: '/api/knowledge-bases/{id}',
@@ -2004,7 +2004,7 @@ export const updateKnowledgeBase = <ThrowOnError extends boolean = false>(option
  *
  * Authorization:
  *
- * `knowledgeBase:read`: View knowledge bases and connectors
+ * `knowledgeSource:read`: View knowledge bases and connectors
  */
 export const getKnowledgeBaseHealth = <ThrowOnError extends boolean = false>(options: Options<GetKnowledgeBaseHealthData, ThrowOnError>) => (options.client ?? client).get<GetKnowledgeBaseHealthResponses, GetKnowledgeBaseHealthErrors, ThrowOnError>({ url: '/api/knowledge-bases/{id}/health', ...options });
 
@@ -2017,7 +2017,7 @@ export const getKnowledgeBaseHealth = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `knowledgeBase:read`: View knowledge bases and connectors
+ * `knowledgeSource:read`: View knowledge bases and connectors
  */
 export const getConnectors = <ThrowOnError extends boolean = false>(options?: Options<GetConnectorsData, ThrowOnError>) => (options?.client ?? client).get<GetConnectorsResponses, GetConnectorsErrors, ThrowOnError>({ url: '/api/connectors', ...options });
 
@@ -2030,7 +2030,7 @@ export const getConnectors = <ThrowOnError extends boolean = false>(options?: Op
  *
  * Authorization:
  *
- * `knowledgeBase:create`: Create knowledge bases and connectors
+ * `knowledgeSource:create`: Create knowledge bases and connectors
  */
 export const createConnector = <ThrowOnError extends boolean = false>(options: Options<CreateConnectorData, ThrowOnError>) => (options.client ?? client).post<CreateConnectorResponses, CreateConnectorErrors, ThrowOnError>({
     url: '/api/connectors',
@@ -2050,7 +2050,7 @@ export const createConnector = <ThrowOnError extends boolean = false>(options: O
  *
  * Authorization:
  *
- * `knowledgeBase:delete`: Delete knowledge bases and connectors
+ * `knowledgeSource:delete`: Delete knowledge bases and connectors
  */
 export const deleteConnector = <ThrowOnError extends boolean = false>(options: Options<DeleteConnectorData, ThrowOnError>) => (options.client ?? client).delete<DeleteConnectorResponses, DeleteConnectorErrors, ThrowOnError>({ url: '/api/connectors/{id}', ...options });
 
@@ -2063,7 +2063,7 @@ export const deleteConnector = <ThrowOnError extends boolean = false>(options: O
  *
  * Authorization:
  *
- * `knowledgeBase:read`: View knowledge bases and connectors
+ * `knowledgeSource:read`: View knowledge bases and connectors
  */
 export const getConnector = <ThrowOnError extends boolean = false>(options: Options<GetConnectorData, ThrowOnError>) => (options.client ?? client).get<GetConnectorResponses, GetConnectorErrors, ThrowOnError>({ url: '/api/connectors/{id}', ...options });
 
@@ -2076,7 +2076,7 @@ export const getConnector = <ThrowOnError extends boolean = false>(options: Opti
  *
  * Authorization:
  *
- * `knowledgeBase:update`: Modify knowledge bases and connectors
+ * `knowledgeSource:update`: Modify knowledge bases and connectors
  */
 export const updateConnector = <ThrowOnError extends boolean = false>(options: Options<UpdateConnectorData, ThrowOnError>) => (options.client ?? client).put<UpdateConnectorResponses, UpdateConnectorErrors, ThrowOnError>({
     url: '/api/connectors/{id}',
@@ -2096,7 +2096,7 @@ export const updateConnector = <ThrowOnError extends boolean = false>(options: O
  *
  * Authorization:
  *
- * `knowledgeBase:update`: Modify knowledge bases and connectors
+ * `knowledgeSource:update`: Modify knowledge bases and connectors
  */
 export const syncConnector = <ThrowOnError extends boolean = false>(options: Options<SyncConnectorData, ThrowOnError>) => (options.client ?? client).post<SyncConnectorResponses, SyncConnectorErrors, ThrowOnError>({ url: '/api/connectors/{id}/sync', ...options });
 
@@ -2109,7 +2109,7 @@ export const syncConnector = <ThrowOnError extends boolean = false>(options: Opt
  *
  * Authorization:
  *
- * `knowledgeBase:update`: Modify knowledge bases and connectors
+ * `knowledgeSource:update`: Modify knowledge bases and connectors
  */
 export const forceResyncConnector = <ThrowOnError extends boolean = false>(options: Options<ForceResyncConnectorData, ThrowOnError>) => (options.client ?? client).post<ForceResyncConnectorResponses, ForceResyncConnectorErrors, ThrowOnError>({ url: '/api/connectors/{id}/force-resync', ...options });
 
@@ -2122,7 +2122,7 @@ export const forceResyncConnector = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `knowledgeBase:read`: View knowledge bases and connectors
+ * `knowledgeSource:read`: View knowledge bases and connectors
  */
 export const testConnectorConnection = <ThrowOnError extends boolean = false>(options: Options<TestConnectorConnectionData, ThrowOnError>) => (options.client ?? client).post<TestConnectorConnectionResponses, TestConnectorConnectionErrors, ThrowOnError>({ url: '/api/connectors/{id}/test', ...options });
 
@@ -2135,7 +2135,7 @@ export const testConnectorConnection = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `knowledgeBase:read`: View knowledge bases and connectors
+ * `knowledgeSource:read`: View knowledge bases and connectors
  */
 export const getConnectorKnowledgeBases = <ThrowOnError extends boolean = false>(options: Options<GetConnectorKnowledgeBasesData, ThrowOnError>) => (options.client ?? client).get<GetConnectorKnowledgeBasesResponses, GetConnectorKnowledgeBasesErrors, ThrowOnError>({ url: '/api/connectors/{id}/knowledge-bases', ...options });
 
@@ -2148,7 +2148,7 @@ export const getConnectorKnowledgeBases = <ThrowOnError extends boolean = false>
  *
  * Authorization:
  *
- * `knowledgeBase:update`: Modify knowledge bases and connectors
+ * `knowledgeSource:update`: Modify knowledge bases and connectors
  */
 export const assignConnectorToKnowledgeBases = <ThrowOnError extends boolean = false>(options: Options<AssignConnectorToKnowledgeBasesData, ThrowOnError>) => (options.client ?? client).post<AssignConnectorToKnowledgeBasesResponses, AssignConnectorToKnowledgeBasesErrors, ThrowOnError>({
     url: '/api/connectors/{id}/knowledge-bases',
@@ -2168,7 +2168,7 @@ export const assignConnectorToKnowledgeBases = <ThrowOnError extends boolean = f
  *
  * Authorization:
  *
- * `knowledgeBase:update`: Modify knowledge bases and connectors
+ * `knowledgeSource:update`: Modify knowledge bases and connectors
  */
 export const unassignConnectorFromKnowledgeBase = <ThrowOnError extends boolean = false>(options: Options<UnassignConnectorFromKnowledgeBaseData, ThrowOnError>) => (options.client ?? client).delete<UnassignConnectorFromKnowledgeBaseResponses, UnassignConnectorFromKnowledgeBaseErrors, ThrowOnError>({ url: '/api/connectors/{id}/knowledge-bases/{kbId}', ...options });
 
@@ -2181,7 +2181,7 @@ export const unassignConnectorFromKnowledgeBase = <ThrowOnError extends boolean 
  *
  * Authorization:
  *
- * `knowledgeBase:read`: View knowledge bases and connectors
+ * `knowledgeSource:read`: View knowledge bases and connectors
  */
 export const getConnectorRuns = <ThrowOnError extends boolean = false>(options: Options<GetConnectorRunsData, ThrowOnError>) => (options.client ?? client).get<GetConnectorRunsResponses, GetConnectorRunsErrors, ThrowOnError>({ url: '/api/connectors/{id}/runs', ...options });
 
@@ -2194,7 +2194,7 @@ export const getConnectorRuns = <ThrowOnError extends boolean = false>(options: 
  *
  * Authorization:
  *
- * `knowledgeBase:read`: View knowledge bases and connectors
+ * `knowledgeSource:read`: View knowledge bases and connectors
  */
 export const getConnectorRun = <ThrowOnError extends boolean = false>(options: Options<GetConnectorRunData, ThrowOnError>) => (options.client ?? client).get<GetConnectorRunResponses, GetConnectorRunErrors, ThrowOnError>({ url: '/api/connectors/{id}/runs/{runId}', ...options });
 

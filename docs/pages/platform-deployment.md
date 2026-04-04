@@ -1,7 +1,7 @@
 ---
 title: Deployment
 category: Archestra Platform
-order: 2
+order: 3
 ---
 
 <!--

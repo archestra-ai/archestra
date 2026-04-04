@@ -1,9 +1,34 @@
+import type { APIRequestContext, APIResponse } from "@playwright/test";
 import {
   expect,
   LLM_PROVIDER_API_KEYS_AVAILABLE_ROUTE,
   LLM_PROVIDER_API_KEYS_ROUTE,
   test,
 } from "./fixtures";
+
+async function dropEmbeddingConfig(params: {
+  request: APIRequestContext;
+  makeApiRequest: (params: {
+    request: APIRequestContext;
+    method: "post";
+    urlSuffix: string;
+    ignoreStatusCheck?: boolean;
+  }) => Promise<APIResponse>;
+  expectLocked?: boolean;
+}) {
+  const response = await params.makeApiRequest({
+    request: params.request,
+    method: "post",
+    urlSuffix: "/api/organization/knowledge-settings/drop-embedding",
+    ignoreStatusCheck: !params.expectLocked,
+  });
+  if (params.expectLocked) {
+    expect(response.ok()).toBe(true);
+    return;
+  }
+
+  expect([200, 400]).toContain(response.status());
+}
 
 test.describe("Knowledge Settings API", () => {
   // Run serially since tests modify shared organization settings
@@ -71,6 +96,8 @@ test.describe("Knowledge Settings API", () => {
 
     expect(openAiKey).toBeTruthy();
 
+    await dropEmbeddingConfig({ request, makeApiRequest });
+
     await syncModels(request);
 
     const modelsResponse = await getModels(request);
@@ -111,9 +138,12 @@ test.describe("Knowledge Settings API", () => {
       embeddingModel: "text-embedding-3-small",
     });
     expect(sameModelResponse.ok()).toBe(true);
-    // Cleanup: clear the key reference first (unlocks), then reset model
-    await updateKnowledgeSettings(request, {
-      embeddingChatApiKeyId: null,
+    // Cleanup via the dedicated drop endpoint, since the config is locked once
+    // both embedding key and model are set.
+    await dropEmbeddingConfig({
+      request,
+      makeApiRequest,
+      expectLocked: true,
     });
   });
 

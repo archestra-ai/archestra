@@ -21,6 +21,7 @@ import { z } from "zod";
 import {
   buildUserAccessControlList,
   didKnowledgeSourceAclInputsChange,
+  isTeamScopedWithoutTeams,
   knowledgeSourceAccessControlService,
   queryService,
 } from "@/knowledge-base";
@@ -31,7 +32,6 @@ import {
   AgentModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
-  TeamModel,
   UserModel,
 } from "@/models";
 import {
@@ -565,14 +565,11 @@ async function handleQueryKnowledgeSources(params: {
 
     let userAcl: AclEntry[] = ["org:*"];
     if (context.userId) {
-      const [user, teamIds] = await Promise.all([
-        UserModel.getById(context.userId),
-        TeamModel.getUserTeamIds(context.userId),
-      ]);
+      const user = await UserModel.getById(context.userId);
       if (user?.email) {
         userAcl = buildUserAccessControlList({
           userEmail: user.email,
-          teamIds,
+          teamIds: access?.teamIds ?? [],
         });
       }
     }
@@ -741,6 +738,14 @@ async function handleCreateKnowledgeConnector(params: {
       return errorResult("Organization context not available");
     }
 
+    const teamIds = args.team_ids ?? [];
+    const visibility = args.visibility ?? "org-wide";
+    if (isTeamScopedWithoutTeams({ visibility, teamIds })) {
+      return errorResult(
+        "At least one team must be selected for team-scoped connectors",
+      );
+    }
+
     const connector = await KnowledgeBaseConnectorModel.create(
       InsertKnowledgeBaseConnectorSchema.parse({
         organizationId: context.organizationId,
@@ -882,6 +887,18 @@ async function handleUpdateKnowledgeConnector(params: {
         ))
     ) {
       return errorResult(`Knowledge connector not found: ${args.id}`);
+    }
+    const nextVisibility = updates.visibility ?? existingConnector.visibility;
+    const nextTeamIds = updates.teamIds ?? existingConnector.teamIds;
+    if (
+      isTeamScopedWithoutTeams({
+        visibility: nextVisibility,
+        teamIds: nextTeamIds,
+      })
+    ) {
+      return errorResult(
+        "At least one team must be selected for team-scoped connectors",
+      );
     }
     const connector = await KnowledgeBaseConnectorModel.update(
       args.id,

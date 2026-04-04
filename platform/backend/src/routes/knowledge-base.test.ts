@@ -403,6 +403,36 @@ describe("knowledge base routes", () => {
     });
   });
 
+  describe("POST /api/connectors", () => {
+    test("rejects team-scoped connectors without teamIds", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/connectors",
+        payload: {
+          name: "Invalid Scoped Connector",
+          connectorType: "jira",
+          visibility: "team-scoped",
+          teamIds: [],
+          config: {
+            type: "jira",
+            jiraBaseUrl: "https://test.atlassian.net",
+            isCloud: true,
+            projectKey: "TEST",
+          },
+          credentials: {
+            email: "user@example.com",
+            apiToken: "token",
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain(
+        "At least one team must be selected for team-scoped connectors",
+      );
+    });
+  });
+
   describe("GET /api/connectors", () => {
     test("lists connectors for the organization", async () => {
       await KnowledgeBaseConnectorModel.create({
@@ -623,6 +653,36 @@ describe("knowledge base routes", () => {
       });
 
       expect(response.statusCode).toBe(404);
+    });
+
+    test("rejects team-scoped updates without teamIds", async () => {
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Invalid Update Connector",
+        connectorType: "jira",
+        visibility: "org-wide",
+        teamIds: [],
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://test.atlassian.net",
+          isCloud: true,
+          projectKey: "TEST",
+        },
+      });
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: {
+          visibility: "team-scoped",
+          teamIds: [],
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain(
+        "At least one team must be selected for team-scoped connectors",
+      );
     });
   });
 

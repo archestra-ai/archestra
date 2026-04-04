@@ -482,15 +482,73 @@ describe("KbChunkModel", () => {
         },
       ]);
 
-      await KbChunkModel.updateAclByConnector(targetConnector.id, [
-        "team:alpha",
-      ]);
+      const updatedCount = await KbChunkModel.updateAclByConnector(
+        targetConnector.id,
+        ["team:alpha"],
+      );
+
+      expect(updatedCount).toBe(1);
 
       const targetChunks = await KbChunkModel.findByDocument(targetDoc.id);
       const otherChunks = await KbChunkModel.findByDocument(otherDoc.id);
 
       expect(targetChunks.map((chunk) => chunk.acl)).toEqual([["team:alpha"]]);
       expect(otherChunks.map((chunk) => chunk.acl)).toEqual([["org:*"]]);
+    });
+
+    test("skips chunks that already have the target ACL", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const targetConnector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        name: "Target Connector",
+      });
+
+      const unchangedDoc = await KbDocumentModel.create(
+        createDocumentData(targetConnector.id, org.id, {
+          acl: ["team:alpha"],
+        }),
+      );
+      const changedDoc = await KbDocumentModel.create(
+        createDocumentData(targetConnector.id, org.id, {
+          acl: ["org:*"],
+        }),
+      );
+
+      await KbChunkModel.insertMany([
+        {
+          documentId: unchangedDoc.id,
+          content: "Already correct chunk",
+          chunkIndex: 0,
+          acl: ["team:alpha"],
+        },
+        {
+          documentId: changedDoc.id,
+          content: "Needs rewrite chunk",
+          chunkIndex: 0,
+          acl: ["org:*"],
+        },
+      ]);
+
+      const updatedCount = await KbChunkModel.updateAclByConnector(
+        targetConnector.id,
+        ["team:alpha"],
+      );
+
+      expect(updatedCount).toBe(1);
+
+      const unchangedChunks = await KbChunkModel.findByDocument(
+        unchangedDoc.id,
+      );
+      const changedChunks = await KbChunkModel.findByDocument(changedDoc.id);
+
+      expect(unchangedChunks.map((chunk) => chunk.acl)).toEqual([
+        ["team:alpha"],
+      ]);
+      expect(changedChunks.map((chunk) => chunk.acl)).toEqual([["team:alpha"]]);
     });
   });
 

@@ -463,4 +463,53 @@ describe("KbDocumentModel", () => {
       expect(count).toBe(2);
     });
   });
+
+  describe("updateAclByConnector", () => {
+    test("updates only documents whose ACL differs from the target ACL", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const targetConnector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        name: "Target Connector",
+      });
+      const otherConnector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        name: "Other Connector",
+      });
+
+      const unchangedDoc = await KbDocumentModel.create(
+        createDocumentData(targetConnector.id, org.id, {
+          acl: ["team:alpha"],
+        }),
+      );
+      const changedDoc = await KbDocumentModel.create(
+        createDocumentData(targetConnector.id, org.id, {
+          acl: ["org:*"],
+        }),
+      );
+      const otherDoc = await KbDocumentModel.create(
+        createDocumentData(otherConnector.id, org.id, {
+          acl: ["org:*"],
+        }),
+      );
+
+      const updatedCount = await KbDocumentModel.updateAclByConnector(
+        targetConnector.id,
+        ["team:alpha"],
+      );
+
+      expect(updatedCount).toBe(1);
+      expect((await KbDocumentModel.findById(unchangedDoc.id))?.acl).toEqual([
+        "team:alpha",
+      ]);
+      expect((await KbDocumentModel.findById(changedDoc.id))?.acl).toEqual([
+        "team:alpha",
+      ]);
+      expect((await KbDocumentModel.findById(otherDoc.id))?.acl).toEqual([
+        "org:*",
+      ]);
+    });
+  });
 });

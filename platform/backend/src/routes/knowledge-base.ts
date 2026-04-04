@@ -8,6 +8,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
   didKnowledgeSourceAclInputsChange,
+  isTeamScopedWithoutTeams,
   knowledgeSourceAccessControlService,
 } from "@/knowledge-base";
 import { getConnector } from "@/knowledge-base/connectors/registry";
@@ -448,6 +449,15 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body, organizationId, user }, reply) => {
+      const teamIds = body.teamIds ?? [];
+      const visibility = body.visibility ?? "org-wide";
+      if (isTeamScopedWithoutTeams({ visibility, teamIds })) {
+        throw new ApiError(
+          400,
+          "At least one team must be selected for team-scoped connectors",
+        );
+      }
+
       // Validate connector config
       const connectorImpl = getConnector(body.connectorType);
       const validation = await connectorImpl.validateConfig(body.config);
@@ -576,6 +586,20 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const { credentials: _, ...updateData } = body;
+      const nextVisibility = updateData.visibility ?? connector.visibility;
+      const nextTeamIds = updateData.teamIds ?? connector.teamIds;
+      if (
+        isTeamScopedWithoutTeams({
+          visibility: nextVisibility,
+          teamIds: nextTeamIds,
+        })
+      ) {
+        throw new ApiError(
+          400,
+          "At least one team must be selected for team-scoped connectors",
+        );
+      }
+
       // Reset checkpoint when config changes to force a full re-sync
       // (filters, queries, inclusion/exclusion criteria affect which items get synced)
       const updated = await KnowledgeBaseConnectorModel.update(id, {

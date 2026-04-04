@@ -70,6 +70,13 @@ export function didKnowledgeSourceAclInputsChange(params: {
   );
 }
 
+export function isTeamScopedWithoutTeams(params: {
+  visibility: KnowledgeSourceVisibility;
+  teamIds: string[];
+}): boolean {
+  return params.visibility === "team-scoped" && params.teamIds.length === 0;
+}
+
 class KnowledgeSourceAccessControlService {
   async buildAccessControlContext(params: {
     userId: string;

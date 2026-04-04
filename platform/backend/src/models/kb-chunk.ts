@@ -50,14 +50,24 @@ class KbChunkModel {
   static async updateAclByConnector(
     connectorId: string,
     acl: AclEntry[],
-  ): Promise<void> {
-    await db.execute(sql`
-      UPDATE ${schema.kbChunksTable} AS chunk
-      SET acl = ${JSON.stringify(acl)}::jsonb
-      FROM ${schema.kbDocumentsTable} AS document
-      WHERE chunk.document_id = document.id
-        AND document.connector_id = ${connectorId}
+  ): Promise<number> {
+    // Skip rows that already have the target ACL to avoid unnecessary rewrites,
+    // WAL churn, and vacuum work when connector visibility is re-applied.
+    const result = await db.execute(sql`
+      WITH updated AS (
+        UPDATE ${schema.kbChunksTable} AS chunk
+        SET acl = ${JSON.stringify(acl)}::jsonb
+        FROM ${schema.kbDocumentsTable} AS document
+        WHERE chunk.document_id = document.id
+          AND document.connector_id = ${connectorId}
+          AND chunk.acl IS DISTINCT FROM ${JSON.stringify(acl)}::jsonb
+        RETURNING 1
+      )
+      SELECT COUNT(*)::int AS count FROM updated
     `);
+
+    const count = result.rows[0]?.count;
+    return typeof count === "number" ? count : Number(count ?? 0);
   }
 
   static async vectorSearch(params: {

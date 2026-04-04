@@ -7,5 +7,6 @@ export {
   buildDocumentAccessControlList,
   buildUserAccessControlList,
   didKnowledgeSourceAclInputsChange,
+  isTeamScopedWithoutTeams,
   knowledgeSourceAccessControlService,
 } from "./source-access-control";

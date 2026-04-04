@@ -9,7 +9,7 @@ import {
   knowledgeSourceAccessControlService,
   queryService,
 } from "@/knowledge-base";
-import { KbChunkModel, KbDocumentModel } from "@/models";
+import { KbChunkModel, KbDocumentModel, TeamModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent, KnowledgeBase, KnowledgeBaseConnector } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -95,6 +95,7 @@ describe("knowledge-management tool execution", () => {
       const querySpy = vi
         .spyOn(queryService, "query")
         .mockResolvedValueOnce(mockResults as any);
+      const teamIdsSpy = vi.spyOn(TeamModel, "getUserTeamIds");
 
       const contextWithOrg: ArchestraContext = {
         agent: { id: agentWithKb.id, name: agentWithKb.name },
@@ -123,6 +124,7 @@ describe("knowledge-management tool execution", () => {
       expect(callArgs.organizationId).toBe(org.id);
       expect(callArgs.queryText).toBe("relevant document");
       expect(callArgs.limit).toBe(10);
+      expect(teamIdsSpy).toHaveBeenCalledOnce();
 
       querySpy.mockRestore();
     });
@@ -689,6 +691,29 @@ describe("knowledge-management tool execution", () => {
       );
     });
 
+    test("create_knowledge_connector rejects team-scoped connectors without team_ids", async () => {
+      const result = await executeArchestraTool(
+        t("create_knowledge_connector"),
+        {
+          name: "Invalid Scoped Connector",
+          connector_type: "jira",
+          visibility: "team-scoped",
+          team_ids: [],
+          config: {
+            jiraBaseUrl: "https://test.atlassian.net",
+            isCloud: true,
+            projectKey: "TEST",
+          },
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "At least one team must be selected for team-scoped connectors",
+      );
+    });
+
     test("get_knowledge_connectors returns empty list", async () => {
       const result = await executeArchestraTool(
         t("get_knowledge_connectors"),
@@ -904,6 +929,32 @@ describe("knowledge-management tool execution", () => {
 
       expect(result.isError).toBe(false);
       expect(refreshSpy).not.toHaveBeenCalled();
+    });
+
+    test("update_knowledge_connector rejects team-scoped connectors without team_ids", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const kb = await makeKnowledgeBase(mockContext.organizationId!);
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        mockContext.organizationId!,
+      );
+
+      const result = await executeArchestraTool(
+        t("update_knowledge_connector"),
+        {
+          id: connector.id,
+          visibility: "team-scoped",
+          team_ids: [],
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "At least one team must be selected for team-scoped connectors",
+      );
     });
   });
 

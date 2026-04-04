@@ -1,10 +1,10 @@
+import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import {
   KbChunkModel,
   KbDocumentModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
 } from "@/models";
-import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";

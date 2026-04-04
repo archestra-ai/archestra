@@ -499,24 +499,37 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   );
                 }
 
-                // Emit data-tool-ui-start synchronously in onChunk so it
-                // arrives right after tool-input-start, before any deltas.
+                // Collect data-tool-ui-start payloads in onChunk so they can
+                // be injected into the merged stream right after the matching
+                // tool-input-start event. Writing directly to the outer writer
+                // here would race ahead of the inner toUIMessageStream pipeline
+                // (which hasn't emitted "start" or "tool-input-start" yet),
+                // causing tool UI placeholders to appear out of order — especially
+                // with reasoning models that emit all tool calls in a burst.
+                const pendingToolUiStarts = new Map<
+                  string,
+                  {
+                    toolCallId: string;
+                    toolName: string;
+                    uiResourceUri: string;
+                    html?: string;
+                    csp?: ToolUiResourceData["csp"];
+                    permissions?: ToolUiResourceData["permissions"];
+                  }
+                >();
                 streamTextConfig.onChunk = ({ chunk }) => {
                   if (chunk.type === "tool-input-start" && chunk.toolName) {
                     const prefetched = prefetchedUiResources.get(
                       chunk.toolName,
                     );
                     if (prefetched) {
-                      writer.write({
-                        type: "data-tool-ui-start",
-                        data: {
-                          toolCallId: chunk.id,
-                          toolName: chunk.toolName,
-                          uiResourceUri: toolUiResourceUris[chunk.toolName],
-                          html: prefetched.html,
-                          csp: prefetched.csp,
-                          permissions: prefetched.permissions,
-                        },
+                      pendingToolUiStarts.set(chunk.id, {
+                        toolCallId: chunk.id,
+                        toolName: chunk.toolName,
+                        uiResourceUri: toolUiResourceUris[chunk.toolName],
+                        html: prefetched.html,
+                        csp: prefetched.csp,
+                        permissions: prefetched.permissions,
                       });
                     }
                   }
@@ -604,110 +617,140 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 }
 
                 const assistantMessageId = randomUUID();
-                writer.merge(
-                  result.toUIMessageStream({
-                    generateMessageId: () => assistantMessageId,
-                    originalMessages: messages as UIMessage[],
-                    onError: (error) => {
-                      // Claim persistence before the async work below starts,
-                      // otherwise onFinish can race and also persist (duplicates).
-                      const shouldPersist =
-                        !messagesPersisted && !!conversationId;
-                      if (shouldPersist) {
-                        messagesPersisted = true;
-                      }
 
-                      (async () => {
-                        logger.error(
-                          {
-                            error,
-                            conversationId,
-                            agentId,
-                          },
-                          "Chat stream error occurred",
-                        );
+                // Pipe the inner stream through a transform that injects
+                // data-tool-ui-start right after each tool-input-start chunk.
+                // This guarantees correct ordering regardless of how fast the
+                // LLM produces chunks (reasoning models emit them in bursts).
+                const innerStream = result.toUIMessageStream({
+                  generateMessageId: () => assistantMessageId,
+                  originalMessages: messages as UIMessage[],
+                  onError: (error) => {
+                    // Claim persistence before the async work below starts,
+                    // otherwise onFinish can race and also persist (duplicates).
+                    const shouldPersist =
+                      !messagesPersisted && !!conversationId;
+                    if (shouldPersist) {
+                      messagesPersisted = true;
+                    }
 
-                        // Persist messages despite error so they have a valid ID for editing
-                        if (shouldPersist) {
-                          try {
-                            await persistNewMessages(
-                              conversationId,
-                              messages,
-                              "onError",
-                            );
-                          } catch (persistError) {
-                            // Log persistence error but don't prevent the error response
-                            logger.error(
-                              { persistError, conversationId },
-                              "Failed to persist messages during error handling",
-                            );
-                          }
-                        }
-                      })().catch((err) => {
-                        // Log any errors from the async IIFE but don't crash
-                        logger.error(
-                          { err },
-                          "Unexpected error in onError async handler",
-                        );
-                      });
-
-                      // Use pre-built error from subagent if available (preserves correct provider),
-                      // otherwise map the error with the current provider
-                      const mappedError: ChatErrorResponse =
-                        error instanceof ProviderError
-                          ? error.chatErrorResponse
-                          : mapProviderError(error, provider);
-                      const traceCtx = getActiveTraceContext();
-
-                      logger.info(
+                    (async () => {
+                      logger.error(
                         {
-                          mappedError,
-                          originalErrorType:
-                            error instanceof Error ? error.name : typeof error,
-                          willBeSentToFrontend: true,
+                          error,
+                          conversationId,
+                          agentId,
                         },
-                        "Returning mapped error to frontend via stream",
+                        "Chat stream error occurred",
                       );
 
-                      // mapProviderError safely serializes raw errors, but add defensive try-catch
-                      try {
-                        return JSON.stringify({ ...mappedError, ...traceCtx });
-                      } catch (stringifyError) {
-                        logger.error(
-                          { stringifyError, errorCode: mappedError.code },
-                          "Failed to stringify mapped error, returning minimal error",
-                        );
-                        // Return a minimal error response without the raw error
-                        return JSON.stringify({
-                          code: mappedError.code,
-                          message: mappedError.message,
-                          isRetryable: mappedError.isRetryable,
-                          ...traceCtx,
-                        });
-                      }
-                    },
-                    onFinish: async ({ messages: finalMessages }) => {
-                      removeAbortListeners();
-
-                      // Only persist if not already persisted by onError
-                      if (!messagesPersisted && conversationId) {
+                      // Persist messages despite error so they have a valid ID for editing
+                      if (shouldPersist) {
                         try {
                           await persistNewMessages(
                             conversationId,
-                            finalMessages,
-                            "onFinish",
+                            messages,
+                            "onError",
                           );
-                          messagesPersisted = true;
-                        } catch (error) {
+                        } catch (persistError) {
+                          // Log persistence error but don't prevent the error response
                           logger.error(
-                            { error, conversationId },
-                            "Failed to persist messages during onFinish",
+                            { persistError, conversationId },
+                            "Failed to persist messages during error handling",
                           );
+                        }
+                      }
+                    })().catch((err) => {
+                      // Log any errors from the async IIFE but don't crash
+                      logger.error(
+                        { err },
+                        "Unexpected error in onError async handler",
+                      );
+                    });
+
+                    // Use pre-built error from subagent if available (preserves correct provider),
+                    // otherwise map the error with the current provider
+                    const mappedError: ChatErrorResponse =
+                      error instanceof ProviderError
+                        ? error.chatErrorResponse
+                        : mapProviderError(error, provider);
+                    const traceCtx = getActiveTraceContext();
+
+                    logger.info(
+                      {
+                        mappedError,
+                        originalErrorType:
+                          error instanceof Error ? error.name : typeof error,
+                        willBeSentToFrontend: true,
+                      },
+                      "Returning mapped error to frontend via stream",
+                    );
+
+                    // mapProviderError safely serializes raw errors, but add defensive try-catch
+                    try {
+                      return JSON.stringify({ ...mappedError, ...traceCtx });
+                    } catch (stringifyError) {
+                      logger.error(
+                        { stringifyError, errorCode: mappedError.code },
+                        "Failed to stringify mapped error, returning minimal error",
+                      );
+                      // Return a minimal error response without the raw error
+                      return JSON.stringify({
+                        code: mappedError.code,
+                        message: mappedError.message,
+                        isRetryable: mappedError.isRetryable,
+                        ...traceCtx,
+                      });
+                    }
+                  },
+                  onFinish: async ({ messages: finalMessages }) => {
+                    removeAbortListeners();
+
+                    // Only persist if not already persisted by onError
+                    if (!messagesPersisted && conversationId) {
+                      try {
+                        await persistNewMessages(
+                          conversationId,
+                          finalMessages,
+                          "onFinish",
+                        );
+                        messagesPersisted = true;
+                      } catch (error) {
+                        logger.error(
+                          { error, conversationId },
+                          "Failed to persist messages during onFinish",
+                        );
+                      }
+                    }
+                  },
+                });
+
+                // Inject data-tool-ui-start right after each tool-input-start
+                // so the frontend receives them in the correct order.
+                const uiInjectedStream = innerStream.pipeThrough(
+                  new TransformStream({
+                    transform(chunk, controller) {
+                      controller.enqueue(chunk);
+                      if (
+                        chunk.type === "tool-input-start" &&
+                        chunk.toolCallId
+                      ) {
+                        const pending = pendingToolUiStarts.get(
+                          chunk.toolCallId,
+                        );
+                        if (pending) {
+                          pendingToolUiStarts.delete(chunk.toolCallId);
+                          controller.enqueue({
+                            type: "data-tool-ui-start",
+                            data: pending,
+                          });
                         }
                       }
                     },
                   }),
                 );
+
+                writer.merge(uiInjectedStream);
 
                 // Wait for the stream to complete and get usage data.
                 // Catch NoOutputGeneratedError (thrown when provider errors

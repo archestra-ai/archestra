@@ -147,6 +147,44 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "No GPL/AGPL/Unknown licenses found in dependencies." >> $GITHUB_STEP_SUMMARY
 
+  supply-chain-policy:
+    name: Supply Chain Policy
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Enforce image pinning and download verification policy
+        run: python3 .github/scripts/check-supply-chain-policy.py
+
+  dependency-review:
+    name: Dependency Review
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Dependency review
+        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
+        with:
+          fail-on-severity: high
+          # NOTE: we don't use the license checker here as we already have our own script
+          # platform/standalone-scripts/license-check.ts (see license-compliance-check job above)
+          # allow-licenses: MIT
+          license-check: false
+          comment-summary-in-pr: on-failure
+
   # Optional checks: runs the full platform linting + e2e tests on every PR commit.
   # Not a required status check — PRs can merge without this passing (merge queue re-runs as required).
   platform-linting-and-tests-pr:

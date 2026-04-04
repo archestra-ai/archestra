@@ -2,11 +2,11 @@ import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock the config module
-vi.mock("@/lib/config", () => ({
+vi.mock("@/lib/config/config", () => ({
   getBackendBaseUrl: vi.fn(() => "http://localhost:9000"),
 }));
 
-import { getBackendBaseUrl } from "@/lib/config";
+import { getBackendBaseUrl } from "@/lib/config/config";
 import { DELETE, GET, PATCH, POST, PUT } from "./route";
 
 describe("auth route handler", () => {

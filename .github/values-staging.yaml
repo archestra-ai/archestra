@@ -1,6 +1,9 @@
 archestra:
   replicaCount: 4
 
+  worker:
+    replicaCount: 3
+
   # Pod Disruption Budget: ensure at least 3 of 4 pods stay running during
   # voluntary disruptions (node upgrades, autoscaling, maintenance)
   podDisruptionBudget:
@@ -19,12 +22,30 @@ archestra:
   # instead of API keys for authentication
   env:
     ARCHESTRA_ANALYTICS: disabled
+    ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
+    ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING: "true"
+    ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED: "true"
     ARCHESTRA_API_BASE_URL: "https://frontend.archestra.dev,https://backend.archestra.dev"
     ARCHESTRA_GEMINI_VERTEX_AI_ENABLED: "true"
     ARCHESTRA_GEMINI_VERTEX_AI_PROJECT: "friendly-path-465518-r6"
     ARCHESTRA_GEMINI_VERTEX_AI_LOCATION: "us-central1"
     ARCHESTRA_BEDROCK_BASE_URL: "https://bedrock-runtime.eu-north-1.amazonaws.com"
     ARCHESTRA_BEDROCK_INFERENCE_PROFILE_PREFIX: "eu"
+    ARCHESTRA_AUTH_COOKIE_DOMAIN: ".archestra.dev"
+    ARCHESTRA_FRONTEND_URL: "https://frontend.archestra.dev"
+    ARCHESTRA_SENTRY_ENVIRONMENT: "archestra.dev"
+    ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER: "outlook"
+    ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_MAILBOX_ADDRESS: "agents@archestraai.onmicrosoft.com"
+    ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL: "https://backend.archestra.dev/api/webhooks/incoming-email"
+    ARCHESTRA_CHAT_DEFAULT_PROVIDER: "anthropic"
+    ARCHESTRA_CHAT_DEFAULT_MODEL: "claude-opus-4-5-20251101"
+
+  diagnostics:
+    enabled: true
+    storageClassName: "archestra-diagnostics-rwx"
+    accessModes:
+      - ReadWriteMany
+    heapSnapshotsNearHeapLimit: 1
 
   # Orchestrator configuration with Workload Identity for Vertex AI
   orchestrator:

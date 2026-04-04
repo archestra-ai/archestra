@@ -165,6 +165,24 @@ describe("Authnz", () => {
       expect(mockReply.send).not.toHaveBeenCalled();
     });
 
+    test("should skip auth for GET requests to public config endpoint", async () => {
+      const mockRequest = {
+        url: "/api/config/public",
+        method: "GET",
+        headers: {},
+      } as FastifyRequest;
+
+      const mockReply = {
+        status: vi.fn().mockReturnThis(),
+        send: vi.fn(),
+      } as unknown as FastifyReply;
+
+      await authnz.handle(mockRequest, mockReply);
+
+      expect(mockReply.status).not.toHaveBeenCalled();
+      expect(mockReply.send).not.toHaveBeenCalled();
+    });
+
     test("should NOT skip auth for GET requests to full SSO providers endpoint (contains secrets)", async () => {
       const mockRequest = {
         url: "/api/identity-providers",
@@ -216,7 +234,7 @@ describe("Authnz", () => {
     });
 
     test("should skip auth for GET requests to public appearance endpoint", async () => {
-      const publicAppearanceUrl = "/api/organization/appearance";
+      const publicAppearanceUrl = "/api/organization/appearance-settings";
 
       const mockRequest = {
         url: publicAppearanceUrl,
@@ -240,7 +258,7 @@ describe("Authnz", () => {
 
       for (const method of nonGetMethods) {
         const mockRequest = {
-          url: "/api/organization/appearance",
+          url: "/api/organization/appearance-settings",
           method,
           headers: {},
           routeOptions: {

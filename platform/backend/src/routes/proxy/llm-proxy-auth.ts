@@ -5,15 +5,15 @@
  * request/response orchestration. Each function is independently testable.
  */
 
-import { ARCHESTRA_TOKEN_PREFIX } from "@shared";
+import { ARCHESTRA_TOKEN_PREFIX, isSupportedProvider } from "@shared";
 import type { FastifyRequest } from "fastify";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
-import { resolveProviderApiKey } from "@/clients/llm-client";
 import logger from "@/logging";
 import { AgentModel, VirtualApiKeyModel } from "@/models";
 import { validateExternalIdpToken } from "@/routes/mcp-gateway.utils";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
-import { type Agent, ApiError, isSupportedChatProvider } from "@/types";
+import { type Agent, ApiError } from "@/types";
+import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { isLoopbackAddress } from "@/utils/network";
 
 // =========================================================================
@@ -187,7 +187,7 @@ export async function attemptJwksAuth(
   let apiKey: string | undefined;
   let baseUrl: string | undefined;
 
-  if (isSupportedChatProvider(providerName)) {
+  if (isSupportedProvider(providerName)) {
     const resolved = await resolveProviderApiKey({
       organizationId: jwksResult.organizationId,
       userId: jwksResult.userId,

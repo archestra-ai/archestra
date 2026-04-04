@@ -36,7 +36,7 @@ const openAiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.OpenAiChatCompletionsWithDefaultAgent,
         description:
           "Create a chat completion with OpenAI (uses default agent)",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         body: OpenAi.API.ChatCompletionRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
         response: constructResponseSchema(
@@ -61,7 +61,7 @@ const openAiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.OpenAiChatCompletionsWithAgent,
         description:
           "Create a chat completion with OpenAI for a specific agent",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
         }),

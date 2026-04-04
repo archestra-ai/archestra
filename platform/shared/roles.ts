@@ -11,5 +11,14 @@ export const PredefinedRoleNameSchema = z.enum([
 
 export type PredefinedRoleName = z.infer<typeof PredefinedRoleNameSchema>;
 
+export const roleDescriptions: Record<PredefinedRoleName, string> = {
+  admin:
+    "Full access to all resources including user management, roles, and platform settings",
+  editor:
+    "Full access to core resources and settings, but cannot manage users, roles, or identity providers",
+  member:
+    "Can manage agents, tools, and chat, with read-only access to most other resources",
+};
+
 const AnyRoleName = PredefinedRoleNameSchema.or(z.string());
 export type AnyRoleName = z.infer<typeof AnyRoleName>;

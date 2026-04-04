@@ -20,7 +20,7 @@ import {
   Video,
   XIcon,
 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ModelSelectorContent,
   ModelSelectorEmpty,
@@ -35,6 +35,7 @@ import {
 } from "@/components/ai-elements/model-selector";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { UnknownCapabilitiesBadge } from "@/components/model-badges";
+import { Button } from "@/components/ui/button";
 import { DialogClose } from "@/components/ui/dialog";
 import { Toggle } from "@/components/ui/toggle";
 import {
@@ -43,12 +44,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { resolveAutoSelectedModel } from "@/lib/chat/use-chat-preferences";
 import {
-  type ChatModel,
+  type LlmModel,
   type ModelCapabilities,
-  useModelsByProvider,
-} from "@/lib/chat-models.query";
-import { useSyncChatModels } from "@/lib/chat-settings.query";
+  useLlmModelsByProvider,
+  useSyncLlmModels,
+} from "@/lib/llm-models.query";
 import { cn } from "@/lib/utils";
 
 /** Modalities that can be filtered (excludes "text" since all models support it) */
@@ -86,13 +88,17 @@ interface ModelSelectorProps {
   onOpenChange?: (open: boolean) => void;
   /** Optional callback to clear selection - shows X button inside the trigger when provided and a model is selected */
   onClear?: () => void;
+  /** Render trigger as an outline button instead of the default ghost prompt-input button */
+  variant?: "default" | "outline";
+  /** When provided, only show models associated with this API key */
+  apiKeyId?: string | null;
 }
 
 /** Map our provider names to logo provider names
  * models.dev provider IDs
  * see https://github.com/anomalyco/models.dev/tree/dev/providers
  * */
-const providerToLogoProvider: Record<SupportedProvider, string> = {
+export const providerToLogoProvider: Record<SupportedProvider, string> = {
   openai: "openai",
   anthropic: "anthropic",
   gemini: "google",
@@ -485,7 +491,7 @@ function ModelFiltersBar({
 /**
  * Checks if a model has unknown capabilities (no data available).
  */
-function hasUnknownCapabilities(model: ChatModel): boolean {
+function hasUnknownCapabilities(model: LlmModel): boolean {
   const capabilities = model.capabilities;
   if (!capabilities) return true;
 
@@ -502,7 +508,7 @@ function hasUnknownCapabilities(model: ChatModel): boolean {
  * Checks if a model matches the given filters.
  * Models with unknown capabilities are always shown.
  */
-function modelMatchesFilters(model: ChatModel, filters: ModelFilters): boolean {
+function modelMatchesFilters(model: LlmModel, filters: ModelFilters): boolean {
   // Always show models with unknown capabilities
   if (hasUnknownCapabilities(model)) {
     return true;
@@ -537,9 +543,17 @@ export function ModelSelector({
   disabled = false,
   onOpenChange: onOpenChangeProp,
   onClear,
+  variant = "default",
+  apiKeyId,
 }: ModelSelectorProps) {
-  const { modelsByProvider, isPending: isLoading } = useModelsByProvider();
-  const syncMutation = useSyncChatModels();
+  const {
+    modelsByProvider,
+    isPending: isLoading,
+    isPlaceholderData,
+  } = useLlmModelsByProvider({
+    apiKeyId: apiKeyId ?? undefined,
+  });
+  const syncMutation = useSyncLlmModels();
   const [open, setOpen] = useState(false);
   const [filters, setFilters] = useState<ModelFilters>(INITIAL_FILTERS);
 
@@ -582,7 +596,7 @@ export function ModelSelector({
       return modelsByProvider;
     }
 
-    const filtered: Partial<Record<SupportedProvider, ChatModel[]>> = {};
+    const filtered: Partial<Record<SupportedProvider, LlmModel[]>> = {};
     for (const provider of availableProviders) {
       const models = modelsByProvider[provider] ?? [];
       const matchingModels = models.filter((model) =>
@@ -642,15 +656,43 @@ export function ModelSelector({
     onModelChange(modelId);
   };
 
-  // Check if selectedModel is in the available models
-  const allAvailableModelIds = useMemo(
+  // All available models flattened (filtered by apiKeyId)
+  const allAvailableModels = useMemo(
     () =>
       availableProviders.flatMap(
-        (provider) => modelsByProvider[provider]?.map((m) => m.id) ?? [],
+        (provider) => modelsByProvider[provider] ?? [],
       ),
     [availableProviders, modelsByProvider],
   );
+  const allAvailableModelIds = useMemo(
+    () => allAvailableModels.map((m) => m.id),
+    [allAvailableModels],
+  );
   const isModelAvailable = allAvailableModelIds.includes(selectedModel);
+
+  // Auto-select the "best" model (or first) when the selected model is not
+  // in the available list (e.g. after switching API keys or on initial load).
+  // Only triggers when the model is genuinely unavailable — keeps the user's
+  // selection stable across API key changes if the model is still valid.
+  // Skip when using placeholder (stale) data from a previous apiKeyId query —
+  // the stale models would incorrectly trigger auto-select for the wrong provider.
+  useEffect(() => {
+    if (isPlaceholderData) return;
+    const modelToSelect = resolveAutoSelectedModel({
+      selectedModel,
+      availableModels: allAvailableModels,
+      isLoading,
+    });
+    if (modelToSelect) {
+      onModelChange(modelToSelect);
+    }
+  }, [
+    isLoading,
+    isPlaceholderData,
+    allAvailableModels,
+    selectedModel,
+    onModelChange,
+  ]);
 
   // If loading, show loading state
   if (isLoading) {
@@ -675,34 +717,73 @@ export function ModelSelector({
     <div>
       <ModelSelectorRoot open={open} onOpenChange={handleOpenChange}>
         <ModelSelectorTrigger asChild>
-          <PromptInputButton
-            disabled={disabled}
-            className="max-w-[280px] min-w-0"
-            data-testid={E2eTestId.ChatModelSelectorTrigger}
-          >
-            {selectedModelLogo && (
-              <ModelSelectorLogo
-                provider={selectedModelLogo}
-                className="shrink-0"
-              />
-            )}
-            <ModelSelectorName className="truncate flex-1 text-left">
-              {selectedModelDisplayName || "Select model"}
-            </ModelSelectorName>
-            {onClear && selectedModel && (
-              <button
-                type="button"
-                aria-label="Clear model"
-                className="ml-1 shrink-0 rounded-sm opacity-50 hover:opacity-100"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onClear();
-                }}
-              >
-                <XIcon className="size-3" />
-              </button>
-            )}
-          </PromptInputButton>
+          {variant === "outline" ? (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={disabled}
+              className="h-8 px-3 gap-1.5 text-xs max-w-[280px] min-w-0"
+              data-testid={E2eTestId.ChatModelSelectorTrigger}
+            >
+              {selectedModelLogo && (
+                <ModelSelectorLogo
+                  provider={selectedModelLogo}
+                  className="shrink-0"
+                />
+              )}
+              {selectedModelDisplayName ? (
+                <span className="font-medium truncate">
+                  {selectedModelDisplayName}
+                </span>
+              ) : (
+                <span className="text-muted-foreground">
+                  Best available model
+                </span>
+              )}
+              {onClear && selectedModel && (
+                <button
+                  type="button"
+                  aria-label="Clear model"
+                  className="ml-1 shrink-0 rounded-sm opacity-50 hover:opacity-100"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onClear();
+                  }}
+                >
+                  <XIcon className="size-3" />
+                </button>
+              )}
+            </Button>
+          ) : (
+            <PromptInputButton
+              disabled={disabled}
+              className="max-w-[280px] min-w-0"
+              data-testid={E2eTestId.ChatModelSelectorTrigger}
+            >
+              {selectedModelLogo && (
+                <ModelSelectorLogo
+                  provider={selectedModelLogo}
+                  className="shrink-0"
+                />
+              )}
+              <ModelSelectorName className="truncate flex-1 text-left">
+                {selectedModelDisplayName || "Select model"}
+              </ModelSelectorName>
+              {onClear && selectedModel && (
+                <button
+                  type="button"
+                  aria-label="Clear model"
+                  className="ml-1 shrink-0 rounded-sm opacity-50 hover:opacity-100"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onClear();
+                  }}
+                >
+                  <XIcon className="size-3" />
+                </button>
+              )}
+            </PromptInputButton>
+          )}
         </ModelSelectorTrigger>
         <ModelSelectorContent
           title="Select Model"
@@ -716,13 +797,31 @@ export function ModelSelector({
             onRefresh={() => syncMutation.mutate()}
             isRefreshing={syncMutation.isPending}
           />
-          <ModelSelectorInput placeholder="Search models..." />
+          <ModelSelectorInput placeholder="Search models..." autoFocus />
           <ModelSelectorList>
             <ModelSelectorEmpty>
               {hasActiveFilters
                 ? "No models match the selected filters."
                 : "No models found."}
             </ModelSelectorEmpty>
+
+            {/* Option to unselect model */}
+            {onClear && (
+              <ModelSelectorGroup heading="">
+                <ModelSelectorItem
+                  value="__none__"
+                  onSelect={() => {
+                    handleOpenChange(false);
+                    onClear();
+                  }}
+                >
+                  <ModelSelectorName>
+                    Best available model (resolved at runtime)
+                  </ModelSelectorName>
+                  {!selectedModel && <CheckIcon className="ml-auto size-4" />}
+                </ModelSelectorItem>
+              </ModelSelectorGroup>
+            )}
 
             {/* Show current model if not in available list */}
             {!isModelAvailable && selectedModel && (

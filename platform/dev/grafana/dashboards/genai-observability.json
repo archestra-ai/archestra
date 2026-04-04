@@ -59,6 +59,18 @@
     },
     {
       "asDropdown": false,
+      "icon": "dashboard",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "RAG & Knowledge Base",
+      "tooltip": "",
+      "type": "link",
+      "url": "/d/archestra-rag-knowledge-base/archestra-rag-knowledge-base"
+    },
+    {
+      "asDropdown": false,
       "icon": "doc",
       "includeVars": false,
       "keepTime": false,
@@ -145,7 +157,9 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -162,7 +176,7 @@
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "sum(rate(llm_request_duration_seconds_count{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval]))",
+          "expr": "sum(rate(llm_request_duration_seconds_count{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
@@ -220,7 +234,9 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -237,7 +253,7 @@
           },
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(llm_tokens_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"})",
+          "expr": "sum(llm_tokens_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"})",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
@@ -299,7 +315,9 @@
         "orientation": "auto",
         "percentChangeColorMode": "inverted",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -316,7 +334,7 @@
           },
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "(sum(\n  increase(\n    llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__range]\n  )\n)\n/\nsum(\n  increase(\n    llm_request_duration_seconds_count{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__range]\n  )\n)) / 10000",
+          "expr": "(sum(\n  increase(\n    llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__range]\n  )\n)\n/\nsum(\n  increase(\n    llm_request_duration_seconds_count{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__range]\n  )\n))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
@@ -374,7 +392,9 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -391,7 +411,7 @@
           },
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(increase(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__range])) / 10000",
+          "expr": "sum(increase(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__range]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
@@ -496,7 +516,7 @@
             "type": "prometheus",
             "uid": "${metrics_datasource}"
           },
-          "expr": "sum(rate(llm_request_duration_seconds_count{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) by (provider)",
+          "expr": "sum(rate(llm_request_duration_seconds_count{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])) by (provider)",
           "legendFormat": "{{provider}}",
           "range": true,
           "refId": "A",
@@ -599,7 +619,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "increase(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[1h]) / 1000",
+          "expr": "increase(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[1h])",
           "legendFormat": "{{provider}}",
           "range": true,
           "refId": "A",
@@ -701,7 +721,7 @@
             "type": "prometheus",
             "uid": "${metrics_datasource}"
           },
-          "expr": "sum(rate(llm_request_duration_seconds_count{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval]))",
+          "expr": "sum(rate(llm_request_duration_seconds_count{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval]))",
           "legendFormat": "Total Requests",
           "range": true,
           "refId": "A",
@@ -803,7 +823,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "rate(llm_blocked_tools_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])",
+          "expr": "rate(llm_blocked_tools_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])",
           "legendFormat": "{{agent_name}}",
           "range": true,
           "refId": "A",
@@ -861,7 +881,9 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -877,7 +899,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, provider) (rate(llm_time_to_first_token_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le, provider) (rate(llm_time_to_first_token_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])))",
           "legendFormat": "{{provider}} P95",
           "range": true,
           "refId": "A"
@@ -1037,7 +1059,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum(rate(llm_request_duration_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) by (le)) * on() (sum(rate(llm_token_usage_bucket{le=\"16\", agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) - sum(rate(llm_token_usage_bucket{le=\"4\", agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) > 0)",
+          "expr": "histogram_quantile(0.50, sum(rate(llm_request_duration_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])) by (le)) * on() (sum(rate(llm_token_usage_bucket{le=\"16\", agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])) - sum(rate(llm_token_usage_bucket{le=\"4\", agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])) > 0)",
           "legendFormat": "5-16 tokens",
           "range": true,
           "refId": "A"
@@ -1048,7 +1070,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum(rate(llm_request_duration_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) by (le)) * on() (sum(rate(llm_token_usage_bucket{le=\"64\", agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) - sum(rate(llm_token_usage_bucket{le=\"16\", agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) > 0)",
+          "expr": "histogram_quantile(0.50, sum(rate(llm_request_duration_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])) by (le)) * on() (sum(rate(llm_token_usage_bucket{le=\"64\", agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])) - sum(rate(llm_token_usage_bucket{le=\"16\", agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])) > 0)",
           "legendFormat": "17-64 tokens",
           "range": true,
           "refId": "B"
@@ -1059,7 +1081,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum(rate(llm_request_duration_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) by (le)) * on() (sum(rate(llm_token_usage_bucket{le=\"256\", agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) - sum(rate(llm_token_usage_bucket{le=\"64\", agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) > 0)",
+          "expr": "histogram_quantile(0.50, sum(rate(llm_request_duration_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])) by (le)) * on() (sum(rate(llm_token_usage_bucket{le=\"256\", agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])) - sum(rate(llm_token_usage_bucket{le=\"64\", agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])) > 0)",
           "legendFormat": "65-256 tokens",
           "range": true,
           "refId": "C"
@@ -1070,7 +1092,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum(rate(llm_request_duration_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) by (le)) * on() (sum(rate(llm_token_usage_bucket{le=\"1024\", agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) - sum(rate(llm_token_usage_bucket{le=\"256\", agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) > 0)",
+          "expr": "histogram_quantile(0.50, sum(rate(llm_request_duration_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])) by (le)) * on() (sum(rate(llm_token_usage_bucket{le=\"1024\", agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])) - sum(rate(llm_token_usage_bucket{le=\"256\", agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])) > 0)",
           "legendFormat": "257-1024 tokens",
           "range": true,
           "refId": "D"
@@ -1081,7 +1103,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum(rate(llm_request_duration_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) by (le)) * on() (sum(rate(llm_token_usage_bucket{le=\"4096\", agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) - sum(rate(llm_token_usage_bucket{le=\"1024\", agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) > 0)",
+          "expr": "histogram_quantile(0.50, sum(rate(llm_request_duration_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])) by (le)) * on() (sum(rate(llm_token_usage_bucket{le=\"4096\", agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])) - sum(rate(llm_token_usage_bucket{le=\"1024\", agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])) > 0)",
           "legendFormat": "1025-4096 tokens",
           "range": true,
           "refId": "E"
@@ -1174,7 +1196,7 @@
           ],
           "limit": 20,
           "metricsQueryType": "range",
-          "query": "{status=ok && resource.service.name=\"Archestra\" && span.route.category=\"llm-proxy\" }",
+          "query": "{status=ok && resource.service.name=\"Archestra\" && span.route.category=\"llm-proxy\" && span.archestra.trigger.source=~\"$source\"}",
           "queryType": "traceql",
           "refId": "A",
           "tableType": "traces"
@@ -1274,7 +1296,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(llm_request_duration_seconds_count{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval]) ) by (model)",
+          "expr": "sum(rate(llm_request_duration_seconds_count{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval]) ) by (model)",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A",
@@ -1338,7 +1360,9 @@
         "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -1354,7 +1378,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "topk(5, sum by(model) (llm_request_duration_seconds_count{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}))",
+          "expr": "topk(5, sum by(model) (llm_request_duration_seconds_count{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}))",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -1459,7 +1483,7 @@
           },
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(rate(llm_tokens_total{type=\"input\", agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) / sum(rate(llm_request_duration_seconds_count{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval]))",
+          "expr": "sum(rate(llm_tokens_total{type=\"input\", agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])) / sum(rate(llm_request_duration_seconds_count{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
@@ -1476,7 +1500,7 @@
           },
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(rate(llm_tokens_total{type=\"output\", agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) / sum(rate(llm_request_duration_seconds_count{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval]))",
+          "expr": "sum(rate(llm_tokens_total{type=\"output\", agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])) / sum(rate(llm_request_duration_seconds_count{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
@@ -1493,7 +1517,7 @@
           },
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(rate(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) / sum(rate(llm_request_duration_seconds_count{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval]))",
+          "expr": "sum(rate(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])) / sum(rate(llm_request_duration_seconds_count{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
@@ -1606,7 +1630,7 @@
           },
           "limit": 20,
           "metricsQueryType": "range",
-          "query": "{resource.service.name=\"Archestra\" && span.route.category=\"llm-proxy\" && span.gen_ai.agent.name=~\"$agent_name\" && span.gen_ai.provider.name=~\"$provider\" && span.gen_ai.request.model=~\"$model\"}",
+          "query": "{resource.service.name=\"Archestra\" && span.route.category=\"llm-proxy\" && span.gen_ai.provider.name=~\"$provider\" && span.gen_ai.request.model=~\"$model\" && span.archestra.trigger.source=~\"$source\"}",
           "queryType": "traceql",
           "refId": "A",
           "tableType": "traces"
@@ -1791,7 +1815,10 @@
               {
                 "id": "custom.lineStyle",
                 "value": {
-                  "dash": [10, 10],
+                  "dash": [
+                    10,
+                    10
+                  ],
                   "fill": "dash"
                 }
               }
@@ -1803,12 +1830,14 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 50
+        "y": 66
       },
       "id": 29,
       "options": {
         "legend": {
-          "calcs": ["median"],
+          "calcs": [
+            "median"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
@@ -1827,7 +1856,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"} [$__rate_interval])) / 1000",
+          "expr": "sum(increase(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"} [$__rate_interval]))",
           "legendFormat": "Total Cost",
           "range": true,
           "refId": "A",
@@ -1839,7 +1868,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) by(provider) / 1000",
+          "expr": "sum(increase(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])) by(provider)",
           "instant": false,
           "legendFormat": "Cost by {{provider}}",
           "range": true,
@@ -1847,7 +1876,7 @@
           "exemplar": true
         }
       ],
-      "title": "Total Cost By Provider",
+      "title": "Cost Trend By Provider",
       "transparent": true,
       "type": "timeseries"
     },
@@ -1922,12 +1951,14 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 50
+        "y": 66
       },
       "id": 32,
       "options": {
         "legend": {
-          "calcs": ["median"],
+          "calcs": [
+            "median"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
@@ -1946,14 +1977,14 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) by(model) / 1000",
+          "expr": "sum(increase(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])) by(model)",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A",
           "exemplar": true
         }
       ],
-      "title": "Total Cost By Model",
+      "title": "Cost Trend By Model",
       "transparent": true,
       "type": "timeseries"
     },
@@ -2009,7 +2040,9 @@
         "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": true
         },
@@ -2027,7 +2060,7 @@
           "disableTextWrap": false,
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(increase(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__range])) by(provider) / 10000",
+          "expr": "sum(increase(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__range])) by(provider)",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": true,
@@ -2111,7 +2144,9 @@
         "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": true
         },
@@ -2129,7 +2164,7 @@
           "disableTextWrap": false,
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(increase(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__range])) by(model) / 10000",
+          "expr": "sum(increase(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__range])) by(model)",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": true,
@@ -2189,7 +2224,7 @@
         "h": 5,
         "w": 8,
         "x": 8,
-        "y": 66
+        "y": 74
       },
       "id": 16,
       "options": {
@@ -2200,7 +2235,9 @@
         },
         "pieType": "pie",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -2220,7 +2257,7 @@
           },
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum by(provider) (llm_request_duration_seconds_count{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"})",
+          "expr": "sum by(provider) (llm_request_duration_seconds_count{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"})",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
@@ -2240,7 +2277,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 71
+        "y": 79
       },
       "id": 64,
       "panels": [],
@@ -2273,10 +2310,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 6,
-        "w": 24,
+        "h": 8,
+        "w": 12,
         "x": 0,
-        "y": 72
+        "y": 80
       },
       "id": 65,
       "options": {
@@ -2285,7 +2322,9 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -2298,9 +2337,9 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "round(sum by (external_agent_id) (sum_over_time(increase(agent_executions_total{external_agent_id!=\"\"}[1m])[$__range:1m])))",
+          "expr": "round(sum by (external_agent_id, agent_name) (sum_over_time(increase(agent_executions_total{external_agent_id!=\"\"}[1m])[$__range:1m])))",
           "instant": true,
-          "legendFormat": "{{external_agent_id}}",
+          "legendFormat": "{{agent_name}} ({{external_agent_id}})",
           "queryType": "instant",
           "range": false,
           "refId": "A"
@@ -2370,14 +2409,16 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 24,
         "x": 0,
-        "y": 78
+        "y": 50
       },
       "id": 66,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "displayMode": "table",
           "placement": "right",
           "showLegend": true
@@ -2395,9 +2436,9 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (external_agent_id) (sum_over_time(increase(llm_cost_total{external_agent_id!=\"\"}[1m])[$__range:1m]))",
+          "expr": "sum by (external_agent_id, agent_name) (sum_over_time(increase(llm_cost_total{external_agent_id!=\"\"}[1m])[$__range:1m]))",
           "instant": false,
-          "legendFormat": "{{external_agent_id}}",
+          "legendFormat": "{{agent_name}} ({{external_agent_id}})",
           "queryType": "range",
           "range": true,
           "refId": "A",
@@ -2470,12 +2511,14 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 78
+        "y": 80
       },
       "id": 67,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "displayMode": "table",
           "placement": "right",
           "showLegend": true
@@ -2493,9 +2536,9 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (external_agent_id) (sum_over_time(increase(llm_cost_total{external_agent_id!=\"\"}[1m])[$__range:1m])) + round(sum by (external_agent_id) (sum_over_time(increase(agent_executions_total{external_agent_id!=\"\"}[1m])[$__range:1m]))) * 1",
+          "expr": "sum by (external_agent_id, agent_name) (sum_over_time(increase(llm_cost_total{external_agent_id!=\"\"}[1m])[$__range:1m])) + round(sum by (external_agent_id, agent_name) (sum_over_time(increase(agent_executions_total{external_agent_id!=\"\"}[1m])[$__range:1m]))) * 1",
           "instant": false,
-          "legendFormat": "{{external_agent_id}}",
+          "legendFormat": "{{agent_name}} ({{external_agent_id}})",
           "queryType": "range",
           "range": true,
           "refId": "A",
@@ -2511,7 +2554,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 86
+        "y": 88
       },
       "id": 46,
       "panels": [],
@@ -2626,7 +2669,9 @@
       "id": 57,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -2643,7 +2688,7 @@
             "type": "prometheus",
             "uid": "${metrics_datasource}"
           },
-          "expr": "histogram_quantile(0.95, sum(rate(llm_request_duration_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) by (le, provider))",
+          "expr": "histogram_quantile(0.95, sum(rate(llm_request_duration_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])) by (le, provider))",
           "legendFormat": "{{provider}}",
           "range": true,
           "refId": "A",
@@ -2710,7 +2755,9 @@
       "id": 53,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -2727,7 +2774,7 @@
             "type": "prometheus",
             "uid": "${metrics_datasource}"
           },
-          "expr": "histogram_quantile(0.95, sum(rate(llm_request_duration_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) by (le, model))",
+          "expr": "histogram_quantile(0.95, sum(rate(llm_request_duration_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])) by (le, model))",
           "legendFormat": "{{model}}",
           "range": true,
           "refId": "A",
@@ -2797,7 +2844,7 @@
         {
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(0.95, \n  sum by(le, token_count_group, provider) (\n    increase(llm_request_duration_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__range])\n  )\n)",
+          "expr": "histogram_quantile(0.95, \n  sum by(le, token_count_group, provider) (\n    increase(llm_request_duration_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__range])\n  )\n)",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -2856,7 +2903,9 @@
         "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -2868,7 +2917,7 @@
         {
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(0.95, \n  sum by(le, model) (\n    increase(llm_request_duration_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__range])\n  )\n)",
+          "expr": "histogram_quantile(0.95, \n  sum by(le, model) (\n    increase(llm_request_duration_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__range])\n  )\n)",
           "format": "table",
           "instant": true,
           "legendFormat": "{{model}}",
@@ -2932,7 +2981,9 @@
         "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": true
         },
@@ -2950,7 +3001,7 @@
           "disableTextWrap": false,
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(0.95, \n  sum by(le, provider) (\n    increase(llm_request_duration_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__range])\n  )\n)",
+          "expr": "histogram_quantile(0.95, \n  sum by(le, provider) (\n    increase(llm_request_duration_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__range])\n  )\n)",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": true,
@@ -3034,7 +3085,9 @@
         "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": true
         },
@@ -3052,7 +3105,7 @@
           "disableTextWrap": false,
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(0.95, \n  sum by(le, model) (\n    increase(llm_request_duration_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__range])\n  )\n)",
+          "expr": "histogram_quantile(0.95, \n  sum by(le, model) (\n    increase(llm_request_duration_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__range])\n  )\n)",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": true,
@@ -3156,7 +3209,9 @@
       "id": 41,
       "options": {
         "legend": {
-          "calcs": ["median"],
+          "calcs": [
+            "median"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
@@ -3175,7 +3230,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(llm_time_to_first_token_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) by (provider, le))",
+          "expr": "histogram_quantile(0.95, sum(rate(llm_time_to_first_token_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])) by (provider, le))",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A",
@@ -3258,7 +3313,9 @@
       "id": 42,
       "options": {
         "legend": {
-          "calcs": ["median"],
+          "calcs": [
+            "median"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
@@ -3277,7 +3334,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(llm_time_to_first_token_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) by (model, le))",
+          "expr": "histogram_quantile(0.95, sum(rate(llm_time_to_first_token_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])) by (model, le))",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A",
@@ -3360,7 +3417,9 @@
       "id": 39,
       "options": {
         "legend": {
-          "calcs": ["median"],
+          "calcs": [
+            "median"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
@@ -3379,7 +3438,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(llm_request_duration_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) by (provider, le))",
+          "expr": "histogram_quantile(0.95, sum(rate(llm_request_duration_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])) by (provider, le))",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A",
@@ -3462,7 +3521,9 @@
       "id": 43,
       "options": {
         "legend": {
-          "calcs": ["median"],
+          "calcs": [
+            "median"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
@@ -3481,7 +3542,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(llm_request_duration_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) by (model, le))",
+          "expr": "histogram_quantile(0.95, sum(rate(llm_request_duration_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])) by (model, le))",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A",
@@ -3496,7 +3557,10 @@
   "preload": false,
   "refresh": "30s",
   "schemaVersion": 42,
-  "tags": ["archestra", "genai"],
+  "tags": [
+    "archestra",
+    "genai"
+  ],
   "templating": {
     "list": [
       {
@@ -3604,6 +3668,62 @@
         "regex": "",
         "sort": 1,
         "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "includeAll": true,
+        "label": "Source",
+        "multi": true,
+        "name": "source",
+        "options": [
+          {
+            "selected": true,
+            "text": "All",
+            "value": "$__all"
+          },
+          {
+            "selected": false,
+            "text": "API",
+            "value": "api"
+          },
+          {
+            "selected": false,
+            "text": "Chat",
+            "value": "chat"
+          },
+          {
+            "selected": false,
+            "text": "Slack",
+            "value": "chatops:slack"
+          },
+          {
+            "selected": false,
+            "text": "MS Teams",
+            "value": "chatops:ms-teams"
+          },
+          {
+            "selected": false,
+            "text": "Email",
+            "value": "email"
+          },
+          {
+            "selected": false,
+            "text": "Knowledge - Embedding",
+            "value": "knowledge:embedding"
+          },
+          {
+            "selected": false,
+            "text": "Knowledge - Reranker",
+            "value": "knowledge:reranker"
+          }
+        ],
+        "query": "API : api,Chat : chat,Slack : chatops:slack,MS Teams : chatops:ms-teams,Email : email,Knowledge - Embedding : knowledge:embedding,Knowledge - Reranker : knowledge:reranker",
+        "type": "custom"
       },
       {
         "current": {

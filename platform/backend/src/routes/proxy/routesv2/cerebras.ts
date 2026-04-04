@@ -47,7 +47,7 @@ const cerebrasProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.CerebrasChatCompletionsWithDefaultAgent,
         description:
           "Create a chat completion with Cerebras (uses default agent)",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         body: Cerebras.API.ChatCompletionRequestSchema,
         headers: Cerebras.API.ChatCompletionsHeadersSchema,
         response: constructResponseSchema(
@@ -80,7 +80,7 @@ const cerebrasProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.CerebrasChatCompletionsWithAgent,
         description:
           "Create a chat completion with Cerebras for a specific agent",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
         }),

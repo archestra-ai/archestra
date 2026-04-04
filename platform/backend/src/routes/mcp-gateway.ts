@@ -1,4 +1,8 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import {
+  MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
+  MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
+} from "@shared";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -49,7 +53,7 @@ async function handleMcpPostRequest(
   const isInitialize =
     typeof body?.method === "string" && body.method === "initialize";
 
-  fastify.log.info(
+  fastify.log.trace(
     {
       profileId,
       method: body?.method,
@@ -64,11 +68,11 @@ async function handleMcpPostRequest(
     const { server } = await createAgentServer(profileId, tokenAuthContext);
     const transport = createStatelessTransport(profileId);
 
-    fastify.log.info({ profileId }, "Connecting server to transport");
+    fastify.log.trace({ profileId }, "Connecting server to transport");
     await server.connect(transport);
-    fastify.log.info({ profileId }, "Server connected to transport");
+    fastify.log.trace({ profileId }, "Server connected to transport");
 
-    fastify.log.info({ profileId }, "Calling transport.handleRequest");
+    fastify.log.trace({ profileId }, "Calling transport.handleRequest");
 
     // Hijack reply to let SDK handle raw response
     reply.hijack();
@@ -79,7 +83,7 @@ async function handleMcpPostRequest(
       body,
     );
 
-    fastify.log.info({ profileId }, "Transport.handleRequest completed");
+    fastify.log.trace({ profileId }, "Transport.handleRequest completed");
 
     // Log initialize request
     if (isInitialize) {
@@ -91,6 +95,10 @@ async function handleMcpPostRequest(
           toolCall: null,
           toolResult: {
             capabilities: {
+              extensions: {
+                ...MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
+                ...MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
+              },
               tools: { listChanged: false },
             },
             serverInfo: {
@@ -102,7 +110,7 @@ async function handleMcpPostRequest(
           userId: tokenAuthContext?.userId ?? null,
           authMethod: deriveAuthMethod(tokenAuthContext) ?? null,
         });
-        fastify.log.info({ profileId }, "✅ Saved initialize request");
+        fastify.log.trace({ profileId }, "Saved initialize request");
       } catch (dbError) {
         fastify.log.error(
           { err: dbError },
@@ -111,7 +119,7 @@ async function handleMcpPostRequest(
       }
     }
 
-    fastify.log.info({ profileId }, "Request handled successfully");
+    fastify.log.trace({ profileId }, "Request handled successfully");
   } catch (error) {
     fastify.log.error(
       {
@@ -149,7 +157,8 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
     `${endpoint}/:profileId`,
     {
       schema: {
-        tags: ["mcp-gateway"],
+        operationId: "mcpGatewayGet",
+        tags: ["MCP Gateway"],
         params: z.object({
           profileId: UuidIdSchema,
         }),
@@ -223,7 +232,8 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
     `${endpoint}/:profileId`,
     {
       schema: {
-        tags: ["mcp-gateway"],
+        operationId: "mcpGatewayPost",
+        tags: ["MCP Gateway"],
         params: z.object({
           profileId: UuidIdSchema,
         }),

@@ -2,11 +2,7 @@ import { DEFAULT_THEME_ID, type OrganizationCustomFont } from "@shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
-import type {
-  Organization,
-  PublicAppearance,
-  UpdateOrganization,
-} from "@/types";
+import type { AppearanceSettings, Organization } from "@/types";
 
 class OrganizationModel {
   /**
@@ -67,7 +63,7 @@ class OrganizationModel {
    */
   static async patch(
     id: string,
-    data: Partial<UpdateOrganization>,
+    data: Partial<Organization>,
   ): Promise<Organization | null> {
     logger.debug(
       { id, dataKeys: Object.keys(data) },
@@ -111,15 +107,26 @@ class OrganizationModel {
   }
 
   /**
-   * Get public appearance settings (theme, logo, font) for unauthenticated pages.
-   * Returns the default organization's appearance settings.
+   * Get appearance settings
+   * Returns default appearance settings if no organization exists.
    */
-  static async getPublicAppearance(): Promise<PublicAppearance> {
+  static async getAppearanceSettings(): Promise<AppearanceSettings> {
     const [organization] = await db
       .select({
         theme: schema.organizationsTable.theme,
         customFont: schema.organizationsTable.customFont,
         logo: schema.organizationsTable.logo,
+        logoDark: schema.organizationsTable.logoDark,
+        favicon: schema.organizationsTable.favicon,
+        iconLogo: schema.organizationsTable.iconLogo,
+        appName: schema.organizationsTable.appName,
+        ogDescription: schema.organizationsTable.ogDescription,
+        footerText: schema.organizationsTable.footerText,
+        chatLinks: schema.organizationsTable.chatLinks,
+        chatErrorSupportMessage:
+          schema.organizationsTable.chatErrorSupportMessage,
+        animateChatPlaceholders:
+          schema.organizationsTable.animateChatPlaceholders,
       })
       .from(schema.organizationsTable)
       .limit(1);
@@ -130,6 +137,15 @@ class OrganizationModel {
         theme: DEFAULT_THEME_ID,
         customFont: "lato" as OrganizationCustomFont,
         logo: null,
+        logoDark: null,
+        favicon: null,
+        iconLogo: null,
+        appName: null,
+        ogDescription: null,
+        footerText: null,
+        chatLinks: null,
+        chatErrorSupportMessage: null,
+        animateChatPlaceholders: true,
       };
     }
 

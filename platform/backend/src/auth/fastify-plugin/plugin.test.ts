@@ -112,13 +112,7 @@ describe("authPlugin integration", () => {
       mockBetterAuth.api.verifyApiKey.mockResolvedValue({
         valid: true,
         error: null,
-        key: {
-          userId: "user1",
-          enabled: true,
-          id: "api-key-123",
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        } as ApiKey,
+        key: makeApiKey({ referenceId: "user1" }),
       });
       mockHasPermission.mockResolvedValue({
         success: true,
@@ -457,3 +451,32 @@ describe("authPlugin integration", () => {
     });
   });
 });
+
+function makeApiKey(
+  overrides: Partial<NonNullable<ApiKey>> = {},
+): NonNullable<ApiKey> {
+  return {
+    id: "api-key-123",
+    configId: "default",
+    name: null,
+    start: null,
+    prefix: null,
+    referenceId: "user1",
+    refillInterval: null,
+    refillAmount: null,
+    lastRefillAt: null,
+    enabled: true,
+    rateLimitEnabled: false,
+    rateLimitTimeWindow: null,
+    rateLimitMax: null,
+    requestCount: 0,
+    remaining: null,
+    lastRequest: null,
+    expiresAt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    metadata: null,
+    permissions: null,
+    ...overrides,
+  };
+}

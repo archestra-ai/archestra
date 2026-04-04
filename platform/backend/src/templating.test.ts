@@ -1,151 +1,10 @@
 import { describe, expect, test } from "@/test";
 import {
-  applyResponseModifierTemplate,
   evaluateRoleMappingTemplate,
   extractGroupsWithTemplate,
+  promptNeedsRendering,
+  renderSystemPrompt,
 } from "./templating";
-
-describe("applyResponseModifierTemplate", () => {
-  test("renders basic text template", () => {
-    const content = [{ type: "text", text: "Hello World" }];
-    const template = 'Modified: {{lookup (lookup response 0) "text"}}';
-
-    const result = applyResponseModifierTemplate(template, content);
-
-    expect(result).toEqual([{ type: "text", text: "Modified: Hello World" }]);
-  });
-
-  test("renders JSON template and parses result", () => {
-    const content = [{ type: "text", text: "test data" }];
-    const template =
-      '{"formatted": true, "data": "{{lookup (lookup response 0) "text"}}"}';
-
-    const result = applyResponseModifierTemplate(template, content);
-
-    expect(result).toEqual({ formatted: true, data: "test data" });
-  });
-
-  test("accesses nested properties in response data with 'with' helper", () => {
-    const content = [
-      {
-        type: "resource",
-        resource: {
-          uri: "file:///test.txt",
-          mimeType: "text/plain",
-          text: "File contents",
-        },
-      },
-    ];
-    const template =
-      "{{#with (lookup response 0)}}URI: {{resource.uri}}{{/with}}";
-
-    const result = applyResponseModifierTemplate(template, content);
-
-    expect(result).toEqual([{ type: "text", text: "URI: file:///test.txt" }]);
-  });
-
-  test("uses json helper to stringify objects", () => {
-    const content = [
-      {
-        type: "text",
-        text: "data",
-      },
-    ];
-    const template = "{{{json (lookup response 0)}}}";
-
-    const result = applyResponseModifierTemplate(template, content);
-
-    // json helper stringifies the object, then JSON.parse parses it back at the end
-    expect(result).toEqual({
-      type: "text",
-      text: "data",
-    });
-  });
-
-  test("parses and re-stringifies JSON from first element", () => {
-    // Realistic GitHub MCP server response format
-    const content = [
-      {
-        type: "text",
-        text: '{"issues":[{"id":816,"title":"Add authentication for MCP gateways"},{"id":815,"title":"ERROR: role \\"postgres\\" already exists"}]}',
-      },
-    ];
-
-    // Template to parse and re-stringify the JSON (using nested json calls)
-    const template =
-      "{{#with (lookup response 0)}}{{{json (json this.text)}}}{{/with}}";
-
-    const result = applyResponseModifierTemplate(template, content);
-
-    // First json parses the string, second json stringifies it back, triple braces prevent escaping
-    expect(result).toEqual({
-      issues: [
-        { id: 816, title: "Add authentication for MCP gateways" },
-        { id: 815, title: 'ERROR: role "postgres" already exists' },
-      ],
-    });
-  });
-
-  test("transforms GitHub issues data to id:title mapping using json helper", () => {
-    const content = [
-      {
-        type: "text",
-        text: '{"issues":[{"id":3550499726,"number":816,"state":"OPEN","title":"Add authentication for MCP gateways"},{"id":3550391199,"number":815,"state":"OPEN","title":"ERROR: role \\"postgres\\" already exists"},{"id":3545318824,"number":805,"state":"OPEN","title":"Bug: if I rename default agent, it gets re-created"}]}',
-      },
-    ];
-
-    // Template that parses the JSON and creates id:title mapping
-    // Use escapeJson helper with triple braces to properly escape quotes
-    const template = `{{#with (lookup response 0)}}{{#with (json this.text)}}
-{
-  {{#each this.issues}}
-    "{{this.id}}": "{{{escapeJson this.title}}}"{{#unless @last}},{{/unless}}
-  {{/each}}
-}
-{{/with}}{{/with}}`;
-
-    const result = applyResponseModifierTemplate(template, content);
-
-    expect(result).toEqual({
-      "3550499726": "Add authentication for MCP gateways",
-      "3550391199": 'ERROR: role "postgres" already exists',
-      "3545318824": "Bug: if I rename default agent, it gets re-created",
-    });
-  });
-
-  test("returns original content when template produces invalid JSON", () => {
-    const content = [{ type: "text", text: "test" }];
-    const template = 'This is not JSON: {{lookup (lookup response 0) "text"}}';
-
-    const result = applyResponseModifierTemplate(template, content);
-
-    // Should return as text content block since it's not valid JSON
-    expect(result).toEqual([{ type: "text", text: "This is not JSON: test" }]);
-  });
-
-  test("returns original content when template fails to compile", () => {
-    const content = [{ type: "text", text: "test" }];
-    const template = "{{#invalid}}"; // Invalid Handlebars syntax
-
-    const result = applyResponseModifierTemplate(template, content);
-
-    // Should return original content when template fails
-    expect(result).toEqual(content);
-  });
-
-  test("handles multiple content blocks using with helpers", () => {
-    const content = [
-      { type: "text", text: "Line 1" },
-      { type: "text", text: "Line 2" },
-    ];
-    const template =
-      '{{#with (lookup response 0)}}{{#with (lookup ../response 1)}}{"first": "{{../this.text}}", "second": "{{this.text}}"}{{/with}}{{/with}}';
-
-    const result = applyResponseModifierTemplate(template, content);
-
-    expect(result).toEqual({ first: "Line 1", second: "Line 2" });
-  });
-});
 
 describe("evaluateRoleMappingTemplate", () => {
   test("returns true when includes helper matches", () => {
@@ -432,5 +291,245 @@ describe("evaluateRoleMappingTemplate with JSON string claims", () => {
 
     // Should return false when JSON parsing fails
     expect(evaluateRoleMappingTemplate(template, context)).toBe(false);
+  });
+});
+
+describe("renderSystemPrompt", () => {
+  const baseContext = {
+    user: {
+      name: "Alice Smith",
+      email: "alice@example.com",
+      teams: ["Engineering", "Platform"],
+    },
+  };
+
+  test("renders user.name variable", () => {
+    const template = "Hello {{user.name}}, welcome!";
+    expect(renderSystemPrompt(template, baseContext)).toBe(
+      "Hello Alice Smith, welcome!",
+    );
+  });
+
+  test("renders user.email variable", () => {
+    const template = "Your email is {{user.email}}";
+    expect(renderSystemPrompt(template, baseContext)).toBe(
+      "Your email is alice@example.com",
+    );
+  });
+
+  test("renders user.teams with each loop", () => {
+    const template =
+      "Teams: {{#each user.teams}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}";
+    expect(renderSystemPrompt(template, baseContext)).toBe(
+      "Teams: Engineering, Platform",
+    );
+  });
+
+  test("renders currentDate helper in YYYY-MM-DD format", () => {
+    const template = "Today is {{currentDate}}";
+    const result = renderSystemPrompt(template, baseContext);
+    expect(result).toMatch(/^Today is \d{4}-\d{2}-\d{2}$/);
+  });
+
+  test("renders currentTime helper in HH:MM:SS UTC format", () => {
+    const template = "Time is {{currentTime}}";
+    const result = renderSystemPrompt(template, baseContext);
+    expect(result).toMatch(/^Time is \d{2}:\d{2}:\d{2} UTC$/);
+  });
+
+  test("passes through plain text without templates unchanged", () => {
+    const template = "You are a helpful assistant. Be concise.";
+    expect(renderSystemPrompt(template, baseContext)).toBe(
+      "You are a helpful assistant. Be concise.",
+    );
+  });
+
+  test("returns original template string on invalid Handlebars syntax", () => {
+    const template = "Hello {{#invalid}}";
+    expect(renderSystemPrompt(template, baseContext)).toBe(
+      "Hello {{#invalid}}",
+    );
+  });
+
+  test("renders empty string for missing variables", () => {
+    const template = "Hello {{user.nonexistent}}!";
+    expect(renderSystemPrompt(template, baseContext)).toBe("Hello !");
+  });
+
+  test("renders complex template with multiple variables and helpers", () => {
+    const template = `You are an assistant for {{user.name}} ({{user.email}}).
+You are a member of: {{#each user.teams}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}.
+Current date: {{currentDate}}.`;
+    const result = renderSystemPrompt(template, baseContext);
+    expect(result).toContain("You are an assistant for Alice Smith");
+    expect(result).toContain("(alice@example.com)");
+    expect(result).toContain("You are a member of: Engineering, Platform");
+    expect(result).toMatch(/Current date: \d{4}-\d{2}-\d{2}/);
+  });
+
+  test("handles empty teams array", () => {
+    const context = {
+      user: { name: "Bob", email: "bob@test.com", teams: [] },
+    };
+    const template =
+      "{{#if user.teams}}Teams: {{#each user.teams}}{{this}}{{/each}}{{else}}No teams{{/if}}";
+    expect(renderSystemPrompt(template, context)).toBe("No teams");
+  });
+
+  test("handles conditional blocks with user data", () => {
+    const template =
+      '{{#includes user.teams "Engineering"}}You are an engineer{{else}}You are not an engineer{{/includes}}';
+    expect(renderSystemPrompt(template, baseContext)).toBe(
+      "You are an engineer",
+    );
+  });
+
+  test("renders variables adjacent to backticks correctly", () => {
+    const template = "Use `{{user.name}}` in your code";
+    expect(renderSystemPrompt(template, baseContext)).toBe(
+      "Use `Alice Smith` in your code",
+    );
+  });
+
+  test("renders variables inside triple backtick code blocks", () => {
+    const template = "```\n{{user.name}}\n```";
+    expect(renderSystemPrompt(template, baseContext)).toBe(
+      "```\nAlice Smith\n```",
+    );
+  });
+
+  test("does not HTML-escape apostrophes in variable values", () => {
+    const context = {
+      user: { name: "O'Brien", email: "obrien@test.com", teams: [] },
+    };
+    const template = "Hello {{user.name}}";
+    expect(renderSystemPrompt(template, context)).toBe("Hello O'Brien");
+  });
+
+  test("does not HTML-escape ampersands in variable values", () => {
+    const context = {
+      user: { name: "Alice", email: "alice@test.com", teams: ["R&D"] },
+    };
+    const template = "Teams: {{#each user.teams}}{{this}}{{/each}}";
+    expect(renderSystemPrompt(template, context)).toBe("Teams: R&D");
+  });
+
+  test("does not HTML-escape backticks in variable values", () => {
+    const context = {
+      user: {
+        name: "use `tool` here",
+        email: "test@test.com",
+        teams: [],
+      },
+    };
+    const template = "Instruction: {{user.name}}";
+    expect(renderSystemPrompt(template, context)).toBe(
+      "Instruction: use `tool` here",
+    );
+  });
+
+  test("does not HTML-escape angle brackets in variable values", () => {
+    const context = {
+      user: { name: "<admin>", email: "admin@test.com", teams: [] },
+    };
+    const template = "User: {{user.name}}";
+    expect(renderSystemPrompt(template, context)).toBe("User: <admin>");
+  });
+
+  test("renders backtick-wrapped variable with special chars in value", () => {
+    const context = {
+      user: {
+        name: "O'Brien",
+        email: "obrien@test.com",
+        teams: ["R&D"],
+      },
+    };
+    const template = "Welcome `{{user.name}}` from `{{user.teams}}`";
+    expect(renderSystemPrompt(template, context)).toBe(
+      "Welcome `O'Brien` from `R&D`",
+    );
+  });
+});
+
+describe("promptNeedsRendering", () => {
+  test("returns false for plain text prompts", () => {
+    expect(promptNeedsRendering("You are a helpful assistant.")).toBe(false);
+  });
+
+  test("returns true when prompt contains handlebars syntax", () => {
+    expect(promptNeedsRendering("Hello {{user.name}}")).toBe(true);
+  });
+
+  test("returns false for null and undefined prompts", () => {
+    expect(promptNeedsRendering(null, undefined)).toBe(false);
+  });
+
+  test("returns false when all prompts are null or undefined", () => {
+    expect(promptNeedsRendering(null, undefined, null)).toBe(false);
+  });
+
+  test("returns true when any prompt contains handlebars syntax", () => {
+    expect(promptNeedsRendering("plain text", "Hello {{user.name}}")).toBe(
+      true,
+    );
+  });
+
+  test("returns false for single curly braces", () => {
+    expect(promptNeedsRendering("Use { and } for JSON")).toBe(false);
+  });
+
+  test("returns true for helper syntax", () => {
+    expect(promptNeedsRendering("{{#if user.teams}}yes{{/if}}")).toBe(true);
+  });
+
+  test("returns false with no arguments", () => {
+    expect(promptNeedsRendering()).toBe(false);
+  });
+});
+
+describe("renderSystemPrompt with null handling", () => {
+  const context = {
+    user: {
+      name: "Alice",
+      email: "alice@test.com",
+      teams: ["Engineering"],
+    },
+  };
+
+  test("returns null when systemPrompt is null", () => {
+    expect(renderSystemPrompt(null)).toBeNull();
+  });
+
+  test("returns raw prompt when no context provided", () => {
+    expect(renderSystemPrompt("Be helpful")).toBe("Be helpful");
+  });
+
+  test("renders templates when context is provided and prompt contains handlebars", () => {
+    expect(renderSystemPrompt("Hello {{user.name}}", context)).toBe(
+      "Hello Alice",
+    );
+  });
+
+  test("skips rendering when context is null even if prompt has braces", () => {
+    expect(renderSystemPrompt("Hello {{user.name}}", null)).toBe(
+      "Hello {{user.name}}",
+    );
+  });
+
+  test("renders with additionalContext when user context is null", () => {
+    expect(
+      renderSystemPrompt("Tool: {{tool.name}} on {{mcpServerName}}", null, {
+        tool: { name: "my-tool" },
+        mcpServerName: "TestServer",
+      }),
+    ).toBe("Tool: my-tool on TestServer");
+  });
+
+  test("merges user context and additionalContext", () => {
+    expect(
+      renderSystemPrompt("{{user.name}} analyzing {{tool.name}}", context, {
+        tool: { name: "my-tool" },
+      }),
+    ).toBe("Alice analyzing my-tool");
   });
 });

@@ -58,18 +58,19 @@ export function SetupDialog({
     });
   }, [api]);
 
+  const isSingleStep = steps.length === 1;
   const isFirst = current === 0;
   const isLast = current === steps.length - 1;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="h-[85vh] max-h-[85vh] flex flex-col gap-0 p-0 overflow-hidden max-w-[1400px]! w-[80vw]">
-        <DialogHeader className="px-6 pt-6 pb-4">
+        <DialogHeader className="px-4 pt-4 pb-4">
           <DialogTitle>{title}</DialogTitle>
           {description && <DialogDescription>{description}</DialogDescription>}
         </DialogHeader>
 
-        {beforeSteps && <div className="px-6 pb-4">{beforeSteps}</div>}
+        {beforeSteps && <div className="px-4 pb-4">{beforeSteps}</div>}
 
         <div className="flex-1 min-h-0 [&_[data-slot=carousel-content]]:h-full">
           <Carousel
@@ -77,11 +78,11 @@ export function SetupDialog({
             opts={{ watchDrag: false }}
             className="h-full"
           >
-            <CarouselContent className="h-full pb-6">
+            <CarouselContent className="h-full">
               {steps.map((step, index) => (
                 // biome-ignore lint/suspicious/noArrayIndexKey: items are static
                 <CarouselItem key={index} className="h-full">
-                  <div className="flex h-full flex-col overflow-y-auto px-6">
+                  <div className="flex h-full flex-col overflow-y-auto px-4 py-4">
                     {step}
                   </div>
                 </CarouselItem>
@@ -90,20 +91,22 @@ export function SetupDialog({
           </Carousel>
         </div>
 
-        <div className="flex items-center justify-between border-t px-6 py-4">
+        <div className="flex items-center justify-between border-t px-4 py-3">
           <div className="text-sm text-muted-foreground">
-            Step {current + 1} of {steps.length}
+            {!isSingleStep && `Step ${current + 1} of ${steps.length}`}
           </div>
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => api?.scrollPrev()}
-              disabled={isFirst}
-            >
-              <ChevronLeft className="mr-1 h-4 w-4" />
-              Back
-            </Button>
+            {!isSingleStep && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => api?.scrollPrev()}
+                disabled={isFirst}
+              >
+                <ChevronLeft className="mr-1 h-4 w-4" />
+                Back
+              </Button>
+            )}
             {isLast && lastStepAction && (
               <Button
                 size="sm"
@@ -118,7 +121,7 @@ export function SetupDialog({
                 Close
               </Button>
             )}
-            {!isLast && (
+            {!isSingleStep && !isLast && (
               <Button
                 size="sm"
                 onClick={() => api?.scrollNext()}

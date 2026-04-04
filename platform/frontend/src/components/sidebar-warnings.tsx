@@ -4,23 +4,35 @@ import { DEFAULT_ADMIN_EMAIL } from "@shared";
 import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { DefaultCredentialsWarning } from "@/components/default-credentials-warning";
-import { useDefaultCredentialsEnabled } from "@/lib/auth.query";
+import {
+  useDefaultCredentialsEnabled,
+  useHasPermissions,
+} from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { useFeatures } from "@/lib/config.query";
+import { useDisableBasicAuth, useFeature } from "@/lib/config/config.query";
 
 export function SidebarWarnings() {
   const { data: session } = authClient.useSession();
   const userEmail = session?.user?.email;
   const { data: defaultCredentialsEnabled, isLoading: isLoadingCreds } =
     useDefaultCredentialsEnabled();
-  const { data: features, isLoading: isLoadingFeatures } = useFeatures();
+  const globalToolPolicy = useFeature("globalToolPolicy");
+  const disableBasicAuth = useDisableBasicAuth();
+  const { data: canUpdateOrg } = useHasPermissions({
+    organization: ["update"],
+  });
+  const { data: canUpdateAgentSettings } = useHasPermissions({
+    agentSettings: ["update"],
+  });
 
-  const isPermissive = features?.globalToolPolicy === "permissive";
+  const isPermissive = globalToolPolicy === "permissive";
 
-  // Determine which warnings should be shown (only for authenticated users)
+  // Security-engine fixes live under Agent Settings; default-credential fixes remain org-scoped.
   const showSecurityEngineWarning =
-    !!session && !isLoadingFeatures && features !== undefined && isPermissive;
+    !!session && canUpdateAgentSettings === true && isPermissive;
   const showDefaultCredsWarning =
+    canUpdateOrg === true &&
+    disableBasicAuth === false &&
     !isLoadingCreds &&
     defaultCredentialsEnabled !== undefined &&
     defaultCredentialsEnabled &&
@@ -40,7 +52,10 @@ export function SidebarWarnings() {
             <span>
               Security engine off
               {" - "}
-              <Link href="/tool-policies" className="underline font-medium">
+              <Link
+                href="/mcp/tool-guardrails"
+                className="underline font-medium"
+              >
                 Fix
               </Link>
             </span>

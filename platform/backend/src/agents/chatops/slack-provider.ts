@@ -1,32 +1,41 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { TimeInMs } from "@shared";
+import { SLACK_REQUIRED_BOT_SCOPES, TimeInMs } from "@shared";
 import { SocketModeClient } from "@slack/socket-mode";
 import { WebClient } from "@slack/web-api";
 import { slackifyMarkdown } from "slackify-markdown";
-import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
-import logger from "@/logging";
 import {
-  AgentModel,
-  ChatOpsChannelBindingModel,
-  type SlackConfig,
-  UserModel,
-} from "@/models";
+  type AllowedCacheKey,
+  CacheKey,
+  cacheManager,
+  LRUCacheManager,
+} from "@/cache-manager";
+import logger from "@/logging";
+import { AgentModel, ChatOpsChannelBindingModel, UserModel } from "@/models";
 import type {
+  ChatOpsConnectionMode,
   ChatOpsEventHandler,
   ChatOpsProvider,
   ChatOpsProviderType,
   ChatReplyOptions,
   ChatThreadMessage,
+  ChatThreadMessageFile,
   DiscoveredChannel,
   IncomingChatMessage,
+  SlackDbConfig,
   ThreadHistoryParams,
-} from "@/types/chatops";
+} from "@/types";
 import {
+  autoProvisionUser,
+  buildWelcomeMessage,
+  isSsoConfigured,
+} from "./auto-provision";
+import {
+  CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_THREAD_HISTORY,
   SLACK_DEFAULT_CONNECTION_MODE,
   SLACK_SLASH_COMMANDS,
 } from "./constants";
-import { EventDedupMap, errorMessage } from "./utils";
+import { EventDedupMap, errorMessage, isSlackDmChannel } from "./utils";
 
 /**
  * Slack provider using Slack Web API.
@@ -43,12 +52,17 @@ class SlackProvider implements ChatOpsProvider {
   private botUserId: string | null = null;
   private teamId: string | null = null;
   private teamName: string | null = null;
-  private config: SlackConfig;
+  private config: SlackDbConfig;
   private socketModeClient: SocketModeClient | null = null;
   private eventHandler: ChatOpsEventHandler | null = null;
   private socketDedup = new EventDedupMap();
+  private missingScopes: string[] = [];
+  private userNameCache = new LRUCacheManager<string>({
+    maxSize: 500,
+    defaultTtl: TimeInMs.Hour,
+  });
 
-  constructor(slackConfig: SlackConfig) {
+  constructor(slackConfig: SlackDbConfig) {
     this.config = slackConfig;
   }
 
@@ -64,7 +78,7 @@ class SlackProvider implements ChatOpsProvider {
     return this.config.connectionMode === "socket";
   }
 
-  getConnectionMode(): "webhook" | "socket" {
+  getConnectionMode(): ChatOpsConnectionMode {
     return this.config.connectionMode === "webhook"
       ? "webhook"
       : SLACK_DEFAULT_CONNECTION_MODE;
@@ -83,15 +97,33 @@ class SlackProvider implements ChatOpsProvider {
     const { botToken } = this.config;
     this.client = new WebClient(botToken);
 
+    // Single raw fetch to auth.test — reads both the JSON body (user/team info)
+    // and the x-oauth-scopes response header (scope validation) in one API call.
+    // The SDK's auth.test() doesn't expose response headers.
     try {
-      const authResult = await this.client.auth.test();
-      this.botUserId = (authResult.user_id as string) || null;
-      this.teamId = (authResult.team_id as string) || null;
-      this.teamName = (authResult.team as string) || null;
+      const response = await fetch("https://slack.com/api/auth.test", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${botToken}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      });
+
+      const body = await response.json();
+      if (!body.ok) {
+        throw new Error(body.error || "auth.test returned ok=false");
+      }
+
+      this.botUserId = (body.user_id as string) || null;
+      this.teamId = (body.team_id as string) || null;
+      this.teamName = (body.team as string) || null;
       logger.info(
         { botUserId: this.botUserId, teamId: this.teamId },
         "[SlackProvider] Authenticated successfully",
       );
+
+      // Check granted scopes from the same response (non-fatal)
+      this.parseGrantedScopes(response.headers.get("x-oauth-scopes"));
     } catch (error) {
       logger.error(
         { error: errorMessage(error) },
@@ -233,12 +265,14 @@ class SlackProvider implements ChatOpsProvider {
     }
 
     const cleanedText = this.cleanBotMention(text);
-
-    if (!cleanedText.trim()) {
+    if (!cleanedText && event.type !== "app_mention") {
       return null;
     }
 
     const threadTs = event.thread_ts || event.ts;
+
+    // Download file attachments if present
+    const attachments = await this.downloadSlackFiles(event.files);
 
     return {
       messageId: event.ts,
@@ -255,6 +289,7 @@ class SlackProvider implements ChatOpsProvider {
         eventType: event.type,
         channelType: event.channel_type,
       },
+      ...(attachments.length > 0 && { attachments }),
     };
   }
 
@@ -310,7 +345,7 @@ class SlackProvider implements ChatOpsProvider {
         elements: [
           {
             type: "plain_text",
-            text: `🤖 ${options.footer}`,
+            text: options.footer,
             emoji: true,
           },
         ],
@@ -336,24 +371,23 @@ class SlackProvider implements ChatOpsProvider {
       throw new Error("SlackProvider not initialized");
     }
 
-    const agentButtons = params.agents.map((agent) => ({
-      type: "button" as const,
-      text: {
-        type: "plain_text" as const,
-        text: agent.name,
-      },
-      action_id: `select_agent_${agent.id}`,
-      value: agent.id,
-    }));
-
-    // Slack allows max 5 elements per actions block, split if needed
-    const actionBlocks: Record<string, unknown>[] = [];
-    for (let i = 0; i < agentButtons.length; i += 5) {
-      actionBlocks.push({
-        type: "actions" as const,
-        elements: agentButtons.slice(i, i + 5),
-      });
-    }
+    const agentDropdown = {
+      type: "actions" as const,
+      elements: [
+        {
+          type: "static_select" as const,
+          action_id: "select_agent",
+          placeholder: {
+            type: "plain_text" as const,
+            text: "Choose an agent…",
+          },
+          options: params.agents.map((agent) => ({
+            text: { type: "plain_text" as const, text: agent.name },
+            value: agent.id,
+          })),
+        },
+      ],
+    };
 
     const blocks: Record<string, unknown>[] = params.isWelcome
       ? [
@@ -361,7 +395,7 @@ class SlackProvider implements ChatOpsProvider {
             type: "section",
             text: {
               type: "mrkdwn",
-              text: "*Welcome to Archestra!*\nEach Slack channel needs a *default agent* bound to it. This agent will handle all your requests in this channel by default.",
+              text: "Each Slack channel needs a *default agent* assigned to it. This agent will handle all your requests in this channel by default.",
             },
           },
           {
@@ -386,7 +420,7 @@ class SlackProvider implements ChatOpsProvider {
               text: "*Let's set the default agent for this channel:*",
             },
           },
-          ...actionBlocks,
+          agentDropdown,
         ]
       : [
           {
@@ -396,16 +430,35 @@ class SlackProvider implements ChatOpsProvider {
               text: "*Change Default Agent*\nSelect a different agent to handle messages in this channel:",
             },
           },
-          ...actionBlocks,
+          agentDropdown,
         ];
 
-    await this.client.chat.postMessage({
-      channel: params.message.channelId,
-      thread_ts: params.message.threadId,
-      text: params.isWelcome ? "Welcome to Archestra!" : "Change Default Agent",
-      // biome-ignore lint/suspicious/noExplicitAny: Block Kit types are complex; shape is correct
-      blocks: blocks as any,
-    });
+    const isDM = params.message.metadata?.channelType === "im";
+    const fallbackText = params.isWelcome
+      ? "Welcome to Archestra!"
+      : "Change Default Agent";
+
+    if (isDM) {
+      // In DMs, thread the reply to the user's message so it appears in Chat tab.
+      // Top-level postMessage without thread_ts goes to History.
+      await this.client.chat.postMessage({
+        channel: params.message.channelId,
+        text: fallbackText,
+        // biome-ignore lint/suspicious/noExplicitAny: Block Kit types are complex; shape is correct
+        blocks: blocks as any,
+        ...(params.message.threadId
+          ? { thread_ts: params.message.threadId }
+          : {}),
+      });
+    } else {
+      await this.client.chat.postEphemeral({
+        channel: params.message.channelId,
+        user: params.message.senderId,
+        text: fallbackText,
+        // biome-ignore lint/suspicious/noExplicitAny: Block Kit types are complex; shape is correct
+        blocks: blocks as any,
+      });
+    }
   }
 
   async getThreadHistory(
@@ -422,26 +475,72 @@ class SlackProvider implements ChatOpsProvider {
     );
 
     try {
-      const result = await this.client.conversations.replies({
-        channel: params.channelId,
-        ts: params.threadId,
-        limit,
-      });
+      // Fetch all messages using cursor-based pagination
+      const allMessages: NonNullable<
+        Awaited<ReturnType<WebClient["conversations"]["replies"]>>["messages"]
+      > = [];
+      let cursor: string | undefined;
 
-      const messages = result.messages || [];
-      return messages
-        .filter(
-          (msg) => msg.ts && msg.ts !== params.excludeMessageId && msg.text,
-        )
-        .map((msg) => ({
+      do {
+        const result = await this.client.conversations.replies({
+          channel: params.channelId,
+          ts: params.threadId,
+          limit,
+          cursor,
+        });
+        allMessages.push(...(result.messages || []));
+        cursor = result.response_metadata?.next_cursor || undefined;
+      } while (cursor && allMessages.length < limit);
+
+      // Trim to the requested limit
+      const trimmedMessages = allMessages.slice(0, limit);
+
+      const filtered = trimmedMessages.filter(
+        (msg) => msg.ts && msg.ts !== params.excludeMessageId && msg.text,
+      );
+
+      // Batch-resolve unique non-bot user IDs to display names
+      const userIds = [
+        ...new Set(
+          filtered
+            .filter(
+              (msg) => msg.user && !msg.bot_id && msg.user !== this.botUserId,
+            )
+            .map((msg) => msg.user as string),
+        ),
+      ];
+      const userNameMap = await this.resolveUserNames(userIds);
+
+      const threadMessages = filtered.map((msg) => {
+        // Extract file metadata from Slack message files
+        const files = (msg.files as SlackFile[] | undefined)
+          ?.filter((f) => f.url_private_download || f.url_private)
+          .map((f) => ({
+            url: (f.url_private_download || f.url_private) as string,
+            mimetype: f.mimetype || "application/octet-stream",
+            name: f.name,
+            size: f.size,
+          }));
+
+        const isFromBot = Boolean(msg.bot_id) || msg.user === this.botUserId;
+        const senderName = isFromBot
+          ? msg.user || "Unknown"
+          : userNameMap.get(msg.user as string) || msg.user || "Unknown";
+
+        return {
           messageId: msg.ts as string,
           senderId: msg.user || msg.bot_id || "unknown",
-          senderName: msg.user || "Unknown",
+          senderName,
           text: msg.text || "",
           timestamp: new Date(Number.parseFloat(msg.ts as string) * 1000),
-          isFromBot: Boolean(msg.bot_id) || msg.user === this.botUserId,
-        }))
-        .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+          isFromBot,
+          ...(files && files.length > 0 && { files }),
+        };
+      });
+
+      return threadMessages.sort(
+        (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
+      );
     } catch (error) {
       logger.warn(
         { error: errorMessage(error), channelId: params.channelId },
@@ -481,6 +580,26 @@ class SlackProvider implements ChatOpsProvider {
     }
   }
 
+  async getUserName(userId: string): Promise<string | null> {
+    if (!this.client) return null;
+
+    try {
+      const result = await this.client.users.info({ user: userId });
+      return (
+        result.user?.real_name ||
+        result.user?.profile?.display_name ||
+        result.user?.name ||
+        null
+      );
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error), userId },
+        "[SlackProvider] Failed to get user name",
+      );
+      return null;
+    }
+  }
+
   async getChannelName(channelId: string): Promise<string | null> {
     if (!this.client) return null;
     try {
@@ -503,15 +622,26 @@ class SlackProvider implements ChatOpsProvider {
     }
 
     try {
-      const result = await this.client.conversations.list({
-        types: "public_channel,private_channel",
-        exclude_archived: true,
-        limit: 999,
-      });
+      // Paginate through all channels using cursor-based pagination.
+      // Slack API returns at most `limit` channels per page (max 999).
+      const allChannels: NonNullable<
+        Awaited<ReturnType<WebClient["conversations"]["list"]>>["channels"]
+      > = [];
+      let cursor: string | undefined;
 
-      const channels = result.channels || [];
+      do {
+        const result = await this.client.conversations.list({
+          types: "public_channel,private_channel",
+          exclude_archived: true,
+          limit: 999,
+          cursor,
+        });
+        allChannels.push(...(result.channels || []));
+        cursor = result.response_metadata?.next_cursor || undefined;
+      } while (cursor);
+
       // Only include channels where the bot is a member
-      return channels
+      return allChannels
         .filter((ch) => ch.id && ch.is_member)
         .map((ch) => ({
           channelId: ch.id as string,
@@ -547,12 +677,12 @@ class SlackProvider implements ChatOpsProvider {
     }
 
     const action = p.actions[0];
-    if (!action.action_id?.startsWith("select_agent_") || !action.value) {
+    if (action.action_id !== "select_agent" || !action.selected_option?.value) {
       return null;
     }
 
     return {
-      agentId: action.value,
+      agentId: action.selected_option.value,
       channelId: p.channel?.id || "",
       workspaceId: p.team?.id || null,
       threadTs: p.message?.thread_ts || p.message?.ts,
@@ -592,12 +722,38 @@ class SlackProvider implements ChatOpsProvider {
       };
     }
 
-    const user = await UserModel.findByEmail(senderEmail.toLowerCase());
+    let user = await UserModel.findByEmail(senderEmail.toLowerCase());
     if (!user) {
-      return {
-        response_type: "ephemeral",
-        text: `You (${senderEmail}) are not a registered Archestra user. Contact your administrator for access.`,
-      };
+      // Auto-provision: create user + member from slash command
+      const displayName =
+        (await this.getUserName(userId)) || body.user_name || "Unknown User";
+      const { invitationId } = await autoProvisionUser({
+        email: senderEmail,
+        name: displayName,
+        provider: "slack",
+      });
+      user = await UserModel.findByEmail(senderEmail.toLowerCase());
+      if (!user) {
+        return {
+          response_type: "ephemeral",
+          text: "Something went wrong while setting up your account. Please try again.",
+        };
+      }
+
+      // Send welcome DM (fire-and-forget) — skip when SSO is enabled
+      if (!(await isSsoConfigured())) {
+        const welcome = buildWelcomeMessage({
+          invitationId,
+          email: senderEmail,
+          name: displayName,
+        });
+        this.sendDirectMessage({
+          userId,
+          text: welcome.text,
+          actionUrl: welcome.actionUrl,
+          actionLabel: welcome.actionLabel,
+        }).catch(() => {});
+      }
     }
 
     switch (command) {
@@ -609,7 +765,7 @@ class SlackProvider implements ChatOpsProvider {
             "`/archestra-select-agent` — Change the default agent\n" +
             "`/archestra-status` — Show current agent binding\n" +
             "`/archestra-help` — Show this help message\n\n" +
-            "Or just send a message to interact with the bound agent.",
+            "Or just send a message to interact with the assigned agent.",
         };
 
       case SLACK_SLASH_COMMANDS.STATUS: {
@@ -624,7 +780,7 @@ class SlackProvider implements ChatOpsProvider {
           return {
             response_type: "ephemeral",
             text:
-              `This channel is bound to agent: *${agent?.name || binding.agentId}*\n\n` +
+              `This channel is assigned to agent: *${agent?.name || binding.agentId}*\n\n` +
               "*Tip:* You can use other agents with the syntax *AgentName >* (e.g., @Archestra Sales > what's the status?).\n\n" +
               "Use `/archestra-select-agent` to change the default agent.",
           };
@@ -632,12 +788,13 @@ class SlackProvider implements ChatOpsProvider {
 
         return {
           response_type: "ephemeral",
-          text: "No agent is bound to this channel yet.\nSend any message to set up an agent binding.",
+          text: "No agent is assigned to this channel yet.\nSend any message to set up an agent assignment.",
         };
       }
 
       case SLACK_SLASH_COMMANDS.SELECT_AGENT: {
         // Send agent selection card (visible to all in channel)
+        const isDm = isSlackDmChannel(channelId);
         const message: IncomingChatMessage = {
           messageId: `slack-slash-${Date.now()}`,
           channelId,
@@ -655,6 +812,7 @@ class SlackProvider implements ChatOpsProvider {
         const agents =
           (await this.eventHandler?.getAccessibleChatopsAgents({
             senderEmail,
+            isDm,
           })) ?? [];
 
         if (agents.length === 0) {
@@ -680,6 +838,88 @@ class SlackProvider implements ChatOpsProvider {
     }
   }
 
+  async sendEphemeralMessage(params: {
+    channelId: string;
+    userId: string;
+    text: string;
+    threadId?: string;
+  }): Promise<void> {
+    if (!this.client) return;
+    try {
+      await this.client.chat.postEphemeral({
+        channel: params.channelId,
+        user: params.userId,
+        text: params.text,
+        thread_ts: params.threadId,
+      });
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error) },
+        "[SlackProvider] Failed to send ephemeral message",
+      );
+    }
+  }
+
+  async sendDirectMessage(params: {
+    userId: string;
+    text: string;
+    actionUrl?: string;
+    actionLabel?: string;
+    channelId?: string;
+    threadId?: string;
+  }): Promise<void> {
+    if (!this.client) return;
+
+    let dmChannelId = params.channelId;
+    if (!dmChannelId) {
+      // Open a DM channel with the user
+      const dmResult = await this.client.conversations.open({
+        users: params.userId,
+      });
+      dmChannelId = dmResult.channel?.id;
+      if (!dmChannelId) {
+        logger.warn(
+          { userId: params.userId },
+          "[SlackProvider] Failed to open DM channel",
+        );
+        return;
+      }
+    }
+
+    // biome-ignore lint/suspicious/noExplicitAny: Block Kit types are complex; shape is correct
+    const blocks: any[] = [
+      {
+        type: "section",
+        text: { type: "mrkdwn", text: params.text },
+      },
+    ];
+
+    if (params.actionUrl && params.actionLabel) {
+      blocks.push({
+        type: "actions",
+        elements: [
+          {
+            type: "button",
+            text: { type: "plain_text", text: params.actionLabel, emoji: true },
+            url: params.actionUrl,
+            style: "primary",
+          },
+        ],
+      });
+      blocks.push({
+        type: "context",
+        elements: [{ type: "mrkdwn", text: `Link: ${params.actionUrl}` }],
+      });
+    }
+
+    await this.client.chat.postMessage({
+      channel: dmChannelId,
+      text: params.text,
+      blocks,
+      ...(params.threadId ? { thread_ts: params.threadId } : {}),
+    });
+  }
+
   async setTypingStatus(channelId: string, threadTs: string): Promise<void> {
     if (!this.client) return;
     try {
@@ -697,8 +937,76 @@ class SlackProvider implements ChatOpsProvider {
     }
   }
 
+  async downloadFiles(
+    files: ChatThreadMessageFile[],
+  ): Promise<
+    Array<{ contentType: string; contentBase64: string; name?: string }>
+  > {
+    // Convert ChatThreadMessageFile[] to SlackFile[] and reuse existing download logic
+    const slackFiles: SlackFile[] = files.map((f) => ({
+      id: f.name || "unknown",
+      name: f.name,
+      mimetype: f.mimetype,
+      size: f.size,
+      url_private_download: f.url,
+    }));
+    return this.downloadSlackFiles(slackFiles);
+  }
+
   getBotUserId(): string | null {
     return this.botUserId;
+  }
+
+  hasMissingScopes(): boolean {
+    return this.missingScopes.length > 0;
+  }
+
+  /**
+   * Send a rate-limited notification to a Slack thread when missing scopes
+   * are detected. Throttled to at most once per 30 days per workspace.
+   */
+  async notifyMissingScopes(message: IncomingChatMessage): Promise<void> {
+    if (this.missingScopes.length === 0 || !this.client) return;
+
+    const cacheKey: AllowedCacheKey = `${CacheKey.SlackScopeNotification}-${this.teamId ?? "unknown"}`;
+    const alreadyNotified = await cacheManager.get<boolean>(cacheKey);
+    if (alreadyNotified) return;
+
+    const scopeList = this.missingScopes.map((s) => `  • \`${s}\``).join("\n");
+
+    const appSettingsUrl =
+      this.config.appId && this.teamId
+        ? `https://app.slack.com/app-settings/${this.teamId}/${this.config.appId}/oauth`
+        : "https://api.slack.com/apps";
+
+    const text = [
+      ":warning: *Your Archestra Slack app is missing required scopes*",
+      "",
+      "The following scopes need to be added to your Slack app:",
+      scopeList,
+      "",
+      "*To update your app:*",
+      `1. Open your <${appSettingsUrl}|Slack app settings>`,
+      "2. Go to *OAuth & Permissions* → *Scopes* → *Bot Token Scopes*",
+      "3. Add the missing scopes listed above",
+      "4. Click *Reinstall to Workspace* to apply the changes",
+    ].join("\n");
+
+    try {
+      await this.client.chat.postMessage({
+        channel: message.channelId,
+        text,
+        thread_ts: message.threadId,
+      });
+
+      // Throttle: don't send again for 30 days
+      cacheManager.set(cacheKey, true, TimeInMs.Day * 30).catch(() => {});
+    } catch (error) {
+      logger.debug(
+        { error: errorMessage(error) },
+        "[SlackProvider] Failed to send missing-scope notification (non-fatal)",
+      );
+    }
   }
 
   // ===========================================================================
@@ -830,6 +1138,269 @@ class SlackProvider implements ChatOpsProvider {
     }
   }
 
+  /**
+   * Download files attached to a Slack message and convert to A2AAttachment format.
+   * Uses the bot token to authenticate downloads from Slack's private URLs.
+   * Enforces size limits to prevent excessive memory usage.
+   */
+  private async downloadSlackFiles(
+    files?: SlackFile[],
+  ): Promise<
+    Array<{ contentType: string; contentBase64: string; name?: string }>
+  > {
+    if (!files || files.length === 0 || !this.client) return [];
+
+    const filesToProcess = files.slice(
+      0,
+      CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENTS_PER_MESSAGE,
+    );
+    const results: Array<{
+      contentType: string;
+      contentBase64: string;
+      name?: string;
+    }> = [];
+    let totalSize = 0;
+
+    for (const file of filesToProcess) {
+      const downloadUrl = file.url_private_download || file.url_private;
+      if (!downloadUrl) {
+        logger.debug(
+          { fileId: file.id, fileName: file.name },
+          "[SlackProvider] Skipping file without download URL",
+        );
+        continue;
+      }
+
+      // Skip files that exceed individual size limit
+      if (
+        file.size &&
+        file.size > CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENT_SIZE
+      ) {
+        logger.info(
+          {
+            fileId: file.id,
+            fileName: file.name,
+            size: file.size,
+            maxSize: CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENT_SIZE,
+          },
+          "[SlackProvider] Skipping file exceeding size limit",
+        );
+        continue;
+      }
+
+      // Skip if total size would exceed limit
+      if (
+        file.size &&
+        totalSize + file.size >
+          CHATOPS_ATTACHMENT_LIMITS.MAX_TOTAL_ATTACHMENTS_SIZE
+      ) {
+        logger.info(
+          {
+            fileId: file.id,
+            fileName: file.name,
+            totalSize,
+            maxTotalSize: CHATOPS_ATTACHMENT_LIMITS.MAX_TOTAL_ATTACHMENTS_SIZE,
+          },
+          "[SlackProvider] Skipping file - total attachments size limit reached",
+        );
+        break;
+      }
+
+      try {
+        // Only send the bot token to known Slack domains to prevent token leakage via SSRF
+        if (!isSlackFileUrl(downloadUrl)) {
+          logger.warn(
+            { fileId: file.id, url: downloadUrl },
+            "[SlackProvider] Skipping file from non-Slack domain",
+          );
+          continue;
+        }
+
+        // Slack redirects files.slack.com → files-origin.slack.com.
+        // Node's fetch strips the Authorization header on cross-origin redirects,
+        // so we follow redirects manually to re-attach the token.
+        const response = await fetchSlackFile(
+          downloadUrl,
+          this.config.botToken,
+        );
+
+        if (!response.ok) {
+          logger.warn(
+            {
+              fileId: file.id,
+              fileName: file.name,
+              status: response.status,
+            },
+            "[SlackProvider] Failed to download file",
+          );
+          continue;
+        }
+
+        // Verify we got a file, not an HTML error/login page
+        const responseContentType = response.headers.get("content-type") || "";
+        if (responseContentType.includes("text/html")) {
+          logger.warn(
+            {
+              fileId: file.id,
+              fileName: file.name,
+              contentType: responseContentType,
+            },
+            "[SlackProvider] Received HTML instead of file — bot may be missing files:read scope",
+          );
+          continue;
+        }
+
+        // Pre-check Content-Length to avoid buffering oversized files
+        const contentLength = Number.parseInt(
+          response.headers.get("content-length") || "0",
+          10,
+        );
+        if (
+          contentLength > 0 &&
+          contentLength > CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENT_SIZE
+        ) {
+          logger.info(
+            { fileId: file.id, contentLength },
+            "[SlackProvider] Skipping oversized attachment (Content-Length)",
+          );
+          continue;
+        }
+
+        const buffer = Buffer.from(await response.arrayBuffer());
+
+        // Double-check actual size against individual limit
+        if (buffer.length > CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENT_SIZE) {
+          logger.info(
+            { fileId: file.id, actualSize: buffer.length },
+            "[SlackProvider] Downloaded file exceeds size limit, skipping",
+          );
+          continue;
+        }
+
+        // Post-download total size check (handles case where file.size was missing/zero)
+        if (
+          totalSize + buffer.length >
+          CHATOPS_ATTACHMENT_LIMITS.MAX_TOTAL_ATTACHMENTS_SIZE
+        ) {
+          logger.info(
+            {
+              fileId: file.id,
+              fileName: file.name,
+              totalSize,
+              maxTotalSize:
+                CHATOPS_ATTACHMENT_LIMITS.MAX_TOTAL_ATTACHMENTS_SIZE,
+            },
+            "[SlackProvider] Total attachments size limit reached (post-download)",
+          );
+          break;
+        }
+
+        totalSize += buffer.length;
+        results.push({
+          contentType: file.mimetype || "application/octet-stream",
+          contentBase64: buffer.toString("base64"),
+          name: file.name,
+        });
+
+        logger.debug(
+          {
+            fileId: file.id,
+            fileName: file.name,
+            contentType: file.mimetype,
+            size: buffer.length,
+          },
+          "[SlackProvider] Downloaded file attachment",
+        );
+      } catch (error) {
+        logger.warn(
+          { fileId: file.id, fileName: file.name, error: errorMessage(error) },
+          "[SlackProvider] Error downloading file",
+        );
+      }
+    }
+
+    if (results.length > 0) {
+      logger.info(
+        {
+          fileCount: results.length,
+          totalSize,
+          originalFileCount: files.length,
+        },
+        "[SlackProvider] Downloaded file attachments from Slack message",
+      );
+    }
+
+    return results;
+  }
+
+  /**
+   * Parse the x-oauth-scopes header from auth.test and detect missing scopes.
+   * Non-fatal — silently skips if the header is absent.
+   */
+  private parseGrantedScopes(scopeHeader: string | null): void {
+    if (!scopeHeader) {
+      logger.debug(
+        "[SlackProvider] No x-oauth-scopes header in auth.test response",
+      );
+      return;
+    }
+
+    const grantedScopes = new Set(scopeHeader.split(",").map((s) => s.trim()));
+    const missing = SLACK_REQUIRED_BOT_SCOPES.filter(
+      (s) => !grantedScopes.has(s),
+    );
+
+    if (missing.length > 0) {
+      this.missingScopes = missing;
+      logger.warn(
+        { missingScopes: missing },
+        "[SlackProvider] Bot token is missing required scopes. Some features (e.g., file downloads) may not work.",
+      );
+    } else {
+      logger.debug("[SlackProvider] All required scopes are granted");
+    }
+  }
+
+  /**
+   * Batch-resolve Slack user IDs to display names using the LRU cache.
+   * Falls back to the raw user ID if resolution fails.
+   */
+  private async resolveUserNames(
+    userIds: string[],
+  ): Promise<Map<string, string>> {
+    const result = new Map<string, string>();
+    const uncachedIds: string[] = [];
+
+    // Check cache first
+    for (const id of userIds) {
+      const cached = this.userNameCache.get(id);
+      if (cached) {
+        result.set(id, cached);
+      } else {
+        uncachedIds.push(id);
+      }
+    }
+
+    // Resolve uncached IDs via Slack API
+    const resolutions = await Promise.allSettled(
+      uncachedIds.map(async (id) => {
+        const name = await this.getUserName(id);
+        return { id, name };
+      }),
+    );
+
+    for (const resolution of resolutions) {
+      if (resolution.status === "fulfilled") {
+        const { id, name } = resolution.value;
+        const displayName = name || id;
+        this.userNameCache.set(id, displayName);
+        result.set(id, displayName);
+      }
+    }
+
+    return result;
+  }
+
   private cleanBotMention(text: string): string {
     if (!this.botUserId) return text;
     // Slack mentions are formatted as <@U12345678>
@@ -862,6 +1433,68 @@ function decodeSlackEntities(text: string): string {
 }
 
 /**
+ * Check whether a URL points to a known Slack file-hosting domain.
+ * Prevents leaking the bot token to arbitrary URLs via SSRF.
+ */
+function isSlackFileUrl(url: string): boolean {
+  try {
+    const hostname = new URL(url).hostname;
+    return (
+      hostname === "files.slack.com" || hostname === "files-origin.slack.com"
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Fetch a file from Slack, manually following redirects to preserve the
+ * Authorization header. Slack redirects files.slack.com to
+ * files-origin.slack.com (a different origin), and Node's fetch strips
+ * the Authorization header on cross-origin redirects per spec.
+ * We follow up to 5 redirects, re-attaching the token on each hop
+ * as long as the target remains a known Slack domain.
+ */
+async function fetchSlackFile(
+  url: string,
+  botToken: string,
+): Promise<Response> {
+  const maxRedirects = 5;
+  let currentUrl = url;
+
+  for (let i = 0; i <= maxRedirects; i++) {
+    const headers: Record<string, string> = {};
+    if (isSlackFileUrl(currentUrl)) {
+      headers.Authorization = `Bearer ${botToken}`;
+    }
+
+    const response = await fetch(currentUrl, {
+      headers,
+      redirect: "manual",
+    });
+
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get("location");
+      if (!location) break;
+      currentUrl = location;
+      continue;
+    }
+
+    return response;
+  }
+
+  // If we exhausted redirects, do a final attempt with auth if still a Slack domain
+  const headers: Record<string, string> = {};
+  if (isSlackFileUrl(currentUrl)) {
+    headers.Authorization = `Bearer ${botToken}`;
+  }
+  return fetch(currentUrl, {
+    headers: Object.keys(headers).length > 0 ? headers : undefined,
+    redirect: "follow",
+  });
+}
+
+/**
  * Get a header value as a string, handling both string and string[] values.
  */
 function getHeader(
@@ -877,6 +1510,16 @@ function getHeader(
 // Slack Event Types
 // =============================================================================
 
+interface SlackFile {
+  id: string;
+  name?: string;
+  mimetype?: string;
+  filetype?: string;
+  size?: number;
+  url_private?: string;
+  url_private_download?: string;
+}
+
 interface SlackEventPayload {
   type: string;
   team_id?: string;
@@ -890,6 +1533,7 @@ interface SlackEventPayload {
     text?: string;
     ts: string;
     thread_ts?: string;
+    files?: SlackFile[];
   };
   challenge?: string;
 }
@@ -898,7 +1542,8 @@ interface SlackInteractivePayload {
   type: string;
   actions?: Array<{
     action_id: string;
-    value: string;
+    value?: string;
+    selected_option?: { value: string };
   }>;
   user?: { id: string; name: string };
   channel?: { id: string };

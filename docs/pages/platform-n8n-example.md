@@ -143,7 +143,7 @@ N8N is not able to execute the second call once the untrusted content got inject
 
 ![N8N](/docs/platfrom/n8n-3.png)
 
-Here, Archestra's "Dynamic Tools" feature is reducing the context trustworthiness and preventing the following tool calls. Read about it [here](/docs/platform-dynamic-tools).
+Here, Archestra's AI tool guardrails reduce the context trustworthiness and prevent the following tool calls. Read about them [here](/docs/platform-ai-tool-guardrails).
 
 ### 5. Tracking N8N Executions (Optional)
 
@@ -165,6 +165,6 @@ The [`X-Archestra-Meta`](/docs/platform-llm-proxy#custom-headers) header format 
 
 Archestra will then export the `agent_executions_total` Prometheus metric — a counter of unique executions grouped by `agent_id`.
 
-This is also useful for attributing costs. Archestra already exports `llm_cost_total`, which tracks LLM inference spending per agent. Combined with `agent_executions_total`, you can calculate the full operating cost of each agent (inference + per-execution fees). The built-in [Grafana dashboard](https://github.com/archestra-ai/archestra/blob/main/platform/dev/grafana/dashboards/platform.json) includes this under the **Agent Executions** row. See [Observability](/docs/platform-observability) for setup.
+This is also useful for attributing costs. Archestra already exports `llm_cost_total`, which tracks LLM inference spending per agent. Combined with `agent_executions_total`, you can calculate the full operating cost of each agent (inference + per-execution fees). The built-in [GenAI Observability dashboard](https://github.com/archestra-ai/archestra/blob/main/platform/dev/grafana/dashboards/genai-observability.json) includes this in the main **Cost** section, with execution-level totals grouped separately under **External Agent Executions**. See [Observability](/docs/platform-observability) for setup.
 
 ![Inference Cost per Agent](/docs/automated_screenshots/platform_n8n_inference_costs.png)

@@ -2,7 +2,6 @@
 
 import type { IdentityProviderFormValues } from "@shared";
 import { Info } from "lucide-react";
-import { useCallback, useRef } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import {
   Accordion,
@@ -27,6 +26,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useAppName } from "@/lib/hooks/use-app-name";
 
 interface TeamSyncConfigFormProps {
   form: UseFormReturn<IdentityProviderFormValues>;
@@ -48,31 +48,12 @@ const HANDLEBARS_EXAMPLES = [
 ];
 
 export function TeamSyncConfigForm({ form }: TeamSyncConfigFormProps) {
-  const accordionContentRef = useRef<HTMLDivElement>(null);
-
-  // Scroll the accordion content into view when expanded
-  const handleAccordionChange = useCallback((value: string) => {
-    if (value === "team-sync") {
-      // Small delay to allow accordion animation to start
-      setTimeout(() => {
-        accordionContentRef.current?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
-      }, 100);
-    }
-  }, []);
-
+  const appName = useAppName();
   return (
     <div className="space-y-6">
       <Separator />
 
-      <Accordion
-        type="single"
-        collapsible
-        className="w-full"
-        onValueChange={handleAccordionChange}
-      >
+      <Accordion type="single" collapsible className="w-full">
         <AccordionItem value="team-sync" className="border-none">
           <AccordionTrigger className="hover:no-underline">
             <div className="flex items-center gap-2">
@@ -94,10 +75,7 @@ export function TeamSyncConfigForm({ form }: TeamSyncConfigFormProps) {
               </TooltipProvider>
             </div>
           </AccordionTrigger>
-          <AccordionContent
-            ref={accordionContentRef}
-            className="space-y-4 pt-4"
-          >
+          <AccordionContent className="space-y-4 pt-4">
             <FormField
               control={form.control}
               name="teamSyncConfig.enabled"
@@ -113,7 +91,7 @@ export function TeamSyncConfigForm({ form }: TeamSyncConfigFormProps) {
                     <FormLabel>Enable Team Sync</FormLabel>
                     <FormDescription>
                       When enabled, users are automatically added/removed from
-                      Archestra teams based on their SSO group memberships.
+                      {appName} teams based on their SSO group memberships.
                     </FormDescription>
                   </div>
                 </FormItem>

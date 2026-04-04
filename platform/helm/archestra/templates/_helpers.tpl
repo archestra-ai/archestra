@@ -40,6 +40,7 @@ helm.sh/chart: {{ include "archestra-platform.chart" . }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
+app.kubernetes.io/part-of: archestra
 {{- end }}
 
 {{/*
@@ -103,10 +104,12 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
   valueFrom:
     secretKeyRef:
       name: {{ include "archestra-platform.authSecretName" . }}
-      key: auth-secret
+      key: {{ include "archestra-platform.authSecretKey" . }}
 {{- end }}
+{{- if not (hasKey .Values.archestra.env "ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE") }}
 - name: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE
   value: {{ default .Release.Namespace .Values.archestra.orchestrator.kubernetes.namespace | quote }}
+{{- end }}
 {{- if .Values.archestra.orchestrator.baseImage }}
 - name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE
   value: {{ .Values.archestra.orchestrator.baseImage | quote }}
@@ -117,6 +120,18 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
 {{- end }}
 - name: ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER
   value: {{ .Values.archestra.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster | quote }}
+{{- if .Values.archestra.orchestrator.kubernetes.clusterDomain }}
+- name: ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DOMAIN
+  value: {{ .Values.archestra.orchestrator.kubernetes.clusterDomain | quote }}
+{{- end }}
+{{- if .Values.archestra.diagnostics.enabled }}
+- name: ARCHESTRA_NODE_DIAGNOSTIC_DIR
+  value: "/var/diagnostics"
+{{- if gt (int .Values.archestra.diagnostics.heapSnapshotsNearHeapLimit) 0 }}
+- name: ARCHESTRA_NODE_HEAPSNAPSHOT_NEAR_HEAP_LIMIT
+  value: {{ .Values.archestra.diagnostics.heapSnapshotsNearHeapLimit | quote }}
+{{- end }}
+{{- end }}
 {{- range $key, $value := .Values.archestra.env }}
 {{/* Check if env var is in the explicit sensitive list OR matches ARCHESTRA_CHAT_*_API_KEY pattern */}}
 {{- $isSensitive := or (has $key $sensitiveEnvVars) (and (hasPrefix "ARCHESTRA_CHAT_" $key) (hasSuffix "_API_KEY" $key)) }}
@@ -151,7 +166,24 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
 Auth secret name for the Archestra Platform
 */}}
 {{- define "archestra-platform.authSecretName" -}}
-{{- printf "%s-auth" (include "archestra-platform.fullname" .) -}}
+{{- default (printf "%s-auth" (include "archestra-platform.fullname" .)) .Values.archestra.authSecret.existingSecretName -}}
+{{- end }}
+
+{{/*
+Auth secret key for the Archestra Platform
+*/}}
+{{- define "archestra-platform.authSecretKey" -}}
+{{- if and (not .Values.archestra.authSecret.existingSecretName) (ne .Values.archestra.authSecret.existingSecretKey "auth-secret") -}}
+{{- fail "archestra.authSecret.existingSecretKey requires archestra.authSecret.existingSecretName to also be set." -}}
+{{- end -}}
+{{- default "auth-secret" .Values.archestra.authSecret.existingSecretKey -}}
+{{- end }}
+
+{{/*
+Diagnostics PVC claim name
+*/}}
+{{- define "archestra-platform.diagnosticsClaimName" -}}
+{{- default (printf "%s-diagnostics" (include "archestra-platform.fullname" .)) .Values.archestra.diagnostics.existingClaimName -}}
 {{- end }}
 
 {{/*
@@ -163,6 +195,182 @@ ServiceAccount name for the Archestra Platform
 {{- else }}
 {{- default "default" .Values.archestra.orchestrator.kubernetes.serviceAccount.name }}
 {{- end }}
+{{- end }}
+
+{{/*
+Worker selector labels
+*/}}
+{{- define "archestra-platform.workerSelectorLabels" -}}
+app.kubernetes.io/name: {{ include "archestra-platform.name" . }}-worker
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/component: worker
+{{- end }}
+
+{{/*
+Worker labels
+*/}}
+{{- define "archestra-platform.workerLabels" -}}
+helm.sh/chart: {{ include "archestra-platform.chart" . }}
+{{ include "archestra-platform.workerSelectorLabels" . }}
+{{- if .Chart.AppVersion }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- end }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+app.kubernetes.io/part-of: archestra
+{{- end }}
+
+{{/*
+Shared init containers for both platform and worker Deployments.
+Handles Vault secret injection, pgvector extension setup, and PostgreSQL readiness.
+*/}}
+{{- define "archestra-platform.initContainers" -}}
+{{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
+# Vault secret injection init container
+- name: vault-secrets
+  image: {{ include "archestra-platform.image" . }}
+  workingDir: /app/backend
+  env:
+    {{- include "archestra-platform.env" . | nindent 4 }}
+    - name: VAULT_INJECTOR_SECRETS
+      value: {{ .Values.archestra.initContainers.vaultSecrets.secrets | toJson | quote }}
+  command: ["node", "--enable-source-maps", "dist/standalone-scripts/vault-env-injector.ee.mjs"]
+  volumeMounts:
+    - name: vault-secrets
+      mountPath: /vault/secrets
+{{- end }}
+{{- if .Values.postgresql.enabled }}
+# Ensure the pgvector extension exists in the application database.
+- name: setup-postgres-extensions
+  image: {{ printf "%s:%s" (.Values.postgresql.image.repository | default "bitnami/postgresql") (.Values.postgresql.image.tag | default "latest") }}
+  env:
+    - name: PGPASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: {{ include "archestra-platform.fullname" . }}-postgresql
+          key: postgres-password
+  command:
+    - sh
+    - -c
+    - |
+      until pg_isready -h {{ include "archestra-platform.fullname" . }}-postgresql -U postgres; do
+        echo "Waiting for PostgreSQL..."
+        sleep 1
+      done
+      psql -h {{ include "archestra-platform.fullname" . }}-postgresql -U postgres -d {{ .Values.postgresql.auth.database }} -c "CREATE EXTENSION IF NOT EXISTS vector;"
+{{- end }}
+- name: wait-for-postgres
+  image: busybox:1.36
+  env:
+    {{- include "archestra-platform.env" . | nindent 4 }}
+  {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
+  volumeMounts:
+    - name: vault-secrets
+      mountPath: /vault/secrets
+      readOnly: true
+  {{- end }}
+  command:
+    - sh
+    - -c
+    - |
+      {{- if .Values.archestra.initContainers.waitForPostgres.enabled }}
+      # Source Vault secrets if available (may override ARCHESTRA_DATABASE_URL)
+      if [ -f /vault/secrets/env ]; then
+        set -a
+        . /vault/secrets/env
+        set +a
+      fi
+
+      # Parse host and port from ARCHESTRA_DATABASE_URL
+      # Format: postgresql://user:pass@host[:port]/database
+      DB_URL="${ARCHESTRA_DATABASE_URL##*@}"  # Remove prefix up to last @ (handles passwords with @)
+      HOST_PORT="${DB_URL%%/*}"               # Remove /database suffix
+      HOST="${HOST_PORT%%:*}"                 # Extract host
+      # Extract port, defaulting to 5432 if not specified
+      case "$HOST_PORT" in
+        *:*) PORT="${HOST_PORT##*:}" ;;
+        *)   PORT="5432" ;;
+      esac
+
+      echo "Waiting for PostgreSQL at ${HOST}:${PORT}..."
+      until nc -z "${HOST}" "${PORT}"; do
+        echo "PostgreSQL is unavailable - sleeping"
+        sleep 1
+      done
+      echo "PostgreSQL is up - continuing"
+      {{- else }}
+      echo "Skipping PostgreSQL readiness check"
+      {{- end }}
+{{- end }}
+
+{{/*
+Shared volumes for both platform and worker Deployments.
+*/}}
+{{- define "archestra-platform.volumes" -}}
+{{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.diagnostics.enabled .Values.archestra.extraVolumes }}
+volumes:
+  {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
+  - name: kubeconfig
+    secret:
+      secretName: {{ .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
+  {{- end }}
+  {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
+  - name: vault-secrets
+    emptyDir:
+      medium: Memory
+  {{- end }}
+  {{- if .Values.archestra.diagnostics.enabled }}
+  - name: diagnostics
+    persistentVolumeClaim:
+      claimName: {{ include "archestra-platform.diagnosticsClaimName" . }}
+  {{- end }}
+  {{- with .Values.archestra.extraVolumes }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
+Shared volume mounts for the main container.
+*/}}
+{{- define "archestra-platform.volumeMounts" -}}
+{{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.diagnostics.enabled .Values.archestra.extraVolumeMounts }}
+volumeMounts:
+  {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
+  - name: kubeconfig
+    mountPath: {{ .Values.archestra.orchestrator.kubernetes.kubeconfig.mountPath }}
+    readOnly: true
+  {{- end }}
+  {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
+  - name: vault-secrets
+    mountPath: /vault/secrets
+    readOnly: true
+  {{- end }}
+  {{- if .Values.archestra.diagnostics.enabled }}
+  - name: diagnostics
+    mountPath: /var/diagnostics
+    readOnly: false
+  {{- end }}
+  {{- with .Values.archestra.extraVolumeMounts }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
+Vault secrets command wrapper for the main container.
+Sources /vault/secrets/env before exec'ing the given entrypoint command.
+Usage: Pass the desired entrypoint as the argument.
+*/}}
+{{- define "archestra-platform.vaultSecretsCommand" -}}
+command: ["/bin/sh", "-c"]
+args:
+  - |
+    if [ -f /vault/secrets/env ]; then
+      set -a
+      . /vault/secrets/env
+      set +a
+    fi
+    exec {{ . }}
 {{- end }}
 
 {{/*

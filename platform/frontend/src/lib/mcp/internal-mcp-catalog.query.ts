@@ -1,0 +1,227 @@
+import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+
+const {
+  createInternalMcpCatalogItem,
+  deleteInternalMcpCatalogItem,
+  getDeploymentYamlPreview,
+  getInternalMcpCatalog,
+  getInternalMcpCatalogLabelKeys,
+  getInternalMcpCatalogLabelValues,
+  getInternalMcpCatalogTools,
+  getK8sImagePullSecrets,
+  resetDeploymentYaml,
+  updateInternalMcpCatalogItem,
+  validateDeploymentYaml,
+} = archestraApiSdk;
+
+type InternalMcpCatalogParams = {
+  initialData?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
+  enabled?: boolean;
+};
+type McpCatalogLabelValuesQuery = NonNullable<
+  archestraApiTypes.GetInternalMcpCatalogLabelValuesData["query"]
+>;
+type UpdateInternalMcpCatalogItemParams =
+  archestraApiTypes.UpdateInternalMcpCatalogItemData["path"] & {
+    data: archestraApiTypes.UpdateInternalMcpCatalogItemData["body"];
+  };
+
+export function useInternalMcpCatalog(params?: InternalMcpCatalogParams) {
+  return useQuery({
+    queryKey: ["mcp-catalog"],
+    queryFn: async () => (await getInternalMcpCatalog()).data ?? [],
+    initialData: params?.initialData,
+    enabled: params?.enabled,
+  });
+}
+
+export function useMcpCatalogLabelKeys() {
+  return useQuery({
+    queryKey: ["mcp-catalog", "labels", "keys"],
+    queryFn: async () => (await getInternalMcpCatalogLabelKeys()).data ?? [],
+  });
+}
+
+export function useMcpCatalogLabelValues(
+  params?: Partial<McpCatalogLabelValuesQuery>,
+) {
+  const { key } = params || {};
+  return useQuery({
+    queryKey: ["mcp-catalog", "labels", "values", key],
+    queryFn: async () =>
+      (await getInternalMcpCatalogLabelValues({ query: key ? { key } : {} }))
+        .data ?? [],
+    enabled: !!key,
+  });
+}
+
+export function useCreateInternalMcpCatalogItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: archestraApiTypes.CreateInternalMcpCatalogItemData["body"],
+    ) => {
+      const response = await createInternalMcpCatalogItem({ body: data });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      toast.success("Catalog item created successfully");
+    },
+    onError: (error) => {
+      console.error("Create error:", error);
+      toast.error("Failed to create catalog item");
+    },
+  });
+}
+
+export function useUpdateInternalMcpCatalogItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, data }: UpdateInternalMcpCatalogItemParams) => {
+      const response = await updateInternalMcpCatalogItem({
+        path: { id },
+        body: data,
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      // Also invalidate MCP servers to refresh reinstallRequired flags
+      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+      // Invalidate all chat MCP tools (server config may have changed)
+      queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
+      toast.success("Catalog item updated successfully");
+    },
+    onError: (error) => {
+      console.error("Edit error:", error);
+      toast.error("Failed to update catalog item");
+    },
+  });
+}
+
+export function useDeleteInternalMcpCatalogItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const response = await deleteInternalMcpCatalogItem({ path: { id } });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      toast.success("Catalog item deleted successfully");
+    },
+    onError: (error) => {
+      console.error("Delete error:", error);
+      toast.error("Failed to delete catalog item");
+    },
+  });
+}
+
+export type CatalogTool =
+  archestraApiTypes.GetInternalMcpCatalogToolsResponses["200"][number];
+
+/**
+ * Fetch tools for a catalog item by catalog ID (raw function for use with useQueries).
+ */
+export async function fetchCatalogTools(
+  catalogId: string,
+): Promise<CatalogTool[]> {
+  try {
+    const response = await getInternalMcpCatalogTools({
+      path: { id: catalogId },
+    });
+    return response.data ?? [];
+  } catch (error) {
+    console.error("Failed to fetch catalog tools:", error);
+    return [];
+  }
+}
+
+/**
+ * Fetch tools for a catalog item by catalog ID.
+ * Used for builtin servers (like Archestra) that don't have a traditional MCP server installation.
+ */
+export function useCatalogTools(catalogId: string | null) {
+  return useQuery({
+    queryKey: ["mcp-catalog", catalogId, "tools"],
+    queryFn: async () => {
+      if (!catalogId) return [];
+      return fetchCatalogTools(catalogId);
+    },
+    enabled: !!catalogId,
+  });
+}
+
+/**
+ * Fetch deployment YAML template preview for a catalog item.
+ */
+export function useGetDeploymentYamlPreview(catalogId: string | null) {
+  return useQuery({
+    queryKey: ["mcp-catalog", catalogId, "deployment-yaml-preview"],
+    queryFn: async () => {
+      if (!catalogId) return null;
+      const response = await getDeploymentYamlPreview({
+        path: { id: catalogId },
+      });
+      return response.data;
+    },
+    enabled: !!catalogId,
+  });
+}
+
+/**
+ * Validate deployment YAML template.
+ */
+export function useValidateDeploymentYaml() {
+  return useMutation({
+    mutationFn: async (
+      params: NonNullable<archestraApiTypes.ValidateDeploymentYamlData["body"]>,
+    ) => {
+      const response = await validateDeploymentYaml({ body: params });
+      return response.data;
+    },
+  });
+}
+
+/**
+ * Reset deployment YAML to default by clearing the custom YAML from the database.
+ * Returns the freshly generated default YAML.
+ */
+export function useResetDeploymentYaml() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (catalogId: string) => {
+      const response = await resetDeploymentYaml({ path: { id: catalogId } });
+      return response.data;
+    },
+    onSuccess: (_data, catalogId) => {
+      // Invalidate the main catalog query to refresh the form data
+      queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      // Invalidate the preview query
+      queryClient.invalidateQueries({
+        queryKey: ["mcp-catalog", catalogId, "deployment-yaml-preview"],
+      });
+      toast.success("Deployment YAML reset to default");
+    },
+    onError: (error) => {
+      console.error("Reset deployment YAML error:", error);
+      toast.error("Failed to reset deployment YAML");
+    },
+  });
+}
+
+/**
+ * Fetch Kubernetes docker-registry secrets available for imagePullSecrets.
+ */
+export function useK8sImagePullSecrets() {
+  return useQuery({
+    queryKey: ["k8s-image-pull-secrets"],
+    queryFn: async () => {
+      const response = await getK8sImagePullSecrets();
+      return response.data ?? [];
+    },
+  });
+}

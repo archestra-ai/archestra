@@ -72,7 +72,7 @@
                 "patterns": [
                   {
                     "group": ["**/*.ee", "**/*.ee.ts", "**/*.ee.tsx"],
-                    "message": "Cannot import .ee.ts files from non-.ee.ts files. Enterprise Edition files should only be imported by other .ee.ts files. Use runtime conditional logic with config.enterpriseLicenseActivated instead to avoid bundling enterprise code into OSS builds."
+                    "message": "Cannot import .ee.ts files from non-.ee.ts files. Enterprise Edition files should only be imported by other .ee.ts files. Use runtime conditional logic with config.enterpriseFeatures.core instead to avoid bundling enterprise code into OSS builds."
                   }
                 ]
               }

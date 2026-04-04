@@ -847,6 +847,7 @@ ${formattedHistory}
         organizationId: organization,
         userId,
         sessionId: buildEmailSessionId(email.conversationId),
+        source: "email",
         attachments: a2aAttachments.length > 0 ? a2aAttachments : undefined,
       });
     },

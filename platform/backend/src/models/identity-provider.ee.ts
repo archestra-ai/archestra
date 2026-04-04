@@ -1,6 +1,6 @@
 import type { SSOOptions } from "@better-auth/sso";
 import type { IdpRoleMappingConfig } from "@shared";
-import { MEMBER_ROLE_NAME } from "@shared";
+import { IDENTITY_TRUSTED_PROVIDER_IDS, MEMBER_ROLE_NAME } from "@shared";
 import { APIError } from "better-auth";
 import { and, eq } from "drizzle-orm";
 import { jwtDecode } from "jwt-decode";
@@ -431,6 +431,37 @@ class IdentityProviderModel {
     return idpProviders;
   }
 
+  static async getTrustedAccountLinkingProviderIds(): Promise<string[]> {
+    let configuredProviderIds: Array<{ providerId: string }> = [];
+
+    try {
+      configuredProviderIds = await db
+        .selectDistinct({
+          providerId: schema.identityProvidersTable.providerId,
+        })
+        .from(schema.identityProvidersTable);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes("Database not initialized")
+      ) {
+        return [...IDENTITY_TRUSTED_PROVIDER_IDS];
+      }
+
+      throw error;
+    }
+
+    return [
+      ...new Set([
+        ...IDENTITY_TRUSTED_PROVIDER_IDS,
+        ...configuredProviderIds
+          .map(({ providerId }) => providerId)
+          .filter((providerId) => providerId.length > 0)
+          .sort((a, b) => a.localeCompare(b)),
+      ]),
+    ];
+  }
+
   /**
    * Find all identity providers with full configuration including secrets.
    * Use this only for authenticated admin endpoints.
@@ -595,48 +626,49 @@ class IdentityProviderModel {
      */
     // Also store roleMapping and teamSyncConfig if provided (Better Auth doesn't handle these fields)
     // Note: These are stored as JSON text but typed as objects in Drizzle schema
-    const roleMappingJson = data.roleMapping
-      ? typeof data.roleMapping === "string"
-        ? data.roleMapping
-        : JSON.stringify(data.roleMapping)
-      : undefined;
-    const teamSyncConfigJson = data.teamSyncConfig
-      ? typeof data.teamSyncConfig === "string"
-        ? data.teamSyncConfig
-        : JSON.stringify(data.teamSyncConfig)
-      : undefined;
-    await db
+    const oidcConfigJson = serializeConfigValue(data.oidcConfig);
+    const samlConfigJson = serializeConfigValue(data.samlConfig);
+    const roleMappingJson = serializeConfigValue(data.roleMapping);
+    const teamSyncConfigJson = serializeConfigValue(data.teamSyncConfig);
+    const [updatedProvider] = await db
       .update(schema.identityProvidersTable)
       .set({
         domainVerified: true,
-        ...(roleMappingJson && {
+        ...(oidcConfigJson !== undefined && {
+          oidcConfig: oidcConfigJson as unknown as typeof data.oidcConfig,
+        }),
+        ...(samlConfigJson !== undefined && {
+          samlConfig: samlConfigJson as unknown as typeof data.samlConfig,
+        }),
+        ...(roleMappingJson !== undefined && {
           roleMapping: roleMappingJson as unknown as typeof data.roleMapping,
         }),
-        ...(teamSyncConfigJson && {
+        ...(teamSyncConfigJson !== undefined && {
           teamSyncConfig:
             teamSyncConfigJson as unknown as typeof data.teamSyncConfig,
         }),
       })
-      .where(eq(schema.identityProvidersTable.id, provider.id));
+      .where(eq(schema.identityProvidersTable.id, provider.id))
+      .returning();
+
+    if (!updatedProvider) {
+      throw new Error("Failed to update identity provider after creation");
+    }
 
     return {
-      ...provider,
+      ...updatedProvider,
       domainVerified: true,
-      oidcConfig: provider.oidcConfig
-        ? JSON.parse(provider.oidcConfig as unknown as string)
+      oidcConfig: updatedProvider.oidcConfig
+        ? JSON.parse(updatedProvider.oidcConfig as unknown as string)
         : undefined,
-      samlConfig: provider.samlConfig
-        ? JSON.parse(provider.samlConfig as unknown as string)
+      samlConfig: updatedProvider.samlConfig
+        ? JSON.parse(updatedProvider.samlConfig as unknown as string)
         : undefined,
-      roleMapping: data.roleMapping
-        ? typeof data.roleMapping === "string"
-          ? JSON.parse(data.roleMapping)
-          : data.roleMapping
+      roleMapping: updatedProvider.roleMapping
+        ? JSON.parse(updatedProvider.roleMapping as unknown as string)
         : undefined,
-      teamSyncConfig: data.teamSyncConfig
-        ? typeof data.teamSyncConfig === "string"
-          ? JSON.parse(data.teamSyncConfig)
-          : data.teamSyncConfig
+      teamSyncConfig: updatedProvider.teamSyncConfig
+        ? JSON.parse(updatedProvider.teamSyncConfig as unknown as string)
         : undefined,
     };
   }
@@ -657,19 +689,12 @@ class IdentityProviderModel {
 
     // Serialize roleMapping and teamSyncConfig if provided as objects
     // Note: These are stored as JSON text but typed as objects in Drizzle schema
-    const { roleMapping, teamSyncConfig, ...restData } = data;
-    const roleMappingJson =
-      roleMapping !== undefined
-        ? typeof roleMapping === "string" || roleMapping === null
-          ? roleMapping
-          : JSON.stringify(roleMapping)
-        : undefined;
-    const teamSyncConfigJson =
-      teamSyncConfig !== undefined
-        ? typeof teamSyncConfig === "string" || teamSyncConfig === null
-          ? teamSyncConfig
-          : JSON.stringify(teamSyncConfig)
-        : undefined;
+    const { oidcConfig, samlConfig, roleMapping, teamSyncConfig, ...restData } =
+      data;
+    const oidcConfigJson = serializeConfigValue(oidcConfig);
+    const samlConfigJson = serializeConfigValue(samlConfig);
+    const roleMappingJson = serializeConfigValue(roleMapping);
+    const teamSyncConfigJson = serializeConfigValue(teamSyncConfig);
 
     // Update in database
     // WORKAROUND: Always ensure domainVerified is true to enable account linking
@@ -679,6 +704,12 @@ class IdentityProviderModel {
       .set({
         ...restData,
         domainVerified: true,
+        ...(oidcConfigJson !== undefined && {
+          oidcConfig: oidcConfigJson as unknown as typeof oidcConfig,
+        }),
+        ...(samlConfigJson !== undefined && {
+          samlConfig: samlConfigJson as unknown as typeof samlConfig,
+        }),
         ...(roleMappingJson !== undefined && {
           roleMapping: roleMappingJson as unknown as typeof roleMapping,
         }),
@@ -789,3 +820,17 @@ class IdentityProviderModel {
 }
 
 export default IdentityProviderModel;
+
+function serializeConfigValue(
+  value: string | object | null | undefined,
+): string | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value === "string" || value === null) {
+    return value;
+  }
+
+  return JSON.stringify(value);
+}

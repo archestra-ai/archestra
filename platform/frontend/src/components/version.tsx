@@ -2,9 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useLatestGitHubRelease } from "@/lib/github-release.query";
-import { useHealth } from "@/lib/health.query";
-import { hasNewerVersion } from "@/lib/version-utils";
+import config from "@/lib/config/config";
+import { useHealth } from "@/lib/config/health.query";
+import { useLatestGitHubRelease } from "@/lib/github/github-release.query";
+import {
+  useAppearanceSettings,
+  useOrganization,
+} from "@/lib/organization.query";
+import { hasNewerVersion } from "@/lib/utils/version";
 
 interface VersionProps {
   inline?: boolean;
@@ -13,12 +18,26 @@ interface VersionProps {
 export function Version({ inline = false }: VersionProps) {
   const { data } = useHealth();
   const { data: latestRelease } = useLatestGitHubRelease();
+  const { data: organization } = useOrganization();
+  const { data: appearance } = useAppearanceSettings();
   const [shouldHide, setShouldHide] = useState(false);
 
+  // Prefer authenticated org data; fall back to public appearance for unauthenticated pages (e.g. sign-in)
+  const footerText = organization?.footerText ?? appearance?.footerText;
+  const version = data?.version;
+  const hideReleaseLink = config.enterpriseFeatures.fullWhiteLabeling;
+
   const hasNewVersion = useMemo(() => {
-    if (!data?.version || !latestRelease?.tag_name) return false;
-    return hasNewerVersion(data.version, latestRelease.tag_name);
-  }, [data?.version, latestRelease?.tag_name]);
+    if (!version || !latestRelease?.tag_name) return false;
+    return hasNewerVersion(version, latestRelease.tag_name);
+  }, [version, latestRelease?.tag_name]);
+
+  const footerString = useMemo(() => {
+    // Wait for version to load before rendering to avoid layout shift
+    if (!version) return null;
+    if (footerText) return `${footerText} (v${version})`;
+    return `Version: ${version}`;
+  }, [footerText, version]);
 
   useEffect(() => {
     // Only check for hide-version class if not inline
@@ -46,32 +65,36 @@ export function Version({ inline = false }: VersionProps) {
     return null;
   }
 
+  if (!footerString) {
+    return null;
+  }
+
+  const className = inline
+    ? "text-xs text-muted-foreground"
+    : "text-xs text-muted-foreground text-center py-4";
+
+  // Custom footer text: show text with version, no upgrade link
+  if (footerText) {
+    return <div className={className}>{footerString}</div>;
+  }
+
+  // Default: show version with optional upgrade link
   return (
-    <>
-      {data?.version && (
-        <div
-          className={
-            inline
-              ? "text-xs text-muted-foreground"
-              : "text-xs text-muted-foreground text-center py-4"
-          }
-        >
-          Version: {data.version}
-          {hasNewVersion && latestRelease && (
-            <>
-              , new:{" "}
-              <Link
-                href={latestRelease.html_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:text-foreground transition-colors"
-              >
-                {latestRelease.tag_name.replace(/^platform-/, "")}
-              </Link>
-            </>
-          )}
-        </div>
+    <div className={className}>
+      {footerString}
+      {!hideReleaseLink && hasNewVersion && latestRelease && (
+        <>
+          , new:{" "}
+          <Link
+            href={latestRelease.html_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-foreground transition-colors"
+          >
+            {latestRelease.tag_name.replace(/^platform-/, "")}
+          </Link>
+        </>
       )}
-    </>
+    </div>
   );
 }

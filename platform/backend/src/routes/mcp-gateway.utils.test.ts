@@ -1,8 +1,15 @@
 import { createHash } from "node:crypto";
 import { OAUTH_TOKEN_ID_PREFIX } from "@shared";
 import { vi } from "vitest";
+import { archestraMcpBranding } from "@/archestra-mcp-server";
 import type * as originalConfigModule from "@/config";
-import { TeamTokenModel, UserTokenModel } from "@/models";
+import {
+  AgentTeamModel,
+  TeamTokenModel,
+  ToolModel,
+  UserTokenModel,
+} from "@/models";
+import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import type { JwksValidationResult } from "@/services/jwks-validator";
 import { describe, expect, test } from "@/test";
 
@@ -11,7 +18,7 @@ vi.mock("@/config", async (importOriginal) => {
   return {
     default: {
       ...actual.default,
-      enterpriseLicenseActivated: true,
+      enterpriseFeatures: { ...actual.default.enterpriseFeatures, core: true },
     },
   };
 });
@@ -25,9 +32,11 @@ vi.mock("@/services/jwks-validator", () => ({
 }));
 
 const {
+  createAgentServer,
   validateMCPGatewayToken,
   validateOAuthToken,
   validateExternalIdpToken,
+  buildKnowledgeSourcesDescription,
 } = await import("./mcp-gateway.utils");
 
 describe("validateMCPGatewayToken", () => {
@@ -112,6 +121,34 @@ describe("validateMCPGatewayToken", () => {
 
       const result = await validateMCPGatewayToken(agent.id, value);
       expect(result).toBeNull();
+    });
+
+    test("reuses resolved team tokens across profiles", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const { value } = await TeamTokenModel.create({
+        organizationId: org.id,
+        name: "Org Token",
+        teamId: null,
+        isOrganizationToken: true,
+      });
+      const validateTeamTokenSpy = vi.spyOn(TeamTokenModel, "validateToken");
+
+      const firstResult = await validateMCPGatewayToken(
+        crypto.randomUUID(),
+        value,
+      );
+      const secondResult = await validateMCPGatewayToken(
+        crypto.randomUUID(),
+        value,
+      );
+
+      expect(firstResult).not.toBeNull();
+      expect(secondResult).not.toBeNull();
+      expect(validateTeamTokenSpy).toHaveBeenCalledTimes(1);
+
+      validateTeamTokenSpy.mockRestore();
     });
   });
 
@@ -214,6 +251,41 @@ describe("validateMCPGatewayToken", () => {
       expect(result?.tokenId).toBe(token.id);
       expect(result?.isUserToken).toBe(true);
       expect(result?.userId).toBe(adminUser.id);
+    });
+
+    test("passes preloaded access context into user access checks", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeTeam,
+      makeTeamMember,
+      makeAgent,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "member" });
+
+      const team = await makeTeam(org.id, user.id, { name: "Dev Team" });
+      await makeTeamMember(team.id, user.id);
+      const agent = await makeAgent({ teams: [team.id], scope: "team" });
+      const { value } = await UserTokenModel.create(user.id, org.id);
+      const userHasAgentAccessSpy = vi.spyOn(
+        AgentTeamModel,
+        "userHasAgentAccess",
+      );
+
+      const result = await validateMCPGatewayToken(agent.id, value);
+
+      expect(result).not.toBeNull();
+      expect(userHasAgentAccessSpy).toHaveBeenCalledTimes(1);
+      expect(userHasAgentAccessSpy.mock.calls[0]?.[3]).toMatchObject({
+        id: agent.id,
+        organizationId: agent.organizationId,
+        scope: "team",
+        authorId: agent.authorId,
+      });
+
+      userHasAgentAccessSpy.mockRestore();
     });
   });
 
@@ -448,6 +520,37 @@ describe("validateMCPGatewayToken", () => {
       expect(result?.organizationId).toBe(org.id);
     });
 
+    test("validateOAuthToken returns null when token is bound to another MCP resource", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeOAuthClient,
+      makeOAuthAccessToken,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "admin" });
+
+      const client = await makeOAuthClient({ userId: user.id });
+      const otherAgent = await makeAgent({ organizationId: org.id });
+      const targetAgent = await makeAgent({ organizationId: org.id });
+
+      const rawToken = `test-bound-resource-token-${crypto.randomUUID()}`;
+      const tokenHash = createHash("sha256")
+        .update(rawToken)
+        .digest("base64url");
+
+      await makeOAuthAccessToken(client.clientId, user.id, {
+        token: tokenHash,
+        referenceId: `${MCP_RESOURCE_REFERENCE_PREFIX}${otherAgent.id}`,
+      });
+
+      const result = await validateOAuthToken(targetAgent.id, rawToken);
+
+      expect(result).toBeNull();
+    });
+
     test("validateOAuthToken returns valid result when refresh token is not revoked", async ({
       makeUser,
       makeOrganization,
@@ -484,6 +587,41 @@ describe("validateMCPGatewayToken", () => {
 
       expect(result).not.toBeNull();
       expect(result?.tokenId).toBe(`${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`);
+      expect(result?.userId).toBe(user.id);
+    });
+
+    test("validateOAuthToken uses the target agent organization for multi-org users", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeOAuthClient,
+      makeOAuthAccessToken,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const firstOrg = await makeOrganization();
+      const targetOrg = await makeOrganization();
+
+      await makeMember(user.id, firstOrg.id, { role: "member" });
+      await makeMember(user.id, targetOrg.id, { role: "admin" });
+
+      const client = await makeOAuthClient({ userId: user.id });
+
+      const rawToken = `test-multi-org-token-${crypto.randomUUID()}`;
+      const tokenHash = createHash("sha256")
+        .update(rawToken)
+        .digest("base64url");
+
+      const accessToken = await makeOAuthAccessToken(client.clientId, user.id, {
+        token: tokenHash,
+      });
+
+      const agent = await makeAgent({ organizationId: targetOrg.id });
+      const result = await validateOAuthToken(agent.id, rawToken);
+
+      expect(result).not.toBeNull();
+      expect(result?.tokenId).toBe(`${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`);
+      expect(result?.organizationId).toBe(targetOrg.id);
       expect(result?.userId).toBe(user.id);
     });
   });
@@ -526,6 +664,35 @@ describe("validateExternalIdpToken", () => {
 
     const result = await validateExternalIdpToken(agent.id, FAKE_JWT);
     expect(result).toBeNull();
+  });
+
+  test("returns null when the identity provider OIDC config has no clientId for audience validation", async ({
+    makeOrganization,
+    makeIdentityProvider,
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    mockValidateJwt.mockClear();
+
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+
+    const idp = await makeIdentityProvider(org.id, {
+      oidcConfig: {
+        jwksEndpoint: "https://example.com/.well-known/jwks.json",
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      identityProviderId: idp.id,
+    });
+
+    const result = await validateExternalIdpToken(agent.id, FAKE_JWT);
+
+    expect(result).toBeNull();
+    expect(mockValidateJwt).not.toHaveBeenCalled();
   });
 
   test("returns null when email does not match any Archestra user", async ({
@@ -765,5 +932,329 @@ describe("validateExternalIdpToken", () => {
     expect(result?.isOrganizationToken).toBe(false);
     expect(result?.organizationId).toBe(org.id);
     expect(result?.teamId).toBeNull();
+  });
+});
+
+describe("buildKnowledgeSourcesDescription", () => {
+  test("returns null when agent has no knowledge bases and no direct connectors", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const result = await buildKnowledgeSourcesDescription(agent.id);
+    expect(result).toBeNull();
+  });
+
+  test("returns null for non-existent agent id", async () => {
+    const result = await buildKnowledgeSourcesDescription(crypto.randomUUID());
+    expect(result).toBeNull();
+  });
+
+  test("includes knowledge base name in description", async ({
+    makeAgent,
+    makeOrganization,
+    makeKnowledgeBase,
+  }) => {
+    const { AgentKnowledgeBaseModel } = await import("@/models");
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const kb = await makeKnowledgeBase(org.id, { name: "Engineering Docs" });
+    await AgentKnowledgeBaseModel.assign(agent.id, kb.id);
+
+    const result = await buildKnowledgeSourcesDescription(agent.id);
+
+    expect(result).not.toBeNull();
+    expect(result).toContain("Engineering Docs");
+    expect(result).toContain("Available knowledge bases:");
+  });
+
+  test("includes connector types in description", async ({
+    makeAgent,
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const { AgentKnowledgeBaseModel } = await import("@/models");
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const kb = await makeKnowledgeBase(org.id);
+    await AgentKnowledgeBaseModel.assign(agent.id, kb.id);
+    await makeKnowledgeBaseConnector(kb.id, org.id, { connectorType: "jira" });
+
+    const result = await buildKnowledgeSourcesDescription(agent.id);
+
+    expect(result).not.toBeNull();
+    expect(result).toContain("jira");
+    expect(result).toContain("Connected sources:");
+  });
+
+  test("includes multiple knowledge base names", async ({
+    makeAgent,
+    makeOrganization,
+    makeKnowledgeBase,
+  }) => {
+    const { AgentKnowledgeBaseModel } = await import("@/models");
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const kb1 = await makeKnowledgeBase(org.id, { name: "Product KB" });
+    const kb2 = await makeKnowledgeBase(org.id, { name: "Support KB" });
+    await AgentKnowledgeBaseModel.assign(agent.id, kb1.id);
+    await AgentKnowledgeBaseModel.assign(agent.id, kb2.id);
+
+    const result = await buildKnowledgeSourcesDescription(agent.id);
+
+    expect(result).not.toBeNull();
+    expect(result).toContain("Product KB");
+    expect(result).toContain("Support KB");
+  });
+
+  test("deduplicates connector types", async ({
+    makeAgent,
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const { AgentKnowledgeBaseModel } = await import("@/models");
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const kb = await makeKnowledgeBase(org.id);
+    await AgentKnowledgeBaseModel.assign(agent.id, kb.id);
+    await makeKnowledgeBaseConnector(kb.id, org.id, { connectorType: "jira" });
+    await makeKnowledgeBaseConnector(kb.id, org.id, { connectorType: "jira" });
+
+    const result = await buildKnowledgeSourcesDescription(agent.id);
+
+    expect(result).not.toBeNull();
+    // "jira" should appear once in "Connected sources: jira."
+    const match = result?.match(/Connected sources: (.+?)\./);
+    expect(match).not.toBeNull();
+    expect(match?.[1]).toBe("jira");
+  });
+
+  test("includes multiple distinct connector types", async ({
+    makeAgent,
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const { AgentKnowledgeBaseModel } = await import("@/models");
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const kb = await makeKnowledgeBase(org.id);
+    await AgentKnowledgeBaseModel.assign(agent.id, kb.id);
+    await makeKnowledgeBaseConnector(kb.id, org.id, { connectorType: "jira" });
+    await makeKnowledgeBaseConnector(kb.id, org.id, {
+      connectorType: "confluence",
+    });
+
+    const result = await buildKnowledgeSourcesDescription(agent.id);
+
+    expect(result).not.toBeNull();
+    expect(result).toContain("jira");
+    expect(result).toContain("confluence");
+  });
+
+  test("includes base instruction text", async ({
+    makeAgent,
+    makeOrganization,
+    makeKnowledgeBase,
+  }) => {
+    const { AgentKnowledgeBaseModel } = await import("@/models");
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const kb = await makeKnowledgeBase(org.id);
+    await AgentKnowledgeBaseModel.assign(agent.id, kb.id);
+
+    const result = await buildKnowledgeSourcesDescription(agent.id);
+
+    expect(result).not.toBeNull();
+    expect(result).toContain(
+      "Query the organization's knowledge sources to retrieve relevant information",
+    );
+    expect(result).toContain("Pass the user's original query as-is");
+  });
+
+  test("omits 'Connected sources' when no connectors exist", async ({
+    makeAgent,
+    makeOrganization,
+    makeKnowledgeBase,
+  }) => {
+    const { AgentKnowledgeBaseModel } = await import("@/models");
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const kb = await makeKnowledgeBase(org.id);
+    await AgentKnowledgeBaseModel.assign(agent.id, kb.id);
+
+    const result = await buildKnowledgeSourcesDescription(agent.id);
+
+    expect(result).not.toBeNull();
+    expect(result).not.toContain("Connected sources:");
+  });
+
+  test("returns description when agent has only direct connector assignments (no KB)", async ({
+    makeAgent,
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const { AgentConnectorAssignmentModel } = await import("@/models");
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+      connectorType: "jira",
+    });
+
+    // Agent with direct connector but no KB assignment
+    const agent = await makeAgent({ organizationId: org.id });
+    await AgentConnectorAssignmentModel.assign(agent.id, connector.id);
+
+    const result = await buildKnowledgeSourcesDescription(agent.id);
+
+    expect(result).not.toBeNull();
+    expect(result).toContain("Connected sources:");
+    expect(result).toContain("jira");
+  });
+
+  test("includes connector types from both KB and direct assignments", async ({
+    makeAgent,
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const { AgentKnowledgeBaseModel, AgentConnectorAssignmentModel } =
+      await import("@/models");
+    const org = await makeOrganization();
+
+    // KB with a jira connector
+    const kb = await makeKnowledgeBase(org.id, { name: "My KB" });
+    await makeKnowledgeBaseConnector(kb.id, org.id, {
+      connectorType: "jira",
+    });
+
+    // Separate connector for direct assignment
+    const directConnector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+      connectorType: "confluence",
+    });
+
+    const agent = await makeAgent({ organizationId: org.id });
+    await AgentKnowledgeBaseModel.assign(agent.id, kb.id);
+    await AgentConnectorAssignmentModel.assign(agent.id, directConnector.id);
+
+    const result = await buildKnowledgeSourcesDescription(agent.id);
+
+    expect(result).not.toBeNull();
+    expect(result).toContain("My KB");
+    expect(result).toContain("jira");
+    expect(result).toContain("confluence");
+  });
+
+  test("omits 'Available knowledge bases' when agent has only direct connectors", async ({
+    makeAgent,
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const { AgentConnectorAssignmentModel } = await import("@/models");
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+      connectorType: "github",
+    });
+
+    const agent = await makeAgent({ organizationId: org.id });
+    await AgentConnectorAssignmentModel.assign(agent.id, connector.id);
+
+    const result = await buildKnowledgeSourcesDescription(agent.id);
+
+    expect(result).not.toBeNull();
+    expect(result).not.toContain("Available knowledge bases:");
+    expect(result).toContain("Connected sources: github");
+  });
+
+  test("deduplicates connector types across KB and direct assignments", async ({
+    makeAgent,
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const { AgentKnowledgeBaseModel, AgentConnectorAssignmentModel } =
+      await import("@/models");
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+
+    // Same connector type from KB and direct assignment
+    const kbConnector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+      connectorType: "jira",
+    });
+    await makeKnowledgeBaseConnector(kb.id, org.id, {
+      connectorType: "jira",
+    });
+
+    const agent = await makeAgent({ organizationId: org.id });
+    await AgentKnowledgeBaseModel.assign(agent.id, kb.id);
+    await AgentConnectorAssignmentModel.assign(agent.id, kbConnector.id);
+
+    const result = await buildKnowledgeSourcesDescription(agent.id);
+
+    expect(result).not.toBeNull();
+    // "jira" should appear once in "Connected sources: jira."
+    const match = result?.match(/Connected sources: (.+?)\./);
+    expect(match).not.toBeNull();
+    expect(match?.[1]).toBe("jira");
+  });
+});
+
+describe("createAgentServer tools/list", () => {
+  test("returns branded built-in tool names through the MCP tools/list handler", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+
+    await ToolModel.syncArchestraBuiltInCatalog({
+      organization: {
+        appName: "Acme Control Plane",
+        iconLogo: null,
+      },
+    });
+    await ToolModel.assignArchestraToolsToAgent(
+      agent.id,
+      "00000000-0000-4000-8000-000000000001",
+    );
+
+    archestraMcpBranding.syncFromOrganization({
+      appName: "Acme Control Plane",
+      iconLogo: null,
+    });
+
+    const { server } = await createAgentServer(agent.id);
+    const listToolsHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<
+          string,
+          (request: unknown) => Promise<{
+            tools: Array<{ name: string; description?: string }>;
+          }>
+        >;
+      }
+    )._requestHandlers.get("tools/list");
+
+    expect(listToolsHandler).toBeDefined();
+    if (!listToolsHandler) {
+      throw new Error("Expected tools/list handler to be registered");
+    }
+
+    const response = await listToolsHandler({
+      method: "tools/list",
+      params: {},
+    });
+
+    expect(
+      response.tools.some((tool) =>
+        tool.name.startsWith("acme_control_plane__"),
+      ),
+    ).toBe(true);
+
+    archestraMcpBranding.syncFromOrganization(null);
   });
 });

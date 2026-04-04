@@ -5,10 +5,16 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { CredentialResolutionModeSchema } from "@/types/enterprise-managed-credentials";
 import { UuidIdSchema } from "./api";
 import { ToolParametersContentSchema } from "./tool";
 
-export const SelectAgentToolSchema = createSelectSchema(schema.agentToolsTable)
+export const SelectAgentToolSchema = createSelectSchema(
+  schema.agentToolsTable,
+  {
+    credentialResolutionMode: CredentialResolutionModeSchema,
+  },
+)
   .omit({
     agentId: true,
     toolId: true,
@@ -29,8 +35,34 @@ export const SelectAgentToolSchema = createSelectSchema(schema.agentToolsTable)
     }),
   });
 
-export const InsertAgentToolSchema = createInsertSchema(schema.agentToolsTable);
-export const UpdateAgentToolSchema = createUpdateSchema(schema.agentToolsTable);
+export const InsertAgentToolSchema = createInsertSchema(
+  schema.agentToolsTable,
+  {
+    credentialResolutionMode: CredentialResolutionModeSchema,
+  },
+);
+export const UpdateAgentToolSchema = createUpdateSchema(
+  schema.agentToolsTable,
+  {
+    credentialResolutionMode: CredentialResolutionModeSchema,
+  },
+);
+export const AgentToolAssignmentInputSchema = z.object({
+  toolId: UuidIdSchema,
+  resolveAtCallTime: z.boolean().optional(),
+  credentialResolutionMode: CredentialResolutionModeSchema.optional(),
+  mcpServerId: UuidIdSchema.nullable().optional(),
+});
+
+export const AgentToolAssignmentBodySchema =
+  AgentToolAssignmentInputSchema.omit({
+    toolId: true,
+  }).nullish();
+
+export const BulkAgentToolAssignmentSchema =
+  AgentToolAssignmentInputSchema.extend({
+    agentId: UuidIdSchema,
+  });
 
 export const AgentToolFilterSchema = z.object({
   search: z.string().optional(),
@@ -45,20 +77,25 @@ export const AgentToolFilterSchema = z.object({
     .optional()
     .describe("For test isolation"),
 });
-export const AgentToolSortBySchema = z.enum([
+
+export const AgentToolSortBy = [
   "name",
   "agent",
   "origin",
   "createdAt",
-]);
-export const AgentToolSortDirectionSchema = z.enum(["asc", "desc"]);
+] as const;
+export type AgentToolSortBy = (typeof AgentToolSortBy)[number];
 
 export type AgentTool = z.infer<typeof SelectAgentToolSchema>;
 export type InsertAgentTool = z.infer<typeof InsertAgentToolSchema>;
 export type UpdateAgentTool = z.infer<typeof UpdateAgentToolSchema>;
 
 export type AgentToolFilters = z.infer<typeof AgentToolFilterSchema>;
-export type AgentToolSortBy = z.infer<typeof AgentToolSortBySchema>;
-export type AgentToolSortDirection = z.infer<
-  typeof AgentToolSortDirectionSchema
->;
+
+export type McpToolAssignment = {
+  toolName: string;
+  mcpServerId: string | null;
+  credentialResolutionMode: z.infer<typeof CredentialResolutionModeSchema>;
+  catalogId: string | null;
+  catalogName: string | null;
+};

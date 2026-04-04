@@ -1,4 +1,9 @@
 import {
+  isSpanContextValid,
+  context as otelContext,
+  trace,
+} from "@opentelemetry/api";
+import {
   AnthropicErrorTypes,
   BedrockErrorTypes,
   ChatErrorCode,
@@ -13,7 +18,7 @@ import {
   VllmErrorTypes,
   ZhipuaiErrorTypes,
 } from "@shared";
-import { APICallError, RetryError } from "ai";
+import { APICallError, NoOutputGeneratedError, RetryError } from "ai";
 import logger from "@/logging";
 
 // =============================================================================
@@ -1421,6 +1426,20 @@ export function mapProviderError(
     }
   }
 
+  // Handle NoOutputGeneratedError — the provider failed before producing any
+  // output. Map it to a structured server_error so the frontend shows the
+  // same styled error card instead of raw text.
+  if (NoOutputGeneratedError.isInstance(error)) {
+    return createErrorResponse(
+      ChatErrorCode.ServerError,
+      provider,
+      undefined,
+      ChatErrorMessages[ChatErrorCode.ServerError],
+      "NoOutputGeneratedError",
+      {},
+    );
+  }
+
   // Get provider-specific parser and mapper
   const parseError = providerParsers[provider];
   const mapError = providerMappers[provider];
@@ -1497,4 +1516,24 @@ export function mapProviderError(
         : undefined,
     },
   );
+}
+
+/**
+ * Extract the active OpenTelemetry trace/span IDs from the current context.
+ * Returns an object with traceId and spanId if available.
+ */
+export function getActiveTraceContext(): {
+  traceId?: string;
+  spanId?: string;
+} {
+  const span = trace.getSpan(otelContext.active());
+  if (!span) return {};
+
+  const spanContext = span.spanContext();
+  if (!isSpanContextValid(spanContext)) return {};
+
+  return {
+    traceId: spanContext.traceId,
+    spanId: spanContext.spanId,
+  };
 }

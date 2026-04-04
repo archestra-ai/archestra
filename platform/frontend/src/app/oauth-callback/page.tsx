@@ -11,24 +11,26 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  useInstallMcpServer,
-  useReauthenticateMcpServer,
-} from "@/lib/mcp-server.query";
-import { useHandleOAuthCallback } from "@/lib/oauth.query";
+import { useHandleOAuthCallback } from "@/lib/auth/oauth.query";
 import {
   clearCallbackProcessing,
   clearInstallContext,
+  clearOAuthReturnUrl,
   clearReauthContext,
   getOAuthEnvironmentValues,
   getOAuthIsFirstInstallation,
   getOAuthMcpServerId,
+  getOAuthReturnUrl,
   getOAuthServerType,
   getOAuthTeamId,
   isCallbackProcessed,
   markCallbackProcessing,
   setOAuthInstallationCompleteCatalogId,
-} from "@/lib/oauth-session";
+} from "@/lib/auth/oauth-session";
+import {
+  useInstallMcpServer,
+  useReauthenticateMcpServer,
+} from "@/lib/mcp/mcp-server.query";
 
 function OAuthCallbackContent() {
   const searchParams = useSearchParams();
@@ -37,7 +39,6 @@ function OAuthCallbackContent() {
   const reauthMutation = useReauthenticateMcpServer();
   const callbackMutation = useHandleOAuthCallback();
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Mutation objects and router change reference on every render. Using stable function references prevents unnecessary re-executions. Effect is guarded by sessionStorage to run only once per callback.
   useEffect(() => {
     const handleOAuthCallback = async () => {
       const code = searchParams.get("code");
@@ -52,7 +53,7 @@ function OAuthCallbackContent() {
               ? "No authorization code received"
               : "Missing OAuth state",
         );
-        router.push("/mcp-catalog");
+        router.push("/mcp/registry");
         return;
       }
 
@@ -72,6 +73,8 @@ function OAuthCallbackContent() {
 
         if (mcpServerId) {
           // Re-authentication: update existing server with new secret
+          const returnUrl = getOAuthReturnUrl();
+
           await reauthMutation.mutateAsync({
             id: mcpServerId,
             secretId,
@@ -80,6 +83,13 @@ function OAuthCallbackContent() {
 
           clearCallbackProcessing(code, state);
           clearReauthContext();
+          clearOAuthReturnUrl();
+
+          // Redirect back to where the user was (e.g. chat page)
+          if (returnUrl) {
+            router.push(returnUrl);
+            return;
+          }
         } else {
           // New installation flow
           const teamId = getOAuthTeamId();
@@ -110,12 +120,12 @@ function OAuthCallbackContent() {
 
         // Redirect back to MCP catalog immediately
         // The mutation's onSuccess handler will show the success toast
-        router.push("/mcp-catalog");
+        router.push("/mcp/registry");
       } catch (error) {
         console.error("OAuth completion error:", error);
         // The mutation's onError handler will show the error toast
         // Redirect back to catalog
-        router.push("/mcp-catalog");
+        router.push("/mcp/registry");
       }
     };
 

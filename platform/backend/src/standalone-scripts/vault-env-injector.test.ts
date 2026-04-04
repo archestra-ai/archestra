@@ -1,6 +1,29 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 // biome-ignore lint/style/noRestrictedImports: test file for .ee module
 import { escapeForShell } from "./vault-env-injector.ee";
+
+describe("vault-env-injector import safety", () => {
+  it("vault-config.ts must not import @/config to avoid crashing the vault-secrets init container", () => {
+    // The vault-env-injector runs as a K8s init container BEFORE the database URL
+    // is available (it's the one that fetches it from Vault). If vault-config.ts
+    // imports @/config, it triggers config.ts module evaluation which calls
+    // getDatabaseUrl() and throws "Database URL is not set".
+    const vaultConfigSource = readFileSync(
+      resolve(__dirname, "../secrets-manager/vault-config.ts"),
+      "utf-8",
+    );
+
+    const hasConfigImport = /import\s+.*from\s+["']@\/config["']/.test(
+      vaultConfigSource,
+    );
+    expect(
+      hasConfigImport,
+      "vault-config.ts must NOT import @/config — it would crash the vault-secrets init container which runs before DATABASE_URL is available",
+    ).toBe(false);
+  });
+});
 
 describe("escapeForShell", () => {
   it("should wrap simple values in single quotes", () => {

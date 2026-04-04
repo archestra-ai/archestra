@@ -5,9 +5,10 @@ const config: KnipConfig = {
   project: ["**/*.ts"],
   ignore: [],
   ignoreBinaries: [
-    // biome and concurrently are in the workspace root package.json
+    // biome, concurrently, and tsx are in the workspace root package.json
     "biome",
     "concurrently",
+    "tsx",
   ],
 };
 

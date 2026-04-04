@@ -1,25 +1,17 @@
 import type { IncomingEmailSecurityMode } from "@shared";
+import { type SQL, sql } from "drizzle-orm";
 import {
   boolean,
   index,
-  integer,
   jsonb,
-  pgEnum,
   pgTable,
   text,
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { AgentHistoryEntry, AgentType } from "@/types/agent";
-
-export const agentScopeEnum = pgEnum("agent_scope", [
-  "personal",
-  "team",
-  "org",
-]);
-
-import chatApiKeysTable from "./chat-api-key";
+import type { AgentScope, AgentType, BuiltInAgentConfig } from "@/types/agent";
 import identityProvidersTable from "./identity-provider";
+import llmProviderApiKeysTable from "./llm-provider-api-key";
 import usersTable from "./user";
 
 /**
@@ -38,7 +30,6 @@ import usersTable from "./user";
  *
  * Internal agents (agent_type = 'agent'):
  *   - Chat agents with system/user prompts
- *   - Support version history and rollback
  *   - Can delegate to other internal agents via delegation tools
  *   - Can be triggered by ChatOps providers
  */
@@ -50,9 +41,8 @@ const agentsTable = pgTable(
     authorId: text("author_id").references(() => usersTable.id, {
       onDelete: "set null",
     }),
-    scope: agentScopeEnum("scope").notNull().default("personal"),
+    scope: text("scope").$type<AgentScope>().notNull().default("personal"),
     name: text("name").notNull(),
-    isDemo: boolean("is_demo").notNull().default(false),
     isDefault: boolean("is_default").notNull().default(false),
     considerContextUntrusted: boolean("consider_context_untrusted")
       .notNull()
@@ -63,14 +53,12 @@ const agentsTable = pgTable(
       .default("mcp_gateway"),
     // Prompt fields (only used when agentType = 'agent')
     systemPrompt: text("system_prompt"),
-    userPrompt: text("user_prompt"),
-    promptVersion: integer("prompt_version").default(1),
-    promptHistory: jsonb("prompt_history")
-      .$type<AgentHistoryEntry[]>()
-      .default([]),
     // Description (only used when agentType = 'agent')
     /** Human-readable description of the agent */
     description: text("description"),
+
+    /** Agent icon: emoji character or base64-encoded image data URL */
+    icon: text("icon"),
 
     // Incoming email settings (only used when agentType = 'agent')
     /** Whether incoming email invocation is enabled for this agent */
@@ -87,9 +75,12 @@ const agentsTable = pgTable(
 
     // LLM configuration (allows per-agent model selection)
     /** API key ID for LLM calls */
-    llmApiKeyId: uuid("llm_api_key_id").references(() => chatApiKeysTable.id, {
-      onDelete: "set null",
-    }),
+    llmApiKeyId: uuid("llm_api_key_id").references(
+      () => llmProviderApiKeysTable.id,
+      {
+        onDelete: "set null",
+      },
+    ),
     /** Model ID for LLM calls */
     llmModel: text("llm_model"),
 
@@ -97,6 +88,16 @@ const agentsTable = pgTable(
     identityProviderId: text("identity_provider_id").references(
       () => identityProvidersTable.id,
       { onDelete: "set null" },
+    ),
+
+    /** JSONB config for built-in agents (null for user-created agents) */
+    builtInAgentConfig: jsonb(
+      "built_in_agent_config",
+    ).$type<BuiltInAgentConfig>(),
+
+    /** Computed column: true when builtInAgentConfig is not null */
+    builtIn: boolean("built_in").generatedAlwaysAs(
+      (): SQL => sql`${agentsTable.builtInAgentConfig} IS NOT NULL`,
     ),
 
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),

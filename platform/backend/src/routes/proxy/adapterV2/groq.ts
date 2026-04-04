@@ -21,7 +21,6 @@ import type {
   LLMResponseAdapter,
   LLMStreamAdapter,
 } from "@/types";
-import { MockOpenAIClient } from "../mock-openai-client";
 import {
   OpenAIRequestAdapter,
   OpenAIResponseAdapter,
@@ -213,29 +212,26 @@ export const groqAdapterFactory: LLMProvider<
 
   createClient(
     apiKey: string | undefined,
-    options?: CreateClientOptions,
+    options: CreateClientOptions,
   ): OpenAIProvider {
-    if (options?.mockMode) {
-      return new MockOpenAIClient() as unknown as OpenAIProvider;
-    }
-
     if (!apiKey) {
       throw new Error("API key required for Groq");
     }
 
-    const customFetch = options?.agent
+    const customFetch = options.agent
       ? metrics.llm.getObservableFetch(
           "groq",
           options.agent,
+          options.source,
           options.externalAgentId,
         )
       : undefined;
 
     return new OpenAIProvider({
       apiKey,
-      baseURL: options?.baseUrl,
+      baseURL: options.baseUrl,
       fetch: customFetch,
-      defaultHeaders: options?.defaultHeaders,
+      defaultHeaders: options.defaultHeaders,
     });
   },
 

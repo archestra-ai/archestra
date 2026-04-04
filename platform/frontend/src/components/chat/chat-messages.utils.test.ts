@@ -1,6 +1,12 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { describe, expect, it } from "vitest";
-import { extractFileAttachments, hasTextPart } from "./chat-messages.utils";
+import {
+  extractFileAttachments,
+  filterOptimisticToolCalls,
+  hasTextPart,
+  identifyCompactToolGroups,
+  stripDanglingToolCalls,
+} from "./chat-messages.utils";
 
 describe("extractFileAttachments", () => {
   it("should return undefined for undefined parts", () => {
@@ -141,5 +147,197 @@ describe("hasTextPart", () => {
       { type: "reasoning", text: "Thinking..." },
     ];
     expect(hasTextPart(parts)).toBe(false);
+  });
+});
+
+describe("filterOptimisticToolCalls", () => {
+  it("keeps optimistic tool calls until a rendered part with the same toolCallId exists", () => {
+    const optimisticToolCalls = [
+      {
+        toolCallId: "call_1",
+        toolName: "google__search",
+        input: { q: "weather" },
+      },
+      {
+        toolCallId: "call_2",
+        toolName: "google__maps",
+        input: { location: "Toronto" },
+      },
+    ];
+
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "dynamic-tool",
+            toolName: "google__search",
+            toolCallId: "call_1",
+            state: "input-available",
+            input: { q: "weather" },
+          },
+        ],
+      },
+    ] as never;
+
+    expect(filterOptimisticToolCalls(messages, optimisticToolCalls)).toEqual([
+      optimisticToolCalls[1],
+    ]);
+  });
+});
+
+describe("identifyCompactToolGroups", () => {
+  it("groups adjacent compact-eligible tool calls together", () => {
+    const parts = [
+      {
+        type: "tool-google__search",
+        toolCallId: "call_1",
+        state: "input-available",
+        input: { q: "weather" },
+      },
+      {
+        type: "tool-google__search",
+        toolCallId: "call_1",
+        state: "output-available",
+        output: "sunny",
+      },
+      {
+        type: "tool-google__maps",
+        toolCallId: "call_2",
+        state: "input-available",
+        input: { location: "Toronto" },
+      },
+      {
+        type: "tool-google__maps",
+        toolCallId: "call_2",
+        state: "output-available",
+        output: "map",
+      },
+    ] as UIMessage["parts"];
+
+    const { groupMap } = identifyCompactToolGroups(parts, {
+      getToolShortName: (toolName) => {
+        if (toolName === "archestra__todo_write") {
+          return "todo_write";
+        }
+        return null;
+      },
+    });
+    const group = groupMap.get(0);
+
+    expect(groupMap.size).toBe(1);
+    expect(group?.entries).toHaveLength(2);
+    expect(group?.entries.map((entry) => entry.toolName)).toEqual([
+      "google__search",
+      "google__maps",
+    ]);
+  });
+
+  it("does not group across a non-compact-eligible tool call", () => {
+    const parts = [
+      {
+        type: "tool-google__search",
+        toolCallId: "call_1",
+        state: "input-available",
+        input: { q: "weather" },
+      },
+      {
+        type: "tool-google__search",
+        toolCallId: "call_1",
+        state: "output-available",
+        output: "sunny",
+      },
+      {
+        type: "tool-archestra__todo_write",
+        toolCallId: "call_2",
+        state: "input-available",
+        input: { todos: [] },
+      },
+      {
+        type: "tool-archestra__todo_write",
+        toolCallId: "call_2",
+        state: "output-available",
+        output: "ok",
+      },
+      {
+        type: "tool-google__maps",
+        toolCallId: "call_3",
+        state: "input-available",
+        input: { location: "Toronto" },
+      },
+      {
+        type: "tool-google__maps",
+        toolCallId: "call_3",
+        state: "output-available",
+        output: "map",
+      },
+    ] as UIMessage["parts"];
+
+    const { groupMap } = identifyCompactToolGroups(parts, {
+      getToolShortName: (toolName) => {
+        if (toolName === "archestra__todo_write") {
+          return "todo_write";
+        }
+        return null;
+      },
+    });
+
+    expect(groupMap.size).toBe(2);
+    expect(groupMap.get(0)?.entries).toHaveLength(1);
+    expect(groupMap.get(4)?.entries).toHaveLength(1);
+  });
+});
+
+describe("stripDanglingToolCalls", () => {
+  it("removes interrupted input-available tool calls with no result so the next turn does not hit MissingToolResultsError", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          { type: "text", text: "Working on it..." },
+          {
+            type: "tool-google__search",
+            toolCallId: "call_1",
+            state: "input-available",
+            input: { q: "weather" },
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    const sanitized = stripDanglingToolCalls(messages);
+
+    expect(sanitized[0].parts).toEqual([
+      { type: "text", text: "Working on it..." },
+    ]);
+  });
+
+  it("preserves tool calls that have a matching completed result", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-google__search",
+            toolCallId: "call_1",
+            state: "input-available",
+            input: { q: "weather" },
+          },
+          {
+            type: "tool-google__search",
+            toolCallId: "call_1",
+            state: "output-available",
+            output: "sunny",
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    const sanitized = stripDanglingToolCalls(messages);
+
+    expect(sanitized).toEqual(messages);
   });
 });

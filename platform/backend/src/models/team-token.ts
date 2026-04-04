@@ -138,12 +138,13 @@ class TeamTokenModel {
   }
 
   /**
-   * Find all tokens (org token and all team tokens)
+   * Find all tokens (org token and all team tokens) for a given organization.
    */
-  static async findAll(): Promise<SelectTeamToken[]> {
+  static async findAll(organizationId: string): Promise<SelectTeamToken[]> {
     return db
       .select()
       .from(schema.teamTokensTable)
+      .where(eq(schema.teamTokensTable.organizationId, organizationId))
       .orderBy(schema.teamTokensTable.createdAt);
   }
 

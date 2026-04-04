@@ -1,5 +1,8 @@
 import crypto from "node:crypto";
-import { OAUTH_ENDPOINTS } from "@shared";
+import {
+  OAUTH_ENDPOINTS,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+} from "@shared";
 import {
   API_BASE_URL,
   MCP_GATEWAY_URL_SUFFIX,
@@ -18,6 +21,7 @@ import { expect, test } from "./fixtures";
 import {
   assignArchestraToolsToProfile,
   getOrgTokenForProfile,
+  getUserTokenForCurrentUser,
   makeApiRequest,
 } from "./mcp-gateway-utils";
 
@@ -30,7 +34,7 @@ import {
 
 test.describe("MCP Gateway - Authentication", () => {
   let profileId: string;
-  let archestraToken: string;
+  let userToken: string;
 
   test.beforeAll(async ({ request, createAgent }) => {
     // Create test profile with unique name to avoid conflicts in parallel runs
@@ -46,8 +50,8 @@ test.describe("MCP Gateway - Authentication", () => {
     // Assign Archestra tools to the profile (required for tools/list to return them)
     await assignArchestraToolsToProfile(request, profileId);
 
-    // Get org token using shared utility
-    archestraToken = await getOrgTokenForProfile(request);
+    // Use a user token so RBAC-filtered Archestra tools remain visible in tools/list.
+    userToken = await getUserTokenForCurrentUser(request);
   });
 
   test.afterAll(async ({ request, deleteAgent }) => {
@@ -55,7 +59,7 @@ test.describe("MCP Gateway - Authentication", () => {
   });
 
   const makeMcpGatewayRequestHeaders = () => ({
-    Authorization: `Bearer ${archestraToken}`,
+    Authorization: `Bearer ${userToken}`,
     "Content-Type": "application/json",
     Accept: "application/json, text/event-stream",
   });
@@ -524,7 +528,7 @@ test.describe("MCP Gateway - External MCP Server Tests", () => {
         );
       }
 
-      // Assign the tool to the profile with executionSourceMcpServerId
+      // Assign the tool to the profile with the installed MCP server binding
       const assignResponse = await makeApiRequest({
         request,
         method: "post",
@@ -534,7 +538,7 @@ test.describe("MCP Gateway - External MCP Server Tests", () => {
             {
               agentId: profileId,
               toolId: testTool.id,
-              executionSourceMcpServerId: testServer.id,
+              mcpServerId: testServer.id,
             },
           ],
         },
@@ -1763,5 +1767,124 @@ test.describe("MCP Gateway - CIMD (Client ID Metadata Documents)", () => {
     expect(response.status()).toBe(200);
     const body = await response.json();
     expect(body.client_id_metadata_document_supported).toBe(true);
+  });
+});
+
+test.describe("MCP Gateway - Knowledge Sources Tool Description", () => {
+  let profileId: string;
+  let userToken: string;
+  let knowledgeBaseId: string;
+
+  test.beforeAll(async ({ request, createKnowledgeBase, createConnector }) => {
+    const uniqueSuffix = crypto.randomUUID().slice(0, 8);
+
+    // Create a knowledge base
+    const kbResponse = await createKnowledgeBase(
+      request,
+      `E2E KB Dynamic Desc ${uniqueSuffix}`,
+    );
+    const kb = await kbResponse.json();
+    knowledgeBaseId = kb.id;
+
+    // Create a connector assigned to the knowledge base
+    await createConnector(
+      request,
+      knowledgeBaseId,
+      `E2E Jira Conn ${uniqueSuffix}`,
+    );
+
+    // Create an agent with the knowledge base assigned
+    const agentResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: "/api/agents",
+      data: {
+        name: `MCP Gateway KB Test ${uniqueSuffix}`,
+        teams: [],
+        scope: "personal",
+        knowledgeBaseIds: [knowledgeBaseId],
+      },
+    });
+    const agent = await agentResponse.json();
+    profileId = agent.id;
+
+    // Assign Archestra tools to the profile
+    await assignArchestraToolsToProfile(request, profileId);
+
+    // Use a user token so the RBAC-protected knowledge tool is visible in tools/list.
+    userToken = await getUserTokenForCurrentUser(request);
+  });
+
+  test.afterAll(async ({ request, deleteAgent, deleteKnowledgeBase }) => {
+    await deleteAgent(request, profileId);
+    await deleteKnowledgeBase(request, knowledgeBaseId);
+  });
+
+  test("query_knowledge_sources tool has dynamic description with KB name and connector type", async ({
+    request,
+  }) => {
+    // Allow time for MCP tool cache to pick up the knowledge base assignment
+    await new Promise((r) => setTimeout(r, 2000));
+
+    // Initialize MCP session
+    await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: `${MCP_GATEWAY_URL_SUFFIX}/${profileId}`,
+      headers: {
+        Authorization: `Bearer ${userToken}`,
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+      },
+      data: {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: { tools: {} },
+          clientInfo: { name: "test-client", version: "1.0.0" },
+        },
+      },
+    });
+
+    // List tools
+    const listToolsResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: `${MCP_GATEWAY_URL_SUFFIX}/${profileId}`,
+      headers: {
+        Authorization: `Bearer ${userToken}`,
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+      },
+      data: {
+        jsonrpc: "2.0",
+        id: 2,
+        method: "tools/list",
+        params: {},
+      },
+    });
+
+    expect(listToolsResponse.status()).toBe(200);
+    const listResult = await listToolsResponse.json();
+    const tools = listResult.result.tools;
+
+    // Find the knowledge sources tool
+    const kbTool = tools.find(
+      // biome-ignore lint/suspicious/noExplicitAny: e2e test
+      (t: any) => t.name === TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+    );
+
+    expect(
+      kbTool,
+      "query_knowledge_sources tool not found in tools list",
+    ).toBeDefined();
+
+    // Verify dynamic description includes the KB name and connector type
+    // biome-ignore lint/style/noNonNullAssertion: guarded by toBeDefined above
+    expect(kbTool!.description).toContain("E2E KB Dynamic Desc");
+    // biome-ignore lint/style/noNonNullAssertion: guarded by toBeDefined above
+    expect(kbTool!.description).toMatch(/jira/i);
   });
 });

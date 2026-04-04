@@ -2,9 +2,9 @@
 
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { EnterpriseLicenseRequired } from "@/components/enterprise-license-required";
-import config from "@/lib/config";
+import config from "@/lib/config/config";
 
-const { IdentityProvidersSettingsContent } = config.enterpriseLicenseActivated
+const { IdentityProvidersSettingsContent } = config.enterpriseFeatures.core
   ? // biome-ignore lint/style/noRestrictedImports: conditional ee component with identity providers
     await import("./_parts/identity-providers-page.ee")
   : {

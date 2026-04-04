@@ -1,6 +1,96 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
-import { type A2AAttachment, buildUserContent } from "./a2a-executor";
+import {
+  type A2AAttachment,
+  buildUserContent,
+  executeA2AMessage,
+} from "./a2a-executor";
+
+const {
+  mockStreamText,
+  mockGetChatMcpTools,
+  mockCreateLLMModelForAgent,
+  mockResolveConversationLlmSelectionForAgent,
+} = vi.hoisted(() => ({
+  mockStreamText: vi.fn(),
+  mockGetChatMcpTools: vi.fn(),
+  mockCreateLLMModelForAgent: vi.fn(),
+  mockResolveConversationLlmSelectionForAgent: vi.fn(),
+}));
+
+vi.mock("ai", async () => {
+  const actual = await vi.importActual<typeof import("ai")>("ai");
+  return {
+    ...actual,
+    streamText: (...args: unknown[]) => mockStreamText(...args),
+    stepCountIs: vi.fn(() => undefined),
+  };
+});
+
+vi.mock("@/clients/chat-mcp-client", () => ({
+  closeChatMcpClient: vi.fn(),
+  getChatMcpTools: (...args: unknown[]) => mockGetChatMcpTools(...args),
+}));
+
+vi.mock("@/clients/llm-client", () => ({
+  createLLMModelForAgent: (...args: unknown[]) =>
+    mockCreateLLMModelForAgent(...args),
+}));
+
+vi.mock("@/utils/llm-resolution", async () => {
+  const actual = await vi.importActual<typeof import("@/utils/llm-resolution")>(
+    "@/utils/llm-resolution",
+  );
+  return {
+    ...actual,
+    resolveConversationLlmSelectionForAgent: (...args: unknown[]) =>
+      mockResolveConversationLlmSelectionForAgent(...args),
+  };
+});
+
+vi.mock("@/features/browser-stream/services/browser-stream.feature", () => ({
+  browserStreamFeature: {
+    isEnabled: vi.fn().mockReturnValue(false),
+    closeTab: vi.fn(),
+  },
+}));
+
+vi.mock("@/clients/mcp-client", () => ({
+  default: {
+    closeSession: vi.fn(),
+  },
+}));
+
+vi.mock("@/models", async () => {
+  const actual = await vi.importActual<typeof import("@/models")>("@/models");
+  return {
+    ...actual,
+    AgentModel: {
+      findById: vi.fn(),
+    },
+    McpServerModel: {
+      getUserPersonalServerForCatalog: vi.fn(),
+    },
+    TeamModel: {
+      getUserTeams: vi.fn(),
+    },
+    UserModel: {
+      getById: vi.fn(),
+    },
+  };
+});
+
+vi.mock("@/templating", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/templating")>("@/templating");
+  return {
+    ...actual,
+    promptNeedsRendering: vi.fn(() => false),
+    renderSystemPrompt: vi.fn((prompt: string) => prompt),
+  };
+});
+
+import { AgentModel, McpServerModel } from "@/models";
 
 // Base64 string large enough to pass the MIN_IMAGE_ATTACHMENT_SIZE (2KB) filter.
 // 2732 base64 chars → ~2048 decoded bytes.
@@ -32,11 +122,13 @@ describe("buildUserContent", () => {
         name: "note.txt",
       },
     ];
+
     const { content, skippedNote } = buildUserContent("Hello", attachments);
+
     expect(content).toBeNull();
     expect(skippedNote).toContain("2 attachment(s)");
-    expect(skippedNote).toContain("doc.pdf (application/pdf)");
-    expect(skippedNote).toContain("note.txt (text/plain)");
+    expect(skippedNote).toContain("doc.pdf");
+    expect(skippedNote).toContain("note.txt");
   });
 
   test("builds content parts with a single image attachment", () => {
@@ -50,10 +142,15 @@ describe("buildUserContent", () => {
 
     const { content } = buildUserContent("Describe this image", attachments);
 
-    expect(content).toEqual([
-      { type: "text", text: "Describe this image" },
-      { type: "image", image: `data:image/png;base64,${VALID_IMAGE_BASE64}` },
-    ]);
+    expect(content).toHaveLength(2);
+    expect(content?.[0]).toEqual({ type: "text", text: "Describe this image" });
+    expect(content?.[1]).toHaveProperty("type", "file");
+    expect(content?.[1]).toHaveProperty("mediaType", "image/png");
+    expect(content?.[1]).toHaveProperty("data");
+    // Verify the data is a Buffer with the correct decoded bytes
+    const filePart = content?.[1] as { data: Buffer; mediaType: string };
+    expect(Buffer.isBuffer(filePart.data)).toBe(true);
+    expect(filePart.data.toString("base64")).toBe(VALID_IMAGE_BASE64);
   });
 
   test("builds content parts with multiple image attachments", () => {
@@ -77,11 +174,15 @@ describe("buildUserContent", () => {
       attachments,
     );
 
-    expect(content).toEqual([
-      { type: "text", text: "What's in these photos?" },
-      { type: "image", image: `data:image/png;base64,${pngBase64}` },
-      { type: "image", image: `data:image/jpeg;base64,${jpegBase64}` },
-    ]);
+    expect(content).toHaveLength(3); // 1 text + 2 files
+    expect(content?.[0]).toEqual({
+      type: "text",
+      text: "What's in these photos?",
+    });
+    expect(content?.[1]).toHaveProperty("type", "file");
+    expect(content?.[1]).toHaveProperty("mediaType", "image/png");
+    expect(content?.[2]).toHaveProperty("type", "file");
+    expect(content?.[2]).toHaveProperty("mediaType", "image/jpeg");
   });
 
   test("filters out non-image attachments from mixed set and appends note", () => {
@@ -108,17 +209,15 @@ describe("buildUserContent", () => {
       attachments,
     );
 
-    expect(content).toHaveLength(2); // 1 text + 1 image
+    expect(content).toHaveLength(2); // 1 text + 1 file
     expect(content?.[0]).toHaveProperty("type", "text");
     // The text part should include the skipped note
     expect((content?.[0] as { text: string }).text).toContain("Check this");
     expect((content?.[0] as { text: string }).text).toContain(
       "2 attachment(s)",
     );
-    expect(content?.[1]).toEqual({
-      type: "image",
-      image: `data:image/png;base64,${VALID_IMAGE_BASE64}`,
-    });
+    expect(content?.[1]).toHaveProperty("type", "file");
+    expect(content?.[1]).toHaveProperty("mediaType", "image/png");
     expect(skippedNote).toContain("doc.pdf");
     expect(skippedNote).toContain("note.txt");
   });
@@ -154,10 +253,10 @@ describe("buildUserContent", () => {
 
     const { content } = buildUserContent("Describe", attachments);
 
-    expect(content).toHaveLength(6); // 1 text + 5 images
+    expect(content).toHaveLength(6); // 1 text + 5 files
     expect(content?.[0]).toHaveProperty("type", "text");
     for (let i = 1; i < (content?.length ?? 0); i++) {
-      expect(content?.[i]).toHaveProperty("type", "image");
+      expect(content?.[i]).toHaveProperty("type", "file");
     }
   });
 
@@ -171,10 +270,10 @@ describe("buildUserContent", () => {
 
     const { content } = buildUserContent("What is this?", attachments);
 
-    expect(content).toEqual([
-      { type: "text", text: "What is this?" },
-      { type: "image", image: `data:image/png;base64,${VALID_IMAGE_BASE64}` },
-    ]);
+    expect(content).toHaveLength(2);
+    expect(content?.[0]).toEqual({ type: "text", text: "What is this?" });
+    expect(content?.[1]).toHaveProperty("type", "file");
+    expect(content?.[1]).toHaveProperty("mediaType", "image/png");
   });
 
   test("skipped note uses 'unnamed' for attachments without names", () => {
@@ -218,11 +317,9 @@ describe("buildUserContent", () => {
     );
 
     // Should include only the valid image
-    expect(content).toHaveLength(2); // 1 text + 1 image
-    expect(content?.[1]).toEqual({
-      type: "image",
-      image: `data:image/jpeg;base64,${validBase64}`,
-    });
+    expect(content).toHaveLength(2); // 1 text + 1 file
+    expect(content?.[1]).toHaveProperty("type", "file");
+    expect(content?.[1]).toHaveProperty("mediaType", "image/jpeg");
 
     // Skipped note should mention the filtered tiny image
     expect(skippedNote).toContain("broken-inline-ref.png");
@@ -263,7 +360,68 @@ describe("buildUserContent", () => {
 
     const { content } = buildUserContent("Test", attachments);
 
-    expect(content).toHaveLength(2); // 1 text + 1 image
-    expect(content?.[1]).toHaveProperty("type", "image");
+    expect(content).toHaveLength(2); // 1 text + 1 file
+    expect(content?.[1]).toHaveProperty("type", "file");
+  });
+});
+
+describe("executeA2AMessage model selection", () => {
+  test("uses the shared conversation selection so delegated agents inherit the organization default model", async () => {
+    vi.mocked(AgentModel.findById).mockResolvedValue({
+      id: "agent-child",
+      name: "Child Agent",
+      agentType: "agent",
+      systemPrompt: "Handle the task.",
+      llmApiKeyId: null,
+      llmModel: null,
+    } as never);
+    vi.mocked(McpServerModel.getUserPersonalServerForCatalog).mockResolvedValue(
+      null,
+    );
+    mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
+      chatApiKeyId: "org-key",
+      selectedModel: "gemini-2.5-pro",
+      selectedProvider: "gemini",
+    });
+    mockGetChatMcpTools.mockResolvedValue({});
+    mockCreateLLMModelForAgent.mockResolvedValue({
+      model: { provider: "mock" },
+      provider: "gemini",
+      apiKeySource: "org",
+    });
+    mockStreamText.mockReturnValue({
+      text: Promise.resolve("Delegated response"),
+      usage: Promise.resolve(undefined),
+      finishReason: Promise.resolve("stop"),
+    });
+
+    const result = await executeA2AMessage({
+      agentId: "agent-child",
+      message: "Handle this",
+      organizationId: "org-1",
+      userId: "user-1",
+      conversationId: "conv-1",
+      parentDelegationChain: "agent-parent",
+    });
+
+    expect(mockResolveConversationLlmSelectionForAgent).toHaveBeenCalledWith({
+      agent: {
+        llmApiKeyId: null,
+        llmModel: null,
+      },
+      organizationId: "org-1",
+      userId: "user-1",
+    });
+    expect(mockCreateLLMModelForAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        organizationId: "org-1",
+        userId: "user-1",
+        agentId: "agent-child",
+        model: "gemini-2.5-pro",
+        provider: "gemini",
+        externalAgentId: "agent-parent:agent-child",
+      }),
+    );
+    expect(result.text).toBe("Delegated response");
   });
 });

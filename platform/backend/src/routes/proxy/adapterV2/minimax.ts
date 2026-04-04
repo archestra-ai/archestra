@@ -19,6 +19,7 @@ import type {
   StreamAccumulatorState,
   UsageView,
 } from "@/types";
+import { extractCommonMessageText } from "@/types";
 import type { Minimax } from "@/types/llm-providers";
 import type { ToolCompressionStats } from "../utils/toon-conversion";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
@@ -380,6 +381,7 @@ class MinimaxRequestAdapter
     for (const message of messages) {
       const commonMessage: CommonMessage = {
         role: message.role as CommonMessage["role"],
+        content: extractCommonMessageText(message),
       };
 
       if (message.role === "tool") {
@@ -1061,17 +1063,18 @@ export const minimaxAdapterFactory: LLMProvider<
 
   createClient(
     apiKey: string | undefined,
-    options?: CreateClientOptions,
+    options: CreateClientOptions,
   ): MinimaxClient {
-    const customFetch = options?.agent
+    const customFetch = options.agent
       ? metrics.llm.getObservableFetch(
           "minimax",
           options.agent,
+          options.source,
           options.externalAgentId,
         )
       : undefined;
 
-    const baseUrl = options?.baseUrl || config.llm.minimax.baseUrl;
+    const baseUrl = options.baseUrl || config.llm.minimax.baseUrl;
     return new MinimaxClient(apiKey, baseUrl, customFetch);
   },
 

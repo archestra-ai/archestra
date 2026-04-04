@@ -16,6 +16,7 @@ import {
   constructResponseSchema,
   DeleteObjectResponseSchema,
 } from "@/types";
+import { INCOMING_EMAIL_WEBHOOK_PREFIX } from "./route-paths";
 
 /**
  * Incoming Email webhook routes
@@ -53,7 +54,7 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
    * 4. Invokes the agent with the email body as the message
    */
   fastify.post(
-    "/api/webhooks/incoming-email",
+    INCOMING_EMAIL_WEBHOOK_PREFIX,
     {
       schema: {
         description: "Webhook endpoint for incoming email notifications",

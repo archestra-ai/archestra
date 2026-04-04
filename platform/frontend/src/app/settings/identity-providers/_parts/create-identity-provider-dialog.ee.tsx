@@ -2,23 +2,23 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  E2eTestId,
   IdentityProviderFormSchema,
   type IdentityProviderFormValues,
 } from "@shared";
 import { useCallback } from "react";
 import { useForm } from "react-hook-form";
+import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  DialogBody,
+  DialogForm,
+  DialogStickyFooter,
 } from "@/components/ui/dialog";
 import { Form } from "@/components/ui/form";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { useCreateIdentityProvider } from "@/lib/identity-provider.query.ee";
+import { useCreateIdentityProvider } from "@/lib/auth/identity-provider.query.ee";
+import { normalizeIdentityProviderFormValues } from "./identity-provider-form.utils";
 import { OidcConfigForm } from "./oidc-config-form.ee";
 import { SamlConfigForm } from "./saml-config-form.ee";
 
@@ -49,44 +49,54 @@ export function CreateIdentityProviderDialog({
   const form = useForm<IdentityProviderFormValues>({
     // biome-ignore lint/suspicious/noExplicitAny: Version mismatch between @hookform/resolvers and Zod
     resolver: zodResolver(IdentityProviderFormSchema as any),
-    defaultValues: defaultValues || {
-      providerId: "",
-      issuer: "",
-      domain: "",
-      providerType: providerType,
-      ...(providerType === "saml"
-        ? {
-            samlConfig: {
-              issuer: "",
-              entryPoint: "",
-              cert: "",
-              callbackUrl: "",
-              spMetadata: {},
-            },
-          }
-        : {
-            oidcConfig: {
-              issuer: "",
-              pkce: true,
-              clientId: "",
-              clientSecret: "",
-              discoveryEndpoint: "",
-              scopes: ["openid", "email", "profile"],
-              mapping: {
-                id: "sub",
-                email: "email",
-                name: "name",
+    defaultValues: {
+      roleMapping: { rules: [] },
+      ...(defaultValues || {
+        providerId: "",
+        issuer: "",
+        domain: "",
+        providerType: providerType,
+        ...(providerType === "saml"
+          ? {
+              samlConfig: {
+                issuer: "",
+                entryPoint: "",
+                cert: "",
+                callbackUrl: "",
+                spMetadata: {},
               },
-            },
-          }),
+            }
+          : {
+              oidcConfig: {
+                issuer: "",
+                pkce: true,
+                enableRpInitiatedLogout: true,
+                clientId: "",
+                clientSecret: "",
+                discoveryEndpoint: "",
+                scopes: ["openid", "email", "profile"],
+                mapping: {
+                  id: "sub",
+                  email: "email",
+                  name: "name",
+                },
+                overrideUserInfo: true,
+              },
+            }),
+      }),
     },
   });
 
   const onSubmit = useCallback(
     async (data: IdentityProviderFormValues) => {
-      await createIdentityProvider.mutateAsync(data);
-      form.reset();
-      onOpenChange(false);
+      const result = await createIdentityProvider.mutateAsync(
+        normalizeIdentityProviderFormValues(data),
+      );
+      // Only close the dialog if creation succeeded (result is not null)
+      if (result) {
+        form.reset();
+        onOpenChange(false);
+      }
     },
     [createIdentityProvider, form, onOpenChange],
   );
@@ -99,55 +109,53 @@ export function CreateIdentityProviderDialog({
   const currentProviderType = form.watch("providerType");
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>
-            {providerName
-              ? `Configure ${providerName}`
-              : "Add Identity Provider"}
-          </DialogTitle>
-          <DialogDescription>
-            {providerName
-              ? `Configure ${providerName} Single Sign-On for your organization.`
-              : "Configure a new Single Sign-On provider for your organization."}
-          </DialogDescription>
-        </DialogHeader>
+    <FormDialog
+      open={open}
+      onOpenChange={handleClose}
+      title={
+        providerName ? `Configure ${providerName}` : "Add Identity Provider"
+      }
+      description={
+        providerName
+          ? `Configure ${providerName} Single Sign-On for your organization.`
+          : "Configure a new Single Sign-On provider for your organization."
+      }
+      size="large"
+    >
+      <Form {...form}>
+        <DialogForm
+          className="flex min-h-0 flex-1 flex-col"
+          onSubmit={form.handleSubmit(onSubmit)}
+        >
+          <DialogBody className="pb-4">
+            {currentProviderType === "saml" ? (
+              <SamlConfigForm form={form} hideProviderId={hideProviderId} />
+            ) : (
+              <OidcConfigForm
+                form={form}
+                hidePkce={hidePkce}
+                hideProviderId={hideProviderId}
+              />
+            )}
+          </DialogBody>
 
-        <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(onSubmit)}
-            className="flex flex-col flex-1 overflow-hidden"
-          >
-            <div className="flex-1 overflow-y-auto py-4">
-              {currentProviderType === "saml" ? (
-                <SamlConfigForm form={form} hideProviderId={hideProviderId} />
-              ) : (
-                <OidcConfigForm
-                  form={form}
-                  hidePkce={hidePkce}
-                  hideProviderId={hideProviderId}
-                />
-              )}
-            </div>
-
-            <DialogFooter className="mt-4">
-              <Button type="button" variant="outline" onClick={handleClose}>
-                Cancel
-              </Button>
-              <PermissionButton
-                type="submit"
-                permissions={{ identityProvider: ["create"] }}
-                disabled={createIdentityProvider.isPending}
-              >
-                {createIdentityProvider.isPending
-                  ? "Creating..."
-                  : "Create Provider"}
-              </PermissionButton>
-            </DialogFooter>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
+          <DialogStickyFooter className="mt-0">
+            <Button type="button" variant="outline" onClick={handleClose}>
+              Cancel
+            </Button>
+            <PermissionButton
+              type="submit"
+              permissions={{ identityProvider: ["create"] }}
+              disabled={createIdentityProvider.isPending}
+              data-testid={E2eTestId.IdentityProviderCreateButton}
+            >
+              {createIdentityProvider.isPending
+                ? "Creating..."
+                : "Create Provider"}
+            </PermissionButton>
+          </DialogStickyFooter>
+        </DialogForm>
+      </Form>
+    </FormDialog>
   );
 }

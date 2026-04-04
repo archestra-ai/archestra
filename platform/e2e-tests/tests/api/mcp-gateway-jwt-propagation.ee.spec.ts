@@ -24,7 +24,11 @@ import {
   MCP_SERVER_JWKS_EXTERNAL_URL,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "../../consts";
-import { getKeycloakJwt, waitForServerInstallation } from "../../utils";
+import {
+  getKeycloakJwt,
+  waitForApiEndpointHealthy,
+  waitForServerInstallation,
+} from "../../utils";
 import { expect, test } from "./fixtures";
 import {
   callMcpTool,
@@ -39,7 +43,7 @@ import {
 
 test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
   test("should propagate JWT to upstream MCP server and return user identity from tool call", async ({
-    request,
+    adminRequest: request,
     createAgent,
     deleteAgent,
     createIdentityProvider,
@@ -53,14 +57,15 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
     test.slow();
 
     // STEP 1: Verify the upstream MCP server is healthy
-    const healthResponse = await request.get(
-      `${MCP_SERVER_JWKS_EXTERNAL_URL}/health`,
-    );
-    expect(
-      healthResponse.ok(),
-      `MCP server JWKS not reachable at ${MCP_SERVER_JWKS_EXTERNAL_URL}/health. ` +
-        "Ensure the mcp-server-jwks-keycloak image is built and deployed via e2e Helm chart.",
-    ).toBeTruthy();
+    await waitForApiEndpointHealthy({
+      request,
+      url: `${MCP_SERVER_JWKS_EXTERNAL_URL}/health`,
+      maxAttempts: 20,
+      delayMs: 2000,
+      description:
+        `MCP server JWKS at ${MCP_SERVER_JWKS_EXTERNAL_URL}/health` +
+        " (ensure the mcp-server-jwks-keycloak image is built and deployed via e2e Helm chart)",
+    });
 
     // STEP 2: Get a JWT from Keycloak
     const jwt = await getKeycloakJwt();
@@ -208,7 +213,7 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
   });
 
   test("should reject tool call when upstream MCP server rejects invalid JWT", async ({
-    request,
+    adminRequest: request,
     createAgent,
     deleteAgent,
     createIdentityProvider,
@@ -222,14 +227,15 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
     test.slow();
 
     // Verify the upstream MCP server is healthy
-    const healthResponse = await request.get(
-      `${MCP_SERVER_JWKS_EXTERNAL_URL}/health`,
-    );
-    expect(
-      healthResponse.ok(),
-      `MCP server JWKS not reachable at ${MCP_SERVER_JWKS_EXTERNAL_URL}/health. ` +
-        "Ensure the mcp-server-jwks-keycloak image is built and deployed via e2e Helm chart.",
-    ).toBeTruthy();
+    await waitForApiEndpointHealthy({
+      request,
+      url: `${MCP_SERVER_JWKS_EXTERNAL_URL}/health`,
+      maxAttempts: 20,
+      delayMs: 2000,
+      description:
+        `MCP server JWKS at ${MCP_SERVER_JWKS_EXTERNAL_URL}/health` +
+        " (ensure the mcp-server-jwks-keycloak image is built and deployed via e2e Helm chart)",
+    });
 
     // Get a valid JWT for server installation (tool discovery requires auth),
     // but later use an org token for the tool call — the upstream server
@@ -350,7 +356,7 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
   });
 
   test("should propagate JWT to local K8s-orchestrated MCP server via streamable-http", async ({
-    request,
+    adminRequest: request,
     createAgent,
     deleteAgent,
     createIdentityProvider,

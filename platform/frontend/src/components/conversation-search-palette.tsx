@@ -1,5 +1,4 @@
 "use client";
-
 import { useDebounce } from "@uidotdev/usehooks";
 import { isToday, isWithinInterval, isYesterday, subDays } from "date-fns";
 import {
@@ -15,11 +14,12 @@ import {
   Router,
   Settings,
   Shield,
+  UsersRound,
   Wrench,
   Zap,
 } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
   CommandDialog,
@@ -30,21 +30,31 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command";
-import { usePlatform } from "@/hooks/use-platform";
-import { useIsAuthenticated } from "@/lib/auth.hook";
 import {
-  useConversations,
-  useDeleteConversation,
-  usePinConversation,
-} from "@/lib/chat.query";
-import { getConversationDisplayTitle } from "@/lib/chat-utils";
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   SHORTCUT_DELETE,
   SHORTCUT_NEW_CHAT,
   SHORTCUT_PIN,
   SHORTCUT_SEARCH,
   SHORTCUT_SIDEBAR,
-} from "@/lib/keyboard-shortcuts";
+} from "@/consts";
+import { useIsAuthenticated } from "@/lib/auth/auth.hook";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  useConversations,
+  useDeleteConversation,
+  usePinConversation,
+} from "@/lib/chat/chat.query";
+import {
+  getConversationDisplayTitle,
+  getConversationShareTooltip,
+} from "@/lib/chat/chat-utils";
+import { usePlatform } from "@/lib/hooks/use-platform";
 
 /**
  * Extracts all text content from messages for preview purposes.
@@ -116,56 +126,56 @@ const navigationItems = [
     label: "Agent Triggers",
     value: "agent-triggers",
     keywords: "triggers automation webhooks ms teams",
-    href: "/agent-triggers/ms-teams",
+    href: "/agents/triggers/ms-teams",
   },
   {
     icon: Shield,
     label: "MCP Gateways",
     value: "mcp-gateways",
     keywords: "gateways security mcp",
-    href: "/mcp-gateways",
+    href: "/mcp/gateways",
   },
   {
     icon: Network,
     label: "LLM Proxies",
     value: "llm-proxies",
     keywords: "proxies llm network",
-    href: "/llm-proxies",
+    href: "/llm/proxies",
   },
   {
     icon: Key,
     label: "Provider Settings",
     value: "provider-settings",
     keywords: "provider settings api keys virtual keys models llm",
-    href: "/llm-proxies/provider-settings",
+    href: "/llm/providers/api-keys",
   },
   {
     icon: MessagesSquare,
     label: "Logs",
     value: "logs",
     keywords: "logs llm proxy requests",
-    href: "/logs/llm-proxy",
+    href: "/llm/logs",
   },
   {
     icon: Wrench,
-    label: "Tool Policies",
-    value: "tool-policies",
-    keywords: "tools policies permissions",
-    href: "/tool-policies",
+    label: "Tool Guardrails",
+    value: "tool-guardrails",
+    keywords: "tools guardrails policies permissions security",
+    href: "/mcp/tool-guardrails",
   },
   {
     icon: Router,
     label: "MCP Registry",
     value: "mcp-registry",
     keywords: "mcp catalog registry servers",
-    href: "/mcp-catalog/registry",
+    href: "/mcp/registry",
   },
   {
     icon: Home,
     label: "Cost & Limits",
     value: "cost-limits",
     keywords: "cost dashboard limits budget",
-    href: "/cost",
+    href: "/llm/costs",
   },
   {
     icon: Cable,
@@ -195,17 +205,24 @@ export function ConversationSearchPalette({
   recentChatsView = false,
 }: ConversationSearchPaletteProps) {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const pathname = usePathname();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedValue, setSelectedValue] = useState("");
   const [isPendingDeletion, setIsPendingDeletion] = useState<string | null>(
     null,
   );
   const isAuthenticated = useIsAuthenticated();
+  const { data: canReadConversation } = useHasPermissions({
+    chat: ["read"],
+  });
   const { modKey, altKey } = usePlatform();
 
   const deleteMutation = useDeleteConversation();
   const pinMutation = usePinConversation();
+
+  // Track in-flight deletions via ref to prevent rapid double-deletion
+  // (React batches state updates, so the keydown handler may see stale state)
+  const deletingIdsRef = useRef(new Set<string>());
 
   // Debounce search query to reduce API calls while typing
   const debouncedSearch = useDebounce(searchQuery, 300);
@@ -216,7 +233,7 @@ export function ConversationSearchPalette({
     isLoading,
     isFetching,
   } = useConversations({
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && canReadConversation === true,
     search: debouncedSearch,
   });
 
@@ -240,6 +257,7 @@ export function ConversationSearchPalette({
     setSearchQuery("");
     setSelectedValue("");
     setIsPendingDeletion(null);
+    deletingIdsRef.current.clear();
   }, [open]);
 
   // Reset pending deletion when selection or search query changes
@@ -249,7 +267,7 @@ export function ConversationSearchPalette({
   }, [selectedValue, searchQuery]);
 
   const handleSelectConversation = (conversationId: string) => {
-    router.push(`/chat?conversation=${conversationId}`);
+    router.push(`/chat/${conversationId}`);
     onOpenChange(false);
   };
 
@@ -260,6 +278,10 @@ export function ConversationSearchPalette({
 
   const handleDeleteConversation = useCallback(
     (conversationId: string) => {
+      // Guard against rapid double-deletion (ref is synchronous, not batched)
+      if (deletingIdsRef.current.has(conversationId)) return;
+      deletingIdsRef.current.add(conversationId);
+
       // Find the next conversation to select after deletion
       const currentIndex = conversations.findIndex(
         (c) => c.id === conversationId,
@@ -271,15 +293,17 @@ export function ConversationSearchPalette({
           null;
         setSelectedValue(nextConv ? `conv-${nextConv.id}` : "");
       }
-      deleteMutation.mutate(conversationId);
+      deleteMutation.mutate(conversationId, {
+        onSettled: () => deletingIdsRef.current.delete(conversationId),
+      });
       setIsPendingDeletion(null);
 
       // Redirect to new chat if the deleted conversation is currently open
-      if (searchParams.get("conversation") === conversationId) {
+      if (pathname === `/chat/${conversationId}`) {
         router.push("/chat");
       }
     },
-    [deleteMutation, conversations, searchParams, router],
+    [deleteMutation, conversations, pathname, router],
   );
 
   const handlePinConversation = useCallback(
@@ -431,6 +455,18 @@ export function ConversationSearchPalette({
       >
         <div className="flex items-start gap-2 w-full min-w-0">
           <IconComponent className="h-4 w-4 shrink-0 text-muted-foreground" />
+          {conv.share && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <UsersRound className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary/80" />
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  {getConversationShareTooltip(conv.share.visibility)}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
           <span className="text-sm flex-1 min-w-0 break-words leading-snug line-clamp-2">
             {displayTitle}
           </span>

@@ -6,12 +6,19 @@ import { type APIRequestContext, test as base } from "@playwright/test";
 import type { SupportedProvider } from "@shared";
 import {
   API_BASE_URL,
+  adminAuthFile,
   editorAuthFile,
   KEYCLOAK_OIDC,
   memberAuthFile,
   UI_BASE_URL,
   WIREMOCK_BASE_URL,
 } from "../../consts";
+
+export const LLM_PROVIDER_API_KEYS_ROUTE = "/api/llm-provider-api-keys";
+export const LLM_PROVIDER_API_KEYS_AVAILABLE_ROUTE =
+  "/api/llm-provider-api-keys/available";
+export const LLM_MODELS_ROUTE = "/api/llm-models";
+export const SYNC_LLM_MODELS_ROUTE = "/api/llm-models/sync";
 
 /**
  * Playwright test extension with fixtures
@@ -55,10 +62,16 @@ export interface TestFixtures {
   syncModels: typeof syncModels;
   updateModelPricing: typeof updateModelPricing;
   getOrganization: typeof getOrganization;
-  updateOrganization: typeof updateOrganization;
+  updateLlmSettings: typeof updateLlmSettings;
+  updateSecuritySettings: typeof updateSecuritySettings;
+  updateKnowledgeSettings: typeof updateKnowledgeSettings;
   getInteractions: typeof getInteractions;
   getWiremockRequests: typeof getWiremockRequests;
   clearWiremockRequests: typeof clearWiremockRequests;
+  createKnowledgeBase: typeof createKnowledgeBase;
+  deleteKnowledgeBase: typeof deleteKnowledgeBase;
+  createConnector: typeof createConnector;
+  deleteConnector: typeof deleteConnector;
   /** API request context authenticated as admin (same as default `request`) */
   adminRequest: APIRequestContext;
   /** API request context authenticated as editor */
@@ -100,6 +113,23 @@ const makeApiRequest = async ({
 
   return response;
 };
+
+function extractPaginatedArray<T>(data: unknown): T[] {
+  if (Array.isArray(data)) {
+    return data as T[];
+  }
+
+  if (
+    data &&
+    typeof data === "object" &&
+    "data" in data &&
+    Array.isArray(data.data)
+  ) {
+    return data.data as T[];
+  }
+
+  return [];
+}
 
 /**
  * Create an agent
@@ -213,6 +243,22 @@ const deleteApiKey = async (request: APIRequestContext, keyId: string) =>
 const createIdentityProvider = async (
   request: APIRequestContext,
   providerId: string,
+  options?: {
+    domain?: string;
+    enterpriseManagedCredentials?: {
+      clientId?: string;
+      clientSecret?: string;
+      tokenEndpoint?: string;
+      tokenEndpointAuthentication?:
+        | "client_secret_post"
+        | "client_secret_basic"
+        | "private_key_jwt";
+      subjectTokenType?:
+        | "urn:ietf:params:oauth:token-type:access_token"
+        | "urn:ietf:params:oauth:token-type:id_token"
+        | "urn:ietf:params:oauth:token-type:jwt";
+    };
+  },
 ): Promise<string> => {
   const response = await makeApiRequest({
     request,
@@ -221,7 +267,7 @@ const createIdentityProvider = async (
     data: {
       providerId,
       issuer: KEYCLOAK_OIDC.issuer,
-      domain: "jwks-test.example.com",
+      domain: options?.domain ?? "jwks-test.example.com",
       oidcConfig: {
         issuer: KEYCLOAK_OIDC.issuer,
         pkce: true,
@@ -229,6 +275,12 @@ const createIdentityProvider = async (
         clientSecret: KEYCLOAK_OIDC.clientSecret,
         discoveryEndpoint: KEYCLOAK_OIDC.discoveryEndpoint,
         jwksEndpoint: KEYCLOAK_OIDC.jwksEndpoint,
+        ...(options?.enterpriseManagedCredentials
+          ? {
+              enterpriseManagedCredentials:
+                options.enterpriseManagedCredentials,
+            }
+          : {}),
       },
     },
   });
@@ -588,7 +640,9 @@ export const getTeamByName = async (
     method: "get",
     urlSuffix: "/api/teams",
   });
-  const teams = await teamsResponse.json();
+  const teams = extractPaginatedArray<{ id: string; name: string }>(
+    await teamsResponse.json(),
+  );
   const team = teams.find((t: { name: string }) => t.name === teamName);
   if (!team) {
     throw new Error(`Team '${teamName}' not found`);
@@ -780,7 +834,7 @@ const getModels = async (request: APIRequestContext) =>
   makeApiRequest({
     request,
     method: "get",
-    urlSuffix: "/api/models",
+    urlSuffix: LLM_MODELS_ROUTE,
   });
 
 /**
@@ -793,7 +847,7 @@ const syncModels = async (request: APIRequestContext) =>
   makeApiRequest({
     request,
     method: "post",
-    urlSuffix: "/api/chat/models/sync",
+    urlSuffix: SYNC_LLM_MODELS_ROUTE,
   });
 
 /**
@@ -812,7 +866,7 @@ const updateModelPricing = async (
   makeApiRequest({
     request,
     method: "patch",
-    urlSuffix: `/api/models/${modelId}/pricing`,
+    urlSuffix: `${LLM_MODELS_ROUTE}/${modelId}`,
     data: pricing,
   });
 
@@ -828,21 +882,59 @@ const getOrganization = async (request: APIRequestContext) =>
   });
 
 /**
- * Update organization settings
+ * Update LLM settings (compression, cleanup interval)
  * (authnz is handled by the authenticated session)
  */
-const updateOrganization = async (
+const updateLlmSettings = async (
   request: APIRequestContext,
   updates: {
     convertToolResultsToToon?: boolean;
     compressionScope?: "organization" | "team";
-    globalToolPolicy?: "permissive" | "restrictive";
+    limitCleanupInterval?: "1h" | "12h" | "24h" | "1w" | "1m";
   },
 ) =>
   makeApiRequest({
     request,
     method: "patch",
-    urlSuffix: "/api/organization",
+    urlSuffix: "/api/organization/llm-settings",
+    data: updates,
+  });
+
+/**
+ * Update security settings (global tool policy, chat file uploads)
+ * (authnz is handled by the authenticated session)
+ */
+const updateSecuritySettings = async (
+  request: APIRequestContext,
+  updates: {
+    globalToolPolicy?: "permissive" | "restrictive";
+    allowChatFileUploads?: boolean;
+  },
+) =>
+  makeApiRequest({
+    request,
+    method: "patch",
+    urlSuffix: "/api/organization/security-settings",
+    data: updates,
+  });
+
+/**
+ * Update knowledge settings (embedding model, API keys, reranker)
+ * (authnz is handled by the authenticated session)
+ */
+const updateKnowledgeSettings = async (
+  request: APIRequestContext,
+  updates: {
+    embeddingModel?: string | null;
+    embeddingChatApiKeyId?: string | null;
+    rerankerChatApiKeyId?: string | null;
+    rerankerModel?: string | null;
+  },
+) =>
+  makeApiRequest({
+    request,
+    method: "patch",
+    urlSuffix: "/api/organization/knowledge-settings",
     data: updates,
   });
 
@@ -940,6 +1032,87 @@ const getWiremockRequests = async (
 const clearWiremockRequests = async (request: APIRequestContext) => {
   await request.delete(`${WIREMOCK_BASE_URL}/__admin/requests`);
 };
+
+/**
+ * Create a knowledge base
+ * (authnz is handled by the authenticated session)
+ */
+const createKnowledgeBase = async (request: APIRequestContext, name?: string) =>
+  makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: "/api/knowledge-bases",
+    data: {
+      name: name ?? `Test Knowledge Base ${crypto.randomUUID().slice(0, 8)}`,
+    },
+  });
+
+/**
+ * Delete a knowledge base by ID
+ * (authnz is handled by the authenticated session)
+ */
+const deleteKnowledgeBase = async (request: APIRequestContext, id: string) =>
+  makeApiRequest({
+    request,
+    method: "delete",
+    urlSuffix: `/api/knowledge-bases/${id}`,
+    ignoreStatusCheck: true,
+  });
+
+/**
+ * Create a connector for a knowledge base
+ * (authnz is handled by the authenticated session)
+ */
+const createConnector = async (
+  request: APIRequestContext,
+  kgId: string,
+  name?: string,
+  overrides?: {
+    connectorType?: string;
+    config?: Record<string, unknown>;
+    credentials?: { email: string; apiToken: string };
+    schedule?: string;
+    enabled?: boolean;
+  },
+) =>
+  makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: "/api/connectors",
+    data: {
+      name: name ?? `Test Connector ${crypto.randomUUID().slice(0, 8)}`,
+      knowledgeBaseIds: [kgId],
+      connectorType: overrides?.connectorType ?? "jira",
+      config: overrides?.config ?? {
+        type: "jira",
+        jiraBaseUrl: "https://test.atlassian.net",
+        isCloud: true,
+        projectKey: "TEST",
+      },
+      credentials: overrides?.credentials ?? {
+        email: "test@example.com",
+        apiToken: "test-token-123",
+      },
+      schedule: overrides?.schedule ?? "0 */6 * * *",
+      enabled: overrides?.enabled ?? true,
+    },
+  });
+
+/**
+ * Delete a connector by ID
+ * (authnz is handled by the authenticated session)
+ */
+const deleteConnector = async (
+  request: APIRequestContext,
+  _kgId: string,
+  connectorId: string,
+) =>
+  makeApiRequest({
+    request,
+    method: "delete",
+    urlSuffix: `/api/connectors/${connectorId}`,
+    ignoreStatusCheck: true,
+  });
 
 export * from "@playwright/test";
 export const test = base.extend<TestFixtures>({
@@ -1054,8 +1227,14 @@ export const test = base.extend<TestFixtures>({
   getOrganization: async ({}, use) => {
     await use(getOrganization);
   },
-  updateOrganization: async ({}, use) => {
-    await use(updateOrganization);
+  updateLlmSettings: async ({}, use) => {
+    await use(updateLlmSettings);
+  },
+  updateSecuritySettings: async ({}, use) => {
+    await use(updateSecuritySettings);
+  },
+  updateKnowledgeSettings: async ({}, use) => {
+    await use(updateKnowledgeSettings);
   },
   getInteractions: async ({}, use) => {
     await use(getInteractions);
@@ -1066,12 +1245,27 @@ export const test = base.extend<TestFixtures>({
   clearWiremockRequests: async ({}, use) => {
     await use(clearWiremockRequests);
   },
+  createKnowledgeBase: async ({}, use) => {
+    await use(createKnowledgeBase);
+  },
+  deleteKnowledgeBase: async ({}, use) => {
+    await use(deleteKnowledgeBase);
+  },
+  createConnector: async ({}, use) => {
+    await use(createConnector);
+  },
+  deleteConnector: async ({}, use) => {
+    await use(deleteConnector);
+  },
   /**
-   * Admin request - same auth as default `request` fixture
+   * Admin request - creates a new request context with admin auth
    */
-  adminRequest: async ({ request }, use) => {
-    // Default request is already admin (via storageState in config)
-    await use(request);
+  adminRequest: async ({ playwright }, use) => {
+    const context = await playwright.request.newContext({
+      storageState: adminAuthFile,
+    });
+    await use(context);
+    await context.dispose();
   },
   /**
    * Editor request - creates a new request context with editor auth

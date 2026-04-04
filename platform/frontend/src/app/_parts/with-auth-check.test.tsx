@@ -2,7 +2,7 @@ import * as Sentry from "@sentry/nextjs";
 import { render, screen } from "@testing-library/react";
 import { usePathname, useRouter } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useHasPermissions } from "@/lib/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { WithAuthCheck } from "./with-auth-check";
 
@@ -25,7 +25,7 @@ vi.mock("@/lib/clients/auth/auth-client", () => ({
 }));
 
 // Mock auth query
-vi.mock("@/lib/auth.query", () => ({
+vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: vi.fn(),
 }));
 
@@ -201,7 +201,7 @@ describe("WithAuthCheck", () => {
 
     it("should redirect to redirectTo param when accessing auth pages after login", () => {
       vi.mocked(usePathname).mockReturnValue("/auth/sign-in");
-      setWindowLocation("/auth/sign-in", "?redirectTo=%2Flogs%2Fllm-proxy");
+      setWindowLocation("/auth/sign-in", "?redirectTo=%2Fllm%2Flogs");
 
       render(
         <WithAuthCheck>
@@ -209,7 +209,7 @@ describe("WithAuthCheck", () => {
         </WithAuthCheck>,
       );
 
-      expect(mockRouterPush).toHaveBeenCalledWith("/logs/llm-proxy");
+      expect(mockRouterPush).toHaveBeenCalledWith("/llm/logs");
     });
 
     it("should ignore malicious redirectTo param and redirect to home", () => {

@@ -1,6 +1,14 @@
-import { MCP_CATALOG_INSTALL_PATH } from "@shared";
+import { randomUUID } from "node:crypto";
+import {
+  MCP_APPS_EXTENSION_ID,
+  MCP_CATALOG_INSTALL_PATH,
+  MCP_CATALOG_REAUTH_QUERY_PARAM,
+  MCP_CATALOG_SERVER_QUERY_PARAM,
+  MCP_ENTERPRISE_AUTH_EXTENSION_ID,
+} from "@shared";
 import { vi } from "vitest";
 import config from "@/config";
+import db, { schema } from "@/database";
 import {
   AgentModel,
   AgentToolModel,
@@ -58,7 +66,7 @@ const {
   mockGetOrLoadDeployment: vi.fn(),
 }));
 
-vi.mock("@/mcp-server-runtime", () => ({
+vi.mock("@/k8s/mcp-server-runtime", () => ({
   McpServerRuntimeManager: {
     usesStreamableHttp: mockUsesStreamableHttp,
     getHttpEndpointUrl: mockGetHttpEndpointUrl,
@@ -73,6 +81,8 @@ describe("McpClient", () => {
   let catalogId: string;
 
   beforeEach(async () => {
+    await mcpClient.disconnectAll();
+
     // Create test agent
     const agent = await AgentModel.create({
       name: "Test Agent",
@@ -151,347 +161,47 @@ describe("McpClient", () => {
       });
     });
 
-    describe("Response Modifier Templates", () => {
-      test("applies simple text template to tool response", async () => {
-        // Create MCP tool with response modifier template
-        const tool = await ToolModel.createToolIfNotExists({
-          name: "github-mcp-server__test_tool",
-          description: "Test MCP tool",
-          parameters: {},
-          catalogId,
-        });
-
-        // Assign tool to agent with response modifier
-        await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServerId,
-          responseModifierTemplate:
-            'Modified: {{{lookup (lookup response 0) "text"}}}',
-        });
-
-        // Mock the MCP client response with realistic GitHub issues data
-        mockCallTool.mockResolvedValueOnce({
-          content: [
-            {
-              type: "text",
-              text: '{"issues":[{"id":3550499726,"number":816,"state":"OPEN","title":"Add authentication for MCP gateways"}]}',
-            },
-          ],
-          isError: false,
-        });
-
-        const toolCall = {
-          id: "call_1",
-          name: "github-mcp-server__test_tool",
-          arguments: {},
-        };
-
-        const result = await mcpClient.executeToolCall(toolCall, agentId);
-
-        expect(result).toEqual({
-          id: "call_1",
-          content: [
-            {
-              type: "text",
-              text: 'Modified: {"issues":[{"id":3550499726,"number":816,"state":"OPEN","title":"Add authentication for MCP gateways"}]}',
-            },
-          ],
-          isError: false,
-          name: "github-mcp-server__test_tool",
-        });
+    test("declares MCP Apps and enterprise auth extensions during initialize", async () => {
+      const tool = await ToolModel.createToolIfNotExists({
+        name: "github-mcp-server__declared_extensions",
+        description: "Extension declaration test",
+        parameters: {},
+        catalogId,
       });
 
-      test("applies JSON template to tool response", async () => {
-        // Create MCP tool with JSON response modifier template
-        const tool = await ToolModel.createToolIfNotExists({
-          name: "github-mcp-server__json_tool",
-          description: "Test MCP tool with JSON",
-          parameters: {},
-          catalogId,
-        });
-
-        await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServerId,
-          responseModifierTemplate:
-            '{{#with (lookup response 0)}}{"formatted": true, "data": "{{{this.text}}}"}{{/with}}',
-        });
-
-        mockCallTool.mockResolvedValueOnce({
-          content: [{ type: "text", text: "test data" }],
-          isError: false,
-        });
-
-        const toolCall = {
-          id: "call_1",
-          name: "github-mcp-server__json_tool",
-          arguments: {},
-        };
-
-        const result = await mcpClient.executeToolCall(toolCall, agentId);
-
-        expect(result).toEqual({
-          id: "call_1",
-          content: { formatted: true, data: "test data" },
-          isError: false,
-          name: "github-mcp-server__json_tool",
-        });
+      await AgentToolModel.create(agentId, tool.id, {
+        mcpServerId,
+        credentialResolutionMode: "static",
       });
 
-      test("transforms GitHub issues to id:title mapping using json helper", async () => {
-        const tool = await ToolModel.createToolIfNotExists({
-          name: "github-mcp-server__github_issues",
-          description: "GitHub issues tool",
-          parameters: {},
-          catalogId,
-        });
-
-        await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServerId,
-          responseModifierTemplate: `{{#with (lookup response 0)}}{{#with (json this.text)}}
-  {
-  {{#each this.issues}}
-    "{{this.id}}": "{{{escapeJson this.title}}}"{{#unless @last}},{{/unless}}
-  {{/each}}
-}
-{{/with}}{{/with}}`,
-        });
-
-        // Realistic GitHub MCP response with stringified JSON
-        mockCallTool.mockResolvedValueOnce({
-          content: [
-            {
-              type: "text",
-              text: '{"issues":[{"id":3550499726,"number":816,"state":"OPEN","title":"Add authentication for MCP gateways"},{"id":3550391199,"number":815,"state":"OPEN","title":"ERROR: role \\"postgres\\" already exists"}]}',
-            },
-          ],
-          isError: false,
-        });
-
-        const toolCall = {
-          id: "call_1",
-          name: "github-mcp-server__github_issues",
-          arguments: {},
-        };
-
-        const result = await mcpClient.executeToolCall(toolCall, agentId);
-
-        expect(result).toEqual({
-          id: "call_1",
-          content: {
-            "3550499726": "Add authentication for MCP gateways",
-            "3550391199": 'ERROR: role "postgres" already exists',
-          },
-          isError: false,
-          name: "github-mcp-server__github_issues",
-        });
+      mockConnect.mockResolvedValue(undefined);
+      mockCallTool.mockResolvedValue({
+        content: [{ type: "text", text: "ok" }],
       });
 
-      test("uses {{response}} to access full response content", async () => {
-        const tool = await ToolModel.createToolIfNotExists({
-          name: "github-mcp-server__content_tool",
-          description: "Test tool accessing full content",
-          parameters: {},
-          catalogId,
-        });
-
-        await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServerId,
-          responseModifierTemplate: "{{{json response}}}",
-        });
-
-        mockCallTool.mockResolvedValueOnce({
-          content: [
-            { type: "text", text: "Line 1" },
-            { type: "text", text: "Line 2" },
-          ],
-          isError: false,
-        });
-
-        const toolCall = {
-          id: "call_1",
-          name: "github-mcp-server__content_tool",
+      const result = await mcpClient.executeToolCall(
+        {
+          id: "call_extensions",
+          name: tool.name,
           arguments: {},
-        };
+        },
+        agentId,
+      );
 
-        const result = await mcpClient.executeToolCall(toolCall, agentId);
+      expect(result.isError).toBe(false);
 
-        expect(result?.content).toEqual([
-          { type: "text", text: "Line 1" },
-          { type: "text", text: "Line 2" },
-        ]);
-      });
-
-      test("falls back to original content when template fails", async () => {
-        const tool = await ToolModel.createToolIfNotExists({
-          name: "github-mcp-server__bad_template",
-          description: "Test tool with bad template",
-          parameters: {},
-          catalogId,
-        });
-
-        // Invalid Handlebars template
-        await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServerId,
-          responseModifierTemplate: "{{#invalid",
-        });
-
-        const originalContent = [{ type: "text", text: "Original" }];
-        mockCallTool.mockResolvedValueOnce({
-          content: originalContent,
-          isError: false,
-        });
-
-        const toolCall = {
-          id: "call_1",
-          name: "github-mcp-server__bad_template",
-          arguments: {},
-        };
-
-        const result = await mcpClient.executeToolCall(toolCall, agentId);
-
-        // Should fall back to original content when template fails
-
-        expect(result).toEqual({
-          id: "call_1",
-          content: originalContent,
-          isError: false,
-          name: "github-mcp-server__bad_template",
-        });
-      });
-
-      test("handles non-text content gracefully", async () => {
-        const tool = await ToolModel.createToolIfNotExists({
-          name: "github-mcp-server__image_tool",
-          description: "Test tool with image content",
-          parameters: {},
-          catalogId,
-        });
-
-        await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServerId,
-          responseModifierTemplate:
-            'Type: {{lookup (lookup response 0) "type"}}',
-        });
-
-        // Response with image instead of text
-        mockCallTool.mockResolvedValueOnce({
-          content: [{ type: "image", data: "base64data" }],
-          isError: false,
-        });
-
-        const toolCall = {
-          id: "call_1",
-          name: "github-mcp-server__image_tool",
-          arguments: {},
-        };
-
-        const result = await mcpClient.executeToolCall(toolCall, agentId);
-
-        expect(result?.content).toEqual([
-          { type: "text", text: "Type: image" },
-        ]);
-      });
-
-      test("executes tool without template when none is set", async () => {
-        const tool = await ToolModel.createToolIfNotExists({
-          name: "github-mcp-server__no_template",
-          description: "Test tool without template",
-          parameters: {},
-          catalogId,
-        });
-
-        // Assign tool without response modifier template
-        await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServerId,
-          responseModifierTemplate: null,
-        });
-
-        const originalContent = [{ type: "text", text: "Unmodified" }];
-        mockCallTool.mockResolvedValueOnce({
-          content: originalContent,
-          isError: false,
-        });
-
-        const toolCall = {
-          id: "call_1",
-          name: "github-mcp-server__no_template",
-          arguments: {},
-        };
-
-        const result = await mcpClient.executeToolCall(toolCall, agentId);
-
-        expect(result).toEqual({
-          id: "call_1",
-          content: originalContent,
-          isError: false,
-          name: "github-mcp-server__no_template",
-        });
-      });
-
-      test("applies different templates to different tools", async () => {
-        // Create two tools with different templates
-        const tool1 = await ToolModel.createToolIfNotExists({
-          name: "github-mcp-server__tool1",
-          description: "First tool",
-          parameters: {},
-          catalogId,
-        });
-
-        const tool2 = await ToolModel.createToolIfNotExists({
-          name: "github-mcp-server__tool2",
-          description: "Second tool",
-          parameters: {},
-          catalogId,
-        });
-
-        await AgentToolModel.create(agentId, tool1.id, {
-          credentialSourceMcpServerId: mcpServerId,
-          responseModifierTemplate:
-            'Template 1: {{lookup (lookup response 0) "text"}}',
-        });
-
-        await AgentToolModel.create(agentId, tool2.id, {
-          credentialSourceMcpServerId: mcpServerId,
-          responseModifierTemplate:
-            'Template 2: {{lookup (lookup response 0) "text"}}',
-        });
-
-        mockCallTool
-          .mockResolvedValueOnce({
-            content: [{ type: "text", text: "Response 1" }],
-            isError: false,
-          })
-          .mockResolvedValueOnce({
-            content: [{ type: "text", text: "Response 2" }],
-            isError: false,
-          });
-
-        const toolCall1 = {
-          id: "call_1",
-          name: "github-mcp-server__tool1",
-          arguments: {},
-        };
-
-        const toolCall2 = {
-          id: "call_2",
-          name: "github-mcp-server__tool2",
-          arguments: {},
-        };
-
-        const result1 = await mcpClient.executeToolCall(toolCall1, agentId);
-        const result2 = await mcpClient.executeToolCall(toolCall2, agentId);
-
-        expect(result1).toEqual({
-          id: "call_1",
-          content: [{ type: "text", text: "Template 1: Response 1" }],
-          isError: false,
-          name: "github-mcp-server__tool1",
-        });
-        expect(result2).toEqual({
-          id: "call_2",
-          content: [{ type: "text", text: "Template 2: Response 2" }],
-          isError: false,
-          name: "github-mcp-server__tool2",
-        });
+      const clientConstructor = vi.mocked(
+        (await import("@modelcontextprotocol/sdk/client/index.js")).Client,
+      );
+      expect(clientConstructor).toHaveBeenCalled();
+      const options = clientConstructor.mock.calls.at(-1)?.[1] as
+        | { capabilities?: { extensions?: Record<string, unknown> } }
+        | undefined;
+      expect(options?.capabilities?.extensions).toEqual({
+        [MCP_APPS_EXTENSION_ID]: {
+          mimeTypes: ["text/html;profile=mcp-app"],
+        },
+        [MCP_ENTERPRISE_AUTH_EXTENSION_ID]: {},
       });
     });
 
@@ -512,10 +222,10 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool1.id, {
-          credentialSourceMcpServerId: mcpServerId,
+          mcpServerId: mcpServerId,
         });
         await AgentToolModel.create(agentId, tool2.id, {
-          credentialSourceMcpServerId: mcpServerId,
+          mcpServerId: mcpServerId,
         });
 
         mockCallTool
@@ -551,84 +261,7 @@ describe("McpClient", () => {
     });
 
     describe("Concurrency limiter", () => {
-      test("bypasses limiter when browser streaming is disabled", async () => {
-        const originalBrowserStreaming =
-          config.features.browserStreamingEnabled;
-        config.features.browserStreamingEnabled = false;
-
-        const clientWithInternals = mcpClient as unknown as {
-          connectionLimiter: {
-            runWithLimit: (
-              connectionKey: string,
-              limit: number,
-              fn: () => Promise<unknown>,
-            ) => Promise<unknown>;
-          };
-          getTransport: (
-            catalogItem: unknown,
-            targetLocalMcpServerId: string,
-            secrets: Record<string, unknown>,
-          ) => Promise<unknown>;
-          getTransportWithKind: (
-            catalogItem: unknown,
-            targetLocalMcpServerId: string,
-            secrets: Record<string, unknown>,
-            transportKind: "stdio" | "http",
-          ) => Promise<unknown>;
-        };
-
-        const runWithLimitSpy = vi.spyOn(
-          clientWithInternals.connectionLimiter,
-          "runWithLimit",
-        );
-        const getTransportSpy = vi.spyOn(clientWithInternals, "getTransport");
-
-        try {
-          const tool = await ToolModel.createToolIfNotExists({
-            name: "github-mcp-server__limiter_disabled",
-            description: "Limiter disabled tool",
-            parameters: {},
-            catalogId,
-          });
-
-          await AgentToolModel.create(agentId, tool.id, {
-            credentialSourceMcpServerId: mcpServerId,
-          });
-
-          mockCallTool.mockResolvedValueOnce({
-            content: [{ type: "text", text: "Limiter disabled" }],
-            isError: false,
-          });
-
-          const toolCall = {
-            id: "call_limiter_disabled",
-            name: "github-mcp-server__limiter_disabled",
-            arguments: {},
-          };
-
-          const result = await mcpClient.executeToolCall(toolCall, agentId);
-
-          expect(runWithLimitSpy).not.toHaveBeenCalled();
-          expect(getTransportSpy).toHaveBeenCalled();
-
-          expect(result).toEqual({
-            id: "call_limiter_disabled",
-            content: [{ type: "text", text: "Limiter disabled" }],
-            isError: false,
-            name: "github-mcp-server__limiter_disabled",
-          });
-        } finally {
-          config.features.browserStreamingEnabled = originalBrowserStreaming;
-          runWithLimitSpy.mockRestore();
-          getTransportSpy.mockRestore();
-        }
-      });
-
-      test("limits HTTP concurrency to 4 when browser streaming is enabled", async () => {
-        const originalBrowserStreaming =
-          config.features.browserStreamingEnabled;
-        config.features.browserStreamingEnabled = true;
-
+      test("limits HTTP concurrency to 4", async () => {
         const clientWithInternals = mcpClient as unknown as {
           connectionLimiter: {
             runWithLimit: (
@@ -669,7 +302,7 @@ describe("McpClient", () => {
           });
 
           await AgentToolModel.create(agentId, tool.id, {
-            credentialSourceMcpServerId: mcpServerId,
+            mcpServerId: mcpServerId,
           });
 
           mockCallTool.mockResolvedValueOnce({
@@ -697,7 +330,6 @@ describe("McpClient", () => {
             name: "github-mcp-server__limiter_http",
           });
         } finally {
-          config.features.browserStreamingEnabled = originalBrowserStreaming;
           runWithLimitSpy.mockRestore();
           getTransportSpy.mockRestore();
           getTransportWithKindSpy.mockRestore();
@@ -758,7 +390,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          executionSourceMcpServerId: localMcpServerId,
+          mcpServerId: localMcpServerId,
         });
 
         // Mock runtime manager responses
@@ -809,7 +441,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          executionSourceMcpServerId: localMcpServerId,
+          mcpServerId: localMcpServerId,
         });
 
         // Mock runtime manager responses - no endpoint URL
@@ -837,49 +469,18 @@ describe("McpClient", () => {
           isError: true,
           error: expect.stringContaining("No HTTP endpoint URL found"),
           name: "local-streamable-http-server__test_tool",
-        });
-      });
-
-      test("applies response modifier template with streamable-http", async () => {
-        // Create tool with response modifier template
-        const tool = await ToolModel.createToolIfNotExists({
-          name: "local-streamable-http-server__formatted_tool",
-          description: "Tool with template",
-          parameters: {},
-          catalogId: localCatalogId,
-        });
-
-        await AgentToolModel.create(agentId, tool.id, {
-          executionSourceMcpServerId: localMcpServerId,
-          responseModifierTemplate:
-            'Result: {{{lookup (lookup response 0) "text"}}}',
-        });
-
-        // Mock runtime manager responses
-        mockUsesStreamableHttp.mockResolvedValue(true);
-        mockGetHttpEndpointUrl.mockReturnValue("http://localhost:30123/mcp");
-
-        // Mock tool call response
-        mockCallTool.mockResolvedValue({
-          content: [{ type: "text", text: "Original content" }],
-          isError: false,
-        });
-
-        const toolCall = {
-          id: "call_1",
-          name: "local-streamable-http-server__formatted_tool",
-          arguments: {},
-        };
-
-        const result = await mcpClient.executeToolCall(toolCall, agentId);
-
-        // Verify template was applied
-
-        expect(result).toEqual({
-          id: "call_1",
-          content: [{ type: "text", text: "Result: Original content" }],
-          isError: false,
-          name: "local-streamable-http-server__formatted_tool",
+          _meta: {
+            archestraError: {
+              type: "generic",
+              message: expect.stringContaining("No HTTP endpoint URL found"),
+            },
+          },
+          structuredContent: {
+            archestraError: {
+              type: "generic",
+              message: expect.stringContaining("No HTTP endpoint URL found"),
+            },
+          },
         });
       });
 
@@ -893,7 +494,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          executionSourceMcpServerId: localMcpServerId,
+          mcpServerId: localMcpServerId,
         });
 
         // Mock runtime manager to indicate stdio transport (not HTTP)
@@ -942,11 +543,7 @@ describe("McpClient", () => {
         });
       });
 
-      test("limits stdio concurrency to 1 when browser streaming is enabled", async () => {
-        const originalBrowserStreaming =
-          config.features.browserStreamingEnabled;
-        config.features.browserStreamingEnabled = true;
-
+      test("limits stdio concurrency to 1", async () => {
         const clientWithInternals = mcpClient as unknown as {
           connectionLimiter: {
             runWithLimit: (
@@ -971,7 +568,7 @@ describe("McpClient", () => {
           });
 
           await AgentToolModel.create(agentId, tool.id, {
-            executionSourceMcpServerId: localMcpServerId,
+            mcpServerId: localMcpServerId,
           });
 
           mockUsesStreamableHttp.mockResolvedValue(false);
@@ -1006,7 +603,6 @@ describe("McpClient", () => {
             isError: false,
           });
         } finally {
-          config.features.browserStreamingEnabled = originalBrowserStreaming;
           runWithLimitSpy.mockRestore();
         }
       });
@@ -1021,7 +617,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          executionSourceMcpServerId: localMcpServerId,
+          mcpServerId: localMcpServerId,
         });
 
         // Mock runtime manager responses
@@ -1075,7 +671,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          executionSourceMcpServerId: localMcpServerId,
+          mcpServerId: localMcpServerId,
         });
 
         mockUsesStreamableHttp.mockResolvedValue(true);
@@ -1117,7 +713,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          executionSourceMcpServerId: localMcpServerId,
+          mcpServerId: localMcpServerId,
         });
 
         mockUsesStreamableHttp.mockResolvedValue(true);
@@ -1196,9 +792,8 @@ describe("McpClient", () => {
         await AgentToolModel.createOrUpdateCredentials(
           agentId,
           tool.id,
-          null, // no credentialSourceMcpServerId
-          null, // no executionSourceMcpServerId
-          true, // useDynamicTeamCredential
+          null,
+          "dynamic",
         );
 
         const toolCall = {
@@ -1233,6 +828,19 @@ describe("McpClient", () => {
         expect(result?.content).toEqual([
           { type: "text", text: result?.error },
         ]);
+        expect(result?._meta).toMatchObject({
+          archestraError: {
+            type: "auth_required",
+            catalogId: dynCatalog.id,
+            catalogName: "jira-mcp-server",
+            installUrl: `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?install=${dynCatalog.id}`,
+          },
+        });
+        expect(result?.structuredContent).toMatchObject({
+          archestraError: {
+            type: "auth_required",
+          },
+        });
       });
 
       test("returns install URL with team context when team token has no server", async ({
@@ -1264,8 +872,7 @@ describe("McpClient", () => {
           agentId,
           tool.id,
           null,
-          null,
-          true,
+          "dynamic",
         );
 
         const toolCall = {
@@ -1338,8 +945,7 @@ describe("McpClient", () => {
           agentId,
           tool.id,
           null,
-          null,
-          true,
+          "dynamic",
         );
 
         const toolCall = {
@@ -1369,6 +975,822 @@ describe("McpClient", () => {
         expect(result?.content).toEqual([
           { type: "text", text: result?.error },
         ]);
+      });
+    });
+
+    describe("Enterprise-managed credentials", () => {
+      test("uses an external IdP JWT as the exchange assertion when the caller authenticates via external IdP auth", async ({
+        makeIdentityProvider,
+        makeOrganization,
+      }) => {
+        const organization = await makeOrganization();
+        const identityProvider = await makeIdentityProvider(organization.id, {
+          providerId: "enterprise-external-jwt",
+          issuer: "http://localhost:30081/realms/archestra",
+          oidcConfig: {
+            clientId: "archestra-oidc",
+            tokenEndpoint:
+              "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+            enterpriseManagedCredentials: {
+              providerType: "keycloak",
+              clientId: "archestra-oidc",
+              clientSecret: "archestra-oidc-secret",
+              tokenEndpoint:
+                "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+              tokenEndpointAuthentication: "client_secret_post",
+              subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+            },
+          },
+        });
+
+        await AgentModel.update(agentId, {
+          organizationId: organization.id,
+          identityProviderId: identityProvider.id,
+        });
+
+        await McpServerModel.update(mcpServerId, { secretId: null });
+        await InternalMcpCatalogModel.update(catalogId, {
+          name: "enterprise external jwt demo",
+          enterpriseManagedConfig: {
+            identityProviderId: identityProvider.id,
+            requestedCredentialType: "bearer_token",
+            resourceIdentifier: "archestra-oidc",
+            tokenInjectionMode: "authorization_bearer",
+          },
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "enterprise external jwt demo__debug-auth-token",
+          description: "Managed credential tool",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "enterprise_managed",
+        });
+
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              access_token: "exchanged-downstream-token",
+              expires_in: 300,
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        );
+
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Managed result" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCall(
+          {
+            id: "call_enterprise_external_jwt",
+            name: "enterprise external jwt demo__debug-auth-token",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: "external-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: "external-user-id",
+            isExternalIdp: true,
+            rawToken: "external-idp-jwt",
+          },
+        );
+
+        expect(result.isError).toBe(false);
+
+        const [, requestInit] = fetchMock.mock.calls.at(0) ?? [];
+        expect(String(requestInit?.body)).toContain(
+          "subject_token=external-idp-jwt",
+        );
+
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        const [, options] =
+          vi.mocked(StreamableHTTPClientTransport).mock.calls.at(-1) ?? [];
+        const headers =
+          options?.requestInit?.headers instanceof Headers
+            ? options.requestInit.headers
+            : new Headers(options?.requestInit?.headers);
+        expect(headers.get("Authorization")).toBe(
+          "Bearer exchanged-downstream-token",
+        );
+
+        fetchMock.mockRestore();
+      });
+
+      test("injects the brokered managed credential into the outgoing MCP request", async ({
+        makeIdentityProvider,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const organization = await makeOrganization();
+        const user = await makeUser({ email: "managed-mcp@example.com" });
+        const managedConfig = {
+          requestedCredentialType: "secret" as const,
+          resourceIdentifier: "orn:okta:pam:github-secret",
+          tokenInjectionMode: "authorization_bearer" as const,
+          responseFieldPath: "token",
+        };
+        const identityProvider = await makeIdentityProvider(organization.id, {
+          providerId: "okta-managed-mcp",
+          issuer: "https://example.okta.com",
+          oidcConfig: {
+            clientId: "web-client-id",
+            tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+            enterpriseManagedCredentials: {
+              providerType: "okta",
+              clientId: "ai-agent-client-id",
+              tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+              tokenEndpointAuthentication: "client_secret_post",
+              clientSecret: "ai-agent-client-secret",
+            },
+          },
+        });
+
+        await AgentModel.update(agentId, {
+          organizationId: organization.id,
+          identityProviderId: identityProvider.id,
+        });
+
+        await McpServerModel.update(mcpServerId, { secretId: null });
+        await InternalMcpCatalogModel.update(catalogId, {
+          enterpriseManagedConfig: managedConfig,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__managed_tool",
+          description: "Managed credential tool",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "enterprise_managed",
+        });
+
+        await db.insert(schema.accountsTable).values({
+          id: randomUUID(),
+          accountId: "acct-managed",
+          providerId: identityProvider.providerId,
+          userId: user.id,
+          idToken: createJwt({ exp: futureExpSeconds() }),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              issued_token_type: "urn:okta:params:oauth:token-type:secret",
+              secret: { token: "ghu_managed_token" },
+              expires_in: 300,
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        );
+
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Managed result" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCall(
+          {
+            id: "call_enterprise_managed",
+            name: "github-mcp-server__managed_tool",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: "session-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+          },
+          { conversationId: "enterprise-managed-conv" },
+        );
+
+        expect(result.isError).toBe(false);
+
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        const [, options] =
+          vi.mocked(StreamableHTTPClientTransport).mock.calls.at(-1) ?? [];
+        const headers =
+          options?.requestInit?.headers instanceof Headers
+            ? options.requestInit.headers
+            : new Headers(options?.requestInit?.headers);
+        expect(headers.get("Authorization")).toBe("Bearer ghu_managed_token");
+
+        fetchMock.mockRestore();
+      });
+
+      test("caches the brokered enterprise-managed credential for repeated tool calls", async ({
+        makeIdentityProvider,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const organization = await makeOrganization();
+        const user = await makeUser({
+          email: "cached-managed-mcp@example.com",
+        });
+        const managedConfig = {
+          requestedCredentialType: "secret" as const,
+          resourceIdentifier: "orn:okta:pam:github-secret",
+          tokenInjectionMode: "authorization_bearer" as const,
+          responseFieldPath: "token",
+        };
+        const identityProvider = await makeIdentityProvider(organization.id, {
+          providerId: "okta-managed-cache",
+          issuer: "https://example.okta.com",
+          oidcConfig: {
+            clientId: "web-client-id",
+            tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+            enterpriseManagedCredentials: {
+              providerType: "okta",
+              clientId: "ai-agent-client-id",
+              tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+              tokenEndpointAuthentication: "client_secret_post",
+              clientSecret: "ai-agent-client-secret",
+            },
+          },
+        });
+
+        await AgentModel.update(agentId, {
+          organizationId: organization.id,
+          identityProviderId: identityProvider.id,
+        });
+
+        await McpServerModel.update(mcpServerId, { secretId: null });
+        await InternalMcpCatalogModel.update(catalogId, {
+          enterpriseManagedConfig: managedConfig,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__managed_cache_tool",
+          description: "Managed credential cache tool",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "enterprise_managed",
+        });
+
+        await db.insert(schema.accountsTable).values({
+          id: randomUUID(),
+          accountId: "acct-managed-cache",
+          providerId: identityProvider.providerId,
+          userId: user.id,
+          idToken: createJwt({ exp: futureExpSeconds() }),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              issued_token_type: "urn:okta:params:oauth:token-type:secret",
+              secret: { token: "ghu_managed_token" },
+              expires_in: 300,
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        );
+
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Managed result" }],
+          isError: false,
+        });
+
+        const firstResult = await mcpClient.executeToolCall(
+          {
+            id: "call_enterprise_managed_cache_1",
+            name: "github-mcp-server__managed_cache_tool",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: "session-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+          },
+          { conversationId: "enterprise-managed-cache-conv" },
+        );
+        const secondResult = await mcpClient.executeToolCall(
+          {
+            id: "call_enterprise_managed_cache_2",
+            name: "github-mcp-server__managed_cache_tool",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: "session-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+          },
+          { conversationId: "enterprise-managed-cache-conv" },
+        );
+
+        expect(firstResult.isError).toBe(false);
+        expect(secondResult.isError).toBe(false);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+
+        fetchMock.mockRestore();
+      });
+
+      test("returns re-authentication error when no usable enterprise assertion is available", async ({
+        makeIdentityProvider,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const organization = await makeOrganization();
+        const user = await makeUser({
+          email: "missing-enterprise-assertion@example.com",
+        });
+        const identityProvider = await makeIdentityProvider(organization.id, {
+          providerId: "keycloak-managed-mcp",
+          issuer: "http://localhost:30081/realms/archestra",
+          oidcConfig: {
+            clientId: "archestra-oidc",
+            tokenEndpoint:
+              "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+            enterpriseManagedCredentials: {
+              providerType: "keycloak",
+              clientId: "archestra-oidc",
+              clientSecret: "archestra-oidc-secret",
+              tokenEndpoint:
+                "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+              tokenEndpointAuthentication: "client_secret_post",
+              subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+            },
+          },
+        });
+
+        await AgentModel.update(agentId, {
+          organizationId: organization.id,
+          identityProviderId: identityProvider.id,
+        });
+
+        await InternalMcpCatalogModel.update(catalogId, {
+          name: "keycloak protected demo",
+          enterpriseManagedConfig: {
+            identityProviderId: identityProvider.id,
+            requestedCredentialType: "bearer_token",
+            resourceIdentifier: "archestra-oidc",
+            tokenInjectionMode: "authorization_bearer",
+          },
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "keycloak protected demo__whoami",
+          description: "Show the current authenticated user",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "enterprise_managed",
+        });
+
+        const result = await mcpClient.executeToolCall(
+          {
+            id: "call_missing_enterprise_assertion",
+            name: "keycloak protected demo__whoami",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: "session-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+          },
+        );
+
+        expect(result.isError).toBe(true);
+        expect(result.error).toContain(
+          'Expired or invalid authentication for "keycloak protected demo"',
+        );
+        expect(result.error).toContain(
+          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${catalogId}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${mcpServerId}`,
+        );
+        expect(result._meta).toMatchObject({
+          archestraError: {
+            type: "auth_expired",
+            catalogId,
+            catalogName: "keycloak protected demo",
+            serverId: mcpServerId,
+          },
+        });
+      });
+    });
+
+    describe("Auth error actionable message", () => {
+      test("returns expired-auth message with manage URL when tool call throws UnauthorizedError on OAuth server with existing credentials", async ({
+        makeUser,
+      }) => {
+        const testUser = await makeUser({
+          email: "oauth-unauth@example.com",
+        });
+
+        // Create an OAuth-enabled catalog
+        const oauthCatalog = await InternalMcpCatalogModel.create({
+          name: "github-oauth-server",
+          serverType: "remote",
+          serverUrl: "https://api.githubcopilot.com/mcp/",
+          oauthConfig: {
+            name: "GitHub",
+            server_url: "https://api.githubcopilot.com/mcp/",
+            client_id: "test-client-id",
+            redirect_uris: ["http://localhost:3000/callback"],
+            scopes: ["repo"],
+            default_scopes: ["repo"],
+            supports_resource_metadata: false,
+          },
+        });
+
+        // Create secret WITHOUT refresh_token (simulates expired token, no refresh)
+        const secret = await secretManager().createSecret(
+          { access_token: "expired-token" },
+          "expired-oauth-secret",
+        );
+
+        const mcpServer = await McpServerModel.create({
+          name: "github-oauth-server",
+          catalogId: oauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: testUser.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-oauth-server__list_repos",
+          description: "List repos",
+          parameters: {},
+          catalogId: oauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: mcpServer.id,
+        });
+
+        // Mock callTool to throw UnauthorizedError
+        const { UnauthorizedError } = await import(
+          "@modelcontextprotocol/sdk/client/auth.js"
+        );
+        mockCallTool.mockRejectedValueOnce(new UnauthorizedError());
+        mockConnect.mockResolvedValue(undefined);
+
+        const toolCall = {
+          id: "call_oauth_unauth",
+          name: "github-oauth-server__list_repos",
+          arguments: {},
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId, {
+          tokenId: "test-token",
+          teamId: null,
+          isOrganizationToken: false,
+          userId: testUser.id,
+        });
+
+        expect(result).toMatchObject({ isError: true });
+        expect(result?.error).toContain(
+          `Expired or invalid authentication for "github-oauth-server"`,
+        );
+        expect(result?.error).toContain(`user: ${testUser.id}`);
+        expect(result?.error).toContain(
+          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${oauthCatalog.id}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${mcpServer.id}`,
+        );
+        expect(result?.error).toContain(
+          "Once you have re-authenticated, retry this tool call.",
+        );
+        expect(result?._meta).toMatchObject({
+          archestraError: {
+            type: "auth_expired",
+            catalogId: oauthCatalog.id,
+            catalogName: "github-oauth-server",
+            serverId: mcpServer.id,
+            reauthUrl: `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${oauthCatalog.id}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${mcpServer.id}`,
+          },
+        });
+      });
+
+      test("returns expired-auth message with manage URL when tool call throws StreamableHTTPError 401 on OAuth server", async ({
+        makeUser,
+      }) => {
+        const testUser = await makeUser({
+          email: "oauth-http401@example.com",
+        });
+
+        const oauthCatalog = await InternalMcpCatalogModel.create({
+          name: "github-http401-server",
+          serverType: "remote",
+          serverUrl: "https://api.githubcopilot.com/mcp/",
+          oauthConfig: {
+            name: "GitHub",
+            server_url: "https://api.githubcopilot.com/mcp/",
+            client_id: "test-client-id",
+            redirect_uris: ["http://localhost:3000/callback"],
+            scopes: ["repo"],
+            default_scopes: ["repo"],
+            supports_resource_metadata: false,
+          },
+        });
+
+        const secret = await secretManager().createSecret(
+          { access_token: "expired-token-2" },
+          "expired-oauth-secret-2",
+        );
+
+        const mcpServer = await McpServerModel.create({
+          name: "github-http401-server",
+          catalogId: oauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: testUser.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-http401-server__list_repos",
+          description: "List repos",
+          parameters: {},
+          catalogId: oauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: mcpServer.id,
+        });
+
+        // Mock callTool to throw StreamableHTTPError with 401
+        const { StreamableHTTPError } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        mockCallTool.mockRejectedValueOnce(
+          new StreamableHTTPError(401, "Unauthorized"),
+        );
+        mockConnect.mockResolvedValue(undefined);
+
+        const toolCall = {
+          id: "call_oauth_http401",
+          name: "github-http401-server__list_repos",
+          arguments: {},
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId, {
+          tokenId: "test-token",
+          teamId: null,
+          isOrganizationToken: false,
+          userId: testUser.id,
+        });
+
+        expect(result).toMatchObject({ isError: true });
+        expect(result?.error).toContain(
+          `Expired or invalid authentication for "github-http401-server"`,
+        );
+        expect(result?.error).toContain(
+          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${oauthCatalog.id}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${mcpServer.id}`,
+        );
+      });
+
+      test("returns expired-auth message for auth error on non-OAuth server (PAT-based) with existing credentials", async ({
+        makeUser,
+      }) => {
+        const testUser = await makeUser({
+          email: "non-oauth-unauth@example.com",
+        });
+
+        // Create catalog WITHOUT oauthConfig (PAT-based auth like GitHub)
+        const nonOauthCatalog = await InternalMcpCatalogModel.create({
+          name: "private-api-server",
+          serverType: "remote",
+          serverUrl: "https://private-api.example.com/mcp/",
+        });
+
+        const secret = await secretManager().createSecret(
+          { access_token: "bad-token" },
+          "non-oauth-secret",
+        );
+
+        const mcpServer = await McpServerModel.create({
+          name: "private-api-server",
+          catalogId: nonOauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: testUser.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "private-api-server__get_data",
+          description: "Get data",
+          parameters: {},
+          catalogId: nonOauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: mcpServer.id,
+        });
+
+        const { UnauthorizedError } = await import(
+          "@modelcontextprotocol/sdk/client/auth.js"
+        );
+        mockCallTool.mockRejectedValueOnce(new UnauthorizedError());
+        mockConnect.mockResolvedValue(undefined);
+
+        const toolCall = {
+          id: "call_non_oauth_unauth",
+          name: "private-api-server__get_data",
+          arguments: {},
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId, {
+          tokenId: "test-token",
+          teamId: null,
+          isOrganizationToken: false,
+          userId: testUser.id,
+        });
+
+        expect(result).toMatchObject({ isError: true });
+        // Non-OAuth servers with existing credentials should get expired-auth message
+        expect(result?.error).toContain(
+          `Expired or invalid authentication for "private-api-server"`,
+        );
+        expect(result?.error).toContain(
+          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${nonOauthCatalog.id}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${mcpServer.id}`,
+        );
+      });
+
+      test("returns expired-auth message when error message contains auth keywords", async ({
+        makeUser,
+      }) => {
+        const testUser = await makeUser({
+          email: "auth-keyword@example.com",
+        });
+
+        // Non-OAuth catalog (like GitHub with PAT)
+        const catalog = await InternalMcpCatalogModel.create({
+          name: "github-pat-server",
+          serverType: "remote",
+          serverUrl: "https://api.githubcopilot.com/mcp/",
+        });
+
+        const secret = await secretManager().createSecret(
+          { access_token: "expired-pat" },
+          "expired-pat-secret",
+        );
+
+        const mcpServer = await McpServerModel.create({
+          name: "github-pat-server",
+          catalogId: catalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: testUser.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-pat-server__list_repos",
+          description: "List repos",
+          parameters: {},
+          catalogId: catalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: mcpServer.id,
+        });
+
+        // Mock callTool to throw StreamableHTTPError with non-401 code but auth message
+        // (this is what GitHub actually does - returns error with "unauthorized" in body)
+        const { StreamableHTTPError } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        mockCallTool.mockRejectedValueOnce(
+          new StreamableHTTPError(
+            500,
+            "Error POSTing to endpoint: unauthorized: unauthorized: AuthenticateToken authentication failed",
+          ),
+        );
+        mockConnect.mockResolvedValue(undefined);
+
+        const toolCall = {
+          id: "call_auth_keyword",
+          name: "github-pat-server__list_repos",
+          arguments: {},
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId, {
+          tokenId: "test-token",
+          teamId: null,
+          isOrganizationToken: false,
+          userId: testUser.id,
+        });
+
+        expect(result).toMatchObject({ isError: true });
+        expect(result?.error).toContain(
+          `Expired or invalid authentication for "github-pat-server"`,
+        );
+        expect(result?.error).toContain(
+          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${catalog.id}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${mcpServer.id}`,
+        );
+      });
+
+      test("returns expired-auth message with team context", async ({
+        makeUser,
+        makeTeam,
+        makeOrganization,
+      }) => {
+        const org = await makeOrganization();
+        const testUser = await makeUser({
+          email: "oauth-team-unauth@example.com",
+        });
+        const team = await makeTeam(org.id, testUser.id, {
+          name: "Dev Team",
+        });
+
+        const oauthCatalog = await InternalMcpCatalogModel.create({
+          name: "github-team-oauth-server",
+          serverType: "remote",
+          serverUrl: "https://api.githubcopilot.com/mcp/",
+          oauthConfig: {
+            name: "GitHub",
+            server_url: "https://api.githubcopilot.com/mcp/",
+            client_id: "test-client-id",
+            redirect_uris: ["http://localhost:3000/callback"],
+            scopes: ["repo"],
+            default_scopes: ["repo"],
+            supports_resource_metadata: false,
+          },
+        });
+
+        const secret = await secretManager().createSecret(
+          { access_token: "expired-team-token" },
+          "expired-team-oauth-secret",
+        );
+
+        const mcpServer = await McpServerModel.create({
+          name: "github-team-oauth-server",
+          catalogId: oauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: testUser.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-team-oauth-server__list_repos",
+          description: "List repos",
+          parameters: {},
+          catalogId: oauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: mcpServer.id,
+        });
+
+        const { UnauthorizedError } = await import(
+          "@modelcontextprotocol/sdk/client/auth.js"
+        );
+        mockCallTool.mockRejectedValueOnce(new UnauthorizedError());
+        mockConnect.mockResolvedValue(undefined);
+
+        const toolCall = {
+          id: "call_team_oauth_unauth",
+          name: "github-team-oauth-server__list_repos",
+          arguments: {},
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId, {
+          tokenId: "team-token",
+          teamId: team.id,
+          isOrganizationToken: false,
+        });
+
+        expect(result).toMatchObject({ isError: true });
+        expect(result?.error).toContain(
+          `Expired or invalid authentication for "github-team-oauth-server"`,
+        );
+        expect(result?.error).toContain(`team: ${team.id}`);
+        expect(result?.error).toContain(
+          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${oauthCatalog.id}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${mcpServer.id}`,
+        );
       });
     });
 
@@ -1435,7 +1857,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          executionSourceMcpServerId: localMcpServerId,
+          mcpServerId: localMcpServerId,
         });
 
         mockUsesStreamableHttp.mockResolvedValue(true);
@@ -1482,7 +1904,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          executionSourceMcpServerId: localMcpServerId,
+          mcpServerId: localMcpServerId,
         });
 
         mockUsesStreamableHttp.mockResolvedValue(true);
@@ -1539,7 +1961,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          executionSourceMcpServerId: localMcpServerId,
+          mcpServerId: localMcpServerId,
         });
 
         mockUsesStreamableHttp.mockResolvedValue(true);
@@ -1591,7 +2013,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          executionSourceMcpServerId: localMcpServerId,
+          mcpServerId: localMcpServerId,
         });
 
         mockUsesStreamableHttp.mockResolvedValue(true);
@@ -1658,7 +2080,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServerId,
+          mcpServerId: mcpServerId,
         });
 
         // Remote server reports tool with camelCase name
@@ -1698,7 +2120,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServerId,
+          mcpServerId: mcpServerId,
         });
 
         // Remote server reports tool with PascalCase name
@@ -1734,7 +2156,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServerId,
+          mcpServerId: mcpServerId,
         });
 
         // listTools throws an error
@@ -1769,7 +2191,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServerId,
+          mcpServerId: mcpServerId,
         });
 
         // Server returns tools, but not the one we're looking for
@@ -1806,7 +2228,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServerId,
+          mcpServerId: mcpServerId,
         });
 
         // Server also uses lowercase (snake_case)
@@ -1845,7 +2267,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServerId,
+          mcpServerId: mcpServerId,
         });
 
         mockCallTool.mockResolvedValueOnce({
@@ -1906,7 +2328,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: noCredServer.id,
+          mcpServerId: noCredServer.id,
         });
 
         mockCallTool.mockResolvedValueOnce({
@@ -1971,7 +2393,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: rawTokenServer.id,
+          mcpServerId: rawTokenServer.id,
         });
 
         mockCallTool.mockResolvedValueOnce({
@@ -2017,7 +2439,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          credentialSourceMcpServerId: mcpServerId,
+          mcpServerId: mcpServerId,
         });
 
         mockCallTool.mockResolvedValueOnce({
@@ -2094,8 +2516,7 @@ describe("McpClient", () => {
           agentId,
           tool.id,
           null,
-          null,
-          true, // useDynamicTeamCredential
+          "dynamic",
         );
 
         mockCallTool.mockResolvedValueOnce({
@@ -2174,7 +2595,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
-          executionSourceMcpServerId: localServer.id,
+          mcpServerId: localServer.id,
         });
 
         mockUsesStreamableHttp.mockResolvedValue(true);
@@ -2214,5 +2635,133 @@ describe("McpClient", () => {
         );
       });
     });
+
+    describe("Tool name suffix fallback", () => {
+      test("resolves unprefixed tool name by suffix when no exact match", async () => {
+        // Create a tool with the full prefixed name
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__refresh-stats",
+          description: "Refresh stats",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: mcpServerId,
+        });
+
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "refreshed" }],
+          isError: false,
+        });
+
+        // Call with unprefixed name (no "__") — triggers suffix fallback
+        const toolCall = {
+          id: "call_suffix_1",
+          name: "refresh-stats",
+          arguments: {},
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
+
+        expect(result.isError).toBe(false);
+        // The tool name should be rewritten to the full prefixed name
+        expect(result.name).toBe("github-mcp-server__refresh-stats");
+      });
+
+      test("does not use suffix fallback when name contains separator", async () => {
+        // Tool call with "__" in the name should NOT trigger suffix fallback
+        const toolCall = {
+          id: "call_suffix_2",
+          name: "wrong-server__nonexistent-tool",
+          arguments: {},
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
+
+        expect(result.isError).toBe(true);
+        expect(result.error).toContain("Tool not found");
+      });
+    });
+
+    describe("_meta and structuredContent passthrough", () => {
+      test("passes _meta from callTool result into CommonToolResult", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__meta_tool",
+          description: "Tool with meta",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: mcpServerId,
+        });
+
+        const toolMeta = { ui: { resourceUri: "mcp://widget/stats" } };
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "result" }],
+          isError: false,
+          _meta: toolMeta,
+        });
+
+        const toolCall = {
+          id: "call_meta_1",
+          name: "github-mcp-server__meta_tool",
+          arguments: {},
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
+
+        expect(result.isError).toBe(false);
+        expect(result._meta).toEqual(toolMeta);
+      });
+
+      test("passes structuredContent from callTool result into CommonToolResult", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__structured_tool",
+          description: "Tool with structured content",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: mcpServerId,
+        });
+
+        const structured = { dashboard: { widgets: ["chart", "table"] } };
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "ok" }],
+          isError: false,
+          structuredContent: structured,
+        });
+
+        const toolCall = {
+          id: "call_structured_1",
+          name: "github-mcp-server__structured_tool",
+          arguments: {},
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
+
+        expect(result.isError).toBe(false);
+        expect(result.structuredContent).toEqual(structured);
+      });
+    });
   });
 });
+
+function createJwt(payload: Record<string, unknown>): string {
+  return [
+    base64UrlEncode({ alg: "none", typ: "JWT" }),
+    base64UrlEncode(payload),
+    "",
+  ].join(".");
+}
+
+function base64UrlEncode(value: unknown): string {
+  return Buffer.from(JSON.stringify(value)).toString("base64url");
+}
+
+function futureExpSeconds(): number {
+  return Math.floor(Date.now() / 1000) + 3600;
+}

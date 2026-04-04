@@ -16,6 +16,7 @@ const oauthRefreshToken = pgTable("oauth_refresh_token", {
     .notNull()
     .references(() => usersTable.id, { onDelete: "cascade" }),
   referenceId: text("reference_id"),
+  authTime: timestamp("auth_time"),
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   revoked: timestamp("revoked"),

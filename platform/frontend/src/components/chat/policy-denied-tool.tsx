@@ -1,6 +1,6 @@
 "use client";
 
-import { X } from "lucide-react";
+import { ShieldX } from "lucide-react";
 import { useState } from "react";
 import {
   Tool,
@@ -8,9 +8,11 @@ import {
   ToolHeader,
   ToolInput,
 } from "@/components/ai-elements/tool";
-import type { PolicyDeniedPart } from "@/components/chatbot-demo";
-import { PermissionButton } from "@/components/ui/permission-button";
+import type { PolicyDeniedPart } from "@/components/message-thread";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useOrganization } from "@/lib/organization.query";
 import { EditPolicyDialog } from "./edit-policy-dialog";
+import { ToolStatusRow } from "./tool-status-row";
 
 // Re-export for backward compatibility
 export type { PolicyDeniedPart as PolicyDeniedResult };
@@ -28,6 +30,10 @@ export function PolicyDeniedTool({
   editable,
 }: PolicyDeniedToolProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const { data: canUpdateToolPolicy } = useHasPermissions({
+    toolPolicy: ["update"],
+  });
+  const { data: organization } = useOrganization();
 
   // Parse errorText JSON: { method, args, reason }
   let reason = "Policy denied";
@@ -40,6 +46,13 @@ export function PolicyDeniedTool({
 
   const hasInput = Object.keys(policyDenied.input ?? {}).length > 0;
   const toolName = policyDenied.type.replace("tool-", "");
+  const supportMessage = organization?.chatErrorSupportMessage?.trim();
+  const canEditPolicy = editable && canUpdateToolPolicy === true;
+  const inlineSupportMessage =
+    editable && canUpdateToolPolicy === false
+      ? supportMessage ||
+        "You do not have permission to edit tool guardrails. Contact your administrator or support team for help."
+      : undefined;
 
   return (
     <>
@@ -51,26 +64,26 @@ export function PolicyDeniedTool({
         />
         <ToolContent>
           {hasInput ? <ToolInput input={policyDenied.input} /> : null}
-          <div className="p-4 pt-0">
-            <div className="flex items-start gap-2 text-sm">
-              <X className="flex-none size-4 h-[1.43em] text-destructive" />
-              <span className="text-destructive">Rejected: {reason}</span>
-              {editable && (
-                <PermissionButton
-                  size="sm"
-                  variant="secondary"
-                  className="mt-[-0.45em]"
-                  permissions={{ policy: ["update"] }}
-                  onClick={() => setIsModalOpen(true)}
-                >
-                  Edit policy
-                </PermissionButton>
-              )}
-            </div>
-          </div>
+          <ToolStatusRow
+            icon={<ShieldX className="size-4 flex-none text-destructive" />}
+            title="Rejected"
+            description={reason}
+            secondaryText={inlineSupportMessage}
+            actions={
+              canEditPolicy
+                ? [
+                    {
+                      label: "Edit policy",
+                      onClick: () => setIsModalOpen(true),
+                      variant: "secondary" as const,
+                    },
+                  ]
+                : []
+            }
+          />
         </ToolContent>
       </Tool>
-      {editable && (
+      {canEditPolicy && (
         <EditPolicyDialog
           open={isModalOpen}
           onOpenChange={setIsModalOpen}

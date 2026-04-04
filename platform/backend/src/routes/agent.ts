@@ -1,4 +1,10 @@
-import { RouteId } from "@shared";
+import {
+  createPaginatedResponseSchema,
+  LABELS_ENTRY_DELIMITER,
+  LABELS_VALUE_DELIMITER,
+  PaginationQuerySchema,
+  RouteId,
+} from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
@@ -6,17 +12,25 @@ import {
   hasAnyAgentTypeReadPermission,
   requireAgentModifyPermission,
 } from "@/auth";
-import { AgentLabelModel, AgentModel } from "@/models";
-import { metrics } from "@/observability";
+import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import {
-  AgentVersionsResponseSchema,
+  AgentLabelModel,
+  AgentModel,
+  KnowledgeBaseConnectorModel,
+  KnowledgeBaseModel,
+  MemberModel,
+  TeamModel,
+} from "@/models";
+import { initializeObservabilityMetrics } from "@/observability";
+import {
+  type AgentScope,
+  AgentScopeFilterSchema,
   ApiError,
+  BuiltInAgentConfigSchema,
   constructResponseSchema,
-  createPaginatedResponseSchema,
   createSortingQuerySchema,
   DeleteObjectResponseSchema,
   InsertAgentSchema,
-  PaginationQuerySchema,
   SelectAgentSchema,
   UpdateAgentSchemaBase,
   UuidIdSchema,
@@ -50,6 +64,42 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .describe(
                 "Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided.",
               ),
+            scope: AgentScopeFilterSchema.optional().describe(
+              "Filter by scope: personal, team, org, or built_in.",
+            ),
+            teamIds: z
+              .preprocess(
+                (val) => (typeof val === "string" ? val.split(",") : val),
+                z.array(z.string()),
+              )
+              .optional()
+              .describe(
+                "Filter by specific team IDs (comma-separated). Only used when scope=team.",
+              ),
+            authorIds: z
+              .preprocess(
+                (val) => (typeof val === "string" ? val.split(",") : val),
+                z.array(z.string()),
+              )
+              .optional()
+              .describe(
+                "Filter by author user IDs (comma-separated). Admin-only, only used when scope=personal.",
+              ),
+            excludeAuthorIds: z
+              .preprocess(
+                (val) => (typeof val === "string" ? val.split(",") : val),
+                z.array(z.string()),
+              )
+              .optional()
+              .describe(
+                "Exclude agents by author user IDs (comma-separated). Admin-only, only used when scope=personal.",
+              ),
+            labels: z
+              .string()
+              .optional()
+              .describe(
+                "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
+              ),
           })
           .merge(PaginationQuerySchema)
           .merge(
@@ -57,6 +107,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "name",
               "createdAt",
               "toolsCount",
+              "subagentsCount",
+              "knowledgeSourcesCount",
               "team",
             ] as const),
           ),
@@ -71,6 +123,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           name,
           agentType,
           agentTypes,
+          scope,
+          teamIds,
+          authorIds,
+          excludeAuthorIds,
+          labels,
           limit,
           offset,
           sortBy,
@@ -116,6 +173,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // agentTypes takes precedence over agentType
             agentType: agentTypes ? undefined : agentType,
             agentTypes,
+            scope,
+            teamIds,
+            // authorIds and excludeAuthorIds are admin-only
+            authorIds: isAdmin ? authorIds : undefined,
+            excludeAuthorIds: isAdmin ? excludeAuthorIds : undefined,
+            labels: parseLabelsParam(labels),
           },
           user.id,
           isAdmin,
@@ -147,12 +210,25 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided.",
             ),
+          excludeBuiltIn: z
+            .preprocess((val) => val === "true" || val === true, z.boolean())
+            .optional()
+            .describe(
+              "Exclude built-in agents from the results. Defaults to false.",
+            ),
+          scope: AgentScopeFilterSchema.optional().describe(
+            "Filter by scope: personal, team, org, or built_in.",
+          ),
         }),
         response: constructResponseSchema(z.array(SelectAgentSchema)),
       },
     },
     async (
-      { query: { agentType, agentTypes }, user, organizationId },
+      {
+        query: { agentType, agentTypes, excludeBuiltIn, scope },
+        user,
+        organizationId,
+      },
       reply,
     ) => {
       // Determine the effective type filter
@@ -186,6 +262,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // agentTypes takes precedence over agentType
           agentType: agentTypes ? undefined : agentType,
           agentTypes,
+          excludeBuiltIn,
+          scope:
+            scope && scope !== "built_in" ? (scope as AgentScope) : undefined,
         }),
       );
     },
@@ -196,8 +275,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetDefaultMcpGateway,
-        description: "Get or create default MCP Gateway",
-        tags: ["MCP Gateways"],
+        description: "Get default MCP Gateway",
+        tags: ["MCP Gateway"],
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
@@ -213,7 +292,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetDefaultLlmProxy,
-        description: "Get or create default LLM Proxy",
+        description: "Get default LLM Proxy",
         tags: ["LLM Proxy"],
         response: constructResponseSchema(SelectAgentSchema),
       },
@@ -260,6 +339,63 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "You need team-admin permission to create team-scoped agents",
             );
           }
+
+          // team-admin can only assign teams they are a member of
+          const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+          const userTeamIdSet = new Set(userTeamIds);
+          const invalidTeams = body.teams.filter(
+            (id) => !userTeamIdSet.has(id),
+          );
+          if (invalidTeams.length > 0) {
+            throw new ApiError(
+              403,
+              "You can only assign teams you are a member of",
+            );
+          }
+        }
+      }
+
+      // Validate knowledgeBaseIds if provided
+      if (body.knowledgeBaseIds && body.knowledgeBaseIds.length > 0) {
+        if (agentType === "llm_proxy") {
+          throw new ApiError(
+            400,
+            "Knowledge bases cannot be assigned to LLM Proxy agents",
+          );
+        }
+        const knowledgeSourceAccess =
+          await knowledgeSourceAccessControlService.buildAccessControlContext({
+            userId: user.id,
+            organizationId,
+          });
+        for (const kbId of body.knowledgeBaseIds) {
+          await validateKnowledgeBaseAccess({
+            kbId,
+            organizationId,
+            access: knowledgeSourceAccess,
+          });
+        }
+      }
+
+      // Validate connectorIds if provided
+      if (body.connectorIds && body.connectorIds.length > 0) {
+        if (agentType === "llm_proxy") {
+          throw new ApiError(
+            400,
+            "Connectors cannot be assigned to LLM Proxy agents",
+          );
+        }
+        const knowledgeSourceAccess =
+          await knowledgeSourceAccessControlService.buildAccessControlContext({
+            userId: user.id,
+            organizationId,
+          });
+        for (const connectorId of body.connectorIds) {
+          await validateConnectorAccess({
+            connectorId,
+            organizationId,
+            access: knowledgeSourceAccess,
+          });
         }
       }
 
@@ -269,13 +405,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...(body.scope !== "team" && { teams: [] }),
       };
       const agent = await AgentModel.create(createData, user.id);
-      const labelKeys = await AgentLabelModel.getAllKeys();
-
       // We need to re-init metrics with the new label keys in case label keys changed.
       // Otherwise the newly added labels will not make it to metrics. The labels with new keys, that is.
-      metrics.llm.initializeMetrics(labelKeys);
-      metrics.mcp.initializeMcpMetrics(labelKeys);
-      metrics.agentExecution.initializeAgentExecutionMetrics(labelKeys);
+      await initializeObservabilityMetrics();
 
       return reply.send(agent);
     },
@@ -363,12 +495,19 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
+      // Fetch user's team IDs once for scope-based checks and team assignment validation
+      const userTeamIds = !checker.isAdmin(existingAgent.agentType)
+        ? await TeamModel.getUserTeamIds(user.id)
+        : [];
+
       // Enforce scope-based modify permissions on the existing agent
       requireAgentModifyPermission({
         checker,
         agentType: existingAgent.agentType,
         agentScope: existingAgent.scope,
         agentAuthorId: existingAgent.authorId,
+        agentTeamIds: existingAgent.teams.map((t) => t.id),
+        userTeamIds,
         userId: user.id,
       });
 
@@ -385,6 +524,34 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
           }
         }
+
+        // team-admin: validate team assignments and preserve teams they don't control
+        if (checker.isTeamAdmin(existingAgent.agentType) && body.teams) {
+          const userTeamIdSet = new Set(userTeamIds);
+          const existingTeamIds = new Set(existingAgent.teams.map((t) => t.id));
+
+          // Validate newly added teams — must be a member
+          const invalidAdds = body.teams.filter(
+            (id) => !existingTeamIds.has(id) && !userTeamIdSet.has(id),
+          );
+          if (invalidAdds.length > 0) {
+            throw new ApiError(
+              403,
+              "You can only assign teams you are a member of",
+            );
+          }
+
+          // Preserve existing teams the user doesn't control
+          const preservedTeams = [...existingTeamIds].filter(
+            (id) => !userTeamIdSet.has(id),
+          );
+          const userControlledTeams = body.teams.filter((id) =>
+            userTeamIdSet.has(id),
+          );
+          body.teams = [
+            ...new Set([...userControlledTeams, ...preservedTeams]),
+          ];
+        }
       }
 
       // Prevent downgrading shared agents to personal
@@ -392,12 +559,86 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, "Shared agents cannot be made personal");
       }
 
-      // Omit teams if scope is not 'team' — scope takes precedence
-      const updateData = {
-        ...body,
-        ...((body.scope ?? existingAgent.scope) !== "team" &&
-          body.teams !== undefined && { teams: [] }),
-      };
+      // Validate knowledgeBaseIds if provided
+      if (body.knowledgeBaseIds && body.knowledgeBaseIds.length > 0) {
+        if (existingAgent.agentType === "llm_proxy") {
+          throw new ApiError(
+            400,
+            "Knowledge bases cannot be assigned to LLM Proxy agents",
+          );
+        }
+        const knowledgeSourceAccess =
+          await knowledgeSourceAccessControlService.buildAccessControlContext({
+            userId: user.id,
+            organizationId,
+          });
+        for (const kbId of body.knowledgeBaseIds) {
+          await validateKnowledgeBaseAccess({
+            kbId,
+            organizationId,
+            access: knowledgeSourceAccess,
+          });
+        }
+      }
+
+      // Validate connectorIds if provided
+      if (body.connectorIds && body.connectorIds.length > 0) {
+        if (existingAgent.agentType === "llm_proxy") {
+          throw new ApiError(
+            400,
+            "Connectors cannot be assigned to LLM Proxy agents",
+          );
+        }
+        const knowledgeSourceAccess =
+          await knowledgeSourceAccessControlService.buildAccessControlContext({
+            userId: user.id,
+            organizationId,
+          });
+        for (const connectorId of body.connectorIds) {
+          await validateConnectorAccess({
+            connectorId,
+            organizationId,
+            access: knowledgeSourceAccess,
+          });
+        }
+      }
+
+      // Built-in agent guard: restrict which fields can be modified
+      let updateData: typeof body;
+      if (existingAgent.builtInAgentConfig) {
+        // Validate builtInAgentConfig if provided
+        if (body.builtInAgentConfig) {
+          const parsed = BuiltInAgentConfigSchema.safeParse(
+            body.builtInAgentConfig,
+          );
+          if (!parsed.success) {
+            throw new ApiError(400, "Invalid built-in agent configuration");
+          }
+        }
+
+        // Only allow specific fields for built-in agents.
+        updateData = {
+          ...(body.builtInAgentConfig !== undefined && {
+            builtInAgentConfig: body.builtInAgentConfig,
+          }),
+          ...(body.systemPrompt !== undefined && {
+            systemPrompt: body.systemPrompt,
+          }),
+          ...(body.llmApiKeyId !== undefined && {
+            llmApiKeyId: body.llmApiKeyId,
+          }),
+          ...(body.llmModel !== undefined && { llmModel: body.llmModel }),
+          ...(body.scope !== undefined && { scope: body.scope }),
+          ...(body.teams !== undefined && { teams: body.teams }),
+        };
+      } else {
+        // Omit teams if scope is not 'team' — scope takes precedence
+        updateData = {
+          ...body,
+          ...((body.scope ?? existingAgent.scope) !== "team" &&
+            body.teams !== undefined && { teams: [] }),
+        };
+      }
 
       const agent = await AgentModel.update(id, updateData);
 
@@ -405,12 +646,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
-      const labelKeys = await AgentLabelModel.getAllKeys();
-      // We need to re-init metrics with the new label keys in case label keys changed.
-      // Otherwise the newly added labels will not make it to metrics. The labels with new keys, that is.
-      metrics.llm.initializeMetrics(labelKeys);
-      metrics.mcp.initializeMcpMetrics(labelKeys);
-      metrics.agentExecution.initializeAgentExecutionMetrics(labelKeys);
+      // Only re-init metrics when labels were part of the update payload,
+      // since that's the only field that can introduce new label keys.
+      if (body.labels !== undefined) {
+        await initializeObservabilityMetrics();
+      }
 
       return reply.send(agent);
     },
@@ -448,13 +688,32 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Enforce scope-based modify permissions
+      const userTeamIds = !checker.isAdmin(agent.agentType)
+        ? await TeamModel.getUserTeamIds(user.id)
+        : [];
       requireAgentModifyPermission({
         checker,
         agentType: agent.agentType,
         agentScope: agent.scope,
         agentAuthorId: agent.authorId,
+        agentTeamIds: agent.teams.map((t) => t.id),
+        userTeamIds,
         userId: user.id,
       });
+
+      // Prevent deletion of built-in agents
+      if (agent.builtInAgentConfig) {
+        throw new ApiError(403, "Built-in agents cannot be deleted");
+      }
+
+      // Prevent deletion of an agent that is any member's default
+      const isDefault = await MemberModel.isAgentDefault(id);
+      if (isDefault) {
+        throw new ApiError(
+          403,
+          "Cannot delete a default agent. Set another agent as default first.",
+        );
+      }
 
       const success = await AgentModel.delete(id);
 
@@ -463,118 +722,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send({ success: true });
-    },
-  );
-
-  // Version history endpoint (internal agents only)
-  fastify.get(
-    "/api/agents/:id/versions",
-    {
-      schema: {
-        operationId: RouteId.GetAgentVersions,
-        description:
-          "Get version history for an internal agent. Only applicable to internal agents.",
-        tags: ["Agents"],
-        params: z.object({
-          id: UuidIdSchema,
-        }),
-        response: constructResponseSchema(AgentVersionsResponseSchema),
-      },
-    },
-    async ({ params: { id }, user, organizationId }, reply) => {
-      // Fetch agent to determine its type
-      const agent = await AgentModel.findById(id, user.id, true);
-      if (!agent) {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      // Single DB query for all permission checks on this agent type
-      const checker = await getAgentTypePermissionChecker({
-        userId: user.id,
-        organizationId,
-      });
-
-      // Check read permission (return 404 to avoid leaking existence)
-      try {
-        checker.require(agent.agentType, "read");
-      } catch {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      const versions = await AgentModel.getVersions(
-        id,
-        user.id,
-        checker.isAdmin(agent.agentType),
-      );
-
-      if (!versions) {
-        throw new ApiError(
-          404,
-          "Agent not found or not an internal agent (versioning only applies to internal agents)",
-        );
-      }
-
-      return reply.send(versions);
-    },
-  );
-
-  // Rollback endpoint (internal agents only)
-  fastify.post(
-    "/api/agents/:id/rollback",
-    {
-      schema: {
-        operationId: RouteId.RollbackAgent,
-        description:
-          "Rollback an internal agent to a previous version. Only applicable to internal agents.",
-        tags: ["Agents"],
-        params: z.object({
-          id: UuidIdSchema,
-        }),
-        body: z.object({
-          version: z
-            .number()
-            .int()
-            .positive()
-            .describe("Version to rollback to"),
-        }),
-        response: constructResponseSchema(SelectAgentSchema),
-      },
-    },
-    async (
-      { params: { id }, body: { version }, user, organizationId },
-      reply,
-    ) => {
-      // Fetch agent to determine its type
-      const agent = await AgentModel.findById(id, user.id, true);
-      if (!agent) {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      // Check update permission for this agent's type (return 404 to avoid leaking existence)
-      const checker = await getAgentTypePermissionChecker({
-        userId: user.id,
-        organizationId,
-      });
-      try {
-        checker.require(agent.agentType, "update");
-      } catch {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      if (agent.agentType !== "agent") {
-        throw new ApiError(
-          400,
-          "Rollback only applies to internal agents (agentType='agent')",
-        );
-      }
-
-      const rolledBackAgent = await AgentModel.rollback(id, version);
-
-      if (!rolledBackAgent) {
-        throw new ApiError(404, "Version not found in agent history");
-      }
-
-      return reply.send(rolledBackAgent);
     },
   );
 
@@ -628,6 +775,93 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
     },
   );
+  fastify.get(
+    "/api/members/default-agent",
+    {
+      schema: {
+        operationId: RouteId.GetMemberDefaultAgent,
+        description: "Get the current user's default agent ID",
+        tags: ["Members"],
+        response: constructResponseSchema(
+          z.object({ defaultAgentId: z.string().uuid().nullable() }),
+        ),
+      },
+    },
+    async ({ user, organizationId }, reply) => {
+      const defaultAgentId = await MemberModel.getDefaultAgentId(
+        user.id,
+        organizationId,
+      );
+      return reply.send({ defaultAgentId });
+    },
+  );
 };
 
 export default agentRoutes;
+
+async function validateKnowledgeBaseAccess(params: {
+  kbId: string;
+  organizationId: string;
+  access: Awaited<
+    ReturnType<
+      typeof knowledgeSourceAccessControlService.buildAccessControlContext
+    >
+  >;
+}) {
+  const kb = await KnowledgeBaseModel.findById(params.kbId);
+  if (
+    !kb ||
+    kb.organizationId !== params.organizationId ||
+    !knowledgeSourceAccessControlService.canAccessKnowledgeBase(
+      params.access,
+      kb,
+    )
+  ) {
+    throw new ApiError(404, `Knowledge base not found: ${params.kbId}`);
+  }
+}
+
+async function validateConnectorAccess(params: {
+  connectorId: string;
+  organizationId: string;
+  access: Awaited<
+    ReturnType<
+      typeof knowledgeSourceAccessControlService.buildAccessControlContext
+    >
+  >;
+}) {
+  const connector = await KnowledgeBaseConnectorModel.findById(
+    params.connectorId,
+  );
+  if (
+    !connector ||
+    connector.organizationId !== params.organizationId ||
+    !knowledgeSourceAccessControlService.canAccessConnector(
+      params.access,
+      connector,
+    )
+  ) {
+    throw new ApiError(404, `Connector not found: ${params.connectorId}`);
+  }
+}
+
+function parseLabelsParam(
+  labels: string | undefined,
+): Record<string, string[]> | undefined {
+  if (!labels) return undefined;
+  const result: Record<string, string[]> = {};
+  for (const entry of labels.split(LABELS_ENTRY_DELIMITER)) {
+    const colonIdx = entry.indexOf(":");
+    if (colonIdx === -1) continue;
+    const key = entry.slice(0, colonIdx).trim();
+    const values = entry
+      .slice(colonIdx + 1)
+      .split(LABELS_VALUE_DELIMITER)
+      .map((v) => v.trim())
+      .filter(Boolean);
+    if (key && values.length > 0) {
+      result[key] = values;
+    }
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}

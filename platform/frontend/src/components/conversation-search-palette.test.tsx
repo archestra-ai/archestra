@@ -9,32 +9,40 @@ global.ResizeObserver = vi.fn().mockImplementation(() => ({
 }));
 
 const mockRouterPush = vi.fn();
-const mockSearchParamsGet = vi.fn();
+const mockUsePathname = vi.fn();
 const mockDeleteMutate = vi.fn();
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockRouterPush }),
-  useSearchParams: () => ({ get: mockSearchParamsGet }),
+  usePathname: () => mockUsePathname(),
 }));
 
 vi.mock("@uidotdev/usehooks", () => ({
   useDebounce: (value: string) => value,
 }));
 
-vi.mock("@/hooks/use-platform", () => ({
+vi.mock("@/lib/hooks/use-platform", () => ({
   usePlatform: () => ({ modKey: "⌘", altKey: "⌥", isMac: true }),
 }));
 
-vi.mock("@/lib/auth.hook", () => ({
+vi.mock("@/lib/auth/auth.hook", () => ({
   useIsAuthenticated: () => true,
 }));
 
-vi.mock("@/lib/chat-utils", () => ({
+vi.mock("@/lib/auth/auth.query", () => ({
+  useHasPermissions: () => ({
+    data: true,
+    isPending: false,
+    isLoading: false,
+  }),
+}));
+
+vi.mock("@/lib/chat/chat-utils", () => ({
   getConversationDisplayTitle: (title: string | null) =>
     title ?? "Untitled chat",
 }));
 
-vi.mock("@/lib/chat.query", () => ({
+vi.mock("@/lib/chat/chat.query", () => ({
   useConversations: () => ({
     data: [
       {
@@ -146,7 +154,7 @@ describe("ConversationSearchPalette", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockSearchParamsGet.mockReturnValue(null);
+    mockUsePathname.mockReturnValue("/chat");
     capturedOnValueChange = null;
   });
 
@@ -158,10 +166,7 @@ describe("ConversationSearchPalette", () => {
   });
 
   it("redirects to /chat when deleting the currently viewed conversation", () => {
-    // Simulate being on /chat?conversation=conv-1
-    mockSearchParamsGet.mockImplementation((key: string) =>
-      key === "conversation" ? "conv-1" : null,
-    );
+    mockUsePathname.mockReturnValue("/chat/conv-1");
 
     render(<ConversationSearchPalette {...defaultProps} />);
 
@@ -177,17 +182,17 @@ describe("ConversationSearchPalette", () => {
     fireEvent.keyDown(window, { key: "d", code: "KeyD" });
 
     // Should have called deleteMutation.mutate with the conversation ID
-    expect(mockDeleteMutate).toHaveBeenCalledWith("conv-1");
+    expect(mockDeleteMutate).toHaveBeenCalledWith(
+      "conv-1",
+      expect.objectContaining({ onSettled: expect.any(Function) }),
+    );
 
     // Should redirect to /chat since the deleted conversation is currently open
     expect(mockRouterPush).toHaveBeenCalledWith("/chat");
   });
 
   it("does not redirect when deleting a conversation that is not currently viewed", () => {
-    // Simulate being on /chat?conversation=conv-2 (different from what we'll delete)
-    mockSearchParamsGet.mockImplementation((key: string) =>
-      key === "conversation" ? "conv-2" : null,
-    );
+    mockUsePathname.mockReturnValue("/chat/conv-2");
 
     render(<ConversationSearchPalette {...defaultProps} />);
 
@@ -203,16 +208,16 @@ describe("ConversationSearchPalette", () => {
     fireEvent.keyDown(window, { key: "d", code: "KeyD" });
 
     // Should have called deleteMutation.mutate
-    expect(mockDeleteMutate).toHaveBeenCalledWith("conv-1");
+    expect(mockDeleteMutate).toHaveBeenCalledWith(
+      "conv-1",
+      expect.objectContaining({ onSettled: expect.any(Function) }),
+    );
 
     // Should NOT redirect since the deleted conversation is not the one currently open
     expect(mockRouterPush).not.toHaveBeenCalled();
   });
 
   it("does not redirect when deleting a conversation and no conversation is open", () => {
-    // Simulate being on /chat with no conversation param
-    mockSearchParamsGet.mockReturnValue(null);
-
     render(<ConversationSearchPalette {...defaultProps} />);
 
     // Simulate selecting conv-1
@@ -224,8 +229,33 @@ describe("ConversationSearchPalette", () => {
     fireEvent.keyDown(window, { key: "d", code: "KeyD" });
     fireEvent.keyDown(window, { key: "d", code: "KeyD" });
 
-    expect(mockDeleteMutate).toHaveBeenCalledWith("conv-1");
+    expect(mockDeleteMutate).toHaveBeenCalledWith(
+      "conv-1",
+      expect.objectContaining({ onSettled: expect.any(Function) }),
+    );
     expect(mockRouterPush).not.toHaveBeenCalled();
+  });
+
+  it("prevents rapid double-deletion of the same conversation", () => {
+    render(<ConversationSearchPalette {...defaultProps} />);
+
+    // Select conv-1
+    act(() => {
+      capturedOnValueChange?.("conv-conv-1");
+    });
+
+    // Press 'd' once → pending state
+    fireEvent.keyDown(window, { key: "d", code: "KeyD" });
+    // Press 'd' again → confirms deletion
+    fireEvent.keyDown(window, { key: "d", code: "KeyD" });
+
+    expect(mockDeleteMutate).toHaveBeenCalledTimes(1);
+
+    // Rapid third 'd' press in the same frame — should be ignored
+    // because the ref guard prevents double-deletion before React re-renders
+    fireEvent.keyDown(window, { key: "d", code: "KeyD" });
+
+    expect(mockDeleteMutate).toHaveBeenCalledTimes(1);
   });
 
   it("navigates to conversation when selecting it", () => {
@@ -234,7 +264,7 @@ describe("ConversationSearchPalette", () => {
     // Click a conversation item
     fireEvent.click(screen.getByTestId("cmd-item-conv-conv-1"));
 
-    expect(mockRouterPush).toHaveBeenCalledWith("/chat?conversation=conv-1");
+    expect(mockRouterPush).toHaveBeenCalledWith("/chat/conv-1");
   });
 
   it("navigates to /chat when selecting new chat", () => {

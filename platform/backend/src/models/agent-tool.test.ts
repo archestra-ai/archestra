@@ -1,4 +1,10 @@
-import { describe, expect, test } from "@/test";
+import {
+  getArchestraToolFullName,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+} from "@shared";
+import { archestraMcpBranding } from "@/archestra-mcp-server";
+import { beforeEach, describe, expect, test } from "@/test";
 import AgentToolModel from "./agent-tool";
 
 describe("AgentToolModel.findById", () => {
@@ -28,7 +34,7 @@ describe("AgentToolModel.findById", () => {
     expect(result).toBeUndefined();
   });
 
-  test("includes credential and execution source fields", async ({
+  test("includes static MCP server binding field", async ({
     makeAgent,
     makeTool,
     makeAgentTool,
@@ -36,18 +42,15 @@ describe("AgentToolModel.findById", () => {
   }) => {
     const agent = await makeAgent();
     const tool = await makeTool();
-    const credServer = await makeMcpServer({ name: "Cred Server" });
-    const execServer = await makeMcpServer({ name: "Exec Server" });
+    const server = await makeMcpServer({ name: "Bound Server" });
     const agentTool = await makeAgentTool(agent.id, tool.id, {
-      credentialSourceMcpServerId: credServer.id,
-      executionSourceMcpServerId: execServer.id,
+      mcpServerId: server.id,
     });
 
     const result = await AgentToolModel.findById(agentTool.id);
 
     expect(result).toBeDefined();
-    expect(result?.credentialSourceMcpServerId).toBe(credServer.id);
-    expect(result?.executionSourceMcpServerId).toBe(execServer.id);
+    expect(result?.mcpServerId).toBe(server.id);
   });
 });
 
@@ -517,13 +520,13 @@ describe("AgentToolModel.findAll", () => {
       const tool4 = await makeTool({ name: "tool-4" });
 
       await makeAgentTool(agent.id, tool1.id, {
-        credentialSourceMcpServerId: ownerServer1.id,
+        mcpServerId: ownerServer1.id,
       });
       await makeAgentTool(agent.id, tool2.id, {
-        executionSourceMcpServerId: ownerServer2.id,
+        mcpServerId: ownerServer2.id,
       });
       await makeAgentTool(agent.id, tool3.id, {
-        credentialSourceMcpServerId: otherOwnerServer.id,
+        mcpServerId: otherOwnerServer.id,
       });
       await makeAgentTool(agent.id, tool4.id);
 
@@ -535,37 +538,37 @@ describe("AgentToolModel.findAll", () => {
       expect(result.data).toHaveLength(2);
       expect(
         result.data.some(
-          (agentTool) =>
-            agentTool.credentialSourceMcpServerId === ownerServer1.id,
+          (agentTool) => agentTool.mcpServerId === ownerServer1.id,
         ),
       ).toBe(true);
       expect(
         result.data.some(
-          (agentTool) =>
-            agentTool.executionSourceMcpServerId === ownerServer2.id,
+          (agentTool) => agentTool.mcpServerId === ownerServer2.id,
         ),
       ).toBe(true);
       expect(
         result.data.every(
           (agentTool) =>
-            agentTool.credentialSourceMcpServerId === ownerServer1.id ||
-            agentTool.executionSourceMcpServerId === ownerServer2.id,
+            agentTool.mcpServerId === ownerServer1.id ||
+            agentTool.mcpServerId === ownerServer2.id,
         ),
       ).toBe(true);
     });
 
-    test("excludeArchestraTools excludes tools with archestra__ prefix", async ({
+    test("excludeArchestraTools excludes built-in MCP tools by catalog ID", async ({
       makeAgent,
       makeTool,
       makeAgentTool,
+      seedAndAssignArchestraTools,
     }) => {
       const agent = await makeAgent();
+      await seedAndAssignArchestraTools(agent.id);
 
       // Create regular tools
       const regularTool1 = await makeTool({ name: "exclude_test_regular_1" });
       const regularTool2 = await makeTool({ name: "exclude_test_regular_2" });
 
-      // Create Archestra tools (double underscore prefix) with unique names
+      // Create non-built-in tools that happen to use the default prefix.
       const archestraTool1 = await makeTool({
         name: "archestra__exclude_test_tool_1",
       });
@@ -588,20 +591,21 @@ describe("AgentToolModel.findAll", () => {
       await makeAgentTool(agent.id, singleUnderscoreTool.id);
       await makeAgentTool(agent.id, noUnderscoreTool.id);
 
-      // With excludeArchestraTools: true - should exclude archestra__ tools
+      // With excludeArchestraTools: true - should exclude only built-in MCP tools.
       const resultExcluded = await AgentToolModel.findAll({
-        pagination: { limit: 10, offset: 0 },
+        pagination: { limit: 100, offset: 0 },
         filters: { agentId: agent.id, excludeArchestraTools: true },
       });
 
-      expect(resultExcluded.data).toHaveLength(4);
       const excludedToolNames = resultExcluded.data.map((at) => at.tool.name);
       expect(excludedToolNames).toContain("exclude_test_regular_1");
       expect(excludedToolNames).toContain("exclude_test_regular_2");
+      expect(excludedToolNames).toContain("archestra__exclude_test_tool_1");
+      expect(excludedToolNames).toContain("archestra__exclude_test_tool_2");
       expect(excludedToolNames).toContain("archestra_single_underscore_test");
       expect(excludedToolNames).toContain("archestranounderscore_test");
-      expect(excludedToolNames).not.toContain("archestra__exclude_test_tool_1");
-      expect(excludedToolNames).not.toContain("archestra__exclude_test_tool_2");
+      expect(excludedToolNames).not.toContain("archestra__artifact_write");
+      expect(excludedToolNames).not.toContain("archestra__todo_write");
 
       // Without excludeArchestraTools - should include all tools including archestra__ ones
       const resultIncluded = await AgentToolModel.findAll({
@@ -937,7 +941,7 @@ describe("AgentToolModel.findAll", () => {
         [agent1.id, agent2.id],
         [tool1.id, tool2.id],
         {
-          executionSourceMcpServerId: mcpServer.id,
+          mcpServerId: mcpServer.id,
         },
       );
 
@@ -962,7 +966,7 @@ describe("AgentToolModel.findAll", () => {
 
       expect(relevantAssignments).toHaveLength(4);
       relevantAssignments.forEach((assignment) => {
-        expect(assignment.executionSourceMcpServerId).toBe(mcpServer.id);
+        expect(assignment.mcpServerId).toBe(mcpServer.id);
       });
     });
 
@@ -1029,5 +1033,322 @@ describe("AgentToolModel.findAll", () => {
       // Only Archestra tools should be present
       expect(agent1Tools.length).toBeGreaterThan(0);
     });
+  });
+
+  describe("Knowledge sources tool filtering", () => {
+    beforeEach(() => {
+      archestraMcpBranding.syncFromOrganization(null);
+    });
+
+    test("findAll excludes query_knowledge_sources tool", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+    }) => {
+      const agent = await makeAgent();
+      const regularTool = await makeTool({ name: "regular-tool" });
+      const kbTool = await makeTool({
+        name: TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+      });
+      await makeAgentTool(agent.id, regularTool.id);
+      await makeAgentTool(agent.id, kbTool.id);
+
+      const result = await AgentToolModel.findAll({
+        filters: { agentId: agent.id, excludeArchestraTools: true },
+        skipPagination: true,
+      });
+
+      const toolNames = result.data.map((at) => at.tool.name);
+      expect(toolNames).toContain("regular-tool");
+      expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
+    });
+
+    test("findAll excludes the white-labeled knowledge tool name as well", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+    }) => {
+      archestraMcpBranding.syncFromOrganization({
+        appName: "Acme Copilot",
+        iconLogo: null,
+      });
+      const brandedKbToolName = getArchestraToolFullName(
+        TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+        {
+          appName: "Acme Copilot",
+          fullWhiteLabeling: true,
+        },
+      );
+      const agent = await makeAgent();
+      const regularTool = await makeTool({ name: "regular-tool" });
+      const kbTool = await makeTool({ name: brandedKbToolName });
+      await makeAgentTool(agent.id, regularTool.id);
+      await makeAgentTool(agent.id, kbTool.id);
+
+      const result = await AgentToolModel.findAll({
+        filters: { agentId: agent.id, excludeArchestraTools: true },
+        skipPagination: true,
+      });
+
+      const toolNames = result.data.map((at) => at.tool.name);
+      expect(toolNames).toContain("regular-tool");
+      expect(toolNames).not.toContain(brandedKbToolName);
+    });
+  });
+});
+
+describe("AgentToolModel.bulkCreateOrUpdateCredentials", () => {
+  test("creates multiple new assignments in a single batch", async ({
+    makeAgent,
+    makeTool,
+  }) => {
+    const agent = await makeAgent();
+    const tool1 = await makeTool({ name: "tool-1" });
+    const tool2 = await makeTool({ name: "tool-2" });
+
+    const results = await AgentToolModel.bulkCreateOrUpdateCredentials([
+      { agentId: agent.id, toolId: tool1.id },
+      { agentId: agent.id, toolId: tool2.id },
+    ]);
+
+    expect(results).toHaveLength(2);
+    expect(results[0].status).toBe("created");
+    expect(results[1].status).toBe("created");
+
+    // Verify they exist in DB
+    const tools = await AgentToolModel.findToolIdsByAgent(agent.id);
+    expect(tools).toContain(tool1.id);
+    expect(tools).toContain(tool2.id);
+  });
+
+  test("returns unchanged for duplicate assignments", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const agent = await makeAgent();
+    const tool = await makeTool({ name: "tool-1" });
+    await makeAgentTool(agent.id, tool.id);
+
+    const results = await AgentToolModel.bulkCreateOrUpdateCredentials([
+      { agentId: agent.id, toolId: tool.id },
+    ]);
+
+    expect(results).toHaveLength(1);
+    expect(results[0].status).toBe("unchanged");
+  });
+
+  test("handles mix of new, existing, and updated assignments", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const agent = await makeAgent();
+    const tool1 = await makeTool({ name: "tool-existing" });
+    const tool2 = await makeTool({ name: "tool-new" });
+    await makeAgentTool(agent.id, tool1.id);
+
+    const results = await AgentToolModel.bulkCreateOrUpdateCredentials([
+      { agentId: agent.id, toolId: tool1.id }, // already exists, unchanged
+      { agentId: agent.id, toolId: tool2.id }, // new
+    ]);
+
+    expect(results).toHaveLength(2);
+    const statusMap = new Map(
+      results.map((r) => [`${r.agentId}:${r.toolId}`, r.status]),
+    );
+    expect(statusMap.get(`${agent.id}:${tool1.id}`)).toBe("unchanged");
+    expect(statusMap.get(`${agent.id}:${tool2.id}`)).toBe("created");
+  });
+
+  test("returns empty array for empty input", async () => {
+    const results = await AgentToolModel.bulkCreateOrUpdateCredentials([]);
+    expect(results).toEqual([]);
+  });
+
+  test("updates credentials when they differ from existing", async ({
+    makeAgent,
+    makeTool,
+    makeMcpServer,
+    makeAgentTool,
+  }) => {
+    const agent = await makeAgent();
+    const tool = await makeTool({ name: "tool-cred-update" });
+    const server1 = await makeMcpServer();
+    const server2 = await makeMcpServer();
+
+    // Create initial assignment with server1 as credential source
+    await makeAgentTool(agent.id, tool.id, {
+      mcpServerId: server1.id,
+    });
+
+    // Bulk update to server2
+    const results = await AgentToolModel.bulkCreateOrUpdateCredentials([
+      {
+        agentId: agent.id,
+        toolId: tool.id,
+        mcpServerId: server2.id,
+      },
+    ]);
+
+    expect(results).toHaveLength(1);
+    expect(results[0].status).toBe("updated");
+  });
+
+  test("updates credentialResolutionMode when it differs", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const agent = await makeAgent();
+    const tool = await makeTool({ name: "tool-dynamic-cred" });
+    await makeAgentTool(agent.id, tool.id);
+
+    const results = await AgentToolModel.bulkCreateOrUpdateCredentials([
+      {
+        agentId: agent.id,
+        toolId: tool.id,
+        credentialResolutionMode: "dynamic",
+      },
+    ]);
+
+    expect(results).toHaveLength(1);
+    expect(results[0].status).toBe("updated");
+  });
+
+  test("handles multiple agents with multiple tools", async ({
+    makeAgent,
+    makeTool,
+  }) => {
+    const agent1 = await makeAgent({ name: "Agent 1" });
+    const agent2 = await makeAgent({ name: "Agent 2" });
+    const tool1 = await makeTool({ name: "tool-multi-1" });
+    const tool2 = await makeTool({ name: "tool-multi-2" });
+
+    const results = await AgentToolModel.bulkCreateOrUpdateCredentials([
+      { agentId: agent1.id, toolId: tool1.id },
+      { agentId: agent1.id, toolId: tool2.id },
+      { agentId: agent2.id, toolId: tool1.id },
+      { agentId: agent2.id, toolId: tool2.id },
+    ]);
+
+    expect(results).toHaveLength(4);
+    expect(results.every((r) => r.status === "created")).toBe(true);
+
+    const agent1Tools = await AgentToolModel.findToolIdsByAgent(agent1.id);
+    const agent2Tools = await AgentToolModel.findToolIdsByAgent(agent2.id);
+    expect(agent1Tools).toHaveLength(2);
+    expect(agent2Tools).toHaveLength(2);
+  });
+});
+
+describe("AgentToolModel.bulkCreate", () => {
+  test("inserts multiple rows in a single operation", async ({
+    makeAgent,
+    makeTool,
+  }) => {
+    const agent = await makeAgent();
+    const tool1 = await makeTool({ name: "bulk-1" });
+    const tool2 = await makeTool({ name: "bulk-2" });
+    const tool3 = await makeTool({ name: "bulk-3" });
+
+    const rows = await AgentToolModel.bulkCreate([
+      { agentId: agent.id, toolId: tool1.id },
+      { agentId: agent.id, toolId: tool2.id },
+      { agentId: agent.id, toolId: tool3.id },
+    ]);
+
+    expect(rows).toHaveLength(3);
+    expect(rows.every((r) => r.agentId === agent.id)).toBe(true);
+
+    const toolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
+    expect(toolIds).toContain(tool1.id);
+    expect(toolIds).toContain(tool2.id);
+    expect(toolIds).toContain(tool3.id);
+  });
+
+  test("returns empty array for empty input", async () => {
+    const rows = await AgentToolModel.bulkCreate([]);
+    expect(rows).toEqual([]);
+  });
+
+  test("persists credential fields on bulk-created rows", async ({
+    makeAgent,
+    makeTool,
+    makeMcpServer,
+  }) => {
+    const agent = await makeAgent();
+    const tool = await makeTool({ name: "bulk-cred" });
+    const server = await makeMcpServer();
+
+    const rows = await AgentToolModel.bulkCreate([
+      {
+        agentId: agent.id,
+        toolId: tool.id,
+        mcpServerId: server.id,
+        credentialResolutionMode: "dynamic",
+      },
+    ]);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].mcpServerId).toBe(server.id);
+    expect(rows[0].credentialResolutionMode).toBe("dynamic");
+  });
+
+  test("persists enterprise-managed mode on bulk-created rows", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const agent = await makeAgent();
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const tool = await makeTool({
+      name: "bulk-enterprise-managed",
+      catalogId: catalog.id,
+    });
+
+    const rows = await AgentToolModel.bulkCreate([
+      {
+        agentId: agent.id,
+        toolId: tool.id,
+        credentialResolutionMode: "enterprise_managed",
+      },
+    ]);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].credentialResolutionMode).toBe("enterprise_managed");
+  });
+});
+
+describe("AgentToolModel.create", () => {
+  test("creates a basic agent-tool assignment", async ({
+    makeAgent,
+    makeTool,
+  }) => {
+    const agent = await makeAgent();
+    const tool = await makeTool({ name: "create-basic" });
+
+    const agentTool = await AgentToolModel.create(agent.id, tool.id);
+
+    expect(agentTool.agentId).toBe(agent.id);
+    expect(agentTool.toolId).toBe(tool.id);
+    expect(agentTool.mcpServerId).toBeNull();
+    expect(agentTool.credentialResolutionMode).toBe("static");
+  });
+
+  test("creates assignment with credential options", async ({
+    makeAgent,
+    makeTool,
+    makeMcpServer,
+  }) => {
+    const agent = await makeAgent();
+    const tool = await makeTool({ name: "create-with-creds" });
+    const server = await makeMcpServer();
+
+    const agentTool = await AgentToolModel.create(agent.id, tool.id, {
+      mcpServerId: server.id,
+    });
+
+    expect(agentTool.mcpServerId).toBe(server.id);
   });
 });

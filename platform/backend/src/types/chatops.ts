@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { A2AAttachment } from "@/agents/a2a-executor";
 
 /**
  * ChatOps provider types enum
@@ -6,6 +7,48 @@ import { z } from "zod";
  */
 export const ChatOpsProviderTypeSchema = z.enum(["ms-teams", "slack"]);
 export type ChatOpsProviderType = z.infer<typeof ChatOpsProviderTypeSchema>;
+
+export const ChatOpsConnectionModeSchema = z.enum(["webhook", "socket"]);
+export type ChatOpsConnectionMode = z.infer<typeof ChatOpsConnectionModeSchema>;
+
+export const ChatOpsStatusSchema = z.enum(["configured", "unassigned"]);
+export type ChatOpsStatus = z.infer<typeof ChatOpsStatusSchema>;
+
+/** Credentials shape returned by the chatops status endpoint */
+export const ChatOpsProviderCredentialsSchema = z
+  .object({
+    botToken: z.string().optional(),
+    appId: z.string().optional(),
+    appSecret: z.string().optional(),
+    tenantId: z.string().optional(),
+    signingSecret: z.string().optional(),
+    appLevelToken: z.string().optional(),
+    connectionMode: ChatOpsConnectionModeSchema.optional(),
+  })
+  .optional();
+
+/** DM info returned by the chatops status endpoint */
+export const ChatOpsDmInfoSchema = z
+  .object({
+    botUserId: z.string().optional(),
+    teamId: z.string().optional(),
+    appId: z.string().optional(),
+  })
+  .optional();
+
+/** Single provider entry in the chatops status response */
+export const ChatOpsProviderInfoSchema = z.object({
+  id: ChatOpsProviderTypeSchema,
+  displayName: z.string(),
+  configured: z.boolean(),
+  credentials: ChatOpsProviderCredentialsSchema,
+  dmInfo: ChatOpsDmInfoSchema,
+});
+
+/** Full chatops status response schema */
+export const ChatOpsStatusResponseSchema = z.object({
+  providers: z.array(ChatOpsProviderInfoSchema),
+});
 
 /**
  * Represents an incoming chat message from a chatops provider
@@ -35,6 +78,8 @@ export interface IncomingChatMessage {
   isThreadReply: boolean;
   /** Provider-specific metadata */
   metadata?: Record<string, unknown>;
+  /** Attachments from the message (images, files, etc.) */
+  attachments?: A2AAttachment[];
 }
 
 /**
@@ -54,6 +99,22 @@ export interface ChatReplyOptions {
 }
 
 /**
+ * File metadata from a thread history message (not yet downloaded).
+ * Used to carry attachment info from provider-specific history APIs
+ * so the manager can download them for LLM context.
+ */
+export interface ChatThreadMessageFile {
+  /** Download URL for the file */
+  url: string;
+  /** MIME type of the file */
+  mimetype: string;
+  /** Optional filename */
+  name?: string;
+  /** Optional file size in bytes (from provider metadata) */
+  size?: number;
+}
+
+/**
  * A message in a chat thread history
  */
 export interface ChatThreadMessage {
@@ -69,6 +130,8 @@ export interface ChatThreadMessage {
   timestamp: Date;
   /** Whether this message was from the bot */
   isFromBot: boolean;
+  /** File attachments from this message (metadata only, not downloaded) */
+  files?: ChatThreadMessageFile[];
 }
 
 /**
@@ -182,6 +245,39 @@ export interface ChatOpsProvider {
   sendReply(options: ChatReplyOptions): Promise<string>;
 
   /**
+   * Send an ephemeral message visible only to a specific user.
+   * Used for welcome messages to auto-provisioned users.
+   * Falls back to a regular reply if ephemeral messaging is not supported.
+   */
+  sendEphemeralMessage?(params: {
+    channelId: string;
+    userId: string;
+    text: string;
+    threadId?: string;
+  }): Promise<void>;
+
+  /**
+   * Send a direct message (DM) to a user.
+   * Used for welcome messages to auto-provisioned users.
+   * @param params.userId - The user's ID in the provider's system
+   * @param params.text - The message text (markdown)
+   * @param params.actionUrl - Optional URL for an action button
+   * @param params.actionLabel - Optional label for the action button
+   */
+  sendDirectMessage?(params: {
+    userId: string;
+    text: string;
+    actionUrl?: string;
+    actionLabel?: string;
+    /** When provided, post to this channel instead of opening a new DM via conversations.open.
+     *  Useful for replying inside an existing DM without routing to the History tab. */
+    channelId?: string;
+    /** When provided, thread the message as a reply to this timestamp.
+     *  Required in DMs so the reply appears in Chat tab instead of History. */
+    threadId?: string;
+  }): Promise<void>;
+
+  /**
    * Set a typing/loading status indicator (optional, provider-specific).
    * For Slack: shows "App is thinking..." in the assistant thread.
    * For Teams: sends a typing activity indicator in DMs/group chats,
@@ -214,6 +310,14 @@ export interface ChatOpsProvider {
    * @returns The user's email address, or null if not available
    */
   getUserEmail(userId: string): Promise<string | null>;
+
+  /**
+   * Get user's display name from their provider-specific ID.
+   * Used for auto-provisioning to set a meaningful user name.
+   * @param userId - The user's ID in the provider's system
+   * @returns The user's display name, or null if not available
+   */
+  getUserName?(userId: string): Promise<string | null>;
 
   /**
    * Get a channel's display name from its provider-specific ID.
@@ -269,6 +373,28 @@ export interface ChatOpsProvider {
   getWorkspaceName(): string | null;
 
   /**
+   * Check whether the provider is missing any required scopes/permissions.
+   * Used to trigger rate-limited user notifications about scope drift.
+   */
+  hasMissingScopes(): boolean;
+
+  /**
+   * Send a rate-limited notification to the user about missing scopes/permissions.
+   * Implementations should throttle notifications (e.g., once per 30 days per workspace).
+   * No-op if the provider has no missing scopes or doesn't support scope detection.
+   * @param message - The incoming message to reply in-thread to
+   */
+  notifyMissingScopes(message: IncomingChatMessage): Promise<void>;
+
+  /**
+   * Download files from thread history messages.
+   * Reuses the provider's existing download logic (auth headers, SSRF protection, etc.).
+   * @param files - File metadata from thread history messages
+   * @returns Downloaded attachments in A2A format (base64-encoded)
+   */
+  downloadFiles(files: ChatThreadMessageFile[]): Promise<A2AAttachment[]>;
+
+  /**
    * Discover all channels in a workspace/team.
    * Used to auto-populate channel bindings so admins can assign agents from the UI.
    * @param context - Provider-specific context (e.g., TurnContext for MS Teams)
@@ -290,8 +416,12 @@ export interface ChatOpsEventHandler {
     provider: ChatOpsProvider,
     payload: unknown,
   ): Promise<void>;
-  getAccessibleChatopsAgents(params: {
+  getAccessibleChatopsAgents({
+    senderEmail,
+    isDm,
+  }: {
     senderEmail?: string;
+    isDm: boolean;
   }): Promise<{ id: string; name: string }[]>;
 }
 
@@ -310,4 +440,25 @@ export interface MSTeamsConfig {
     clientId: string;
     clientSecret: string;
   };
+}
+
+/** MS Teams config stored as a DB secret */
+export interface MsTeamsDbConfig {
+  enabled: boolean;
+  appId: string;
+  appSecret: string;
+  tenantId: string;
+  graphTenantId: string;
+  graphClientId: string;
+  graphClientSecret: string;
+}
+
+/** Slack config stored as a DB secret */
+export interface SlackDbConfig {
+  enabled: boolean;
+  botToken: string;
+  signingSecret: string;
+  appId: string;
+  connectionMode?: ChatOpsConnectionMode;
+  appLevelToken?: string;
 }

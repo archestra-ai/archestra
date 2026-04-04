@@ -50,6 +50,14 @@ export class EventDedupMap {
 }
 
 /**
+ * Slack DM channel IDs start with "D".
+ * @see https://api.slack.com/types/conversation
+ */
+export function isSlackDmChannel(channelId: string): boolean {
+  return channelId.startsWith("D");
+}
+
+/**
  * Extract a human-readable error message from an unknown error value.
  */
 export function errorMessage(error: unknown): string {

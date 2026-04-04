@@ -11,16 +11,11 @@ import AgentModel from "@/models/agent";
 import { beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";
 
-// Mock config to ENABLE the feature for these tests
 vi.mock("@/config", async (importOriginal) => {
   const actual = await importOriginal<typeof originalConfigModule>();
   return {
     default: {
       ...actual.default,
-      features: {
-        ...actual.default.features,
-        browserStreamingEnabled: true, // Feature is enabled for these tests
-      },
     },
   };
 });
@@ -29,7 +24,7 @@ vi.mock("@/config", async (importOriginal) => {
 const { default: browserStreamRoutes } = await import(
   "./browser-stream.routes"
 );
-const { default: chatRoutes } = await import("@/routes/chat/routes.chat");
+const { default: chatRoutes } = await import("@/routes/chat/routes");
 
 const buildAppWithUser = async (user: User, organizationId: string) => {
   const app = Fastify({ logger: false })

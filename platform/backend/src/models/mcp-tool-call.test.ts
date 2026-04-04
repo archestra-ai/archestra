@@ -66,6 +66,7 @@ describe("McpToolCallModel", () => {
         name: "Agent",
         scope: "org",
         teams: [],
+        knowledgeBaseIds: [],
       });
 
       // Create an MCP tool call
@@ -96,6 +97,7 @@ describe("McpToolCallModel", () => {
         name: "Agent",
         scope: "org",
         teams: [],
+        knowledgeBaseIds: [],
       });
 
       // Create an MCP tool call
@@ -133,6 +135,7 @@ describe("McpToolCallModel", () => {
         name: "Agent",
         scope: "org",
         teams: [],
+        knowledgeBaseIds: [],
       });
 
       // Create an MCP tool call
@@ -174,6 +177,7 @@ describe("McpToolCallModel", () => {
         name: "Agent",
         scope: "org",
         teams: [],
+        knowledgeBaseIds: [],
       });
 
       // Create an MCP tool call
@@ -212,6 +216,7 @@ describe("McpToolCallModel", () => {
         name: "Agent",
         scope: "org",
         teams: [],
+        knowledgeBaseIds: [],
       });
 
       await McpToolCallModel.create({
@@ -249,6 +254,7 @@ describe("McpToolCallModel", () => {
         name: "Agent",
         scope: "org",
         teams: [],
+        knowledgeBaseIds: [],
       });
 
       await McpToolCallModel.create({
@@ -286,6 +292,7 @@ describe("McpToolCallModel", () => {
         name: "Agent",
         scope: "org",
         teams: [],
+        knowledgeBaseIds: [],
       });
 
       await McpToolCallModel.create({
@@ -333,6 +340,7 @@ describe("McpToolCallModel", () => {
         name: "Agent",
         scope: "org",
         teams: [],
+        knowledgeBaseIds: [],
       });
 
       await McpToolCallModel.create({
@@ -380,6 +388,7 @@ describe("McpToolCallModel", () => {
         name: "Agent",
         scope: "org",
         teams: [],
+        knowledgeBaseIds: [],
       });
 
       await McpToolCallModel.create({
@@ -422,6 +431,7 @@ describe("McpToolCallModel", () => {
         name: "Agent",
         scope: "org",
         teams: [],
+        knowledgeBaseIds: [],
       });
 
       await McpToolCallModel.create({
@@ -466,6 +476,7 @@ describe("McpToolCallModel", () => {
         name: "Agent",
         scope: "org",
         teams: [],
+        knowledgeBaseIds: [],
       });
 
       await McpToolCallModel.create({
@@ -510,6 +521,7 @@ describe("McpToolCallModel", () => {
         name: "Agent",
         scope: "org",
         teams: [],
+        knowledgeBaseIds: [],
       });
 
       await McpToolCallModel.create({
@@ -536,6 +548,7 @@ describe("McpToolCallModel", () => {
         name: "Agent",
         scope: "org",
         teams: [],
+        knowledgeBaseIds: [],
       });
 
       await McpToolCallModel.create({
@@ -573,6 +586,7 @@ describe("McpToolCallModel", () => {
         name: "Agent",
         scope: "org",
         teams: [],
+        knowledgeBaseIds: [],
       });
 
       await McpToolCallModel.create({
@@ -608,6 +622,7 @@ describe("McpToolCallModel", () => {
         name: "Agent To Delete",
         scope: "org",
         teams: [],
+        knowledgeBaseIds: [],
       });
 
       // Create an MCP tool call for the agent
@@ -654,6 +669,7 @@ describe("McpToolCallModel", () => {
         name: "Agent To Delete",
         teams: [team.id],
         scope: "team",
+        knowledgeBaseIds: [],
       });
 
       // Create an MCP tool call for the agent
@@ -702,11 +718,13 @@ describe("McpToolCallModel", () => {
         name: "Agent To Delete",
         scope: "org",
         teams: [],
+        knowledgeBaseIds: [],
       });
       const agentToKeep = await AgentModel.create({
         name: "Agent To Keep",
         scope: "org",
         teams: [],
+        knowledgeBaseIds: [],
       });
 
       // Create tool calls for both agents

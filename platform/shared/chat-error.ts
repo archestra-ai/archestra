@@ -263,8 +263,7 @@ export const ChatErrorMessages: Record<ChatErrorCode, string> = {
     "Your conversation is too long. Please start a new chat or remove some messages.",
   [ChatErrorCode.ContentFiltered]:
     "Your message was blocked by content filters. Please rephrase your request.",
-  [ChatErrorCode.ServerError]:
-    "The AI provider is experiencing issues. Please try again in a moment.",
+  [ChatErrorCode.ServerError]: "The AI provider is experiencing issues.",
   [ChatErrorCode.NetworkError]:
     "Connection error. Please check your network and try again.",
   [ChatErrorCode.Unknown]: "An unexpected error occurred. Please try again.",
@@ -290,6 +289,10 @@ export interface ChatErrorResponse {
   message: string;
   /** Whether the operation can be retried */
   isRetryable: boolean;
+  /** OpenTelemetry trace ID for correlating with backend logs */
+  traceId?: string;
+  /** OpenTelemetry span ID for correlating with backend logs */
+  spanId?: string;
   /** Original error details for debugging (provider-specific) */
   originalError?: {
     /** Provider name (anthropic, openai, gemini) */

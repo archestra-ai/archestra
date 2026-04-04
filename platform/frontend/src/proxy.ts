@@ -2,6 +2,11 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 export function proxy(req: NextRequest) {
+  // Redirect root to /chat before any client components render
+  if (req.nextUrl.pathname === "/") {
+    return NextResponse.redirect(new URL("/chat", req.url));
+  }
+
   if (shouldLogApiRequest(req)) {
     // biome-ignore lint/suspicious/noConsole: Intentional console log of API requests
     console.log(`API Request: ${req.method} ${req.nextUrl.href}`);
@@ -47,6 +52,10 @@ const shouldLogApiRequest = (req: NextRequest) => {
   const { pathname } = req.nextUrl;
   // ignore nextjs internal requests
   if (pathname.startsWith("/_next")) {
+    return false;
+  }
+  // ignore MCP gateway GET polling requests to reduce log noise
+  if (req.method === "GET" && pathname.startsWith("/v1/mcp/")) {
     return false;
   }
   // log request before it is proxied via nextjs rewrites

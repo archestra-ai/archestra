@@ -1,7 +1,12 @@
 import { E2eTestId } from "@shared";
 import { ADMIN_EMAIL, ADMIN_PASSWORD, UI_BASE_URL } from "../../consts";
 import { expect, test } from "../../fixtures";
-import { loginViaApi } from "../../utils";
+import {
+  createLlmProviderApiKey,
+  expectChatReady,
+  loginViaApi,
+  sendChatMessage,
+} from "../../utils";
 
 /**
  * Quickstart test: validates the first-time user experience end-to-end.
@@ -27,33 +32,62 @@ test.describe("Quickstart", { tag: "@quickstart" }, () => {
       await page.goto(`${UI_BASE_URL}/chat`);
       await page.waitForLoadState("domcontentloaded");
 
-      // 2. Create an API key from the empty-state prompt
-      await expect(page.getByText("Add an LLM Provider Key")).toBeVisible({
-        timeout: 10_000,
-      });
-      await page.getByRole("button", { name: "Add API Key" }).click();
+      // 2. Handle both quickstart states:
+      //    - empty-state onboarding that requires creating the first key
+      //    - already-ready chat with a default/system key selected
+      const addApiKeyButton = page.getByTestId(
+        E2eTestId.QuickstartAddApiKeyButton,
+      );
+      const chatPrompt = page.getByTestId(E2eTestId.ChatPromptTextarea);
+      const quickstartState = await expect
+        .poll(
+          async () => {
+            if (await addApiKeyButton.isVisible().catch(() => false)) {
+              return "onboarding";
+            }
 
-      // Default provider is Anthropic — switch to OpenAI (has WireMock stubs)
-      await page.getByRole("combobox", { name: "Provider" }).click();
-      await page.getByRole("option", { name: "OpenAI OpenAI" }).click();
-      await page.getByLabel(/Name/i).fill("Quickstart Key");
-      await page
-        .getByRole("textbox", { name: /API Key/i })
-        .fill("sk-quickstart-test");
-      await page.getByRole("button", { name: "Test & Create" }).click();
+            if (await chatPrompt.isVisible().catch(() => false)) {
+              return "chat-ready";
+            }
 
-      await expect(page.getByText("API key created successfully")).toBeVisible({
-        timeout: 10_000,
-      });
+            return null;
+          },
+          {
+            timeout: 20_000,
+            intervals: [500, 1000, 2000, 5000],
+          },
+        )
+        .toBeTruthy()
+        .then(async () => {
+          if (await addApiKeyButton.isVisible().catch(() => false)) {
+            return "onboarding" as const;
+          }
+
+          return "chat-ready" as const;
+        });
+
+      if (quickstartState === "onboarding") {
+        await createLlmProviderApiKey(page, {
+          name: "Quickstart Key",
+          apiKey: "sk-quickstart-test",
+          providerOptionName: "OpenAI OpenAI",
+        });
+
+        await expect(
+          page.getByText("API key created successfully"),
+        ).toBeVisible({
+          timeout: 10_000,
+        });
+      } else {
+        await expect(chatPrompt).toBeVisible({ timeout: 15_000 });
+      }
 
       // 3. Chat is immediately ready — model and key are auto-selected
-      const textarea = page.getByTestId(E2eTestId.ChatPromptTextarea);
-      await expect(textarea).toBeVisible({ timeout: 15_000 });
+      await expectChatReady(page);
 
       // 4. Send a message and get mocked response
       // Message must contain "chat-ui-e2e-test" to match WireMock stub
-      await textarea.fill("chat-ui-e2e-test quickstart: Hello!");
-      await page.keyboard.press("Enter");
+      await sendChatMessage(page, "chat-ui-e2e-test quickstart: Hello!");
 
       await expect(
         page.getByText("This is a mocked response for the chat UI e2e test."),

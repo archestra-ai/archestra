@@ -1,31 +1,71 @@
 "use client";
 
-import { ApiKeysCard, SecuritySettingsCards } from "@daveyplate/better-auth-ui";
-import { Suspense } from "react";
+import {
+  ChangePasswordCard,
+  SessionsCard,
+  TwoFactorCard,
+  UpdateNameCard,
+} from "@daveyplate/better-auth-ui";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { LightDarkToggle } from "@/app/settings/account/_components/light-dark-toggle";
 import { LoadingSpinner } from "@/components/loading";
 import { PersonalTokenCard } from "@/components/settings/personal-token-card";
 import { RolePermissionsCard } from "@/components/settings/role-permissions-card";
+import { SettingsSectionStack } from "@/components/settings/settings-block";
+import { usePublicConfig } from "@/lib/config/config.query";
+import { useOrganization } from "@/lib/organization.query";
+import { useOrgTheme } from "@/lib/theme.hook";
+import { cn } from "@/lib/utils";
 
 function AccountSettingsContent() {
+  const searchParams = useSearchParams();
+  const highlight = searchParams.get("highlight");
+  const changePasswordRef = useRef<HTMLDivElement>(null);
+  const [isPulsing, setIsPulsing] = useState(false);
+  const orgTheme = useOrgTheme();
+  const currentUITheme = orgTheme?.currentUITheme;
+  const { data: organization } = useOrganization();
+  const { data: publicConfig, isLoading: isLoadingPublicConfig } =
+    usePublicConfig();
+  const isBasicAuthDisabled = publicConfig?.disableBasicAuth ?? false;
+
+  useEffect(() => {
+    if (highlight === "change-password" && changePasswordRef.current) {
+      changePasswordRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+      setIsPulsing(true);
+      const timer = setTimeout(() => setIsPulsing(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [highlight]);
+
   return (
-    <div className="space-y-6">
+    <SettingsSectionStack>
       <RolePermissionsCard />
+      <UpdateNameCard classNames={{ base: "w-full" }} />
       <PersonalTokenCard />
-      <ApiKeysCard
-        classNames={{
-          base: "w-full",
-        }}
-      />
-      <SecuritySettingsCards
-        classNames={{
-          cards: "w-full",
-          card: {
-            base: "w-full",
-          },
-        }}
-      />
-    </div>
+      {!isLoadingPublicConfig && !isBasicAuthDisabled && (
+        <div
+          ref={changePasswordRef}
+          className={cn(
+            "rounded-lg transition-shadow duration-500",
+            isPulsing &&
+              "ring-2 ring-destructive/50 animate-pulse shadow-lg shadow-destructive/10",
+          )}
+        >
+          <ChangePasswordCard classNames={{ base: "w-full" }} />
+        </div>
+      )}
+      {organization?.showTwoFactor && (
+        <TwoFactorCard classNames={{ base: "w-full" }} />
+      )}
+      <SessionsCard classNames={{ base: "w-full" }} />
+      <LightDarkToggle currentThemeId={currentUITheme} />
+    </SettingsSectionStack>
   );
 }
 

@@ -1,7 +1,7 @@
 ---
 title: Deployment
 category: Archestra Platform
-order: 2
+order: 3
 ---
 
 <!--
@@ -28,7 +28,7 @@ Run the platform with a single command:
 
 ```bash
 docker pull archestra/platform:latest;
-docker run -p 9000:9000 -p 3000:3000 \
+docker run -p 9000:9000 -p 3000:3000\
    -e ARCHESTRA_QUICKSTART=true \
    -v /var/run/docker.sock:/var/run/docker.sock \
    -v archestra-postgres-data:/var/lib/postgresql/data \
@@ -40,7 +40,7 @@ docker run -p 9000:9000 -p 3000:3000 \
 
 ```powershell
 docker pull archestra/platform:latest;
-docker run -p 9000:9000 -p 3000:3000 `
+docker run -p 9000:9000 -p 3000:3000`
    -e ARCHESTRA_QUICKSTART=true `
    -v /var/run/docker.sock:/var/run/docker.sock `
    -v archestra-postgres-data:/var/lib/postgresql/data `
@@ -62,7 +62,7 @@ This will start the platform with:
 If you have Kubernetes installed locally, you can use it for the MCP orchestrator. Make sure `kubectl` points to the right cluster and run the container without the socket and without `ARCHESTRA_QUICKSTART`. The orchestrator will create a cluster in the current context. See [Development with Standalone Kubernetes](./platform-orchestrator#local-development-with-docker-and-standalone-kubernetes)
 
 ```diff
-docker run -p 9000:9000 -p 3000:3000 \
+docker run -p 9000:9000 -p 3000:3000\
 -  -e ARCHESTRA_QUICKSTART=true \
 -  -v /var/run/docker.sock:/var/run/docker.sock \
    -v archestra-postgres-data:/var/lib/postgresql/data \
@@ -128,22 +128,40 @@ The Helm chart provides extensive configuration options through values. For the 
 - `archestra.imagePullPolicy` - Image pull policy for the Archestra container (default: IfNotPresent). Options: Always, IfNotPresent, Never
 - `archestra.replicaCount` - Number of pod replicas (default: 1). Ignored when HPA is enabled
 - `archestra.env` - Environment variables to pass to the container (see Environment Variables section for available options). Supports Kubernetes `$(VAR_NAME)` expansion syntax.
+- `archestra.authSecret.extraData` - Additional plain-text key/value pairs to add to the Helm-managed `<release>-auth` Secret; Helm base64-encodes the values for you, which is useful when mounting extra secret-backed files via `archestra.extraVolumes`
 - `archestra.envWithValueFrom` - Environment variables with `valueFrom` for Kubernetes downward API (`fieldRef`, `resourceFieldRef`) or other sources. Required for defining variables like `NODE_IP` that can be referenced via `$(NODE_IP)` in other env vars.
 - `archestra.envFromSecrets` - Environment variables from Kubernetes Secrets (inject sensitive data from secrets)
 - `archestra.envFrom` - Import all key-value pairs from Secrets or ConfigMaps as environment variables
+- `archestra.extraVolumes` - Additional volumes for mounting extra files into the platform and worker pods
+- `archestra.extraVolumeMounts` - Additional volume mounts for the platform and worker containers (for example, a Vertex AI service account key file)
 
-**Example**:
+**Auth secret configuration**: `ARCHESTRA_AUTH_SECRET` is optional. If you do not configure it, the Helm chart creates a `<release>-auth` Secret and auto-generates a 64-character `auth-secret` value on first install.
 
-```bash
-helm upgrade archestra-platform \
-  oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
-  --install \
-  --namespace archestra \
-  --create-namespace \
-  --wait
+If you manage secrets outside Helm, point the chart at an existing Kubernetes Secret:
+
+```yaml
+archestra:
+  authSecret:
+    existingSecretName: archestra-auth
+    existingSecretKey: auth-secret
 ```
 
-**Note**: `ARCHESTRA_AUTH_SECRET` is optional and will be auto-generated (64 characters) if not specified. If you need to set it manually, it must be at least 32 characters:
+If you use the Helm-managed `<release>-auth` Secret, you can also add extra keys to it and mount them as files from `archestra.extraVolumes`:
+
+```yaml
+archestra:
+  authSecret:
+    extraData:
+      service-account.json: |
+        {"type":"service_account"}
+  extraVolumes:
+    - name: platform-auth-secret
+      secret:
+        secretName: <release>-auth
+        items:
+          - key: service-account.json
+            path: service-account.json
+```
 
 ```bash
 # Generate a secure secret
@@ -152,6 +170,33 @@ openssl rand -base64 32
 # Then add to your helm command:
 --set archestra.env.ARCHESTRA_AUTH_SECRET=<your-generated-secret>
 ```
+
+#### Diagnostics Storage
+
+To persist Node fatal error reports from the backend, enable chart-managed diagnostics storage. This mounts a persistent volume at `/var/diagnostics` in both the platform and worker pods and configures the backend to write diagnostic reports there automatically.
+
+```yaml
+archestra:
+  diagnostics:
+    enabled: true
+    size: 10Gi
+    storageClassName: standard-rwo
+    accessModes:
+      - ReadWriteOnce
+```
+
+Available values:
+
+- `archestra.diagnostics.enabled` - Enable diagnostics storage for backend reports
+- `archestra.diagnostics.existingClaimName` - Use an existing PVC instead of creating one
+- `archestra.diagnostics.storageClassName` - StorageClass for the chart-managed PVC
+- `archestra.diagnostics.size` - PVC storage request
+- `archestra.diagnostics.accessModes` - PVC access modes
+- `archestra.diagnostics.heapSnapshotsNearHeapLimit` - Optional Node heap snapshot count for near-OOM investigations
+
+If you run both the platform and worker pods and want them to write to the same claim concurrently, choose a storage class and access mode combination your cluster supports for that pattern.
+
+Chart-managed diagnostics PVCs are validated conservatively. If more than one diagnostics-writing pod can run at the same time, including during rolling updates, the chart requires `ReadWriteMany`. A single `ReadWriteOnce` claim is only safe for single-pod deployments with non-overlapping updates.
 
 #### MCP Server Runtime Configuration
 
@@ -163,6 +208,7 @@ openssl rand -base64 32
 
 - `archestra.orchestrator.kubernetes.namespace` - Kubernetes namespace where MCP server pods will be created (defaults to Helm release namespace)
 - `archestra.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster` - Use in-cluster configuration (recommended when running inside K8s)
+- `archestra.orchestrator.kubernetes.clusterDomain` - Kubernetes cluster DNS domain for internal service URL construction (default: cluster.local)
 - `archestra.orchestrator.kubernetes.kubeconfig.enabled` - Enable mounting kubeconfig from a secret
 - `archestra.orchestrator.kubernetes.kubeconfig.secretName` - Name of secret containing kubeconfig file
 - `archestra.orchestrator.kubernetes.kubeconfig.mountPath` - Path where kubeconfig will be mounted
@@ -185,7 +231,7 @@ openssl rand -base64 32
 - `archestra.podAnnotations` - Annotations to add to pods (useful for Prometheus, Vault agent, service mesh sidecars, etc.)
 - `archestra.nodeSelector` - Node selector for scheduling pods on specific nodes (e.g., specific node pools or instance types). These values are also inherited by MCP server pods as defaults.
 - `archestra.tolerations` - Tolerations for scheduling pods on nodes with specific taints (e.g., dedicated nodes, GPU nodes, spot instances). These values are also inherited by MCP server pods as defaults. See [Kubernetes docs](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)
-- `archestra.deploymentStrategy` - Deployment strategy configuration (default: RollingUpdate with maxUnavailable: 0 for zero-downtime deployments)
+- `archestra.deploymentStrategy` - Deployment strategy configuration (default: RollingUpdate with `maxUnavailable: 25%` and `maxSurge: 25%`)
 - `archestra.resources` - CPU and memory requests/limits for the container (default: 2Gi request, 3Gi limit for memory)
 
 **Service Settings**:
@@ -239,19 +285,6 @@ archestra:
 
 Apply via Helm (replace `RELEASE_NAME` with your actual release name, e.g., `archestra-platform`):
 
-```bash
-helm upgrade archestra-platform \
-  oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
-  --install \
-  --namespace archestra \
-  --create-namespace \
-  --set archestra.gkeBackendConfig.enabled=true \
-  --set archestra.gkeBackendConfig.backend.timeoutSec=600 \
-  --set archestra.gkeBackendConfig.frontend.timeoutSec=600 \
-  --set-string archestra.service.annotations."cloud\.google\.com/backend-config"='{"ports": {"9000":"archestra-platform-archestra-platform-backend-config", "3000":"archestra-platform-archestra-platform-frontend-config"}}' \
-  --wait
-```
-
 The Helm chart creates two BackendConfig resources with health checks tuned for deployments:
 
 - `<release>-archestra-platform-backend-config` - For the API backend (port 9000)
@@ -269,19 +302,6 @@ archestra:
       service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout: "600"
 ```
 
-Apply via Helm:
-
-```bash
-helm upgrade archestra-platform \
-  oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
-  --install \
-  --namespace archestra \
-  --create-namespace \
-  --set-string archestra.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-backend-protocol"=http \
-  --set-string archestra.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-connection-idle-timeout"="600" \
-  --wait
-```
-
 ##### Microsoft Azure (AKS)
 
 For Azure AKS with Application Gateway Ingress Controller (AGIC), configure timeout annotations on the Ingress:
@@ -293,20 +313,6 @@ archestra:
     annotations:
       appgw.ingress.kubernetes.io/request-timeout: "600"
       appgw.ingress.kubernetes.io/connection-draining-timeout: "60"
-```
-
-Apply via Helm:
-
-```bash
-helm upgrade archestra-platform \
-  oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
-  --install \
-  --namespace archestra \
-  --create-namespace \
-  --set archestra.ingress.enabled=true \
-  --set-string archestra.ingress.annotations."appgw\.ingress\.kubernetes\.io/request-timeout"="600" \
-  --set-string archestra.ingress.annotations."appgw\.ingress\.kubernetes\.io/connection-draining-timeout"="60" \
-  --wait
 ```
 
 ##### Other Ingress Controllers (nginx, Traefik, etc.)
@@ -343,36 +349,6 @@ archestra:
 - `archestra.horizontalPodAutoscaler.metrics` - Metrics configuration for scaling decisions
 - `archestra.horizontalPodAutoscaler.behavior` - Scaling behavior configuration
 
-**Example with CPU-based autoscaling**:
-
-```yaml
-archestra:
-  horizontalPodAutoscaler:
-    enabled: true
-    minReplicas: 2
-    maxReplicas: 10
-    metrics:
-      - type: Resource
-        resource:
-          name: cpu
-          target:
-            type: Utilization
-            averageUtilization: 80
-    behavior:
-      scaleDown:
-        stabilizationWindowSeconds: 300
-        policies:
-          - type: Percent
-            value: 10
-            periodSeconds: 60
-      scaleUp:
-        stabilizationWindowSeconds: 0
-        policies:
-          - type: Percent
-            value: 100
-            periodSeconds: 15
-```
-
 **PodDisruptionBudget Settings**:
 
 - `archestra.podDisruptionBudget.enabled` - Enable or disable PodDisruptionBudget creation (default: false)
@@ -382,29 +358,26 @@ archestra:
 
 **Note**: Only one of `minAvailable` or `maxUnavailable` can be set.
 
-**Example with minAvailable**:
-
-```yaml
-archestra:
-  podDisruptionBudget:
-    enabled: true
-    minAvailable: 1
-    unhealthyPodEvictionPolicy: IfHealthyBudget
-```
-
-**Example with maxUnavailable percentage**:
-
-```yaml
-archestra:
-  podDisruptionBudget:
-    enabled: true
-    maxUnavailable: "25%"
-```
-
 See the Kubernetes documentation for more details:
 
 - [HorizontalPodAutoscaler](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/)
 - [PodDisruptionBudget](https://kubernetes.io/docs/tasks/run-application/configure-pdb/)
+
+#### Background Worker Configuration
+
+The Helm chart deploys a separate worker `Deployment` for processing background jobs from the postgres queue. When enabled, the main platform pods run as web-only and the worker pods handle all background job processing.
+
+**Worker Settings**:
+
+- `archestra.worker.enabled` - Deploy a separate worker Deployment (default: true)
+- `archestra.worker.replicaCount` - Number of worker pod replicas (default: 1)
+- `archestra.worker.resources` - Resource requests/limits for worker pods (default: 1Gi request, 2Gi limit)
+- `archestra.worker.deploymentStrategy` - Deployment strategy (default: RollingUpdate with `maxUnavailable: 25%` and `maxSurge: 25%`)
+- `archestra.worker.podAnnotations` - Pod annotations (inherits from `archestra.podAnnotations` if not set)
+- `archestra.worker.nodeSelector` - Node selector (inherits from `archestra.nodeSelector` if not set)
+- `archestra.worker.tolerations` - Tolerations (inherits from `archestra.tolerations` if not set)
+
+When the worker is disabled (`archestra.worker.enabled: false`), background jobs run in-process within the main platform pods.
 
 #### Database Configuration
 
@@ -513,7 +486,7 @@ archestra:
 After installation, access the platform using port forwarding:
 
 ```bash
-# Forward the API (port 9000) and the Admin UI (port 3000)
+# Forward the API (port 9000) and Admin UI (port 3000)
 kubectl --namespace archestra port-forward svc/archestra-platform 9000:9000 3000:3000
 ```
 
@@ -535,6 +508,20 @@ For production deployments, we strongly recommend using a cloud-hosted PostgreSQ
 - **Monitoring** and alerting out of the box
 
 To use an external database, specify the connection string via the `ARCHESTRA_DATABASE_URL` environment variable. When using an external database, the bundled PostgreSQL instance is automatically disabled. See the [Environment Variables](#environment-variables) section for details.
+
+##### pgvector Extension (Knowledge Base Feature)
+
+The [Knowledge Base](/docs/platform-knowledge-bases) enterprise feature requires the [pgvector](https://github.com/pgvector/pgvector) PostgreSQL extension for vector similarity search. The database user specified in `ARCHESTRA_DATABASE_URL` must have permission to run `CREATE EXTENSION vector`, which typically requires **superuser** privileges.
+
+**Cloud-managed databases:**
+
+- **AWS RDS** — pgvector is available but is [not a trusted extension](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/PostgreSQL.Concepts.General.FeatureSupport.Extensions.html#PostgreSQL.Concepts.General.Extensions.Trusted), so it must be installed by a user with the `rds_superuser` role. Connect as the RDS master user and run `CREATE EXTENSION vector`.
+- **Google Cloud SQL** — pgvector is [supported natively](https://cloud.google.com/sql/docs/postgres/extensions#pgvector). Enable it via the Cloud SQL console or `CREATE EXTENSION vector`.
+- **Azure Database for PostgreSQL** — pgvector is [available as an extension](https://learn.microsoft.com/en-us/azure/postgresql/flexible-server/concepts-extensions). Allow-list it in server parameters, then run `CREATE EXTENSION vector`.
+
+**Self-managed PostgreSQL:** Install the pgvector package for your distribution (e.g., `apt install postgresql-17-pgvector`) and ensure the database user has `CREATE` privilege on the database, or grant `SUPERUSER` to allow extension creation.
+
+If pgvector is not installed or the database user lacks permissions, the Knowledge Base migration will fail. This does not affect other Archestra features.
 
 #### SSRF Protection
 
@@ -594,6 +581,11 @@ The following environment variables can be used to configure Archestra Platform.
   - Multiple URLs example: `http://archestra.default.svc:9000,https://api.archestra.example.com`
   - Use case: Set this when your external access URL differs from the internal service URL (common in Kubernetes with ingress/load balancers)
 
+- **`ARCHESTRA_TRUST_PROXY`** - Set this when Archestra runs behind a TLS-terminating reverse proxy (e.g. AWS ALB, nginx, Cloudflare) so that generated OAuth metadata and auth URLs use the external `https://` scheme rather than the internal `http://` scheme seen by the backend.
+  - Default: `false` (no proxy trust)
+  - Values: `true`, `false`, or a comma-separated list of trusted proxy IPs/CIDRs (e.g. `10.0.0.0/8,172.16.0.0/12`)
+  - Example: `ARCHESTRA_TRUST_PROXY=true`
+
 - **`ARCHESTRA_API_BODY_LIMIT`** - Maximum request body size for LLM proxy and chat routes.
   - Default: `50MB` (52428800 bytes)
   - Format: Numeric bytes (e.g., `52428800`) or human-readable (e.g., `50MB`, `100KB`, `1GB`)
@@ -603,6 +595,11 @@ The following environment variables can be used to configure Archestra Platform.
   - Example: `https://frontend.example.com`
   - Highly recommended for production.
   - If users access the platform via a LAN IP (e.g., `http://192.168.1.5:3000`), set this to that URL
+
+- **`ARCHESTRA_MCP_SANDBOX_DOMAIN`** - Wildcard domain for MCP App sandbox isolation. Gives each MCP server a unique subdomain origin, enabling localStorage, CORS, and OAuth for MCP Apps. Not needed for local development (automatic localhost swap provides isolation).
+  - Example: `mcp.example.com`
+  - Requires wildcard DNS (`*.mcp.example.com`) and wildcard TLS certificate pointing to the backend
+  - See [MCP Apps Sandbox](#mcp-apps-sandbox) for setup instructions
 
 - **`ARCHESTRA_GLOBAL_TOOL_POLICY`** - Controls how tool invocation is treated across the LLM proxy.
   - Default: `permissive`
@@ -617,9 +614,6 @@ The following environment variables can be used to configure Archestra Platform.
 - **`ARCHESTRA_LOGGING_LEVEL`** - Log level for Archestra
   - Default: `info`
   - Supported values: `trace`, `debug`, `info`, `warn`, `error`, `fatal`
-
-- **`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`** - Activates enterprise features in Archestra.
-  - Please reach out to <sales@archestra.ai> to learn more about the license.
 
 ### Authentication & Security
 
@@ -734,6 +728,25 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Set to `0` to create virtual keys that never expire by default
   - Users can override this per-key when creating virtual keys via the UI
 
+- **`ARCHESTRA_BEDROCK_IAM_AUTH_ENABLED`** - Enable AWS IAM authentication for Bedrock.
+  - Default: `false`
+  - Set to `true` to use the AWS credential chain (IRSA, instance profiles, env vars) instead of API keys
+  - See: [Bedrock IAM setup guide](/docs/platform-supported-llm-providers#iam-authentication-setup-irsa)
+
+- **`ARCHESTRA_BEDROCK_REGION`** - Explicit AWS region for Bedrock.
+  - Optional: Falls back to extracting from `ARCHESTRA_BEDROCK_BASE_URL`
+  - Example: `us-east-1`
+
+- **`ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS`** - Filter Bedrock inference profiles by provider.
+  - Optional: When empty, all inference profiles are returned
+  - Comma-separated list of provider prefixes (e.g., `anthropic,amazon`)
+  - See: [Filtering Models by Provider](/docs/platform-supported-llm-providers#filtering-models-by-provider)
+
+- **`ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS`** - Filter Bedrock inference profiles by region.
+  - Optional: When empty, all inference regions are returned
+  - Comma-separated list of region prefixes (e.g., `us,global`)
+  - See: [Filtering Models by Inference Region](/docs/platform-supported-llm-providers#filtering-models-by-inference-region)
+
 - **`ARCHESTRA_GEMINI_VERTEX_AI_ENABLED`** - Enable Vertex AI mode for Gemini.
   - Default: `false`
   - Set to `true` to use Vertex AI instead of the Google AI Studio API
@@ -748,6 +761,7 @@ These environment variables set the default base URL for each LLM provider. Per-
 - **`ARCHESTRA_GEMINI_VERTEX_AI_LOCATION`** - Google Cloud location/region for Vertex AI.
   - Default: `us-central1`
   - Example: `us-central1`, `europe-west1`, `asia-northeast1`
+  - In our testing, `us-central1` and `global` returned the most reliable Gemini publisher model listings. Some regions, including `us-east1`, may return incomplete model catalogs from Vertex AI model discovery APIs.
 
 - **`ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE`** - Path to Google Cloud service account JSON key file.
   - Optional: Only needed when running outside of GCP or without Workload Identity
@@ -766,10 +780,52 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Options: `anthropic`, `openai`, `gemini`
   - Used when no profile-specific provider is configured
 
+### MCP Apps Sandbox
+
+MCP Apps run inside sandboxed iframes with cross-origin isolation, CSP enforcement, and a double-iframe architecture. The sandbox proxy is served from the main backend under `/_sandbox/` — no separate port or service is needed.
+
+#### How It Works by Environment
+
+| Environment | Isolation method | Config needed | MCP App capabilities |
+|---|---|---|---|
+| **Local dev / Quickstart** (`localhost`) | `localhost` ↔ `127.0.0.1` origin swap (same port, different origin) | None | Full (localStorage, CORS, etc.) |
+| **Production with sandbox domain** | Dedicated subdomain per MCP server | `ARCHESTRA_MCP_SANDBOX_DOMAIN` + wildcard DNS/TLS | Full |
+| **Production without sandbox domain** | Opaque origin (iframe `sandbox` attribute) | None | Limited (no localStorage, no origin-restricted CORS) |
+
+**Local development and Quickstart** work out of the box with no configuration. The platform automatically swaps `localhost` to `127.0.0.1` (or vice versa) to create a different origin on the same port. This gives MCP Apps full browser API access while maintaining security isolation.
+
+**Production deployments** can optionally configure `ARCHESTRA_MCP_SANDBOX_DOMAIN` for full MCP App functionality. Without it, MCP Apps still render and function, but cannot use `localStorage`, cookies, or APIs that check `Access-Control-Allow-Origin` against a specific origin. Most MCP Apps work fine without it.
+
+#### Configuring a Sandbox Domain (Production)
+
+Set `ARCHESTRA_MCP_SANDBOX_DOMAIN` when MCP Apps need persistent state or origin-restricted API access.
+
+1. Choose a subdomain for the sandbox (e.g., `mcp.example.com`)
+
+2. Create a **wildcard DNS record**:
+   ```
+   *.mcp.example.com → <backend IP or load balancer>
+   ```
+
+3. Obtain a **wildcard TLS certificate** for `*.mcp.example.com` (e.g., via Let's Encrypt DNS challenge, or your CA)
+
+4. Configure the reverse proxy (nginx, Caddy, etc.) to route `*.mcp.example.com` to the backend (port 9000), applying the wildcard certificate
+
+5. Set the environment variable:
+   ```yaml
+   ARCHESTRA_MCP_SANDBOX_DOMAIN: mcp.example.com
+   ```
+
+Each MCP server automatically gets a unique hash-based subdomain (e.g., `a1b2c3d4.mcp.example.com`). The backend validates the `Host` header on sandbox requests to prevent abuse.
+
+#### Origin Restrictions
+
+The sandbox inherits origin restrictions from `ARCHESTRA_FRONTEND_URL` and `ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS` (the same variables that control CORS). When set, only those origins can embed the sandbox iframe. When neither is set (local dev), all origins are accepted.
+
 ### MCP Server Orchestrator
 
 - **`ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`** - Kubernetes namespace to run MCP server pods.
-  - Default: `default`
+  - Default: Helm release namespace (if relevant) or `default`
   - Example: `archestra-mcp` or `production`
 
 - **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE`** - Base Docker image for MCP servers.
@@ -821,7 +877,7 @@ These environment variables set the default base URL for each LLM provider. Per-
 
 ### Incoming Email Configuration
 
-These environment variables configure the Incoming Email feature, which allows external users to invoke agents by sending emails. See [Agents - Incoming Email](/docs/platform-agents#incoming-email) for setup instructions.
+These environment variables configure the Incoming Email feature, which allows external users to invoke agents by sending emails. See [Incoming Email](/docs/platform-agent-triggers-email) for setup instructions.
 
 - **`ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER`** - Email provider to use for incoming email.
   - Default: Not set (feature disabled)
@@ -924,20 +980,35 @@ See [Slack](/docs/platform-slack) for setup instructions.
   - Starts with `xapp-`
   - Generated in: Basic Information page → App-Level Tokens (with `connections:write` scope)
 
-### Knowledge Graph Configuration
+### Knowledge Base Configuration
 
-These environment variables configure the Knowledge Graph feature, which automatically ingests documents uploaded via chat into a knowledge graph for enhanced retrieval. See [Knowledge Graphs](/docs/platform-knowledge-graphs) for setup instructions.
+> **Enterprise feature:** Requires `ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED=true`. See [Enterprise Licensing](#enterprise-licensing) below.
 
-- **`ARCHESTRA_KNOWLEDGE_GRAPH_PROVIDER`** - Knowledge graph provider to use.
-  - Default: Not set (feature disabled)
-  - Options: `lightrag`
-  - Required to enable the knowledge graph feature
+These environment variables configure the [Knowledge Base](/docs/platform-knowledge-bases) enterprise feature. Knowledge bases use a built-in RAG stack powered by pgvector for document chunking, embedding, and hybrid search. Connectors sync external data into knowledge bases on a schedule. See [Knowledge Connectors](/docs/platform-adding-knowledge-connectors) for connector setup instructions.
 
-- **`ARCHESTRA_KNOWLEDGE_GRAPH_LIGHTRAG_API_URL`** - URL of the LightRAG API server.
-  - Required when: `ARCHESTRA_KNOWLEDGE_GRAPH_PROVIDER=lightrag`
-  - Example: `http://lightrag:9621`
-  - The LightRAG server must be accessible from the Archestra backend
+- **Embedding and reranker API keys** are configured via LLM Provider Keys in **Settings > Knowledge**. No environment variable is needed — select an existing LLM Provider Key (OpenAI only for embeddings, any provider for the reranker). Both must be configured before knowledge bases and connectors can be used.
 
-- **`ARCHESTRA_KNOWLEDGE_GRAPH_LIGHTRAG_API_KEY`** - API key for authenticating with LightRAG.
-  - Optional: Only required if your LightRAG server is configured with authentication
-  - Note: Keep this value secure; do not commit to version control
+- **`ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS`** - Maximum duration for a single connector sync run before it stops and triggers a continuation.
+  - Default: `3300` (55 minutes)
+  - Only applies to K8s CronJob runs. When a sync exceeds 90% of this budget, it stops and creates a continuation Job to resume from the last checkpoint.
+  - Set to `0` to disable time-bounded runs.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED`** - Enable or disable hybrid search (combines vector similarity with full-text search using Reciprocal Rank Fusion).
+  - Default: `true`
+  - Set to `false` to use vector similarity search only.
+
+### Enterprise Licensing
+
+To learn more about enterprise licensing, please reach out to [sales@archestra.ai](mailto:sales@archestra.ai).
+
+- **`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`** - Activates enterprise features in Archestra.
+  - Set to `true` to enable the enterprise license
+  - Required as a prerequisite for all other enterprise feature flags
+
+- **`ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED`** - Enables the Knowledge Base enterprise feature.
+  - Set to `true` to enable
+  - Requires the core enterprise license (`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED=true`)
+
+- **`ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING`** - Enables full white-labeling (removes "Powered by Archestra" attribution).
+  - Set to `true` to enable
+  - Requires the core enterprise license (`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED=true`)

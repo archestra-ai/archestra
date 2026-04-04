@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 
-import { getBackendBaseUrl } from "@/lib/config";
+import { getBackendBaseUrl } from "@/lib/config/config";
 
 /**
  * This catch-all route handles all `/api/auth/*` requests and forwards them to the backend.

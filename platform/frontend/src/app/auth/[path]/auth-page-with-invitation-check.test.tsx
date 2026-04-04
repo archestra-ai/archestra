@@ -1,8 +1,9 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useBackendConnectivity } from "@/lib/backend-connectivity";
-import { useInvitationCheck } from "@/lib/invitation.query";
+import { useInvitationCheck } from "@/lib/auth/invitation.query";
+import { useBackendConnectivity } from "@/lib/config/backend-connectivity";
+import { usePublicConfig } from "@/lib/config/config.query";
 import { AuthPageWithInvitationCheck } from "./auth-page-with-invitation-check";
 
 // Mock Next.js navigation
@@ -12,21 +13,21 @@ vi.mock("next/navigation", () => ({
 }));
 
 // Mock invitation query
-vi.mock("@/lib/invitation.query", () => ({
+vi.mock("@/lib/auth/invitation.query", () => ({
   useInvitationCheck: vi.fn(),
 }));
 
 // Mock backend connectivity
-vi.mock("@/lib/backend-connectivity", () => ({
+vi.mock("@/lib/config/backend-connectivity", () => ({
   useBackendConnectivity: vi.fn(),
 }));
 
-// Mock config
-vi.mock("@/lib/config", () => ({
-  default: {
-    disableBasicAuth: false,
-    enterpriseLicenseActivated: false,
-  },
+vi.mock("@/lib/config/config.query", () => ({
+  usePublicConfig: vi.fn(),
+}));
+
+vi.mock("@/lib/hooks/use-app-name", () => ({
+  useAppName: () => "Sparky",
 }));
 
 // Mock AuthViewWithErrorHandling
@@ -39,6 +40,18 @@ vi.mock("@/app/auth/_components/auth-view-with-error-handling", () => ({
       </div>
     ),
   ),
+}));
+
+// Mock AppLogo
+vi.mock("@/components/app-logo", () => ({
+  AppLogo: vi.fn(() => <div data-testid="app-logo">App Logo</div>),
+}));
+
+// Mock CommunityLinks
+vi.mock("@/components/community-links", () => ({
+  CommunityLinks: vi.fn(() => (
+    <div data-testid="community-links">Community Links</div>
+  )),
 }));
 
 // Mock DefaultCredentialsWarning
@@ -59,6 +72,13 @@ describe("AuthPageWithInvitationCheck", () => {
     vi.mocked(useRouter).mockReturnValue({
       push: mockRouterPush,
     } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(usePublicConfig).mockReturnValue({
+      data: {
+        disableBasicAuth: false,
+        disableInvitations: false,
+      },
+      isLoading: false,
+    } as ReturnType<typeof usePublicConfig>);
     // Default to connected state so existing tests work
     vi.mocked(useBackendConnectivity).mockReturnValue({
       status: "connected",
@@ -106,6 +126,29 @@ describe("AuthPageWithInvitationCheck", () => {
       } as unknown as ReturnType<typeof useSearchParams>);
       vi.mocked(useInvitationCheck).mockReturnValue({
         data: { userExists: true },
+        isLoading: false,
+      } as ReturnType<typeof useInvitationCheck>);
+
+      render(<AuthPageWithInvitationCheck path="sign-in" />);
+
+      expect(
+        screen.queryByTestId("default-credentials-warning"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("should not show default credentials warning when basic auth is disabled", () => {
+      vi.mocked(usePublicConfig).mockReturnValue({
+        data: {
+          disableBasicAuth: true,
+          disableInvitations: false,
+        },
+        isLoading: false,
+      } as ReturnType<typeof usePublicConfig>);
+      vi.mocked(useSearchParams).mockReturnValue({
+        get: vi.fn().mockReturnValue(null),
+      } as unknown as ReturnType<typeof useSearchParams>);
+      vi.mocked(useInvitationCheck).mockReturnValue({
+        data: undefined,
         isLoading: false,
       } as ReturnType<typeof useInvitationCheck>);
 

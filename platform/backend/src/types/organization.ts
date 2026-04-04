@@ -1,4 +1,8 @@
-import { OrganizationCustomFontSchema, OrganizationThemeSchema } from "@shared";
+import {
+  OrganizationCustomFontSchema,
+  OrganizationThemeSchema,
+  SupportedProvidersSchema,
+} from "@shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
@@ -6,6 +10,7 @@ import { schema } from "@/database";
 const DATA_URI_PREFIX = "data:image/png;base64,";
 const MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB decoded
 const PNG_MAGIC_BYTES = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+const MAX_CHAT_LINK_URL_LENGTH = 2000;
 
 /**
  * Validates a Base64-encoded PNG data URI.
@@ -62,14 +67,36 @@ const Base64PngSchema = z
     }
   });
 
+const ChatLinkUrlSchema = z
+  .string()
+  .trim()
+  .max(MAX_CHAT_LINK_URL_LENGTH)
+  .refine((value) => isValidHttpUrl(value), {
+    message: "Chat link URL must be a valid HTTP or HTTPS URL",
+  });
+
+export const OrganizationChatLinkSchema = z.object({
+  label: z.string().trim().min(1).max(25),
+  url: ChatLinkUrlSchema,
+});
+
 /**
- * Public appearance schema - used for unauthenticated access to branding settings.
+ * Appearance settings schema - used for unauthenticated access to branding settings.
  * Only exposes theme, logo, and font - no sensitive organization data.
  */
-export const PublicAppearanceSchema = z.object({
+export const AppearanceSettingsSchema = z.object({
   theme: OrganizationThemeSchema,
   customFont: OrganizationCustomFontSchema,
   logo: z.string().nullable(),
+  logoDark: z.string().nullable(),
+  favicon: z.string().nullable(),
+  iconLogo: z.string().nullable(),
+  appName: z.string().nullable(),
+  ogDescription: z.string().nullable(),
+  footerText: z.string().nullable(),
+  chatLinks: z.array(OrganizationChatLinkSchema).nullable(),
+  chatErrorSupportMessage: z.string().nullable(),
+  animateChatPlaceholders: z.boolean(),
 });
 
 export const OrganizationLimitCleanupIntervalSchema = z
@@ -89,6 +116,21 @@ const extendedFields = {
   limitCleanupInterval: OrganizationLimitCleanupIntervalSchema,
   compressionScope: OrganizationCompressionScopeSchema,
   globalToolPolicy: GlobalToolPolicySchema,
+  embeddingModel: z.string().nullable(),
+  embeddingDimensions: z.number().nullable(),
+  defaultLlmModel: z.string().nullable(),
+  defaultLlmProvider: SupportedProvidersSchema.nullable(),
+  defaultAgentId: z.string().uuid().nullable(),
+  favicon: z.string().nullable(),
+  iconLogo: z.string().nullable(),
+  appName: z.string().nullable(),
+  ogDescription: z.string().nullable(),
+  footerText: z.string().nullable(),
+  chatLinks: z.array(OrganizationChatLinkSchema).nullable(),
+  chatErrorSupportMessage: z.string().nullable(),
+  chatPlaceholders: z.array(z.string()).nullable(),
+  animateChatPlaceholders: z.boolean(),
+  showTwoFactor: z.boolean(),
 };
 
 export const SelectOrganizationSchema = createSelectSchema(
@@ -99,15 +141,50 @@ export const InsertOrganizationSchema = createInsertSchema(
   schema.organizationsTable,
   extendedFields,
 );
-export const UpdateOrganizationSchema = z.object({
-  ...extendedFields,
-  logo: Base64PngSchema,
-  onboardingComplete: z.boolean(),
-  convertToolResultsToToon: z.boolean(),
-  compressionScope: OrganizationCompressionScopeSchema,
-  autoConfigureNewTools: z.boolean(),
-  globalToolPolicy: GlobalToolPolicySchema,
-  allowChatFileUploads: z.boolean(),
+export const UpdateAppearanceSettingsSchema = z.object({
+  theme: OrganizationThemeSchema.optional(),
+  customFont: OrganizationCustomFontSchema.optional(),
+  logo: Base64PngSchema.optional(),
+  logoDark: Base64PngSchema.optional(),
+  favicon: Base64PngSchema.optional(),
+  iconLogo: Base64PngSchema.optional(),
+  appName: z.string().max(100).nullable().optional(),
+  ogDescription: z.string().max(500).nullable().optional(),
+  footerText: z.string().max(500).nullable().optional(),
+  chatLinks: z.array(OrganizationChatLinkSchema).max(3).nullable().optional(),
+  chatErrorSupportMessage: z.string().max(500).nullable().optional(),
+  chatPlaceholders: z.array(z.string().max(80)).max(20).nullable().optional(),
+  animateChatPlaceholders: z.boolean().optional(),
+  showTwoFactor: z.boolean().optional(),
+});
+
+export const UpdateSecuritySettingsSchema = z.object({
+  globalToolPolicy: GlobalToolPolicySchema.optional(),
+  allowChatFileUploads: z.boolean().optional(),
+});
+
+export const UpdateLlmSettingsSchema = z.object({
+  convertToolResultsToToon: z.boolean().optional(),
+  compressionScope: OrganizationCompressionScopeSchema.optional(),
+  limitCleanupInterval: OrganizationLimitCleanupIntervalSchema.optional(),
+});
+
+export const UpdateAgentSettingsSchema = z.object({
+  defaultLlmModel: z.string().nullable().optional(),
+  defaultLlmProvider: SupportedProvidersSchema.nullable().optional(),
+  defaultLlmApiKeyId: z.string().uuid().nullable().optional(),
+  defaultAgentId: z.string().uuid().nullable().optional(),
+});
+
+export const UpdateKnowledgeSettingsSchema = z.object({
+  embeddingModel: z.string().min(1).nullable().optional(),
+  embeddingChatApiKeyId: z.string().uuid().nullable().optional(),
+  rerankerChatApiKeyId: z.string().uuid().nullable().optional(),
+  rerankerModel: z.string().nullable().optional(),
+});
+
+export const CompleteOnboardingSchema = z.object({
+  onboardingComplete: z.literal(true),
 });
 
 export type OrganizationLimitCleanupInterval = z.infer<
@@ -119,5 +196,14 @@ export type OrganizationCompressionScope = z.infer<
 export type GlobalToolPolicy = z.infer<typeof GlobalToolPolicySchema>;
 export type Organization = z.infer<typeof SelectOrganizationSchema>;
 export type InsertOrganization = z.infer<typeof InsertOrganizationSchema>;
-export type UpdateOrganization = z.infer<typeof UpdateOrganizationSchema>;
-export type PublicAppearance = z.infer<typeof PublicAppearanceSchema>;
+export type AppearanceSettings = z.infer<typeof AppearanceSettingsSchema>;
+export type OrganizationChatLink = z.infer<typeof OrganizationChatLinkSchema>;
+
+function isValidHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}

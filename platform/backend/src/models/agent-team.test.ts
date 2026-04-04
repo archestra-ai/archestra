@@ -188,6 +188,59 @@ describe("AgentTeamModel", () => {
 
       expect(hasAccess).toBe(false);
     });
+
+    test("uses provided access context for personal agents", async ({
+      makeUser,
+    }) => {
+      const author = await makeUser();
+      const otherUser = await makeUser();
+
+      const authorHasAccess = await AgentTeamModel.userHasAgentAccess(
+        author.id,
+        crypto.randomUUID(),
+        false,
+        {
+          id: crypto.randomUUID(),
+          organizationId: crypto.randomUUID(),
+          scope: "personal",
+          authorId: author.id,
+        },
+      );
+      const otherUserHasAccess = await AgentTeamModel.userHasAgentAccess(
+        otherUser.id,
+        crypto.randomUUID(),
+        false,
+        {
+          id: crypto.randomUUID(),
+          organizationId: crypto.randomUUID(),
+          scope: "personal",
+          authorId: author.id,
+        },
+      );
+
+      expect(authorHasAccess).toBe(true);
+      expect(otherUserHasAccess).toBe(false);
+    });
+
+    test("uses provided access context for org-scoped agents without loading the agent", async ({
+      makeUser,
+    }) => {
+      const user = await makeUser();
+
+      const hasAccess = await AgentTeamModel.userHasAgentAccess(
+        user.id,
+        crypto.randomUUID(),
+        false,
+        {
+          id: crypto.randomUUID(),
+          organizationId: crypto.randomUUID(),
+          scope: "org",
+          authorId: null,
+        },
+      );
+
+      expect(hasAccess).toBe(true);
+    });
   });
 
   describe("teamHasAgentAccess", () => {
@@ -293,6 +346,58 @@ describe("AgentTeamModel", () => {
       );
 
       expect(hasAccess).toBe(false);
+    });
+
+    test("uses provided access context for org-scoped agents", async ({
+      makeTeam,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id);
+
+      const hasAccess = await AgentTeamModel.teamHasAgentAccess(
+        crypto.randomUUID(),
+        team.id,
+        {
+          id: crypto.randomUUID(),
+          organizationId: org.id,
+          scope: "org",
+          authorId: null,
+        },
+      );
+
+      expect(hasAccess).toBe(true);
+    });
+
+    test("uses provided access context for team-scoped agents", async ({
+      makeAgent,
+      makeTeam,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id);
+      const agent = await makeAgent({
+        organizationId: org.id,
+        scope: "team",
+      });
+      await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+      const hasAccess = await AgentTeamModel.teamHasAgentAccess(
+        agent.id,
+        team.id,
+        {
+          id: agent.id,
+          organizationId: org.id,
+          scope: "team",
+          authorId: agent.authorId,
+        },
+      );
+
+      expect(hasAccess).toBe(true);
     });
   });
 

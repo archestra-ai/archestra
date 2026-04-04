@@ -1,8 +1,10 @@
 "use client";
 
+import { getMediaType } from "@shared";
 import type { ChatStatus, FileUIPart } from "ai";
 import {
   CornerDownLeftIcon,
+  FileTextIcon,
   ImageIcon,
   Loader2Icon,
   MicIcon,
@@ -68,6 +70,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  getAttachmentFallbackLabel,
+  isCsvAttachment,
+  isPlainTextAttachment,
+} from "@/lib/chat/chat-attachment-display";
 import { cn } from "@/lib/utils";
 
 // ============================================================================
@@ -82,49 +89,6 @@ export type AttachmentsContext = {
   openFileDialog: () => void;
   fileInputRef: RefObject<HTMLInputElement | null>;
 };
-
-/**
- * Get MIME type from file, with fallback to extension-based detection.
- * Some browsers don't set file.type for certain file formats.
- */
-function getMediaType(file: File): string {
-  if (file.type) {
-    return file.type;
-  }
-
-  // Fallback: detect from extension
-  const lastDotIndex = file.name.lastIndexOf(".");
-  const ext =
-    lastDotIndex > 0 && lastDotIndex < file.name.length - 1
-      ? file.name.slice(lastDotIndex + 1).toLowerCase()
-      : undefined;
-  const extensionMap: Record<string, string> = {
-    // Images
-    jpg: "image/jpeg",
-    jpeg: "image/jpeg",
-    png: "image/png",
-    gif: "image/gif",
-    webp: "image/webp",
-    svg: "image/svg+xml",
-    bmp: "image/bmp",
-    ico: "image/x-icon",
-    // Videos
-    mp4: "video/mp4",
-    webm: "video/webm",
-    mov: "video/quicktime",
-    avi: "video/x-msvideo",
-    // Documents
-    pdf: "application/pdf",
-    // Text
-    txt: "text/plain",
-    json: "application/json",
-    xml: "application/xml",
-  };
-
-  return ext
-    ? extensionMap[ext] || "application/octet-stream"
-    : "application/octet-stream";
-}
 
 export type TextInputContext = {
   value: string;
@@ -336,8 +300,15 @@ export function PromptInputAttachment({
   const mediaType =
     data.mediaType?.startsWith("image/") && data.url ? "image" : "file";
   const isImage = mediaType === "image";
+  const isTextDocument =
+    isCsvAttachment(data.mediaType, filename) ||
+    isPlainTextAttachment(data.mediaType, filename);
 
-  const attachmentLabel = filename || (isImage ? "Image" : "Attachment");
+  const attachmentLabel =
+    filename ||
+    (isImage
+      ? "Image"
+      : getAttachmentFallbackLabel({ mediaType: data.mediaType, filename }));
 
   return (
     <PromptInputHoverCard>
@@ -359,6 +330,10 @@ export function PromptInputAttachment({
                 src={data.url}
                 width={20}
               />
+            ) : isTextDocument ? (
+              <div className="flex size-5 items-center justify-center text-muted-foreground">
+                <FileTextIcon className="size-3" />
+              </div>
             ) : (
               <div className="flex size-5 items-center justify-center text-muted-foreground">
                 <PaperclipIcon className="size-3" />
@@ -399,7 +374,7 @@ export function PromptInputAttachment({
           <div className="flex items-center gap-2.5">
             <div className="min-w-0 flex-1 space-y-1 px-0.5">
               <h4 className="truncate font-semibold text-sm leading-none">
-                {filename || (isImage ? "Image" : "Attachment")}
+                {attachmentLabel}
               </h4>
               {data.mediaType && (
                 <p className="truncate font-mono text-muted-foreground text-xs">
@@ -675,7 +650,16 @@ export const PromptInput = ({
         e.preventDefault();
       }
       if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
-        add(e.dataTransfer.files);
+        const incoming = Array.from(e.dataTransfer.files);
+        const accepted = incoming.filter((f) => matchesAccept(f));
+        if (accepted.length === 0) {
+          onError?.({
+            code: "accept",
+            message: "No files match the accepted types.",
+          });
+          return;
+        }
+        add(accepted);
       }
     };
     form.addEventListener("dragover", onDragOver);
@@ -684,7 +668,7 @@ export const PromptInput = ({
       form.removeEventListener("dragover", onDragOver);
       form.removeEventListener("drop", onDrop);
     };
-  }, [add, globalDrop]);
+  }, [add, globalDrop, matchesAccept, onError]);
 
   useEffect(() => {
     if (!globalDrop) return;
@@ -699,7 +683,16 @@ export const PromptInput = ({
         e.preventDefault();
       }
       if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
-        add(e.dataTransfer.files);
+        const incoming = Array.from(e.dataTransfer.files);
+        const accepted = incoming.filter((f) => matchesAccept(f));
+        if (accepted.length === 0) {
+          onError?.({
+            code: "accept",
+            message: "No files match the accepted types.",
+          });
+          return;
+        }
+        add(accepted);
       }
     };
     document.addEventListener("dragover", onDragOver);
@@ -708,7 +701,7 @@ export const PromptInput = ({
       document.removeEventListener("dragover", onDragOver);
       document.removeEventListener("drop", onDrop);
     };
-  }, [add, globalDrop]);
+  }, [add, globalDrop, matchesAccept, onError]);
 
   useEffect(
     () => () => {
@@ -846,7 +839,9 @@ export const PromptInput = ({
         ref={formRef}
         {...props}
       >
-        <InputGroup className="overflow-hidden">{children}</InputGroup>
+        <InputGroup className="overflow-hidden shadow-md ring-1 ring-ring/10 has-[[data-slot=input-group-control]:focus-visible]:shadow-lg has-[[data-slot=input-group-control]:focus-visible]:ring-[4px] has-[[data-slot=input-group-control]:focus-visible]:ring-ring/30">
+          {children}
+        </InputGroup>
       </form>
     </>
   );

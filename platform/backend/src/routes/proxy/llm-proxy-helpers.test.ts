@@ -246,10 +246,19 @@ describe("buildInteractionRecord", () => {
       hadToolResults: true,
     } satisfies ToolCompressionStats,
     toonSkipReason: null,
+    dualLlmAnalyses: [],
   };
 
   test("builds correct record with all fields", () => {
-    const record = buildInteractionRecord(baseParams);
+    const record = buildInteractionRecord({
+      ...baseParams,
+      unsafeContextBoundary: {
+        kind: "tool_result",
+        reason: "tool_result_marked_untrusted",
+        toolCallId: "call-1",
+        toolName: "read_email",
+      },
+    });
 
     expect(record.profileId).toBe("agent-1");
     expect(record.externalAgentId).toBe("ext-1");
@@ -268,6 +277,12 @@ describe("buildInteractionRecord", () => {
     expect(record.toonTokensBefore).toBe(500);
     expect(record.toonTokensAfter).toBe(300);
     expect(record.toonSkipReason).toBeNull();
+    expect(record.unsafeContextBoundary).toEqual({
+      kind: "tool_result",
+      reason: "tool_result_marked_untrusted",
+      toolCallId: "call-1",
+      toolName: "read_email",
+    });
   });
 
   test("formats costs to 10 decimal places", () => {
@@ -304,6 +319,19 @@ describe("buildInteractionRecord", () => {
     const record = buildInteractionRecord(baseParams);
     expect(record.toonCostSavings).toBe("0.0001200000");
   });
+
+  test("includes source when provided", () => {
+    const record = buildInteractionRecord({
+      ...baseParams,
+      source: "chatops:slack",
+    });
+    expect(record.source).toBe("chatops:slack");
+  });
+
+  test("source is undefined when not provided", () => {
+    const record = buildInteractionRecord(baseParams);
+    expect(record.source).toBeUndefined();
+  });
 });
 
 // --------------------------------------------------------------------------
@@ -326,6 +354,7 @@ describe("recordBlockedToolCallMetrics", () => {
       providerName: "openai",
       toolCallCount: 2,
       actualModel: "gpt-4",
+      source: "api",
       externalAgentId: "ext-1",
     });
 
@@ -351,6 +380,7 @@ describe("recordBlockedToolCallMetrics", () => {
       providerName: "anthropic",
       toolCallCount: 1,
       actualModel: "claude-3-opus",
+      source: "api",
       externalAgentId: "ext-2",
     });
 
@@ -359,6 +389,7 @@ describe("recordBlockedToolCallMetrics", () => {
       agent,
       1,
       "claude-3-opus",
+      "api",
       "ext-2",
     );
   });
@@ -375,6 +406,7 @@ describe("recordBlockedToolCallMetrics", () => {
       providerName: "openai",
       toolCallCount: 1,
       actualModel: "gpt-4",
+      source: "api",
     });
 
     expect(mockRecordBlockedToolSpans).toHaveBeenCalledWith(

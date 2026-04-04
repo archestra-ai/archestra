@@ -3,6 +3,7 @@
  */
 
 import { TimeInMs } from "@shared";
+import type { ChatOpsConnectionMode } from "@/types";
 
 /**
  * Rate limit configuration for chatops webhooks
@@ -29,7 +30,7 @@ export const CHATOPS_MESSAGE_RETENTION = {
  */
 export const CHATOPS_THREAD_HISTORY = {
   /** Default number of messages to fetch for context */
-  DEFAULT_LIMIT: 10,
+  DEFAULT_LIMIT: 50,
   /** Maximum number of messages to fetch */
   MAX_LIMIT: 50,
 };
@@ -72,10 +73,24 @@ export const CHATOPS_COMMANDS = {
 /**
  * Default connection mode for Slack when not explicitly configured.
  */
-export const SLACK_DEFAULT_CONNECTION_MODE = "socket" as const;
+export const SLACK_DEFAULT_CONNECTION_MODE: ChatOpsConnectionMode =
+  "socket" as const;
 
 export const SLACK_SLASH_COMMANDS = {
   SELECT_AGENT: "/archestra-select-agent",
   STATUS: "/archestra-status",
   HELP: "/archestra-help",
+} as const;
+
+/**
+ * Attachment limits for chatops file downloads.
+ * Reuses the same limits as the incoming email module for consistency.
+ */
+export const CHATOPS_ATTACHMENT_LIMITS = {
+  /** Maximum size for a single attachment in bytes (10MB) */
+  MAX_ATTACHMENT_SIZE: 10 * 1024 * 1024,
+  /** Maximum total size for all attachments per message in bytes (25MB) */
+  MAX_TOTAL_ATTACHMENTS_SIZE: 25 * 1024 * 1024,
+  /** Maximum number of attachments to process per message */
+  MAX_ATTACHMENTS_PER_MESSAGE: 20,
 } as const;

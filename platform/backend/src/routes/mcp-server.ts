@@ -1,10 +1,16 @@
+import type { IncomingHttpHeaders } from "node:http";
 import { isPlaywrightCatalogItem, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
+import mcpClient, {
+  McpServerConnectionTimeoutError,
+  McpServerNotReadyError,
+} from "@/clients/mcp-client";
+import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
-import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import {
+  AccountModel,
   AgentToolModel,
   InternalMcpCatalogModel,
   McpServerModel,
@@ -12,6 +18,12 @@ import {
   ToolModel,
 } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
+import { refreshLinkedIdentityProviderAccessToken } from "@/services/identity-providers/access-token-refresh";
+import { exchangeEnterpriseManagedCredential } from "@/services/identity-providers/enterprise-managed/exchange";
+import {
+  findExternalIdentityProviderById,
+  findExternalIdentityProviderByProviderId,
+} from "@/services/identity-providers/oidc";
 import { autoReinstallServer } from "@/services/mcp-reinstall";
 import {
   ApiError,
@@ -41,7 +53,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ user, headers, query }, reply) => {
       const { catalogId } = query;
       const { success: isMcpServerAdmin } = await hasPermission(
-        { mcpServer: ["admin"] },
+        { mcpServerInstallation: ["admin"] },
         headers,
       );
       let allServers = await McpServerModel.findAll(user.id, isMcpServerAdmin);
@@ -150,14 +162,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Set serverType from catalog item
         serverData.serverType = catalogItem.serverType;
 
-        // Reject personal installations when Readonly Vault is enabled
-        if (isByosEnabled() && !serverData.teamId) {
-          throw new ApiError(
-            400,
-            "Personal MCP server installations are not allowed when Readonly Vault is enabled. Please select a team.",
-          );
-        }
-
         // Validate permissions for team installations
         // WHY: We want to restrict who can create team-wide MCP server installations:
         // - Members should NOT be able to create team installations (they lack mcpServer:update)
@@ -174,7 +178,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // WHY: mcpServer:update distinguishes editors from members
             // Editors have this permission, members don't
             const { success: hasMcpServerUpdate } = await hasPermission(
-              { mcpServer: ["update"] },
+              { mcpServerInstallation: ["update"] },
               headers,
             );
 
@@ -578,6 +582,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   name: ToolModel.slugifyName(toolNamePrefix, tool.name),
                   description: tool.description,
                   parameters: tool.inputSchema,
+                  meta: { _meta: tool._meta, annotations: tool.annotations },
                   catalogId: capturedCatalogId,
                 }));
 
@@ -585,14 +590,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 const createdTools =
                   await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
 
-                // If agentIds were provided, create agent-tool assignments with executionSourceMcpServerId
+                // If agentIds were provided, create agent-tool assignments pinned to this installation.
                 if (agentIds && agentIds.length > 0) {
                   const toolIds = createdTools.map((t) => t.id);
                   await AgentToolModel.bulkCreateForAgentsAndTools(
                     agentIds,
                     toolIds,
                     {
-                      executionSourceMcpServerId: mcpServer.id,
+                      mcpServerId: mcpServer.id,
                     },
                   );
                 }
@@ -651,20 +656,29 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
-        // For non-local servers, fetch tools synchronously during installation
-        const tools = await McpServerModel.getToolsFromServer(mcpServer);
-
         // Catalog item must exist for remote servers
         if (!catalogItem) {
           throw new ApiError(400, "Catalog item not found for remote server");
         }
 
+        // For non-local servers, fetch tools synchronously during installation.
+        // If discovery fails with auth and this is a personal install, retry once
+        // with the current user's linked IdP access token.
+        const tools = await connectAndGetToolsForInstallation({
+          catalogItem,
+          mcpServerId: mcpServer.id,
+          secretId: mcpServer.secretId ?? undefined,
+          userId: user.id,
+          allowCurrentUserTokenFallback: !mcpServer.teamId,
+        });
+
         // Persist tools in the database with source='mcp_server' and mcpServerId
         // Note: For remote servers, mcpServer.name doesn't include userId, so we can use it directly
         const toolsToCreate = tools.map((tool) => ({
           name: ToolModel.slugifyName(mcpServer.name, tool.name),
-          description: tool.description,
+          description: tool.description ?? null,
           parameters: tool.inputSchema,
+          meta: { _meta: tool._meta, annotations: tool.annotations },
           catalogId: catalogItem.id,
         }));
 
@@ -672,13 +686,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const createdTools =
           await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
 
-        // If agentIds were provided, create agent-tool assignments
-        // Note: Remote servers don't use executionSourceMcpServerId (they route via HTTP)
-        // but need credentialSourceMcpServerId to resolve credentials at call time
+        // If agentIds were provided, create agent-tool assignments pinned to this installation.
         if (agentIds && agentIds.length > 0) {
           const toolIds = createdTools.map((t) => t.id);
           await AgentToolModel.bulkCreateForAgentsAndTools(agentIds, toolIds, {
-            credentialSourceMcpServerId: mcpServer.id,
+            mcpServerId: mcpServer.id,
           });
         }
 
@@ -726,22 +738,49 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: UuidIdSchema,
         }),
         body: z.object({
-          secretId: UuidIdSchema,
+          secretId: UuidIdSchema.optional(),
+          accessToken: z.string().optional(),
+          userConfigValues: z.record(z.string(), z.string()).optional(),
+          environmentValues: z.record(z.string(), z.string()).optional(),
+          isByosVault: z.boolean().optional(),
         }),
         response: constructResponseSchema(SelectMcpServerSchema),
       },
     },
-    async ({ params: { id }, body: { secretId }, user, headers }, reply) => {
+    async (
+      {
+        params: { id },
+        body: {
+          secretId: providedSecretId,
+          accessToken,
+          userConfigValues,
+          environmentValues,
+          isByosVault,
+        },
+        user,
+        headers,
+      },
+      reply,
+    ) => {
+      // Validate that at least one credential field is provided
+      if (
+        !providedSecretId &&
+        !accessToken &&
+        !userConfigValues &&
+        !environmentValues
+      ) {
+        throw new ApiError(400, "At least one credential field is required");
+      }
+
       // Get the existing MCP server
       const mcpServer = await McpServerModel.findById(id, user.id);
 
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
       }
-
       // Check mcpServer create permission (required for re-authentication)
       const { success: hasMcpServerCreatePermission } = await hasPermission(
-        { mcpServer: ["create"] },
+        { mcpServerInstallation: ["create"] },
         headers,
       );
 
@@ -774,7 +813,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // WHY: mcpServer:update distinguishes editors from members
           // Editors have this permission, members don't
           const { success: hasMcpServerUpdate } = await hasPermission(
-            { mcpServer: ["update"] },
+            { mcpServerInstallation: ["update"] },
             headers,
           );
 
@@ -799,6 +838,113 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      // Resolve the new secret ID: either provided directly, or create from raw credentials
+      let newSecretId = providedSecretId;
+
+      if (!newSecretId) {
+        const catalogItem = mcpServer.catalogId
+          ? await InternalMcpCatalogModel.findById(mcpServer.catalogId)
+          : null;
+
+        if (accessToken) {
+          // PAT token flow
+          if (isByosVault && isByosEnabled()) {
+            throw new ApiError(
+              400,
+              "Manual PAT token input is not allowed when Readonly Vault is enabled",
+            );
+          }
+          const secret = await secretManager().createSecret(
+            { access_token: accessToken },
+            `${mcpServer.name}-token`,
+          );
+          newSecretId = secret.id;
+        } else if (userConfigValues) {
+          // Remote server user config fields
+          if (isByosVault) {
+            if (!isByosEnabled()) {
+              throw new ApiError(
+                400,
+                "Readonly Vault is not enabled. Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
+              );
+            }
+          }
+          const secret = await secretManager().createSecret(
+            userConfigValues as Record<string, unknown>,
+            isByosVault
+              ? `${mcpServer.name}-vault-secret`
+              : `${mcpServer.name}-secret`,
+          );
+          newSecretId = secret.id;
+
+          // Validate connection for remote servers before committing the swap
+          if (catalogItem?.serverType === "remote") {
+            try {
+              await connectAndGetToolsForInstallation({
+                catalogItem,
+                mcpServerId: "validation",
+                secretId: newSecretId,
+                userId: user.id,
+                allowCurrentUserTokenFallback: !mcpServer.teamId,
+              });
+            } catch (error) {
+              // Clean up the newly created secret
+              try {
+                await secretManager().deleteSecret(newSecretId);
+              } catch {
+                // Ignore cleanup errors
+              }
+              throw new ApiError(
+                400,
+                error instanceof Error
+                  ? error.message
+                  : "Failed to connect to MCP server with provided credentials",
+              );
+            }
+          }
+        } else if (environmentValues) {
+          // Local server environment variables
+          if (isByosVault) {
+            if (!isByosEnabled()) {
+              throw new ApiError(
+                400,
+                "Readonly Vault is not enabled. Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
+              );
+            }
+            // Vault references for secret env vars
+            const secret = await secretManager().createSecret(
+              environmentValues,
+              `${mcpServer.name}-vault-secret`,
+            );
+            newSecretId = secret.id;
+          } else if (catalogItem?.localConfig?.environment) {
+            // Collect only secret-type env vars
+            const secretEnvVars: Record<string, string> = {};
+            for (const envDef of catalogItem.localConfig.environment) {
+              if (envDef.type === "secret") {
+                const value = envDef.promptOnInstallation
+                  ? environmentValues[envDef.key]
+                  : (envDef.value as string | undefined);
+                if (value) {
+                  secretEnvVars[envDef.key] = value;
+                }
+              }
+            }
+            if (Object.keys(secretEnvVars).length > 0) {
+              const secret = await secretManager().createSecret(
+                secretEnvVars,
+                `${mcpServer.name}-secret`,
+              );
+              newSecretId = secret.id;
+            }
+          }
+        }
+      }
+
+      if (!newSecretId) {
+        throw new ApiError(400, "Could not resolve credentials");
+      }
+
       // Delete the old secret if it exists
       if (mcpServer.secretId) {
         try {
@@ -818,17 +964,33 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Update the server with new secret and clear OAuth error fields
       const updatedServer = await McpServerModel.update(id, {
-        secretId,
+        secretId: newSecretId,
         oauthRefreshError: null,
         oauthRefreshFailedAt: null,
       });
+
+      // For local servers, trigger pod restart to pick up new credentials
+      if (mcpServer.serverType === "local") {
+        try {
+          await McpServerRuntimeManager.restartServer(id);
+          logger.info(
+            { mcpServerId: id },
+            "Triggered pod restart after re-authentication",
+          );
+        } catch (error) {
+          logger.warn(
+            { err: error, mcpServerId: id },
+            "Failed to restart pod after re-authentication (may not be running)",
+          );
+        }
+      }
 
       if (!updatedServer) {
         throw new ApiError(500, "Failed to update MCP server");
       }
 
       logger.info(
-        { mcpServerId: id, newSecretId: secretId },
+        { mcpServerId: id, newSecretId },
         "MCP server re-authenticated successfully",
       );
 
@@ -867,7 +1029,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Personal server: owner OR mcpServer:update permission
         if (mcpServer.ownerId !== user.id) {
           const { success: hasMcpServerUpdate } = await hasPermission(
-            { mcpServer: ["update"] },
+            { mcpServerInstallation: ["update"] },
             headers,
           );
           if (!hasMcpServerUpdate) {
@@ -886,7 +1048,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         if (!isTeamAdmin) {
           const { success: hasMcpServerUpdate } = await hasPermission(
-            { mcpServer: ["update"] },
+            { mcpServerInstallation: ["update"] },
             headers,
           );
 
@@ -971,8 +1133,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { id } }, reply) => {
-      const mcpServer = await McpServerModel.findById(id);
+    async ({ params: { id }, user, headers }, reply) => {
+      const mcpServer = await findAccessibleMcpServer({
+        mcpServerId: id,
+        userId: user.id,
+        headers,
+      });
 
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
@@ -1015,9 +1181,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { id } }, reply) => {
-      // Get the MCP server first to check if it has a catalogId
-      const mcpServer = await McpServerModel.findById(id);
+    async ({ params: { id }, user, headers }, reply) => {
+      const mcpServer = await findAccessibleMcpServer({
+        mcpServerId: id,
+        userId: user.id,
+        headers,
+      });
 
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
@@ -1029,6 +1198,86 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         : [];
 
       return reply.send(tools);
+    },
+  );
+
+  fastify.post(
+    "/api/mcp_server/:id/inspect",
+    {
+      schema: {
+        operationId: RouteId.InspectMcpServer,
+        description: "Inspect a running MCP server (list tools or call a tool)",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        body: z.object({
+          method: z.enum(["tools/list", "tools/call"]),
+          toolName: z.string().optional(),
+          toolArguments: z.record(z.string(), z.unknown()).optional(),
+        }),
+        response: constructResponseSchema(z.record(z.string(), z.unknown())),
+      },
+    },
+    async ({ params: { id }, body, user, headers }, reply) => {
+      const mcpServer = await findAccessibleMcpServer({
+        mcpServerId: id,
+        userId: user.id,
+        headers,
+      });
+      if (!mcpServer) {
+        throw new ApiError(404, "MCP server not found");
+      }
+
+      const catalogItem = mcpServer.catalogId
+        ? await InternalMcpCatalogModel.findById(mcpServer.catalogId)
+        : null;
+      if (!catalogItem) {
+        throw new ApiError(400, "No catalog item found for this MCP server");
+      }
+
+      let secrets: Record<string, unknown> = {};
+      if (mcpServer.secretId) {
+        const secretRecord = await secretManager().getSecret(
+          mcpServer.secretId,
+        );
+        if (secretRecord) {
+          secrets = secretRecord.secret;
+        }
+      }
+
+      try {
+        const result = await mcpClient.inspectServer({
+          catalogItem,
+          mcpServerId: mcpServer.id,
+          secrets,
+          method: body.method,
+          toolName: body.toolName,
+          toolArguments: body.toolArguments,
+        });
+
+        return reply.send(result as Record<string, unknown>);
+      } catch (error) {
+        if (
+          error instanceof McpServerNotReadyError ||
+          error instanceof McpServerConnectionTimeoutError
+        ) {
+          logger.warn(
+            { err: error, mcpServerId: mcpServer.id, statusCode: 409 },
+            `MCP server ${mcpServer.name} is not ready for inspection`,
+          );
+          throw new ApiError(409, error.message);
+        }
+
+        logger.error(
+          { err: error },
+          `Failed to inspect MCP server ${mcpServer.name}`,
+        );
+        throw new ApiError(
+          502,
+          `Failed to inspect MCP server: ${error instanceof Error ? error.message : "Unknown error"}`,
+        );
+      }
     },
   );
 
@@ -1096,7 +1345,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // WHY: mcpServer:update distinguishes editors from members
           // Editors have this permission, members don't
           const { success: hasMcpServerUpdate } = await hasPermission(
-            { mcpServer: ["update"] },
+            { mcpServerInstallation: ["update"] },
             headers,
           );
 
@@ -1245,7 +1494,27 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // This allows the frontend to show the progress bar immediately
       setImmediate(async () => {
         try {
-          await autoReinstallServer(updatedServer, catalogItem);
+          await autoReinstallServer(updatedServer, catalogItem, {
+            getTools:
+              updatedServer.serverType === "remote"
+                ? async ({ server, catalogItem }) =>
+                    (
+                      await connectAndGetToolsForInstallation({
+                        catalogItem,
+                        mcpServerId: server.id,
+                        secretId: server.secretId ?? undefined,
+                        userId: user.id,
+                        allowCurrentUserTokenFallback: true,
+                      })
+                    ).map((tool) => ({
+                      name: tool.name,
+                      description: tool.description || `Tool: ${tool.name}`,
+                      inputSchema: tool.inputSchema,
+                      _meta: tool._meta,
+                      annotations: tool.annotations,
+                    }))
+                : undefined,
+          });
           // Set status to success when done
           await McpServerModel.update(id, {
             localInstallationStatus: "success",
@@ -1275,3 +1544,234 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default mcpServerRoutes;
+
+async function findAccessibleMcpServer(params: {
+  mcpServerId: string;
+  userId: string;
+  headers: IncomingHttpHeaders;
+}) {
+  const { success: isMcpServerAdmin } = await hasPermission(
+    { mcpServerInstallation: ["admin"] },
+    params.headers,
+  );
+
+  return McpServerModel.findById(
+    params.mcpServerId,
+    params.userId,
+    isMcpServerAdmin,
+  );
+}
+
+// =============================================================================
+// Internal helpers
+// =============================================================================
+
+async function connectAndGetToolsForInstallation(params: {
+  catalogItem: Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>;
+  mcpServerId: string;
+  secretId?: string;
+  userId: string;
+  allowCurrentUserTokenFallback: boolean;
+}) {
+  const { catalogItem } = params;
+  if (!catalogItem) {
+    throw new Error("Catalog item not found");
+  }
+
+  const secrets = await getSecretValues(params.secretId);
+
+  try {
+    return await mcpClient.connectAndGetTools({
+      catalogItem,
+      mcpServerId: params.mcpServerId,
+      secrets,
+    });
+  } catch (error) {
+    if (
+      !params.allowCurrentUserTokenFallback ||
+      !isInstallDiscoveryAuthError(error)
+    ) {
+      throw error;
+    }
+
+    const accessToken = await getInstallDiscoveryAccessToken({
+      catalogItem,
+      userId: params.userId,
+    });
+    if (!accessToken || secrets.access_token === accessToken) {
+      throw error;
+    }
+
+    logger.info(
+      {
+        catalogId: catalogItem.id,
+        mcpServerId: params.mcpServerId,
+        userId: params.userId,
+      },
+      "Retrying MCP install-time tool discovery with the current user's identity-provider access token",
+    );
+
+    return await mcpClient.connectAndGetTools({
+      catalogItem,
+      mcpServerId: params.mcpServerId,
+      secrets: {
+        ...secrets,
+        access_token: accessToken,
+      },
+    });
+  }
+}
+
+async function getCurrentIdentityProviderAccessToken(
+  userId: string,
+): Promise<string | undefined> {
+  const account =
+    await AccountModel.getLatestSsoAccountWithAccessTokenByUserId(userId);
+  if (!account?.accessToken) {
+    return undefined;
+  }
+
+  const isAccessTokenExpired =
+    !!account.accessTokenExpiresAt &&
+    account.accessTokenExpiresAt <= new Date();
+  if (!isAccessTokenExpired) {
+    return account.accessToken;
+  }
+
+  return await refreshLinkedIdentityProviderAccessToken({
+    account: {
+      id: account.id,
+      providerId: account.providerId,
+      refreshToken: account.refreshToken,
+      refreshTokenExpiresAt: account.refreshTokenExpiresAt,
+    },
+  });
+}
+
+async function getInstallDiscoveryAccessToken(params: {
+  catalogItem: NonNullable<
+    Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>
+  >;
+  userId: string;
+}): Promise<string | undefined> {
+  const account = await AccountModel.getLatestSsoAccountWithAccessTokenByUserId(
+    params.userId,
+  );
+  if (!account?.accessToken) {
+    return undefined;
+  }
+
+  const accessToken = await getCurrentIdentityProviderAccessToken(
+    params.userId,
+  );
+  if (!accessToken) {
+    return undefined;
+  }
+
+  const enterpriseManagedConfig = params.catalogItem.enterpriseManagedConfig;
+  if (!enterpriseManagedConfig) {
+    return accessToken;
+  }
+
+  const identityProvider = enterpriseManagedConfig.identityProviderId
+    ? await findExternalIdentityProviderById(
+        enterpriseManagedConfig.identityProviderId,
+      )
+    : await findExternalIdentityProviderByProviderId(account.providerId);
+  if (!identityProvider) {
+    return accessToken;
+  }
+
+  const credential = await exchangeEnterpriseManagedCredential({
+    identityProviderId: identityProvider.id,
+    assertion: accessToken,
+    enterpriseManagedConfig,
+  });
+
+  return extractInstallDiscoveryCredentialValue({
+    credentialValue: credential.value,
+    responseFieldPath: enterpriseManagedConfig.responseFieldPath,
+  });
+}
+
+async function getSecretValues(
+  secretId?: string,
+): Promise<Record<string, unknown>> {
+  if (!secretId) {
+    return {};
+  }
+
+  const secretRecord = await secretManager().getSecret(secretId);
+  return secretRecord?.secret ?? {};
+}
+
+function isInstallDiscoveryAuthError(error: unknown): boolean {
+  if (
+    error instanceof Error &&
+    "code" in error &&
+    (error as { code?: number }).code !== undefined
+  ) {
+    const code = (error as { code?: number }).code;
+    if (code === 401 || code === 403) {
+      return true;
+    }
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("401") ||
+    lower.includes("403") ||
+    lower.includes("unauthorized") ||
+    lower.includes("forbidden") ||
+    lower.includes("authentication failed") ||
+    lower.includes("authentication required") ||
+    lower.includes("missing required authorization header") ||
+    lower.includes("invalid authorization header") ||
+    lower.includes("invalid token") ||
+    lower.includes("access denied") ||
+    lower.includes("invalid credentials")
+  );
+}
+
+function extractInstallDiscoveryCredentialValue(params: {
+  credentialValue: string | Record<string, unknown>;
+  responseFieldPath?: string;
+}): string {
+  if (typeof params.credentialValue === "string") {
+    return params.credentialValue;
+  }
+
+  if (!params.responseFieldPath) {
+    throw new Error(
+      "Install-time enterprise-managed discovery returned a structured credential but no responseFieldPath was configured",
+    );
+  }
+
+  const extractedValue = params.responseFieldPath
+    .split(".")
+    .filter(Boolean)
+    .reduce<unknown>((current, segment) => {
+      if (
+        segment === "__proto__" ||
+        segment === "constructor" ||
+        segment === "prototype"
+      ) {
+        return undefined;
+      }
+
+      if (!current || typeof current !== "object" || Array.isArray(current)) {
+        return undefined;
+      }
+
+      return (current as Record<string, unknown>)[segment];
+    }, params.credentialValue);
+
+  if (typeof extractedValue !== "string") {
+    throw new Error(
+      `Install-time enterprise-managed discovery response field '${params.responseFieldPath}' did not resolve to a string`,
+    );
+  }
+
+  return extractedValue;
+}

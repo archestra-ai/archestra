@@ -10,6 +10,9 @@ archestra:
   # when replicas is > 1
   replicaCount: 3
 
+  worker:
+    replicaCount: 2
+
   # Environment variables for e2e testing
   env:
     ARCHESTRA_ANALYTICS: disabled
@@ -53,6 +56,8 @@ archestra:
     ARCHESTRA_AUTH_SECRET: "e2e-auth-secret-must-be-32-chars-long"
     # Enable enterprise license for e2e tests (required for SSO tests)
     ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
+    ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING: "true"
+    ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED: "true"
     # Enable test MCP server seeding
     ENABLE_TEST_MCP_SERVER: "true"
     # Disable better-auth rate limit for e2e tests
@@ -99,8 +104,11 @@ postgresql:
     database: archestra_dev
     username: archestra
     password: archestra_dev_password
-  # Use NodePort to expose PostgreSQL for debugging if needed
   primary:
+    initdb:
+      scripts:
+        grant-superuser.sql: |
+          ALTER USER archestra WITH SUPERUSER;
     service:
       type: NodePort
       nodePorts:

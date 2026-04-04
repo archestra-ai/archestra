@@ -5,6 +5,7 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { CredentialResolutionModeSchema } from "@/types/enterprise-managed-credentials";
 
 import { OpenAi } from "./llm-providers";
 
@@ -21,7 +22,6 @@ export const SelectToolSchema = createSelectSchema(schema.toolsTable, {
 
 export const ExtendedSelectToolSchema = SelectToolSchema.omit({
   agentId: true,
-  mcpServerId: true,
 }).extend({
   // Nullable for MCP tools
   agent: z
@@ -60,12 +60,10 @@ export const ToolAssignmentSchema = z.object({
     id: z.string(),
     name: z.string(),
   }),
-  credentialSourceMcpServerId: z.string().nullable(),
+  mcpServerId: z.string().nullable(),
   credentialOwnerEmail: z.string().nullable(),
-  executionSourceMcpServerId: z.string().nullable(),
   executionOwnerEmail: z.string().nullable(),
-  useDynamicTeamCredential: z.boolean(),
-  responseModifierTemplate: z.string().nullable(),
+  credentialResolutionMode: CredentialResolutionModeSchema,
 });
 
 // Tool with embedded assignments schema
@@ -77,6 +75,9 @@ export const ToolWithAssignmentsSchema = z.object({
   catalogId: z.string().nullable(),
   createdAt: z.date(),
   updatedAt: z.date(),
+  policiesAutoConfiguredAt: z.date().nullable(),
+  policiesAutoConfiguredReasoning: z.string().nullable(),
+  policiesAutoConfiguredModel: z.string().nullable(),
   assignmentCount: z.number(),
   assignments: z.array(ToolAssignmentSchema),
 });
@@ -84,24 +85,24 @@ export const ToolWithAssignmentsSchema = z.object({
 // Filter schema for tools with assignments
 export const ToolFilterSchema = z.object({
   search: z.string().optional(),
-  origin: z.string().optional().describe("Can be 'llm-proxy' or a catalogId"),
+  origin: z
+    .string()
+    .optional()
+    .describe("Can be 'llm-proxy', 'agent', or a catalogId"),
   excludeArchestraTools: z.coerce
     .boolean()
     .optional()
     .describe("Hide built-in Archestra tools"),
 });
 
-// Sort options for tools
-export const ToolSortBySchema = z.enum([
+export const ToolSortBy = [
   "name",
   "origin",
   "createdAt",
   "assignmentCount",
-]);
-export const ToolSortDirectionSchema = z.enum(["asc", "desc"]);
+] as const;
+export type ToolSortBy = (typeof ToolSortBy)[number];
 
 export type ToolAssignment = z.infer<typeof ToolAssignmentSchema>;
 export type ToolWithAssignments = z.infer<typeof ToolWithAssignmentsSchema>;
 export type ToolFilters = z.infer<typeof ToolFilterSchema>;
-export type ToolSortBy = z.infer<typeof ToolSortBySchema>;
-export type ToolSortDirection = z.infer<typeof ToolSortDirectionSchema>;

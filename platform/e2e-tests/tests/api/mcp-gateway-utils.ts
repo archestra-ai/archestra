@@ -120,6 +120,28 @@ export async function getOrgTokenForProfile(
 }
 
 /**
+ * Get the current authenticated user's personal token value.
+ * Creates the token if needed.
+ */
+export async function getUserTokenForCurrentUser(
+  request: APIRequestContext,
+): Promise<string> {
+  await makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: "/api/user-tokens/me",
+  });
+
+  const valueResponse = await makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: "/api/user-tokens/me/value",
+  });
+  const tokenData = await valueResponse.json();
+  return tokenData.value;
+}
+
+/**
  * Initialize MCP session
  *
  * @param profileId - The profile ID to connect to

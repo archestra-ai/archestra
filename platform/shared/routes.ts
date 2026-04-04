@@ -8,8 +8,6 @@ export const RouteId = {
   GetDefaultLlmProxy: "getDefaultLlmProxy",
   UpdateAgent: "updateAgent",
   DeleteAgent: "deleteAgent",
-  GetAgentVersions: "getAgentVersions",
-  RollbackAgent: "rollbackAgent",
   GetLabelKeys: "getLabelKeys",
   GetLabelValues: "getLabelValues",
 
@@ -32,6 +30,7 @@ export const RouteId = {
 
   // Config Routes
   GetConfig: "getConfig",
+  GetPublicConfig: "getPublicConfig",
 
   // Auth Routes
   GetDefaultCredentialsStatus: "getDefaultCredentialsStatus",
@@ -55,12 +54,16 @@ export const RouteId = {
   GetMcpServers: "getMcpServers",
   GetMcpServer: "getMcpServer",
   GetMcpServerTools: "getMcpServerTools",
+  InspectMcpServer: "inspectMcpServer",
   InstallMcpServer: "installMcpServer",
   DeleteMcpServer: "deleteMcpServer",
   ReauthenticateMcpServer: "reauthenticateMcpServer",
   ReinstallMcpServer: "reinstallMcpServer",
   GetMcpServerInstallationStatus: "getMcpServerInstallationStatus",
-  McpProxy: "mcpProxy",
+  // MCP Gateway Routes
+  McpGatewayGet: "mcpGatewayGet",
+  McpGatewayPost: "mcpGatewayPost",
+  McpProxyPost: "mcpProxyPost", // Frontend session-based proxy to MCP Gateway
 
   // MCP Server Installation Request Routes
   GetMcpServerInstallationRequests: "getMcpServerInstallationRequests",
@@ -79,6 +82,7 @@ export const RouteId = {
   SubmitOAuthConsent: "submitOAuthConsent",
 
   // Team Routes
+  GetMembers: "getMembers",
   GetTeams: "getTeams",
   CreateTeam: "createTeam",
   GetTeam: "getTeam",
@@ -139,19 +143,6 @@ export const RouteId = {
   DeleteTrustedDataPolicy: "deleteTrustedDataPolicy",
   BulkUpsertDefaultCallPolicy: "bulkUpsertDefaultCallPolicy",
   BulkUpsertDefaultResultPolicy: "bulkUpsertDefaultResultPolicy",
-  GetPolicyConfigSubagentPrompt: "getPolicyConfigSubagentPrompt",
-
-  // Dual LLM Config Routes
-  GetDefaultDualLlmConfig: "getDefaultDualLlmConfig",
-  GetDualLlmConfigs: "getDualLlmConfigs",
-  CreateDualLlmConfig: "createDualLlmConfig",
-  GetDualLlmConfig: "getDualLlmConfig",
-  UpdateDualLlmConfig: "updateDualLlmConfig",
-  DeleteDualLlmConfig: "deleteDualLlmConfig",
-
-  // Dual LLM Result Routes
-  GetDualLlmResultByToolCallId: "getDualLlmResultByToolCallId",
-  GetDualLlmResultsByInteraction: "getDualLlmResultsByInteraction",
 
   // Proxy Routes - OpenAI
   OpenAiChatCompletionsWithDefaultAgent:
@@ -242,25 +233,38 @@ export const RouteId = {
   GetConversationEnabledTools: "getConversationEnabledTools",
   UpdateConversationEnabledTools: "updateConversationEnabledTools",
   DeleteConversationEnabledTools: "deleteConversationEnabledTools",
-  GetChatModels: "getChatModels",
-  SyncChatModels: "syncChatModels",
+  ShareConversation: "shareConversation",
+  UnshareConversation: "unshareConversation",
+  GetConversationShare: "getConversationShare",
+  GetSharedConversation: "getSharedConversation",
+  ForkSharedConversation: "forkSharedConversation",
+  GetLlmModels: "getLlmModels",
+  SyncLlmModels: "syncLlmModels",
 
-  // Chat API Key Routes
-  GetChatApiKeys: "getChatApiKeys",
-  GetAvailableChatApiKeys: "getAvailableChatApiKeys",
-  CreateChatApiKey: "createChatApiKey",
-  GetChatApiKey: "getChatApiKey",
-  UpdateChatApiKey: "updateChatApiKey",
-  DeleteChatApiKey: "deleteChatApiKey",
+  // LLM Provider API Key Routes
+  GetLlmProviderApiKeys: "getLlmProviderApiKeys",
+  GetAvailableLlmProviderApiKeys: "getAvailableLlmProviderApiKeys",
+  CreateLlmProviderApiKey: "createLlmProviderApiKey",
+  GetLlmProviderApiKey: "getLlmProviderApiKey",
+  UpdateLlmProviderApiKey: "updateLlmProviderApiKey",
+  DeleteLlmProviderApiKey: "deleteLlmProviderApiKey",
+
+  // User API Key Routes
+  GetApiKeys: "getApiKeys",
+  GetApiKey: "getApiKey",
+  CreateApiKey: "createApiKey",
+  DeleteApiKey: "deleteApiKey",
 
   // Virtual API Key Routes
   GetVirtualApiKeys: "getVirtualApiKeys",
   GetAllVirtualApiKeys: "getAllVirtualApiKeys",
   CreateVirtualApiKey: "createVirtualApiKey",
+  UpdateVirtualApiKey: "updateVirtualApiKey",
   DeleteVirtualApiKey: "deleteVirtualApiKey",
 
   // Models with API Keys Routes
   GetModelsWithApiKeys: "getModelsWithApiKeys",
+  UpdateModel: "updateModel",
 
   // Limits Routes
   GetLimits: "getLimits",
@@ -271,11 +275,30 @@ export const RouteId = {
 
   // Organization Routes
   GetOrganization: "getOrganization",
-  UpdateOrganization: "updateOrganization",
   GetOnboardingStatus: "getOnboardingStatus",
+  GetMemberSignupStatus: "getMemberSignupStatus",
+  GetOrganizationMembers: "getOrganizationMembers",
+  GetOrganizationMember: "getOrganizationMember",
+  DeletePendingSignupMember: "deletePendingSignupMember",
+  CompleteOnboarding: "completeOnboarding",
 
-  // Appearance Routes (public/unauthenticated)
-  GetPublicAppearance: "getPublicAppearance",
+  // Appearance Settings Routes
+  GetAppearanceSettings: "getAppearanceSettings",
+  UpdateAppearanceSettings: "updateAppearanceSettings",
+
+  // Security Settings Routes
+  UpdateSecuritySettings: "updateSecuritySettings",
+
+  // LLM Settings Routes (organization-level)
+  UpdateLlmSettings: "updateLlmSettings",
+
+  // Agent Settings Routes (organization-level)
+  UpdateAgentSettings: "updateAgentSettings",
+
+  // Knowledge Settings Routes (organization-level)
+  UpdateKnowledgeSettings: "updateKnowledgeSettings",
+  DropEmbeddingConfig: "dropEmbeddingConfig",
+  TestEmbeddingConnection: "testEmbeddingConnection",
 
   // Identity Provider Routes
   GetPublicIdentityProviders: "getPublicIdentityProviders",
@@ -286,11 +309,11 @@ export const RouteId = {
   DeleteIdentityProvider: "deleteIdentityProvider",
   GetIdentityProviderIdpLogoutUrl: "getIdentityProviderIdpLogoutUrl",
 
+  // Member Routes
+  GetMemberDefaultAgent: "getMemberDefaultAgent",
+
   // User Routes
   GetUserPermissions: "getUserPermissions",
-
-  // Model Pricing Routes
-  UpdateModelPricing: "updateModelPricing",
 
   // Team Token Routes
   GetTokens: "getTokens",
@@ -337,6 +360,33 @@ export const RouteId = {
   UpdateChatOpsConfigInQuickstart: "updateChatOpsConfigInQuickstart",
   UpdateSlackChatOpsConfig: "updateSlackChatOpsConfig",
   RefreshChatOpsChannelDiscovery: "refreshChatOpsChannelDiscovery",
+
+  // Knowledge Base Routes
+  GetKnowledgeBases: "getKnowledgeBases",
+  CreateKnowledgeBase: "createKnowledgeBase",
+  GetKnowledgeBase: "getKnowledgeBase",
+  UpdateKnowledgeBase: "updateKnowledgeBase",
+  DeleteKnowledgeBase: "deleteKnowledgeBase",
+  GetKnowledgeBaseHealth: "getKnowledgeBaseHealth",
+
+  // Knowledge Base Connector Routes
+  GetConnectors: "getConnectors",
+  CreateConnector: "createConnector",
+  GetConnector: "getConnector",
+  UpdateConnector: "updateConnector",
+  DeleteConnector: "deleteConnector",
+  SyncConnector: "syncConnector",
+  ForceResyncConnector: "forceResyncConnector",
+  TestConnectorConnection: "testConnectorConnection",
+
+  // Connector Knowledge Base Assignment Routes
+  AssignConnectorToKnowledgeBases: "assignConnectorToKnowledgeBases",
+  UnassignConnectorFromKnowledgeBase: "unassignConnectorFromKnowledgeBase",
+  GetConnectorKnowledgeBases: "getConnectorKnowledgeBases",
+
+  // Connector Run Routes
+  GetConnectorRuns: "getConnectorRuns",
+  GetConnectorRun: "getConnectorRun",
 
   // Invitation Routes
   CheckInvitation: "checkInvitation",

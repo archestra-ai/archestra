@@ -6,8 +6,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useHasPermissions, useMissingPermissions } from "@/lib/auth.query";
-import { formatMissingPermissions } from "@/lib/auth.utils";
+import {
+  useHasPermissions,
+  useMissingPermissions,
+} from "@/lib/auth/auth.query";
+import { formatMissingPermissions } from "@/lib/auth/auth.utils";
 
 type PermissionButtonProps = ButtonProps & {
   permissions: Permissions;
@@ -24,7 +27,7 @@ type PermissionButtonProps = ButtonProps & {
  *
  * @example
  * <PermissionButton
- *   permissions={{ tool: ["update"] }}
+ *   permissions={{ toolPolicy: ["update"] }}
  *   onClick={handleAction}
  *   size="sm"
  *   variant="outline"

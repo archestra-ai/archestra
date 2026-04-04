@@ -6,23 +6,36 @@ Performance benchmarking tools for measuring Archestra Platform overhead using G
 
 To test benchmarks locally against your development environment:
 
-1. **Enable benchmark mock mode** in `platform/.env`:
+1. **Start the WireMock dependency** from the `platform/` directory:
    ```bash
-   BENCHMARK_MOCK_MODE=true
+   tilt trigger e2e-test-dependencies
    ```
 
-2. **Create benchmark configuration** at `platform/benchmarks/benchmark-config.env`:
+2. **Point the backend at WireMock** in `platform/.env`:
+   ```bash
+   ARCHESTRA_OPENAI_BASE_URL=http://localhost:9092/openai/v1
+   ```
+
+3. **Restart the backend** so it picks up the updated env var:
+   ```bash
+   tilt trigger pnpm-dev-backend
+   ```
+
+4. **Create benchmark configuration** at `platform/benchmarks/benchmark-config.env`:
    ```bash
    export ARCHESTRA_API_URL=http://127.0.0.1:9000
+   export ARCHESTRA_BENCHMARK_API_KEY=benchmark-openai-tools
    ```
 
-3. **Run the benchmark**:
+5. **Run the benchmark**:
    ```bash
    cd platform/benchmarks
    bash ./run-benchmark.sh
    ```
 
-**Note**: Make sure your local platform is running (via `tilt up` or `pnpm dev`) before running benchmarks.
+The benchmark request is satisfied by [`helm/e2e-tests/mappings/openai-benchmark-chat-with-tools.json`](../helm/e2e-tests/mappings/openai-benchmark-chat-with-tools.json), so no real provider traffic is involved.
+
+Make sure your local platform is running via `tilt up` before running benchmarks.
 
 ## Quick Start
 
@@ -49,7 +62,7 @@ bash ./setup-gcp-benchmark.sh
 ```
 
 This creates:
-- `archestra-platform-vm`: Runs Archestra Platform with mock mode enabled
+- `archestra-platform-vm`: Runs Archestra Platform with a local WireMock upstream
 - `loadtest-vm`: Runs Apache Bench for load testing
 - Firewall rule allowing port 9000 between VMs
 
@@ -73,6 +86,7 @@ cp .env.example .env
 
 # Or manually create it with the Archestra VM internal IP:
 # echo "export ARCHESTRA_API_URL=http://<archestra-vm-internal-ip>:9000" > benchmark-config.env
+# echo "export ARCHESTRA_BENCHMARK_API_KEY=benchmark-openai-tools" >> benchmark-config.env
 
 # Run benchmarks
 bash ./run-benchmark.sh
@@ -102,9 +116,9 @@ Edit `.env`:
 - `NUM_REQUESTS`: Total requests per test (default: 1000)
 - `CONCURRENCY`: Concurrent requests (default: 10)
 
-## Mock Mode
+## WireMock Upstream
 
-The platform runs with `BENCHMARK_MOCK_MODE=true` to return immediate responses without real OpenAI API calls. This isolates pure platform overhead from network latency.
+Benchmarks use the WireMock mappings under `platform/helm/e2e-tests/mappings`, specifically `openai-benchmark-chat-with-tools.json`. This keeps the benchmark deterministic without any in-process mock client code in the backend.
 
 ## Test Scenarios
 

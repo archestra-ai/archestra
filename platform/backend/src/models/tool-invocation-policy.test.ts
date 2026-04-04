@@ -1,3 +1,8 @@
+import {
+  getArchestraToolFullName,
+  TOOL_GET_AGENT_SHORT_NAME,
+  TOOL_WHOAMI_SHORT_NAME,
+} from "@shared";
 import { describe, expect, test } from "@/test";
 import type { PolicyEvaluationContext } from "./tool-invocation-policy";
 import ToolInvocationPolicyModel from "./tool-invocation-policy";
@@ -79,18 +84,29 @@ describe("ToolInvocationPolicyModel", () => {
       expect(result.reason).toContain("Tool 1 blocked");
     });
 
-    test("returns success when only Archestra tools are in the batch", async ({
+    test("returns success when only white-labeled built-in tools are in the batch", async ({
       makeAgent,
       seedAndAssignArchestraTools,
     }) => {
       const agent = await makeAgent();
       await seedAndAssignArchestraTools(agent.id);
+      const brandedWhoami = getArchestraToolFullName(TOOL_WHOAMI_SHORT_NAME, {
+        appName: "Acme Copilot",
+        fullWhiteLabeling: true,
+      });
+      const brandedGetAgent = getArchestraToolFullName(
+        TOOL_GET_AGENT_SHORT_NAME,
+        {
+          appName: "Acme Copilot",
+          fullWhiteLabeling: true,
+        },
+      );
 
       const result = await ToolInvocationPolicyModel.evaluateBatch(
         agent.id,
         [
-          { toolCallName: "archestra__whoami", toolInput: {} },
-          { toolCallName: "archestra__get_agent", toolInput: { id: "123" } },
+          { toolCallName: brandedWhoami, toolInput: {} },
+          { toolCallName: brandedGetAgent, toolInput: { id: "123" } },
         ],
         mockContext,
         false, // untrusted context
@@ -209,7 +225,7 @@ describe("ToolInvocationPolicyModel", () => {
 
       expect(result.isAllowed).toBe(false);
       expect(result.reason).toContain(
-        "forbidden in untrusted context by default",
+        "forbidden in sensitive context by default",
       );
     });
 
@@ -777,7 +793,7 @@ describe("ToolInvocationPolicyModel", () => {
 
         expect(result.isAllowed).toBe(false);
         expect(result.reason).toContain(
-          "forbidden in untrusted context by default",
+          "forbidden in sensitive context by default",
         );
       });
 
@@ -1295,7 +1311,7 @@ describe("ToolInvocationPolicyModel", () => {
 
         expect(result.isAllowed).toBe(false);
         expect(result.reason).toContain(
-          "forbidden in untrusted context by default",
+          "forbidden in sensitive context by default",
         );
       });
 
@@ -1493,6 +1509,7 @@ describe("ToolInvocationPolicyModel", () => {
         "chat-approval-tool",
         { arg: "value" },
         mockContext,
+        "restrictive",
       );
 
       expect(result).toBe(true);
@@ -1522,6 +1539,7 @@ describe("ToolInvocationPolicyModel", () => {
         "allowed-chat-tool",
         { arg: "value" },
         mockContext,
+        "restrictive",
       );
 
       expect(result).toBe(false);
@@ -1544,6 +1562,7 @@ describe("ToolInvocationPolicyModel", () => {
         "no-policy-tool",
         {},
         mockContext,
+        "restrictive",
       );
 
       expect(result).toBe(false);
@@ -1554,6 +1573,7 @@ describe("ToolInvocationPolicyModel", () => {
         "archestra__todo_write",
         { todos: [] },
         mockContext,
+        "restrictive",
       );
 
       expect(result).toBe(false);
@@ -1564,6 +1584,7 @@ describe("ToolInvocationPolicyModel", () => {
         "nonexistent-tool",
         {},
         mockContext,
+        "restrictive",
       );
 
       expect(result).toBe(false);
@@ -1594,6 +1615,7 @@ describe("ToolInvocationPolicyModel", () => {
         "conditional-approval-tool",
         { action: "dangerous" },
         mockContext,
+        "restrictive",
       );
       expect(result).toBe(true);
 
@@ -1602,6 +1624,7 @@ describe("ToolInvocationPolicyModel", () => {
         "conditional-approval-tool",
         { action: "safe" },
         mockContext,
+        "restrictive",
       );
       expect(safeResult).toBe(false);
     });
@@ -1639,6 +1662,7 @@ describe("ToolInvocationPolicyModel", () => {
         "precedence-tool",
         { path: "/safe/file.txt" },
         mockContext,
+        "restrictive",
       );
       expect(safeResult).toBe(false);
 
@@ -1647,8 +1671,208 @@ describe("ToolInvocationPolicyModel", () => {
         "precedence-tool",
         { path: "/other/file.txt" },
         mockContext,
+        "restrictive",
       );
       expect(otherResult).toBe(true);
+    });
+
+    test("returns false when globalToolPolicy is permissive even with require_approval policies", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+      makeToolPolicy,
+    }) => {
+      const agent = await makeAgent();
+      const tool = await makeTool({
+        agentId: agent.id,
+        name: "permissive-test-tool",
+      });
+      await makeAgentTool(agent.id, tool.id);
+      await ToolInvocationPolicyModel.deleteByToolId(tool.id);
+
+      await makeToolPolicy(tool.id, {
+        conditions: [],
+        action: "require_approval",
+        reason: "Should be skipped in permissive mode",
+      });
+
+      const result = await ToolInvocationPolicyModel.checkApprovalRequired(
+        "permissive-test-tool",
+        { arg: "value" },
+        mockContext,
+        "permissive",
+      );
+
+      expect(result).toBe(false);
+    });
+
+    test("evaluates policies normally when globalToolPolicy is restrictive", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+      makeToolPolicy,
+    }) => {
+      const agent = await makeAgent();
+      const tool = await makeTool({
+        agentId: agent.id,
+        name: "restrictive-test-tool",
+      });
+      await makeAgentTool(agent.id, tool.id);
+      await ToolInvocationPolicyModel.deleteByToolId(tool.id);
+
+      await makeToolPolicy(tool.id, {
+        conditions: [],
+        action: "require_approval",
+        reason: "Should be enforced in restrictive mode",
+      });
+
+      const result = await ToolInvocationPolicyModel.checkApprovalRequired(
+        "restrictive-test-tool",
+        { arg: "value" },
+        mockContext,
+        "restrictive",
+      );
+
+      expect(result).toBe(true);
+    });
+  });
+
+  describe("hasBlockingPolicy", () => {
+    test("returns false for tool with allow_when_context_is_untrusted policy (trusted)", async ({
+      makeTool,
+      makeToolPolicy,
+    }) => {
+      const tool = await makeTool({ name: "always-allowed-tool" });
+      await makeToolPolicy(tool.id, {
+        conditions: [],
+        action: "allow_when_context_is_untrusted",
+      });
+
+      const result = await ToolInvocationPolicyModel.hasBlockingPolicy(
+        "always-allowed-tool",
+        true,
+      );
+      expect(result).toBe(false);
+    });
+
+    test("returns false for tool with allow_when_context_is_untrusted policy (untrusted)", async ({
+      makeTool,
+      makeToolPolicy,
+    }) => {
+      const tool = await makeTool({ name: "always-allowed-untrusted" });
+      await makeToolPolicy(tool.id, {
+        conditions: [],
+        action: "allow_when_context_is_untrusted",
+      });
+
+      const result = await ToolInvocationPolicyModel.hasBlockingPolicy(
+        "always-allowed-untrusted",
+        false,
+      );
+      expect(result).toBe(false);
+    });
+
+    test("returns true for tool with block_always policy", async ({
+      makeTool,
+      makeToolPolicy,
+    }) => {
+      const tool = await makeTool({ name: "blocked-tool" });
+      await makeToolPolicy(tool.id, {
+        conditions: [],
+        action: "block_always",
+      });
+
+      const result = await ToolInvocationPolicyModel.hasBlockingPolicy(
+        "blocked-tool",
+        true,
+      );
+      expect(result).toBe(true);
+    });
+
+    test("returns true for tool with require_approval policy", async ({
+      makeTool,
+      makeToolPolicy,
+    }) => {
+      const tool = await makeTool({ name: "approval-tool" });
+      await makeToolPolicy(tool.id, {
+        conditions: [],
+        action: "require_approval",
+      });
+
+      const result = await ToolInvocationPolicyModel.hasBlockingPolicy(
+        "approval-tool",
+        true,
+      );
+      expect(result).toBe(true);
+    });
+
+    test("returns true for tool with block_when_context_is_untrusted when untrusted", async ({
+      makeTool,
+      makeToolPolicy,
+    }) => {
+      const tool = await makeTool({ name: "untrusted-block-tool" });
+      await makeToolPolicy(tool.id, {
+        conditions: [],
+        action: "block_when_context_is_untrusted",
+      });
+
+      const result = await ToolInvocationPolicyModel.hasBlockingPolicy(
+        "untrusted-block-tool",
+        false,
+      );
+      expect(result).toBe(true);
+    });
+
+    test("returns false for tool with block_when_context_is_untrusted when trusted", async ({
+      makeTool,
+      makeToolPolicy,
+    }) => {
+      const tool = await makeTool({ name: "trusted-context-tool" });
+      await makeToolPolicy(tool.id, {
+        conditions: [],
+        action: "block_when_context_is_untrusted",
+      });
+
+      const result = await ToolInvocationPolicyModel.hasBlockingPolicy(
+        "trusted-context-tool",
+        true,
+      );
+      expect(result).toBe(false);
+    });
+
+    test("returns true for tool with custom conditions (any action)", async ({
+      makeTool,
+      makeToolPolicy,
+    }) => {
+      const tool = await makeTool({ name: "conditional-tool" });
+      await makeToolPolicy(tool.id, {
+        conditions: [{ key: "path", operator: "startsWith", value: "/etc/" }],
+        action: "allow_when_context_is_untrusted",
+      });
+
+      const result = await ToolInvocationPolicyModel.hasBlockingPolicy(
+        "conditional-tool",
+        true,
+      );
+      expect(result).toBe(true);
+    });
+
+    test("returns false for tool with no policies", async ({ makeTool }) => {
+      await makeTool({ name: "no-policy-tool" });
+
+      const result = await ToolInvocationPolicyModel.hasBlockingPolicy(
+        "no-policy-tool",
+        true,
+      );
+      expect(result).toBe(false);
+    });
+
+    test("returns false for non-existent tool", async () => {
+      const result = await ToolInvocationPolicyModel.hasBlockingPolicy(
+        "non-existent-tool",
+        true,
+      );
+      expect(result).toBe(false);
     });
   });
 });

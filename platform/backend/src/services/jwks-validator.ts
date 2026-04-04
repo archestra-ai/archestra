@@ -1,5 +1,6 @@
 import type { JWTVerifyGetKey } from "jose";
 import { createRemoteJWKSet, jwtVerify } from "jose";
+import { LRUCacheManager } from "@/cache-manager";
 import logger from "@/logging";
 
 /**
@@ -22,7 +23,12 @@ export interface JwksValidationResult {
  */
 class JwksValidator {
   private static readonly MAX_CACHE_SIZE = 100;
-  private jwksCache = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
+  private jwksCache = new LRUCacheManager<
+    ReturnType<typeof createRemoteJWKSet>
+  >({
+    maxSize: JwksValidator.MAX_CACHE_SIZE,
+    defaultTtl: 0,
+  });
 
   /**
    * Validate a JWT against an external IdP's JWKS endpoint.
@@ -90,11 +96,6 @@ class JwksValidator {
   ): ReturnType<typeof createRemoteJWKSet> {
     let jwks = this.jwksCache.get(jwksUrl);
     if (!jwks) {
-      // Evict oldest entry if cache is full
-      if (this.jwksCache.size >= JwksValidator.MAX_CACHE_SIZE) {
-        const oldestKey = this.jwksCache.keys().next().value;
-        if (oldestKey) this.jwksCache.delete(oldestKey);
-      }
       jwks = createRemoteJWKSet(new URL(jwksUrl));
       this.jwksCache.set(jwksUrl, jwks);
     }

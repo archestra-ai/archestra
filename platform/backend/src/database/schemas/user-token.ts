@@ -41,6 +41,7 @@ const userTokensTable = pgTable(
     unique().on(table.organizationId, table.userId),
     index("idx_user_token_org_id").on(table.organizationId),
     index("idx_user_token_user_id").on(table.userId),
+    index("idx_user_token_token_start").on(table.tokenStart),
   ],
 );
 

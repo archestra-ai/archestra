@@ -2,7 +2,7 @@ import { DEFAULT_THEME_ID } from "@shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
-import { UpdateOrganizationSchema } from "@/types";
+import { UpdateAppearanceSettingsSchema } from "@/types";
 import OrganizationModel from "./organization";
 
 // Minimal valid 1x1 transparent PNG (Base64-encoded)
@@ -10,15 +10,24 @@ const VALID_PNG_BASE64 =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+hc2rNAAAAABJRU5ErkJggg==";
 
 describe("OrganizationModel", () => {
-  describe("getPublicAppearance", () => {
+  describe("getAppearanceSettings", () => {
     test("should return default appearance when no organization exists", async () => {
       // Ensure no organizations exist (test setup clears DB)
-      const appearance = await OrganizationModel.getPublicAppearance();
+      const appearance = await OrganizationModel.getAppearanceSettings();
 
       expect(appearance).toEqual({
         theme: DEFAULT_THEME_ID,
         customFont: "lato",
         logo: null,
+        logoDark: null,
+        favicon: null,
+        iconLogo: null,
+        appName: null,
+        ogDescription: null,
+        footerText: null,
+        chatLinks: null,
+        chatErrorSupportMessage: null,
+        animateChatPlaceholders: true,
       });
     });
 
@@ -27,12 +36,21 @@ describe("OrganizationModel", () => {
     }) => {
       await makeOrganization();
 
-      const appearance = await OrganizationModel.getPublicAppearance();
+      const appearance = await OrganizationModel.getAppearanceSettings();
 
       expect(appearance).toEqual({
         theme: "cosmic-night",
         customFont: "lato",
         logo: null,
+        logoDark: null,
+        favicon: null,
+        iconLogo: null,
+        appName: null,
+        ogDescription: null,
+        footerText: null,
+        chatLinks: null,
+        chatErrorSupportMessage: null,
+        animateChatPlaceholders: true,
       });
     });
 
@@ -47,7 +65,7 @@ describe("OrganizationModel", () => {
         .set({ theme: "twitter" })
         .where(eq(schema.organizationsTable.id, org.id));
 
-      const appearance = await OrganizationModel.getPublicAppearance();
+      const appearance = await OrganizationModel.getAppearanceSettings();
 
       expect(appearance.theme).toBe("twitter");
     });
@@ -61,7 +79,7 @@ describe("OrganizationModel", () => {
         .set({ customFont: "inter" })
         .where(eq(schema.organizationsTable.id, org.id));
 
-      const appearance = await OrganizationModel.getPublicAppearance();
+      const appearance = await OrganizationModel.getAppearanceSettings();
 
       expect(appearance.customFont).toBe("inter");
     });
@@ -75,9 +93,22 @@ describe("OrganizationModel", () => {
         .set({ logo: VALID_PNG_BASE64 })
         .where(eq(schema.organizationsTable.id, org.id));
 
-      const appearance = await OrganizationModel.getPublicAppearance();
+      const appearance = await OrganizationModel.getAppearanceSettings();
 
       expect(appearance.logo).toBe(VALID_PNG_BASE64);
+    });
+
+    test("should return logoDark when set", async ({ makeOrganization }) => {
+      const org = await makeOrganization();
+
+      await db
+        .update(schema.organizationsTable)
+        .set({ logoDark: VALID_PNG_BASE64 })
+        .where(eq(schema.organizationsTable.id, org.id));
+
+      const appearance = await OrganizationModel.getAppearanceSettings();
+
+      expect(appearance.logoDark).toBe(VALID_PNG_BASE64);
     });
 
     test("should return first organization's appearance when multiple exist", async ({
@@ -93,26 +124,50 @@ describe("OrganizationModel", () => {
       // Create second organization with different settings
       await makeOrganization();
 
-      const appearance = await OrganizationModel.getPublicAppearance();
+      const appearance = await OrganizationModel.getAppearanceSettings();
 
       // Should return first organization's appearance
       expect(appearance.theme).toBe("claude");
       expect(appearance.customFont).toBe("roboto");
     });
 
-    test("should only return theme, customFont, and logo fields", async ({
+    test("should only return expected public appearance fields", async ({
       makeOrganization,
     }) => {
       await makeOrganization();
 
-      const appearance = await OrganizationModel.getPublicAppearance();
+      const appearance = await OrganizationModel.getAppearanceSettings();
 
       // Verify only expected fields are returned
       expect(Object.keys(appearance).sort()).toEqual([
+        "animateChatPlaceholders",
+        "appName",
+        "chatErrorSupportMessage",
+        "chatLinks",
         "customFont",
+        "favicon",
+        "footerText",
+        "iconLogo",
         "logo",
+        "logoDark",
+        "ogDescription",
         "theme",
       ]);
+    });
+
+    test("should return animateChatPlaceholders when set", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      await db
+        .update(schema.organizationsTable)
+        .set({ animateChatPlaceholders: false })
+        .where(eq(schema.organizationsTable.id, org.id));
+
+      const appearance = await OrganizationModel.getAppearanceSettings();
+
+      expect(appearance.animateChatPlaceholders).toBe(false);
     });
   });
 
@@ -180,6 +235,29 @@ describe("OrganizationModel", () => {
       expect(updated?.logo).toBeNull();
     });
 
+    test("should accept valid PNG logoDark", async ({ makeOrganization }) => {
+      const org = await makeOrganization();
+
+      const updated = await OrganizationModel.patch(org.id, {
+        logoDark: VALID_PNG_BASE64,
+      });
+
+      expect(updated?.logoDark).toBe(VALID_PNG_BASE64);
+    });
+
+    test("should accept null logoDark (removal)", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      await OrganizationModel.patch(org.id, { logoDark: VALID_PNG_BASE64 });
+      const updated = await OrganizationModel.patch(org.id, {
+        logoDark: null,
+      });
+
+      expect(updated?.logoDark).toBeNull();
+    });
+
     test("should return null for non-existent organization", async () => {
       const updated = await OrganizationModel.patch("non-existent-id", {
         theme: "twitter",
@@ -206,11 +284,153 @@ describe("OrganizationModel", () => {
 
       expect(updated).toBeNull();
     });
+
+    test("should update animateChatPlaceholders", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      const updated = await OrganizationModel.patch(org.id, {
+        animateChatPlaceholders: false,
+      });
+
+      expect(updated?.animateChatPlaceholders).toBe(false);
+    });
+
+    test("should update chatLinks", async ({ makeOrganization }) => {
+      const org = await makeOrganization();
+
+      const updated = await OrganizationModel.patch(org.id, {
+        chatLinks: [
+          {
+            label: "Docs",
+            url: "https://support.example.com/help",
+          },
+          {
+            label: "Status",
+            url: "https://status.example.com",
+          },
+        ],
+      });
+
+      expect(updated?.chatLinks).toEqual([
+        {
+          label: "Docs",
+          url: "https://support.example.com/help",
+        },
+        {
+          label: "Status",
+          url: "https://status.example.com",
+        },
+      ]);
+    });
+
+    test("should update chatErrorSupportMessage", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      const updated = await OrganizationModel.patch(org.id, {
+        chatErrorSupportMessage: "Contact support@example.com for help.",
+      });
+
+      expect(updated?.chatErrorSupportMessage).toBe(
+        "Contact support@example.com for help.",
+      );
+    });
+
+    test("should set default LLM model and provider", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      const updated = await OrganizationModel.patch(org.id, {
+        defaultLlmModel: "gpt-4o",
+        defaultLlmProvider: "openai",
+      });
+
+      expect(updated).not.toBeNull();
+      expect(updated?.defaultLlmModel).toBe("gpt-4o");
+      expect(updated?.defaultLlmProvider).toBe("openai");
+    });
+
+    test("should set default agent ID", async ({
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await makeAgent({ organizationId: org.id });
+
+      const updated = await OrganizationModel.patch(org.id, {
+        defaultAgentId: agent.id,
+      });
+
+      expect(updated).not.toBeNull();
+      expect(updated?.defaultAgentId).toBe(agent.id);
+    });
+
+    test("should clear default agent ID with null", async ({
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await makeAgent({ organizationId: org.id });
+
+      await OrganizationModel.patch(org.id, { defaultAgentId: agent.id });
+
+      const updated = await OrganizationModel.patch(org.id, {
+        defaultAgentId: null,
+      });
+
+      expect(updated).not.toBeNull();
+      expect(updated?.defaultAgentId).toBeNull();
+    });
+
+    test("should update all agent settings at once", async ({
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await makeAgent({ organizationId: org.id });
+
+      const updated = await OrganizationModel.patch(org.id, {
+        defaultLlmModel: "claude-opus-4-1-20250805",
+        defaultLlmProvider: "anthropic",
+        defaultAgentId: agent.id,
+      });
+
+      expect(updated).not.toBeNull();
+      expect(updated?.defaultLlmModel).toBe("claude-opus-4-1-20250805");
+      expect(updated?.defaultLlmProvider).toBe("anthropic");
+      expect(updated?.defaultAgentId).toBe(agent.id);
+    });
   });
 
-  describe("patch logo validation (via UpdateOrganizationSchema)", () => {
+  describe("patch logoDark validation (via UpdateAppearanceSettingsSchema)", () => {
+    const parseLogoDarkField = (logoDark: string | null) =>
+      UpdateAppearanceSettingsSchema.shape.logoDark.safeParse(logoDark);
+
+    test("should accept null", () => {
+      const result = parseLogoDarkField(null);
+      expect(result.success).toBe(true);
+    });
+
+    test("should accept valid PNG data URI", () => {
+      const result = parseLogoDarkField(VALID_PNG_BASE64);
+      expect(result.success).toBe(true);
+    });
+
+    test("should reject non-PNG data URI prefix", () => {
+      const result = parseLogoDarkField(
+        "data:image/jpeg;base64,/9j/4AAQSkZJRg==",
+      );
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe("patch logo validation (via UpdateAppearanceSettingsSchema)", () => {
     const parseLogoField = (logo: string | null) =>
-      UpdateOrganizationSchema.shape.logo.safeParse(logo);
+      UpdateAppearanceSettingsSchema.shape.logo.safeParse(logo);
 
     describe("MIME type validation", () => {
       test("should reject non-PNG data URI prefix", () => {
@@ -315,6 +535,92 @@ describe("OrganizationModel", () => {
     });
   });
 
+  describe("chatLinks validation (via UpdateAppearanceSettingsSchema)", () => {
+    const parseChatLinksField = (
+      chatLinks:
+        | {
+            label: string;
+            url: string;
+          }[]
+        | null,
+    ) => UpdateAppearanceSettingsSchema.shape.chatLinks.safeParse(chatLinks);
+
+    test("should accept null", () => {
+      const result = parseChatLinksField(null);
+
+      expect(result.success).toBe(true);
+    });
+
+    test("should accept up to 3 valid links", () => {
+      const result = parseChatLinksField([
+        {
+          label: "Docs",
+          url: "https://docs.example.com",
+        },
+        {
+          label: "Status",
+          url: "https://status.example.com",
+        },
+        {
+          label: "Support",
+          url: "https://support.example.com",
+        },
+      ]);
+
+      expect(result.success).toBe(true);
+    });
+
+    test("should reject invalid URLs", () => {
+      const result = parseChatLinksField([
+        {
+          label: "Docs",
+          url: "not-a-url",
+        },
+      ]);
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0]?.message).toContain(
+          "valid HTTP or HTTPS URL",
+        );
+      }
+    });
+
+    test("should reject labels longer than 25 characters", () => {
+      const result = parseChatLinksField([
+        {
+          label: "A".repeat(26),
+          url: "https://docs.example.com",
+        },
+      ]);
+
+      expect(result.success).toBe(false);
+    });
+
+    test("should reject more than 3 links", () => {
+      const result = parseChatLinksField([
+        {
+          label: "One",
+          url: "https://one.example.com",
+        },
+        {
+          label: "Two",
+          url: "https://two.example.com",
+        },
+        {
+          label: "Three",
+          url: "https://three.example.com",
+        },
+        {
+          label: "Four",
+          url: "https://four.example.com",
+        },
+      ]);
+
+      expect(result.success).toBe(false);
+    });
+  });
+
   describe("getById", () => {
     test("should return organization by id", async ({ makeOrganization }) => {
       const org = await makeOrganization();
@@ -329,6 +635,20 @@ describe("OrganizationModel", () => {
       const found = await OrganizationModel.getById("non-existent-id");
 
       expect(found).toBeNull();
+    });
+
+    test("should return defaultAgentId after patch", async ({
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await makeAgent({ organizationId: org.id });
+
+      await OrganizationModel.patch(org.id, { defaultAgentId: agent.id });
+
+      const fetched = await OrganizationModel.getById(org.id);
+      expect(fetched).not.toBeNull();
+      expect(fetched?.defaultAgentId).toBe(agent.id);
     });
   });
 });

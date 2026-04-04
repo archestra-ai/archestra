@@ -2,14 +2,18 @@
  * biome-ignore-all lint/correctness/noEmptyPattern: oddly enough in extend below this is required
  * see https://vitest.dev/guide/test-context.html#extend-test-context
  */
-import { ARCHESTRA_MCP_CATALOG_ID, MEMBER_ROLE_NAME } from "@shared";
+import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  DEFAULT_APP_NAME,
+  MEMBER_ROLE_NAME,
+} from "@shared";
 import { beforeEach as baseBeforeEach, test as baseTest } from "vitest";
 import db, { schema } from "@/database";
 import {
   AgentModel,
   AgentToolModel,
-  ChatApiKeyModel,
   InternalMcpCatalogModel,
+  LlmProviderApiKeyModel,
   SecretModel,
   SessionModel,
   TeamModel,
@@ -20,13 +24,17 @@ import {
 import type {
   Agent,
   AgentTool,
+  ConnectorRun,
   InsertAccount,
   InsertAgent,
-  InsertChatApiKey,
+  InsertConnectorRun,
   InsertConversation,
   InsertInteraction,
   InsertInternalMcpCatalog,
   InsertInvitation,
+  InsertKnowledgeBase,
+  InsertKnowledgeBaseConnector,
+  InsertLlmProviderApiKey,
   InsertMcpServer,
   InsertMember,
   InsertOrganization,
@@ -34,6 +42,8 @@ import type {
   InsertSession,
   InsertTeam,
   InsertUser,
+  KnowledgeBase,
+  KnowledgeBaseConnector,
   OrganizationRole,
   TeamMember,
   Tool,
@@ -69,10 +79,13 @@ interface TestFixtures {
   makeAccount: typeof makeAccount;
   makeSession: typeof makeSession;
   makeAuthHeaders: typeof makeAuthHeaders;
+  makeKnowledgeBase: typeof makeKnowledgeBase;
+  makeKnowledgeBaseConnector: typeof makeKnowledgeBaseConnector;
+  makeConnectorRun: typeof makeConnectorRun;
   makeConversation: typeof makeConversation;
   makeInteraction: typeof makeInteraction;
   makeSecret: typeof makeSecret;
-  makeChatApiKey: typeof makeChatApiKey;
+  makeLlmProviderApiKey: typeof makeLlmProviderApiKey;
   makeIdentityProvider: typeof makeIdentityProvider;
   makeOAuthClient: typeof makeOAuthClient;
   makeOAuthAccessToken: typeof makeOAuthAccessToken;
@@ -180,7 +193,9 @@ async function makeTeamMember(
  * Creates a test agent using the Agent model.
  * Auto-creates an organization if not provided.
  */
-async function makeAgent(overrides: Partial<InsertAgent> = {}): Promise<Agent> {
+async function makeAgent(
+  overrides: Partial<InsertAgent> & { authorId?: string } = {},
+): Promise<Agent> {
   // Auto-create organization if not provided
   let organizationId = overrides.organizationId;
   if (!organizationId) {
@@ -188,29 +203,35 @@ async function makeAgent(overrides: Partial<InsertAgent> = {}): Promise<Agent> {
     organizationId = org.id;
   }
 
+  const { authorId, ...agentOverrides } = overrides;
+
   const defaults: InsertAgent = {
     name: `Test Agent ${crypto.randomUUID().substring(0, 8)}`,
     organizationId,
     scope: "org",
     teams: [],
     labels: [],
+    knowledgeBaseIds: [],
+    connectorIds: [],
   };
-  return await AgentModel.create({
-    ...defaults,
-    ...overrides,
-  });
+  return await AgentModel.create(
+    {
+      ...defaults,
+      ...agentOverrides,
+    },
+    authorId,
+  );
 }
 
 /**
  * Creates an internal test agent (with prompts/chat capabilities).
  */
 async function makeInternalAgent(
-  overrides: Partial<InsertAgent> = {},
+  overrides: Partial<InsertAgent> & { authorId?: string } = {},
 ): Promise<Agent> {
   return await makeAgent({
     agentType: "agent",
     systemPrompt: "You are a test agent",
-    userPrompt: "{{message}}",
     ...overrides,
   });
 }
@@ -247,13 +268,13 @@ async function makeAgentTool(
   agentId: string,
   toolId: string,
   overrides: Partial<
-    Pick<
-      AgentTool,
-      "credentialSourceMcpServerId" | "executionSourceMcpServerId"
-    >
+    Pick<AgentTool, "mcpServerId" | "credentialResolutionMode">
   > = {},
 ) {
-  return await AgentToolModel.create(agentId, toolId, overrides);
+  return await AgentToolModel.create(agentId, toolId, {
+    mcpServerId: overrides.mcpServerId,
+    credentialResolutionMode: overrides.credentialResolutionMode,
+  });
 }
 
 /**
@@ -410,15 +431,37 @@ async function makeInternalMcpCatalog(
       | "localConfig"
       | "userConfig"
       | "oauthConfig"
+      | "enterpriseManagedConfig"
+      | "scope"
+      | "teams"
     >
-  > = {},
+  > & {
+    organizationId?: string;
+    authorId?: string;
+  } = {},
 ) {
-  return await InternalMcpCatalogModel.create({
-    name: `test-catalog-${crypto.randomUUID().substring(0, 8)}`,
-    serverType: "remote",
-    serverUrl: "https://api.example.com/mcp/",
-    ...overrides,
-  });
+  const { organizationId, authorId, ...catalogOverrides } = overrides;
+
+  // Auto-create organization if not provided
+  let orgId = organizationId;
+  if (!orgId) {
+    const org = await makeOrganization();
+    orgId = org.id;
+  }
+
+  return await InternalMcpCatalogModel.create(
+    {
+      name: `test-catalog-${crypto.randomUUID().substring(0, 8)}`,
+      serverType: "remote",
+      serverUrl: "https://api.example.com/mcp/",
+      scope: "org",
+      ...catalogOverrides,
+    },
+    {
+      organizationId: orgId,
+      authorId,
+    },
+  );
 }
 
 /**
@@ -453,7 +496,16 @@ async function makeInvitation(
 async function makeAccount(
   userId: string,
   overrides: Partial<
-    Pick<InsertAccount, "accountId" | "providerId" | "accessToken" | "idToken">
+    Pick<
+      InsertAccount,
+      | "accountId"
+      | "providerId"
+      | "accessToken"
+      | "refreshToken"
+      | "idToken"
+      | "accessTokenExpiresAt"
+      | "refreshTokenExpiresAt"
+    >
   > = {},
 ) {
   const [account] = await db
@@ -646,20 +698,23 @@ async function makeSecret(
  * Creates a test chat API key in the database.
  * Used for testing features that require LLM API keys (e.g., auto-policy configuration).
  */
-async function makeChatApiKey(
+async function makeLlmProviderApiKey(
   organizationId: string,
   secretId: string,
   overrides: Partial<
-    Pick<InsertChatApiKey, "name" | "provider" | "scope" | "userId" | "teamId">
+    Pick<
+      InsertLlmProviderApiKey,
+      "name" | "provider" | "scope" | "userId" | "teamId"
+    >
   > = {},
 ) {
-  return await ChatApiKeyModel.create({
+  return await LlmProviderApiKeyModel.create({
     organizationId,
     secretId,
     name:
       overrides.name ?? `Test API Key ${crypto.randomUUID().substring(0, 8)}`,
     provider: overrides.provider ?? "anthropic",
-    scope: overrides.scope ?? "org_wide",
+    scope: overrides.scope ?? "org",
     userId: overrides.userId ?? null,
     teamId: overrides.teamId ?? null,
   });
@@ -758,6 +813,7 @@ async function makeOAuthAccessToken(
     expiresAt?: Date;
     scopes?: string[];
     refreshId?: string;
+    referenceId?: string | null;
   } = {},
 ) {
   const id = crypto.randomUUID();
@@ -771,6 +827,7 @@ async function makeOAuthAccessToken(
       expiresAt: overrides.expiresAt ?? new Date(Date.now() + 3600000),
       scopes: overrides.scopes ?? ["mcp"],
       refreshId: overrides.refreshId ?? null,
+      referenceId: overrides.referenceId ?? null,
       createdAt: new Date(),
     })
     .returning();
@@ -808,6 +865,89 @@ async function makeOAuthRefreshToken(
 }
 
 /**
+ * Creates a test knowledge base in the database
+ */
+async function makeKnowledgeBase(
+  organizationId: string,
+  overrides: Partial<Pick<InsertKnowledgeBase, "name" | "status">> = {},
+): Promise<KnowledgeBase> {
+  const [result] = await db
+    .insert(schema.knowledgeBasesTable)
+    .values({
+      organizationId,
+      name: `Test Knowledge Base ${crypto.randomUUID().substring(0, 8)}`,
+      ...overrides,
+    })
+    .returning();
+  return result;
+}
+
+/**
+ * Creates a test knowledge base connector in the database
+ */
+async function makeKnowledgeBaseConnector(
+  knowledgeBaseId: string,
+  organizationId: string,
+  overrides: Partial<
+    Pick<
+      InsertKnowledgeBaseConnector,
+      | "name"
+      | "visibility"
+      | "teamIds"
+      | "connectorType"
+      | "config"
+      | "schedule"
+      | "enabled"
+    >
+  > = {},
+): Promise<KnowledgeBaseConnector> {
+  const [result] = await db
+    .insert(schema.knowledgeBaseConnectorsTable)
+    .values({
+      organizationId,
+      name: `Test Connector ${crypto.randomUUID().substring(0, 8)}`,
+      connectorType: "jira",
+      config: {
+        type: "jira",
+        jiraBaseUrl: "https://test.atlassian.net",
+        isCloud: true,
+        projectKey: "TEST",
+      },
+      ...overrides,
+    })
+    .returning();
+
+  // Assign connector to the knowledge base via junction table
+  await db.insert(schema.knowledgeBaseConnectorAssignmentsTable).values({
+    connectorId: result.id,
+    knowledgeBaseId,
+  });
+
+  return result;
+}
+
+/**
+ * Creates a test connector run in the database
+ */
+async function makeConnectorRun(
+  connectorId: string,
+  overrides: Partial<
+    Pick<InsertConnectorRun, "status" | "startedAt" | "documentsProcessed">
+  > = {},
+): Promise<ConnectorRun> {
+  const [result] = await db
+    .insert(schema.connectorRunsTable)
+    .values({
+      connectorId,
+      status: "running",
+      startedAt: new Date(),
+      ...overrides,
+    })
+    .returning();
+  return result;
+}
+
+/**
  * Seeds and assigns Archestra tools to an agent.
  * Creates the Archestra catalog entry if it doesn't exist, then seeds tools.
  * This is useful for tests that need Archestra tools to be available.
@@ -820,9 +960,8 @@ async function seedAndAssignArchestraTools(agentId: string): Promise<void> {
   if (!existing) {
     await db.insert(schema.internalMcpCatalogTable).values({
       id: ARCHESTRA_MCP_CATALOG_ID,
-      name: "Archestra",
-      description:
-        "Built-in Archestra tools for managing profiles, limits, policies, and MCP servers.",
+      name: DEFAULT_APP_NAME,
+      description: `Built-in ${DEFAULT_APP_NAME} tools for managing profiles, limits, policies, and MCP servers.`,
       serverType: "builtin",
     });
   }
@@ -894,6 +1033,15 @@ export const test = baseTest.extend<TestFixtures>({
   makeAuthHeaders: async ({}, use) => {
     await use(makeAuthHeaders);
   },
+  makeKnowledgeBase: async ({}, use) => {
+    await use(makeKnowledgeBase);
+  },
+  makeKnowledgeBaseConnector: async ({}, use) => {
+    await use(makeKnowledgeBaseConnector);
+  },
+  makeConnectorRun: async ({}, use) => {
+    await use(makeConnectorRun);
+  },
   makeConversation: async ({}, use) => {
     await use(makeConversation);
   },
@@ -903,8 +1051,8 @@ export const test = baseTest.extend<TestFixtures>({
   makeSecret: async ({}, use) => {
     await use(makeSecret);
   },
-  makeChatApiKey: async ({}, use) => {
-    await use(makeChatApiKey);
+  makeLlmProviderApiKey: async ({}, use) => {
+    await use(makeLlmProviderApiKey);
   },
   makeIdentityProvider: async ({}, use) => {
     await use(makeIdentityProvider);

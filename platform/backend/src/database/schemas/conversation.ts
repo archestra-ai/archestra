@@ -1,3 +1,4 @@
+import type { SupportedProvider } from "@shared";
 import {
   boolean,
   jsonb,
@@ -6,9 +7,8 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { SupportedChatProvider } from "@/types";
 import agentsTable from "./agent";
-import chatApiKeysTable from "./chat-api-key";
+import llmProviderApiKeysTable from "./llm-provider-api-key";
 
 // Note: Additional pg_trgm GIN index for search is created in migration 0116_pg_trgm_indexes.sql:
 // - conversations_title_trgm_idx: GIN index on title column
@@ -21,12 +21,15 @@ const conversationsTable = pgTable("conversations", {
   agentId: uuid("agent_id").references(() => agentsTable.id, {
     onDelete: "set null",
   }),
-  chatApiKeyId: uuid("chat_api_key_id").references(() => chatApiKeysTable.id, {
-    onDelete: "set null",
-  }),
+  chatApiKeyId: uuid("chat_api_key_id").references(
+    () => llmProviderApiKeysTable.id,
+    {
+      onDelete: "set null",
+    },
+  ),
   title: text("title"),
   selectedModel: text("selected_model").notNull().default("gpt-4o"),
-  selectedProvider: text("selected_provider").$type<SupportedChatProvider>(),
+  selectedProvider: text("selected_provider").$type<SupportedProvider>(),
   hasCustomToolSelection: boolean("has_custom_tool_selection")
     .notNull()
     .default(false),

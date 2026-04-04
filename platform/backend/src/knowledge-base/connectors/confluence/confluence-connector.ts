@@ -1,0 +1,481 @@
+import * as cheerio from "cheerio";
+import { ConfluenceClient } from "confluence.js";
+import type pino from "pino";
+import type {
+  ConfluenceCheckpoint,
+  ConfluenceConfig,
+  ConnectorCredentials,
+  ConnectorDocument,
+  ConnectorSyncBatch,
+} from "@/types";
+import { ConfluenceConfigSchema } from "@/types";
+import {
+  BaseConnector,
+  buildCheckpoint,
+  extractErrorMessage,
+} from "../base-connector";
+
+const DEFAULT_BATCH_SIZE = 50;
+
+export class ConfluenceConnector extends BaseConnector {
+  type = "confluence" as const;
+
+  async validateConfig(
+    config: Record<string, unknown>,
+  ): Promise<{ valid: boolean; error?: string }> {
+    const parsed = parseConfluenceConfig(config);
+    if (!parsed) {
+      return {
+        valid: false,
+        error:
+          "Invalid Confluence configuration: confluenceUrl (string) and isCloud (boolean) are required",
+      };
+    }
+
+    if (!/^https?:\/\/.+/.test(parsed.confluenceUrl)) {
+      return {
+        valid: false,
+        error: "confluenceUrl must be a valid HTTP(S) URL",
+      };
+    }
+
+    return { valid: true };
+  }
+
+  async testConnection(params: {
+    config: Record<string, unknown>;
+    credentials: ConnectorCredentials;
+  }): Promise<{ success: boolean; error?: string }> {
+    const parsed = parseConfluenceConfig(params.config);
+    if (!parsed) {
+      return { success: false, error: "Invalid Confluence configuration" };
+    }
+
+    this.log.debug(
+      { baseUrl: parsed.confluenceUrl, isCloud: parsed.isCloud },
+      "Testing connection",
+    );
+
+    try {
+      const client = createConfluenceClient(
+        parsed,
+        params.credentials,
+        this.log,
+      );
+      await client.space.getSpaces({ limit: 1 });
+      this.log.debug("Connection test successful");
+      return { success: true };
+    } catch (error) {
+      const message = extractErrorMessage(error);
+      this.log.error({ error: message }, "Connection test failed");
+      return { success: false, error: `Connection failed: ${message}` };
+    }
+  }
+
+  async estimateTotalItems(params: {
+    config: Record<string, unknown>;
+    credentials: ConnectorCredentials;
+    checkpoint: Record<string, unknown> | null;
+  }): Promise<number | null> {
+    const parsed = parseConfluenceConfig(params.config);
+    if (!parsed) return null;
+
+    try {
+      const checkpoint = (params.checkpoint as ConfluenceCheckpoint | null) ?? {
+        type: "confluence" as const,
+      };
+      const cql = buildCql(parsed, checkpoint);
+
+      this.log.debug({ cql }, "Estimating total items");
+
+      const client = createConfluenceClient(
+        parsed,
+        params.credentials,
+        this.log,
+      );
+
+      const result = await client.content.searchContentByCQL({
+        cql,
+        limit: 1,
+      });
+
+      // Server/DC returns totalSize in the response; Cloud does not.
+      // biome-ignore lint/suspicious/noExplicitAny: SDK type missing totalSize field
+      const rawResult = result as any;
+      const totalSize = rawResult.totalSize as number | undefined;
+
+      this.log.debug(
+        { totalSize, size: rawResult.size, start: rawResult.start },
+        "Estimate response",
+      );
+
+      return totalSize ?? null;
+    } catch (error) {
+      this.log.warn(
+        { error: extractErrorMessage(error) },
+        "Failed to estimate total items",
+      );
+      return null;
+    }
+  }
+
+  async *sync(params: {
+    config: Record<string, unknown>;
+    credentials: ConnectorCredentials;
+    checkpoint: Record<string, unknown> | null;
+    startTime?: Date;
+    endTime?: Date;
+  }): AsyncGenerator<ConnectorSyncBatch> {
+    const parsed = parseConfluenceConfig(params.config);
+    if (!parsed) {
+      throw new Error("Invalid Confluence configuration");
+    }
+
+    const checkpoint = (params.checkpoint as ConfluenceCheckpoint | null) ?? {
+      type: "confluence" as const,
+    };
+    const batchSize = parsed.batchSize ?? DEFAULT_BATCH_SIZE;
+    const cql = buildCql(parsed, checkpoint, params.startTime);
+    const client = createConfluenceClient(parsed, params.credentials, this.log);
+
+    this.log.debug(
+      {
+        baseUrl: parsed.confluenceUrl,
+        isCloud: parsed.isCloud,
+        spaceKeys: parsed.spaceKeys,
+        cql,
+        checkpoint,
+      },
+      "Starting sync",
+    );
+
+    let cursor: string | undefined;
+    let start = 0;
+    let hasMore = true;
+    let batchIndex = 0;
+
+    while (hasMore) {
+      await this.rateLimit();
+
+      try {
+        this.log.debug({ batchIndex, cursor, start }, "Fetching batch");
+
+        // biome-ignore lint/suspicious/noExplicitAny: SDK response type
+        let searchResult: any;
+
+        if (parsed.isCloud) {
+          // Cloud: cursor-based pagination via SDK
+          searchResult = await client.content.searchContentByCQL({
+            cql,
+            cursor,
+            limit: batchSize,
+            expand: ["body.storage", "version", "space", "metadata.labels"],
+          });
+        } else {
+          // Server/DC: offset-based pagination — the SDK's searchContentByCQL
+          // doesn't accept a 'start' param, so use sendRequest directly.
+          searchResult = await client.sendRequest(
+            {
+              url: "/api/content/search",
+              method: "GET",
+              params: {
+                cql,
+                start,
+                limit: batchSize,
+                expand: ["body.storage", "version", "space", "metadata.labels"],
+              },
+            },
+            // biome-ignore lint/suspicious/noExplicitAny: SDK requires callback arg
+            undefined as any,
+          );
+        }
+
+        const results = searchResult.results ?? [];
+        const documents: ConnectorDocument[] = [];
+
+        for (const page of results) {
+          if (shouldSkipPage(page, parsed.labelsToSkip)) {
+            continue;
+          }
+
+          documents.push(
+            pageToDocument(page, parsed.confluenceUrl, parsed.isCloud),
+          );
+        }
+
+        const nextUrl: string | undefined = searchResult._links?.next;
+
+        if (parsed.isCloud) {
+          // Cloud: extract cursor from _links.next
+          if (nextUrl) {
+            const cursorMatch = nextUrl.match(/cursor=([^&]+)/);
+            cursor = cursorMatch
+              ? decodeURIComponent(cursorMatch[1])
+              : undefined;
+          } else {
+            cursor = undefined;
+          }
+          hasMore = results.length >= batchSize && !!cursor;
+        } else {
+          // Server/DC: increment offset by actual results count.
+          // Confluence may return fewer results than requested due to server
+          // limits, so we rely on _links.next presence rather than count.
+          start += results.length;
+          hasMore = results.length > 0 && !!nextUrl;
+        }
+
+        const lastPage = results[results.length - 1];
+        const rawModifiedAt: string | undefined = lastPage?.version?.when;
+
+        this.log.debug(
+          {
+            batchIndex,
+            pageCount: results.length,
+            documentCount: documents.length,
+            hasMore,
+          },
+          "Batch fetched",
+        );
+
+        batchIndex++;
+        yield {
+          documents,
+          failures: this.flushFailures(),
+          checkpoint: buildCheckpoint({
+            type: "confluence",
+            itemUpdatedAt: rawModifiedAt,
+            previousLastSyncedAt: checkpoint.lastSyncedAt,
+            extra: {
+              lastPageId: lastPage?.id ?? checkpoint.lastPageId,
+              lastRawModifiedAt: rawModifiedAt ?? checkpoint.lastRawModifiedAt,
+            },
+          }),
+          hasMore,
+        };
+      } catch (error) {
+        this.log.error(
+          { batchIndex, error: extractErrorMessage(error) },
+          "Batch fetch failed",
+        );
+        throw error;
+      }
+    }
+  }
+}
+
+// ===== Module-level helpers =====
+
+function createConfluenceClient(
+  config: ConfluenceConfig,
+  credentials: ConnectorCredentials,
+  log: pino.Logger,
+) {
+  const host = config.confluenceUrl.replace(/\/+$/, "");
+  return new ConfluenceClient({
+    host,
+    noCheckAtlassianToken: true,
+    authentication: credentials.email
+      ? { basic: { email: credentials.email, apiToken: credentials.apiToken } }
+      : { oauth2: { accessToken: credentials.apiToken } },
+    apiPrefix: config.isCloud ? "/wiki/rest/" : "/rest/",
+    middlewares: {
+      onError: (error: unknown) => {
+        // biome-ignore lint/suspicious/noExplicitAny: Axios error shape
+        const err = error as any;
+        log.debug(
+          {
+            status: err?.response?.status,
+            method: err?.config?.method?.toUpperCase(),
+            url: err?.config?.url,
+            error: err?.message ?? String(error),
+          },
+          "HTTP error",
+        );
+      },
+      onResponse: (response: unknown) => {
+        // biome-ignore lint/suspicious/noExplicitAny: Axios response shape
+        const res = response as any;
+        log.debug(
+          {
+            status: res?.status,
+            method: res?.config?.method?.toUpperCase(),
+            url: res?.config?.url,
+          },
+          "HTTP response",
+        );
+      },
+    },
+  });
+}
+
+function parseConfluenceConfig(
+  config: Record<string, unknown>,
+): ConfluenceConfig | null {
+  const result = ConfluenceConfigSchema.safeParse({
+    type: "confluence",
+    ...config,
+  });
+  return result.success ? result.data : null;
+}
+
+function buildCql(
+  config: ConfluenceConfig,
+  checkpoint: ConfluenceCheckpoint,
+  startTime?: Date,
+): string {
+  const clauses: string[] = ["type = page"];
+
+  if (config.spaceKeys && config.spaceKeys.length > 0) {
+    const spaceList = config.spaceKeys.map((k) => `"${k}"`).join(", ");
+    clauses.push(`space IN (${spaceList})`);
+  }
+
+  if (config.pageIds && config.pageIds.length > 0) {
+    const idList = config.pageIds.map((id) => `"${id}"`).join(", ");
+    clauses.push(`content = (${idList})`);
+  }
+
+  if (config.cqlQuery) {
+    clauses.push(`(${config.cqlQuery})`);
+  }
+
+  // Prefer the raw Confluence timestamp (includes timezone offset) so the CQL date
+  // is formatted in the user's local timezone.  Fall back to UTC lastSyncedAt for
+  // backward compatibility with old checkpoints — subtract 1 day as safety buffer
+  // to account for unknown timezone offsets (CQL uses day-level precision).
+  const rawTimestamp = checkpoint.lastRawModifiedAt;
+  if (rawTimestamp) {
+    const cqlDate = formatCqlLocalDate(rawTimestamp);
+    clauses.push(`lastModified >= "${cqlDate}"`);
+  } else {
+    const syncFrom = checkpoint.lastSyncedAt ?? startTime?.toISOString();
+    if (syncFrom) {
+      const cqlDate = formatCqlDateWithSafetyBuffer(syncFrom);
+      clauses.push(`lastModified >= "${cqlDate}"`);
+    }
+  }
+
+  return `${clauses.join(" AND ")} ORDER BY lastModified ASC`;
+}
+
+/**
+ * Extract the LOCAL date from an ISO 8601 timestamp with timezone offset.
+ * CQL interprets date literals in the authenticating user's timezone.
+ */
+export function formatCqlLocalDate(rawTimestamp: string): string {
+  const match = rawTimestamp.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    return `${match[1]}-${match[2]}-${match[3]}`;
+  }
+  const d = new Date(rawTimestamp);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Format a UTC ISO timestamp for CQL, subtracting 1 day to account for
+ * timezone offsets. CQL uses day precision so 1 day buffer is sufficient.
+ * Used only for old checkpoints that lack `lastRawModifiedAt`.
+ */
+function formatCqlDateWithSafetyBuffer(isoDate: string): string {
+  const d = new Date(isoDate);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return formatCqlDate(d.toISOString());
+}
+
+function formatCqlDate(isoDate: string): string {
+  const d = new Date(isoDate);
+  const year = d.getUTCFullYear();
+  const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+// biome-ignore lint/suspicious/noExplicitAny: SDK content types
+function shouldSkipPage(page: any, labelsToSkip?: string[]): boolean {
+  if (!labelsToSkip || labelsToSkip.length === 0) return false;
+  const pageLabels: string[] =
+    page.metadata?.labels?.results?.map((l: { name: string }) => l.name) ?? [];
+  return pageLabels.some((label) => labelsToSkip.includes(label));
+}
+
+function pageToDocument(
+  // biome-ignore lint/suspicious/noExplicitAny: SDK content types
+  page: any,
+  baseUrl: string,
+  isCloud: boolean,
+): ConnectorDocument {
+  const htmlContent: string = page.body?.storage?.value ?? "";
+  const plainText = stripHtmlTags(htmlContent);
+
+  const normalizedBase = baseUrl.replace(/\/+$/, "");
+  const basePath = isCloud ? "/wiki" : "";
+  const webUiPath: string = page._links?.webui ?? "";
+  const sourceUrl = webUiPath
+    ? `${normalizedBase}${basePath}${webUiPath}`
+    : undefined;
+
+  return {
+    id: page.id,
+    title: page.title,
+    content: `# ${page.title}\n\n${plainText}`,
+    sourceUrl,
+    metadata: {
+      pageId: page.id,
+      spaceKey: page.space?.key,
+      spaceName: page.space?.name,
+      status: page.status,
+      labels:
+        page.metadata?.labels?.results?.map((l: { name: string }) => l.name) ??
+        [],
+    },
+    updatedAt: page.version?.when ? new Date(page.version.when) : undefined,
+  };
+}
+
+/**
+ * Strip HTML tags from Confluence storage format to produce clean plain text.
+ *
+ * Uses cheerio (DOM parser) instead of regex to correctly handle:
+ *  - Confluence structured macros (status lozenges, panels, etc.)
+ *  - Decorative parameters (colour, icon) that should not appear in text
+ *  - Table structure (cells separated by tabs, rows by newlines)
+ *  - Proper spacing between adjacent inline elements
+ */
+export function stripHtmlTags(html: string): string {
+  if (!html) return "";
+
+  const $ = cheerio.load(html, { xml: true });
+
+  // Remove decorative ac:parameter elements so values like "Red" from
+  // status lozenges don't leak into indexed text
+  $(
+    'ac\\:parameter[ac\\:name="colour"], ac\\:parameter[ac\\:name="color"], ac\\:parameter[ac\\:name="subtle"], ac\\:parameter[ac\\:name="icon"], ac\\:parameter[ac\\:name="style"], ac\\:parameter[ac\\:name="class"]',
+  ).remove();
+
+  // Process tables: add structural separators before extracting text
+  $("td, th").each((_i, el) => {
+    $(el).prepend("\t");
+  });
+  $("tr").each((_i, el) => {
+    $(el).append("\n");
+  });
+
+  // Block elements → newlines
+  $("p, div, h1, h2, h3, h4, h5, h6, li, br").each((_i, el) => {
+    $(el).after("\n");
+  });
+
+  let text = $.text();
+
+  // Decode HTML entities that cheerio's XML mode doesn't handle
+  text = text.replace(/&nbsp;/g, " ");
+
+  // Collapse whitespace
+  text = text.replace(/ {2,}/g, " ");
+  text = text.replace(/\n{3,}/g, "\n\n");
+
+  return text.trim();
+}

@@ -15,11 +15,24 @@ interface SearchableSelectProps {
   onValueChange: (value: string) => void;
   placeholder?: string;
   searchPlaceholder?: string;
-  items: Array<{ value: string; label: string }>;
+  items: Array<{
+    value: string;
+    label: string;
+    description?: string;
+    searchText?: string;
+    content?: React.ReactNode;
+    selectedContent?: React.ReactNode;
+    disabled?: boolean;
+    checked?: boolean;
+  }>;
   className?: string;
   disabled?: boolean;
   allowCustom?: boolean;
   showSearchIcon?: boolean;
+  hint?: string;
+  onSearchQueryChange?: (value: string) => void;
+  emptyMessage?: string;
+  multiline?: boolean;
 }
 
 export function SearchableSelect({
@@ -32,6 +45,10 @@ export function SearchableSelect({
   disabled = false,
   allowCustom = false,
   showSearchIcon = true,
+  hint,
+  onSearchQueryChange,
+  emptyMessage = "No results found.",
+  multiline = false,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -40,7 +57,11 @@ export function SearchableSelect({
     if (!searchQuery) return items;
 
     const query = searchQuery.toLowerCase();
-    return items.filter((item) => item.label.toLowerCase().includes(query));
+    return items.filter(
+      (item) =>
+        (item.searchText ?? item.label).toLowerCase().includes(query) ||
+        item.description?.toLowerCase().includes(query),
+    );
   }, [items, searchQuery]);
 
   const selectedItem = items.find((item) => item.value === value);
@@ -63,13 +84,19 @@ export function SearchableSelect({
           aria-expanded={open}
           disabled={disabled}
           className={cn(
-            "w-[200px] justify-between font-normal",
+            multiline
+              ? "h-auto min-h-9 w-[200px] justify-between py-2 font-normal"
+              : "h-9 w-[200px] justify-between font-normal",
             !value && "text-muted-foreground",
             className,
           )}
         >
-          <span className="truncate">
-            {selectedItem ? selectedItem.label : value || placeholder}
+          <span className="min-w-0 flex-1 truncate text-left">
+            {selectedItem
+              ? (selectedItem.selectedContent ??
+                selectedItem.content ??
+                selectedItem.label)
+              : value || placeholder}
           </span>
           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
@@ -85,12 +112,23 @@ export function SearchableSelect({
           <input
             placeholder={searchPlaceholder}
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              onSearchQueryChange?.(e.target.value);
+            }}
             onKeyDown={handleKeyDown}
             className="flex w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
         </div>
-        <div className="max-h-[300px] overflow-y-auto p-1">
+        {hint && (
+          <div className="mt-2 px-3 pb-1.5 text-xs text-muted-foreground">
+            {hint}
+          </div>
+        )}
+        <div
+          className="max-h-[300px] overflow-y-auto p-1"
+          onWheelCapture={(event) => event.stopPropagation()}
+        >
           {filteredItems.length === 0 ? (
             <div className="px-4 py-6 text-center text-sm text-muted-foreground">
               {allowCustom && searchQuery ? (
@@ -102,7 +140,7 @@ export function SearchableSelect({
                   to use &quot;{searchQuery}&quot;
                 </>
               ) : (
-                "No results found."
+                emptyMessage
               )}
             </div>
           ) : (
@@ -110,21 +148,37 @@ export function SearchableSelect({
               <button
                 type="button"
                 key={item.value}
+                disabled={item.disabled}
+                aria-disabled={item.disabled}
                 onClick={() => {
+                  if (item.disabled) {
+                    return;
+                  }
                   onValueChange(item.value);
                   setOpen(false);
                   setSearchQuery("");
                 }}
                 className={cn(
-                  "relative flex w-full cursor-default select-none items-center justify-between rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground",
+                  "relative flex w-full cursor-default select-none items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground",
                   value === item.value && "bg-accent text-accent-foreground",
+                  item.disabled &&
+                    "cursor-not-allowed opacity-60 hover:bg-transparent hover:text-inherit",
                 )}
               >
-                <span className="truncate">{item.label}</span>
+                <span className="min-w-0 flex-1">
+                  {item.content ?? item.label}
+                  {item.description && (
+                    <span className="block text-xs text-muted-foreground truncate">
+                      {item.description}
+                    </span>
+                  )}
+                </span>
                 <Check
                   className={cn(
                     "ml-2 h-4 w-4 shrink-0",
-                    value === item.value ? "opacity-100" : "opacity-0",
+                    value === item.value || item.checked
+                      ? "opacity-100"
+                      : "opacity-0",
                   )}
                 />
               </button>

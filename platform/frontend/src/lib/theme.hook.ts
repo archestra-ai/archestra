@@ -1,8 +1,10 @@
 import { DEFAULT_THEME_ID, type OrganizationTheme } from "@shared";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { usePublicAppearance } from "./appearance.query";
-import { useUpdateOrganization } from "./organization.query";
+import {
+  useAppearanceSettings,
+  useUpdateAppearanceSettings,
+} from "./organization.query";
 
 const THEME_STORAGE_KEY = "archestra-theme";
 const DEFAULT_THEME: OrganizationTheme = DEFAULT_THEME_ID as OrganizationTheme;
@@ -16,11 +18,11 @@ export function useOrgTheme() {
   // Always use public appearance endpoint - it returns the same data for all pages
   // and works without authentication
   const { data: appearance, isLoading: isLoadingAppearance } =
-    usePublicAppearance();
+    useAppearanceSettings();
 
-  const { theme: themeFromBackend, logo } = appearance ?? {};
+  const { theme: themeFromBackend, logo, logoDark } = appearance ?? {};
 
-  const updateThemeMutation = useUpdateOrganization(
+  const updateThemeMutation = useUpdateAppearanceSettings(
     "Appearance settings updated",
     "Failed to update appearance settings",
   );
@@ -35,9 +37,9 @@ export function useOrgTheme() {
   );
 
   const saveAppearance = useCallback(
-    (themeId: OrganizationTheme) => {
+    async (themeId: OrganizationTheme) => {
       setCurrentUITheme(themeId);
-      updateThemeMutation.mutate({
+      await updateThemeMutation.mutateAsync({
         theme: themeId,
       });
       applyThemeInLocalStorage(themeId);
@@ -72,6 +74,7 @@ export function useOrgTheme() {
       setPreviewTheme: undefined,
       saveAppearance: undefined,
       logo,
+      logoDark,
       DEFAULT_THEME,
       isLoadingAppearance,
       applyThemeOnUI,
@@ -84,6 +87,7 @@ export function useOrgTheme() {
     setPreviewTheme: setCurrentUITheme,
     saveAppearance,
     logo,
+    logoDark,
     DEFAULT_THEME,
     isLoadingAppearance,
     applyThemeOnUI,

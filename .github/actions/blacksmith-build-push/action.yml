@@ -1,0 +1,69 @@
+name: Blacksmith Build Push
+description: Wrapper around useblacksmith/build-push-action pinned to a vetted version.
+inputs:
+  context:
+    description: Build context.
+    required: true
+  file:
+    description: Path to the Dockerfile.
+    required: false
+    default: ""
+  platforms:
+    description: Target platforms.
+    required: false
+    default: ""
+  push:
+    description: Whether to push the built image.
+    required: false
+    default: "false"
+  load:
+    description: Whether to load the built image into the local Docker daemon.
+    required: false
+    default: "false"
+  tags:
+    description: Image tags.
+    required: false
+    default: ""
+  outputs:
+    description: Build outputs configuration.
+    required: false
+    default: ""
+  network:
+    description: Network mode for the build.
+    required: false
+    default: ""
+  build-args:
+    description: Build arguments.
+    required: false
+    default: ""
+  secrets:
+    description: Build secrets.
+    required: false
+    default: ""
+outputs:
+  imageid:
+    description: Built image ID.
+    value: ${{ steps.build.outputs.imageid }}
+  digest:
+    description: Built image digest.
+    value: ${{ steps.build.outputs.digest }}
+  metadata:
+    description: Build metadata.
+    value: ${{ steps.build.outputs.metadata }}
+runs:
+  using: composite
+  steps:
+    - name: Build image
+      id: build
+      uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
+      with:
+        context: ${{ inputs.context }}
+        file: ${{ inputs.file }}
+        platforms: ${{ inputs.platforms }}
+        push: ${{ inputs.push }}
+        load: ${{ inputs.load }}
+        tags: ${{ inputs.tags }}
+        outputs: ${{ inputs.outputs }}
+        network: ${{ inputs.network }}
+        build-args: ${{ inputs.build-args }}
+        secrets: ${{ inputs.secrets }}

@@ -10,8 +10,15 @@ import {
   context as otelContext,
   propagation,
 } from "@opentelemetry/api";
-import { ARCHESTRA_TOKEN_PREFIX } from "@shared";
+import {
+  ARCHESTRA_TOKEN_PREFIX,
+  type InteractionSource,
+  InteractionSourceSchema,
+  SOURCE_HEADER,
+  UNTRUSTED_CONTEXT_HEADER,
+} from "@shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -19,6 +26,7 @@ import {
   InteractionModel,
   LimitValidationService,
   ModelModel,
+  ToolInvocationPolicyModel,
   UserModel,
 } from "@/models";
 import { metrics } from "@/observability";
@@ -36,10 +44,15 @@ import {
 import {
   type Agent,
   ApiError,
+  type DualLlmAnalysis,
+  type InteractionRequest,
+  type InteractionResponse,
   type LLMProvider,
   type LLMStreamAdapter,
   type ToolCompressionStats,
   type ToonSkipReason,
+  UNSAFE_CONTEXT_BOUNDARY_REASON,
+  type UnsafeContextBoundary,
 } from "@/types";
 import { isLoopbackAddress } from "@/utils/network";
 import {
@@ -68,6 +81,16 @@ const {
 } = config;
 
 /**
+ * Module-level LRU cache for per-tool blocking policy lookups.
+ * Keyed by `${agentId}:${toolName}:${contextIsTrusted}` to scope per agent/trust context.
+ * Shared across requests to avoid repeated DB queries for the same tool.
+ */
+const toolPolicyCache = new LRUCacheManager<boolean>({
+  maxSize: 500,
+  defaultTtl: 60_000, // 60 seconds
+});
+
+/**
  * Shared context passed to streaming and non-streaming handlers.
  * Groups the 15+ parameters that both handlers need into a single object
  * for maintainability and readability.
@@ -82,11 +105,14 @@ export interface LLMProxyContext<TRequest> {
   globalToolPolicy: "permissive" | "restrictive";
   toonStats: ToolCompressionStats;
   toonSkipReason: ToonSkipReason | null;
+  dualLlmAnalyses: DualLlmAnalysis[];
+  unsafeContextBoundary?: UnsafeContextBoundary;
   externalAgentId?: string;
   userId?: string;
   resolvedUser?: { id: string; email: string; name: string } | null;
   sessionId?: string | null;
   sessionSource?: SessionSource;
+  source: InteractionSource;
   executionId?: string;
   parentContext?: Context;
   teamIds?: string[];
@@ -149,6 +175,20 @@ export async function handleLLMProxy<
           }
         | undefined,
     );
+
+  // Extract interaction source (chat, chatops, email, etc.)
+  // Internal callers set X-Archestra-Source; external API requests default to "api".
+  const rawSource = utils.headers.metaHeader.getHeaderValue(
+    headersForExtraction,
+    SOURCE_HEADER,
+  );
+  const source: InteractionSource =
+    InteractionSourceSchema.safeParse(rawSource).data ?? "api";
+  const inheritedContextUntrusted =
+    utils.headers.metaHeader.getHeaderValue(
+      headersForExtraction,
+      UNTRUSTED_CONTEXT_HEADER,
+    ) === "true";
 
   // Extract W3C trace context (traceparent/tracestate) from incoming request headers.
   // When the chat route calls the LLM proxy via localhost, the traced fetch injects these
@@ -380,50 +420,61 @@ export async function handleLLMProxy<
       {
         resolvedAgentId,
         considerContextUntrusted: resolvedAgent.considerContextUntrusted,
+        inheritedContextUntrusted,
         globalToolPolicy,
       },
       `[${providerName}Proxy] Evaluating trusted data policies`,
     );
 
     const commonMessages = requestAdapter.getMessages();
-    const { toolResultUpdates, contextIsTrusted } =
-      await utils.trustedData.evaluateIfContextIsTrusted(
-        commonMessages,
-        resolvedAgentId,
-        apiKey,
-        providerName,
-        resolvedAgent.considerContextUntrusted,
-        globalToolPolicy,
-        { teamIds, externalAgentId },
-        // Streaming callbacks for dual LLM progress
-        requestAdapter.isStreaming()
-          ? () => {
-              ensureStreamHeaders();
-              reply.raw.write(
-                streamAdapter.formatTextDeltaSSE(
-                  "Analyzing with Dual LLM:\n\n",
-                ),
-              );
-            }
-          : undefined,
-        requestAdapter.isStreaming()
-          ? (progress: {
-              question: string;
-              options: string[];
-              answer: string;
-            }) => {
-              const optionsText = progress.options
-                .map((opt: string, idx: number) => `  ${idx}: ${opt}`)
-                .join("\n");
-              ensureStreamHeaders();
-              reply.raw.write(
-                streamAdapter.formatTextDeltaSSE(
-                  `Question: ${progress.question}\nOptions:\n${optionsText}\nAnswer: ${progress.answer}\n\n`,
-                ),
-              );
-            }
-          : undefined,
-      );
+    const effectiveConsiderContextUntrusted =
+      resolvedAgent.considerContextUntrusted || inheritedContextUntrusted;
+    const initialUntrustedReason = resolvedAgent.considerContextUntrusted
+      ? UNSAFE_CONTEXT_BOUNDARY_REASON.agentConfiguredUntrusted
+      : inheritedContextUntrusted
+        ? UNSAFE_CONTEXT_BOUNDARY_REASON.inheritedFromParent
+        : undefined;
+    const {
+      toolResultUpdates,
+      contextIsTrusted,
+      dualLlmAnalyses,
+      unsafeContextBoundary,
+    } = await utils.trustedData.evaluateIfContextIsTrusted(
+      commonMessages,
+      resolvedAgentId,
+      resolvedAgent.organizationId,
+      userId,
+      effectiveConsiderContextUntrusted,
+      globalToolPolicy,
+      { teamIds, externalAgentId },
+      // Streaming callbacks for dual LLM progress
+      requestAdapter.isStreaming()
+        ? () => {
+            ensureStreamHeaders();
+            reply.raw.write(
+              streamAdapter.formatTextDeltaSSE("Analyzing with Dual LLM:\n\n"),
+            );
+          }
+        : undefined,
+      requestAdapter.isStreaming()
+        ? (progress: {
+            question: string;
+            options: string[];
+            answer: string;
+          }) => {
+            const optionsText = progress.options
+              .map((opt: string, idx: number) => `  ${idx}: ${opt}`)
+              .join("\n");
+            ensureStreamHeaders();
+            reply.raw.write(
+              streamAdapter.formatTextDeltaSSE(
+                `Question: ${progress.question}\nOptions:\n${optionsText}\nAnswer: ${progress.answer}\n\n`,
+              ),
+            );
+          }
+        : undefined,
+      initialUntrustedReason,
+    );
 
     // Apply tool result updates
     requestAdapter.applyToolResultUpdates(toolResultUpdates);
@@ -495,9 +546,9 @@ export async function handleLLMProxy<
     // Create client with observability (each provider handles metrics internally)
     const client = provider.createClient(apiKey, {
       baseUrl: effectiveBaseUrl,
-      mockMode: config.benchmark.mockMode,
       agent: resolvedAgent,
       externalAgentId,
+      source,
       defaultHeaders:
         Object.keys(headersToForward).length > 0 ? headersToForward : undefined,
     });
@@ -532,11 +583,14 @@ export async function handleLLMProxy<
       globalToolPolicy,
       toonStats,
       toonSkipReason,
+      dualLlmAnalyses,
+      unsafeContextBoundary,
       externalAgentId,
       userId,
       resolvedUser,
       sessionId,
       sessionSource,
+      source,
       executionId,
       parentContext,
       teamIds,
@@ -556,6 +610,37 @@ export async function handleLLMProxy<
       return handleNonStreaming(client, finalRequest, reply, provider, ctx);
     }
   } catch (error) {
+    // Persist failed interactions so they appear in LLM logs
+    try {
+      const errorMessage = provider.extractErrorMessage(error);
+      logger.info(
+        { profileId: resolvedAgent.id, errorMessage },
+        "Persisting error interaction record",
+      );
+      await InteractionModel.create({
+        profileId: resolvedAgent.id,
+        externalAgentId,
+        executionId,
+        userId,
+        sessionId,
+        sessionSource,
+        source,
+        type: provider.interactionType,
+        request: requestAdapter.getOriginalRequest() as InteractionRequest,
+        processedRequest: null,
+        response: { error: errorMessage } as unknown as InteractionResponse,
+        model: requestAdapter.getModel(),
+        baselineModel: requestAdapter.getModel(),
+        inputTokens: 0,
+        outputTokens: 0,
+      });
+    } catch (interactionError) {
+      logger.error(
+        { err: interactionError, profileId: resolvedAgent.id },
+        "Failed to create error interaction record",
+      );
+    }
+
     return handleError(
       error,
       reply,
@@ -594,11 +679,14 @@ async function handleStreaming<
     globalToolPolicy,
     toonStats,
     toonSkipReason,
+    dualLlmAnalyses,
+    unsafeContextBoundary,
     externalAgentId,
     userId,
     resolvedUser,
     sessionId,
     sessionSource,
+    source,
     executionId,
     parentContext,
     teamIds,
@@ -608,6 +696,10 @@ async function handleStreaming<
   const streamStartTime = Date.now();
   let firstChunkTime: number | undefined;
   let streamCompleted = false;
+  const streamedEventIndices = new Set<number>();
+  // Once a blocking tool is encountered, buffer all subsequent tool call chunks
+  // to prevent streaming data for tools that appear after a blocked tool.
+  let bufferAllToolCalls = false;
 
   logger.debug(
     { model: actualModel },
@@ -636,6 +728,9 @@ async function handleStreaming<
         const stream = await provider.executeStream(client, request);
 
         // Process chunks
+        // Per-tool buffer/stream decisions: only "Allow always" tools stream immediately.
+        // Policy lookups are cached in the module-level toolPolicyCache (LRU with TTL).
+
         for await (const chunk of stream) {
           // Track first chunk time
           if (!firstChunkTime) {
@@ -646,16 +741,69 @@ async function handleStreaming<
               agent,
               actualModel,
               ttftSeconds,
+              source,
               externalAgentId,
             );
           }
 
           const result = streamAdapter.processChunk(chunk);
 
-          // Stream non-tool-call data immediately
+          // Stream text deltas immediately. For tool call chunks, check
+          // the specific tool's policy to decide buffer vs stream:
+          //  - "Allow always" tools: stream immediately for low latency
+          //    (important for MCP Apps streaming UX).
+          //  - Tools with blocking policies: buffer until policy evaluation
+          //    completes so blocked call data is never exposed.
           if (result.sseData) {
             ensureStreamHeaders();
             reply.raw.write(result.sseData);
+          } else if (result.isToolCallChunk) {
+            // Determine if the current tool call should be streamed
+            let shouldStream = globalToolPolicy === "permissive";
+            if (!shouldStream && !bufferAllToolCalls) {
+              const currentToolCall =
+                streamAdapter.state.toolCalls[
+                  streamAdapter.state.toolCalls.length - 1
+                ];
+              if (currentToolCall?.name) {
+                const cacheKey = `${agent.id}:${currentToolCall.name}:${contextIsTrusted}`;
+                let hasBlocking = toolPolicyCache.get(cacheKey);
+                if (hasBlocking === undefined) {
+                  try {
+                    hasBlocking =
+                      await ToolInvocationPolicyModel.hasBlockingPolicy(
+                        currentToolCall.name,
+                        contextIsTrusted,
+                      );
+                  } catch (err) {
+                    logger.warn(
+                      { err, toolName: currentToolCall.name },
+                      "hasBlockingPolicy lookup failed, defaulting to buffer",
+                    );
+                    hasBlocking = true;
+                  }
+                  toolPolicyCache.set(cacheKey, hasBlocking);
+                }
+                if (hasBlocking) {
+                  bufferAllToolCalls = true;
+                }
+                shouldStream = !hasBlocking;
+              }
+            }
+
+            if (shouldStream) {
+              const allEvents = streamAdapter.getRawToolCallEvents();
+              ensureStreamHeaders();
+              for (let i = 0; i < allEvents.length; i++) {
+                if (!streamedEventIndices.has(i)) {
+                  reply.raw.write(allEvents[i]);
+                  streamedEventIndices.add(i);
+                }
+              }
+            }
+            // Buffered tools: events accumulate in
+            // streamAdapter.state.rawToolCallEvents and are flushed
+            // (or discarded) after policy evaluation below.
           }
 
           if (result.isFinal) {
@@ -747,7 +895,10 @@ async function handleStreaming<
       const { contentMessage, reason, allToolCallNames } =
         toolInvocationRefusal;
 
-      // Stream refusal
+      // When not buffering, tool call chunks were already streamed — append
+      // refusal so clients know not to execute them. When buffering,
+      // tool call chunks were held back and discarded — send only the refusal
+      // so blocked tool call data is never exposed.
       ensureStreamHeaders();
       const refusalEvents = streamAdapter.formatCompleteTextSSE(contentMessage);
       for (const event of refusalEvents) {
@@ -763,19 +914,21 @@ async function handleStreaming<
         providerName,
         toolCallCount: toolCalls.length,
         actualModel,
+        source,
         externalAgentId,
       });
-    } else if (toolCalls.length > 0) {
-      // Tool calls approved - stream raw events
-      logger.info(
-        { toolCallCount: toolCalls.length },
-        "Tool calls allowed, streaming them now",
-      );
-
+    } else if (
+      toolCalls.length > 0 &&
+      streamedEventIndices.size < streamAdapter.getRawToolCallEvents().length
+    ) {
+      // Some tool call chunks were buffered during streaming (per-tool
+      // blocking policies). Policy allowed them, so flush un-streamed events now.
+      const allEvents = streamAdapter.getRawToolCallEvents();
       ensureStreamHeaders();
-      const rawEvents = streamAdapter.getRawToolCallEvents();
-      for (const event of rawEvents) {
-        reply.raw.write(event);
+      for (let i = 0; i < allEvents.length; i++) {
+        if (!streamedEventIndices.has(i)) {
+          reply.raw.write(allEvents[i]);
+        }
       }
     }
 
@@ -804,6 +957,7 @@ async function handleStreaming<
           agent,
           { input: usage.inputTokens, output: usage.outputTokens },
           actualModel,
+          source,
           externalAgentId,
         );
 
@@ -815,6 +969,7 @@ async function handleStreaming<
             actualModel,
             usage.outputTokens,
             totalDurationSeconds,
+            source,
             externalAgentId,
           );
         }
@@ -833,6 +988,7 @@ async function handleStreaming<
           agent,
           actualModel,
           costs.actualCost,
+          source,
           externalAgentId,
         ),
       );
@@ -846,6 +1002,7 @@ async function handleStreaming<
             userId,
             sessionId,
             sessionSource,
+            source,
             providerType: provider.interactionType,
             request: originalRequest,
             processedRequest: request,
@@ -856,6 +1013,8 @@ async function handleStreaming<
             costs,
             toonStats,
             toonSkipReason,
+            dualLlmAnalyses,
+            unsafeContextBoundary,
           }),
         );
       } catch (interactionError) {
@@ -895,11 +1054,14 @@ async function handleNonStreaming<
     globalToolPolicy,
     toonStats,
     toonSkipReason,
+    dualLlmAnalyses,
+    unsafeContextBoundary,
     externalAgentId,
     userId,
     resolvedUser,
     sessionId,
     sessionSource,
+    source,
     executionId,
     parentContext,
     teamIds,
@@ -1012,6 +1174,7 @@ async function handleNonStreaming<
         providerName,
         toolCallCount: toolCalls.length,
         actualModel,
+        source,
         externalAgentId,
       });
 
@@ -1030,6 +1193,7 @@ async function handleNonStreaming<
           agent,
           actualModel,
           costs.actualCost,
+          source,
           externalAgentId,
         ),
       );
@@ -1042,6 +1206,7 @@ async function handleNonStreaming<
           userId,
           sessionId,
           sessionSource,
+          source,
           providerType: provider.interactionType,
           request: originalRequest,
           processedRequest: request,
@@ -1052,6 +1217,8 @@ async function handleNonStreaming<
           costs,
           toonStats,
           toonSkipReason,
+          dualLlmAnalyses,
+          unsafeContextBoundary,
         }),
       );
 
@@ -1071,6 +1238,7 @@ async function handleNonStreaming<
   //   agent,
   //   { input: usage.inputTokens, output: usage.outputTokens },
   //   actualModel,
+  //   source,
   //   externalAgentId,
   // );
 
@@ -1087,6 +1255,7 @@ async function handleNonStreaming<
       agent,
       actualModel,
       costs.actualCost,
+      source,
       externalAgentId,
     ),
   );
@@ -1100,6 +1269,7 @@ async function handleNonStreaming<
         userId,
         sessionId,
         sessionSource,
+        source,
         providerType: provider.interactionType,
         request: originalRequest,
         processedRequest: request,
@@ -1110,6 +1280,8 @@ async function handleNonStreaming<
         costs,
         toonStats,
         toonSkipReason,
+        dualLlmAnalyses,
+        unsafeContextBoundary,
       }),
     );
   } catch (interactionError) {

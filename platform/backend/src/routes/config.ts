@@ -3,16 +3,39 @@ import { RouteId, SupportedProvidersSchema } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getEmailProviderInfo } from "@/agents/incoming-email";
+import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config from "@/config";
-import { getKnowledgeGraphProviderInfo } from "@/knowledge-graph";
-import { McpServerRuntimeManager } from "@/mcp-server-runtime";
+import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import { OrganizationModel } from "@/models";
 import { getByosVaultKvVersion, isByosEnabled } from "@/secrets-manager";
 import { EmailProviderTypeSchema, type GlobalToolPolicy } from "@/types";
-import { KnowledgeGraphProviderTypeSchema } from "@/types/knowledge-graph";
+import { PUBLIC_CONFIG_PATH } from "./route-paths";
 
 const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  fastify.get(
+    PUBLIC_CONFIG_PATH,
+    {
+      schema: {
+        operationId: RouteId.GetPublicConfig,
+        description: "Get public config",
+        tags: ["Config"],
+        response: {
+          200: z.strictObject({
+            disableBasicAuth: z.boolean(),
+            disableInvitations: z.boolean(),
+          }),
+        },
+      },
+    },
+    async (_request, reply) => {
+      return reply.send({
+        disableBasicAuth: config.auth.disableBasicAuth,
+        disableInvitations: config.auth.disableInvitations,
+      });
+    },
+  );
+
   fastify.get(
     "/api/config",
     {
@@ -22,29 +45,30 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Config"],
         response: {
           200: z.strictObject({
+            enterpriseFeatures: z.strictObject({
+              core: z.boolean(),
+              knowledgeBase: z.boolean(),
+              fullWhiteLabeling: z.boolean(),
+            }),
             features: z.strictObject({
-              "orchestrator-k8s-runtime": z.boolean(),
+              orchestratorK8sRuntime: z.boolean(),
               byosEnabled: z.boolean(),
               byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
+              bedrockIamAuthEnabled: z.boolean(),
               geminiVertexAiEnabled: z.boolean(),
               globalToolPolicy: z.enum(["permissive", "restrictive"]),
-              browserStreamingEnabled: z.boolean(),
               incomingEmail: z.object({
                 enabled: z.boolean(),
                 provider: EmailProviderTypeSchema.optional(),
                 displayName: z.string().optional(),
                 emailDomain: z.string().optional(),
               }),
-              knowledgeGraph: z.object({
-                enabled: z.boolean(),
-                provider: KnowledgeGraphProviderTypeSchema.optional(),
-                displayName: z.string().optional(),
-              }),
               mcpServerBaseImage: z.string(),
               orchestratorK8sNamespace: z.string(),
               isQuickstart: z.boolean(),
               ngrokDomain: z.string(),
               virtualKeyDefaultExpirationSeconds: z.number(),
+              mcpSandboxDomain: z.string().nullable(),
             }),
             providerBaseUrls: z.record(
               SupportedProvidersSchema,
@@ -61,21 +85,26 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
         org?.globalToolPolicy ?? "permissive";
 
       return reply.send({
+        enterpriseFeatures: {
+          core: config.enterpriseFeatures.core,
+          knowledgeBase: config.enterpriseFeatures.knowledgeBase,
+          fullWhiteLabeling: config.enterpriseFeatures.fullWhiteLabeling,
+        },
         features: {
-          ...config.features,
-          "orchestrator-k8s-runtime": McpServerRuntimeManager.isEnabled,
+          orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
           byosEnabled: isByosEnabled(),
           byosVaultKvVersion: getByosVaultKvVersion(),
+          bedrockIamAuthEnabled: isBedrockIamAuthEnabled(),
           geminiVertexAiEnabled: isVertexAiEnabled(),
           globalToolPolicy,
           incomingEmail: getEmailProviderInfo(),
-          knowledgeGraph: getKnowledgeGraphProviderInfo(),
           mcpServerBaseImage: config.orchestrator.mcpServerBaseImage,
           orchestratorK8sNamespace: config.orchestrator.kubernetes.namespace,
           isQuickstart: config.isQuickstart,
           ngrokDomain: getNgrokDomain(),
           virtualKeyDefaultExpirationSeconds:
             config.llmProxy.virtualKeyDefaultExpirationSeconds,
+          mcpSandboxDomain: config.mcpSandbox.domain,
         },
         providerBaseUrls: {
           openai: config.llm.openai.baseUrl || null,

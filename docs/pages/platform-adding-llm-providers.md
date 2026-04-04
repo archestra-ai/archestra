@@ -3,7 +3,7 @@ title: Adding LLM Providers
 category: Development
 order: 2
 description: Developer guide for implementing new LLM provider support in Archestra Platform
-lastUpdated: 2026-02-18
+lastUpdated: 2026-03-23
 ---
 
 <!--
@@ -163,17 +163,6 @@ The function must:
 4. Calculate token savings using the appropriate tokenizer
 5. Return compressed messages and compression statistics
 
-### Dual LLM
-
-> **Note:** This is a known abstraction leak that we're planning to address in future versions. Thanks for bearing with us!
-
-Dual LLM pattern uses a secondary LLM for Q&A verification of tool invocations. Each provider needs its own client implementation.
-
-| File                                     | Description                                                                                                                                                                             |
-| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `backend/src/clients/dual-llm-client.ts` | **OpenAI-compatible providers:** use `createOpenAiCompatibleDualLlmClient({ providerLabel, baseUrl, defaultModel })`. **Non-OpenAI providers:** create a custom class implementing `DualLlmClient` |
-| `backend/src/clients/dual-llm-client.ts` | Add entry to `dualLlmClientFactories` record                                                                                                                                            |
-
 ### Metrics
 
 > **Note:** This is a known abstraction leak that we're planning to address in future versions. Thanks for bearing with us!
@@ -189,12 +178,12 @@ For example: OpenAI and Anthropic SDKs accept a custom `fetch` function, so we i
 
 ### Frontend: Logs UI
 
-Interaction handlers parse stored request/response data for display in the LLM Proxy Logs UI (`/logs/llm-proxy`).
+Interaction handlers parse stored request/response data for display in the LLM Proxy Logs UI (`/llm/logs`).
 
 | File                                          | Description                                                                                |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `frontend/src/lib/llmProviders/{provider}.ts` | Implement `InteractionUtils` interface for parsing provider-specific request/response JSON |
-| `frontend/src/lib/interaction.utils.ts`       | Add case to `getInteractionClass()` switch to route discriminator to handler               |
+| `frontend/src/lib/interactions/llmProviders/{provider}.ts` | Implement `InteractionUtils` interface for parsing provider-specific request/response JSON |
+| `frontend/src/lib/interactions/interaction.utils.ts`       | Add case to `getInteractionClass()` switch to route discriminator to handler               |
 
 ### E2E Tests
 
@@ -230,32 +219,28 @@ Environment variables for API keys and base URLs.
 | ----------------------- | ------------------------------------------ |
 | `backend/src/config.ts` | Add `chat.{provider}.apiKey` and `baseUrl` |
 
-### Chat Provider Registration
-
-Allows users to select this provider's models in the Chat UI.
-
-| File                                | Description                          |
-| ----------------------------------- | ------------------------------------ |
-| `backend/src/types/chat-api-key.ts` | Add to `SupportedChatProviderSchema` |
-
 ### Model Listing
 
 Each provider has a different API for listing available models.
 
-| File                                       | Description                                                            |
-| ------------------------------------------ | ---------------------------------------------------------------------- |
-| `backend/src/routes/chat/routes.models.ts` | Add `fetch{Provider}Models()` function and register in `modelFetchers` |
-| `backend/src/routes/chat/routes.models.ts` | Add case to `getProviderApiKey()` switch                               |
+| File                                                   | Description                                                                                          |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `backend/src/routes/chat/model-fetchers/{provider}.ts` | Implement `fetch{Provider}Models()` for the provider's model listing API                             |
+| `backend/src/routes/chat/model-fetchers/index.ts`      | Register the fetcher in the shared `modelFetchers` record                                            |
+| `backend/src/routes/chat/model-fetchers/registry.ts`   | Update `fetchModelsForProvider()` only if the provider needs special auth or non-standard fetch flow |
+| `backend/src/routes/chat/routes.api-keys.ts`           | Add provider-specific API key validation rules if needed                                             |
+
+If the provider is keyless or uses cloud credentials instead of an API key, also update `backend/src/services/system-key-manager.ts`.
 
 ### LLM Client
 
 Chat uses Vercel AI SDK which requires provider-specific model creation.
 
-| File                                | Description                                                                                      |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `backend/src/clients/llm-client.ts` | Add to `detectProviderFromModel()` - model naming conventions differ (e.g., `gpt-*`, `claude-*`) |
-| `backend/src/clients/llm-client.ts` | Add case to `resolveProviderApiKey()` switch                                                     |
-| `backend/src/clients/llm-client.ts` | Add case to `createLLMModel()` - AI SDK requires provider-specific initialization                |
+| File                                | Description                                                                                                                               |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `backend/src/clients/llm-client.ts` | Add to `detectProviderFromModel()` - model naming conventions differ (e.g., `gpt-*`, `claude-*`)                                          |
+| `backend/src/clients/llm-client.ts` | Add case to `resolveProviderApiKey()` switch                                                                                              |
+| `backend/src/clients/llm-client.ts` | Add entry to `providerModelConfigs` registry - defines SDK initialization, default base URL, API key requirement, and proxied path suffix |
 
 ### Error Handling
 

@@ -15,10 +15,10 @@ import agentsTable from "./agent";
  * Maps chatops channels (Teams, Slack, etc.) to Archestra agents.
  *
  * Each channel can have one binding to an agent. When a message arrives
- * in the channel, it is routed to the bound agent for processing via A2A.
+ * in the channel, it is routed to the assigned agent for processing via A2A.
  *
  * Unique constraint on (provider, channelId, workspaceId) ensures
- * one binding per channel.
+ * one assignment per channel.
  */
 const chatopsChannelBindingsTable = pgTable(
   "chatops_channel_binding",

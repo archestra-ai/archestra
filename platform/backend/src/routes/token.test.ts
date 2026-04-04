@@ -316,6 +316,99 @@ describe("Token Route Authorization", () => {
       expect(visibleTokens[0].teamId).toBe(team1.id);
     });
 
+    test("user with mcpGateway:team-admin and membership sees their team tokens", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeTeamMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const otherUser = await makeUser();
+
+      const team1 = await makeTeam(org.id, user.id, { name: "Team 1" });
+      const team2 = await makeTeam(org.id, otherUser.id, { name: "Team 2" });
+
+      // User is only member of team1
+      await makeTeamMember(team1.id, user.id);
+
+      await TeamTokenModel.createTeamToken(team1.id, team1.name);
+      await TeamTokenModel.createTeamToken(team2.id, team2.name);
+
+      // Grant only mcpGateway:team-admin (no team:admin or team:update)
+      setupPermissions({ mcpGateway: ["team-admin"] });
+
+      const { success: isTeamAdmin } = await hasPermission(
+        { team: ["admin"] },
+        {} as IncomingHttpHeaders,
+      );
+      expect(isTeamAdmin).toBe(false);
+
+      const { success: hasTeamUpdate } = await hasPermission(
+        { team: ["update"] },
+        {} as IncomingHttpHeaders,
+      );
+      expect(hasTeamUpdate).toBe(false);
+
+      const { success: hasMcpGatewayTeamAdmin } = await hasPermission(
+        { mcpGateway: ["team-admin"] },
+        {} as IncomingHttpHeaders,
+      );
+      expect(hasMcpGatewayTeamAdmin).toBe(true);
+
+      // Get user's teams
+      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+      expect(userTeamIds).toContain(team1.id);
+      expect(userTeamIds).not.toContain(team2.id);
+
+      // Simulate filtering logic (same as route: mcpGateway:team-admin + membership)
+      const tokens = await TeamTokenModel.findAllWithTeam();
+      const visibleTokens = tokens.filter(
+        (t) =>
+          t.isOrganizationToken || (t.teamId && userTeamIds.includes(t.teamId)),
+      );
+
+      expect(visibleTokens.length).toBe(1);
+      expect(visibleTokens[0].teamId).toBe(team1.id);
+    });
+
+    test("user with mcpGateway:team-admin but no membership sees no team tokens", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const otherUser = await makeUser();
+      const team = await makeTeam(org.id, otherUser.id, { name: "Test Team" });
+
+      await TeamTokenModel.createTeamToken(team.id, team.name);
+
+      // Grant only mcpGateway:team-admin
+      setupPermissions({ mcpGateway: ["team-admin"] });
+
+      const { success: hasMcpGatewayTeamAdmin } = await hasPermission(
+        { mcpGateway: ["team-admin"] },
+        {} as IncomingHttpHeaders,
+      );
+      expect(hasMcpGatewayTeamAdmin).toBe(true);
+
+      // User is not a member of the team
+      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+      expect(userTeamIds).not.toContain(team.id);
+
+      // Simulate filtering logic
+      const tokens = await TeamTokenModel.findAllWithTeam();
+      const visibleTokens = tokens.filter(
+        (t) =>
+          t.isOrganizationToken || (t.teamId && userTeamIds.includes(t.teamId)),
+      );
+
+      expect(visibleTokens.filter((t) => !t.isOrganizationToken).length).toBe(
+        0,
+      );
+    });
+
     test("user without team:update sees no team tokens", async ({
       makeOrganization,
       makeUser,

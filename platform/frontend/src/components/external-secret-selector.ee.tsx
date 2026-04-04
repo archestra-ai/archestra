@@ -17,14 +17,14 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useFeatureFlag } from "@/lib/features.hook";
-import { useTeamsWithVaultFolders } from "@/lib/team.query";
+import { useFeature } from "@/lib/config/config.query";
+import { useTeamsWithVaultFolders } from "@/lib/teams/team.query";
 import {
   useTeamVaultFolder,
   useTeamVaultFolderSecrets,
   useTeamVaultSecretKeys,
   type VaultSecretListItem,
-} from "@/lib/team-vault-folder.query.ee";
+} from "@/lib/teams/team-vault-folder.query.ee";
 import { CurrentVaultSecret } from "./current-vault-secret.ee";
 
 interface ExternalSecretSelectorProps {
@@ -46,7 +46,7 @@ export default function ExternalSecretSelector({
   onSecretKeyChange,
   disabled = false,
 }: ExternalSecretSelectorProps) {
-  const byosEnabled = useFeatureFlag("byosEnabled");
+  const byosEnabled = useFeature("byosEnabled");
   const { data: teamsWithVaultPaths, isLoading: isLoadingTeams } =
     useTeamsWithVaultFolders();
   const {

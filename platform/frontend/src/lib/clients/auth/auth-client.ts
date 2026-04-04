@@ -7,14 +7,13 @@ import {
 } from "@shared/access-control";
 import {
   adminClient,
-  apiKeyClient,
   inferOrgAdditionalFields,
   organizationClient,
   twoFactorClient,
 } from "better-auth/client/plugins";
 import { createAccessControl } from "better-auth/plugins/access";
 import { createAuthClient } from "better-auth/react";
-import config from "@/lib/config";
+import config from "@/lib/config/config";
 
 const ac = createAccessControl(allAvailableActions);
 
@@ -42,12 +41,15 @@ export const authClient = createAuthClient({
               type: "string",
               required: true,
             },
+            description: {
+              type: "string",
+              required: false,
+            },
           },
         },
       }),
     }),
     adminClient(),
-    apiKeyClient(),
     twoFactorClient(),
     ssoClient(),
     oauthProviderClient(),

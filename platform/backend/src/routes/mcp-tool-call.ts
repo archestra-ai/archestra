@@ -1,4 +1,8 @@
-import { RouteId } from "@shared";
+import {
+  createPaginatedResponseSchema,
+  PaginationQuerySchema,
+  RouteId,
+} from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
@@ -6,9 +10,7 @@ import { McpToolCallModel } from "@/models";
 import {
   ApiError,
   constructResponseSchema,
-  createPaginatedResponseSchema,
   createSortingQuerySchema,
-  PaginationQuerySchema,
   SelectMcpToolCallSchema,
   UuidIdSchema,
 } from "@/types";
@@ -93,7 +95,7 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const { success: isMcpServerAdmin } = await hasPermission(
-        { mcpServer: ["admin"] },
+        { mcpServerInstallation: ["admin"] },
         headers,
       );
 
@@ -124,7 +126,7 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { mcpToolCallId }, user, headers }, reply) => {
       const { success: isMcpServerAdmin } = await hasPermission(
-        { mcpServer: ["admin"] },
+        { mcpServerInstallation: ["admin"] },
         headers,
       );
 

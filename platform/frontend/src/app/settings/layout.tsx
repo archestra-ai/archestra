@@ -1,64 +1,101 @@
 "use client";
 
+import { usePathname } from "next/navigation";
+import { createContext, useContext, useMemo, useState } from "react";
 import { PageLayout } from "@/components/page-layout";
-import { useHasPermissions } from "@/lib/auth.query";
-import config from "@/lib/config";
-import { useSecretsType } from "@/lib/secrets.query";
+import { useSettingsTabs } from "./settings-tabs";
+
+const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
+  "/settings/account": {
+    title: "Your Account",
+    description:
+      "Manage your personal profile, sessions, and sign-in settings.",
+  },
+  "/settings/api-keys": {
+    title: "API Keys",
+    description: "Create and manage personal API keys for programmatic access.",
+  },
+  "/settings/agents": {
+    title: "Agents",
+    description:
+      "Configure default agent behavior and agent-related platform settings.",
+  },
+  "/settings/identity-providers": {
+    title: "Identity Providers",
+    description: "Configure SSO and identity provider integrations.",
+  },
+  "/settings/knowledge": {
+    title: "Knowledge",
+    description:
+      "Configure embedding, reranking, and knowledge system defaults.",
+  },
+  "/settings/llm": {
+    title: "LLM",
+    description: "Configure platform-wide LLM defaults and behavior.",
+  },
+  "/settings/organization": {
+    title: "Organization",
+    description:
+      "Manage organization-wide appearance and authentication settings",
+  },
+  "/settings/roles": {
+    title: "Roles",
+    description:
+      "Manage predefined and custom roles, permissions, and access control.",
+  },
+  "/settings/secrets": {
+    title: "Secrets",
+    description: "Manage organization secrets and secure configuration.",
+  },
+  "/settings/teams": {
+    title: "Teams",
+    description:
+      "Manage teams and their access to resources across the platform.",
+  },
+  "/settings/users": {
+    title: "Users",
+    description: "Manage users, their roles, and user invitations.",
+  },
+};
+
+type SettingsLayoutContextType = {
+  setActionButton: (button: React.ReactNode) => void;
+};
+
+const SettingsLayoutContext = createContext<SettingsLayoutContextType>({
+  setActionButton: () => {},
+});
+
+export function useSetSettingsAction() {
+  return useContext(SettingsLayoutContext).setActionButton;
+}
 
 export default function SettingsLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { data: userCanReadOrganization } = useHasPermissions({
-    organization: ["read"],
-  });
+  const pathname = usePathname();
+  const tabs = useSettingsTabs();
+  const [actionButton, setActionButton] = useState<React.ReactNode>(null);
 
-  const { data: userCanReadIdentityProviders } = useHasPermissions({
-    identityProvider: ["read"],
-  });
+  const config = PAGE_CONFIG[pathname] ?? {
+    title: "Settings",
+    description: "Configure your platform, teams, and integrations.",
+  };
 
-  const { data: secretsType } = useSecretsType();
-
-  const tabs = [
-    { label: "Your Account", href: "/settings/account" },
-    { label: "Dual LLM", href: "/settings/dual-llm" },
-    { label: "Security", href: "/settings/security" },
-    ...(userCanReadOrganization
-      ? [
-          { label: "Members", href: "/settings/members" },
-          { label: "Teams", href: "/settings/teams" },
-          { label: "Roles", href: "/settings/roles" },
-          /**
-           * Identity Providers tab is only shown when enterprise license is activated
-           * and the user has the permission to read identity providers.
-           */
-          ...(config.enterpriseLicenseActivated && userCanReadIdentityProviders
-            ? [
-                {
-                  label: "Identity Providers",
-                  href: "/settings/identity-providers",
-                },
-              ]
-            : []),
-        ]
-      : []),
-    { label: "Appearance", href: "/settings/appearance" },
-    /**
-     * Secrets tab is only shown when using Vault storage (not DB).
-     */
-    ...(secretsType?.type === "Vault"
-      ? [{ label: "Secrets", href: "/settings/secrets" }]
-      : []),
-  ];
+  const contextValue = useMemo(() => ({ setActionButton }), []);
 
   return (
-    <PageLayout
-      title="Settings"
-      description="Manage your account settings and preferences"
-      tabs={tabs}
-    >
-      {children}
-    </PageLayout>
+    <SettingsLayoutContext.Provider value={contextValue}>
+      <PageLayout
+        title={config.title}
+        description={config.description}
+        tabs={tabs}
+        actionButton={actionButton}
+      >
+        {children}
+      </PageLayout>
+    </SettingsLayoutContext.Provider>
   );
 }

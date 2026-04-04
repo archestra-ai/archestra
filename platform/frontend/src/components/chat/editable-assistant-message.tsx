@@ -10,6 +10,8 @@ import {
 } from "react";
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import { Response } from "@/components/ai-elements/response";
+import type { KnowledgeGraphCitationsProps } from "@/components/chat/knowledge-graph-citations";
+import { KnowledgeGraphCitations } from "@/components/chat/knowledge-graph-citations";
 import { MessageActions } from "@/components/chat/message-actions";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -21,7 +23,9 @@ interface EditableAssistantMessageProps {
   text: string;
   isEditing: boolean;
   showActions: boolean;
+  citationParts?: KnowledgeGraphCitationsProps["parts"];
   editDisabled?: boolean;
+  isStreaming?: boolean;
   onStartEdit: (partKey: string) => void;
   onCancelEdit: () => void;
   onSave: (
@@ -38,7 +42,9 @@ export function EditableAssistantMessage({
   text,
   isEditing,
   showActions,
+  citationParts,
   editDisabled = false,
+  isStreaming = false,
   onStartEdit,
   onCancelEdit,
   onSave,
@@ -162,16 +168,17 @@ export function EditableAssistantMessage({
 
   return (
     <Message from="assistant" className="group/message">
-      <div className="relative flex flex-col items-start pb-8 w-full">
+      <div className="relative flex flex-col items-start pb-2 w-full">
         <MessageContent>
-          <Response>{text}</Response>
+          <Response isStreaming={isStreaming}>{text}</Response>
+          {citationParts && <KnowledgeGraphCitations parts={citationParts} />}
         </MessageContent>
         {showActions && (
           <MessageActions
             textToCopy={text}
             onEditClick={handleStartEdit}
             editDisabled={editDisabled}
-            className="absolute -bottom-1 left-0 opacity-0 group-hover/message:opacity-100 transition-opacity"
+            className="absolute -bottom-1 left-0 translate-y-full z-10 opacity-0 group-hover/message:opacity-100 transition-opacity"
           />
         )}
       </div>

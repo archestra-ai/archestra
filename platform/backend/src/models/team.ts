@@ -1,5 +1,5 @@
 import { MEMBER_ROLE_NAME } from "@shared";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, count, eq, getTableColumns, ilike, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import type {
@@ -7,6 +7,7 @@ import type {
   Team,
   TeamExternalGroup,
   TeamMember,
+  TeamMemberListItem,
   UpdateTeam,
 } from "@/types";
 import { ApiError } from "@/types";
@@ -77,6 +78,57 @@ class TeamModel {
       "TeamModel.findByOrganization: completed",
     );
     return teamsWithMembers;
+  }
+
+  /**
+   * Find all teams in an organization with pagination and optional name filter
+   */
+  static async findByOrganizationPaginated(params: {
+    organizationId: string;
+    limit: number;
+    offset: number;
+    name?: string;
+  }): Promise<{ data: Team[]; total: number }> {
+    const { organizationId, limit, offset, name } = params;
+    logger.debug(
+      { organizationId, limit, offset, name },
+      "TeamModel.findByOrganizationPaginated: fetching teams",
+    );
+
+    const filters = [
+      eq(schema.teamsTable.organizationId, organizationId),
+      ...(name ? [ilike(schema.teamsTable.name, `%${name}%`)] : []),
+    ];
+
+    const [teams, totalResult] = await Promise.all([
+      db
+        .select()
+        .from(schema.teamsTable)
+        .where(and(...filters))
+        .orderBy(schema.teamsTable.name)
+        .limit(limit)
+        .offset(offset),
+      db
+        .select({ count: count() })
+        .from(schema.teamsTable)
+        .where(and(...filters)),
+    ]);
+
+    const teamIds = teams.map((t) => t.id);
+    const membersByTeam = await TeamModel.getTeamMembersBatch(teamIds);
+
+    const teamsWithMembers = teams.map((team) => ({
+      ...team,
+      members: membersByTeam.get(team.id) || [],
+    }));
+
+    const total = totalResult[0]?.count ?? 0;
+    logger.debug(
+      { organizationId, count: teamsWithMembers.length, total },
+      "TeamModel.findByOrganizationPaginated: completed",
+    );
+
+    return { data: teamsWithMembers, total };
   }
 
   /**
@@ -194,10 +246,11 @@ class TeamModel {
    */
   static async delete(id: string): Promise<boolean> {
     logger.debug({ id }, "TeamModel.delete: deleting team");
-    const result = await db
+    const rows = await db
       .delete(schema.teamsTable)
-      .where(eq(schema.teamsTable.id, id));
-    const deleted = result.rowCount !== null && result.rowCount > 0;
+      .where(eq(schema.teamsTable.id, id))
+      .returning({ id: schema.teamsTable.id });
+    const deleted = rows.length > 0;
     logger.debug({ id, deleted }, "TeamModel.delete: completed");
     return deleted;
   }
@@ -215,6 +268,35 @@ class TeamModel {
     logger.debug(
       { teamId, count: members.length },
       "TeamModel.getTeamMembers: completed",
+    );
+    return members;
+  }
+
+  static async getTeamMembersWithUsers(
+    teamId: string,
+  ): Promise<TeamMemberListItem[]> {
+    logger.debug(
+      { teamId },
+      "TeamModel.getTeamMembersWithUsers: fetching members",
+    );
+    const members = await db
+      .select({
+        ...getTableColumns(schema.teamMembersTable),
+        name: schema.usersTable.name,
+        email: schema.usersTable.email,
+        image: schema.usersTable.image,
+      })
+      .from(schema.teamMembersTable)
+      .innerJoin(
+        schema.usersTable,
+        eq(schema.teamMembersTable.userId, schema.usersTable.id),
+      )
+      .where(eq(schema.teamMembersTable.teamId, teamId))
+      .orderBy(schema.usersTable.name);
+
+    logger.debug(
+      { teamId, count: members.length },
+      "TeamModel.getTeamMembersWithUsers: completed",
     );
     return members;
   }
@@ -285,16 +367,17 @@ class TeamModel {
    */
   static async removeMember(teamId: string, userId: string): Promise<boolean> {
     logger.debug({ teamId, userId }, "TeamModel.removeMember: removing member");
-    const result = await db
+    const rows = await db
       .delete(schema.teamMembersTable)
       .where(
         and(
           eq(schema.teamMembersTable.teamId, teamId),
           eq(schema.teamMembersTable.userId, userId),
         ),
-      );
+      )
+      .returning({ teamId: schema.teamMembersTable.teamId });
 
-    const removed = result.rowCount !== null && result.rowCount > 0;
+    const removed = rows.length > 0;
     logger.debug(
       { teamId, userId, removed },
       "TeamModel.removeMember: completed",
@@ -339,6 +422,65 @@ class TeamModel {
       "TeamModel.getUserTeams: completed",
     );
     return teamsWithMembers;
+  }
+
+  /**
+   * Get paginated teams a user belongs to with optional name filter
+   */
+  static async getUserTeamsPaginated(params: {
+    userId: string;
+    limit: number;
+    offset: number;
+    name?: string;
+  }): Promise<{ data: Team[]; total: number }> {
+    const { userId, limit, offset, name } = params;
+    logger.debug(
+      { userId, limit, offset, name },
+      "TeamModel.getUserTeamsPaginated: fetching user teams",
+    );
+
+    const filters = [
+      eq(schema.teamMembersTable.userId, userId),
+      ...(name ? [ilike(schema.teamsTable.name, `%${name}%`)] : []),
+    ];
+
+    const [teams, totalResult] = await Promise.all([
+      db
+        .select(getTableColumns(schema.teamsTable))
+        .from(schema.teamMembersTable)
+        .innerJoin(
+          schema.teamsTable,
+          eq(schema.teamMembersTable.teamId, schema.teamsTable.id),
+        )
+        .where(and(...filters))
+        .orderBy(schema.teamsTable.name)
+        .limit(limit)
+        .offset(offset),
+      db
+        .select({ count: count() })
+        .from(schema.teamMembersTable)
+        .innerJoin(
+          schema.teamsTable,
+          eq(schema.teamMembersTable.teamId, schema.teamsTable.id),
+        )
+        .where(and(...filters)),
+    ]);
+
+    const teamIds = teams.map((t) => t.id);
+    const membersByTeam = await TeamModel.getTeamMembersBatch(teamIds);
+
+    const teamsWithMembers = teams.map((team) => ({
+      ...team,
+      members: membersByTeam.get(team.id) || [],
+    }));
+
+    const total = totalResult[0]?.count ?? 0;
+    logger.debug(
+      { userId, count: teamsWithMembers.length, total },
+      "TeamModel.getUserTeamsPaginated: completed",
+    );
+
+    return { data: teamsWithMembers, total };
   }
 
   /**
@@ -513,16 +655,17 @@ class TeamModel {
       { teamId, groupIdentifier },
       "TeamModel.removeExternalGroup: removing external group",
     );
-    const result = await db
+    const rows = await db
       .delete(schema.teamExternalGroupsTable)
       .where(
         and(
           eq(schema.teamExternalGroupsTable.teamId, teamId),
           eq(schema.teamExternalGroupsTable.groupIdentifier, groupIdentifier),
         ),
-      );
+      )
+      .returning({ id: schema.teamExternalGroupsTable.id });
 
-    const removed = result.rowCount !== null && result.rowCount > 0;
+    const removed = rows.length > 0;
     logger.debug(
       { teamId, groupIdentifier, removed },
       "TeamModel.removeExternalGroup: completed",
@@ -542,16 +685,17 @@ class TeamModel {
       { teamId, groupId },
       "TeamModel.removeExternalGroupById: removing external group",
     );
-    const result = await db
+    const rows = await db
       .delete(schema.teamExternalGroupsTable)
       .where(
         and(
           eq(schema.teamExternalGroupsTable.id, groupId),
           eq(schema.teamExternalGroupsTable.teamId, teamId),
         ),
-      );
+      )
+      .returning({ id: schema.teamExternalGroupsTable.id });
 
-    const removed = result.rowCount !== null && result.rowCount > 0;
+    const removed = rows.length > 0;
     logger.debug(
       { teamId, groupId, removed },
       "TeamModel.removeExternalGroupById: completed",

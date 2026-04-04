@@ -1,4 +1,4 @@
-import { SecretsManagerType } from "@shared";
+import { isVaultReference, SecretsManagerType } from "@shared";
 import logger from "@/logging";
 import SecretModel from "@/models/secret";
 import {
@@ -115,8 +115,27 @@ export default class ReadonlyVaultSecretManager
       return dbRecord;
     }
 
+    const secretValues = dbRecord.secret as Record<string, unknown>;
+
+    // Self-heal corrupted records:
+    // We had a bug where we were setting isByosVault to true during updateSecret for records created with forceDB=true introduced here:
+    // https://github.com/archestra-ai/archestra/pull/1694/changes#diff-02457052fc1fed9d616aebeae6f7e0d984575808d3b218ccfd851300dcf7793aR426
+    // In this case, if we detect that the secret values have is_byos_vault=true but are not vault references,
+    // we need to fix the flag and return the DB record as-is.
+    const hasAnyVaultReference = Object.values(secretValues).some(
+      (v) => typeof v === "string" && isVaultReference(v),
+    );
+    if (!hasAnyVaultReference) {
+      logger.warn(
+        { secretId },
+        "BYOSVaultSecretManager.getSecret: isByosVault=true but no vault references found, fixing corrupted flag",
+      );
+      await SecretModel.update(secretId, { isByosVault: false });
+      return { ...dbRecord, isByosVault: false };
+    }
+
     // All values in secret field are vault references (path#key format)
-    const vaultReferences = dbRecord.secret as Record<string, string>;
+    const vaultReferences = secretValues;
     if (Object.keys(vaultReferences).length === 0) {
       return dbRecord;
     }
@@ -195,8 +214,8 @@ export default class ReadonlyVaultSecretManager
     }
 
     return await SecretModel.update(secretId, {
+      // Do not modify isByosVault — that flag is set at creation time and shouldn't be changed during update.
       secret: _secretValue,
-      isByosVault: true,
     });
   }
 
@@ -219,7 +238,7 @@ export default class ReadonlyVaultSecretManager
    * Groups by path to minimize Vault API calls.
    */
   private async resolveVaultReferences(
-    references: Record<string, string>,
+    references: Record<string, unknown>,
   ): Promise<SecretValue> {
     const resolved: SecretValue = {};
 

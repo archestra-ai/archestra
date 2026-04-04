@@ -1260,6 +1260,42 @@ export type AnthropicMessagesRequestInput = {
             };
             cache_control?: unknown;
         } | {
+            type: 'document';
+            source: {
+                type: 'base64';
+                media_type: 'application/pdf';
+                data: string;
+            } | {
+                type: 'text';
+                media_type: 'text/plain';
+                data: string;
+            } | {
+                type: 'url';
+                url: string;
+            } | {
+                type: 'content';
+                content: string | Array<{
+                    text: string;
+                    type: 'text';
+                    cache_control?: unknown;
+                    citations?: Array<unknown> | unknown;
+                } | {
+                    type: 'image';
+                    source: {
+                        type: 'base64';
+                        media_type: string;
+                        data: string;
+                    };
+                    cache_control?: unknown;
+                }>;
+            };
+            title?: string | unknown;
+            context?: string | unknown;
+            citations?: {
+                enabled: boolean;
+            } | unknown;
+            cache_control?: unknown;
+        } | {
             id: string;
             input: unknown;
             name: string;
@@ -1281,6 +1317,42 @@ export type AnthropicMessagesRequestInput = {
                     media_type: string;
                     data: string;
                 };
+                cache_control?: unknown;
+            } | {
+                type: 'document';
+                source: {
+                    type: 'base64';
+                    media_type: 'application/pdf';
+                    data: string;
+                } | {
+                    type: 'text';
+                    media_type: 'text/plain';
+                    data: string;
+                } | {
+                    type: 'url';
+                    url: string;
+                } | {
+                    type: 'content';
+                    content: string | Array<{
+                        text: string;
+                        type: 'text';
+                        cache_control?: unknown;
+                        citations?: Array<unknown> | unknown;
+                    } | {
+                        type: 'image';
+                        source: {
+                            type: 'base64';
+                            media_type: string;
+                            data: string;
+                        };
+                        cache_control?: unknown;
+                    }>;
+                };
+                title?: string | unknown;
+                context?: string | unknown;
+                citations?: {
+                    enabled: boolean;
+                } | unknown;
                 cache_control?: unknown;
             }>;
             is_error?: boolean;
@@ -2202,61 +2274,7 @@ export type MistralChatCompletionResponseInput = {
          */
         prompt_tokens_details?: unknown;
     };
-    [key: string]: unknown | string | Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
-        index: number;
-        logprobs: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
-         */
-        message: {
-            content: string | unknown;
-            refusal?: string | unknown;
-            role: 'assistant';
-            annotations?: Array<unknown>;
-            audio?: unknown;
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
-             */
-            function_call?: {
-                arguments: string;
-                name: string;
-            } | unknown;
-            tool_calls?: Array<{
-                id: string;
-                type: 'function';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
-                 */
-                function: {
-                    arguments: string;
-                    name: string;
-                };
-            } | {
-                id: string;
-                type: 'custom';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
-                 */
-                custom: {
-                    input: string;
-                    name: string;
-                };
-            }> | unknown;
-        };
-    }> | number | 'chat.completion' | string | unknown | {
-        completion_tokens: number;
-        prompt_tokens: number;
-        total_tokens: number;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
-         */
-        completion_tokens_details?: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
-         */
-        prompt_tokens_details?: unknown;
-    } | undefined;
+    [key: string]: unknown;
 };
 
 export type PerplexityChatCompletionRequestInput = {
@@ -2613,61 +2631,7 @@ export type PerplexityChatCompletionResponseInput = {
          */
         prompt_tokens_details?: unknown;
     };
-    [key: string]: unknown | string | Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
-        index: number;
-        logprobs: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
-         */
-        message: {
-            content: string | unknown;
-            refusal?: string | unknown;
-            role: 'assistant';
-            annotations?: Array<unknown>;
-            audio?: unknown;
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
-             */
-            function_call?: {
-                arguments: string;
-                name: string;
-            } | unknown;
-            tool_calls?: Array<{
-                id: string;
-                type: 'function';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
-                 */
-                function: {
-                    arguments: string;
-                    name: string;
-                };
-            } | {
-                id: string;
-                type: 'custom';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
-                 */
-                custom: {
-                    input: string;
-                    name: string;
-                };
-            }> | unknown;
-        };
-    }> | number | 'chat.completion' | string | unknown | {
-        completion_tokens: number;
-        prompt_tokens: number;
-        total_tokens: number;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
-         */
-        completion_tokens_details?: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
-         */
-        prompt_tokens_details?: unknown;
-    } | undefined;
+    [key: string]: unknown;
 };
 
 export type GroqChatCompletionRequestInput = {
@@ -3024,61 +2988,7 @@ export type GroqChatCompletionResponseInput = {
          */
         prompt_tokens_details?: unknown;
     };
-    [key: string]: unknown | string | Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
-        index: number;
-        logprobs: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
-         */
-        message: {
-            content: string | unknown;
-            refusal?: string | unknown;
-            role: 'assistant';
-            annotations?: Array<unknown>;
-            audio?: unknown;
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
-             */
-            function_call?: {
-                arguments: string;
-                name: string;
-            } | unknown;
-            tool_calls?: Array<{
-                id: string;
-                type: 'function';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
-                 */
-                function: {
-                    arguments: string;
-                    name: string;
-                };
-            } | {
-                id: string;
-                type: 'custom';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
-                 */
-                custom: {
-                    input: string;
-                    name: string;
-                };
-            }> | unknown;
-        };
-    }> | number | 'chat.completion' | string | unknown | {
-        completion_tokens: number;
-        prompt_tokens: number;
-        total_tokens: number;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
-         */
-        completion_tokens_details?: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
-         */
-        prompt_tokens_details?: unknown;
-    } | undefined;
+    [key: string]: unknown;
 };
 
 export type OpenrouterChatCompletionRequestInput = {
@@ -3435,61 +3345,7 @@ export type OpenrouterChatCompletionResponseInput = {
          */
         prompt_tokens_details?: unknown;
     };
-    [key: string]: unknown | string | Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
-        index: number;
-        logprobs: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
-         */
-        message: {
-            content: string | unknown;
-            refusal?: string | unknown;
-            role: 'assistant';
-            annotations?: Array<unknown>;
-            audio?: unknown;
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
-             */
-            function_call?: {
-                arguments: string;
-                name: string;
-            } | unknown;
-            tool_calls?: Array<{
-                id: string;
-                type: 'function';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
-                 */
-                function: {
-                    arguments: string;
-                    name: string;
-                };
-            } | {
-                id: string;
-                type: 'custom';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
-                 */
-                custom: {
-                    input: string;
-                    name: string;
-                };
-            }> | unknown;
-        };
-    }> | number | 'chat.completion' | string | unknown | {
-        completion_tokens: number;
-        prompt_tokens: number;
-        total_tokens: number;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
-         */
-        completion_tokens_details?: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
-         */
-        prompt_tokens_details?: unknown;
-    } | undefined;
+    [key: string]: unknown;
 };
 
 export type VllmChatCompletionRequestInput = {
@@ -4601,272 +4457,7 @@ export type DeepSeekChatCompletionRequestInput = {
     temperature?: number | unknown;
     max_tokens?: number | unknown;
     stream?: boolean | unknown;
-    [key: string]: unknown | string | Array<{
-        content: string | Array<{
-            type: 'text';
-            text: string;
-        }>;
-        role: 'developer';
-        name?: string;
-    } | {
-        content: string | Array<{
-            type: 'text';
-            text: string;
-        }>;
-        role: 'system';
-        name?: string;
-    } | {
-        content: string | Array<{
-            type: 'text';
-            text: string;
-        } | {
-            type: 'image_url';
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
-             */
-            image_url: {
-                url: string;
-                detail?: 'auto' | 'low' | 'high';
-            };
-        } | {
-            type: 'input_audio';
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
-             */
-            input_audio: {
-                data: string;
-                format: 'wav' | 'mp3';
-            };
-        } | {
-            type: 'file';
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
-             */
-            file: {
-                file_data?: string;
-                file_id?: string;
-                filename?: string;
-            };
-        }>;
-        role: 'user';
-        name?: string;
-    } | {
-        role: 'assistant';
-        audio?: {
-            id: string;
-        } | unknown;
-        content?: string | Array<{
-            type: 'text';
-            text: string;
-        }> | Array<{
-            type: 'refusal';
-            refusal: string;
-        }> | unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
-         */
-        function_call?: {
-            arguments: string;
-            name: string;
-        } | unknown;
-        name?: string;
-        refusal?: string | unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
-         */
-        tool_calls?: Array<{
-            id: string;
-            type: 'function';
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
-             */
-            function: {
-                arguments: string;
-                name: string;
-            };
-        } | {
-            id: string;
-            type: 'custom';
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
-             */
-            custom: {
-                input: string;
-                name: string;
-            };
-        }>;
-    } | {
-        role: 'tool';
-        content: string | Array<{
-            type: 'text';
-            text: string;
-        } | {
-            type: 'image_url';
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
-             */
-            image_url: {
-                url: string;
-                detail?: 'auto' | 'low' | 'high';
-            };
-        }>;
-        tool_call_id: string;
-    } | {
-        role: 'function';
-        content: string | unknown;
-        name: string;
-    }> | Array<{
-        type: 'function';
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
-         */
-        function: {
-            name: string;
-            description?: string;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
-            strict?: boolean | unknown;
-        };
-    } | {
-        type: 'custom';
-        custom: {
-            /**
-             * The name of the custom tool, used to identify it in tool calls
-             */
-            name: string;
-            /**
-             * Optional description of the custom tool, used to provide more context
-             */
-            description?: string;
-            /**
-             * The input format for the custom tool. Default is unconstrained text.
-             */
-            format?: {
-                /**
-                 * Unconstrained text format. Always `text`
-                 */
-                type: 'text';
-            } | {
-                type: 'grammar';
-                /**
-                 * Your chosen grammar
-                 */
-                grammar: {
-                    /**
-                     * The grammar definition
-                     */
-                    definition: string;
-                    /**
-                     * The syntax of the grammar definition
-                     */
-                    syntax: 'lark' | 'regex';
-                };
-            };
-        };
-    }> | 'none' | 'auto' | 'required' | {
-        type: 'allowed_tools';
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1455
-         */
-        allowed_tools: {
-            /**
-             *
-             * Constrains the tools available to the model to a pre-defined set.
-             *
-             * auto allows the model to pick from among the allowed tools and generate a
-             * message.
-             *
-             * required requires the model to call one or more of the allowed tools.
-             *
-             */
-            mode: 'auto' | 'required';
-            /**
-             * A list of tool definitions that the model should be allowed to call
-             */
-            tools: Array<{
-                [key: string]: {
-                    type: 'function';
-                    /**
-                     * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
-                     */
-                    function: {
-                        name: string;
-                        description?: string;
-                        /**
-                         *
-                         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-                         *
-                         * The parameters the functions accepts, described as a JSON Schema object. See the
-                         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-                         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-                         * documentation about the format.
-                         *
-                         * Omitting parameters defines a function with an empty parameter list.
-                         *
-                         */
-                        parameters?: {
-                            [key: string]: unknown;
-                        };
-                        strict?: boolean | unknown;
-                    };
-                };
-            }>;
-        };
-    } | {
-        type: 'function';
-        function: {
-            name: string;
-        };
-    } | {
-        type: 'custom';
-        custom: {
-            /**
-             * The name of the custom tool, used to identify it in tool calls
-             */
-            name: string;
-            /**
-             * Optional description of the custom tool, used to provide more context
-             */
-            description?: string;
-            /**
-             * The input format for the custom tool. Default is unconstrained text.
-             */
-            format?: {
-                /**
-                 * Unconstrained text format. Always `text`
-                 */
-                type: 'text';
-            } | {
-                type: 'grammar';
-                /**
-                 * Your chosen grammar
-                 */
-                grammar: {
-                    /**
-                     * The grammar definition
-                     */
-                    definition: string;
-                    /**
-                     * The syntax of the grammar definition
-                     */
-                    syntax: 'lark' | 'regex';
-                };
-            };
-        };
-    } | number | unknown | number | unknown | boolean | unknown | undefined;
+    [key: string]: unknown;
 };
 
 export type DeepSeekChatCompletionResponseInput = {
@@ -4935,61 +4526,7 @@ export type DeepSeekChatCompletionResponseInput = {
          */
         prompt_tokens_details?: unknown;
     };
-    [key: string]: unknown | string | Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
-        index: number;
-        logprobs: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
-         */
-        message: {
-            content: string | unknown;
-            refusal?: string | unknown;
-            role: 'assistant';
-            annotations?: Array<unknown>;
-            audio?: unknown;
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
-             */
-            function_call?: {
-                arguments: string;
-                name: string;
-            } | unknown;
-            tool_calls?: Array<{
-                id: string;
-                type: 'function';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
-                 */
-                function: {
-                    arguments: string;
-                    name: string;
-                };
-            } | {
-                id: string;
-                type: 'custom';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
-                 */
-                custom: {
-                    input: string;
-                    name: string;
-                };
-            }> | unknown;
-        };
-    }> | number | 'chat.completion' | string | unknown | {
-        completion_tokens: number;
-        prompt_tokens: number;
-        total_tokens: number;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
-         */
-        completion_tokens_details?: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
-         */
-        prompt_tokens_details?: unknown;
-    } | undefined;
+    [key: string]: unknown;
 };
 
 export type MinimaxChatCompletionRequestInput = {
@@ -5702,61 +5239,7 @@ export type XaiChatCompletionResponseInput = {
          */
         prompt_tokens_details?: unknown;
     };
-    [key: string]: unknown | string | Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
-        index: number;
-        logprobs: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
-         */
-        message: {
-            content: string | unknown;
-            refusal?: string | unknown;
-            role: 'assistant';
-            annotations?: Array<unknown>;
-            audio?: unknown;
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
-             */
-            function_call?: {
-                arguments: string;
-                name: string;
-            } | unknown;
-            tool_calls?: Array<{
-                id: string;
-                type: 'function';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
-                 */
-                function: {
-                    arguments: string;
-                    name: string;
-                };
-            } | {
-                id: string;
-                type: 'custom';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
-                 */
-                custom: {
-                    input: string;
-                    name: string;
-                };
-            }> | unknown;
-        };
-    }> | number | 'chat.completion' | string | unknown | {
-        completion_tokens: number;
-        prompt_tokens: number;
-        total_tokens: number;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
-         */
-        completion_tokens_details?: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
-         */
-        prompt_tokens_details?: unknown;
-    } | undefined;
+    [key: string]: unknown;
 };
 
 export type OpenAiChatCompletionRequest = {
@@ -7015,6 +6498,42 @@ export type AnthropicMessagesRequest = {
             };
             cache_control?: unknown;
         } | {
+            type: 'document';
+            source: {
+                type: 'base64';
+                media_type: 'application/pdf';
+                data: string;
+            } | {
+                type: 'text';
+                media_type: 'text/plain';
+                data: string;
+            } | {
+                type: 'url';
+                url: string;
+            } | {
+                type: 'content';
+                content: string | Array<{
+                    text: string;
+                    type: 'text';
+                    cache_control?: unknown;
+                    citations?: Array<unknown> | unknown;
+                } | {
+                    type: 'image';
+                    source: {
+                        type: 'base64';
+                        media_type: string;
+                        data: string;
+                    };
+                    cache_control?: unknown;
+                }>;
+            };
+            title?: string | unknown;
+            context?: string | unknown;
+            citations?: {
+                enabled: boolean;
+            } | unknown;
+            cache_control?: unknown;
+        } | {
             id: string;
             input: unknown;
             name: string;
@@ -7036,6 +6555,42 @@ export type AnthropicMessagesRequest = {
                     media_type: string;
                     data: string;
                 };
+                cache_control?: unknown;
+            } | {
+                type: 'document';
+                source: {
+                    type: 'base64';
+                    media_type: 'application/pdf';
+                    data: string;
+                } | {
+                    type: 'text';
+                    media_type: 'text/plain';
+                    data: string;
+                } | {
+                    type: 'url';
+                    url: string;
+                } | {
+                    type: 'content';
+                    content: string | Array<{
+                        text: string;
+                        type: 'text';
+                        cache_control?: unknown;
+                        citations?: Array<unknown> | unknown;
+                    } | {
+                        type: 'image';
+                        source: {
+                            type: 'base64';
+                            media_type: string;
+                            data: string;
+                        };
+                        cache_control?: unknown;
+                    }>;
+                };
+                title?: string | unknown;
+                context?: string | unknown;
+                citations?: {
+                    enabled: boolean;
+                } | unknown;
                 cache_control?: unknown;
             }>;
             is_error?: boolean;
@@ -7957,61 +7512,7 @@ export type MistralChatCompletionResponse = {
          */
         prompt_tokens_details?: unknown;
     };
-    [key: string]: unknown | string | Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
-        index: number;
-        logprobs: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
-         */
-        message: {
-            content: string | unknown;
-            refusal?: string | unknown;
-            role: 'assistant';
-            annotations?: Array<unknown>;
-            audio?: unknown;
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
-             */
-            function_call?: {
-                arguments: string;
-                name: string;
-            } | unknown;
-            tool_calls?: Array<{
-                id: string;
-                type: 'function';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
-                 */
-                function: {
-                    arguments: string;
-                    name: string;
-                };
-            } | {
-                id: string;
-                type: 'custom';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
-                 */
-                custom: {
-                    input: string;
-                    name: string;
-                };
-            }> | unknown;
-        };
-    }> | number | 'chat.completion' | string | unknown | {
-        completion_tokens: number;
-        prompt_tokens: number;
-        total_tokens: number;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
-         */
-        completion_tokens_details?: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
-         */
-        prompt_tokens_details?: unknown;
-    } | undefined;
+    [key: string]: unknown;
 };
 
 export type PerplexityChatCompletionRequest = {
@@ -8368,61 +7869,7 @@ export type PerplexityChatCompletionResponse = {
          */
         prompt_tokens_details?: unknown;
     };
-    [key: string]: unknown | string | Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
-        index: number;
-        logprobs: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
-         */
-        message: {
-            content: string | unknown;
-            refusal?: string | unknown;
-            role: 'assistant';
-            annotations?: Array<unknown>;
-            audio?: unknown;
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
-             */
-            function_call?: {
-                arguments: string;
-                name: string;
-            } | unknown;
-            tool_calls?: Array<{
-                id: string;
-                type: 'function';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
-                 */
-                function: {
-                    arguments: string;
-                    name: string;
-                };
-            } | {
-                id: string;
-                type: 'custom';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
-                 */
-                custom: {
-                    input: string;
-                    name: string;
-                };
-            }> | unknown;
-        };
-    }> | number | 'chat.completion' | string | unknown | {
-        completion_tokens: number;
-        prompt_tokens: number;
-        total_tokens: number;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
-         */
-        completion_tokens_details?: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
-         */
-        prompt_tokens_details?: unknown;
-    } | undefined;
+    [key: string]: unknown;
 };
 
 export type GroqChatCompletionRequest = {
@@ -8779,61 +8226,7 @@ export type GroqChatCompletionResponse = {
          */
         prompt_tokens_details?: unknown;
     };
-    [key: string]: unknown | string | Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
-        index: number;
-        logprobs: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
-         */
-        message: {
-            content: string | unknown;
-            refusal?: string | unknown;
-            role: 'assistant';
-            annotations?: Array<unknown>;
-            audio?: unknown;
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
-             */
-            function_call?: {
-                arguments: string;
-                name: string;
-            } | unknown;
-            tool_calls?: Array<{
-                id: string;
-                type: 'function';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
-                 */
-                function: {
-                    arguments: string;
-                    name: string;
-                };
-            } | {
-                id: string;
-                type: 'custom';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
-                 */
-                custom: {
-                    input: string;
-                    name: string;
-                };
-            }> | unknown;
-        };
-    }> | number | 'chat.completion' | string | unknown | {
-        completion_tokens: number;
-        prompt_tokens: number;
-        total_tokens: number;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
-         */
-        completion_tokens_details?: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
-         */
-        prompt_tokens_details?: unknown;
-    } | undefined;
+    [key: string]: unknown;
 };
 
 export type OpenrouterChatCompletionRequest = {
@@ -9190,61 +8583,7 @@ export type OpenrouterChatCompletionResponse = {
          */
         prompt_tokens_details?: unknown;
     };
-    [key: string]: unknown | string | Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
-        index: number;
-        logprobs: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
-         */
-        message: {
-            content: string | unknown;
-            refusal?: string | unknown;
-            role: 'assistant';
-            annotations?: Array<unknown>;
-            audio?: unknown;
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
-             */
-            function_call?: {
-                arguments: string;
-                name: string;
-            } | unknown;
-            tool_calls?: Array<{
-                id: string;
-                type: 'function';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
-                 */
-                function: {
-                    arguments: string;
-                    name: string;
-                };
-            } | {
-                id: string;
-                type: 'custom';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
-                 */
-                custom: {
-                    input: string;
-                    name: string;
-                };
-            }> | unknown;
-        };
-    }> | number | 'chat.completion' | string | unknown | {
-        completion_tokens: number;
-        prompt_tokens: number;
-        total_tokens: number;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
-         */
-        completion_tokens_details?: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
-         */
-        prompt_tokens_details?: unknown;
-    } | undefined;
+    [key: string]: unknown;
 };
 
 export type VllmChatCompletionRequest = {
@@ -10356,272 +9695,7 @@ export type DeepSeekChatCompletionRequest = {
     temperature?: number | unknown;
     max_tokens?: number | unknown;
     stream?: boolean | unknown;
-    [key: string]: unknown | string | Array<{
-        content: string | Array<{
-            type: 'text';
-            text: string;
-        }>;
-        role: 'developer';
-        name?: string;
-    } | {
-        content: string | Array<{
-            type: 'text';
-            text: string;
-        }>;
-        role: 'system';
-        name?: string;
-    } | {
-        content: string | Array<{
-            type: 'text';
-            text: string;
-        } | {
-            type: 'image_url';
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
-             */
-            image_url: {
-                url: string;
-                detail?: 'auto' | 'low' | 'high';
-            };
-        } | {
-            type: 'input_audio';
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
-             */
-            input_audio: {
-                data: string;
-                format: 'wav' | 'mp3';
-            };
-        } | {
-            type: 'file';
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
-             */
-            file: {
-                file_data?: string;
-                file_id?: string;
-                filename?: string;
-            };
-        }>;
-        role: 'user';
-        name?: string;
-    } | {
-        role: 'assistant';
-        audio?: {
-            id: string;
-        } | unknown;
-        content?: string | Array<{
-            type: 'text';
-            text: string;
-        }> | Array<{
-            type: 'refusal';
-            refusal: string;
-        }> | unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
-         */
-        function_call?: {
-            arguments: string;
-            name: string;
-        } | unknown;
-        name?: string;
-        refusal?: string | unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
-         */
-        tool_calls?: Array<{
-            id: string;
-            type: 'function';
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
-             */
-            function: {
-                arguments: string;
-                name: string;
-            };
-        } | {
-            id: string;
-            type: 'custom';
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
-             */
-            custom: {
-                input: string;
-                name: string;
-            };
-        }>;
-    } | {
-        role: 'tool';
-        content: string | Array<{
-            type: 'text';
-            text: string;
-        } | {
-            type: 'image_url';
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
-             */
-            image_url: {
-                url: string;
-                detail?: 'auto' | 'low' | 'high';
-            };
-        }>;
-        tool_call_id: string;
-    } | {
-        role: 'function';
-        content: string | unknown;
-        name: string;
-    }> | Array<{
-        type: 'function';
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
-         */
-        function: {
-            name: string;
-            description?: string;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
-            strict?: boolean | unknown;
-        };
-    } | {
-        type: 'custom';
-        custom: {
-            /**
-             * The name of the custom tool, used to identify it in tool calls
-             */
-            name: string;
-            /**
-             * Optional description of the custom tool, used to provide more context
-             */
-            description?: string;
-            /**
-             * The input format for the custom tool. Default is unconstrained text.
-             */
-            format?: {
-                /**
-                 * Unconstrained text format. Always `text`
-                 */
-                type: 'text';
-            } | {
-                type: 'grammar';
-                /**
-                 * Your chosen grammar
-                 */
-                grammar: {
-                    /**
-                     * The grammar definition
-                     */
-                    definition: string;
-                    /**
-                     * The syntax of the grammar definition
-                     */
-                    syntax: 'lark' | 'regex';
-                };
-            };
-        };
-    }> | 'none' | 'auto' | 'required' | {
-        type: 'allowed_tools';
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1455
-         */
-        allowed_tools: {
-            /**
-             *
-             * Constrains the tools available to the model to a pre-defined set.
-             *
-             * auto allows the model to pick from among the allowed tools and generate a
-             * message.
-             *
-             * required requires the model to call one or more of the allowed tools.
-             *
-             */
-            mode: 'auto' | 'required';
-            /**
-             * A list of tool definitions that the model should be allowed to call
-             */
-            tools: Array<{
-                [key: string]: {
-                    type: 'function';
-                    /**
-                     * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
-                     */
-                    function: {
-                        name: string;
-                        description?: string;
-                        /**
-                         *
-                         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-                         *
-                         * The parameters the functions accepts, described as a JSON Schema object. See the
-                         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-                         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-                         * documentation about the format.
-                         *
-                         * Omitting parameters defines a function with an empty parameter list.
-                         *
-                         */
-                        parameters?: {
-                            [key: string]: unknown;
-                        };
-                        strict?: boolean | unknown;
-                    };
-                };
-            }>;
-        };
-    } | {
-        type: 'function';
-        function: {
-            name: string;
-        };
-    } | {
-        type: 'custom';
-        custom: {
-            /**
-             * The name of the custom tool, used to identify it in tool calls
-             */
-            name: string;
-            /**
-             * Optional description of the custom tool, used to provide more context
-             */
-            description?: string;
-            /**
-             * The input format for the custom tool. Default is unconstrained text.
-             */
-            format?: {
-                /**
-                 * Unconstrained text format. Always `text`
-                 */
-                type: 'text';
-            } | {
-                type: 'grammar';
-                /**
-                 * Your chosen grammar
-                 */
-                grammar: {
-                    /**
-                     * The grammar definition
-                     */
-                    definition: string;
-                    /**
-                     * The syntax of the grammar definition
-                     */
-                    syntax: 'lark' | 'regex';
-                };
-            };
-        };
-    } | number | unknown | number | unknown | boolean | unknown | undefined;
+    [key: string]: unknown;
 };
 
 export type DeepSeekChatCompletionResponse = {
@@ -10690,61 +9764,7 @@ export type DeepSeekChatCompletionResponse = {
          */
         prompt_tokens_details?: unknown;
     };
-    [key: string]: unknown | string | Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
-        index: number;
-        logprobs: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
-         */
-        message: {
-            content: string | unknown;
-            refusal?: string | unknown;
-            role: 'assistant';
-            annotations?: Array<unknown>;
-            audio?: unknown;
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
-             */
-            function_call?: {
-                arguments: string;
-                name: string;
-            } | unknown;
-            tool_calls?: Array<{
-                id: string;
-                type: 'function';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
-                 */
-                function: {
-                    arguments: string;
-                    name: string;
-                };
-            } | {
-                id: string;
-                type: 'custom';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
-                 */
-                custom: {
-                    input: string;
-                    name: string;
-                };
-            }> | unknown;
-        };
-    }> | number | 'chat.completion' | string | unknown | {
-        completion_tokens: number;
-        prompt_tokens: number;
-        total_tokens: number;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
-         */
-        completion_tokens_details?: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
-         */
-        prompt_tokens_details?: unknown;
-    } | undefined;
+    [key: string]: unknown;
 };
 
 export type MinimaxChatCompletionRequest = {
@@ -11457,82 +10477,8 @@ export type XaiChatCompletionResponse = {
          */
         prompt_tokens_details?: unknown;
     };
-    [key: string]: unknown | string | Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
-        index: number;
-        logprobs: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
-         */
-        message: {
-            content: string | unknown;
-            refusal?: string | unknown;
-            role: 'assistant';
-            annotations?: Array<unknown>;
-            audio?: unknown;
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
-             */
-            function_call?: {
-                arguments: string;
-                name: string;
-            } | unknown;
-            tool_calls?: Array<{
-                id: string;
-                type: 'function';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
-                 */
-                function: {
-                    arguments: string;
-                    name: string;
-                };
-            } | {
-                id: string;
-                type: 'custom';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
-                 */
-                custom: {
-                    input: string;
-                    name: string;
-                };
-            }> | unknown;
-        };
-    }> | number | 'chat.completion' | string | unknown | {
-        completion_tokens: number;
-        prompt_tokens: number;
-        total_tokens: number;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
-         */
-        completion_tokens_details?: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
-         */
-        prompt_tokens_details?: unknown;
-    } | undefined;
+    [key: string]: unknown;
 };
-
-export type GetHealthData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/health';
-};
-
-export type GetHealthResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        name: string;
-        status: string;
-        version: string;
-    };
-};
-
-export type GetHealthResponse = GetHealthResponses[keyof GetHealthResponses];
 
 export type GetV1A2aByAgentIdWellKnownAgentJsonData = {
     body?: never;
@@ -11639,9 +10585,29 @@ export type GetAgentsData = {
          * Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided.
          */
         agentTypes?: Array<'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent'>;
+        /**
+         * Filter by scope: personal, team, org, or built_in.
+         */
+        scope?: 'personal' | 'team' | 'org' | 'built_in';
+        /**
+         * Filter by specific team IDs (comma-separated). Only used when scope=team.
+         */
+        teamIds?: Array<string>;
+        /**
+         * Filter by author user IDs (comma-separated). Admin-only, only used when scope=personal.
+         */
+        authorIds?: Array<string>;
+        /**
+         * Exclude agents by author user IDs (comma-separated). Admin-only, only used when scope=personal.
+         */
+        excludeAuthorIds?: Array<string>;
+        /**
+         * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
+         */
+        labels?: string;
         limit?: number;
         offset?: number;
-        sortBy?: 'name' | 'createdAt' | 'toolsCount' | 'team';
+        sortBy?: 'name' | 'createdAt' | 'toolsCount' | 'subagentsCount' | 'knowledgeSourcesCount' | 'team';
         sortDirection?: 'asc' | 'desc';
     };
     url: '/api/agents';
@@ -11717,30 +10683,34 @@ export type GetAgentsResponses = {
             authorId: string | null;
             scope: 'personal' | 'team' | 'org';
             name: string;
-            isDemo: boolean;
             isDefault: boolean;
             considerContextUntrusted: boolean;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             systemPrompt: string | null;
-            userPrompt: string | null;
-            promptVersion: number | null;
-            promptHistory: string | number | boolean | null | {
-                [key: string]: unknown;
-            } | Array<unknown> | null;
             description: string | null;
+            icon: string | null;
             incomingEmailEnabled: boolean;
             incomingEmailSecurityMode: 'private' | 'internal' | 'public';
             incomingEmailAllowedDomain: string | null;
             llmApiKeyId: string | null;
             llmModel: string | null;
             identityProviderId: string | null;
+            builtInAgentConfig: {
+                name: 'policy-configuration-subagent';
+                autoConfigureOnToolDiscovery: boolean;
+            } | {
+                name: 'dual-llm-main-agent';
+                maxRounds: number;
+            } | {
+                name: 'dual-llm-quarantine-agent';
+            } | null;
+            builtIn: boolean | null;
             createdAt: string;
             updatedAt: string;
             tools: Array<{
                 id: string;
                 agentId: string | null;
                 catalogId: string | null;
-                mcpServerId: string | null;
                 delegateToAgentId: string | null;
                 name: string;
                 /**
@@ -11759,9 +10729,13 @@ export type GetAgentsResponses = {
                     [key: string]: unknown;
                 };
                 description: string | null;
+                meta: string | number | boolean | null | {
+                    [key: string]: unknown;
+                } | Array<unknown> | null;
                 policiesAutoConfiguredAt: string | null;
                 policiesAutoConfiguringStartedAt: string | null;
                 policiesAutoConfiguredReasoning: string | null;
+                policiesAutoConfiguredModel: string | null;
                 createdAt: string;
                 updatedAt: string;
             }>;
@@ -11776,6 +10750,12 @@ export type GetAgentsResponses = {
                 valueId?: string;
             }>;
             authorName?: string | null;
+            knowledgeBaseIds: Array<string>;
+            connectorIds: Array<string>;
+            suggestedPrompts: Array<{
+                summaryTitle: string;
+                prompt: string;
+            }>;
         }>;
         pagination: {
             currentPage: number;
@@ -11795,25 +10775,39 @@ export type CreateAgentData = {
         organizationId?: string;
         scope: 'personal' | 'team' | 'org';
         name: string;
-        isDemo?: boolean;
         isDefault?: boolean;
         considerContextUntrusted?: boolean;
         agentType?: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt?: string | null;
-        userPrompt?: string | null;
         description?: string | null;
+        icon?: string | null;
         incomingEmailEnabled?: boolean;
         incomingEmailSecurityMode?: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain?: string | null;
         llmApiKeyId?: string | null;
         llmModel?: string | null;
         identityProviderId?: string | null;
+        builtInAgentConfig?: {
+            name: 'policy-configuration-subagent';
+            autoConfigureOnToolDiscovery: boolean;
+        } | {
+            name: 'dual-llm-main-agent';
+            maxRounds: number;
+        } | {
+            name: 'dual-llm-quarantine-agent';
+        } | null;
         teams?: Array<string>;
         labels?: Array<{
             key: string;
             value: string;
             keyId?: string;
             valueId?: string;
+        }>;
+        knowledgeBaseIds?: Array<string>;
+        connectorIds?: Array<string>;
+        suggestedPrompts?: Array<{
+            summaryTitle: string;
+            prompt: string;
         }>;
     };
     path?: never;
@@ -11890,30 +10884,34 @@ export type CreateAgentResponses = {
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
         name: string;
-        isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
-        userPrompt: string | null;
-        promptVersion: number | null;
-        promptHistory: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
         description: string | null;
+        icon: string | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
+        builtInAgentConfig: {
+            name: 'policy-configuration-subagent';
+            autoConfigureOnToolDiscovery: boolean;
+        } | {
+            name: 'dual-llm-main-agent';
+            maxRounds: number;
+        } | {
+            name: 'dual-llm-quarantine-agent';
+        } | null;
+        builtIn: boolean | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
             id: string;
             agentId: string | null;
             catalogId: string | null;
-            mcpServerId: string | null;
             delegateToAgentId: string | null;
             name: string;
             /**
@@ -11932,9 +10930,13 @@ export type CreateAgentResponses = {
                 [key: string]: unknown;
             };
             description: string | null;
+            meta: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
+            policiesAutoConfiguredModel: string | null;
             createdAt: string;
             updatedAt: string;
         }>;
@@ -11949,6 +10951,12 @@ export type CreateAgentResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        knowledgeBaseIds: Array<string>;
+        connectorIds: Array<string>;
+        suggestedPrompts: Array<{
+            summaryTitle: string;
+            prompt: string;
+        }>;
     };
 };
 
@@ -11966,6 +10974,14 @@ export type GetAllAgentsData = {
          * Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided.
          */
         agentTypes?: Array<'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent'>;
+        /**
+         * Exclude built-in agents from the results. Defaults to false.
+         */
+        excludeBuiltIn?: boolean;
+        /**
+         * Filter by scope: personal, team, org, or built_in.
+         */
+        scope?: 'personal' | 'team' | 'org' | 'built_in';
     };
     url: '/api/agents/all';
 };
@@ -12039,30 +11055,34 @@ export type GetAllAgentsResponses = {
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
         name: string;
-        isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
-        userPrompt: string | null;
-        promptVersion: number | null;
-        promptHistory: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
         description: string | null;
+        icon: string | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
+        builtInAgentConfig: {
+            name: 'policy-configuration-subagent';
+            autoConfigureOnToolDiscovery: boolean;
+        } | {
+            name: 'dual-llm-main-agent';
+            maxRounds: number;
+        } | {
+            name: 'dual-llm-quarantine-agent';
+        } | null;
+        builtIn: boolean | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
             id: string;
             agentId: string | null;
             catalogId: string | null;
-            mcpServerId: string | null;
             delegateToAgentId: string | null;
             name: string;
             /**
@@ -12081,9 +11101,13 @@ export type GetAllAgentsResponses = {
                 [key: string]: unknown;
             };
             description: string | null;
+            meta: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
+            policiesAutoConfiguredModel: string | null;
             createdAt: string;
             updatedAt: string;
         }>;
@@ -12098,6 +11122,12 @@ export type GetAllAgentsResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        knowledgeBaseIds: Array<string>;
+        connectorIds: Array<string>;
+        suggestedPrompts: Array<{
+            summaryTitle: string;
+            prompt: string;
+        }>;
     }>;
 };
 
@@ -12179,30 +11209,34 @@ export type GetDefaultMcpGatewayResponses = {
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
         name: string;
-        isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
-        userPrompt: string | null;
-        promptVersion: number | null;
-        promptHistory: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
         description: string | null;
+        icon: string | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
+        builtInAgentConfig: {
+            name: 'policy-configuration-subagent';
+            autoConfigureOnToolDiscovery: boolean;
+        } | {
+            name: 'dual-llm-main-agent';
+            maxRounds: number;
+        } | {
+            name: 'dual-llm-quarantine-agent';
+        } | null;
+        builtIn: boolean | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
             id: string;
             agentId: string | null;
             catalogId: string | null;
-            mcpServerId: string | null;
             delegateToAgentId: string | null;
             name: string;
             /**
@@ -12221,9 +11255,13 @@ export type GetDefaultMcpGatewayResponses = {
                 [key: string]: unknown;
             };
             description: string | null;
+            meta: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
+            policiesAutoConfiguredModel: string | null;
             createdAt: string;
             updatedAt: string;
         }>;
@@ -12238,6 +11276,12 @@ export type GetDefaultMcpGatewayResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        knowledgeBaseIds: Array<string>;
+        connectorIds: Array<string>;
+        suggestedPrompts: Array<{
+            summaryTitle: string;
+            prompt: string;
+        }>;
     };
 };
 
@@ -12319,30 +11363,34 @@ export type GetDefaultLlmProxyResponses = {
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
         name: string;
-        isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
-        userPrompt: string | null;
-        promptVersion: number | null;
-        promptHistory: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
         description: string | null;
+        icon: string | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
+        builtInAgentConfig: {
+            name: 'policy-configuration-subagent';
+            autoConfigureOnToolDiscovery: boolean;
+        } | {
+            name: 'dual-llm-main-agent';
+            maxRounds: number;
+        } | {
+            name: 'dual-llm-quarantine-agent';
+        } | null;
+        builtIn: boolean | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
             id: string;
             agentId: string | null;
             catalogId: string | null;
-            mcpServerId: string | null;
             delegateToAgentId: string | null;
             name: string;
             /**
@@ -12361,9 +11409,13 @@ export type GetDefaultLlmProxyResponses = {
                 [key: string]: unknown;
             };
             description: string | null;
+            meta: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
+            policiesAutoConfiguredModel: string | null;
             createdAt: string;
             updatedAt: string;
         }>;
@@ -12378,6 +11430,12 @@ export type GetDefaultLlmProxyResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        knowledgeBaseIds: Array<string>;
+        connectorIds: Array<string>;
+        suggestedPrompts: Array<{
+            summaryTitle: string;
+            prompt: string;
+        }>;
     };
 };
 
@@ -12540,30 +11598,34 @@ export type GetAgentResponses = {
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
         name: string;
-        isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
-        userPrompt: string | null;
-        promptVersion: number | null;
-        promptHistory: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
         description: string | null;
+        icon: string | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
+        builtInAgentConfig: {
+            name: 'policy-configuration-subagent';
+            autoConfigureOnToolDiscovery: boolean;
+        } | {
+            name: 'dual-llm-main-agent';
+            maxRounds: number;
+        } | {
+            name: 'dual-llm-quarantine-agent';
+        } | null;
+        builtIn: boolean | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
             id: string;
             agentId: string | null;
             catalogId: string | null;
-            mcpServerId: string | null;
             delegateToAgentId: string | null;
             name: string;
             /**
@@ -12582,9 +11644,13 @@ export type GetAgentResponses = {
                 [key: string]: unknown;
             };
             description: string | null;
+            meta: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
+            policiesAutoConfiguredModel: string | null;
             createdAt: string;
             updatedAt: string;
         }>;
@@ -12599,35 +11665,55 @@ export type GetAgentResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        knowledgeBaseIds: Array<string>;
+        connectorIds: Array<string>;
+        suggestedPrompts: Array<{
+            summaryTitle: string;
+            prompt: string;
+        }>;
     };
 };
 
 export type GetAgentResponse = GetAgentResponses[keyof GetAgentResponses];
 
 export type UpdateAgentData = {
-    body?: {
+    body: {
         organizationId?: string;
         scope?: 'personal' | 'team' | 'org';
         name?: string;
-        isDemo?: boolean;
         isDefault?: boolean;
         considerContextUntrusted?: boolean;
         agentType?: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt?: string | null;
-        userPrompt?: string | null;
         description?: string | null;
+        icon?: string | null;
         incomingEmailEnabled?: boolean;
         incomingEmailSecurityMode?: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain?: string | null;
         llmApiKeyId?: string | null;
         llmModel?: string | null;
         identityProviderId?: string | null;
+        builtInAgentConfig?: {
+            name: 'policy-configuration-subagent';
+            autoConfigureOnToolDiscovery: boolean;
+        } | {
+            name: 'dual-llm-main-agent';
+            maxRounds: number;
+        } | {
+            name: 'dual-llm-quarantine-agent';
+        } | null;
         teams?: Array<string>;
         labels?: Array<{
             key: string;
             value: string;
             keyId?: string;
             valueId?: string;
+        }>;
+        knowledgeBaseIds?: Array<string>;
+        connectorIds?: Array<string>;
+        suggestedPrompts?: Array<{
+            summaryTitle: string;
+            prompt: string;
         }>;
     };
     path: {
@@ -12706,30 +11792,34 @@ export type UpdateAgentResponses = {
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
         name: string;
-        isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
-        userPrompt: string | null;
-        promptVersion: number | null;
-        promptHistory: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
         description: string | null;
+        icon: string | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
+        builtInAgentConfig: {
+            name: 'policy-configuration-subagent';
+            autoConfigureOnToolDiscovery: boolean;
+        } | {
+            name: 'dual-llm-main-agent';
+            maxRounds: number;
+        } | {
+            name: 'dual-llm-quarantine-agent';
+        } | null;
+        builtIn: boolean | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
             id: string;
             agentId: string | null;
             catalogId: string | null;
-            mcpServerId: string | null;
             delegateToAgentId: string | null;
             name: string;
             /**
@@ -12748,9 +11838,13 @@ export type UpdateAgentResponses = {
                 [key: string]: unknown;
             };
             description: string | null;
+            meta: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
+            policiesAutoConfiguredModel: string | null;
             createdAt: string;
             updatedAt: string;
         }>;
@@ -12765,307 +11859,16 @@ export type UpdateAgentResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        knowledgeBaseIds: Array<string>;
+        connectorIds: Array<string>;
+        suggestedPrompts: Array<{
+            summaryTitle: string;
+            prompt: string;
+        }>;
     };
 };
 
 export type UpdateAgentResponse = UpdateAgentResponses[keyof UpdateAgentResponses];
-
-export type GetAgentVersionsData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/agents/{id}/versions';
-};
-
-export type GetAgentVersionsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetAgentVersionsError = GetAgentVersionsErrors[keyof GetAgentVersionsErrors];
-
-export type GetAgentVersionsResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        current: {
-            id: string;
-            organizationId: string;
-            authorId: string | null;
-            scope: 'personal' | 'team' | 'org';
-            name: string;
-            isDemo: boolean;
-            isDefault: boolean;
-            considerContextUntrusted: boolean;
-            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
-            systemPrompt: string | null;
-            userPrompt: string | null;
-            promptVersion: number | null;
-            promptHistory: string | number | boolean | null | {
-                [key: string]: unknown;
-            } | Array<unknown> | null;
-            description: string | null;
-            incomingEmailEnabled: boolean;
-            incomingEmailSecurityMode: 'private' | 'internal' | 'public';
-            incomingEmailAllowedDomain: string | null;
-            llmApiKeyId: string | null;
-            llmModel: string | null;
-            identityProviderId: string | null;
-            createdAt: string;
-            updatedAt: string;
-            tools: Array<{
-                id: string;
-                agentId: string | null;
-                catalogId: string | null;
-                mcpServerId: string | null;
-                delegateToAgentId: string | null;
-                name: string;
-                /**
-                 *
-                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-                 *
-                 * The parameters the functions accepts, described as a JSON Schema object. See the
-                 * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-                 * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-                 * documentation about the format.
-                 *
-                 * Omitting parameters defines a function with an empty parameter list.
-                 *
-                 */
-                parameters?: {
-                    [key: string]: unknown;
-                };
-                description: string | null;
-                policiesAutoConfiguredAt: string | null;
-                policiesAutoConfiguringStartedAt: string | null;
-                policiesAutoConfiguredReasoning: string | null;
-                createdAt: string;
-                updatedAt: string;
-            }>;
-            teams: Array<{
-                id: string;
-                name: string;
-            }>;
-            labels: Array<{
-                key: string;
-                value: string;
-                keyId?: string;
-                valueId?: string;
-            }>;
-            authorName?: string | null;
-        };
-        history: Array<{
-            version: number;
-            userPrompt: string | null;
-            systemPrompt: string | null;
-            createdAt: string;
-        }>;
-    };
-};
-
-export type GetAgentVersionsResponse = GetAgentVersionsResponses[keyof GetAgentVersionsResponses];
-
-export type RollbackAgentData = {
-    body: {
-        /**
-         * Version to rollback to
-         */
-        version: number;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/agents/{id}/rollback';
-};
-
-export type RollbackAgentErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type RollbackAgentError = RollbackAgentErrors[keyof RollbackAgentErrors];
-
-export type RollbackAgentResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        organizationId: string;
-        authorId: string | null;
-        scope: 'personal' | 'team' | 'org';
-        name: string;
-        isDemo: boolean;
-        isDefault: boolean;
-        considerContextUntrusted: boolean;
-        agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
-        systemPrompt: string | null;
-        userPrompt: string | null;
-        promptVersion: number | null;
-        promptHistory: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
-        description: string | null;
-        incomingEmailEnabled: boolean;
-        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
-        incomingEmailAllowedDomain: string | null;
-        llmApiKeyId: string | null;
-        llmModel: string | null;
-        identityProviderId: string | null;
-        createdAt: string;
-        updatedAt: string;
-        tools: Array<{
-            id: string;
-            agentId: string | null;
-            catalogId: string | null;
-            mcpServerId: string | null;
-            delegateToAgentId: string | null;
-            name: string;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
-            description: string | null;
-            policiesAutoConfiguredAt: string | null;
-            policiesAutoConfiguringStartedAt: string | null;
-            policiesAutoConfiguredReasoning: string | null;
-            createdAt: string;
-            updatedAt: string;
-        }>;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
-        labels: Array<{
-            key: string;
-            value: string;
-            keyId?: string;
-            valueId?: string;
-        }>;
-        authorName?: string | null;
-    };
-};
-
-export type RollbackAgentResponse = RollbackAgentResponses[keyof RollbackAgentResponses];
 
 export type GetLabelKeysData = {
     body?: never;
@@ -13222,10 +12025,89 @@ export type GetLabelValuesResponses = {
 
 export type GetLabelValuesResponse = GetLabelValuesResponses[keyof GetLabelValuesResponses];
 
+export type GetMemberDefaultAgentData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/members/default-agent';
+};
+
+export type GetMemberDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetMemberDefaultAgentError = GetMemberDefaultAgentErrors[keyof GetMemberDefaultAgentErrors];
+
+export type GetMemberDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        defaultAgentId: string | null;
+    };
+};
+
+export type GetMemberDefaultAgentResponse = GetMemberDefaultAgentResponses[keyof GetMemberDefaultAgentResponses];
+
 export type GetAllAgentToolsData = {
     body?: never;
     path?: never;
     query?: {
+        sortBy?: 'name' | 'agent' | 'origin' | 'createdAt';
+        sortDirection?: 'asc' | 'desc';
         search?: string;
         agentId?: string;
         /**
@@ -13240,11 +12122,9 @@ export type GetAllAgentToolsData = {
          * For test isolation
          */
         excludeArchestraTools?: boolean;
-        sortBy?: 'name' | 'agent' | 'origin' | 'createdAt';
-        sortDirection?: 'asc' | 'desc';
-        skipPagination?: boolean;
         limit?: number;
         offset?: number;
+        skipPagination?: boolean;
     };
     url: '/api/agent-tools';
 };
@@ -13315,10 +12195,8 @@ export type GetAllAgentToolsResponses = {
     200: {
         data: Array<{
             id: string;
-            responseModifierTemplate: string | null;
-            credentialSourceMcpServerId: string | null;
-            executionSourceMcpServerId: string | null;
-            useDynamicTeamCredential: boolean;
+            mcpServerId: string | null;
+            credentialResolutionMode: 'static' | 'dynamic' | 'enterprise_managed';
             createdAt: string;
             updatedAt: string;
             agent: {
@@ -13443,10 +12321,10 @@ export type UnassignToolFromAgentResponses = {
 export type UnassignToolFromAgentResponse = UnassignToolFromAgentResponses[keyof UnassignToolFromAgentResponses];
 
 export type AssignToolToAgentData = {
-    body?: {
-        credentialSourceMcpServerId?: string | null;
-        executionSourceMcpServerId?: string | null;
-        useDynamicTeamCredential?: boolean;
+    body: {
+        resolveAtCallTime?: boolean;
+        credentialResolutionMode?: 'static' | 'dynamic' | 'enterprise_managed';
+        mcpServerId?: string | null;
     } | null;
     path: {
         agentId: string;
@@ -13529,11 +12407,11 @@ export type AssignToolToAgentResponse = AssignToolToAgentResponses[keyof AssignT
 export type BulkAssignToolsData = {
     body: {
         assignments: Array<{
-            agentId: string;
             toolId: string;
-            credentialSourceMcpServerId?: string | null;
-            executionSourceMcpServerId?: string | null;
-            useDynamicTeamCredential?: boolean;
+            resolveAtCallTime?: boolean;
+            credentialResolutionMode?: 'static' | 'dynamic' | 'enterprise_managed';
+            mcpServerId?: string | null;
+            agentId: string;
         }>;
     };
     path?: never;
@@ -13701,8 +12579,8 @@ export type AutoConfigureAgentToolPoliciesResponses = {
             toolId: string;
             success: boolean;
             config?: {
-                toolInvocationAction: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always';
-                trustedDataAction: 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm' | 'block_always';
+                toolInvocationAction: 'allow_when_context_is_sensitive' | 'block_when_context_is_sensitive' | 'block_always';
+                trustedDataAction: 'mark_as_safe' | 'mark_as_sensitive' | 'sanitize_with_dual_llm' | 'block_always';
                 reasoning: string;
             };
             error?: string;
@@ -13788,7 +12666,6 @@ export type GetAgentToolsResponses = {
         id: string;
         agentId: string | null;
         catalogId: string | null;
-        mcpServerId: string | null;
         delegateToAgentId: string | null;
         name: string;
         /**
@@ -13807,9 +12684,13 @@ export type GetAgentToolsResponses = {
             [key: string]: unknown;
         };
         description: string | null;
+        meta: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
         policiesAutoConfiguredAt: string | null;
         policiesAutoConfiguringStartedAt: string | null;
         policiesAutoConfiguredReasoning: string | null;
+        policiesAutoConfiguredModel: string | null;
         createdAt: string;
         updatedAt: string;
     }>;
@@ -13818,11 +12699,9 @@ export type GetAgentToolsResponses = {
 export type GetAgentToolsResponse = GetAgentToolsResponses[keyof GetAgentToolsResponses];
 
 export type UpdateAgentToolData = {
-    body?: {
-        responseModifierTemplate?: string | null;
-        credentialSourceMcpServerId?: string | null;
-        executionSourceMcpServerId?: string | null;
-        useDynamicTeamCredential?: boolean;
+    body: {
+        mcpServerId?: string | null;
+        credentialResolutionMode?: 'static' | 'dynamic' | 'enterprise_managed';
     };
     path: {
         id: string;
@@ -13898,10 +12777,8 @@ export type UpdateAgentToolResponses = {
         id?: string;
         agentId?: string;
         toolId?: string;
-        responseModifierTemplate?: string | null;
-        credentialSourceMcpServerId?: string | null;
-        executionSourceMcpServerId?: string | null;
-        useDynamicTeamCredential?: boolean;
+        mcpServerId?: string | null;
+        credentialResolutionMode: 'static' | 'dynamic' | 'enterprise_managed';
         createdAt?: string;
         updatedAt?: string;
     };
@@ -14242,7 +13119,7 @@ export type GetAllDelegationConnectionsResponses = {
 export type GetAllDelegationConnectionsResponse = GetAllDelegationConnectionsResponses[keyof GetAllDelegationConnectionsResponses];
 
 export type AnthropicMessagesWithDefaultAgentData = {
-    body?: AnthropicMessagesRequestInput;
+    body: AnthropicMessagesRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -14333,7 +13210,7 @@ export type AnthropicMessagesWithDefaultAgentResponses = {
 export type AnthropicMessagesWithDefaultAgentResponse = AnthropicMessagesWithDefaultAgentResponses[keyof AnthropicMessagesWithDefaultAgentResponses];
 
 export type AnthropicMessagesWithAgentData = {
-    body?: AnthropicMessagesRequestInput;
+    body: AnthropicMessagesRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -14424,6 +13301,367 @@ export type AnthropicMessagesWithAgentResponses = {
 };
 
 export type AnthropicMessagesWithAgentResponse = AnthropicMessagesWithAgentResponses[keyof AnthropicMessagesWithAgentResponses];
+
+export type GetApiKeysData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/api-keys';
+};
+
+export type GetApiKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetApiKeysError = GetApiKeysErrors[keyof GetApiKeysErrors];
+
+export type GetApiKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string | null;
+        start: string | null;
+        prefix: string | null;
+        userId: string;
+        enabled: boolean | null;
+        lastRequest: string | null;
+        expiresAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+        metadata: {
+            [key: string]: unknown;
+        } | null;
+        permissions: {
+            [key: string]: Array<string>;
+        } | null;
+    }>;
+};
+
+export type GetApiKeysResponse = GetApiKeysResponses[keyof GetApiKeysResponses];
+
+export type CreateApiKeyData = {
+    body: {
+        name?: string | null;
+        expiresIn?: number | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/api-keys';
+};
+
+export type CreateApiKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CreateApiKeyError = CreateApiKeyErrors[keyof CreateApiKeyErrors];
+
+export type CreateApiKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string | null;
+        start: string | null;
+        prefix: string | null;
+        userId: string;
+        enabled: boolean | null;
+        lastRequest: string | null;
+        expiresAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+        metadata: {
+            [key: string]: unknown;
+        } | null;
+        permissions: {
+            [key: string]: Array<string>;
+        } | null;
+        key: string;
+    };
+};
+
+export type CreateApiKeyResponse = CreateApiKeyResponses[keyof CreateApiKeyResponses];
+
+export type DeleteApiKeyData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/api-keys/{id}';
+};
+
+export type DeleteApiKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteApiKeyError = DeleteApiKeyErrors[keyof DeleteApiKeyErrors];
+
+export type DeleteApiKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteApiKeyResponse = DeleteApiKeyResponses[keyof DeleteApiKeyResponses];
+
+export type GetApiKeyData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/api-keys/{id}';
+};
+
+export type GetApiKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetApiKeyError = GetApiKeyErrors[keyof GetApiKeyErrors];
+
+export type GetApiKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string | null;
+        start: string | null;
+        prefix: string | null;
+        userId: string;
+        enabled: boolean | null;
+        lastRequest: string | null;
+        expiresAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+        metadata: {
+            [key: string]: unknown;
+        } | null;
+        permissions: {
+            [key: string]: Array<string>;
+        } | null;
+    };
+};
+
+export type GetApiKeyResponse = GetApiKeyResponses[keyof GetApiKeyResponses];
 
 export type GetDefaultCredentialsStatusData = {
     body?: never;
@@ -14527,6 +13765,65 @@ export type SubmitOAuthConsentData = {
     url: '/api/auth/oauth2/consent';
 };
 
+export type SubmitOAuthConsentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type SubmitOAuthConsentError = SubmitOAuthConsentErrors[keyof SubmitOAuthConsentErrors];
+
 export type SubmitOAuthConsentResponses = {
     /**
      * Default Response
@@ -14539,7 +13836,7 @@ export type SubmitOAuthConsentResponses = {
 export type SubmitOAuthConsentResponse = SubmitOAuthConsentResponses[keyof SubmitOAuthConsentResponses];
 
 export type PostApiAuthOauth2RegisterData = {
-    body?: {
+    body: {
         [key: string]: unknown;
     };
     path?: never;
@@ -15016,7 +14313,7 @@ export type GetToolInvocationPolicyResponses = {
 export type GetToolInvocationPolicyResponse = GetToolInvocationPolicyResponses[keyof GetToolInvocationPolicyResponses];
 
 export type UpdateToolInvocationPolicyData = {
-    body?: {
+    body: {
         toolId?: string;
         conditions?: Array<{
             key: string;
@@ -15465,7 +14762,7 @@ export type GetTrustedDataPolicyResponses = {
 export type GetTrustedDataPolicyResponse = GetTrustedDataPolicyResponses[keyof GetTrustedDataPolicyResponses];
 
 export type UpdateTrustedDataPolicyData = {
-    body?: {
+    body: {
         toolId?: string;
         description?: string | null;
         conditions?: Array<{
@@ -15811,6 +15108,9 @@ export type BedrockConverseWithDefaultAgentData = {
             }>;
         }>;
         system?: Array<{
+            type: 'text';
+            text: string;
+        } | {
             text: string;
         } | {
             guardContent: {
@@ -15839,17 +15139,20 @@ export type BedrockConverseWithDefaultAgentData = {
                 };
             }>;
             toolChoice?: {
-                auto?: {
-                    [key: string]: unknown;
-                };
-            } | {
-                any?: {
-                    [key: string]: unknown;
-                };
-            } | {
                 tool: {
                     name: string;
                 };
+                [key: string]: unknown;
+            } | {
+                any: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
+            } | {
+                auto: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
             };
         };
         guardrailConfig?: {
@@ -16109,6 +15412,9 @@ export type BedrockConverseWithAgentData = {
             }>;
         }>;
         system?: Array<{
+            type: 'text';
+            text: string;
+        } | {
             text: string;
         } | {
             guardContent: {
@@ -16137,17 +15443,20 @@ export type BedrockConverseWithAgentData = {
                 };
             }>;
             toolChoice?: {
-                auto?: {
-                    [key: string]: unknown;
-                };
-            } | {
-                any?: {
-                    [key: string]: unknown;
-                };
-            } | {
                 tool: {
                     name: string;
                 };
+                [key: string]: unknown;
+            } | {
+                any: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
+            } | {
+                auto: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
             };
         };
         guardrailConfig?: {
@@ -16409,6 +15718,9 @@ export type BedrockConverseStreamWithDefaultAgentData = {
             }>;
         }>;
         system?: Array<{
+            type: 'text';
+            text: string;
+        } | {
             text: string;
         } | {
             guardContent: {
@@ -16437,17 +15749,20 @@ export type BedrockConverseStreamWithDefaultAgentData = {
                 };
             }>;
             toolChoice?: {
-                auto?: {
-                    [key: string]: unknown;
-                };
-            } | {
-                any?: {
-                    [key: string]: unknown;
-                };
-            } | {
                 tool: {
                     name: string;
                 };
+                [key: string]: unknown;
+            } | {
+                any: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
+            } | {
+                auto: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
             };
         };
         guardrailConfig?: {
@@ -16588,6 +15903,9 @@ export type BedrockConverseStreamWithAgentData = {
             }>;
         }>;
         system?: Array<{
+            type: 'text';
+            text: string;
+        } | {
             text: string;
         } | {
             guardContent: {
@@ -16616,17 +15934,20 @@ export type BedrockConverseStreamWithAgentData = {
                 };
             }>;
             toolChoice?: {
-                auto?: {
-                    [key: string]: unknown;
-                };
-            } | {
-                any?: {
-                    [key: string]: unknown;
-                };
-            } | {
                 tool: {
                     name: string;
                 };
+                [key: string]: unknown;
+            } | {
+                any: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
+            } | {
+                auto: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
             };
         };
         guardrailConfig?: {
@@ -16683,7 +16004,7 @@ export type BedrockConverseStreamWithAgentResponses = {
 };
 
 export type BedrockConverseWithAgentAndModelData = {
-    body?: {
+    body: {
         modelId?: string;
         messages?: Array<{
             role: 'user' | 'assistant';
@@ -16769,6 +16090,9 @@ export type BedrockConverseWithAgentAndModelData = {
             }>;
         }>;
         system?: Array<{
+            type: 'text';
+            text: string;
+        } | {
             text: string;
         } | {
             guardContent: {
@@ -16797,17 +16121,20 @@ export type BedrockConverseWithAgentAndModelData = {
                 };
             }>;
             toolChoice?: {
-                auto?: {
-                    [key: string]: unknown;
-                };
-            } | {
-                any?: {
-                    [key: string]: unknown;
-                };
-            } | {
                 tool: {
                     name: string;
                 };
+                [key: string]: unknown;
+            } | {
+                any: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
+            } | {
+                auto: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
             };
         };
         guardrailConfig?: {
@@ -16984,7 +16311,7 @@ export type BedrockConverseWithAgentAndModelResponses = {
 export type BedrockConverseWithAgentAndModelResponse = BedrockConverseWithAgentAndModelResponses[keyof BedrockConverseWithAgentAndModelResponses];
 
 export type BedrockConverseStreamWithAgentAndModelData = {
-    body?: {
+    body: {
         modelId?: string;
         messages?: Array<{
             role: 'user' | 'assistant';
@@ -17070,6 +16397,9 @@ export type BedrockConverseStreamWithAgentAndModelData = {
             }>;
         }>;
         system?: Array<{
+            type: 'text';
+            text: string;
+        } | {
             text: string;
         } | {
             guardContent: {
@@ -17098,17 +16428,20 @@ export type BedrockConverseStreamWithAgentAndModelData = {
                 };
             }>;
             toolChoice?: {
-                auto?: {
-                    [key: string]: unknown;
-                };
-            } | {
-                any?: {
-                    [key: string]: unknown;
-                };
-            } | {
                 tool: {
                     name: string;
                 };
+                [key: string]: unknown;
+            } | {
+                any: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
+            } | {
+                auto: {
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
             };
         };
         guardrailConfig?: {
@@ -17166,7 +16499,7 @@ export type BedrockConverseStreamWithAgentAndModelResponses = {
 };
 
 export type CerebrasChatCompletionsWithDefaultAgentData = {
-    body?: XaiChatCompletionRequestInput;
+    body: XaiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -17251,7 +16584,7 @@ export type CerebrasChatCompletionsWithDefaultAgentResponses = {
 export type CerebrasChatCompletionsWithDefaultAgentResponse = CerebrasChatCompletionsWithDefaultAgentResponses[keyof CerebrasChatCompletionsWithDefaultAgentResponses];
 
 export type CerebrasChatCompletionsWithAgentData = {
-    body?: XaiChatCompletionRequestInput;
+    body: XaiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -17336,954 +16669,6 @@ export type CerebrasChatCompletionsWithAgentResponses = {
 };
 
 export type CerebrasChatCompletionsWithAgentResponse = CerebrasChatCompletionsWithAgentResponses[keyof CerebrasChatCompletionsWithAgentResponses];
-
-export type GetChatApiKeysData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/chat-api-keys';
-};
-
-export type GetChatApiKeysErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetChatApiKeysError = GetChatApiKeysErrors[keyof GetChatApiKeysErrors];
-
-export type GetChatApiKeysResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        organizationId: string;
-        name: string;
-        provider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'groq' | 'xai' | 'openrouter' | 'mistral' | 'openai' | 'perplexity' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
-        secretId: string | null;
-        scope: 'personal' | 'team' | 'org_wide';
-        userId: string | null;
-        teamId: string | null;
-        baseUrl: string | null;
-        isSystem: boolean;
-        isPrimary: boolean;
-        createdAt: string;
-        updatedAt: string;
-        teamName?: string | null;
-        userName?: string | null;
-        vaultSecretPath?: string | null;
-        vaultSecretKey?: string | null;
-        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
-        bestModelId?: string | null;
-        isAgentKey?: boolean;
-    }>;
-};
-
-export type GetChatApiKeysResponse = GetChatApiKeysResponses[keyof GetChatApiKeysResponses];
-
-export type CreateChatApiKeyData = {
-    body: {
-        name: string;
-        provider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'groq' | 'xai' | 'openrouter' | 'mistral' | 'openai' | 'perplexity' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
-        apiKey?: string;
-        baseUrl?: string | null;
-        scope?: 'personal' | 'team' | 'org_wide';
-        teamId?: string;
-        isPrimary?: boolean;
-        vaultSecretPath?: string;
-        vaultSecretKey?: string;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/chat-api-keys';
-};
-
-export type CreateChatApiKeyErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type CreateChatApiKeyError = CreateChatApiKeyErrors[keyof CreateChatApiKeyErrors];
-
-export type CreateChatApiKeyResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        organizationId: string;
-        name: string;
-        provider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'groq' | 'xai' | 'openrouter' | 'mistral' | 'openai' | 'perplexity' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
-        secretId: string | null;
-        scope: 'personal' | 'team' | 'org_wide';
-        userId: string | null;
-        teamId: string | null;
-        baseUrl: string | null;
-        isSystem: boolean;
-        isPrimary: boolean;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type CreateChatApiKeyResponse = CreateChatApiKeyResponses[keyof CreateChatApiKeyResponses];
-
-export type GetAvailableChatApiKeysData = {
-    body?: never;
-    path?: never;
-    query?: {
-        provider?: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'groq' | 'xai' | 'openrouter' | 'mistral' | 'openai' | 'perplexity' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
-        includeKeyId?: string;
-    };
-    url: '/api/chat-api-keys/available';
-};
-
-export type GetAvailableChatApiKeysErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetAvailableChatApiKeysError = GetAvailableChatApiKeysErrors[keyof GetAvailableChatApiKeysErrors];
-
-export type GetAvailableChatApiKeysResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        organizationId: string;
-        name: string;
-        provider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'groq' | 'xai' | 'openrouter' | 'mistral' | 'openai' | 'perplexity' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
-        secretId: string | null;
-        scope: 'personal' | 'team' | 'org_wide';
-        userId: string | null;
-        teamId: string | null;
-        baseUrl: string | null;
-        isSystem: boolean;
-        isPrimary: boolean;
-        createdAt: string;
-        updatedAt: string;
-        teamName?: string | null;
-        userName?: string | null;
-        vaultSecretPath?: string | null;
-        vaultSecretKey?: string | null;
-        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
-        bestModelId?: string | null;
-        isAgentKey?: boolean;
-    }>;
-};
-
-export type GetAvailableChatApiKeysResponse = GetAvailableChatApiKeysResponses[keyof GetAvailableChatApiKeysResponses];
-
-export type DeleteChatApiKeyData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/chat-api-keys/{id}';
-};
-
-export type DeleteChatApiKeyErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type DeleteChatApiKeyError = DeleteChatApiKeyErrors[keyof DeleteChatApiKeyErrors];
-
-export type DeleteChatApiKeyResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteChatApiKeyResponse = DeleteChatApiKeyResponses[keyof DeleteChatApiKeyResponses];
-
-export type GetChatApiKeyData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/chat-api-keys/{id}';
-};
-
-export type GetChatApiKeyErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetChatApiKeyError = GetChatApiKeyErrors[keyof GetChatApiKeyErrors];
-
-export type GetChatApiKeyResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        organizationId: string;
-        name: string;
-        provider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'groq' | 'xai' | 'openrouter' | 'mistral' | 'openai' | 'perplexity' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
-        secretId: string | null;
-        scope: 'personal' | 'team' | 'org_wide';
-        userId: string | null;
-        teamId: string | null;
-        baseUrl: string | null;
-        isSystem: boolean;
-        isPrimary: boolean;
-        createdAt: string;
-        updatedAt: string;
-        teamName?: string | null;
-        userName?: string | null;
-        vaultSecretPath?: string | null;
-        vaultSecretKey?: string | null;
-        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
-        bestModelId?: string | null;
-        isAgentKey?: boolean;
-    };
-};
-
-export type GetChatApiKeyResponse = GetChatApiKeyResponses[keyof GetChatApiKeyResponses];
-
-export type UpdateChatApiKeyData = {
-    body?: {
-        name?: string;
-        apiKey?: string;
-        baseUrl?: string | null;
-        scope?: 'personal' | 'team' | 'org_wide';
-        teamId?: string | null;
-        isPrimary?: boolean;
-        vaultSecretPath?: string;
-        vaultSecretKey?: string;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/chat-api-keys/{id}';
-};
-
-export type UpdateChatApiKeyErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type UpdateChatApiKeyError = UpdateChatApiKeyErrors[keyof UpdateChatApiKeyErrors];
-
-export type UpdateChatApiKeyResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        organizationId: string;
-        name: string;
-        provider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'groq' | 'xai' | 'openrouter' | 'mistral' | 'openai' | 'perplexity' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
-        secretId: string | null;
-        scope: 'personal' | 'team' | 'org_wide';
-        userId: string | null;
-        teamId: string | null;
-        baseUrl: string | null;
-        isSystem: boolean;
-        isPrimary: boolean;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type UpdateChatApiKeyResponse = UpdateChatApiKeyResponses[keyof UpdateChatApiKeyResponses];
-
-export type GetChatModelsData = {
-    body?: never;
-    path?: never;
-    query?: {
-        provider?: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'groq' | 'xai' | 'openrouter' | 'mistral' | 'openai' | 'perplexity' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
-    };
-    url: '/api/chat/models';
-};
-
-export type GetChatModelsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetChatModelsError = GetChatModelsErrors[keyof GetChatModelsErrors];
-
-export type GetChatModelsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        displayName: string;
-        provider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'groq' | 'xai' | 'openrouter' | 'mistral' | 'openai' | 'perplexity' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
-        createdAt?: string;
-        capabilities?: {
-            contextLength: number | null;
-            inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
-            outputModalities: Array<'text' | 'image' | 'audio'> | null;
-            supportsToolCalling: boolean | null;
-            pricePerMillionInput: string | null;
-            pricePerMillionOutput: string | null;
-            isCustomPrice: boolean;
-            priceSource: 'custom' | 'models_dev' | 'default';
-        };
-    }>;
-};
-
-export type GetChatModelsResponse = GetChatModelsResponses[keyof GetChatModelsResponses];
-
-export type SyncChatModelsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/chat/models/sync';
-};
-
-export type SyncChatModelsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type SyncChatModelsError = SyncChatModelsErrors[keyof SyncChatModelsErrors];
-
-export type SyncChatModelsResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type SyncChatModelsResponse = SyncChatModelsResponses[keyof SyncChatModelsResponses];
-
-export type GetModelsWithApiKeysData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/models';
-};
-
-export type GetModelsWithApiKeysErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetModelsWithApiKeysError = GetModelsWithApiKeysErrors[keyof GetModelsWithApiKeysErrors];
-
-export type GetModelsWithApiKeysResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        externalId: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
-        modelId: string;
-        description: string | null;
-        contextLength: number | null;
-        inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
-        outputModalities: Array<'text' | 'image' | 'audio'> | null;
-        supportsToolCalling: boolean | null;
-        promptPricePerToken: string | null;
-        completionPricePerToken: string | null;
-        customPricePerMillionInput: string | null;
-        customPricePerMillionOutput: string | null;
-        lastSyncedAt: string;
-        createdAt: string;
-        updatedAt: string;
-        isFastest: boolean;
-        isBest: boolean;
-        apiKeys: Array<{
-            id: string;
-            name: string;
-            provider: string;
-            scope: string;
-            isSystem: boolean;
-        }>;
-        capabilities: {
-            contextLength: number | null;
-            inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
-            outputModalities: Array<'text' | 'image' | 'audio'> | null;
-            supportsToolCalling: boolean | null;
-            pricePerMillionInput: string | null;
-            pricePerMillionOutput: string | null;
-            isCustomPrice: boolean;
-            priceSource: 'custom' | 'models_dev' | 'default';
-        };
-    }>;
-};
-
-export type GetModelsWithApiKeysResponse = GetModelsWithApiKeysResponses[keyof GetModelsWithApiKeysResponses];
-
-export type UpdateModelPricingData = {
-    body: {
-        customPricePerMillionInput: string | null;
-        customPricePerMillionOutput: string | null;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/models/{id}/pricing';
-};
-
-export type UpdateModelPricingErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type UpdateModelPricingError = UpdateModelPricingErrors[keyof UpdateModelPricingErrors];
-
-export type UpdateModelPricingResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        externalId: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
-        modelId: string;
-        description: string | null;
-        contextLength: number | null;
-        inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
-        outputModalities: Array<'text' | 'image' | 'audio'> | null;
-        supportsToolCalling: boolean | null;
-        promptPricePerToken: string | null;
-        completionPricePerToken: string | null;
-        customPricePerMillionInput: string | null;
-        customPricePerMillionOutput: string | null;
-        lastSyncedAt: string;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type UpdateModelPricingResponse = UpdateModelPricingResponses[keyof UpdateModelPricingResponses];
 
 export type StreamChatData = {
     body: {
@@ -18514,7 +16899,7 @@ export type GetChatConversationsResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'groq' | 'xai' | 'openrouter' | 'mistral' | 'openai' | 'perplexity' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -18527,9 +16912,12 @@ export type GetChatConversationsResponses = {
             id: string;
             name: string;
             systemPrompt: string | null;
-            userPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
+        } | null;
+        share: {
+            id: string;
+            visibility: 'organization' | 'team' | 'user';
         } | null;
         messages: Array<unknown>;
     }>;
@@ -18542,7 +16930,7 @@ export type CreateChatConversationData = {
         agentId: string;
         title?: string | null;
         selectedModel?: string;
-        selectedProvider?: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'groq' | 'xai' | 'openrouter' | 'mistral' | 'openai' | 'perplexity' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        selectedProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
         chatApiKeyId?: string | null;
     };
     path?: never;
@@ -18621,7 +17009,7 @@ export type CreateChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'groq' | 'xai' | 'openrouter' | 'mistral' | 'openai' | 'perplexity' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -18634,9 +17022,12 @@ export type CreateChatConversationResponses = {
             id: string;
             name: string;
             systemPrompt: string | null;
-            userPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
+        } | null;
+        share: {
+            id: string;
+            visibility: 'organization' | 'team' | 'user';
         } | null;
         messages: Array<unknown>;
     };
@@ -18803,7 +17194,7 @@ export type GetChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'groq' | 'xai' | 'openrouter' | 'mistral' | 'openai' | 'perplexity' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -18816,9 +17207,12 @@ export type GetChatConversationResponses = {
             id: string;
             name: string;
             systemPrompt: string | null;
-            userPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
+        } | null;
+        share: {
+            id: string;
+            visibility: 'organization' | 'team' | 'user';
         } | null;
         messages: Array<unknown>;
     };
@@ -18827,10 +17221,10 @@ export type GetChatConversationResponses = {
 export type GetChatConversationResponse = GetChatConversationResponses[keyof GetChatConversationResponses];
 
 export type UpdateChatConversationData = {
-    body?: {
+    body: {
         title?: string | null;
         selectedModel?: string;
-        selectedProvider?: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'groq' | 'xai' | 'openrouter' | 'mistral' | 'openai' | 'perplexity' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        selectedProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
         chatApiKeyId?: string | null;
         agentId?: string;
         artifact?: string | null;
@@ -18914,7 +17308,7 @@ export type UpdateChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'groq' | 'xai' | 'openrouter' | 'mistral' | 'openai' | 'perplexity' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -18927,9 +17321,12 @@ export type UpdateChatConversationResponses = {
             id: string;
             name: string;
             systemPrompt: string | null;
-            userPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
+        } | null;
+        share: {
+            id: string;
+            visibility: 'organization' | 'team' | 'user';
         } | null;
         messages: Array<unknown>;
     };
@@ -19020,8 +17417,478 @@ export type GetChatAgentMcpToolsResponses = {
 
 export type GetChatAgentMcpToolsResponse = GetChatAgentMcpToolsResponses[keyof GetChatAgentMcpToolsResponses];
 
+export type UnshareConversationData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/share';
+};
+
+export type UnshareConversationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UnshareConversationError = UnshareConversationErrors[keyof UnshareConversationErrors];
+
+export type UnshareConversationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type UnshareConversationResponse = UnshareConversationResponses[keyof UnshareConversationResponses];
+
+export type GetConversationShareData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/share';
+};
+
+export type GetConversationShareErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetConversationShareError = GetConversationShareErrors[keyof GetConversationShareErrors];
+
+export type GetConversationShareResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        conversationId: string;
+        organizationId: string;
+        createdByUserId: string;
+        visibility: 'organization' | 'team' | 'user';
+        createdAt: string;
+        teamIds: Array<string>;
+        userIds: Array<string>;
+    } | null;
+};
+
+export type GetConversationShareResponse = GetConversationShareResponses[keyof GetConversationShareResponses];
+
+export type ShareConversationData = {
+    body: {
+        visibility: 'organization' | 'team' | 'user';
+        teamIds?: Array<string>;
+        userIds?: Array<string>;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/share';
+};
+
+export type ShareConversationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type ShareConversationError = ShareConversationErrors[keyof ShareConversationErrors];
+
+export type ShareConversationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        conversationId: string;
+        organizationId: string;
+        createdByUserId: string;
+        visibility: 'organization' | 'team' | 'user';
+        createdAt: string;
+        teamIds: Array<string>;
+        userIds: Array<string>;
+    };
+};
+
+export type ShareConversationResponse = ShareConversationResponses[keyof ShareConversationResponses];
+
+export type GetSharedConversationData = {
+    body?: never;
+    path: {
+        shareId: string;
+    };
+    query?: never;
+    url: '/api/chat/shared/{shareId}';
+};
+
+export type GetSharedConversationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetSharedConversationError = GetSharedConversationErrors[keyof GetSharedConversationErrors];
+
+export type GetSharedConversationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        userId: string;
+        organizationId: string;
+        agentId: string | null;
+        chatApiKeyId: string | null;
+        title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        hasCustomToolSelection: boolean;
+        todoList: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        artifact: string | null;
+        pinnedAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+            systemPrompt: string | null;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            llmApiKeyId: string | null;
+        } | null;
+        share: {
+            id: string;
+            visibility: 'organization' | 'team' | 'user';
+        } | null;
+        messages: Array<unknown>;
+        sharedByUserId: string;
+    };
+};
+
+export type GetSharedConversationResponse = GetSharedConversationResponses[keyof GetSharedConversationResponses];
+
+export type ForkSharedConversationData = {
+    body: {
+        agentId: string;
+    };
+    path: {
+        shareId: string;
+    };
+    query?: never;
+    url: '/api/chat/shared/{shareId}/fork';
+};
+
+export type ForkSharedConversationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type ForkSharedConversationError = ForkSharedConversationErrors[keyof ForkSharedConversationErrors];
+
+export type ForkSharedConversationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        userId: string;
+        organizationId: string;
+        agentId: string | null;
+        chatApiKeyId: string | null;
+        title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        hasCustomToolSelection: boolean;
+        todoList: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        artifact: string | null;
+        pinnedAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+            systemPrompt: string | null;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            llmApiKeyId: string | null;
+        } | null;
+        share: {
+            id: string;
+            visibility: 'organization' | 'team' | 'user';
+        } | null;
+        messages: Array<unknown>;
+    };
+};
+
+export type ForkSharedConversationResponse = ForkSharedConversationResponses[keyof ForkSharedConversationResponses];
+
 export type GenerateChatConversationTitleData = {
-    body?: {
+    body: {
         /**
          * Force regeneration even if title already exists (for manual regeneration)
          */
@@ -19105,7 +17972,7 @@ export type GenerateChatConversationTitleResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'groq' | 'xai' | 'openrouter' | 'mistral' | 'openai' | 'perplexity' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -19118,9 +17985,12 @@ export type GenerateChatConversationTitleResponses = {
             id: string;
             name: string;
             systemPrompt: string | null;
-            userPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
+        } | null;
+        share: {
+            id: string;
+            visibility: 'organization' | 'team' | 'user';
         } | null;
         messages: Array<unknown>;
     };
@@ -19212,7 +18082,7 @@ export type UpdateChatMessageResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'groq' | 'xai' | 'openrouter' | 'mistral' | 'openai' | 'perplexity' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -19225,9 +18095,12 @@ export type UpdateChatMessageResponses = {
             id: string;
             name: string;
             systemPrompt: string | null;
-            userPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
+        } | null;
+        share: {
+            id: string;
+            visibility: 'organization' | 'team' | 'user';
         } | null;
         messages: Array<unknown>;
     };
@@ -19477,7 +18350,7 @@ export type UpdateConversationEnabledToolsResponses = {
 export type UpdateConversationEnabledToolsResponse = UpdateConversationEnabledToolsResponses[keyof UpdateConversationEnabledToolsResponses];
 
 export type PostApiWebhooksChatopsMsTeamsData = {
-    body?: unknown;
+    body: unknown;
     path?: never;
     query?: never;
     url: '/api/webhooks/chatops/ms-teams';
@@ -19529,7 +18402,7 @@ export type PostApiWebhooksChatopsMsTeamsResponses = {
 export type PostApiWebhooksChatopsMsTeamsResponse = PostApiWebhooksChatopsMsTeamsResponses[keyof PostApiWebhooksChatopsMsTeamsResponses];
 
 export type PostApiWebhooksChatopsSlackData = {
-    body?: unknown;
+    body: unknown;
     path?: never;
     query?: never;
     url: '/api/webhooks/chatops/slack';
@@ -19581,7 +18454,7 @@ export type PostApiWebhooksChatopsSlackResponses = {
 export type PostApiWebhooksChatopsSlackResponse = PostApiWebhooksChatopsSlackResponses[keyof PostApiWebhooksChatopsSlackResponses];
 
 export type PostApiWebhooksChatopsSlackInteractiveData = {
-    body?: unknown;
+    body: unknown;
     path?: never;
     query?: never;
     url: '/api/webhooks/chatops/slack/interactive';
@@ -19622,7 +18495,7 @@ export type PostApiWebhooksChatopsSlackInteractiveResponses = {
 export type PostApiWebhooksChatopsSlackInteractiveResponse = PostApiWebhooksChatopsSlackInteractiveResponses[keyof PostApiWebhooksChatopsSlackInteractiveResponses];
 
 export type PostApiWebhooksChatopsSlackSlashCommandData = {
-    body?: unknown;
+    body: unknown;
     path?: never;
     query?: never;
     url: '/api/webhooks/chatops/slack/slash-command';
@@ -19730,11 +18603,17 @@ export type GetChatOpsStatusResponses = {
      */
     200: {
         providers: Array<{
-            id: string;
+            id: 'ms-teams' | 'slack';
             displayName: string;
             configured: boolean;
             credentials?: {
-                [key: string]: string;
+                botToken?: string;
+                appId?: string;
+                appSecret?: string;
+                tenantId?: string;
+                signingSecret?: string;
+                appLevelToken?: string;
+                connectionMode?: 'webhook' | 'socket';
             };
             dmInfo?: {
                 botUserId?: string;
@@ -19750,7 +18629,16 @@ export type GetChatOpsStatusResponse = GetChatOpsStatusResponses[keyof GetChatOp
 export type ListChatOpsBindingsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        provider?: 'ms-teams' | 'slack';
+        workspaceId?: string;
+        search?: string;
+        status?: 'configured' | 'unassigned';
+        limit?: number;
+        offset?: number;
+        sortBy?: 'channelName' | 'createdAt';
+        sortDirection?: 'asc' | 'desc';
+    };
     url: '/api/chatops/bindings';
 };
 
@@ -19817,20 +18705,39 @@ export type ListChatOpsBindingsResponses = {
     /**
      * Default Response
      */
-    200: Array<{
-        id: string;
-        organizationId: string;
-        provider: 'ms-teams' | 'slack';
-        channelId: string;
-        workspaceId: string | null;
-        channelName: string | null;
-        workspaceName: string | null;
-        isDm: boolean;
-        dmOwnerEmail: string | null;
-        agentId: string | null;
-        createdAt: string;
-        updatedAt: string;
-    }>;
+    200: {
+        data: Array<{
+            id: string;
+            organizationId: string;
+            provider: 'ms-teams' | 'slack';
+            channelId: string;
+            workspaceId: string | null;
+            channelName: string | null;
+            workspaceName: string | null;
+            isDm: boolean;
+            dmOwnerEmail: string | null;
+            agentId: string | null;
+            createdAt: string;
+            updatedAt: string;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+        counts: {
+            configured: number;
+            unassigned: number;
+        };
+        workspaces: Array<{
+            id: string;
+            name: string;
+        }>;
+        hasDmBinding: boolean;
+    };
 };
 
 export type ListChatOpsBindingsResponse = ListChatOpsBindingsResponses[keyof ListChatOpsBindingsResponses];
@@ -20006,7 +18913,7 @@ export type DeleteChatOpsBindingResponses = {
 export type DeleteChatOpsBindingResponse = DeleteChatOpsBindingResponses[keyof DeleteChatOpsBindingResponses];
 
 export type UpdateChatOpsBindingData = {
-    body?: {
+    body: {
         agentId?: string | null;
     };
     path: {
@@ -20189,7 +19096,7 @@ export type CreateChatOpsDmBindingResponses = {
 export type CreateChatOpsDmBindingResponse = CreateChatOpsDmBindingResponses[keyof CreateChatOpsDmBindingResponses];
 
 export type UpdateChatOpsConfigInQuickstartData = {
-    body?: {
+    body: {
         enabled?: boolean;
         appId?: string;
         appSecret?: string;
@@ -20271,7 +19178,7 @@ export type UpdateChatOpsConfigInQuickstartResponses = {
 export type UpdateChatOpsConfigInQuickstartResponse = UpdateChatOpsConfigInQuickstartResponses[keyof UpdateChatOpsConfigInQuickstartResponses];
 
 export type UpdateSlackChatOpsConfigData = {
-    body?: {
+    body: {
         enabled?: boolean;
         botToken?: string;
         signingSecret?: string;
@@ -20434,7 +19341,7 @@ export type RefreshChatOpsChannelDiscoveryResponses = {
 export type RefreshChatOpsChannelDiscoveryResponse = RefreshChatOpsChannelDiscoveryResponses[keyof RefreshChatOpsChannelDiscoveryResponses];
 
 export type CohereChatWithDefaultAgentData = {
-    body?: CohereChatRequestInput;
+    body: CohereChatRequestInput;
     headers?: {
         /**
          * The user agent of the client
@@ -20519,7 +19426,7 @@ export type CohereChatWithDefaultAgentResponses = {
 export type CohereChatWithDefaultAgentResponse = CohereChatWithDefaultAgentResponses[keyof CohereChatWithDefaultAgentResponses];
 
 export type CohereChatWithAgentData = {
-    body?: CohereChatRequestInput;
+    body: CohereChatRequestInput;
     headers?: {
         /**
          * The user agent of the client
@@ -20605,6 +19512,25 @@ export type CohereChatWithAgentResponses = {
 
 export type CohereChatWithAgentResponse = CohereChatWithAgentResponses[keyof CohereChatWithAgentResponses];
 
+export type GetPublicConfigData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/config/public';
+};
+
+export type GetPublicConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        disableBasicAuth: boolean;
+        disableInvitations: boolean;
+    };
+};
+
+export type GetPublicConfigResponse = GetPublicConfigResponses[keyof GetPublicConfigResponses];
+
 export type GetConfigData = {
     body?: never;
     path?: never;
@@ -20617,29 +19543,30 @@ export type GetConfigResponses = {
      * Default Response
      */
     200: {
+        enterpriseFeatures: {
+            core: boolean;
+            knowledgeBase: boolean;
+            fullWhiteLabeling: boolean;
+        };
         features: {
-            'orchestrator-k8s-runtime': boolean;
+            orchestratorK8sRuntime: boolean;
             byosEnabled: boolean;
             byosVaultKvVersion: '1' | '2';
+            bedrockIamAuthEnabled: boolean;
             geminiVertexAiEnabled: boolean;
             globalToolPolicy: 'permissive' | 'restrictive';
-            browserStreamingEnabled: boolean;
             incomingEmail: {
                 enabled: boolean;
                 provider?: 'outlook';
                 displayName?: string;
                 emailDomain?: string;
             };
-            knowledgeGraph: {
-                enabled: boolean;
-                provider?: 'lightrag';
-                displayName?: string;
-            };
             mcpServerBaseImage: string;
             orchestratorK8sNamespace: string;
             isQuickstart: boolean;
             ngrokDomain: string;
             virtualKeyDefaultExpirationSeconds: number;
+            mcpSandboxDomain: string | null;
         };
         providerBaseUrls: {
             [key: string]: string | null;
@@ -20650,7 +19577,7 @@ export type GetConfigResponses = {
 export type GetConfigResponse = GetConfigResponses[keyof GetConfigResponses];
 
 export type DeepseekChatCompletionsWithDefaultAgentData = {
-    body?: DeepSeekChatCompletionRequestInput;
+    body: DeepSeekChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -20735,7 +19662,7 @@ export type DeepseekChatCompletionsWithDefaultAgentResponses = {
 export type DeepseekChatCompletionsWithDefaultAgentResponse = DeepseekChatCompletionsWithDefaultAgentResponses[keyof DeepseekChatCompletionsWithDefaultAgentResponses];
 
 export type DeepseekChatCompletionsWithAgentData = {
-    body?: DeepSeekChatCompletionRequestInput;
+    body: DeepSeekChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -20821,695 +19748,8 @@ export type DeepseekChatCompletionsWithAgentResponses = {
 
 export type DeepseekChatCompletionsWithAgentResponse = DeepseekChatCompletionsWithAgentResponses[keyof DeepseekChatCompletionsWithAgentResponses];
 
-export type GetDefaultDualLlmConfigData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/dual-llm-config/default';
-};
-
-export type GetDefaultDualLlmConfigErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetDefaultDualLlmConfigError = GetDefaultDualLlmConfigErrors[keyof GetDefaultDualLlmConfigErrors];
-
-export type GetDefaultDualLlmConfigResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        enabled: boolean;
-        mainAgentPrompt: string;
-        quarantinedAgentPrompt: string;
-        summaryPrompt: string;
-        maxRounds: number;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type GetDefaultDualLlmConfigResponse = GetDefaultDualLlmConfigResponses[keyof GetDefaultDualLlmConfigResponses];
-
-export type GetDualLlmConfigsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/dual-llm-config';
-};
-
-export type GetDualLlmConfigsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetDualLlmConfigsError = GetDualLlmConfigsErrors[keyof GetDualLlmConfigsErrors];
-
-export type GetDualLlmConfigsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        enabled: boolean;
-        mainAgentPrompt: string;
-        quarantinedAgentPrompt: string;
-        summaryPrompt: string;
-        maxRounds: number;
-        createdAt: string;
-        updatedAt: string;
-    }>;
-};
-
-export type GetDualLlmConfigsResponse = GetDualLlmConfigsResponses[keyof GetDualLlmConfigsResponses];
-
-export type CreateDualLlmConfigData = {
-    body: {
-        enabled?: boolean;
-        mainAgentPrompt: string;
-        quarantinedAgentPrompt: string;
-        summaryPrompt: string;
-        maxRounds?: number;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/dual-llm-config';
-};
-
-export type CreateDualLlmConfigErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type CreateDualLlmConfigError = CreateDualLlmConfigErrors[keyof CreateDualLlmConfigErrors];
-
-export type CreateDualLlmConfigResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        enabled: boolean;
-        mainAgentPrompt: string;
-        quarantinedAgentPrompt: string;
-        summaryPrompt: string;
-        maxRounds: number;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type CreateDualLlmConfigResponse = CreateDualLlmConfigResponses[keyof CreateDualLlmConfigResponses];
-
-export type DeleteDualLlmConfigData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/dual-llm-config/{id}';
-};
-
-export type DeleteDualLlmConfigErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type DeleteDualLlmConfigError = DeleteDualLlmConfigErrors[keyof DeleteDualLlmConfigErrors];
-
-export type DeleteDualLlmConfigResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteDualLlmConfigResponse = DeleteDualLlmConfigResponses[keyof DeleteDualLlmConfigResponses];
-
-export type GetDualLlmConfigData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/dual-llm-config/{id}';
-};
-
-export type GetDualLlmConfigErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetDualLlmConfigError = GetDualLlmConfigErrors[keyof GetDualLlmConfigErrors];
-
-export type GetDualLlmConfigResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        enabled: boolean;
-        mainAgentPrompt: string;
-        quarantinedAgentPrompt: string;
-        summaryPrompt: string;
-        maxRounds: number;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type GetDualLlmConfigResponse = GetDualLlmConfigResponses[keyof GetDualLlmConfigResponses];
-
-export type UpdateDualLlmConfigData = {
-    body?: {
-        enabled?: boolean;
-        mainAgentPrompt?: string;
-        quarantinedAgentPrompt?: string;
-        summaryPrompt?: string;
-        maxRounds?: number;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/dual-llm-config/{id}';
-};
-
-export type UpdateDualLlmConfigErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type UpdateDualLlmConfigError = UpdateDualLlmConfigErrors[keyof UpdateDualLlmConfigErrors];
-
-export type UpdateDualLlmConfigResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        enabled: boolean;
-        mainAgentPrompt: string;
-        quarantinedAgentPrompt: string;
-        summaryPrompt: string;
-        maxRounds: number;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type UpdateDualLlmConfigResponse = UpdateDualLlmConfigResponses[keyof UpdateDualLlmConfigResponses];
-
-export type GetDualLlmResultByToolCallIdData = {
-    body?: never;
-    path: {
-        toolCallId: string;
-    };
-    query?: never;
-    url: '/api/dual-llm-results/by-tool-call-id/{toolCallId}';
-};
-
-export type GetDualLlmResultByToolCallIdErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetDualLlmResultByToolCallIdError = GetDualLlmResultByToolCallIdErrors[keyof GetDualLlmResultByToolCallIdErrors];
-
-export type GetDualLlmResultByToolCallIdResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        agentId: string;
-        toolCallId: string;
-        conversations: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
-        result: string;
-        createdAt: string;
-    } | null;
-};
-
-export type GetDualLlmResultByToolCallIdResponse = GetDualLlmResultByToolCallIdResponses[keyof GetDualLlmResultByToolCallIdResponses];
-
-export type GetDualLlmResultsByInteractionData = {
-    body?: never;
-    path: {
-        interactionId: string;
-    };
-    query?: never;
-    url: '/api/dual-llm-results/by-interaction/{interactionId}';
-};
-
-export type GetDualLlmResultsByInteractionErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetDualLlmResultsByInteractionError = GetDualLlmResultsByInteractionErrors[keyof GetDualLlmResultsByInteractionErrors];
-
-export type GetDualLlmResultsByInteractionResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        agentId: string;
-        toolCallId: string;
-        conversations: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
-        result: string;
-        createdAt: string;
-    }>;
-};
-
-export type GetDualLlmResultsByInteractionResponse = GetDualLlmResultsByInteractionResponses[keyof GetDualLlmResultsByInteractionResponses];
-
 export type PostV1GeminiV1BetaModelsByModelGenerateContentData = {
-    body?: GeminiGenerateContentRequestInput;
+    body: GeminiGenerateContentRequestInput;
     headers?: {
         /**
          * The user agent of the client
@@ -21599,7 +19839,7 @@ export type PostV1GeminiV1BetaModelsByModelGenerateContentResponses = {
 export type PostV1GeminiV1BetaModelsByModelGenerateContentResponse = PostV1GeminiV1BetaModelsByModelGenerateContentResponses[keyof PostV1GeminiV1BetaModelsByModelGenerateContentResponses];
 
 export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentData = {
-    body?: GeminiGenerateContentRequestInput;
+    body: GeminiGenerateContentRequestInput;
     headers?: {
         /**
          * The user agent of the client
@@ -21680,7 +19920,7 @@ export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentErrors = {
 export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentError = PostV1GeminiV1BetaModelsByModelStreamGenerateContentErrors[keyof PostV1GeminiV1BetaModelsByModelStreamGenerateContentErrors];
 
 export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentData = {
-    body?: GeminiGenerateContentRequestInput;
+    body: GeminiGenerateContentRequestInput;
     headers?: {
         /**
          * The user agent of the client
@@ -21771,7 +20011,7 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentResponses = {
 export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentResponse = PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentResponses[keyof PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentResponses];
 
 export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentData = {
-    body?: GeminiGenerateContentRequestInput;
+    body: GeminiGenerateContentRequestInput;
     headers?: {
         /**
          * The user agent of the client
@@ -21853,7 +20093,7 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors 
 export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentError = PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors[keyof PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors];
 
 export type GroqChatCompletionsWithDefaultAgentData = {
-    body?: XaiChatCompletionRequestInput;
+    body: XaiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -21938,7 +20178,7 @@ export type GroqChatCompletionsWithDefaultAgentResponses = {
 export type GroqChatCompletionsWithDefaultAgentResponse = GroqChatCompletionsWithDefaultAgentResponses[keyof GroqChatCompletionsWithDefaultAgentResponses];
 
 export type GroqChatCompletionsWithAgentData = {
-    body?: XaiChatCompletionRequestInput;
+    body: XaiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -22024,8 +20264,63 @@ export type GroqChatCompletionsWithAgentResponses = {
 
 export type GroqChatCompletionsWithAgentResponse = GroqChatCompletionsWithAgentResponses[keyof GroqChatCompletionsWithAgentResponses];
 
+export type GetHealthData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/health';
+};
+
+export type GetHealthResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        name: string;
+        status: string;
+        version: string;
+    };
+};
+
+export type GetHealthResponse = GetHealthResponses[keyof GetHealthResponses];
+
+export type GetReadyData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/ready';
+};
+
+export type GetReadyErrors = {
+    /**
+     * Default Response
+     */
+    503: {
+        name: string;
+        status: string;
+        version: string;
+        database: string;
+    };
+};
+
+export type GetReadyError = GetReadyErrors[keyof GetReadyErrors];
+
+export type GetReadyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        name: string;
+        status: string;
+        version: string;
+        database: string;
+    };
+};
+
+export type GetReadyResponse = GetReadyResponses[keyof GetReadyResponses];
+
 export type PostApiWebhooksIncomingEmailData = {
-    body?: unknown;
+    body: unknown;
     path?: never;
     query?: never;
     url: '/api/webhooks/incoming-email';
@@ -22581,9 +20876,27 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
             response: OpenAiChatCompletionResponse;
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'openai:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -22594,7 +20907,7 @@ export type GetInteractionsResponses = {
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
-            toonSkipReason: string | null;
+            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
@@ -22606,9 +20919,90 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            request: {
+                model: string;
+                input: string | Array<string>;
+                dimensions?: number;
+                encoding_format?: 'float' | 'base64';
+            };
+            processedRequest?: {
+                model: string;
+                input: string | Array<string>;
+                dimensions?: number;
+                encoding_format?: 'float' | 'base64';
+            } | null;
+            response: {
+                object: 'list';
+                data: Array<{
+                    object: 'embedding';
+                    embedding: Array<number>;
+                    index: number;
+                }>;
+                model: string;
+                usage: {
+                    prompt_tokens: number;
+                    total_tokens: number;
+                };
+            };
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
+            type: 'openai:embeddings';
+            model: string | null;
+            baselineModel: string | null;
+            inputTokens: number | null;
+            outputTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
+            toonTokensBefore: number | null;
+            toonTokensAfter: number | null;
+            toonCostSavings: string | null;
+            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            createdAt: string;
+        } | {
+            id: string;
+            profileId: string | null;
+            externalAgentId: string | null;
+            executionId: string | null;
+            userId: string | null;
+            sessionId: string | null;
+            sessionSource: string | null;
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: GeminiGenerateContentRequest;
             processedRequest?: GeminiGenerateContentRequest | null;
             response: GeminiGenerateContentResponse;
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'gemini:generateContent';
             model: string | null;
             baselineModel: string | null;
@@ -22619,7 +21013,7 @@ export type GetInteractionsResponses = {
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
-            toonSkipReason: string | null;
+            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
@@ -22631,9 +21025,27 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: AnthropicMessagesRequest;
             processedRequest?: AnthropicMessagesRequest | null;
             response: AnthropicMessagesResponse;
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'anthropic:messages';
             model: string | null;
             baselineModel: string | null;
@@ -22644,7 +21056,7 @@ export type GetInteractionsResponses = {
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
-            toonSkipReason: string | null;
+            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
@@ -22656,6 +21068,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: {
                 modelId: string;
                 messages?: Array<{
@@ -22770,17 +21183,20 @@ export type GetInteractionsResponses = {
                         };
                     }>;
                     toolChoice?: {
-                        auto?: {
-                            [key: string]: never;
-                        };
-                    } | {
-                        any?: {
-                            [key: string]: never;
-                        };
-                    } | {
                         tool: {
                             name: string;
                         };
+                        [key: string]: unknown;
+                    } | {
+                        any: {
+                            [key: string]: unknown;
+                        };
+                        [key: string]: unknown;
+                    } | {
+                        auto: {
+                            [key: string]: unknown;
+                        };
+                        [key: string]: unknown;
                     };
                 };
                 guardrailConfig?: {
@@ -22926,17 +21342,20 @@ export type GetInteractionsResponses = {
                         };
                     }>;
                     toolChoice?: {
-                        auto?: {
-                            [key: string]: never;
-                        };
-                    } | {
-                        any?: {
-                            [key: string]: never;
-                        };
-                    } | {
                         tool: {
                             name: string;
                         };
+                        [key: string]: unknown;
+                    } | {
+                        any: {
+                            [key: string]: unknown;
+                        };
+                        [key: string]: unknown;
+                    } | {
+                        auto: {
+                            [key: string]: unknown;
+                        };
+                        [key: string]: unknown;
                     };
                 };
                 guardrailConfig?: {
@@ -23027,6 +21446,23 @@ export type GetInteractionsResponses = {
                     type?: 'default' | 'throughput';
                 };
             };
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'bedrock:converse';
             model: string | null;
             baselineModel: string | null;
@@ -23037,7 +21473,7 @@ export type GetInteractionsResponses = {
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
-            toonSkipReason: string | null;
+            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
@@ -23049,9 +21485,27 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
             response: CerebrasChatCompletionResponse;
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'cerebras:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -23062,7 +21516,7 @@ export type GetInteractionsResponses = {
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
-            toonSkipReason: string | null;
+            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
@@ -23074,9 +21528,27 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
             response: MistralChatCompletionResponse;
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'mistral:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -23087,7 +21559,7 @@ export type GetInteractionsResponses = {
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
-            toonSkipReason: string | null;
+            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
@@ -23099,9 +21571,27 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
             response: PerplexityChatCompletionResponse;
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'perplexity:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -23112,7 +21602,7 @@ export type GetInteractionsResponses = {
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
-            toonSkipReason: string | null;
+            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
@@ -23124,9 +21614,27 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
             response: GroqChatCompletionResponse;
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'groq:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -23137,7 +21645,7 @@ export type GetInteractionsResponses = {
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
-            toonSkipReason: string | null;
+            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
@@ -23149,9 +21657,27 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
             response: XaiChatCompletionResponse;
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'xai:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -23162,7 +21688,7 @@ export type GetInteractionsResponses = {
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
-            toonSkipReason: string | null;
+            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
@@ -23174,9 +21700,27 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
             response: OpenrouterChatCompletionResponse;
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'openrouter:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -23187,7 +21731,7 @@ export type GetInteractionsResponses = {
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
-            toonSkipReason: string | null;
+            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
@@ -23199,9 +21743,27 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: VllmChatCompletionRequest;
             processedRequest?: VllmChatCompletionRequest | null;
             response: VllmChatCompletionResponse;
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'vllm:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -23212,7 +21774,7 @@ export type GetInteractionsResponses = {
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
-            toonSkipReason: string | null;
+            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
         } | {
             id: string;
@@ -23222,9 +21784,27 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: OllamaChatCompletionRequest;
             processedRequest?: OllamaChatCompletionRequest | null;
             response: OllamaChatCompletionResponse;
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'ollama:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -23235,7 +21815,7 @@ export type GetInteractionsResponses = {
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
-            toonSkipReason: string | null;
+            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
         } | {
             id: string;
@@ -23245,9 +21825,27 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: CohereChatRequest;
             processedRequest?: CohereChatRequest | null;
             response: CohereChatResponse;
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'cohere:chat';
             model: string | null;
             baselineModel: string | null;
@@ -23258,7 +21856,7 @@ export type GetInteractionsResponses = {
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
-            toonSkipReason: string | null;
+            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
@@ -23270,9 +21868,27 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: ZhipuaiChatCompletionRequest;
             processedRequest?: ZhipuaiChatCompletionRequest | null;
             response: ZhipuaiChatCompletionResponse;
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'zhipuai:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -23283,7 +21899,7 @@ export type GetInteractionsResponses = {
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
-            toonSkipReason: string | null;
+            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
@@ -23295,9 +21911,27 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: DeepSeekChatCompletionRequest;
             processedRequest?: DeepSeekChatCompletionRequest | null;
             response: DeepSeekChatCompletionResponse;
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'deepseek:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -23308,7 +21942,7 @@ export type GetInteractionsResponses = {
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
-            toonSkipReason: string | null;
+            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
@@ -23320,9 +21954,27 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: MinimaxChatCompletionRequest;
             processedRequest?: MinimaxChatCompletionRequest | null;
             response: MinimaxChatCompletionResponse;
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
             type: 'minimax:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -23333,7 +21985,7 @@ export type GetInteractionsResponses = {
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
-            toonSkipReason: string | null;
+            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
@@ -23363,6 +22015,10 @@ export type GetInteractionSessionsData = {
          * Filter by user ID (from X-Archestra-User-Id header)
          */
         userId?: string;
+        /**
+         * Filter by interaction source
+         */
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         /**
          * Filter by session ID
          */
@@ -23452,6 +22108,7 @@ export type GetInteractionSessionsResponses = {
         data: Array<{
             sessionId: string | null;
             sessionSource: string | null;
+            source: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             interactionId: string | null;
             requestCount: number;
             totalInputTokens: number;
@@ -23727,9 +22384,27 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
         response: OpenAiChatCompletionResponse;
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'openai:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -23740,7 +22415,7 @@ export type GetInteractionResponses = {
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
-        toonSkipReason: string | null;
+        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
@@ -23752,9 +22427,90 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        request: {
+            model: string;
+            input: string | Array<string>;
+            dimensions?: number;
+            encoding_format?: 'float' | 'base64';
+        };
+        processedRequest?: {
+            model: string;
+            input: string | Array<string>;
+            dimensions?: number;
+            encoding_format?: 'float' | 'base64';
+        } | null;
+        response: {
+            object: 'list';
+            data: Array<{
+                object: 'embedding';
+                embedding: Array<number>;
+                index: number;
+            }>;
+            model: string;
+            usage: {
+                prompt_tokens: number;
+                total_tokens: number;
+            };
+        };
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
+        type: 'openai:embeddings';
+        model: string | null;
+        baselineModel: string | null;
+        inputTokens: number | null;
+        outputTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
+        toonTokensBefore: number | null;
+        toonTokensAfter: number | null;
+        toonCostSavings: string | null;
+        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        createdAt: string;
+    } | {
+        id: string;
+        profileId: string | null;
+        externalAgentId: string | null;
+        executionId: string | null;
+        userId: string | null;
+        sessionId: string | null;
+        sessionSource: string | null;
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: GeminiGenerateContentRequest;
         processedRequest?: GeminiGenerateContentRequest | null;
         response: GeminiGenerateContentResponse;
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'gemini:generateContent';
         model: string | null;
         baselineModel: string | null;
@@ -23765,7 +22521,7 @@ export type GetInteractionResponses = {
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
-        toonSkipReason: string | null;
+        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
@@ -23777,9 +22533,27 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: AnthropicMessagesRequest;
         processedRequest?: AnthropicMessagesRequest | null;
         response: AnthropicMessagesResponse;
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'anthropic:messages';
         model: string | null;
         baselineModel: string | null;
@@ -23790,7 +22564,7 @@ export type GetInteractionResponses = {
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
-        toonSkipReason: string | null;
+        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
@@ -23802,6 +22576,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: {
             modelId: string;
             messages?: Array<{
@@ -23916,17 +22691,20 @@ export type GetInteractionResponses = {
                     };
                 }>;
                 toolChoice?: {
-                    auto?: {
-                        [key: string]: never;
-                    };
-                } | {
-                    any?: {
-                        [key: string]: never;
-                    };
-                } | {
                     tool: {
                         name: string;
                     };
+                    [key: string]: unknown;
+                } | {
+                    any: {
+                        [key: string]: unknown;
+                    };
+                    [key: string]: unknown;
+                } | {
+                    auto: {
+                        [key: string]: unknown;
+                    };
+                    [key: string]: unknown;
                 };
             };
             guardrailConfig?: {
@@ -24072,17 +22850,20 @@ export type GetInteractionResponses = {
                     };
                 }>;
                 toolChoice?: {
-                    auto?: {
-                        [key: string]: never;
-                    };
-                } | {
-                    any?: {
-                        [key: string]: never;
-                    };
-                } | {
                     tool: {
                         name: string;
                     };
+                    [key: string]: unknown;
+                } | {
+                    any: {
+                        [key: string]: unknown;
+                    };
+                    [key: string]: unknown;
+                } | {
+                    auto: {
+                        [key: string]: unknown;
+                    };
+                    [key: string]: unknown;
                 };
             };
             guardrailConfig?: {
@@ -24173,6 +22954,23 @@ export type GetInteractionResponses = {
                 type?: 'default' | 'throughput';
             };
         };
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'bedrock:converse';
         model: string | null;
         baselineModel: string | null;
@@ -24183,7 +22981,7 @@ export type GetInteractionResponses = {
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
-        toonSkipReason: string | null;
+        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
@@ -24195,9 +22993,27 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
         response: CerebrasChatCompletionResponse;
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'cerebras:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -24208,7 +23024,7 @@ export type GetInteractionResponses = {
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
-        toonSkipReason: string | null;
+        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
@@ -24220,9 +23036,27 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
         response: MistralChatCompletionResponse;
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'mistral:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -24233,7 +23067,7 @@ export type GetInteractionResponses = {
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
-        toonSkipReason: string | null;
+        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
@@ -24245,9 +23079,27 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
         response: PerplexityChatCompletionResponse;
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'perplexity:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -24258,7 +23110,7 @@ export type GetInteractionResponses = {
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
-        toonSkipReason: string | null;
+        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
@@ -24270,9 +23122,27 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
         response: GroqChatCompletionResponse;
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'groq:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -24283,7 +23153,7 @@ export type GetInteractionResponses = {
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
-        toonSkipReason: string | null;
+        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
@@ -24295,9 +23165,27 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
         response: XaiChatCompletionResponse;
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'xai:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -24308,7 +23196,7 @@ export type GetInteractionResponses = {
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
-        toonSkipReason: string | null;
+        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
@@ -24320,9 +23208,27 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
         response: OpenrouterChatCompletionResponse;
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'openrouter:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -24333,7 +23239,7 @@ export type GetInteractionResponses = {
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
-        toonSkipReason: string | null;
+        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
@@ -24345,9 +23251,27 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: VllmChatCompletionRequest;
         processedRequest?: VllmChatCompletionRequest | null;
         response: VllmChatCompletionResponse;
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'vllm:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -24358,7 +23282,7 @@ export type GetInteractionResponses = {
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
-        toonSkipReason: string | null;
+        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
     } | {
         id: string;
@@ -24368,9 +23292,27 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: OllamaChatCompletionRequest;
         processedRequest?: OllamaChatCompletionRequest | null;
         response: OllamaChatCompletionResponse;
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'ollama:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -24381,7 +23323,7 @@ export type GetInteractionResponses = {
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
-        toonSkipReason: string | null;
+        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
     } | {
         id: string;
@@ -24391,9 +23333,27 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: CohereChatRequest;
         processedRequest?: CohereChatRequest | null;
         response: CohereChatResponse;
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'cohere:chat';
         model: string | null;
         baselineModel: string | null;
@@ -24404,7 +23364,7 @@ export type GetInteractionResponses = {
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
-        toonSkipReason: string | null;
+        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
@@ -24416,9 +23376,27 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: ZhipuaiChatCompletionRequest;
         processedRequest?: ZhipuaiChatCompletionRequest | null;
         response: ZhipuaiChatCompletionResponse;
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'zhipuai:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -24429,7 +23407,7 @@ export type GetInteractionResponses = {
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
-        toonSkipReason: string | null;
+        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
@@ -24441,9 +23419,27 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: DeepSeekChatCompletionRequest;
         processedRequest?: DeepSeekChatCompletionRequest | null;
         response: DeepSeekChatCompletionResponse;
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'deepseek:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -24454,7 +23450,7 @@ export type GetInteractionResponses = {
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
-        toonSkipReason: string | null;
+        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
@@ -24466,9 +23462,27 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: MinimaxChatCompletionRequest;
         processedRequest?: MinimaxChatCompletionRequest | null;
         response: MinimaxChatCompletionResponse;
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
         type: 'minimax:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -24479,7 +23493,7 @@ export type GetInteractionResponses = {
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
-        toonSkipReason: string | null;
+        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
@@ -24593,6 +23607,11 @@ export type GetInternalMcpCatalogResponses = {
                 default?: string | number | boolean;
                 mounted?: boolean;
             }>;
+            envFrom?: Array<{
+                type: 'secret' | 'configMap';
+                name: string;
+                prefix?: string;
+            }>;
             dockerImage?: string;
             serviceAccount?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -24646,12 +23665,38 @@ export type GetInternalMcpCatalogResponses = {
             streamable_http_url?: string;
             streamable_http_port?: number;
         } | null;
+        enterpriseManagedConfig: {
+            identityProviderId?: string;
+            resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
+            resourceIdentifier?: string;
+            requestedIssuer?: string;
+            requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
+            scopes?: Array<string>;
+            audience?: string;
+            clientIdOverride?: string;
+            tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
+            headerName?: string;
+            envVarName?: string;
+            bodyFieldName?: string;
+            responseFieldPath?: string;
+            fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
+            cacheTtlSeconds?: number;
+        } | null;
+        icon: string | null;
+        organizationId: string | null;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         createdAt: string;
         updatedAt: string;
         labels: Array<{
             key: string;
             value: string;
         }>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        authorName?: string | null;
     }>;
 };
 
@@ -24672,7 +23717,7 @@ export type CreateInternalMcpCatalogItemData = {
             name: string;
             label: string;
             type: string;
-            required: boolean;
+            required?: boolean;
             description?: string;
         }> | null;
         serverType: 'local' | 'remote' | 'builtin';
@@ -24692,6 +23737,11 @@ export type CreateInternalMcpCatalogItemData = {
                 description?: string;
                 default?: string | number | boolean;
                 mounted?: boolean;
+            }>;
+            envFrom?: Array<{
+                type: 'secret' | 'configMap';
+                name: string;
+                prefix?: string;
             }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -24746,10 +23796,30 @@ export type CreateInternalMcpCatalogItemData = {
             streamable_http_url?: string;
             streamable_http_port?: number;
         } | null;
+        enterpriseManagedConfig?: {
+            identityProviderId?: string;
+            resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
+            resourceIdentifier?: string;
+            requestedIssuer?: string;
+            requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
+            scopes?: Array<string>;
+            audience?: string;
+            clientIdOverride?: string;
+            tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
+            headerName?: string;
+            envVarName?: string;
+            bodyFieldName?: string;
+            responseFieldPath?: string;
+            fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
+            cacheTtlSeconds?: number;
+        } | null;
+        icon?: string | null;
+        scope?: 'personal' | 'team' | 'org';
         labels?: Array<{
             key: string;
             value: string;
         }>;
+        teams?: Array<string>;
         oauthClientSecretVaultPath?: string;
         oauthClientSecretVaultKey?: string;
         localConfigVaultPath?: string;
@@ -24858,6 +23928,11 @@ export type CreateInternalMcpCatalogItemResponses = {
                 default?: string | number | boolean;
                 mounted?: boolean;
             }>;
+            envFrom?: Array<{
+                type: 'secret' | 'configMap';
+                name: string;
+                prefix?: string;
+            }>;
             dockerImage?: string;
             serviceAccount?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -24911,12 +23986,38 @@ export type CreateInternalMcpCatalogItemResponses = {
             streamable_http_url?: string;
             streamable_http_port?: number;
         } | null;
+        enterpriseManagedConfig: {
+            identityProviderId?: string;
+            resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
+            resourceIdentifier?: string;
+            requestedIssuer?: string;
+            requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
+            scopes?: Array<string>;
+            audience?: string;
+            clientIdOverride?: string;
+            tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
+            headerName?: string;
+            envVarName?: string;
+            bodyFieldName?: string;
+            responseFieldPath?: string;
+            fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
+            cacheTtlSeconds?: number;
+        } | null;
+        icon: string | null;
+        organizationId: string | null;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         createdAt: string;
         updatedAt: string;
         labels: Array<{
             key: string;
             value: string;
         }>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        authorName?: string | null;
     };
 };
 
@@ -25108,6 +24209,11 @@ export type GetInternalMcpCatalogItemResponses = {
                 default?: string | number | boolean;
                 mounted?: boolean;
             }>;
+            envFrom?: Array<{
+                type: 'secret' | 'configMap';
+                name: string;
+                prefix?: string;
+            }>;
             dockerImage?: string;
             serviceAccount?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -25161,19 +24267,45 @@ export type GetInternalMcpCatalogItemResponses = {
             streamable_http_url?: string;
             streamable_http_port?: number;
         } | null;
+        enterpriseManagedConfig: {
+            identityProviderId?: string;
+            resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
+            resourceIdentifier?: string;
+            requestedIssuer?: string;
+            requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
+            scopes?: Array<string>;
+            audience?: string;
+            clientIdOverride?: string;
+            tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
+            headerName?: string;
+            envVarName?: string;
+            bodyFieldName?: string;
+            responseFieldPath?: string;
+            fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
+            cacheTtlSeconds?: number;
+        } | null;
+        icon: string | null;
+        organizationId: string | null;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         createdAt: string;
         updatedAt: string;
         labels: Array<{
             key: string;
             value: string;
         }>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        authorName?: string | null;
     };
 };
 
 export type GetInternalMcpCatalogItemResponse = GetInternalMcpCatalogItemResponses[keyof GetInternalMcpCatalogItemResponses];
 
 export type UpdateInternalMcpCatalogItemData = {
-    body?: {
+    body: {
         name?: string;
         version?: string | null;
         description?: string | null;
@@ -25186,7 +24318,7 @@ export type UpdateInternalMcpCatalogItemData = {
             name: string;
             label: string;
             type: string;
-            required: boolean;
+            required?: boolean;
             description?: string;
         }> | null;
         serverType?: 'local' | 'remote' | 'builtin';
@@ -25206,6 +24338,11 @@ export type UpdateInternalMcpCatalogItemData = {
                 description?: string;
                 default?: string | number | boolean;
                 mounted?: boolean;
+            }>;
+            envFrom?: Array<{
+                type: 'secret' | 'configMap';
+                name: string;
+                prefix?: string;
             }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -25260,10 +24397,30 @@ export type UpdateInternalMcpCatalogItemData = {
             streamable_http_url?: string;
             streamable_http_port?: number;
         } | null;
+        enterpriseManagedConfig?: {
+            identityProviderId?: string;
+            resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
+            resourceIdentifier?: string;
+            requestedIssuer?: string;
+            requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
+            scopes?: Array<string>;
+            audience?: string;
+            clientIdOverride?: string;
+            tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
+            headerName?: string;
+            envVarName?: string;
+            bodyFieldName?: string;
+            responseFieldPath?: string;
+            fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
+            cacheTtlSeconds?: number;
+        } | null;
+        icon?: string | null;
+        scope?: 'personal' | 'team' | 'org';
         labels?: Array<{
             key: string;
             value: string;
         }>;
+        teams?: Array<string>;
         oauthClientSecretVaultPath?: string;
         oauthClientSecretVaultKey?: string;
         localConfigVaultPath?: string;
@@ -25374,6 +24531,11 @@ export type UpdateInternalMcpCatalogItemResponses = {
                 default?: string | number | boolean;
                 mounted?: boolean;
             }>;
+            envFrom?: Array<{
+                type: 'secret' | 'configMap';
+                name: string;
+                prefix?: string;
+            }>;
             dockerImage?: string;
             serviceAccount?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -25427,12 +24589,38 @@ export type UpdateInternalMcpCatalogItemResponses = {
             streamable_http_url?: string;
             streamable_http_port?: number;
         } | null;
+        enterpriseManagedConfig: {
+            identityProviderId?: string;
+            resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
+            resourceIdentifier?: string;
+            requestedIssuer?: string;
+            requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
+            scopes?: Array<string>;
+            audience?: string;
+            clientIdOverride?: string;
+            tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
+            headerName?: string;
+            envVarName?: string;
+            bodyFieldName?: string;
+            responseFieldPath?: string;
+            fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
+            cacheTtlSeconds?: number;
+        } | null;
+        icon: string | null;
+        organizationId: string | null;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         createdAt: string;
         updatedAt: string;
         labels: Array<{
             key: string;
             value: string;
         }>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        authorName?: string | null;
     };
 };
 
@@ -26155,7 +25343,7 @@ export type CheckInvitationResponses = {
             id: string;
             email: string;
             organizationId: string;
-            status: 'pending' | 'accepted' | 'canceled';
+            status: string;
             expiresAt: string | null;
         };
         userExists: boolean;
@@ -26163,6 +25351,2046 @@ export type CheckInvitationResponses = {
 };
 
 export type CheckInvitationResponse = CheckInvitationResponses[keyof CheckInvitationResponses];
+
+export type GetKnowledgeBasesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+        search?: string;
+    };
+    url: '/api/knowledge-bases';
+};
+
+export type GetKnowledgeBasesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetKnowledgeBasesError = GetKnowledgeBasesErrors[keyof GetKnowledgeBasesErrors];
+
+export type GetKnowledgeBasesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            organizationId: string;
+            name: string;
+            description: string | null;
+            status: string;
+            createdAt: string;
+            updatedAt: string;
+            connectors: Array<{
+                id: string;
+                name: string;
+                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion';
+            }>;
+            totalDocsIndexed: number;
+            assignedAgents: Array<{
+                id: string;
+                name: string;
+                agentType: string;
+            }>;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetKnowledgeBasesResponse = GetKnowledgeBasesResponses[keyof GetKnowledgeBasesResponses];
+
+export type CreateKnowledgeBaseData = {
+    body: {
+        name: string;
+        description?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/knowledge-bases';
+};
+
+export type CreateKnowledgeBaseErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CreateKnowledgeBaseError = CreateKnowledgeBaseErrors[keyof CreateKnowledgeBaseErrors];
+
+export type CreateKnowledgeBaseResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        description: string | null;
+        status: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateKnowledgeBaseResponse = CreateKnowledgeBaseResponses[keyof CreateKnowledgeBaseResponses];
+
+export type DeleteKnowledgeBaseData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/knowledge-bases/{id}';
+};
+
+export type DeleteKnowledgeBaseErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteKnowledgeBaseError = DeleteKnowledgeBaseErrors[keyof DeleteKnowledgeBaseErrors];
+
+export type DeleteKnowledgeBaseResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteKnowledgeBaseResponse = DeleteKnowledgeBaseResponses[keyof DeleteKnowledgeBaseResponses];
+
+export type GetKnowledgeBaseData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/knowledge-bases/{id}';
+};
+
+export type GetKnowledgeBaseErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetKnowledgeBaseError = GetKnowledgeBaseErrors[keyof GetKnowledgeBaseErrors];
+
+export type GetKnowledgeBaseResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        description: string | null;
+        status: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetKnowledgeBaseResponse = GetKnowledgeBaseResponses[keyof GetKnowledgeBaseResponses];
+
+export type UpdateKnowledgeBaseData = {
+    body: {
+        name?: string;
+        description?: string | null;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/knowledge-bases/{id}';
+};
+
+export type UpdateKnowledgeBaseErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateKnowledgeBaseError = UpdateKnowledgeBaseErrors[keyof UpdateKnowledgeBaseErrors];
+
+export type UpdateKnowledgeBaseResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        description: string | null;
+        status: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateKnowledgeBaseResponse = UpdateKnowledgeBaseResponses[keyof UpdateKnowledgeBaseResponses];
+
+export type GetKnowledgeBaseHealthData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/knowledge-bases/{id}/health';
+};
+
+export type GetKnowledgeBaseHealthErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetKnowledgeBaseHealthError = GetKnowledgeBaseHealthErrors[keyof GetKnowledgeBaseHealthErrors];
+
+export type GetKnowledgeBaseHealthResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        status: 'healthy' | 'unhealthy';
+        message?: string;
+    };
+};
+
+export type GetKnowledgeBaseHealthResponse = GetKnowledgeBaseHealthResponses[keyof GetKnowledgeBaseHealthResponses];
+
+export type GetConnectorsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+        knowledgeBaseId?: string;
+        search?: string;
+        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion';
+    };
+    url: '/api/connectors';
+};
+
+export type GetConnectorsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetConnectorsError = GetConnectorsErrors[keyof GetConnectorsErrors];
+
+export type GetConnectorsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            organizationId: string;
+            name: string;
+            description: string | null;
+            visibility: 'org-wide' | 'team-scoped';
+            teamIds: Array<string>;
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion';
+            config: {
+                type: 'jira';
+                jiraBaseUrl: unknown;
+                isCloud: boolean;
+                projectKey?: string;
+                jqlQuery?: string;
+                commentEmailBlacklist?: Array<string>;
+                labelsToSkip?: Array<string>;
+            } | {
+                type: 'confluence';
+                confluenceUrl: unknown;
+                isCloud: boolean;
+                spaceKeys?: Array<string>;
+                pageIds?: Array<string>;
+                cqlQuery?: string;
+                labelsToSkip?: Array<string>;
+                batchSize?: number;
+            } | {
+                type: 'github';
+                githubUrl: unknown;
+                owner: string;
+                repos?: Array<string>;
+                includeIssues?: boolean;
+                includePullRequests?: boolean;
+                includeMarkdownFiles?: boolean;
+                labelsToSkip?: Array<string>;
+            } | {
+                type: 'gitlab';
+                gitlabUrl: unknown;
+                projectIds?: Array<number>;
+                groupId?: string;
+                includeIssues?: boolean;
+                includeMergeRequests?: boolean;
+                includeMarkdownFiles?: boolean;
+                labelsToSkip?: Array<string>;
+            } | {
+                type: 'servicenow';
+                instanceUrl: unknown;
+                includeIncidents?: boolean;
+                includeChanges?: boolean;
+                includeChangeRequests?: boolean;
+                includeProblems?: boolean;
+                includeBusinessApps?: boolean;
+                states?: Array<string>;
+                assignmentGroups?: Array<string>;
+                batchSize?: number;
+                syncDataForLastMonths?: number;
+            } | {
+                type: 'notion';
+                databaseIds?: Array<string>;
+                pageIds?: Array<string>;
+                batchSize?: number;
+            };
+            secretId: string | null;
+            schedule: string;
+            enabled: boolean;
+            lastSyncAt: string | null;
+            lastSyncStatus: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial';
+            lastSyncError: string | null;
+            checkpoint: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
+            createdAt: string;
+            updatedAt: string;
+            assignedAgents: Array<{
+                id: string;
+                name: string;
+                agentType: string;
+            }>;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetConnectorsResponse = GetConnectorsResponses[keyof GetConnectorsResponses];
+
+export type CreateConnectorData = {
+    body: {
+        name: string;
+        description?: string | null;
+        visibility?: 'org-wide' | 'team-scoped';
+        teamIds?: Array<string>;
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion';
+        config: {
+            type: 'jira';
+            jiraBaseUrl: string;
+            isCloud: boolean;
+            projectKey?: string;
+            jqlQuery?: string;
+            commentEmailBlacklist?: Array<string>;
+            labelsToSkip?: Array<string>;
+        } | {
+            type: 'confluence';
+            confluenceUrl: string;
+            isCloud: boolean;
+            spaceKeys?: Array<string>;
+            pageIds?: Array<string>;
+            cqlQuery?: string;
+            labelsToSkip?: Array<string>;
+            batchSize?: number;
+        } | {
+            type: 'github';
+            githubUrl: string;
+            owner: string;
+            repos?: Array<string>;
+            includeIssues?: boolean;
+            includePullRequests?: boolean;
+            includeMarkdownFiles?: boolean;
+            labelsToSkip?: Array<string>;
+        } | {
+            type: 'gitlab';
+            gitlabUrl: string;
+            projectIds?: Array<number>;
+            groupId?: string;
+            includeIssues?: boolean;
+            includeMergeRequests?: boolean;
+            includeMarkdownFiles?: boolean;
+            labelsToSkip?: Array<string>;
+        } | {
+            type: 'servicenow';
+            instanceUrl: string;
+            includeIncidents?: boolean;
+            includeChanges?: boolean;
+            includeChangeRequests?: boolean;
+            includeProblems?: boolean;
+            includeBusinessApps?: boolean;
+            states?: Array<string>;
+            assignmentGroups?: Array<string>;
+            batchSize?: number;
+            syncDataForLastMonths?: number;
+        } | {
+            type: 'notion';
+            databaseIds?: Array<string>;
+            pageIds?: Array<string>;
+            batchSize?: number;
+        };
+        credentials: {
+            email?: string;
+            apiToken: string;
+        };
+        schedule?: string;
+        enabled?: boolean;
+        knowledgeBaseIds?: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/connectors';
+};
+
+export type CreateConnectorErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CreateConnectorError = CreateConnectorErrors[keyof CreateConnectorErrors];
+
+export type CreateConnectorResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        description: string | null;
+        visibility: 'org-wide' | 'team-scoped';
+        teamIds: Array<string>;
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion';
+        config: {
+            type: 'jira';
+            jiraBaseUrl: unknown;
+            isCloud: boolean;
+            projectKey?: string;
+            jqlQuery?: string;
+            commentEmailBlacklist?: Array<string>;
+            labelsToSkip?: Array<string>;
+        } | {
+            type: 'confluence';
+            confluenceUrl: unknown;
+            isCloud: boolean;
+            spaceKeys?: Array<string>;
+            pageIds?: Array<string>;
+            cqlQuery?: string;
+            labelsToSkip?: Array<string>;
+            batchSize?: number;
+        } | {
+            type: 'github';
+            githubUrl: unknown;
+            owner: string;
+            repos?: Array<string>;
+            includeIssues?: boolean;
+            includePullRequests?: boolean;
+            includeMarkdownFiles?: boolean;
+            labelsToSkip?: Array<string>;
+        } | {
+            type: 'gitlab';
+            gitlabUrl: unknown;
+            projectIds?: Array<number>;
+            groupId?: string;
+            includeIssues?: boolean;
+            includeMergeRequests?: boolean;
+            includeMarkdownFiles?: boolean;
+            labelsToSkip?: Array<string>;
+        } | {
+            type: 'servicenow';
+            instanceUrl: unknown;
+            includeIncidents?: boolean;
+            includeChanges?: boolean;
+            includeChangeRequests?: boolean;
+            includeProblems?: boolean;
+            includeBusinessApps?: boolean;
+            states?: Array<string>;
+            assignmentGroups?: Array<string>;
+            batchSize?: number;
+            syncDataForLastMonths?: number;
+        } | {
+            type: 'notion';
+            databaseIds?: Array<string>;
+            pageIds?: Array<string>;
+            batchSize?: number;
+        };
+        secretId: string | null;
+        schedule: string;
+        enabled: boolean;
+        lastSyncAt: string | null;
+        lastSyncStatus: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial';
+        lastSyncError: string | null;
+        checkpoint: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateConnectorResponse = CreateConnectorResponses[keyof CreateConnectorResponses];
+
+export type DeleteConnectorData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/connectors/{id}';
+};
+
+export type DeleteConnectorErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteConnectorError = DeleteConnectorErrors[keyof DeleteConnectorErrors];
+
+export type DeleteConnectorResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteConnectorResponse = DeleteConnectorResponses[keyof DeleteConnectorResponses];
+
+export type GetConnectorData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/connectors/{id}';
+};
+
+export type GetConnectorErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetConnectorError = GetConnectorErrors[keyof GetConnectorErrors];
+
+export type GetConnectorResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        description: string | null;
+        visibility: 'org-wide' | 'team-scoped';
+        teamIds: Array<string>;
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion';
+        config: {
+            type: 'jira';
+            jiraBaseUrl: unknown;
+            isCloud: boolean;
+            projectKey?: string;
+            jqlQuery?: string;
+            commentEmailBlacklist?: Array<string>;
+            labelsToSkip?: Array<string>;
+        } | {
+            type: 'confluence';
+            confluenceUrl: unknown;
+            isCloud: boolean;
+            spaceKeys?: Array<string>;
+            pageIds?: Array<string>;
+            cqlQuery?: string;
+            labelsToSkip?: Array<string>;
+            batchSize?: number;
+        } | {
+            type: 'github';
+            githubUrl: unknown;
+            owner: string;
+            repos?: Array<string>;
+            includeIssues?: boolean;
+            includePullRequests?: boolean;
+            includeMarkdownFiles?: boolean;
+            labelsToSkip?: Array<string>;
+        } | {
+            type: 'gitlab';
+            gitlabUrl: unknown;
+            projectIds?: Array<number>;
+            groupId?: string;
+            includeIssues?: boolean;
+            includeMergeRequests?: boolean;
+            includeMarkdownFiles?: boolean;
+            labelsToSkip?: Array<string>;
+        } | {
+            type: 'servicenow';
+            instanceUrl: unknown;
+            includeIncidents?: boolean;
+            includeChanges?: boolean;
+            includeChangeRequests?: boolean;
+            includeProblems?: boolean;
+            includeBusinessApps?: boolean;
+            states?: Array<string>;
+            assignmentGroups?: Array<string>;
+            batchSize?: number;
+            syncDataForLastMonths?: number;
+        } | {
+            type: 'notion';
+            databaseIds?: Array<string>;
+            pageIds?: Array<string>;
+            batchSize?: number;
+        };
+        secretId: string | null;
+        schedule: string;
+        enabled: boolean;
+        lastSyncAt: string | null;
+        lastSyncStatus: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial';
+        lastSyncError: string | null;
+        checkpoint: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        createdAt: string;
+        updatedAt: string;
+        totalDocsIngested: number;
+    };
+};
+
+export type GetConnectorResponse = GetConnectorResponses[keyof GetConnectorResponses];
+
+export type UpdateConnectorData = {
+    body: {
+        name?: string;
+        description?: string | null;
+        visibility?: 'org-wide' | 'team-scoped';
+        teamIds?: Array<string>;
+        config?: {
+            type: 'jira';
+            jiraBaseUrl: string;
+            isCloud: boolean;
+            projectKey?: string;
+            jqlQuery?: string;
+            commentEmailBlacklist?: Array<string>;
+            labelsToSkip?: Array<string>;
+        } | {
+            type: 'confluence';
+            confluenceUrl: string;
+            isCloud: boolean;
+            spaceKeys?: Array<string>;
+            pageIds?: Array<string>;
+            cqlQuery?: string;
+            labelsToSkip?: Array<string>;
+            batchSize?: number;
+        } | {
+            type: 'github';
+            githubUrl: string;
+            owner: string;
+            repos?: Array<string>;
+            includeIssues?: boolean;
+            includePullRequests?: boolean;
+            includeMarkdownFiles?: boolean;
+            labelsToSkip?: Array<string>;
+        } | {
+            type: 'gitlab';
+            gitlabUrl: string;
+            projectIds?: Array<number>;
+            groupId?: string;
+            includeIssues?: boolean;
+            includeMergeRequests?: boolean;
+            includeMarkdownFiles?: boolean;
+            labelsToSkip?: Array<string>;
+        } | {
+            type: 'servicenow';
+            instanceUrl: string;
+            includeIncidents?: boolean;
+            includeChanges?: boolean;
+            includeChangeRequests?: boolean;
+            includeProblems?: boolean;
+            includeBusinessApps?: boolean;
+            states?: Array<string>;
+            assignmentGroups?: Array<string>;
+            batchSize?: number;
+            syncDataForLastMonths?: number;
+        } | {
+            type: 'notion';
+            databaseIds?: Array<string>;
+            pageIds?: Array<string>;
+            batchSize?: number;
+        };
+        credentials?: {
+            email?: string;
+            apiToken: string;
+        };
+        schedule?: string;
+        enabled?: boolean;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/connectors/{id}';
+};
+
+export type UpdateConnectorErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateConnectorError = UpdateConnectorErrors[keyof UpdateConnectorErrors];
+
+export type UpdateConnectorResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        description: string | null;
+        visibility: 'org-wide' | 'team-scoped';
+        teamIds: Array<string>;
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion';
+        config: {
+            type: 'jira';
+            jiraBaseUrl: unknown;
+            isCloud: boolean;
+            projectKey?: string;
+            jqlQuery?: string;
+            commentEmailBlacklist?: Array<string>;
+            labelsToSkip?: Array<string>;
+        } | {
+            type: 'confluence';
+            confluenceUrl: unknown;
+            isCloud: boolean;
+            spaceKeys?: Array<string>;
+            pageIds?: Array<string>;
+            cqlQuery?: string;
+            labelsToSkip?: Array<string>;
+            batchSize?: number;
+        } | {
+            type: 'github';
+            githubUrl: unknown;
+            owner: string;
+            repos?: Array<string>;
+            includeIssues?: boolean;
+            includePullRequests?: boolean;
+            includeMarkdownFiles?: boolean;
+            labelsToSkip?: Array<string>;
+        } | {
+            type: 'gitlab';
+            gitlabUrl: unknown;
+            projectIds?: Array<number>;
+            groupId?: string;
+            includeIssues?: boolean;
+            includeMergeRequests?: boolean;
+            includeMarkdownFiles?: boolean;
+            labelsToSkip?: Array<string>;
+        } | {
+            type: 'servicenow';
+            instanceUrl: unknown;
+            includeIncidents?: boolean;
+            includeChanges?: boolean;
+            includeChangeRequests?: boolean;
+            includeProblems?: boolean;
+            includeBusinessApps?: boolean;
+            states?: Array<string>;
+            assignmentGroups?: Array<string>;
+            batchSize?: number;
+            syncDataForLastMonths?: number;
+        } | {
+            type: 'notion';
+            databaseIds?: Array<string>;
+            pageIds?: Array<string>;
+            batchSize?: number;
+        };
+        secretId: string | null;
+        schedule: string;
+        enabled: boolean;
+        lastSyncAt: string | null;
+        lastSyncStatus: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial';
+        lastSyncError: string | null;
+        checkpoint: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateConnectorResponse = UpdateConnectorResponses[keyof UpdateConnectorResponses];
+
+export type SyncConnectorData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/connectors/{id}/sync';
+};
+
+export type SyncConnectorErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type SyncConnectorError = SyncConnectorErrors[keyof SyncConnectorErrors];
+
+export type SyncConnectorResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        taskId: string;
+        status: string;
+    };
+};
+
+export type SyncConnectorResponse = SyncConnectorResponses[keyof SyncConnectorResponses];
+
+export type ForceResyncConnectorData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/connectors/{id}/force-resync';
+};
+
+export type ForceResyncConnectorErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type ForceResyncConnectorError = ForceResyncConnectorErrors[keyof ForceResyncConnectorErrors];
+
+export type ForceResyncConnectorResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        taskId: string;
+        status: string;
+    };
+};
+
+export type ForceResyncConnectorResponse = ForceResyncConnectorResponses[keyof ForceResyncConnectorResponses];
+
+export type TestConnectorConnectionData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/connectors/{id}/test';
+};
+
+export type TestConnectorConnectionErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type TestConnectorConnectionError = TestConnectorConnectionErrors[keyof TestConnectorConnectionErrors];
+
+export type TestConnectorConnectionResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+        error?: string;
+    };
+};
+
+export type TestConnectorConnectionResponse = TestConnectorConnectionResponses[keyof TestConnectorConnectionResponses];
+
+export type GetConnectorKnowledgeBasesData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/connectors/{id}/knowledge-bases';
+};
+
+export type GetConnectorKnowledgeBasesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetConnectorKnowledgeBasesError = GetConnectorKnowledgeBasesErrors[keyof GetConnectorKnowledgeBasesErrors];
+
+export type GetConnectorKnowledgeBasesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            organizationId: string;
+            name: string;
+            description: string | null;
+            status: string;
+            createdAt: string;
+            updatedAt: string;
+        }>;
+    };
+};
+
+export type GetConnectorKnowledgeBasesResponse = GetConnectorKnowledgeBasesResponses[keyof GetConnectorKnowledgeBasesResponses];
+
+export type AssignConnectorToKnowledgeBasesData = {
+    body: {
+        knowledgeBaseIds: Array<string>;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/connectors/{id}/knowledge-bases';
+};
+
+export type AssignConnectorToKnowledgeBasesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type AssignConnectorToKnowledgeBasesError = AssignConnectorToKnowledgeBasesErrors[keyof AssignConnectorToKnowledgeBasesErrors];
+
+export type AssignConnectorToKnowledgeBasesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type AssignConnectorToKnowledgeBasesResponse = AssignConnectorToKnowledgeBasesResponses[keyof AssignConnectorToKnowledgeBasesResponses];
+
+export type UnassignConnectorFromKnowledgeBaseData = {
+    body?: never;
+    path: {
+        id: string;
+        kbId: string;
+    };
+    query?: never;
+    url: '/api/connectors/{id}/knowledge-bases/{kbId}';
+};
+
+export type UnassignConnectorFromKnowledgeBaseErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UnassignConnectorFromKnowledgeBaseError = UnassignConnectorFromKnowledgeBaseErrors[keyof UnassignConnectorFromKnowledgeBaseErrors];
+
+export type UnassignConnectorFromKnowledgeBaseResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type UnassignConnectorFromKnowledgeBaseResponse = UnassignConnectorFromKnowledgeBaseResponses[keyof UnassignConnectorFromKnowledgeBaseResponses];
+
+export type GetConnectorRunsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/connectors/{id}/runs';
+};
+
+export type GetConnectorRunsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetConnectorRunsError = GetConnectorRunsErrors[keyof GetConnectorRunsErrors];
+
+export type GetConnectorRunsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            connectorId: string;
+            status: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial';
+            startedAt: string;
+            completedAt: string | null;
+            documentsProcessed: number | null;
+            documentsIngested: number | null;
+            totalItems: number | null;
+            totalBatches: number | null;
+            completedBatches: number | null;
+            itemErrors: number | null;
+            error: string | null;
+            checkpoint: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
+            createdAt: string;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetConnectorRunsResponse = GetConnectorRunsResponses[keyof GetConnectorRunsResponses];
+
+export type GetConnectorRunData = {
+    body?: never;
+    path: {
+        id: string;
+        runId: string;
+    };
+    query?: never;
+    url: '/api/connectors/{id}/runs/{runId}';
+};
+
+export type GetConnectorRunErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetConnectorRunError = GetConnectorRunErrors[keyof GetConnectorRunErrors];
+
+export type GetConnectorRunResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        connectorId: string;
+        status: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial';
+        startedAt: string;
+        completedAt: string | null;
+        documentsProcessed: number | null;
+        documentsIngested: number | null;
+        totalItems: number | null;
+        totalBatches: number | null;
+        completedBatches: number | null;
+        itemErrors: number | null;
+        error: string | null;
+        logs: string | null;
+        checkpoint: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        createdAt: string;
+    };
+};
+
+export type GetConnectorRunResponse = GetConnectorRunResponses[keyof GetConnectorRunResponses];
 
 export type GetLimitsData = {
     body?: never;
@@ -26526,7 +27754,7 @@ export type GetLimitResponses = {
 export type GetLimitResponse = GetLimitResponses[keyof GetLimitResponses];
 
 export type UpdateLimitData = {
-    body?: {
+    body: {
         entityType?: 'organization' | 'team' | 'agent';
         entityId?: string;
         limitType?: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
@@ -26623,7 +27851,967 @@ export type UpdateLimitResponses = {
 
 export type UpdateLimitResponse = UpdateLimitResponses[keyof UpdateLimitResponses];
 
-export type GetV1McpByProfileIdData = {
+export type GetLlmModelsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        apiKeyId?: string;
+        isEmbedding?: string;
+    };
+    url: '/api/llm-models/available';
+};
+
+export type GetLlmModelsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetLlmModelsError = GetLlmModelsErrors[keyof GetLlmModelsErrors];
+
+export type GetLlmModelsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        displayName: string;
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        createdAt?: string;
+        capabilities?: {
+            contextLength: number | null;
+            inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
+            outputModalities: Array<'text' | 'image' | 'audio'> | null;
+            supportsToolCalling: boolean | null;
+            pricePerMillionInput: string | null;
+            pricePerMillionOutput: string | null;
+            isCustomPrice: boolean;
+            priceSource: 'custom' | 'models_dev' | 'default';
+        };
+        isBest?: boolean;
+        isFastest?: boolean;
+        embeddingDimensions?: 3072 | 1536 | 768 | null;
+    }>;
+};
+
+export type GetLlmModelsResponse = GetLlmModelsResponses[keyof GetLlmModelsResponses];
+
+export type SyncLlmModelsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/llm-models/sync';
+};
+
+export type SyncLlmModelsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type SyncLlmModelsError = SyncLlmModelsErrors[keyof SyncLlmModelsErrors];
+
+export type SyncLlmModelsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type SyncLlmModelsResponse = SyncLlmModelsResponses[keyof SyncLlmModelsResponses];
+
+export type GetModelsWithApiKeysData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/llm-models';
+};
+
+export type GetModelsWithApiKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetModelsWithApiKeysError = GetModelsWithApiKeysErrors[keyof GetModelsWithApiKeysErrors];
+
+export type GetModelsWithApiKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        externalId: string;
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        modelId: string;
+        description: string | null;
+        contextLength: number | null;
+        inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
+        outputModalities: Array<'text' | 'image' | 'audio'> | null;
+        supportsToolCalling: boolean | null;
+        promptPricePerToken: string | null;
+        completionPricePerToken: string | null;
+        customPricePerMillionInput: string | null;
+        customPricePerMillionOutput: string | null;
+        ignored: boolean;
+        embeddingDimensions: 3072 | 1536 | 768 | null;
+        discoveredViaLlmProxy: boolean;
+        lastSyncedAt: string;
+        createdAt: string;
+        updatedAt: string;
+        isFastest: boolean;
+        isBest: boolean;
+        apiKeys: Array<{
+            id: string;
+            name: string;
+            provider: string;
+            scope: string;
+            isSystem: boolean;
+        }>;
+        pricePerMillionInput: string | null;
+        pricePerMillionOutput: string | null;
+        isCustomPrice: boolean;
+        priceSource: 'custom' | 'models_dev' | 'default';
+    }>;
+};
+
+export type GetModelsWithApiKeysResponse = GetModelsWithApiKeysResponses[keyof GetModelsWithApiKeysResponses];
+
+export type UpdateModelData = {
+    body: {
+        customPricePerMillionInput?: string | null;
+        customPricePerMillionOutput?: string | null;
+        ignored?: boolean;
+        embeddingDimensions?: 3072 | 1536 | 768 | null;
+        inputModalities?: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
+        outputModalities?: Array<'text' | 'image' | 'audio'> | null;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/llm-models/{id}';
+};
+
+export type UpdateModelErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateModelError = UpdateModelErrors[keyof UpdateModelErrors];
+
+export type UpdateModelResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        externalId: string;
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        modelId: string;
+        description: string | null;
+        contextLength: number | null;
+        inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
+        outputModalities: Array<'text' | 'image' | 'audio'> | null;
+        supportsToolCalling: boolean | null;
+        promptPricePerToken: string | null;
+        completionPricePerToken: string | null;
+        customPricePerMillionInput: string | null;
+        customPricePerMillionOutput: string | null;
+        ignored: boolean;
+        embeddingDimensions: 3072 | 1536 | 768 | null;
+        discoveredViaLlmProxy: boolean;
+        lastSyncedAt: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateModelResponse = UpdateModelResponses[keyof UpdateModelResponses];
+
+export type GetLlmProviderApiKeysData = {
+    body?: never;
+    path?: never;
+    query?: {
+        search?: string;
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+    };
+    url: '/api/llm-provider-api-keys';
+};
+
+export type GetLlmProviderApiKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetLlmProviderApiKeysError = GetLlmProviderApiKeysErrors[keyof GetLlmProviderApiKeysErrors];
+
+export type GetLlmProviderApiKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        name: string;
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        secretId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        userId: string | null;
+        teamId: string | null;
+        baseUrl: string | null;
+        isSystem: boolean;
+        isPrimary: boolean;
+        createdAt: string;
+        updatedAt: string;
+        teamName?: string | null;
+        userName?: string | null;
+        vaultSecretPath?: string | null;
+        vaultSecretKey?: string | null;
+        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+        bestModelId?: string | null;
+        isAgentKey?: boolean;
+    }>;
+};
+
+export type GetLlmProviderApiKeysResponse = GetLlmProviderApiKeysResponses[keyof GetLlmProviderApiKeysResponses];
+
+export type CreateLlmProviderApiKeyData = {
+    body: {
+        name: string;
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        apiKey?: string;
+        baseUrl?: string | null;
+        scope?: 'personal' | 'team' | 'org';
+        teamId?: string;
+        isPrimary?: boolean;
+        vaultSecretPath?: string;
+        vaultSecretKey?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/llm-provider-api-keys';
+};
+
+export type CreateLlmProviderApiKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CreateLlmProviderApiKeyError = CreateLlmProviderApiKeyErrors[keyof CreateLlmProviderApiKeyErrors];
+
+export type CreateLlmProviderApiKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        secretId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        userId: string | null;
+        teamId: string | null;
+        baseUrl: string | null;
+        isSystem: boolean;
+        isPrimary: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateLlmProviderApiKeyResponse = CreateLlmProviderApiKeyResponses[keyof CreateLlmProviderApiKeyResponses];
+
+export type GetAvailableLlmProviderApiKeysData = {
+    body?: never;
+    path?: never;
+    query?: {
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        includeKeyId?: string;
+    };
+    url: '/api/llm-provider-api-keys/available';
+};
+
+export type GetAvailableLlmProviderApiKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetAvailableLlmProviderApiKeysError = GetAvailableLlmProviderApiKeysErrors[keyof GetAvailableLlmProviderApiKeysErrors];
+
+export type GetAvailableLlmProviderApiKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        name: string;
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        secretId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        userId: string | null;
+        teamId: string | null;
+        baseUrl: string | null;
+        isSystem: boolean;
+        isPrimary: boolean;
+        createdAt: string;
+        updatedAt: string;
+        teamName?: string | null;
+        userName?: string | null;
+        vaultSecretPath?: string | null;
+        vaultSecretKey?: string | null;
+        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+        bestModelId?: string | null;
+        isAgentKey?: boolean;
+    }>;
+};
+
+export type GetAvailableLlmProviderApiKeysResponse = GetAvailableLlmProviderApiKeysResponses[keyof GetAvailableLlmProviderApiKeysResponses];
+
+export type DeleteLlmProviderApiKeyData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/llm-provider-api-keys/{id}';
+};
+
+export type DeleteLlmProviderApiKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteLlmProviderApiKeyError = DeleteLlmProviderApiKeyErrors[keyof DeleteLlmProviderApiKeyErrors];
+
+export type DeleteLlmProviderApiKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteLlmProviderApiKeyResponse = DeleteLlmProviderApiKeyResponses[keyof DeleteLlmProviderApiKeyResponses];
+
+export type GetLlmProviderApiKeyData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/llm-provider-api-keys/{id}';
+};
+
+export type GetLlmProviderApiKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetLlmProviderApiKeyError = GetLlmProviderApiKeyErrors[keyof GetLlmProviderApiKeyErrors];
+
+export type GetLlmProviderApiKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        secretId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        userId: string | null;
+        teamId: string | null;
+        baseUrl: string | null;
+        isSystem: boolean;
+        isPrimary: boolean;
+        createdAt: string;
+        updatedAt: string;
+        teamName?: string | null;
+        userName?: string | null;
+        vaultSecretPath?: string | null;
+        vaultSecretKey?: string | null;
+        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+        bestModelId?: string | null;
+        isAgentKey?: boolean;
+    };
+};
+
+export type GetLlmProviderApiKeyResponse = GetLlmProviderApiKeyResponses[keyof GetLlmProviderApiKeyResponses];
+
+export type UpdateLlmProviderApiKeyData = {
+    body: {
+        name?: string;
+        apiKey?: string;
+        baseUrl?: string | null;
+        scope?: 'personal' | 'team' | 'org';
+        teamId?: string | null;
+        isPrimary?: boolean;
+        vaultSecretPath?: string;
+        vaultSecretKey?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/llm-provider-api-keys/{id}';
+};
+
+export type UpdateLlmProviderApiKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateLlmProviderApiKeyError = UpdateLlmProviderApiKeyErrors[keyof UpdateLlmProviderApiKeyErrors];
+
+export type UpdateLlmProviderApiKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        secretId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        userId: string | null;
+        teamId: string | null;
+        baseUrl: string | null;
+        isSystem: boolean;
+        isPrimary: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateLlmProviderApiKeyResponse = UpdateLlmProviderApiKeyResponses[keyof UpdateLlmProviderApiKeyResponses];
+
+export type McpGatewayGetData = {
     body?: never;
     path: {
         profileId: string;
@@ -26632,7 +28820,7 @@ export type GetV1McpByProfileIdData = {
     url: '/v1/mcp/{profileId}';
 };
 
-export type GetV1McpByProfileIdErrors = {
+export type McpGatewayGetErrors = {
     /**
      * Default Response
      */
@@ -26642,9 +28830,9 @@ export type GetV1McpByProfileIdErrors = {
     };
 };
 
-export type GetV1McpByProfileIdError = GetV1McpByProfileIdErrors[keyof GetV1McpByProfileIdErrors];
+export type McpGatewayGetError = McpGatewayGetErrors[keyof McpGatewayGetErrors];
 
-export type GetV1McpByProfileIdResponses = {
+export type McpGatewayGetResponses = {
     /**
      * Default Response
      */
@@ -26666,10 +28854,10 @@ export type GetV1McpByProfileIdResponses = {
     };
 };
 
-export type GetV1McpByProfileIdResponse = GetV1McpByProfileIdResponses[keyof GetV1McpByProfileIdResponses];
+export type McpGatewayGetResponse = McpGatewayGetResponses[keyof McpGatewayGetResponses];
 
-export type PostV1McpByProfileIdData = {
-    body?: {
+export type McpGatewayPostData = {
+    body: {
         [key: string]: unknown;
     };
     path: {
@@ -26679,7 +28867,25 @@ export type PostV1McpByProfileIdData = {
     url: '/v1/mcp/{profileId}';
 };
 
-export type PostV1McpByProfileIdResponses = {
+export type McpGatewayPostResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type McpProxyPostData = {
+    body: {
+        [key: string]: unknown;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/api/mcp/{agentId}';
+};
+
+export type McpProxyPostResponses = {
     /**
      * Default Response
      */
@@ -26765,7 +28971,7 @@ export type GetMcpServerInstallationRequestsResponses = {
         id: string;
         externalCatalogId: string | null;
         requestedBy: string;
-        status: string;
+        status: 'pending' | 'approved' | 'declined';
         requestReason: string | null;
         customServerConfig: {
             type: 'remote';
@@ -26818,6 +29024,11 @@ export type GetMcpServerInstallationRequestsResponses = {
                     description?: string;
                     default?: string | number | boolean;
                     mounted?: boolean;
+                }>;
+                envFrom?: Array<{
+                    type: 'secret' | 'configMap';
+                    name: string;
+                    prefix?: string;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -26910,6 +29121,11 @@ export type CreateMcpServerInstallationRequestData = {
                     default?: string | number | boolean;
                     mounted?: boolean;
                 }>;
+                envFrom?: Array<{
+                    type: 'secret' | 'configMap';
+                    name: string;
+                    prefix?: string;
+                }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
@@ -27001,7 +29217,7 @@ export type CreateMcpServerInstallationRequestResponses = {
         id: string;
         externalCatalogId: string | null;
         requestedBy: string;
-        status: string;
+        status: 'pending' | 'approved' | 'declined';
         requestReason: string | null;
         customServerConfig: {
             type: 'remote';
@@ -27054,6 +29270,11 @@ export type CreateMcpServerInstallationRequestResponses = {
                     description?: string;
                     default?: string | number | boolean;
                     mounted?: boolean;
+                }>;
+                envFrom?: Array<{
+                    type: 'secret' | 'configMap';
+                    name: string;
+                    prefix?: string;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -27245,7 +29466,7 @@ export type GetMcpServerInstallationRequestResponses = {
         id: string;
         externalCatalogId: string | null;
         requestedBy: string;
-        status: string;
+        status: 'pending' | 'approved' | 'declined';
         requestReason: string | null;
         customServerConfig: {
             type: 'remote';
@@ -27299,6 +29520,11 @@ export type GetMcpServerInstallationRequestResponses = {
                     default?: string | number | boolean;
                     mounted?: boolean;
                 }>;
+                envFrom?: Array<{
+                    type: 'secret' | 'configMap';
+                    name: string;
+                    prefix?: string;
+                }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
@@ -27335,7 +29561,7 @@ export type GetMcpServerInstallationRequestResponses = {
 export type GetMcpServerInstallationRequestResponse = GetMcpServerInstallationRequestResponses[keyof GetMcpServerInstallationRequestResponses];
 
 export type UpdateMcpServerInstallationRequestData = {
-    body?: {
+    body: {
         status?: 'pending' | 'approved' | 'declined';
         requestReason?: string | null;
         customServerConfig?: {
@@ -27389,6 +29615,11 @@ export type UpdateMcpServerInstallationRequestData = {
                     description?: string;
                     default?: string | number | boolean;
                     mounted?: boolean;
+                }>;
+                envFrom?: Array<{
+                    type: 'secret' | 'configMap';
+                    name: string;
+                    prefix?: string;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -27493,7 +29724,7 @@ export type UpdateMcpServerInstallationRequestResponses = {
         id: string;
         externalCatalogId: string | null;
         requestedBy: string;
-        status: string;
+        status: 'pending' | 'approved' | 'declined';
         requestReason: string | null;
         customServerConfig: {
             type: 'remote';
@@ -27547,6 +29778,11 @@ export type UpdateMcpServerInstallationRequestResponses = {
                     default?: string | number | boolean;
                     mounted?: boolean;
                 }>;
+                envFrom?: Array<{
+                    type: 'secret' | 'configMap';
+                    name: string;
+                    prefix?: string;
+                }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
@@ -27583,7 +29819,7 @@ export type UpdateMcpServerInstallationRequestResponses = {
 export type UpdateMcpServerInstallationRequestResponse = UpdateMcpServerInstallationRequestResponses[keyof UpdateMcpServerInstallationRequestResponses];
 
 export type ApproveMcpServerInstallationRequestData = {
-    body?: {
+    body: {
         adminResponse?: string;
     };
     path: {
@@ -27660,7 +29896,7 @@ export type ApproveMcpServerInstallationRequestResponses = {
         id: string;
         externalCatalogId: string | null;
         requestedBy: string;
-        status: string;
+        status: 'pending' | 'approved' | 'declined';
         requestReason: string | null;
         customServerConfig: {
             type: 'remote';
@@ -27714,6 +29950,11 @@ export type ApproveMcpServerInstallationRequestResponses = {
                     default?: string | number | boolean;
                     mounted?: boolean;
                 }>;
+                envFrom?: Array<{
+                    type: 'secret' | 'configMap';
+                    name: string;
+                    prefix?: string;
+                }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
@@ -27750,7 +29991,7 @@ export type ApproveMcpServerInstallationRequestResponses = {
 export type ApproveMcpServerInstallationRequestResponse = ApproveMcpServerInstallationRequestResponses[keyof ApproveMcpServerInstallationRequestResponses];
 
 export type DeclineMcpServerInstallationRequestData = {
-    body?: {
+    body: {
         adminResponse?: string;
     };
     path: {
@@ -27827,7 +30068,7 @@ export type DeclineMcpServerInstallationRequestResponses = {
         id: string;
         externalCatalogId: string | null;
         requestedBy: string;
-        status: string;
+        status: 'pending' | 'approved' | 'declined';
         requestReason: string | null;
         customServerConfig: {
             type: 'remote';
@@ -27880,6 +30121,11 @@ export type DeclineMcpServerInstallationRequestResponses = {
                     description?: string;
                     default?: string | number | boolean;
                     mounted?: boolean;
+                }>;
+                envFrom?: Array<{
+                    type: 'secret' | 'configMap';
+                    name: string;
+                    prefix?: string;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -27994,7 +30240,7 @@ export type AddMcpServerInstallationRequestNoteResponses = {
         id: string;
         externalCatalogId: string | null;
         requestedBy: string;
-        status: string;
+        status: 'pending' | 'approved' | 'declined';
         requestReason: string | null;
         customServerConfig: {
             type: 'remote';
@@ -28047,6 +30293,11 @@ export type AddMcpServerInstallationRequestNoteResponses = {
                     description?: string;
                     default?: string | number | boolean;
                     mounted?: boolean;
+                }>;
+                envFrom?: Array<{
+                    type: 'secret' | 'configMap';
+                    name: string;
+                    prefix?: string;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -28502,7 +30753,15 @@ export type GetMcpServerResponse = GetMcpServerResponses[keyof GetMcpServerRespo
 
 export type ReauthenticateMcpServerData = {
     body: {
-        secretId: string;
+        secretId?: string;
+        accessToken?: string;
+        userConfigValues?: {
+            [key: string]: string;
+        };
+        environmentValues?: {
+            [key: string]: string;
+        };
+        isByosVault?: boolean;
     };
     path: {
         id: string;
@@ -28778,8 +31037,93 @@ export type GetMcpServerToolsResponses = {
 
 export type GetMcpServerToolsResponse = GetMcpServerToolsResponses[keyof GetMcpServerToolsResponses];
 
+export type InspectMcpServerData = {
+    body: {
+        method: 'tools/list' | 'tools/call';
+        toolName?: string;
+        toolArguments?: {
+            [key: string]: unknown;
+        };
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/{id}/inspect';
+};
+
+export type InspectMcpServerErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type InspectMcpServerError = InspectMcpServerErrors[keyof InspectMcpServerErrors];
+
+export type InspectMcpServerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type InspectMcpServerResponse = InspectMcpServerResponses[keyof InspectMcpServerResponses];
+
 export type ReinstallMcpServerData = {
-    body?: {
+    body: {
         environmentValues?: {
             [key: string]: string;
         };
@@ -28999,7 +31343,7 @@ export type GetMcpToolCallsResponses = {
             } | null;
             toolResult: unknown;
             userId: string | null;
-            authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp';
+            authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp' | 'session';
             createdAt: string;
             userName: string | null;
         }>;
@@ -29105,7 +31449,7 @@ export type GetMcpToolCallResponses = {
         } | null;
         toolResult: unknown;
         userId: string | null;
-        authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp';
+        authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp' | 'session';
         createdAt: string;
         userName: string | null;
     };
@@ -29113,8 +31457,112 @@ export type GetMcpToolCallResponses = {
 
 export type GetMcpToolCallResponse = GetMcpToolCallResponses[keyof GetMcpToolCallResponses];
 
+export type GetMembersData = {
+    body?: never;
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+        /**
+         * Search by user name or email (case-insensitive partial match)
+         */
+        name?: string;
+        /**
+         * Filter by exact role name
+         */
+        role?: string;
+    };
+    url: '/api/members';
+};
+
+export type GetMembersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetMembersError = GetMembersErrors[keyof GetMembersErrors];
+
+export type GetMembersResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            userId: string;
+            name: string | null;
+            email: string;
+            image: string | null;
+            role: string;
+            createdAt: string;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetMembersResponse = GetMembersResponses[keyof GetMembersResponses];
+
 export type MinimaxChatCompletionsWithDefaultAgentData = {
-    body?: MinimaxChatCompletionRequestInput;
+    body: MinimaxChatCompletionRequestInput;
     headers?: {
         authorization?: string;
     };
@@ -29192,7 +31640,7 @@ export type MinimaxChatCompletionsWithDefaultAgentResponses = {
 export type MinimaxChatCompletionsWithDefaultAgentResponse = MinimaxChatCompletionsWithDefaultAgentResponses[keyof MinimaxChatCompletionsWithDefaultAgentResponses];
 
 export type MinimaxChatCompletionsWithAgentData = {
-    body?: MinimaxChatCompletionRequestInput;
+    body: MinimaxChatCompletionRequestInput;
     headers?: {
         authorization?: string;
     };
@@ -29272,7 +31720,7 @@ export type MinimaxChatCompletionsWithAgentResponses = {
 export type MinimaxChatCompletionsWithAgentResponse = MinimaxChatCompletionsWithAgentResponses[keyof MinimaxChatCompletionsWithAgentResponses];
 
 export type MistralChatCompletionsWithDefaultAgentData = {
-    body?: XaiChatCompletionRequestInput;
+    body: XaiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -29357,7 +31805,7 @@ export type MistralChatCompletionsWithDefaultAgentResponses = {
 export type MistralChatCompletionsWithDefaultAgentResponse = MistralChatCompletionsWithDefaultAgentResponses[keyof MistralChatCompletionsWithDefaultAgentResponses];
 
 export type MistralChatCompletionsWithAgentData = {
-    body?: XaiChatCompletionRequestInput;
+    body: XaiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -29662,7 +32110,7 @@ export type GetWellKnownOauthAuthorizationServerResponses = {
 export type GetWellKnownOauthAuthorizationServerResponse = GetWellKnownOauthAuthorizationServerResponses[keyof GetWellKnownOauthAuthorizationServerResponses];
 
 export type OllamaChatCompletionsWithDefaultAgentData = {
-    body?: OllamaChatCompletionRequestInput;
+    body: OllamaChatCompletionRequestInput;
     headers?: {
         /**
          * The user agent of the client
@@ -29747,7 +32195,7 @@ export type OllamaChatCompletionsWithDefaultAgentResponses = {
 export type OllamaChatCompletionsWithDefaultAgentResponse = OllamaChatCompletionsWithDefaultAgentResponses[keyof OllamaChatCompletionsWithDefaultAgentResponses];
 
 export type OllamaChatCompletionsWithAgentData = {
-    body?: OllamaChatCompletionRequestInput;
+    body: OllamaChatCompletionRequestInput;
     headers?: {
         /**
          * The user agent of the client
@@ -29834,7 +32282,7 @@ export type OllamaChatCompletionsWithAgentResponses = {
 export type OllamaChatCompletionsWithAgentResponse = OllamaChatCompletionsWithAgentResponses[keyof OllamaChatCompletionsWithAgentResponses];
 
 export type OpenAiChatCompletionsWithDefaultAgentData = {
-    body?: XaiChatCompletionRequestInput;
+    body: XaiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -29919,7 +32367,7 @@ export type OpenAiChatCompletionsWithDefaultAgentResponses = {
 export type OpenAiChatCompletionsWithDefaultAgentResponse = OpenAiChatCompletionsWithDefaultAgentResponses[keyof OpenAiChatCompletionsWithDefaultAgentResponses];
 
 export type OpenAiChatCompletionsWithAgentData = {
-    body?: XaiChatCompletionRequestInput;
+    body: XaiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -30006,7 +32454,7 @@ export type OpenAiChatCompletionsWithAgentResponses = {
 export type OpenAiChatCompletionsWithAgentResponse = OpenAiChatCompletionsWithAgentResponses[keyof OpenAiChatCompletionsWithAgentResponses];
 
 export type OpenrouterChatCompletionsWithDefaultAgentData = {
-    body?: XaiChatCompletionRequestInput;
+    body: XaiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -30091,7 +32539,7 @@ export type OpenrouterChatCompletionsWithDefaultAgentResponses = {
 export type OpenrouterChatCompletionsWithDefaultAgentResponse = OpenrouterChatCompletionsWithDefaultAgentResponses[keyof OpenrouterChatCompletionsWithDefaultAgentResponses];
 
 export type OpenrouterChatCompletionsWithAgentData = {
-    body?: XaiChatCompletionRequestInput;
+    body: XaiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -30449,7 +32897,7 @@ export type DeleteOptimizationRuleResponses = {
 export type DeleteOptimizationRuleResponse = DeleteOptimizationRuleResponses[keyof DeleteOptimizationRuleResponses];
 
 export type UpdateOptimizationRuleData = {
-    body?: {
+    body: {
         id?: string;
         entityType?: 'organization' | 'team' | 'agent';
         entityId?: string;
@@ -30556,7 +33004,11 @@ export type UpdateOptimizationRuleResponse = UpdateOptimizationRuleResponses[key
 export type GetRolesData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+        name?: string;
+    };
     url: '/api/roles';
 };
 
@@ -30623,18 +33075,29 @@ export type GetRolesResponses = {
     /**
      * Default Response
      */
-    200: Array<{
-        id: string;
-        organizationId?: string;
-        role: string;
-        name: string;
-        permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
+    200: {
+        data: Array<{
+            id: string;
+            organizationId: string;
+            role: string;
+            name: string;
+            description: string | null;
+            permission: {
+                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query'>;
+            };
+            createdAt: string;
+            updatedAt: string | null;
+            predefined: boolean;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
         };
-        createdAt: string;
-        updatedAt: string | null;
-        predefined: boolean;
-    }>;
+    };
 };
 
 export type GetRolesResponse = GetRolesResponses[keyof GetRolesResponses];
@@ -30642,8 +33105,9 @@ export type GetRolesResponse = GetRolesResponses[keyof GetRolesResponses];
 export type CreateRoleData = {
     body: {
         name: string;
+        description?: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query'>;
         };
     };
     path?: never;
@@ -30716,11 +33180,12 @@ export type CreateRoleResponses = {
      */
     200: {
         id: string;
-        organizationId?: string;
+        organizationId: string;
         role: string;
         name: string;
+        description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -30889,11 +33354,12 @@ export type GetRoleResponses = {
      */
     200: {
         id: string;
-        organizationId?: string;
+        organizationId: string;
         role: string;
         name: string;
+        description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -30904,10 +33370,11 @@ export type GetRoleResponses = {
 export type GetRoleResponse = GetRoleResponses[keyof GetRoleResponses];
 
 export type UpdateRoleData = {
-    body?: {
+    body: {
         name?: string;
+        description?: string;
         permission?: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query'>;
         };
     };
     path: {
@@ -30985,11 +33452,12 @@ export type UpdateRoleResponses = {
      */
     200: {
         id: string;
-        organizationId?: string;
+        organizationId: string;
         role: string;
         name: string;
+        description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -31074,6 +33542,7 @@ export type GetOrganizationResponses = {
         name: string;
         slug: string;
         logo: string | null;
+        logoDark: string | null;
         createdAt: string;
         metadata: string | null;
         limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
@@ -31082,33 +33551,43 @@ export type GetOrganizationResponses = {
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
-        autoConfigureNewTools: boolean;
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
+        embeddingModel: string | null;
+        embeddingDimensions: number | null;
+        embeddingChatApiKeyId: string | null;
+        rerankerChatApiKeyId: string | null;
+        rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        defaultLlmApiKeyId: string | null;
+        defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatLinks: Array<{
+            label: string;
+            url: string;
+        }> | null;
+        chatPlaceholders: Array<string> | null;
+        animateChatPlaceholders: boolean;
+        iconLogo: string | null;
+        chatErrorSupportMessage: string | null;
+        showTwoFactor: boolean;
     };
 };
 
 export type GetOrganizationResponse = GetOrganizationResponses[keyof GetOrganizationResponses];
 
-export type UpdateOrganizationData = {
-    body?: {
-        theme?: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
-        customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        limitCleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
-        compressionScope?: 'organization' | 'team';
-        globalToolPolicy?: 'permissive' | 'restrictive';
-        logo?: string | null;
-        onboardingComplete?: boolean;
-        convertToolResultsToToon?: boolean;
-        autoConfigureNewTools?: boolean;
-        allowChatFileUploads?: boolean;
-    };
+export type GetAppearanceSettingsData = {
+    body?: never;
     path?: never;
     query?: never;
-    url: '/api/organization';
+    url: '/api/organization/appearance-settings';
 };
 
-export type UpdateOrganizationErrors = {
+export type GetAppearanceSettingsErrors = {
     /**
      * Default Response
      */
@@ -31165,9 +33644,118 @@ export type UpdateOrganizationErrors = {
     };
 };
 
-export type UpdateOrganizationError = UpdateOrganizationErrors[keyof UpdateOrganizationErrors];
+export type GetAppearanceSettingsError = GetAppearanceSettingsErrors[keyof GetAppearanceSettingsErrors];
 
-export type UpdateOrganizationResponses = {
+export type GetAppearanceSettingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
+        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
+        logo: string | null;
+        logoDark: string | null;
+        favicon: string | null;
+        iconLogo: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatLinks: Array<{
+            label: string;
+            url: string;
+        }> | null;
+        chatErrorSupportMessage: string | null;
+        animateChatPlaceholders: boolean;
+    };
+};
+
+export type GetAppearanceSettingsResponse = GetAppearanceSettingsResponses[keyof GetAppearanceSettingsResponses];
+
+export type UpdateAppearanceSettingsData = {
+    body: {
+        theme?: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
+        customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
+        logo?: string | null;
+        logoDark?: string | null;
+        favicon?: string | null;
+        iconLogo?: string | null;
+        appName?: string | null;
+        ogDescription?: string | null;
+        footerText?: string | null;
+        chatLinks?: Array<{
+            label: string;
+            url: string;
+        }> | null;
+        chatErrorSupportMessage?: string | null;
+        chatPlaceholders?: Array<string> | null;
+        animateChatPlaceholders?: boolean;
+        showTwoFactor?: boolean;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/appearance-settings';
+};
+
+export type UpdateAppearanceSettingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateAppearanceSettingsError = UpdateAppearanceSettingsErrors[keyof UpdateAppearanceSettingsErrors];
+
+export type UpdateAppearanceSettingsResponses = {
     /**
      * Default Response
      */
@@ -31176,6 +33764,7 @@ export type UpdateOrganizationResponses = {
         name: string;
         slug: string;
         logo: string | null;
+        logoDark: string | null;
         createdAt: string;
         metadata: string | null;
         limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
@@ -31184,13 +33773,812 @@ export type UpdateOrganizationResponses = {
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
-        autoConfigureNewTools: boolean;
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
+        embeddingModel: string | null;
+        embeddingDimensions: number | null;
+        embeddingChatApiKeyId: string | null;
+        rerankerChatApiKeyId: string | null;
+        rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        defaultLlmApiKeyId: string | null;
+        defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatLinks: Array<{
+            label: string;
+            url: string;
+        }> | null;
+        chatPlaceholders: Array<string> | null;
+        animateChatPlaceholders: boolean;
+        iconLogo: string | null;
+        chatErrorSupportMessage: string | null;
+        showTwoFactor: boolean;
     };
 };
 
-export type UpdateOrganizationResponse = UpdateOrganizationResponses[keyof UpdateOrganizationResponses];
+export type UpdateAppearanceSettingsResponse = UpdateAppearanceSettingsResponses[keyof UpdateAppearanceSettingsResponses];
+
+export type UpdateSecuritySettingsData = {
+    body: {
+        globalToolPolicy?: 'permissive' | 'restrictive';
+        allowChatFileUploads?: boolean;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/security-settings';
+};
+
+export type UpdateSecuritySettingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateSecuritySettingsError = UpdateSecuritySettingsErrors[keyof UpdateSecuritySettingsErrors];
+
+export type UpdateSecuritySettingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        slug: string;
+        logo: string | null;
+        logoDark: string | null;
+        createdAt: string;
+        metadata: string | null;
+        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        onboardingComplete: boolean;
+        theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
+        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
+        convertToolResultsToToon: boolean;
+        compressionScope: 'organization' | 'team';
+        globalToolPolicy: 'permissive' | 'restrictive';
+        allowChatFileUploads: boolean;
+        embeddingModel: string | null;
+        embeddingDimensions: number | null;
+        embeddingChatApiKeyId: string | null;
+        rerankerChatApiKeyId: string | null;
+        rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        defaultLlmApiKeyId: string | null;
+        defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatLinks: Array<{
+            label: string;
+            url: string;
+        }> | null;
+        chatPlaceholders: Array<string> | null;
+        animateChatPlaceholders: boolean;
+        iconLogo: string | null;
+        chatErrorSupportMessage: string | null;
+        showTwoFactor: boolean;
+    };
+};
+
+export type UpdateSecuritySettingsResponse = UpdateSecuritySettingsResponses[keyof UpdateSecuritySettingsResponses];
+
+export type UpdateLlmSettingsData = {
+    body: {
+        convertToolResultsToToon?: boolean;
+        compressionScope?: 'organization' | 'team';
+        limitCleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/llm-settings';
+};
+
+export type UpdateLlmSettingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateLlmSettingsError = UpdateLlmSettingsErrors[keyof UpdateLlmSettingsErrors];
+
+export type UpdateLlmSettingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        slug: string;
+        logo: string | null;
+        logoDark: string | null;
+        createdAt: string;
+        metadata: string | null;
+        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        onboardingComplete: boolean;
+        theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
+        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
+        convertToolResultsToToon: boolean;
+        compressionScope: 'organization' | 'team';
+        globalToolPolicy: 'permissive' | 'restrictive';
+        allowChatFileUploads: boolean;
+        embeddingModel: string | null;
+        embeddingDimensions: number | null;
+        embeddingChatApiKeyId: string | null;
+        rerankerChatApiKeyId: string | null;
+        rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        defaultLlmApiKeyId: string | null;
+        defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatLinks: Array<{
+            label: string;
+            url: string;
+        }> | null;
+        chatPlaceholders: Array<string> | null;
+        animateChatPlaceholders: boolean;
+        iconLogo: string | null;
+        chatErrorSupportMessage: string | null;
+        showTwoFactor: boolean;
+    };
+};
+
+export type UpdateLlmSettingsResponse = UpdateLlmSettingsResponses[keyof UpdateLlmSettingsResponses];
+
+export type UpdateAgentSettingsData = {
+    body: {
+        defaultLlmModel?: string | null;
+        defaultLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        defaultLlmApiKeyId?: string | null;
+        defaultAgentId?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/agent-settings';
+};
+
+export type UpdateAgentSettingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateAgentSettingsError = UpdateAgentSettingsErrors[keyof UpdateAgentSettingsErrors];
+
+export type UpdateAgentSettingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        slug: string;
+        logo: string | null;
+        logoDark: string | null;
+        createdAt: string;
+        metadata: string | null;
+        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        onboardingComplete: boolean;
+        theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
+        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
+        convertToolResultsToToon: boolean;
+        compressionScope: 'organization' | 'team';
+        globalToolPolicy: 'permissive' | 'restrictive';
+        allowChatFileUploads: boolean;
+        embeddingModel: string | null;
+        embeddingDimensions: number | null;
+        embeddingChatApiKeyId: string | null;
+        rerankerChatApiKeyId: string | null;
+        rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        defaultLlmApiKeyId: string | null;
+        defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatLinks: Array<{
+            label: string;
+            url: string;
+        }> | null;
+        chatPlaceholders: Array<string> | null;
+        animateChatPlaceholders: boolean;
+        iconLogo: string | null;
+        chatErrorSupportMessage: string | null;
+        showTwoFactor: boolean;
+    };
+};
+
+export type UpdateAgentSettingsResponse = UpdateAgentSettingsResponses[keyof UpdateAgentSettingsResponses];
+
+export type UpdateKnowledgeSettingsData = {
+    body: {
+        embeddingModel?: string | null;
+        embeddingChatApiKeyId?: string | null;
+        rerankerChatApiKeyId?: string | null;
+        rerankerModel?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/knowledge-settings';
+};
+
+export type UpdateKnowledgeSettingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateKnowledgeSettingsError = UpdateKnowledgeSettingsErrors[keyof UpdateKnowledgeSettingsErrors];
+
+export type UpdateKnowledgeSettingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        slug: string;
+        logo: string | null;
+        logoDark: string | null;
+        createdAt: string;
+        metadata: string | null;
+        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        onboardingComplete: boolean;
+        theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
+        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
+        convertToolResultsToToon: boolean;
+        compressionScope: 'organization' | 'team';
+        globalToolPolicy: 'permissive' | 'restrictive';
+        allowChatFileUploads: boolean;
+        embeddingModel: string | null;
+        embeddingDimensions: number | null;
+        embeddingChatApiKeyId: string | null;
+        rerankerChatApiKeyId: string | null;
+        rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        defaultLlmApiKeyId: string | null;
+        defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatLinks: Array<{
+            label: string;
+            url: string;
+        }> | null;
+        chatPlaceholders: Array<string> | null;
+        animateChatPlaceholders: boolean;
+        iconLogo: string | null;
+        chatErrorSupportMessage: string | null;
+        showTwoFactor: boolean;
+    };
+};
+
+export type UpdateKnowledgeSettingsResponse = UpdateKnowledgeSettingsResponses[keyof UpdateKnowledgeSettingsResponses];
+
+export type DropEmbeddingConfigData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization/knowledge-settings/drop-embedding';
+};
+
+export type DropEmbeddingConfigErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DropEmbeddingConfigError = DropEmbeddingConfigErrors[keyof DropEmbeddingConfigErrors];
+
+export type DropEmbeddingConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        slug: string;
+        logo: string | null;
+        logoDark: string | null;
+        createdAt: string;
+        metadata: string | null;
+        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        onboardingComplete: boolean;
+        theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
+        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
+        convertToolResultsToToon: boolean;
+        compressionScope: 'organization' | 'team';
+        globalToolPolicy: 'permissive' | 'restrictive';
+        allowChatFileUploads: boolean;
+        embeddingModel: string | null;
+        embeddingDimensions: number | null;
+        embeddingChatApiKeyId: string | null;
+        rerankerChatApiKeyId: string | null;
+        rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        defaultLlmApiKeyId: string | null;
+        defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatLinks: Array<{
+            label: string;
+            url: string;
+        }> | null;
+        chatPlaceholders: Array<string> | null;
+        animateChatPlaceholders: boolean;
+        iconLogo: string | null;
+        chatErrorSupportMessage: string | null;
+        showTwoFactor: boolean;
+    };
+};
+
+export type DropEmbeddingConfigResponse = DropEmbeddingConfigResponses[keyof DropEmbeddingConfigResponses];
+
+export type TestEmbeddingConnectionData = {
+    body: {
+        embeddingChatApiKeyId: string;
+        embeddingModel: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/knowledge-settings/test-embedding';
+};
+
+export type TestEmbeddingConnectionErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type TestEmbeddingConnectionError = TestEmbeddingConnectionErrors[keyof TestEmbeddingConnectionErrors];
+
+export type TestEmbeddingConnectionResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+        error?: string;
+    };
+};
+
+export type TestEmbeddingConnectionResponse = TestEmbeddingConnectionResponses[keyof TestEmbeddingConnectionResponses];
+
+export type CompleteOnboardingData = {
+    body: {
+        onboardingComplete: true;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/complete-onboarding';
+};
+
+export type CompleteOnboardingErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CompleteOnboardingError = CompleteOnboardingErrors[keyof CompleteOnboardingErrors];
+
+export type CompleteOnboardingResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        slug: string;
+        logo: string | null;
+        logoDark: string | null;
+        createdAt: string;
+        metadata: string | null;
+        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        onboardingComplete: boolean;
+        theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
+        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
+        convertToolResultsToToon: boolean;
+        compressionScope: 'organization' | 'team';
+        globalToolPolicy: 'permissive' | 'restrictive';
+        allowChatFileUploads: boolean;
+        embeddingModel: string | null;
+        embeddingDimensions: number | null;
+        embeddingChatApiKeyId: string | null;
+        rerankerChatApiKeyId: string | null;
+        rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        defaultLlmApiKeyId: string | null;
+        defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatLinks: Array<{
+            label: string;
+            url: string;
+        }> | null;
+        chatPlaceholders: Array<string> | null;
+        animateChatPlaceholders: boolean;
+        iconLogo: string | null;
+        chatErrorSupportMessage: string | null;
+        showTwoFactor: boolean;
+    };
+};
+
+export type CompleteOnboardingResponse = CompleteOnboardingResponses[keyof CompleteOnboardingResponses];
 
 export type GetOnboardingStatusData = {
     body?: never;
@@ -31270,14 +34658,14 @@ export type GetOnboardingStatusResponses = {
 
 export type GetOnboardingStatusResponse = GetOnboardingStatusResponses[keyof GetOnboardingStatusResponses];
 
-export type GetPublicAppearanceData = {
+export type GetMemberSignupStatusData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/organization/appearance';
+    url: '/api/organization/members/signup-status';
 };
 
-export type GetPublicAppearanceErrors = {
+export type GetMemberSignupStatusErrors = {
     /**
      * Default Response
      */
@@ -31334,23 +34722,272 @@ export type GetPublicAppearanceErrors = {
     };
 };
 
-export type GetPublicAppearanceError = GetPublicAppearanceErrors[keyof GetPublicAppearanceErrors];
+export type GetMemberSignupStatusError = GetMemberSignupStatusErrors[keyof GetMemberSignupStatusErrors];
 
-export type GetPublicAppearanceResponses = {
+export type GetMemberSignupStatusResponses = {
     /**
      * Default Response
      */
     200: {
-        theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
-        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        logo: string | null;
+        pendingSignupMembers: Array<{
+            userId: string;
+            name: string | null;
+            email: string;
+            image: string | null;
+            role: string;
+            provider: string | null;
+            invitationId: string | null;
+        }>;
     };
 };
 
-export type GetPublicAppearanceResponse = GetPublicAppearanceResponses[keyof GetPublicAppearanceResponses];
+export type GetMemberSignupStatusResponse = GetMemberSignupStatusResponses[keyof GetMemberSignupStatusResponses];
+
+export type DeletePendingSignupMemberData = {
+    body?: never;
+    path: {
+        userId: string;
+    };
+    query?: never;
+    url: '/api/organization/members/{userId}/pending-signup';
+};
+
+export type DeletePendingSignupMemberErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeletePendingSignupMemberError = DeletePendingSignupMemberErrors[keyof DeletePendingSignupMemberErrors];
+
+export type DeletePendingSignupMemberResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeletePendingSignupMemberResponse = DeletePendingSignupMemberResponses[keyof DeletePendingSignupMemberResponses];
+
+export type GetOrganizationMembersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization/members';
+};
+
+export type GetOrganizationMembersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetOrganizationMembersError = GetOrganizationMembersErrors[keyof GetOrganizationMembersErrors];
+
+export type GetOrganizationMembersResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        email: string;
+    }>;
+};
+
+export type GetOrganizationMembersResponse = GetOrganizationMembersResponses[keyof GetOrganizationMembersResponses];
+
+export type GetOrganizationMemberData = {
+    body?: never;
+    path: {
+        /**
+         * User ID or email address
+         */
+        idOrEmail: string;
+    };
+    query?: never;
+    url: '/api/organization/members/{idOrEmail}';
+};
+
+export type GetOrganizationMemberErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetOrganizationMemberError = GetOrganizationMemberErrors[keyof GetOrganizationMemberErrors];
+
+export type GetOrganizationMemberResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        email: string;
+        role: string;
+    };
+};
+
+export type GetOrganizationMemberResponse = GetOrganizationMemberResponses[keyof GetOrganizationMemberResponses];
 
 export type PerplexityChatCompletionsWithDefaultAgentData = {
-    body?: XaiChatCompletionRequestInput;
+    body: XaiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -31435,7 +35072,7 @@ export type PerplexityChatCompletionsWithDefaultAgentResponses = {
 export type PerplexityChatCompletionsWithDefaultAgentResponse = PerplexityChatCompletionsWithDefaultAgentResponses[keyof PerplexityChatCompletionsWithDefaultAgentResponses];
 
 export type PerplexityChatCompletionsWithAgentData = {
-    body?: XaiChatCompletionRequestInput;
+    body: XaiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -31520,83 +35157,6 @@ export type PerplexityChatCompletionsWithAgentResponses = {
 };
 
 export type PerplexityChatCompletionsWithAgentResponse = PerplexityChatCompletionsWithAgentResponses[keyof PerplexityChatCompletionsWithAgentResponses];
-
-export type GetPolicyConfigSubagentPromptData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/policy-config-subagent/prompt';
-};
-
-export type GetPolicyConfigSubagentPromptErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetPolicyConfigSubagentPromptError = GetPolicyConfigSubagentPromptErrors[keyof GetPolicyConfigSubagentPromptErrors];
-
-export type GetPolicyConfigSubagentPromptResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        promptTemplate: string;
-    };
-};
-
-export type GetPolicyConfigSubagentPromptResponse = GetPolicyConfigSubagentPromptResponses[keyof GetPolicyConfigSubagentPromptResponses];
 
 export type GetSecretsTypeData = {
     body?: never;
@@ -32287,7 +35847,11 @@ export type GetCostSavingsStatisticsResponse = GetCostSavingsStatisticsResponses
 export type GetTeamsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+        name?: string;
+    };
     url: '/api/teams';
 };
 
@@ -32354,24 +35918,34 @@ export type GetTeamsResponses = {
     /**
      * Default Response
      */
-    200: Array<{
-        id: string;
-        name: string;
-        description: string | null;
-        organizationId: string;
-        createdBy: string;
-        createdAt: string;
-        updatedAt: string;
-        convertToolResultsToToon: boolean;
-        members?: Array<{
+    200: {
+        data: Array<{
             id: string;
-            teamId: string;
-            userId: string;
-            role: string;
-            syncedFromSso: boolean;
+            name: string;
+            description: string | null;
+            organizationId: string;
+            createdBy: string;
             createdAt: string;
+            updatedAt: string;
+            convertToolResultsToToon: boolean;
+            members?: Array<{
+                id: string;
+                teamId: string;
+                userId: string;
+                role: string;
+                syncedFromSso: boolean;
+                createdAt: string;
+            }>;
         }>;
-    }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
 };
 
 export type GetTeamsResponse = GetTeamsResponses[keyof GetTeamsResponses];
@@ -32645,7 +36219,7 @@ export type GetTeamResponses = {
 export type GetTeamResponse = GetTeamResponses[keyof GetTeamResponses];
 
 export type UpdateTeamData = {
-    body?: {
+    body: {
         name?: string;
         description?: string;
         convertToolResultsToToon?: boolean;
@@ -32821,6 +36395,9 @@ export type GetTeamMembersResponses = {
         role: string;
         syncedFromSso: boolean;
         createdAt: string;
+        name: string | null;
+        email: string;
+        image: string | null;
     }>;
 };
 
@@ -33595,9 +37172,13 @@ export type GetToolsResponses = {
             [key: string]: unknown;
         };
         description: string | null;
+        meta: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
         policiesAutoConfiguredAt: string | null;
         policiesAutoConfiguringStartedAt: string | null;
         policiesAutoConfiguredReasoning: string | null;
+        policiesAutoConfiguredModel: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -33617,17 +37198,17 @@ export type GetToolsWithAssignmentsData = {
     body?: never;
     path?: never;
     query?: {
+        sortBy?: 'name' | 'origin' | 'createdAt' | 'assignmentCount';
+        sortDirection?: 'asc' | 'desc';
         search?: string;
         /**
-         * Can be 'llm-proxy' or a catalogId
+         * Can be 'llm-proxy', 'agent', or a catalogId
          */
         origin?: string;
         /**
          * Hide built-in Archestra tools
          */
         excludeArchestraTools?: boolean;
-        sortBy?: 'name' | 'origin' | 'createdAt' | 'assignmentCount';
-        sortDirection?: 'asc' | 'desc';
         limit?: number;
         offset?: number;
     };
@@ -33720,6 +37301,9 @@ export type GetToolsWithAssignmentsResponses = {
             catalogId: string | null;
             createdAt: string;
             updatedAt: string;
+            policiesAutoConfiguredAt: string | null;
+            policiesAutoConfiguredReasoning: string | null;
+            policiesAutoConfiguredModel: string | null;
             assignmentCount: number;
             assignments: Array<{
                 agentToolId: string;
@@ -33727,12 +37311,10 @@ export type GetToolsWithAssignmentsResponses = {
                     id: string;
                     name: string;
                 };
-                credentialSourceMcpServerId: string | null;
+                mcpServerId: string | null;
                 credentialOwnerEmail: string | null;
-                executionSourceMcpServerId: string | null;
                 executionOwnerEmail: string | null;
-                useDynamicTeamCredential: boolean;
-                responseModifierTemplate: string | null;
+                credentialResolutionMode: 'static' | 'dynamic' | 'enterprise_managed';
             }>;
         }>;
         pagination: {
@@ -33898,7 +37480,7 @@ export type GetUserPermissionsResponses = {
      * Default Response
      */
     200: {
-        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
+        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query'>;
     };
 };
 
@@ -34150,8 +37732,10 @@ export type GetAllVirtualApiKeysData = {
     query?: {
         limit?: number;
         offset?: number;
+        search?: string;
+        chatApiKeyId?: string;
     };
-    url: '/api/virtual-api-keys';
+    url: '/api/llm-virtual-keys';
 };
 
 export type GetAllVirtualApiKeysErrors = {
@@ -34224,12 +37808,19 @@ export type GetAllVirtualApiKeysResponses = {
             name: string;
             secretId: string;
             tokenStart: string;
+            scope: 'personal' | 'team' | 'org';
+            authorId: string | null;
             expiresAt: string | null;
             createdAt: string;
             lastUsedAt: string | null;
             parentKeyName: string;
             parentKeyProvider: string;
             parentKeyBaseUrl: string | null;
+            teams: Array<{
+                id: string;
+                name: string;
+            }>;
+            authorName: string | null;
         }>;
         pagination: {
             currentPage: number;
@@ -34250,7 +37841,7 @@ export type GetVirtualApiKeysData = {
         chatApiKeyId: string;
     };
     query?: never;
-    url: '/api/chat-api-keys/{chatApiKeyId}/virtual-keys';
+    url: '/api/llm-provider-api-keys/{chatApiKeyId}/virtual-keys';
 };
 
 export type GetVirtualApiKeysErrors = {
@@ -34322,6 +37913,8 @@ export type GetVirtualApiKeysResponses = {
         name: string;
         secretId: string;
         tokenStart: string;
+        scope: 'personal' | 'team' | 'org';
+        authorId: string | null;
         expiresAt: string | null;
         createdAt: string;
         lastUsedAt: string | null;
@@ -34334,12 +37927,14 @@ export type CreateVirtualApiKeyData = {
     body: {
         name: string;
         expiresAt?: unknown;
+        scope?: 'personal' | 'team' | 'org';
+        teams?: Array<string>;
     };
     path: {
         chatApiKeyId: string;
     };
     query?: never;
-    url: '/api/chat-api-keys/{chatApiKeyId}/virtual-keys';
+    url: '/api/llm-provider-api-keys/{chatApiKeyId}/virtual-keys';
 };
 
 export type CreateVirtualApiKeyErrors = {
@@ -34411,10 +38006,17 @@ export type CreateVirtualApiKeyResponses = {
         name: string;
         secretId: string;
         tokenStart: string;
+        scope: 'personal' | 'team' | 'org';
+        authorId: string | null;
         expiresAt: string | null;
         createdAt: string;
         lastUsedAt: string | null;
         value: string;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        authorName: string | null;
     };
 };
 
@@ -34427,7 +38029,7 @@ export type DeleteVirtualApiKeyData = {
         id: string;
     };
     query?: never;
-    url: '/api/chat-api-keys/{chatApiKeyId}/virtual-keys/{id}';
+    url: '/api/llm-provider-api-keys/{chatApiKeyId}/virtual-keys/{id}';
 };
 
 export type DeleteVirtualApiKeyErrors = {
@@ -34500,8 +38102,107 @@ export type DeleteVirtualApiKeyResponses = {
 
 export type DeleteVirtualApiKeyResponse = DeleteVirtualApiKeyResponses[keyof DeleteVirtualApiKeyResponses];
 
+export type UpdateVirtualApiKeyData = {
+    body: {
+        name: string;
+        expiresAt?: unknown;
+        scope?: 'personal' | 'team' | 'org';
+        teams?: Array<string>;
+    };
+    path: {
+        chatApiKeyId: string;
+        id: string;
+    };
+    query?: never;
+    url: '/api/llm-provider-api-keys/{chatApiKeyId}/virtual-keys/{id}';
+};
+
+export type UpdateVirtualApiKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateVirtualApiKeyError = UpdateVirtualApiKeyErrors[keyof UpdateVirtualApiKeyErrors];
+
+export type UpdateVirtualApiKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        chatApiKeyId: string;
+        name: string;
+        secretId: string;
+        tokenStart: string;
+        scope: 'personal' | 'team' | 'org';
+        authorId: string | null;
+        expiresAt: string | null;
+        createdAt: string;
+        lastUsedAt: string | null;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        authorName: string | null;
+    };
+};
+
+export type UpdateVirtualApiKeyResponse = UpdateVirtualApiKeyResponses[keyof UpdateVirtualApiKeyResponses];
+
 export type VllmChatCompletionsWithDefaultAgentData = {
-    body?: VllmChatCompletionRequestInput;
+    body: VllmChatCompletionRequestInput;
     headers?: {
         /**
          * The user agent of the client
@@ -34586,7 +38287,7 @@ export type VllmChatCompletionsWithDefaultAgentResponses = {
 export type VllmChatCompletionsWithDefaultAgentResponse = VllmChatCompletionsWithDefaultAgentResponses[keyof VllmChatCompletionsWithDefaultAgentResponses];
 
 export type VllmChatCompletionsWithAgentData = {
-    body?: VllmChatCompletionRequestInput;
+    body: VllmChatCompletionRequestInput;
     headers?: {
         /**
          * The user agent of the client
@@ -34673,7 +38374,7 @@ export type VllmChatCompletionsWithAgentResponses = {
 export type VllmChatCompletionsWithAgentResponse = VllmChatCompletionsWithAgentResponses[keyof VllmChatCompletionsWithAgentResponses];
 
 export type XaiChatCompletionsWithDefaultAgentData = {
-    body?: XaiChatCompletionRequestInput;
+    body: XaiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -34758,7 +38459,7 @@ export type XaiChatCompletionsWithDefaultAgentResponses = {
 export type XaiChatCompletionsWithDefaultAgentResponse = XaiChatCompletionsWithDefaultAgentResponses[keyof XaiChatCompletionsWithDefaultAgentResponses];
 
 export type XaiChatCompletionsWithAgentData = {
-    body?: XaiChatCompletionRequestInput;
+    body: XaiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -34845,7 +38546,7 @@ export type XaiChatCompletionsWithAgentResponses = {
 export type XaiChatCompletionsWithAgentResponse = XaiChatCompletionsWithAgentResponses[keyof XaiChatCompletionsWithAgentResponses];
 
 export type ZhipuaiChatCompletionsWithDefaultAgentData = {
-    body?: ZhipuaiChatCompletionRequestInput;
+    body: ZhipuaiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -34931,7 +38632,7 @@ export type ZhipuaiChatCompletionsWithDefaultAgentResponses = {
 export type ZhipuaiChatCompletionsWithDefaultAgentResponse = ZhipuaiChatCompletionsWithDefaultAgentResponses[keyof ZhipuaiChatCompletionsWithDefaultAgentResponses];
 
 export type ZhipuaiChatCompletionsWithAgentData = {
-    body?: ZhipuaiChatCompletionRequestInput;
+    body: ZhipuaiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -35175,6 +38876,7 @@ export type GetIdentityProvidersResponses = {
         oidcConfig?: {
             issuer: string;
             pkce: boolean;
+            enableRpInitiatedLogout?: boolean;
             clientId: string;
             clientSecret: string;
             authorizationEndpoint?: string;
@@ -35183,8 +38885,19 @@ export type GetIdentityProvidersResponses = {
             scopes?: Array<string>;
             overrideUserInfo?: boolean;
             tokenEndpoint?: string;
-            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
             jwksEndpoint?: string;
+            enterpriseManagedCredentials?: {
+                providerType?: 'generic_oidc' | 'okta' | 'keycloak';
+                clientId?: string;
+                clientSecret?: string;
+                tokenEndpoint?: string;
+                tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
+                privateKeyPem?: string;
+                privateKeyId?: string;
+                clientAssertionAudience?: string;
+                subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+            };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
              */
@@ -35290,6 +39003,7 @@ export type CreateIdentityProviderData = {
         oidcConfig?: {
             issuer: string;
             pkce: boolean;
+            enableRpInitiatedLogout?: boolean;
             clientId: string;
             clientSecret: string;
             authorizationEndpoint?: string;
@@ -35298,8 +39012,19 @@ export type CreateIdentityProviderData = {
             scopes?: Array<string>;
             overrideUserInfo?: boolean;
             tokenEndpoint?: string;
-            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
             jwksEndpoint?: string;
+            enterpriseManagedCredentials?: {
+                providerType?: 'generic_oidc' | 'okta' | 'keycloak';
+                clientId?: string;
+                clientSecret?: string;
+                tokenEndpoint?: string;
+                tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
+                privateKeyPem?: string;
+                privateKeyId?: string;
+                clientAssertionAudience?: string;
+                subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+            };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
              */
@@ -35468,6 +39193,7 @@ export type CreateIdentityProviderResponses = {
         oidcConfig?: {
             issuer: string;
             pkce: boolean;
+            enableRpInitiatedLogout?: boolean;
             clientId: string;
             clientSecret: string;
             authorizationEndpoint?: string;
@@ -35476,8 +39202,19 @@ export type CreateIdentityProviderResponses = {
             scopes?: Array<string>;
             overrideUserInfo?: boolean;
             tokenEndpoint?: string;
-            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
             jwksEndpoint?: string;
+            enterpriseManagedCredentials?: {
+                providerType?: 'generic_oidc' | 'okta' | 'keycloak';
+                clientId?: string;
+                clientSecret?: string;
+                tokenEndpoint?: string;
+                tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
+                privateKeyPem?: string;
+                privateKeyId?: string;
+                clientAssertionAudience?: string;
+                subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+            };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
              */
@@ -35811,6 +39548,7 @@ export type GetIdentityProviderResponses = {
         oidcConfig?: {
             issuer: string;
             pkce: boolean;
+            enableRpInitiatedLogout?: boolean;
             clientId: string;
             clientSecret: string;
             authorizationEndpoint?: string;
@@ -35819,8 +39557,19 @@ export type GetIdentityProviderResponses = {
             scopes?: Array<string>;
             overrideUserInfo?: boolean;
             tokenEndpoint?: string;
-            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
             jwksEndpoint?: string;
+            enterpriseManagedCredentials?: {
+                providerType?: 'generic_oidc' | 'okta' | 'keycloak';
+                clientId?: string;
+                clientSecret?: string;
+                tokenEndpoint?: string;
+                tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
+                privateKeyPem?: string;
+                privateKeyId?: string;
+                clientAssertionAudience?: string;
+                subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+            };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
              */
@@ -35918,7 +39667,7 @@ export type GetIdentityProviderResponses = {
 export type GetIdentityProviderResponse = GetIdentityProviderResponses[keyof GetIdentityProviderResponses];
 
 export type UpdateIdentityProviderData = {
-    body?: {
+    body: {
         issuer?: string;
         /**
          * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
@@ -35926,6 +39675,7 @@ export type UpdateIdentityProviderData = {
         oidcConfig?: {
             issuer: string;
             pkce: boolean;
+            enableRpInitiatedLogout?: boolean;
             clientId: string;
             clientSecret: string;
             authorizationEndpoint?: string;
@@ -35934,8 +39684,19 @@ export type UpdateIdentityProviderData = {
             scopes?: Array<string>;
             overrideUserInfo?: boolean;
             tokenEndpoint?: string;
-            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
             jwksEndpoint?: string;
+            enterpriseManagedCredentials?: {
+                providerType?: 'generic_oidc' | 'okta' | 'keycloak';
+                clientId?: string;
+                clientSecret?: string;
+                tokenEndpoint?: string;
+                tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
+                privateKeyPem?: string;
+                privateKeyId?: string;
+                clientAssertionAudience?: string;
+                subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+            };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
              */
@@ -36105,6 +39866,7 @@ export type UpdateIdentityProviderResponses = {
         oidcConfig?: {
             issuer: string;
             pkce: boolean;
+            enableRpInitiatedLogout?: boolean;
             clientId: string;
             clientSecret: string;
             authorizationEndpoint?: string;
@@ -36113,8 +39875,19 @@ export type UpdateIdentityProviderResponses = {
             scopes?: Array<string>;
             overrideUserInfo?: boolean;
             tokenEndpoint?: string;
-            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
             jwksEndpoint?: string;
+            enterpriseManagedCredentials?: {
+                providerType?: 'generic_oidc' | 'okta' | 'keycloak';
+                clientId?: string;
+                clientSecret?: string;
+                tokenEndpoint?: string;
+                tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
+                privateKeyPem?: string;
+                privateKeyId?: string;
+                clientAssertionAudience?: string;
+                subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+            };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
              */
@@ -36459,7 +40232,7 @@ export type SetTeamVaultFolderResponses = {
 export type SetTeamVaultFolderResponse = SetTeamVaultFolderResponses[keyof SetTeamVaultFolderResponses];
 
 export type CheckTeamVaultFolderConnectivityData = {
-    body?: {
+    body: {
         vaultPath?: string;
     };
     path: {

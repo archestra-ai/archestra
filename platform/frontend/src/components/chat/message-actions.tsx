@@ -18,7 +18,7 @@ export function MessageActions({
 }: {
   className?: string;
   textToCopy: string;
-  onEditClick: () => void;
+  onEditClick?: () => void;
   onRegenerateClick?: () => void;
   isRegenerateConfirming?: boolean;
   editDisabled?: boolean;
@@ -74,21 +74,23 @@ export function MessageActions({
               {copied ? "Copied" : "Copy"}
             </TooltipContent>
           </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7 hover:bg-muted"
-                onClick={onEditClick}
-                disabled={editDisabled}
-              >
-                <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="sr-only">Edit</span>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">Edit</TooltipContent>
-          </Tooltip>
+          {onEditClick && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 hover:bg-muted"
+                  onClick={onEditClick}
+                  disabled={editDisabled}
+                >
+                  <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="sr-only">Edit</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Edit</TooltipContent>
+            </Tooltip>
+          )}
           {onRegenerateClick && (
             <Tooltip>
               <TooltipTrigger asChild>

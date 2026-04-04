@@ -1,9 +1,10 @@
 "use client";
 
 import {
-  SSO_PROVIDER_ID,
-  SSO_TRUSTED_PROVIDER_IDS,
-  type SsoProviderId,
+  E2eTestId,
+  IDENTITY_PROVIDER_ID,
+  IDENTITY_TRUSTED_PROVIDER_IDS,
+  type IdentityProviderId,
 } from "@shared";
 import { useCallback, useState } from "react";
 import { EnterpriseLicenseRequired } from "@/components/enterprise-license-required";
@@ -12,12 +13,12 @@ import { LoadingSpinner } from "@/components/loading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import config from "@/lib/config";
-import { useIdentityProviders } from "@/lib/identity-provider.query.ee";
+import { useIdentityProviders } from "@/lib/auth/identity-provider.query.ee";
+import config from "@/lib/config/config";
 import { CreateIdentityProviderDialog } from "./create-identity-provider-dialog.ee";
 import { EditIdentityProviderDialog } from "./edit-identity-provider-dialog.ee";
 
-/** Configuration for a predefined SSO provider card */
+/** Configuration for a predefined identity provider card */
 interface IdpConfig {
   /** Internal ID for the config (used as React key) */
   id: string;
@@ -43,6 +44,7 @@ interface IdpConfig {
     tokenEndpoint?: string;
     userInfoEndpoint?: string;
     jwksEndpoint?: string;
+    enableRpInitiatedLogout?: boolean;
     scopes: string[];
     mapping: {
       id: string;
@@ -66,12 +68,12 @@ interface IdpConfig {
   };
 }
 
-// Predefined SSO provider configurations
+// Predefined identity provider configurations
 const IDP_CONFIGS: IdpConfig[] = [
   {
     id: "okta",
     // Use the canonical provider ID from shared constants
-    providerId: SSO_PROVIDER_ID.OKTA,
+    providerId: IDENTITY_PROVIDER_ID.OKTA,
     name: "Okta",
     description: "Enterprise identity and access management",
     bgColor: "bg-blue-50",
@@ -92,7 +94,7 @@ const IDP_CONFIGS: IdpConfig[] = [
   },
   {
     id: "google",
-    providerId: SSO_PROVIDER_ID.GOOGLE,
+    providerId: IDENTITY_PROVIDER_ID.GOOGLE,
     name: "Google",
     description: "Sign in with Google OAuth",
     bgColor: "bg-red-50",
@@ -122,7 +124,7 @@ const IDP_CONFIGS: IdpConfig[] = [
      * See: https://grafana.com/docs/grafana/latest/setup-grafana/configure-access/configure-authentication/github/
      */
     id: "github",
-    providerId: SSO_PROVIDER_ID.GITHUB,
+    providerId: IDENTITY_PROVIDER_ID.GITHUB,
     name: "GitHub",
     description: "Sign in with GitHub OAuth (requires public email)",
     bgColor: "bg-gray-50",
@@ -154,7 +156,7 @@ const IDP_CONFIGS: IdpConfig[] = [
   },
   {
     id: "gitlab",
-    providerId: SSO_PROVIDER_ID.GITLAB,
+    providerId: IDENTITY_PROVIDER_ID.GITLAB,
     name: "GitLab",
     description: "Sign in with GitLab OAuth",
     bgColor: "bg-orange-50",
@@ -177,7 +179,7 @@ const IDP_CONFIGS: IdpConfig[] = [
   },
   {
     id: "entra",
-    providerId: SSO_PROVIDER_ID.ENTRA_ID,
+    providerId: IDENTITY_PROVIDER_ID.ENTRA_ID,
     name: "Microsoft Entra ID",
     description: "Sign in with Microsoft (Azure AD)",
     bgColor: "bg-sky-50",
@@ -278,8 +280,8 @@ export function IdentityProvidersSettingsContent() {
 
         // For generic providers (empty providerId), match by provider type as well
         // Check if this is a non-trusted provider and matches the same type (OIDC vs SAML)
-        const isNonTrustedProvider = !SSO_TRUSTED_PROVIDER_IDS.includes(
-          p.providerId as SsoProviderId,
+        const isNonTrustedProvider = !IDENTITY_TRUSTED_PROVIDER_IDS.includes(
+          p.providerId as IdentityProviderId,
         );
         if (!isNonTrustedProvider) {
           return false;
@@ -313,31 +315,15 @@ export function IdentityProvidersSettingsContent() {
   );
 
   // Show message if SSO feature is disabled (check before loading since query is disabled)
-  if (!config.enterpriseLicenseActivated) {
-    return (
-      <div>
-        <div className="mb-8">
-          <h2 className="text-lg font-semibold">Identity Providers</h2>
-          <EnterpriseLicenseRequired featureName="Identity Providers" />
-        </div>
-      </div>
-    );
+  if (!config.enterpriseFeatures.core) {
+    return <EnterpriseLicenseRequired featureName="Identity Providers" />;
   }
 
   if (isLoading) return <LoadingSpinner />;
 
   return (
     <div>
-      <div className="mb-8">
-        <h2 className="text-lg font-semibold">Identity Providers</h2>
-        <p className="text-sm text-muted-foreground">
-          Manage Identity Providers (IdPs) for your organization. Identity
-          Providers can be used for Single Sign-On (SSO) authentication and for
-          validating external JWT tokens on MCP Gateway requests via JWKS.
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
         {IDP_CONFIGS.map((config) => {
           const existingProvider = getProviderStatus(config);
 
@@ -346,6 +332,7 @@ export function IdentityProvidersSettingsContent() {
               key={config.id}
               className="cursor-pointer hover:shadow-md transition-shadow flex flex-col h-full"
               onClick={() => handleProviderClick(config)}
+              data-testid={`${E2eTestId.IdentityProviderCard}-${config.id}`}
             >
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
@@ -373,8 +360,9 @@ export function IdentityProvidersSettingsContent() {
                   variant={existingProvider ? "outline" : "default"}
                   size="sm"
                   className="w-full"
+                  data-testid={`${E2eTestId.IdentityProviderOpenDialogButton}-${config.id}`}
                 >
-                  {existingProvider ? "Configure" : "Enable"}
+                  {existingProvider ? "Edit" : "Enable"}
                 </Button>
               </CardContent>
             </Card>
@@ -394,6 +382,7 @@ export function IdentityProvidersSettingsContent() {
                   issuer: createConfig.config.defaultSamlConfig?.issuer || "",
                   domain: "",
                   providerType: "saml" as const,
+                  roleMapping: { rules: [] },
                   samlConfig: {
                     issuer: createConfig.config.defaultSamlConfig?.issuer || "",
                     entryPoint:
@@ -412,12 +401,16 @@ export function IdentityProvidersSettingsContent() {
                   issuer: createConfig.config.defaultOidcConfig?.issuer || "",
                   domain: "",
                   providerType: "oidc" as const,
+                  roleMapping: { rules: [] },
                   oidcConfig: {
                     ...createConfig.config.defaultOidcConfig,
                     issuer: createConfig.config.defaultOidcConfig?.issuer || "",
                     discoveryEndpoint:
                       createConfig.config.defaultOidcConfig
                         ?.discoveryEndpoint || "",
+                    enableRpInitiatedLogout:
+                      createConfig.config.defaultOidcConfig
+                        ?.enableRpInitiatedLogout ?? true,
                     scopes: createConfig.config.defaultOidcConfig?.scopes || [
                       "openid",
                       "email",

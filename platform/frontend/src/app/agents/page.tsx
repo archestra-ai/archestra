@@ -4,14 +4,19 @@ import {
   type ErrorExtended,
 } from "@shared";
 
+import { ForbiddenPage } from "@/app/_parts/forbidden-page";
 import { ServerErrorFallback } from "@/components/error-fallback";
-import { getServerApiHeaders } from "@/lib/server-utils";
 import {
-  DEFAULT_AGENTS_PAGE_SIZE,
   DEFAULT_SORT_BY,
   DEFAULT_SORT_DIRECTION,
-  handleApiError,
-} from "@/lib/utils";
+  DEFAULT_TABLE_LIMIT,
+} from "@/consts";
+import {
+  serverCanAccessPage,
+  serverHasPermissions,
+} from "@/lib/auth/auth.server";
+import { handleApiError } from "@/lib/utils";
+import { getServerApiHeaders } from "@/lib/utils/server";
 import AgentsPage from "./page.client";
 
 export const dynamic = "force-dynamic";
@@ -19,25 +24,39 @@ export const dynamic = "force-dynamic";
 export default async function AgentsPageServer() {
   let initialData: {
     agents: archestraApiTypes.GetAgentsResponses["200"] | null;
-    teams: archestraApiTypes.GetTeamsResponses["200"];
+    teams: archestraApiTypes.GetTeamsResponses["200"]["data"];
   } = {
     agents: null,
     teams: [],
   };
   try {
+    if (!(await serverCanAccessPage("/agents"))) {
+      return <ForbiddenPage />;
+    }
+
     const headers = await getServerApiHeaders();
+    const canReadTeams = await serverHasPermissions({ team: ["read"] });
+    const emptyTeamsResponse = {
+      data: { data: [] },
+      error: undefined,
+    };
     const [agentsResponse, teamsResponse] = await Promise.all([
       archestraApiSdk.getAgents({
         headers,
         query: {
-          limit: DEFAULT_AGENTS_PAGE_SIZE,
+          limit: DEFAULT_TABLE_LIMIT,
           offset: 0,
           sortBy: DEFAULT_SORT_BY,
           sortDirection: DEFAULT_SORT_DIRECTION,
           agentTypes: ["agent"],
         },
       }),
-      archestraApiSdk.getTeams({ headers }),
+      canReadTeams
+        ? archestraApiSdk.getTeams({
+            headers,
+            query: { limit: 100, offset: 0 },
+          })
+        : Promise.resolve(emptyTeamsResponse),
     ]);
     if (agentsResponse.error) {
       handleApiError(agentsResponse.error);
@@ -47,7 +66,7 @@ export default async function AgentsPageServer() {
     }
     initialData = {
       agents: agentsResponse.data || null,
-      teams: teamsResponse.data || [],
+      teams: teamsResponse.data?.data ?? [],
     };
   } catch (error) {
     return <ServerErrorFallback error={error as ErrorExtended} />;

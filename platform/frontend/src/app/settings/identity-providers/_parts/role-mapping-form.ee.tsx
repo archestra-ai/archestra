@@ -1,9 +1,12 @@
 "use client";
 
-import { E2eTestId, type IdentityProviderFormValues } from "@shared";
+import {
+  E2eTestId,
+  getIdpRoleMappingRuleRowTestId,
+  type IdentityProviderFormValues,
+} from "@shared";
 import { Info, Plus, Trash2 } from "lucide-react";
-import { useCallback, useId, useRef, useState } from "react";
-import type { UseFormReturn } from "react-hook-form";
+import { type UseFormReturn, useFieldArray } from "react-hook-form";
 import {
   Accordion,
   AccordionContent,
@@ -30,6 +33,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useAppName } from "@/lib/hooks/use-app-name";
 
 interface RoleMappingFormProps {
   form: UseFormReturn<IdentityProviderFormValues>;
@@ -57,61 +61,22 @@ const HANDLEBARS_EXAMPLES = [
 ];
 
 export function RoleMappingForm({ form }: RoleMappingFormProps) {
-  const rules = form.watch("roleMapping.rules") || [];
-  const accordionContentRef = useRef<HTMLDivElement>(null);
-  const baseId = useId();
-  // Track rule IDs for stable keys. Generate initial IDs based on current rule count.
-  const [ruleIds, setRuleIds] = useState<string[]>(() =>
-    rules.map((_, i) => `${baseId}-rule-${i}`),
-  );
-
-  // Scroll the accordion content into view when expanded
-  const handleAccordionChange = useCallback((value: string) => {
-    if (value === "role-mapping") {
-      // Small delay to allow accordion animation to start
-      setTimeout(() => {
-        accordionContentRef.current?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
-      }, 100);
-    }
-  }, []);
-
-  const addRule = useCallback(() => {
-    const currentRules = form.getValues("roleMapping.rules") || [];
-    const newId = `${baseId}-rule-${Date.now()}`;
-    setRuleIds((prev) => [...prev, newId]);
-    form.setValue("roleMapping.rules", [
-      ...currentRules,
-      { expression: "", role: "member" },
-    ]);
-  }, [form, baseId]);
-
-  const removeRule = useCallback(
-    (index: number) => {
-      const currentRules = form.getValues("roleMapping.rules") || [];
-      setRuleIds((prev) => prev.filter((_, i) => i !== index));
-      form.setValue(
-        "roleMapping.rules",
-        currentRules.filter((_, i) => i !== index),
-      );
-    },
-    [form],
-  );
+  const appName = useAppName();
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "roleMapping.rules",
+  });
 
   return (
     <div className="space-y-6">
       <Separator />
 
-      <Accordion
-        type="single"
-        collapsible
-        className="w-full"
-        onValueChange={handleAccordionChange}
-      >
+      <Accordion type="single" collapsible className="w-full">
         <AccordionItem value="role-mapping" className="border-none">
-          <AccordionTrigger className="hover:no-underline">
+          <AccordionTrigger
+            className="hover:no-underline"
+            data-testid={E2eTestId.IdpRoleMappingAccordionTrigger}
+          >
             <div className="flex items-center gap-2">
               <h4 className="text-md font-medium">Role Mapping (Optional)</h4>
               <TooltipProvider>
@@ -121,7 +86,7 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                   </TooltipTrigger>
                   <TooltipContent className="max-w-sm">
                     <p>
-                      Map identity provider attributes to Archestra roles using
+                      Map identity provider attributes to {appName} roles using
                       Handlebars templates. Rules are evaluated in order - first
                       match wins.
                     </p>
@@ -130,10 +95,7 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
               </TooltipProvider>
             </div>
           </AccordionTrigger>
-          <AccordionContent
-            ref={accordionContentRef}
-            className="space-y-4 pt-4"
-          >
+          <AccordionContent className="space-y-4 pt-4">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <FormLabel>Mapping Rules</FormLabel>
@@ -141,7 +103,7 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={addRule}
+                  onClick={() => append({ expression: "", role: "member" })}
                   data-testid={E2eTestId.IdpRoleMappingAddRule}
                 >
                   <Plus className="mr-1 h-4 w-4" />
@@ -149,7 +111,7 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                 </Button>
               </div>
 
-              {rules.length > 1 && (
+              {fields.length > 1 && (
                 <p className="text-xs text-muted-foreground bg-muted/50 p-2 rounded-md">
                   <span className="font-medium">Note:</span> Rules are evaluated
                   in order from top to bottom. The first matching rule
@@ -158,24 +120,25 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                 </p>
               )}
 
-              {rules.length === 0 ? (
+              {fields.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   No mapping rules configured. All users will be assigned the
                   default role.
                 </p>
               ) : (
                 <div className="space-y-4">
-                  {rules.map((_, index) => (
+                  {fields.map((field, index) => (
                     <div
-                      key={ruleIds[index] || `fallback-${index}`}
-                      className="flex gap-3 items-start p-3 border rounded-md"
+                      key={field.id}
+                      className="flex items-start gap-3 p-3 border rounded-md"
+                      data-testid={getIdpRoleMappingRuleRowTestId(index)}
                     >
-                      <div className="flex-1 space-y-3">
+                      <div className="flex items-start gap-3 w-full flex-1 min-w-0">
                         <FormField
                           control={form.control}
                           name={`roleMapping.rules.${index}.expression`}
                           render={({ field }) => (
-                            <FormItem>
+                            <FormItem className="flex-[3] min-w-0">
                               <FormLabel className="text-xs">
                                 Handlebars Template
                               </FormLabel>
@@ -197,9 +160,9 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                           control={form.control}
                           name={`roleMapping.rules.${index}.role`}
                           render={({ field }) => (
-                            <FormItem>
+                            <FormItem className="flex-1 min-w-[220px] max-w-[360px]">
                               <FormLabel className="text-xs">
-                                Archestra Role
+                                {appName} Role
                               </FormLabel>
                               <Select
                                 onValueChange={field.onChange}
@@ -225,8 +188,8 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => removeRule(index)}
+                        className="shrink-0 mt-6 text-destructive hover:text-destructive"
+                        onClick={() => remove(index)}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>

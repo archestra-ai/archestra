@@ -2,9 +2,9 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { usePublicIdentityProviders } from "@/lib/auth/identity-provider.query.ee";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import config from "@/lib/config";
-import { usePublicIdentityProviders } from "@/lib/identity-provider.query.ee";
+import config from "@/lib/config/config";
 import { IdentityProviderSelector } from "./identity-provider-selector.ee";
 
 // Mock next/navigation
@@ -22,14 +22,14 @@ vi.mock("@/lib/clients/auth/auth-client", () => ({
 }));
 
 // Mock identity providers query
-vi.mock("@/lib/identity-provider.query.ee", () => ({
+vi.mock("@/lib/auth/identity-provider.query.ee", () => ({
   usePublicIdentityProviders: vi.fn(),
 }));
 
 // Mock config
-vi.mock("@/lib/config", () => ({
+vi.mock("@/lib/config/config", () => ({
   default: {
-    enterpriseLicenseActivated: true,
+    enterpriseFeatures: { core: true },
   },
 }));
 
@@ -248,14 +248,14 @@ describe("IdentityProviderSelector", () => {
 
   describe("rendering conditions", () => {
     it("should not render when enterprise license is not activated", () => {
-      vi.mocked(config).enterpriseLicenseActivated = false;
+      (vi.mocked(config).enterpriseFeatures as { core: boolean }).core = false;
 
       const { container } = render(<IdentityProviderSelector />);
 
       expect(container.firstChild).toBeNull();
 
       // Reset for other tests
-      vi.mocked(config).enterpriseLicenseActivated = true;
+      (vi.mocked(config).enterpriseFeatures as { core: boolean }).core = true;
     });
 
     it("should not render when loading", () => {

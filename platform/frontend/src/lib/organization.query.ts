@@ -7,9 +7,38 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Invitation } from "better-auth/plugins/organization";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { appearanceKeys } from "@/lib/appearance.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { handleApiError } from "./utils";
+
+export const appearanceKeys = {
+  all: ["appearance"] as const,
+  public: () => [...appearanceKeys.all, "public"] as const,
+};
+
+/**
+ * Hook to fetch public appearance settings.
+ * Used on login/auth pages where the user is not yet authenticated.
+ * Returns theme, customFont, and logo without requiring authentication.
+ * On API failure, returns undefined (treated as not loaded) to preserve localStorage values.
+ */
+export function useAppearanceSettings(enabled = true) {
+  return useQuery({
+    queryKey: appearanceKeys.public(),
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getAppearanceSettings();
+
+      if (error || !data) {
+        return undefined;
+      }
+
+      return data;
+    },
+    enabled,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+    throwOnError: false,
+  });
+}
 
 /**
  * Query key factory for organization-related queries
@@ -24,6 +53,8 @@ export const organizationKeys = {
   details: () => [...organizationKeys.all, "details"] as const,
   onboardingStatus: () =>
     [...organizationKeys.all, "onboarding-status"] as const,
+  memberSignupStatus: () =>
+    [...organizationKeys.all, "member-signup-status"] as const,
 };
 
 /**
@@ -112,8 +143,16 @@ export function useInvitationsList(organizationId: string | undefined) {
       if (!response.data) return [];
 
       const now = new Date();
+      type InvitationListItem = {
+        id: string;
+        email: string;
+        role: Invitation["role"];
+        expiresAt: Invitation["expiresAt"] | null;
+        isExpired: boolean;
+        status: Invitation["status"];
+      };
       return response.data
-        .filter((inv) => inv.status === "pending")
+        .filter((inv: Invitation) => inv.status === "pending")
         .map((inv: Invitation) => {
           const expiresAt = inv.expiresAt || null;
           const isExpired = expiresAt ? new Date(expiresAt) < now : false;
@@ -127,7 +166,7 @@ export function useInvitationsList(organizationId: string | undefined) {
             status: inv.status,
           };
         })
-        .sort((a, b) => {
+        .sort((a: InvitationListItem, b: InvitationListItem) => {
           // Sort by status first (pending > accepted > rejected)
           const statusOrder: Record<string, number> = {
             pending: 0,
@@ -263,19 +302,19 @@ export function useOrganizationOnboardingStatus(enabled: boolean) {
 }
 
 /**
- * Update organization
+ * Update appearance settings
  */
-export function useUpdateOrganization(
+export function useUpdateAppearanceSettings(
   onSuccessMessage: string,
   onErrorMessage: string,
 ) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (
-      data: archestraApiTypes.UpdateOrganizationData["body"],
+      data: archestraApiTypes.UpdateAppearanceSettingsData["body"],
     ) => {
       const { data: updatedOrganization, error } =
-        await archestraApiSdk.updateOrganization({ body: data });
+        await archestraApiSdk.updateAppearanceSettings({ body: data });
 
       if (error) {
         toast.error(onErrorMessage);
@@ -286,17 +325,299 @@ export function useUpdateOrganization(
     },
     onSuccess: (updatedOrganization) => {
       if (!updatedOrganization) return;
-      // Update organization details cache
       queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
-      // Update appearance cache immediately with the new values
       queryClient.setQueryData(appearanceKeys.public(), {
         theme: updatedOrganization.theme,
         customFont: updatedOrganization.customFont,
         logo: updatedOrganization.logo,
+        logoDark: updatedOrganization.logoDark,
+        favicon: updatedOrganization.favicon,
+        iconLogo: updatedOrganization.iconLogo,
+        appName: updatedOrganization.appName,
+        ogDescription: updatedOrganization.ogDescription,
+        footerText: updatedOrganization.footerText,
+        chatLinks: updatedOrganization.chatLinks,
+        chatErrorSupportMessage: updatedOrganization.chatErrorSupportMessage,
+        animateChatPlaceholders: updatedOrganization.animateChatPlaceholders,
       });
-      // Invalidate config cache since globalToolPolicy comes from organization record
+      toast.success(onSuccessMessage);
+    },
+  });
+}
+
+/**
+ * Update security settings (global tool policy, chat file uploads)
+ */
+export function useUpdateSecuritySettings(
+  onSuccessMessage: string,
+  onErrorMessage: string,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: archestraApiTypes.UpdateSecuritySettingsData["body"],
+    ) => {
+      const { data: updatedOrganization, error } =
+        await archestraApiSdk.updateSecuritySettings({ body: data });
+
+      if (error) {
+        toast.error(onErrorMessage);
+        return null;
+      }
+
+      return updatedOrganization;
+    },
+    onSuccess: (updatedOrganization) => {
+      if (!updatedOrganization) return;
+      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
       queryClient.invalidateQueries({ queryKey: ["config"] });
       toast.success(onSuccessMessage);
+    },
+  });
+}
+
+/**
+ * Update LLM settings (TOON compression, compression scope, limit cleanup interval)
+ */
+export function useUpdateLlmSettings(
+  onSuccessMessage: string,
+  onErrorMessage: string,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: archestraApiTypes.UpdateLlmSettingsData["body"],
+    ) => {
+      const { data: updatedOrganization, error } =
+        await archestraApiSdk.updateLlmSettings({ body: data });
+
+      if (error) {
+        toast.error(onErrorMessage);
+        return null;
+      }
+
+      return updatedOrganization;
+    },
+    onSuccess: (updatedOrganization) => {
+      if (!updatedOrganization) return;
+      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      toast.success(onSuccessMessage);
+    },
+  });
+}
+
+/**
+ * Update agent settings (default model, default agent)
+ */
+export function useUpdateAgentSettings(
+  onSuccessMessage: string,
+  onErrorMessage: string,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: archestraApiTypes.UpdateAgentSettingsData["body"],
+    ) => {
+      const { data: updatedOrganization, error } =
+        await archestraApiSdk.updateAgentSettings({ body: data });
+
+      if (error) {
+        toast.error(onErrorMessage);
+        return null;
+      }
+
+      return updatedOrganization;
+    },
+    onSuccess: (updatedOrganization) => {
+      if (!updatedOrganization) return;
+      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      toast.success(onSuccessMessage);
+    },
+  });
+}
+
+/**
+ * Update knowledge settings (embedding model)
+ */
+export function useUpdateKnowledgeSettings(
+  onSuccessMessage: string,
+  onErrorMessage: string,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: archestraApiTypes.UpdateKnowledgeSettingsData["body"],
+    ) => {
+      const { data: updatedOrganization, error } =
+        await archestraApiSdk.updateKnowledgeSettings({ body: data });
+
+      if (error) {
+        toast.error(onErrorMessage);
+        return null;
+      }
+
+      return updatedOrganization;
+    },
+    onSuccess: (updatedOrganization) => {
+      if (!updatedOrganization) return;
+      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      toast.success(onSuccessMessage);
+    },
+  });
+}
+
+/**
+ * Drop embedding configuration (deletes all KB documents, resets connector checkpoints)
+ */
+export function useDropEmbeddingConfig() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data: updatedOrganization, error } =
+        await archestraApiSdk.dropEmbeddingConfig();
+
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+
+      return updatedOrganization;
+    },
+    onSuccess: (updatedOrganization) => {
+      if (!updatedOrganization) return;
+      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      toast.success("Embedding configuration dropped");
+    },
+  });
+}
+
+/**
+ * Test embedding connection by embedding a sample text
+ */
+export function useTestEmbeddingConnection() {
+  return useMutation({
+    mutationFn: async (
+      params: NonNullable<
+        archestraApiTypes.TestEmbeddingConnectionData["body"]
+      >,
+    ) => {
+      const { data, error } = await archestraApiSdk.testEmbeddingConnection({
+        body: params,
+      });
+
+      if (error) {
+        handleApiError(error);
+        return { success: false, error: "Request failed" };
+      }
+
+      return data ?? { success: false, error: "No response" };
+    },
+    onSuccess: (result) => {
+      if (!result) return;
+      if (result.success) {
+        toast.success("Connection test successful");
+      } else {
+        toast.error("Connection test failed", {
+          description: result.error,
+        });
+      }
+    },
+  });
+}
+
+/**
+ * Complete onboarding
+ */
+export function useCompleteOnboarding() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data: updatedOrganization, error } =
+        await archestraApiSdk.completeOnboarding({
+          body: { onboardingComplete: true },
+        });
+
+      if (error) {
+        toast.error("Failed to complete onboarding");
+        return null;
+      }
+
+      return updatedOrganization;
+    },
+    onSuccess: (updatedOrganization) => {
+      if (!updatedOrganization) return;
+      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      toast.success("Onboarding complete");
+    },
+  });
+}
+
+/**
+ * Get all members of the organization (for admin filtering)
+ */
+export function useOrganizationMembers(enabled = true) {
+  return useQuery({
+    queryKey: [...organizationKeys.all, "members"],
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getOrganizationMembers();
+      if (error) {
+        handleApiError(error);
+        return [];
+      }
+      return data ?? [];
+    },
+    enabled,
+  });
+}
+
+export type PendingSignupMember = {
+  userId: string;
+  name: string | null;
+  email: string;
+  image: string | null;
+  role: string;
+  provider: string | null;
+  invitationId: string | null;
+};
+
+/**
+ * Get member signup status — returns members that haven't completed signup
+ */
+export function useMemberSignupStatus() {
+  return useQuery({
+    queryKey: organizationKeys.memberSignupStatus(),
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getMemberSignupStatus();
+      if (error) {
+        return { pendingSignupMembers: [] as PendingSignupMember[] };
+      }
+      return data ?? { pendingSignupMembers: [] as PendingSignupMember[] };
+    },
+  });
+}
+
+/**
+ * Delete a pending signup member (auto-provisioned, hasn't completed signup)
+ */
+export function useDeletePendingSignupMember() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      const { data, error } = await archestraApiSdk.deletePendingSignupMember({
+        path: { userId },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({
+        queryKey: organizationKeys.memberSignupStatus(),
+      });
+      toast.success("Pending member removed");
     },
   });
 }

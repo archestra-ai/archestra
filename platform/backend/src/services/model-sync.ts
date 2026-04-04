@@ -1,25 +1,17 @@
-import type { SupportedProvider } from "@shared";
-import { modelsDevClient } from "@/clients/models-dev-client";
+import type { SupportedEmbeddingDimension, SupportedProvider } from "@shared";
+import {
+  type ModelsDevApiResponse,
+  modelsDevClient,
+} from "@/clients/models-dev-client";
 import logger from "@/logging";
-import { ApiKeyModelModel, ModelModel } from "@/models";
+import { LlmProviderApiKeyModelLinkModel, ModelModel } from "@/models";
+import { modelFetchers } from "@/routes/chat/model-fetchers";
 import type {
   CreateModel,
   ModelInputModality,
   ModelOutputModality,
 } from "@/types";
 import { ModelInputModalitySchema, ModelOutputModalitySchema } from "@/types";
-
-interface ModelFromProvider {
-  id: string;
-  displayName: string;
-  provider: SupportedProvider;
-  createdAt?: string;
-}
-
-type ModelFetcher = (
-  apiKey: string,
-  baseUrl?: string | null,
-) => Promise<ModelFromProvider[]>;
 
 /**
  * Service for syncing models from provider APIs to the database.
@@ -30,16 +22,6 @@ type ModelFetcher = (
  * 3. Links the models to the API key via the `api_key_models` join table
  */
 class ModelSyncService {
-  private modelFetchers: Map<SupportedProvider, ModelFetcher> = new Map();
-
-  /**
-   * Register a model fetcher function for a provider.
-   * This allows the routes.models.ts to register its fetch functions.
-   */
-  registerFetcher(provider: SupportedProvider, fetcher: ModelFetcher): void {
-    this.modelFetchers.set(provider, fetcher);
-  }
-
   /**
    * Sync models for a specific API key.
    * Fetches models from the provider and links them to the API key.
@@ -49,13 +31,15 @@ class ModelSyncService {
    * @param apiKeyValue - The actual API key value for making API calls
    * @returns The number of models synced
    */
-  async syncModelsForApiKey(
-    apiKeyId: string,
-    provider: SupportedProvider,
-    apiKeyValue: string,
-    baseUrl?: string | null,
-  ): Promise<number> {
-    const fetcher = this.modelFetchers.get(provider);
+  async syncModelsForApiKey(params: {
+    apiKeyId: string;
+    provider: SupportedProvider;
+    apiKeyValue: string;
+    baseUrl?: string | null;
+    forceRefresh?: boolean;
+  }): Promise<number> {
+    const { apiKeyId, provider, apiKeyValue, baseUrl, forceRefresh } = params;
+    const fetcher = modelFetchers[provider];
 
     if (!fetcher) {
       logger.warn(
@@ -72,7 +56,11 @@ class ModelSyncService {
       if (providerModels.length === 0) {
         logger.info({ provider, apiKeyId }, "No models returned from provider");
         // Clear any existing links since no models are available
-        await ApiKeyModelModel.syncModelsForApiKey(apiKeyId, [], provider);
+        await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+          apiKeyId,
+          [],
+          provider,
+        );
         return 0;
       }
 
@@ -84,41 +72,31 @@ class ModelSyncService {
       // 2. Fetch models.dev data for capabilities
       const modelsDevData = await modelsDevClient.fetchModelsFromApi();
 
-      // 3. Build a lookup map for models.dev capabilities
-      const capabilitiesMap = buildCapabilitiesMap(modelsDevData, provider);
-
-      // 4. Merge provider models with models.dev capabilities
-      const modelsToUpsert: CreateModel[] = providerModels.map((model) => {
-        const capabilities = capabilitiesMap.get(model.id);
-        return {
-          externalId: `${model.provider}/${model.id}`,
-          provider: model.provider,
-          modelId: model.id,
-          description: capabilities?.description ?? null,
-          contextLength: capabilities?.contextLength ?? null,
-          inputModalities: capabilities?.inputModalities ?? null,
-          outputModalities: capabilities?.outputModalities ?? null,
-          supportsToolCalling: capabilities?.supportsToolCalling ?? null,
-          promptPricePerToken: capabilities?.promptPricePerToken ?? null,
-          completionPricePerToken:
-            capabilities?.completionPricePerToken ?? null,
-          lastSyncedAt: new Date(),
-        };
+      // 3. Merge provider models with models.dev capabilities.
+      // Use the API key's provider (not the fetcher's detected provider) so that
+      // models from OpenAI-compatible proxies are stored under the correct provider
+      // instead of being mis-classified by heuristic model ID prefix detection.
+      const modelsToUpsert = buildModelsToUpsert({
+        provider,
+        models: providerModels,
+        modelsDevData,
       });
 
-      const upsertedModels = await ModelModel.bulkUpsert(modelsToUpsert);
+      const upsertedModels = forceRefresh
+        ? await ModelModel.bulkUpsertFull(modelsToUpsert)
+        : await ModelModel.bulkUpsert(modelsToUpsert);
 
       logger.info(
         { provider, apiKeyId, upsertedCount: upsertedModels.length },
         "Upserted models to database",
       );
 
-      // 3. Link models to the API key with fastest/best detection
+      // 4. Link models to the API key with fastest/best detection
       const modelsWithIds = upsertedModels.map((m) => ({
         id: m.id,
         modelId: m.modelId,
       }));
-      await ApiKeyModelModel.syncModelsForApiKey(
+      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
         apiKeyId,
         modelsWithIds,
         provider,
@@ -154,17 +132,19 @@ class ModelSyncService {
       apiKeyValue: string;
       baseUrl?: string | null;
     }>,
+    options?: { forceRefresh?: boolean },
   ): Promise<Map<string, number>> {
     const results = new Map<string, number>();
 
     for (const apiKey of apiKeys) {
       try {
-        const count = await this.syncModelsForApiKey(
-          apiKey.id,
-          apiKey.provider,
-          apiKey.apiKeyValue,
-          apiKey.baseUrl,
-        );
+        const count = await this.syncModelsForApiKey({
+          apiKeyId: apiKey.id,
+          provider: apiKey.provider,
+          apiKeyValue: apiKey.apiKeyValue,
+          baseUrl: apiKey.baseUrl,
+          forceRefresh: options?.forceRefresh,
+        });
         results.set(apiKey.id, count);
       } catch (error) {
         logger.error(
@@ -182,13 +162,6 @@ class ModelSyncService {
 
     return results;
   }
-
-  /**
-   * Check if a fetcher is registered for a provider.
-   */
-  hasFetcher(provider: SupportedProvider): boolean {
-    return this.modelFetchers.has(provider);
-  }
 }
 
 // Export singleton instance
@@ -198,7 +171,7 @@ export const modelSyncService = new ModelSyncService();
 // Helper functions
 // ============================================================================
 
-export interface ModelCapabilities {
+export interface ProviderModelCapabilities {
   description: string | null;
   contextLength: number | null;
   inputModalities: ModelInputModality[] | null;
@@ -206,6 +179,91 @@ export interface ModelCapabilities {
   supportsToolCalling: boolean | null;
   promptPricePerToken: string | null;
   completionPricePerToken: string | null;
+}
+
+export function buildModelsToUpsert(params: {
+  provider: SupportedProvider;
+  models: Array<{ id: string }>;
+  modelsDevData: ModelsDevApiResponse;
+}): CreateModel[] {
+  const { provider, models, modelsDevData } = params;
+  const capabilitiesMap = buildCapabilitiesMap(modelsDevData, provider);
+
+  return models.map((model) => {
+    const capabilities = resolveModelCapabilities({
+      provider,
+      modelId: model.id,
+      capabilities: capabilitiesMap.get(model.id),
+    });
+
+    return {
+      externalId: `${provider}/${model.id}`,
+      provider,
+      modelId: model.id,
+      description: capabilities.description,
+      contextLength: capabilities.contextLength,
+      inputModalities: capabilities.inputModalities,
+      outputModalities: capabilities.outputModalities,
+      supportsToolCalling: capabilities.supportsToolCalling,
+      promptPricePerToken: capabilities.promptPricePerToken,
+      completionPricePerToken: capabilities.completionPricePerToken,
+      embeddingDimensions: inferEmbeddingDimensions(model.id, provider),
+      lastSyncedAt: new Date(),
+    };
+  });
+}
+
+/**
+ * Best-effort inference of embedding dimensions for known models.
+ * Unknown models return null and can be configured manually in the model editor.
+ */
+export function inferEmbeddingDimensions(
+  modelId: string,
+  provider: SupportedProvider,
+): SupportedEmbeddingDimension | null {
+  const id = modelId.toLowerCase();
+  if (provider === "openai" && id === "text-embedding-3-small") {
+    return 1536;
+  }
+  if (provider === "openai" && id === "text-embedding-3-large") {
+    // Default to 1536 for backwards compatibility with existing OpenAI KB
+    // embeddings; admins can opt into 3072 manually in the model editor.
+    return 1536;
+  }
+  if (provider === "gemini" && id === "gemini-embedding-001") {
+    return 3072;
+  }
+  if (id === "nomic-embed-text") {
+    return 768;
+  }
+  return null;
+}
+
+export function resolveModelCapabilities(params: {
+  provider: SupportedProvider;
+  modelId: string;
+  capabilities?: ProviderModelCapabilities;
+}): ProviderModelCapabilities {
+  const { provider, modelId, capabilities } = params;
+  const inferredCapabilities = inferModelCapabilities({
+    provider,
+    modelId,
+  });
+
+  return {
+    description: capabilities?.description ?? null,
+    contextLength:
+      capabilities?.contextLength ?? inferredCapabilities.contextLength,
+    inputModalities:
+      capabilities?.inputModalities ?? inferredCapabilities.inputModalities,
+    outputModalities:
+      capabilities?.outputModalities ?? inferredCapabilities.outputModalities,
+    supportsToolCalling:
+      capabilities?.supportsToolCalling ??
+      inferredCapabilities.supportsToolCalling,
+    promptPricePerToken: capabilities?.promptPricePerToken ?? null,
+    completionPricePerToken: capabilities?.completionPricePerToken ?? null,
+  };
 }
 
 /**
@@ -236,25 +294,10 @@ const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
  * Build a map of modelId -> capabilities from models.dev data for a specific provider.
  */
 export function buildCapabilitiesMap(
-  modelsDevData: Record<
-    string,
-    {
-      models: Record<
-        string,
-        {
-          id: string;
-          name: string;
-          tool_call?: boolean;
-          limit?: { context?: number };
-          modalities?: { input?: string[]; output?: string[] };
-          cost?: { input?: number; output?: number };
-        }
-      >;
-    }
-  >,
+  modelsDevData: ModelsDevApiResponse,
   targetProvider: SupportedProvider,
-): Map<string, ModelCapabilities> {
-  const map = new Map<string, ModelCapabilities>();
+): Map<string, ProviderModelCapabilities> {
+  const map = new Map<string, ProviderModelCapabilities>();
 
   for (const [providerId, providerData] of Object.entries(modelsDevData)) {
     const mappedProvider = MODELS_DEV_PROVIDER_MAP[providerId];
@@ -320,4 +363,73 @@ function parseModalities<T>(
   }
 
   return validated.length > 0 ? validated : null;
+}
+
+function inferModelCapabilities(params: {
+  provider: SupportedProvider;
+  modelId: string;
+}): ProviderModelCapabilities {
+  const { provider, modelId } = params;
+
+  if (provider === "gemini") {
+    return inferGeminiCapabilities(modelId);
+  }
+
+  return emptyCapabilities();
+}
+
+function inferGeminiCapabilities(modelId: string): ProviderModelCapabilities {
+  const normalizedModelId = modelId.toLowerCase();
+
+  if (!normalizedModelId.startsWith("gemini-")) {
+    return emptyCapabilities();
+  }
+
+  if (normalizedModelId.includes("embedding")) {
+    return {
+      ...emptyCapabilities(),
+      inputModalities: ["text"],
+      outputModalities: [],
+      supportsToolCalling: false,
+    };
+  }
+
+  if (
+    normalizedModelId.includes("live") ||
+    normalizedModelId.includes("audio")
+  ) {
+    return {
+      ...emptyCapabilities(),
+      inputModalities: ["text", "audio"],
+      outputModalities: ["audio"],
+      supportsToolCalling: false,
+    };
+  }
+
+  if (normalizedModelId.includes("image")) {
+    return {
+      ...emptyCapabilities(),
+      inputModalities: ["text", "image"],
+      outputModalities: ["image"],
+      supportsToolCalling: false,
+    };
+  }
+
+  return {
+    ...emptyCapabilities(),
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+  };
+}
+
+function emptyCapabilities(): ProviderModelCapabilities {
+  return {
+    description: null,
+    contextLength: null,
+    inputModalities: null,
+    outputModalities: null,
+    supportsToolCalling: null,
+    promptPricePerToken: null,
+    completionPricePerToken: null,
+  };
 }

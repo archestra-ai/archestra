@@ -1,13 +1,13 @@
 import type { SupportedProvider } from "@shared";
-import { and, eq, ilike, or, sql } from "drizzle-orm";
+import { and, eq, ilike, notInArray, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import type {
   CreateModel,
   Model,
   ModelCapabilities,
+  PatchModelBody,
   PriceSource,
-  UpdateModelPricing,
 } from "@/types";
 
 /**
@@ -50,8 +50,15 @@ function getDefaultModelPrice(model: string): {
 
 class ModelModel {
   /**
-   * Find all models
+   * Find all models discovered via LLM Proxy requests.
    */
+  static async findLlmProxyModels(): Promise<Model[]> {
+    return await db
+      .select()
+      .from(schema.modelsTable)
+      .where(eq(schema.modelsTable.discoveredViaLlmProxy, true));
+  }
+
   static async findAll(params?: {
     search?: string;
     provider?: SupportedProvider;
@@ -159,15 +166,18 @@ class ModelModel {
         set: {
           externalId: data.externalId,
           description: data.description,
-          contextLength: data.contextLength,
-          inputModalities: data.inputModalities,
-          outputModalities: data.outputModalities,
-          supportsToolCalling: data.supportsToolCalling,
+          contextLength: sql`COALESCE(${schema.modelsTable.contextLength}, excluded.context_length)`,
+          inputModalities: sql`COALESCE(${schema.modelsTable.inputModalities}, excluded.input_modalities)`,
+          outputModalities: sql`COALESCE(${schema.modelsTable.outputModalities}, excluded.output_modalities)`,
+          supportsToolCalling: sql`COALESCE(${schema.modelsTable.supportsToolCalling}, excluded.supports_tool_calling)`,
           promptPricePerToken: data.promptPricePerToken,
           completionPricePerToken: data.completionPricePerToken,
+          embeddingDimensions: sql`COALESCE(${schema.modelsTable.embeddingDimensions}, excluded.embedding_dimensions)`,
           lastSyncedAt: new Date(),
           updatedAt: new Date(),
           // NOTE: customPricePerMillionInput/Output intentionally NOT updated
+          // NOTE: capability fields only backfill when the existing DB value is null
+          // to preserve user-edited values while still populating missing metadata
         },
       })
       .returning();
@@ -218,15 +228,18 @@ class ModelModel {
             set: {
               externalId: sql`excluded.external_id`,
               description: sql`excluded.description`,
-              contextLength: sql`excluded.context_length`,
-              inputModalities: sql`excluded.input_modalities`,
-              outputModalities: sql`excluded.output_modalities`,
-              supportsToolCalling: sql`excluded.supports_tool_calling`,
+              contextLength: sql`COALESCE(${schema.modelsTable.contextLength}, excluded.context_length)`,
+              inputModalities: sql`COALESCE(${schema.modelsTable.inputModalities}, excluded.input_modalities)`,
+              outputModalities: sql`COALESCE(${schema.modelsTable.outputModalities}, excluded.output_modalities)`,
+              supportsToolCalling: sql`COALESCE(${schema.modelsTable.supportsToolCalling}, excluded.supports_tool_calling)`,
               promptPricePerToken: sql`excluded.prompt_price_per_token`,
               completionPricePerToken: sql`excluded.completion_price_per_token`,
+              embeddingDimensions: sql`COALESCE(${schema.modelsTable.embeddingDimensions}, excluded.embedding_dimensions)`,
               lastSyncedAt: sql`excluded.last_synced_at`,
               updatedAt: sql`NOW()`,
               // NOTE: customPricePerMillionInput/Output intentionally NOT updated
+              // NOTE: capability fields only backfill when the existing DB value is null
+              // to preserve user-edited values while still populating missing metadata
             },
           })
           .returning();
@@ -240,6 +253,72 @@ class ModelModel {
     logger.info(
       { totalUpserted: results.length },
       "Completed batched model upsert",
+    );
+
+    return results;
+  }
+
+  /**
+   * Bulk upsert models, overwriting ALL fields including user-edited values.
+   * Used by the "full refresh" flow to reset models to provider defaults.
+   */
+  static async bulkUpsertFull(dataArray: CreateModel[]): Promise<Model[]> {
+    if (dataArray.length === 0) {
+      return [];
+    }
+
+    const BATCH_SIZE = 50;
+    const totalBatches = Math.ceil(dataArray.length / BATCH_SIZE);
+
+    logger.debug(
+      { totalModels: dataArray.length, batchSize: BATCH_SIZE, totalBatches },
+      "Starting batched full model upsert",
+    );
+
+    const results = await db.transaction(async (tx) => {
+      const batchResults: Model[] = [];
+
+      for (let i = 0; i < dataArray.length; i += BATCH_SIZE) {
+        const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
+        const batch = dataArray.slice(i, i + BATCH_SIZE);
+
+        logger.debug(
+          { batchNumber, totalBatches, batchSize: batch.length },
+          "Processing full model batch",
+        );
+
+        const insertedBatch = await tx
+          .insert(schema.modelsTable)
+          .values(batch)
+          .onConflictDoUpdate({
+            target: [schema.modelsTable.provider, schema.modelsTable.modelId],
+            set: {
+              externalId: sql`excluded.external_id`,
+              description: sql`excluded.description`,
+              contextLength: sql`excluded.context_length`,
+              inputModalities: sql`excluded.input_modalities`,
+              outputModalities: sql`excluded.output_modalities`,
+              supportsToolCalling: sql`excluded.supports_tool_calling`,
+              promptPricePerToken: sql`excluded.prompt_price_per_token`,
+              completionPricePerToken: sql`excluded.completion_price_per_token`,
+              embeddingDimensions: sql`excluded.embedding_dimensions`,
+              customPricePerMillionInput: sql`NULL`,
+              customPricePerMillionOutput: sql`NULL`,
+              lastSyncedAt: sql`excluded.last_synced_at`,
+              updatedAt: sql`NOW()`,
+            },
+          })
+          .returning();
+
+        batchResults.push(...insertedBatch);
+      }
+
+      return batchResults;
+    });
+
+    logger.info(
+      { totalUpserted: results.length },
+      "Completed batched full model upsert",
     );
 
     return results;
@@ -281,20 +360,58 @@ class ModelModel {
   }
 
   /**
-   * Update custom pricing for a model by its internal UUID.
-   * Set to null to reset to default pricing.
+   * Delete orphaned models that have no API key links and were NOT
+   * discovered via LLM Proxy. LLM Proxy models are preserved so users
+   * can define custom token pricing for metrics.
    */
-  static async updatePricing(
-    id: string,
-    data: UpdateModelPricing,
-  ): Promise<Model | null> {
+  static async deleteOrphanedModels(): Promise<number> {
+    const orphaned = await db
+      .delete(schema.modelsTable)
+      .where(
+        and(
+          eq(schema.modelsTable.discoveredViaLlmProxy, false),
+          notInArray(
+            schema.modelsTable.id,
+            db
+              .selectDistinct({
+                modelId: schema.llmProviderApiKeyModelsTable.modelId,
+              })
+              .from(schema.llmProviderApiKeyModelsTable),
+          ),
+        ),
+      )
+      .returning({ id: schema.modelsTable.id });
+
+    return orphaned.length;
+  }
+
+  /**
+   * Update model details (pricing + modalities) by its internal UUID.
+   */
+  static async update(id: string, data: PatchModelBody): Promise<Model | null> {
+    const set: Record<string, unknown> = { updatedAt: new Date() };
+    if (data.customPricePerMillionInput !== undefined) {
+      set.customPricePerMillionInput = data.customPricePerMillionInput;
+    }
+    if (data.customPricePerMillionOutput !== undefined) {
+      set.customPricePerMillionOutput = data.customPricePerMillionOutput;
+    }
+    if (data.ignored !== undefined) {
+      set.ignored = data.ignored;
+    }
+    if (data.inputModalities !== undefined) {
+      set.inputModalities = data.inputModalities;
+    }
+    if (data.outputModalities !== undefined) {
+      set.outputModalities = data.outputModalities;
+    }
+    if (data.embeddingDimensions !== undefined) {
+      set.embeddingDimensions = data.embeddingDimensions;
+    }
+
     const [result] = await db
       .update(schema.modelsTable)
-      .set({
-        customPricePerMillionInput: data.customPricePerMillionInput,
-        customPricePerMillionOutput: data.customPricePerMillionOutput,
-        updatedAt: new Date(),
-      })
+      .set(set)
       .where(eq(schema.modelsTable.id, id))
       .returning();
 
@@ -303,7 +420,8 @@ class ModelModel {
 
   /**
    * Ensure a model entry exists for the given modelId and provider.
-   * Creates a stub entry with ON CONFLICT DO NOTHING if it doesn't exist.
+   * Marks the model as discovered via LLM Proxy so it's preserved even
+   * without API key links (users can set custom pricing for metrics).
    * Used by LLM proxy to ensure models are tracked even before models.dev sync.
    */
   static async ensureModelExists(
@@ -316,10 +434,14 @@ class ModelModel {
         externalId: `${provider}/${modelId}`,
         provider,
         modelId,
+        discoveredViaLlmProxy: true,
         lastSyncedAt: new Date(),
       })
-      .onConflictDoNothing({
+      .onConflictDoUpdate({
         target: [schema.modelsTable.provider, schema.modelsTable.modelId],
+        set: {
+          discoveredViaLlmProxy: true,
+        },
       });
   }
 
@@ -434,6 +556,26 @@ class ModelModel {
       isCustomPrice: pricing.source === "custom",
       priceSource: pricing.source,
     };
+  }
+
+  static supportsTextChat(model: Model): boolean {
+    if (model.ignored) {
+      return false;
+    }
+
+    if (model.embeddingDimensions !== null) {
+      return false;
+    }
+
+    if (model.inputModalities && !model.inputModalities.includes("text")) {
+      return false;
+    }
+
+    if (model.outputModalities && !model.outputModalities.includes("text")) {
+      return false;
+    }
+
+    return true;
   }
 }
 

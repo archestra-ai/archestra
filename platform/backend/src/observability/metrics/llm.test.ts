@@ -64,7 +64,7 @@ describe("getObservableFetch", () => {
 
     globalThis.fetch = vi.fn().mockResolvedValue(mockResponse);
 
-    const observableFetch = getObservableFetch("openai", testAgent);
+    const observableFetch = getObservableFetch("openai", testAgent, "api");
 
     await observableFetch("https://api.openai.com/v1/chat", {
       method: "POST",
@@ -78,6 +78,7 @@ describe("getObservableFetch", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "gpt-4",
         status_code: "200",
       },
@@ -92,6 +93,7 @@ describe("getObservableFetch", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "gpt-4",
         type: "input",
       },
@@ -106,6 +108,7 @@ describe("getObservableFetch", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "gpt-4",
         type: "output",
       },
@@ -123,7 +126,7 @@ describe("getObservableFetch", () => {
 
     globalThis.fetch = vi.fn().mockResolvedValue(mockResponse);
 
-    const observableFetch = getObservableFetch("anthropic", testAgent);
+    const observableFetch = getObservableFetch("anthropic", testAgent, "api");
 
     await observableFetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -136,6 +139,7 @@ describe("getObservableFetch", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "unknown",
         status_code: "400",
       },
@@ -153,7 +157,7 @@ describe("getObservableFetch", () => {
 
     globalThis.fetch = vi.fn().mockResolvedValue(mockResponse);
 
-    const observableFetch = getObservableFetch("openai", testAgent);
+    const observableFetch = getObservableFetch("openai", testAgent, "api");
 
     await observableFetch("https://api.openai.com/v1/chat", {
       method: "POST",
@@ -166,6 +170,7 @@ describe("getObservableFetch", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "unknown",
         status_code: "503",
       },
@@ -177,7 +182,7 @@ describe("getObservableFetch", () => {
   test("records duration with status_code 0 on network error", async () => {
     globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network error"));
 
-    const observableFetch = getObservableFetch("openai", testAgent);
+    const observableFetch = getObservableFetch("openai", testAgent, "api");
 
     await expect(
       observableFetch("https://api.openai.com/v1/chat", { method: "POST" }),
@@ -190,6 +195,7 @@ describe("getObservableFetch", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "unknown",
         status_code: "0",
       },
@@ -212,7 +218,7 @@ describe("getObservableFetch", () => {
 
     globalThis.fetch = vi.fn().mockResolvedValue(mockResponse);
 
-    const observableFetch = getObservableFetch("anthropic", testAgent);
+    const observableFetch = getObservableFetch("anthropic", testAgent, "api");
 
     await observableFetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -225,6 +231,7 @@ describe("getObservableFetch", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "unknown",
         type: "input",
       }),
@@ -239,6 +246,7 @@ describe("getObservableFetch", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "unknown",
         type: "output",
       }),
@@ -258,7 +266,7 @@ describe("getObservableFetch", () => {
     const mockFetch = vi.fn().mockResolvedValue(mockResponse);
     globalThis.fetch = mockFetch;
 
-    const observableFetch = getObservableFetch("openai", testAgent);
+    const observableFetch = getObservableFetch("openai", testAgent, "api");
     const url = "https://mock.openai.com/v1/chat";
     const init = { method: "POST", body: '{"model":"gpt-4"}' };
 
@@ -272,7 +280,7 @@ describe("getObservableFetch", () => {
     const testError = new Error("Fetch failed");
     globalThis.fetch = vi.fn().mockRejectedValue(testError);
 
-    const observableFetch = getObservableFetch("anthropic", testAgent);
+    const observableFetch = getObservableFetch("anthropic", testAgent, "api");
 
     await expect(
       observableFetch("https://mock.anthropic.com/v1/messages", {
@@ -319,7 +327,7 @@ describe("getObservableGenAI", () => {
       },
     });
 
-    const instrumentedGenAI = getObservableGenAI(mockGenAI, testAgent);
+    const instrumentedGenAI = getObservableGenAI(mockGenAI, testAgent, "api");
 
     // biome-ignore lint/suspicious/noExplicitAny: Mock parameter for testing
     await instrumentedGenAI.models.generateContent({} as any);
@@ -331,6 +339,7 @@ describe("getObservableGenAI", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "unknown",
         status_code: "200",
       },
@@ -345,6 +354,7 @@ describe("getObservableGenAI", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "unknown",
         type: "input",
       }),
@@ -359,6 +369,7 @@ describe("getObservableGenAI", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "unknown",
         type: "output",
       }),
@@ -372,7 +383,7 @@ describe("getObservableGenAI", () => {
     Object.assign(errorWithStatus, { status: 400 });
 
     const mockGenAI = getGenAIMock(errorWithStatus);
-    const instrumentedGenAI = getObservableGenAI(mockGenAI, testAgent);
+    const instrumentedGenAI = getObservableGenAI(mockGenAI, testAgent, "api");
 
     await expect(
       // biome-ignore lint/suspicious/noExplicitAny: Mock parameter for testing
@@ -386,6 +397,7 @@ describe("getObservableGenAI", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "unknown",
         status_code: "400",
       },
@@ -397,7 +409,7 @@ describe("getObservableGenAI", () => {
   test("records duration with status_code 0 on Gemini network error", async () => {
     const mockGenAI = getGenAIMock(new Error("Network timeout"));
 
-    const instrumentedGenAI = getObservableGenAI(mockGenAI, testAgent);
+    const instrumentedGenAI = getObservableGenAI(mockGenAI, testAgent, "api");
 
     await expect(
       // biome-ignore lint/suspicious/noExplicitAny: Mock parameter for testing
@@ -411,6 +423,7 @@ describe("getObservableGenAI", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "unknown",
         status_code: "0",
       },
@@ -437,7 +450,7 @@ describe("getObservableGenAI", () => {
       },
     } as unknown as GoogleGenAI;
 
-    const instrumentedGenAI = getObservableGenAI(mockGenAI, testAgent);
+    const instrumentedGenAI = getObservableGenAI(mockGenAI, testAgent, "api");
 
     const params = { model: "gemini-pro", contents: [{ text: "test" }] };
     const result = await instrumentedGenAI.models.generateContent(
@@ -462,7 +475,7 @@ describe("getObservableGenAI", () => {
       },
     } as unknown as GoogleGenAI;
 
-    const instrumentedGenAI = getObservableGenAI(mockGenAI, testAgent);
+    const instrumentedGenAI = getObservableGenAI(mockGenAI, testAgent, "api");
 
     await expect(
       // biome-ignore lint/suspicious/noExplicitAny: Mock parameter for testing
@@ -487,7 +500,7 @@ describe("getObservableGenAI", () => {
       },
     } as unknown as GoogleGenAI;
 
-    const instrumentedGenAI = getObservableGenAI(mockGenAI, testAgent);
+    const instrumentedGenAI = getObservableGenAI(mockGenAI, testAgent, "api");
 
     const params = {
       model: "gemini-2.5-pro",
@@ -503,6 +516,7 @@ describe("getObservableGenAI", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "gemini-2.5-pro",
         status_code: "200",
       },
@@ -522,7 +536,7 @@ describe("getObservableGenAI", () => {
       },
     } as unknown as GoogleGenAI;
 
-    const instrumentedGenAI = getObservableGenAI(mockGenAI, testAgent);
+    const instrumentedGenAI = getObservableGenAI(mockGenAI, testAgent, "api");
 
     await expect(
       // biome-ignore lint/suspicious/noExplicitAny: Mock parameter for testing
@@ -536,6 +550,7 @@ describe("getObservableGenAI", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "unknown",
         status_code: "429",
       },
@@ -561,7 +576,7 @@ describe("getObservableGenAI", () => {
       },
     } as unknown as GoogleGenAI;
 
-    const instrumentedGenAI = getObservableGenAI(mockGenAI, testAgent);
+    const instrumentedGenAI = getObservableGenAI(mockGenAI, testAgent, "api");
 
     const result = await instrumentedGenAI.models.generateContentStream(
       // biome-ignore lint/suspicious/noExplicitAny: Mock parameter for testing
@@ -656,7 +671,7 @@ describe("reportLLMCost", () => {
   });
 
   test("records cost with model", () => {
-    reportLLMCost("openai", testAgent, "gpt-4", 0.05);
+    reportLLMCost("openai", testAgent, "gpt-4", 0.05, "api");
 
     expect(counterInc).toHaveBeenCalledWith({
       labels: {
@@ -665,6 +680,7 @@ describe("reportLLMCost", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "gpt-4",
       },
       value: 0.05,
@@ -673,7 +689,7 @@ describe("reportLLMCost", () => {
   });
 
   test("records cost without model", () => {
-    reportLLMCost("anthropic", testAgent, "unknown", 0.02);
+    reportLLMCost("anthropic", testAgent, "unknown", 0.02, "api");
 
     expect(counterInc).toHaveBeenCalledWith({
       labels: {
@@ -682,6 +698,7 @@ describe("reportLLMCost", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "unknown",
       },
       value: 0.02,
@@ -690,7 +707,7 @@ describe("reportLLMCost", () => {
   });
 
   test("records cost with external agent id", () => {
-    reportLLMCost("openai", testAgent, "gpt-4", 0.05, "external-123");
+    reportLLMCost("openai", testAgent, "gpt-4", 0.05, "api", "external-123");
 
     expect(counterInc).toHaveBeenCalledWith({
       labels: {
@@ -699,6 +716,7 @@ describe("reportLLMCost", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "gpt-4",
       },
       value: 0.05,
@@ -717,7 +735,13 @@ describe("reportLLMTokens with model", () => {
   });
 
   test("records tokens with model specified", () => {
-    reportLLMTokens("openai", testAgent, { input: 100, output: 50 }, "gpt-4");
+    reportLLMTokens(
+      "openai",
+      testAgent,
+      { input: 100, output: 50 },
+      "gpt-4",
+      "api",
+    );
 
     expect(counterInc).toHaveBeenCalledWith({
       labels: {
@@ -726,6 +750,7 @@ describe("reportLLMTokens with model", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "gpt-4",
         type: "input",
       },
@@ -740,6 +765,7 @@ describe("reportLLMTokens with model", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "gpt-4",
         type: "output",
       },
@@ -754,6 +780,7 @@ describe("reportLLMTokens with model", () => {
       testAgent,
       { input: 100, output: 50 },
       "gpt-4",
+      "api",
       "external-456",
     );
 
@@ -764,6 +791,7 @@ describe("reportLLMTokens with model", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "gpt-4",
         type: "input",
       },
@@ -778,6 +806,7 @@ describe("reportLLMTokens with model", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "gpt-4",
         type: "output",
       },
@@ -797,7 +826,7 @@ describe("reportBlockedTools with model", () => {
   });
 
   test("records blocked tools with model", () => {
-    reportBlockedTools("openai", testAgent, 3, "gpt-4");
+    reportBlockedTools("openai", testAgent, 3, "gpt-4", "api");
 
     expect(counterInc).toHaveBeenCalledWith({
       labels: {
@@ -806,6 +835,7 @@ describe("reportBlockedTools with model", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "gpt-4",
       },
       value: 3,
@@ -814,7 +844,7 @@ describe("reportBlockedTools with model", () => {
   });
 
   test("records blocked tools with external agent id", () => {
-    reportBlockedTools("openai", testAgent, 3, "gpt-4", "external-789");
+    reportBlockedTools("openai", testAgent, 3, "gpt-4", "api", "external-789");
 
     expect(counterInc).toHaveBeenCalledWith({
       labels: {
@@ -823,6 +853,7 @@ describe("reportBlockedTools with model", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "gpt-4",
       },
       value: 3,
@@ -841,7 +872,7 @@ describe("reportTimeToFirstToken", () => {
   });
 
   test("records time to first token with model", () => {
-    reportTimeToFirstToken("openai", testAgent, "gpt-4", 0.5);
+    reportTimeToFirstToken("openai", testAgent, "gpt-4", 0.5, "api");
 
     expect(histogramObserve).toHaveBeenCalledWith({
       labels: {
@@ -850,6 +881,7 @@ describe("reportTimeToFirstToken", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "gpt-4",
       },
       value: 0.5,
@@ -857,8 +889,8 @@ describe("reportTimeToFirstToken", () => {
     });
   });
 
-  test("records time to first token without model", () => {
-    reportTimeToFirstToken("anthropic", testAgent, undefined, 0.25);
+  test("records time to first token with unknown model", () => {
+    reportTimeToFirstToken("anthropic", testAgent, "unknown", 0.25, "api");
 
     expect(histogramObserve).toHaveBeenCalledWith({
       labels: {
@@ -867,6 +899,7 @@ describe("reportTimeToFirstToken", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "unknown",
       },
       value: 0.25,
@@ -875,14 +908,14 @@ describe("reportTimeToFirstToken", () => {
   });
 
   test("skips reporting for invalid TTFT value", () => {
-    reportTimeToFirstToken("openai", testAgent, "gpt-4", 0);
-    reportTimeToFirstToken("openai", testAgent, "gpt-4", -1);
+    reportTimeToFirstToken("openai", testAgent, "gpt-4", 0, "api");
+    reportTimeToFirstToken("openai", testAgent, "gpt-4", -1, "api");
 
     expect(histogramObserve).not.toHaveBeenCalled();
   });
 
   test("records TTFT for different providers", () => {
-    reportTimeToFirstToken("gemini", testAgent, "gemini-pro", 0.3);
+    reportTimeToFirstToken("gemini", testAgent, "gemini-pro", 0.3, "api");
 
     expect(histogramObserve).toHaveBeenCalledWith({
       labels: {
@@ -891,6 +924,7 @@ describe("reportTimeToFirstToken", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "gemini-pro",
       },
       value: 0.3,
@@ -904,6 +938,7 @@ describe("reportTimeToFirstToken", () => {
       testAgent,
       "gpt-4",
       0.5,
+      "api",
       "external-ttft-123",
     );
 
@@ -914,6 +949,7 @@ describe("reportTimeToFirstToken", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "gpt-4",
       },
       value: 0.5,
@@ -933,7 +969,7 @@ describe("reportTokensPerSecond", () => {
 
   test("records tokens per second with model", () => {
     // 100 tokens in 2 seconds = 50 tokens/sec
-    reportTokensPerSecond("openai", testAgent, "gpt-4", 100, 2);
+    reportTokensPerSecond("openai", testAgent, "gpt-4", 100, 2, "api");
 
     expect(histogramObserve).toHaveBeenCalledWith({
       labels: {
@@ -942,6 +978,7 @@ describe("reportTokensPerSecond", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "gpt-4",
       },
       value: 50,
@@ -949,9 +986,9 @@ describe("reportTokensPerSecond", () => {
     });
   });
 
-  test("records tokens per second without model", () => {
+  test("records tokens per second with unknown model", () => {
     // 150 tokens in 3 seconds = 50 tokens/sec
-    reportTokensPerSecond("anthropic", testAgent, undefined, 150, 3);
+    reportTokensPerSecond("anthropic", testAgent, "unknown", 150, 3, "api");
 
     expect(histogramObserve).toHaveBeenCalledWith({
       labels: {
@@ -960,6 +997,7 @@ describe("reportTokensPerSecond", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "unknown",
       },
       value: 50,
@@ -968,26 +1006,26 @@ describe("reportTokensPerSecond", () => {
   });
 
   test("skips reporting for zero output tokens", () => {
-    reportTokensPerSecond("openai", testAgent, "gpt-4", 0, 2);
+    reportTokensPerSecond("openai", testAgent, "gpt-4", 0, 2, "api");
 
     expect(histogramObserve).not.toHaveBeenCalled();
   });
 
   test("skips reporting for zero duration", () => {
-    reportTokensPerSecond("openai", testAgent, "gpt-4", 100, 0);
+    reportTokensPerSecond("openai", testAgent, "gpt-4", 100, 0, "api");
 
     expect(histogramObserve).not.toHaveBeenCalled();
   });
 
   test("skips reporting for negative duration", () => {
-    reportTokensPerSecond("openai", testAgent, "gpt-4", 100, -1);
+    reportTokensPerSecond("openai", testAgent, "gpt-4", 100, -1, "api");
 
     expect(histogramObserve).not.toHaveBeenCalled();
   });
 
   test("calculates correct tokens/sec for fast response", () => {
     // 50 tokens in 0.5 seconds = 100 tokens/sec
-    reportTokensPerSecond("gemini", testAgent, "gemini-pro", 50, 0.5);
+    reportTokensPerSecond("gemini", testAgent, "gemini-pro", 50, 0.5, "api");
 
     expect(histogramObserve).toHaveBeenCalledWith({
       labels: {
@@ -996,6 +1034,7 @@ describe("reportTokensPerSecond", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "gemini-pro",
       },
       value: 100,
@@ -1005,7 +1044,7 @@ describe("reportTokensPerSecond", () => {
 
   test("calculates correct tokens/sec for slow response", () => {
     // 200 tokens in 10 seconds = 20 tokens/sec
-    reportTokensPerSecond("anthropic", testAgent, "claude-3", 200, 10);
+    reportTokensPerSecond("anthropic", testAgent, "claude-3", 200, 10, "api");
 
     expect(histogramObserve).toHaveBeenCalledWith({
       labels: {
@@ -1014,6 +1053,7 @@ describe("reportTokensPerSecond", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "claude-3",
       },
       value: 20,
@@ -1029,6 +1069,7 @@ describe("reportTokensPerSecond", () => {
       "gpt-4",
       100,
       2,
+      "api",
       "external-tps-123",
     );
 
@@ -1039,6 +1080,7 @@ describe("reportTokensPerSecond", () => {
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
+        source: "api",
         model: "gpt-4",
       },
       value: 50,

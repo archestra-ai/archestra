@@ -1,6 +1,6 @@
 {
   "name": "@shared",
-  "version": "1.0.52",
+  "version": "1.2.3",
   "description": "",
   "type": "module",
   "private": true,
@@ -25,15 +25,14 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "better-auth": "1.4.19",
+    "better-auth": "1.5.5",
     "zod": "^4.3.4"
   },
   "devDependencies": {
-    "@hey-api/openapi-ts": "^0.92.3",
+    "@hey-api/openapi-ts": "^0.94.0",
     "@types/node": "^25",
-    "knip": "^5.83.0",
-    "tsx": "^4.21.0",
+    "knip": "^5.85.0",
     "typescript": "^5.9.2",
-    "vitest": "^4.0.18"
+    "vitest": "^4.1.0"
   }
 }

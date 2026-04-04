@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import websocketService from "@/lib/websocket";
+import websocketService from "@/lib/websocket/websocket";
 
 /**
  * Establishes the shared WebSocket connection once the client hydrates.

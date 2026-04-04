@@ -1,10 +1,16 @@
 "use client";
 
-import { DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD } from "@shared";
+import {
+  DEFAULT_ADMIN_EMAIL,
+  DEFAULT_ADMIN_PASSWORD,
+  DocsPage,
+  getDocsUrl,
+} from "@shared";
 import { AlertTriangle } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { useDefaultCredentialsEnabled } from "@/lib/auth.query";
+import { useDefaultCredentialsEnabled } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 
 export function DefaultCredentialsWarning({
@@ -42,14 +48,16 @@ export function DefaultCredentialsWarning({
           <span>
             Default credentials
             {" - "}
-            <a
-              href="https://archestra.ai/docs/platform-deployment#authentication--security:~:text=ARCHESTRA_AUTH_ADMIN_EMAIL"
-              target="_blank"
-              rel="noopener noreferrer"
+            <ExternalDocsLink
+              href={getDocsUrl(
+                DocsPage.PlatformDeployment,
+                "authentication--security:~:text=ARCHESTRA_AUTH_ADMIN_EMAIL",
+              )}
               className="underline font-medium"
+              showIcon={false}
             >
               Fix
-            </a>
+            </ExternalDocsLink>
           </span>
         </p>
       </div>
@@ -83,14 +91,16 @@ export function DefaultCredentialsWarning({
           </div>
         </div>
         <p className="mt-1">
-          <a
-            href="https://archestra.ai/docs/platform-deployment#authentication--security"
-            target="_blank"
-            rel="noopener noreferrer"
+          <ExternalDocsLink
+            href={getDocsUrl(
+              DocsPage.PlatformDeployment,
+              "authentication--security",
+            )}
             className="inline-flex items-center underline"
+            showIcon={false}
           >
             Set ENV
-          </a>
+          </ExternalDocsLink>
           {alwaysShow ? (
             " to change"
           ) : (

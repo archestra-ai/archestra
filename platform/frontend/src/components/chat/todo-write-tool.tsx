@@ -49,10 +49,6 @@ export function TodoWriteTool({
 
   // Count todos by status
   const completedCount = todos.filter((t) => t.status === "completed").length;
-  const _inProgressCount = todos.filter(
-    (t) => t.status === "in_progress",
-  ).length;
-  const _pendingCount = todos.filter((t) => t.status === "pending").length;
 
   const getStatusIcon = (status: Todo["status"]) => {
     switch (status) {

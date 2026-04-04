@@ -20,7 +20,6 @@ import type {
   LLMStreamAdapter,
   Openrouter,
 } from "@/types";
-import { MockOpenAIClient } from "../mock-openai-client";
 import {
   OpenAIRequestAdapter,
   OpenAIResponseAdapter,
@@ -223,12 +222,8 @@ export const openrouterAdapterFactory: LLMProvider<
 
   createClient(
     apiKey: string | undefined,
-    options?: CreateClientOptions,
+    options: CreateClientOptions,
   ): OpenAIProvider {
-    if (options?.mockMode) {
-      return new MockOpenAIClient() as unknown as OpenAIProvider;
-    }
-
     if (!apiKey) {
       throw new Error("API key required for OpenRouter");
     }
@@ -238,10 +233,11 @@ export const openrouterAdapterFactory: LLMProvider<
     // avoid `Bearer Bearer <key>`.
     const rawApiKey = apiKey.replace(/^Bearer\s+/i, "");
 
-    const customFetch = options?.agent
+    const customFetch = options.agent
       ? metrics.llm.getObservableFetch(
           "openrouter",
           options.agent,
+          options.source,
           options.externalAgentId,
         )
       : undefined;
@@ -257,11 +253,11 @@ export const openrouterAdapterFactory: LLMProvider<
 
     return new OpenAIProvider({
       apiKey: rawApiKey,
-      baseURL: options?.baseUrl ?? config.llm.openrouter.baseUrl,
+      baseURL: options.baseUrl ?? config.llm.openrouter.baseUrl,
       fetch: customFetch,
       defaultHeaders: {
         ...attributionHeaders,
-        ...(options?.defaultHeaders ?? {}),
+        ...(options.defaultHeaders ?? {}),
       },
     });
   },

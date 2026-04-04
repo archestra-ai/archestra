@@ -83,7 +83,7 @@ tests:
           path: spec.replicas
           value: 3
 
-  - it: should configure RollingUpdate deployment strategy with zero-downtime defaults
+  - it: should configure RollingUpdate deployment strategy with percentage defaults
     documentIndex: 1
     asserts:
       - equal:
@@ -91,10 +91,10 @@ tests:
           value: RollingUpdate
       - equal:
           path: spec.strategy.rollingUpdate.maxSurge
-          value: 1
+          value: "25%"
       - equal:
           path: spec.strategy.rollingUpdate.maxUnavailable
-          value: 0
+          value: "25%"
 
   - it: should allow overriding deployment strategy
     documentIndex: 1
@@ -270,10 +270,10 @@ tests:
     documentIndex: 1
     asserts:
       - equal:
-          path: spec.template.spec.initContainers[0].name
+          path: spec.template.spec.initContainers[1].name
           value: wait-for-postgres
       - equal:
-          path: spec.template.spec.initContainers[0].image
+          path: spec.template.spec.initContainers[1].image
           value: busybox:1.36
 
   - it: should configure init container with env vars and parse ARCHESTRA_DATABASE_URL
@@ -281,13 +281,13 @@ tests:
     asserts:
       # Init container should have ARCHESTRA_DATABASE_URL env var
       - contains:
-          path: spec.template.spec.initContainers[0].env
+          path: spec.template.spec.initContainers[1].env
           content:
             name: ARCHESTRA_DATABASE_URL
           any: true
       # Command should parse host/port from ARCHESTRA_DATABASE_URL at runtime
       - matchRegex:
-          path: spec.template.spec.initContainers[0].command[2]
+          path: spec.template.spec.initContainers[1].command[2]
           pattern: ".*ARCHESTRA_DATABASE_URL.*"
 
   - it: should wait for PostgreSQL in init container when waitForPostgres is enabled
@@ -296,10 +296,10 @@ tests:
       archestra.initContainers.waitForPostgres.enabled: true
     asserts:
       - equal:
-          path: spec.template.spec.initContainers[0].name
+          path: spec.template.spec.initContainers[1].name
           value: wait-for-postgres
       - matchRegex:
-          path: spec.template.spec.initContainers[0].command[2]
+          path: spec.template.spec.initContainers[1].command[2]
           pattern: ".*nc -z.*"
 
   - it: should skip PostgreSQL wait in init container when waitForPostgres is disabled
@@ -308,13 +308,13 @@ tests:
       archestra.initContainers.waitForPostgres.enabled: false
     asserts:
       - equal:
-          path: spec.template.spec.initContainers[0].name
+          path: spec.template.spec.initContainers[1].name
           value: wait-for-postgres
       - matchRegex:
-          path: spec.template.spec.initContainers[0].command[2]
+          path: spec.template.spec.initContainers[1].command[2]
           pattern: ".*Skipping PostgreSQL readiness check.*"
       - notMatchRegex:
-          path: spec.template.spec.initContainers[0].command[2]
+          path: spec.template.spec.initContainers[1].command[2]
           pattern: ".*nc -z.*"
 
   - it: should set ARCHESTRA_DATABASE_URL with postgres:// scheme
@@ -358,6 +358,8 @@ tests:
               value: NAMESPACE
             - name: ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER
               value: "true"
+            - name: ARCHESTRA_PROCESS_TYPE
+              value: "web"
 
   - it: should add custom environment variables when archestra.env is set
     documentIndex: 1
@@ -522,6 +524,139 @@ tests:
       - equal:
           path: spec.template.spec.volumes[0].secret.secretName
           value: "my-kubeconfig"
+
+  - it: should not mount extra volumes or volume mounts by default
+    documentIndex: 1
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].volumeMounts
+      - isNull:
+          path: spec.template.spec.volumes
+
+  - it: should mount extra secret-backed volume and volume mount when configured
+    documentIndex: 1
+    set:
+      archestra.extraVolumes:
+        - name: vertex-ai-credentials
+          secret:
+            secretName: vertex-ai-credentials
+            items:
+              - key: service-account.json
+                path: vertex-ai-key.json
+      archestra.extraVolumeMounts:
+        - name: vertex-ai-credentials
+          mountPath: /var/run/gcp
+          readOnly: true
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: vertex-ai-credentials
+            secret:
+              secretName: vertex-ai-credentials
+              items:
+                - key: service-account.json
+                  path: vertex-ai-key.json
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: vertex-ai-credentials
+            mountPath: /var/run/gcp
+            readOnly: true
+
+  - it: should mount diagnostics volume and env var when diagnostics are enabled
+    documentIndex: 1
+    set:
+      archestra.diagnostics.enabled: true
+      archestra.worker.enabled: false
+      archestra.deploymentStrategy.type: Recreate
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_NODE_DIAGNOSTIC_DIR
+            value: /var/diagnostics
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: diagnostics
+            persistentVolumeClaim:
+              claimName: RELEASE-NAME-archestra-platform-diagnostics
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: diagnostics
+            mountPath: /var/diagnostics
+            readOnly: false
+
+  - it: should use an existing diagnostics claim when configured
+    documentIndex: 1
+    set:
+      archestra.diagnostics.enabled: true
+      archestra.diagnostics.existingClaimName: customer-diagnostics
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: diagnostics
+            persistentVolumeClaim:
+              claimName: customer-diagnostics
+
+  - it: should fail when chart-managed diagnostics use ReadWriteOnce with web and worker pods
+    set:
+      archestra.diagnostics.enabled: true
+      archestra.replicaCount: 1
+      archestra.worker.enabled: true
+      archestra.worker.replicaCount: 1
+      archestra.diagnostics.accessModes:
+        - ReadWriteOnce
+    asserts:
+      - failedTemplate:
+          errorMessage: "Configuration error: archestra.diagnostics.enabled with a chart-managed claim requires ReadWriteMany access when more than one diagnostics-writing pod can run concurrently. Use archestra.diagnostics.accessModes=[ReadWriteMany] with a compatible storage class, or disable diagnostics for multi-pod/shared-rollout environments."
+
+  - it: should fail when chart-managed diagnostics use ReadWriteOnce with rolling surge updates
+    set:
+      archestra.diagnostics.enabled: true
+      archestra.worker.enabled: false
+      archestra.replicaCount: 1
+      archestra.deploymentStrategy.type: RollingUpdate
+      archestra.deploymentStrategy.rollingUpdate.maxSurge: 1
+      archestra.diagnostics.accessModes:
+        - ReadWriteOnce
+    asserts:
+      - failedTemplate:
+          errorMessage: "Configuration error: archestra.diagnostics.enabled with a chart-managed claim requires ReadWriteMany access when more than one diagnostics-writing pod can run concurrently. Use archestra.diagnostics.accessModes=[ReadWriteMany] with a compatible storage class, or disable diagnostics for multi-pod/shared-rollout environments."
+
+  - it: should allow chart-managed diagnostics with ReadWriteMany
+    documentIndex: 1
+    set:
+      archestra.diagnostics.enabled: true
+      archestra.replicaCount: 4
+      archestra.worker.enabled: true
+      archestra.worker.replicaCount: 3
+      archestra.diagnostics.accessModes:
+        - ReadWriteMany
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: diagnostics
+            persistentVolumeClaim:
+              claimName: RELEASE-NAME-archestra-platform-diagnostics
+
+  - it: should set heap snapshot env var when diagnostics heap snapshots are enabled
+    documentIndex: 1
+    set:
+      archestra.diagnostics.enabled: true
+      archestra.worker.enabled: false
+      archestra.deploymentStrategy.type: Recreate
+      archestra.diagnostics.heapSnapshotsNearHeapLimit: 1
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_NODE_HEAPSNAPSHOT_NEAR_HEAP_LIMIT
+            value: "1"
 
   - it: should set ARCHESTRA_ORCHESTRATOR_KUBECONFIG env var when kubeconfig volume is mounted
     documentIndex: 1
@@ -1009,6 +1144,28 @@ tests:
               secretKeyRef:
                 name: RELEASE-NAME-archestra-platform-auth
                 key: auth-secret
+
+  - it: should set ARCHESTRA_AUTH_SECRET from configured existing secret
+    documentIndex: 1
+    set:
+      archestra.authSecret.existingSecretName: external-auth-secret
+      archestra.authSecret.existingSecretKey: external-auth-key
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_AUTH_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: external-auth-secret
+                key: external-auth-key
+
+  - it: should fail when auth secret key is set without auth secret name
+    set:
+      archestra.authSecret.existingSecretKey: external-auth-key
+    asserts:
+      - failedTemplate:
+          errorMessage: "archestra.authSecret.existingSecretKey requires archestra.authSecret.existingSecretName to also be set."
 
   - it: should use secretKeyRef for explicit ARCHESTRA_AUTH_SECRET (sensitive env var)
     documentIndex: 1
@@ -2031,9 +2188,12 @@ tests:
     asserts:
       - lengthEqual:
           path: spec.template.spec.initContainers
-          count: 1
+          count: 2
       - equal:
           path: spec.template.spec.initContainers[0].name
+          value: setup-postgres-extensions
+      - equal:
+          path: spec.template.spec.initContainers[1].name
           value: wait-for-postgres
 
   - it: should have vault-secrets init container when enabled
@@ -2047,12 +2207,15 @@ tests:
     asserts:
       - lengthEqual:
           path: spec.template.spec.initContainers
-          count: 2
+          count: 3
       - equal:
           path: spec.template.spec.initContainers[0].name
           value: vault-secrets
       - equal:
           path: spec.template.spec.initContainers[1].name
+          value: setup-postgres-extensions
+      - equal:
+          path: spec.template.spec.initContainers[2].name
           value: wait-for-postgres
 
   - it: should use the main archestra platform image for vault-secrets init container
@@ -2159,10 +2322,10 @@ tests:
           key: url
     asserts:
       - equal:
-          path: spec.template.spec.initContainers[1].name
+          path: spec.template.spec.initContainers[2].name
           value: wait-for-postgres
       - contains:
-          path: spec.template.spec.initContainers[1].volumeMounts
+          path: spec.template.spec.initContainers[2].volumeMounts
           content:
             name: vault-secrets
             mountPath: /vault/secrets
@@ -2178,10 +2341,10 @@ tests:
           key: url
     asserts:
       - equal:
-          path: spec.template.spec.initContainers[1].name
+          path: spec.template.spec.initContainers[2].name
           value: wait-for-postgres
       - matchRegex:
-          path: spec.template.spec.initContainers[1].command[2]
+          path: spec.template.spec.initContainers[2].command[2]
           pattern: "/vault/secrets/env"
 
   - it: should create vault-secrets emptyDir volume with Memory medium when enabled
@@ -2284,4 +2447,61 @@ tests:
           content:
             name: vault-secrets
             mountPath: /vault/secrets
+            readOnly: true
+
+  - it: should support extra volumes alongside kubeconfig and vault-secrets
+    documentIndex: 1
+    set:
+      archestra.orchestrator.kubernetes.kubeconfig.enabled: true
+      archestra.orchestrator.kubernetes.kubeconfig.secretName: "my-kubeconfig"
+      archestra.orchestrator.kubernetes.kubeconfig.mountPath: "/etc/kubeconfig"
+      archestra.initContainers.vaultSecrets.enabled: true
+      archestra.initContainers.vaultSecrets.secrets:
+        - envVar: DATABASE_URL
+          path: secret/data/team/database_url
+          key: url
+      archestra.extraVolumes:
+        - name: vertex-ai-credentials
+          secret:
+            secretName: vertex-ai-credentials
+      archestra.extraVolumeMounts:
+        - name: vertex-ai-credentials
+          mountPath: /var/run/gcp
+          readOnly: true
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: kubeconfig
+            secret:
+              secretName: "my-kubeconfig"
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: vault-secrets
+            emptyDir:
+              medium: Memory
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: vertex-ai-credentials
+            secret:
+              secretName: vertex-ai-credentials
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: kubeconfig
+            mountPath: "/etc/kubeconfig"
+            readOnly: true
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: vault-secrets
+            mountPath: /vault/secrets
+            readOnly: true
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: vertex-ai-credentials
+            mountPath: /var/run/gcp
             readOnly: true

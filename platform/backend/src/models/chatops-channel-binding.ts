@@ -1,16 +1,30 @@
+import type { PaginationQuery } from "@shared";
 import {
   and,
+  asc,
+  count,
   desc,
   eq,
+  ilike,
   inArray,
+  isNotNull,
   isNull,
   ne,
   notInArray,
+  or,
   sql,
 } from "drizzle-orm";
 import db, { schema } from "@/database";
+import {
+  createPaginatedResult,
+  type PaginatedResult,
+} from "@/database/utils/pagination";
 import logger from "@/logging";
-import type { ChatOpsProviderType } from "@/types/chatops";
+import type {
+  ChatOpsProviderType,
+  ChatOpsStatus,
+  SortingQueryFor,
+} from "@/types";
 import type {
   ChatOpsChannelBinding,
   InsertChatOpsChannelBinding,
@@ -128,6 +142,128 @@ class ChatOpsChannelBindingModel {
   }
 
   /**
+   * Find all bindings for an organization with server-side pagination,
+   * sorting, filtering, and status/search support.
+   * Returns paginated data plus configured/unassigned counts.
+   */
+  static async findAllPaginated(params: {
+    organizationId: string;
+    userEmail: string;
+    pagination: PaginationQuery;
+    sorting?: SortingQueryFor<["channelName", "createdAt"]>;
+    filters?: {
+      provider?: ChatOpsProviderType;
+      workspaceId?: string;
+      search?: string;
+      status?: ChatOpsStatus;
+    };
+  }): Promise<
+    PaginatedResult<ChatOpsChannelBinding> & {
+      counts: { configured: number; unassigned: number };
+      workspaces: Array<{ id: string; name: string }>;
+      hasDmBinding: boolean;
+    }
+  > {
+    const t = schema.chatopsChannelBindingsTable;
+    const { organizationId, userEmail, pagination, sorting, filters } = params;
+
+    // Global conditions (org + DM visibility + provider only — used for summary counts)
+    const globalConditions = [
+      eq(t.organizationId, organizationId),
+      // DM visibility: exclude other users' DMs
+      or(eq(t.isDm, false), eq(t.dmOwnerEmail, userEmail)),
+      ...(filters?.provider ? [eq(t.provider, filters.provider)] : []),
+    ];
+
+    // Filtered conditions (adds search + workspace on top of global)
+    const escapedSearch = filters?.search?.replace(/[%_\\]/g, "\\$&");
+    const filteredConditions = [
+      ...globalConditions,
+      ...(filters?.workspaceId ? [eq(t.workspaceId, filters.workspaceId)] : []),
+      ...(escapedSearch ? [ilike(t.channelName, `%${escapedSearch}%`)] : []),
+    ];
+
+    // Data conditions (adds status filter on top of filtered)
+    const dataConditions = [
+      ...filteredConditions,
+      ...(filters?.status === "configured"
+        ? [isNotNull(t.agentId)]
+        : filters?.status === "unassigned"
+          ? [isNull(t.agentId)]
+          : []),
+    ];
+
+    // Sorting
+    const direction = sorting?.sortDirection === "asc" ? asc : desc;
+    const orderByClause =
+      sorting?.sortBy === "channelName"
+        ? direction(t.channelName)
+        : direction(t.createdAt);
+
+    // Run data query, total count, configured count, unassigned count, and workspaces in parallel
+    const [
+      data,
+      [{ total }],
+      [{ configured }],
+      [{ unassigned }],
+      workspaces,
+      [{ dmCount }],
+    ] = await Promise.all([
+      db
+        .select()
+        .from(t)
+        .where(and(...dataConditions))
+        .orderBy(desc(t.isDm), orderByClause, asc(t.id))
+        .limit(pagination.limit)
+        .offset(pagination.offset),
+      db
+        .select({ total: count() })
+        .from(t)
+        .where(and(...dataConditions)),
+      db
+        .select({ configured: count() })
+        .from(t)
+        .where(and(...globalConditions, isNotNull(t.agentId))),
+      db
+        .select({ unassigned: count() })
+        .from(t)
+        .where(and(...globalConditions, isNull(t.agentId))),
+      db
+        .selectDistinct({ id: t.workspaceId, name: t.workspaceName })
+        .from(t)
+        .where(
+          and(
+            eq(t.organizationId, organizationId),
+            isNotNull(t.workspaceId),
+            isNotNull(t.workspaceName),
+            ...(filters?.provider ? [eq(t.provider, filters.provider)] : []),
+          ),
+        ),
+      db
+        .select({ dmCount: count() })
+        .from(t)
+        .where(and(...globalConditions, eq(t.isDm, true))),
+    ]);
+
+    return {
+      ...createPaginatedResult(
+        data as ChatOpsChannelBinding[],
+        Number(total),
+        pagination,
+      ),
+      counts: {
+        configured: Number(configured),
+        unassigned: Number(unassigned),
+      },
+      workspaces: workspaces.filter(
+        (w): w is { id: string; name: string } =>
+          w.id !== null && w.name !== null,
+      ),
+      hasDmBinding: Number(dmCount) > 0,
+    };
+  }
+
+  /**
    * Find all bindings for a specific agent
    */
   static async findByAgentId(
@@ -179,6 +315,31 @@ class ChatOpsChannelBindingModel {
           sql`${schema.chatopsChannelBindingsTable.channelId} LIKE 'dm:pending:%'`,
         ),
       )
+      .limit(1);
+
+    return (binding as ChatOpsChannelBinding) || null;
+  }
+
+  /**
+   * Find any existing DM binding for a provider + email, regardless of
+   * channelId or pending status. Used as a fallback when the DM channel ID
+   * changes (e.g., after bot reinstallation) and the pending lookup misses.
+   */
+  static async findDmBindingByEmail(
+    provider: ChatOpsProviderType,
+    dmOwnerEmail: string,
+  ): Promise<ChatOpsChannelBinding | null> {
+    const [binding] = await db
+      .select()
+      .from(schema.chatopsChannelBindingsTable)
+      .where(
+        and(
+          eq(schema.chatopsChannelBindingsTable.provider, provider),
+          eq(schema.chatopsChannelBindingsTable.isDm, true),
+          eq(schema.chatopsChannelBindingsTable.dmOwnerEmail, dmOwnerEmail),
+        ),
+      )
+      .orderBy(desc(schema.chatopsChannelBindingsTable.updatedAt))
       .limit(1);
 
     return (binding as ChatOpsChannelBinding) || null;
@@ -328,6 +489,16 @@ class ChatOpsChannelBindingModel {
           },
           "[ChatOpsChannelBinding] Removed stale DM bindings",
         );
+
+        // Inherit agentId from the deleted stale binding if the caller
+        // didn't provide one. This prevents losing the agent assignment
+        // when the DM channel ID changes (e.g., after bot reinstallation).
+        if (!input.agentId) {
+          const inheritedAgentId = deleted.find((b) => b.agentId)?.agentId;
+          if (inheritedAgentId) {
+            input.agentId = inheritedAgentId;
+          }
+        }
       }
     }
 
@@ -527,6 +698,28 @@ class ChatOpsChannelBindingModel {
       .returning();
 
     return deleted.length;
+  }
+
+  /**
+   * Find multiple bindings by IDs within an organization.
+   */
+  static async findByIds(
+    ids: string[],
+    organizationId: string,
+  ): Promise<ChatOpsChannelBinding[]> {
+    if (ids.length === 0) return [];
+
+    const bindings = await db
+      .select()
+      .from(schema.chatopsChannelBindingsTable)
+      .where(
+        and(
+          inArray(schema.chatopsChannelBindingsTable.id, ids),
+          eq(schema.chatopsChannelBindingsTable.organizationId, organizationId),
+        ),
+      );
+
+    return bindings as ChatOpsChannelBinding[];
   }
 
   /**

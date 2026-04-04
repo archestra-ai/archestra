@@ -36,6 +36,8 @@ export const CacheKey = {
   SlackUserEmail: "slack-user-email",
   /** Virtual API key brute-force rate limiting per IP */
   VirtualKeyRateLimit: "virtual-key-rate-limit",
+  /** Slack missing-scope notification throttle per workspace */
+  SlackScopeNotification: "slack-scope-notification",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];

@@ -1,11 +1,14 @@
+import { apiKey } from "@better-auth/api-key";
 import type { HookEndpointContext } from "@better-auth/core";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { sso } from "@better-auth/sso";
 import {
   ARCHESTRA_TOKEN_PREFIX,
+  AUTO_PROVISIONED_INVITATION_STATUS,
+  DEFAULT_APP_NAME,
+  IDENTITY_TRUSTED_PROVIDER_IDS,
   OAUTH_PAGES,
   OAUTH_SCOPES,
-  SSO_TRUSTED_PROVIDER_IDS,
 } from "@shared";
 import {
   allAvailableActions,
@@ -15,44 +18,34 @@ import {
 import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
-import {
-  admin,
-  apiKey,
-  jwt,
-  organization,
-  twoFactor,
-} from "better-auth/plugins";
+import { admin, jwt, organization, twoFactor } from "better-auth/plugins";
 import { createAccessControl } from "better-auth/plugins/access";
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { z } from "zod";
 import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
+import { LOG_LEVEL } from "@/logging/log-level";
 // Import directly from files to avoid circular dependency through barrel export
+import AgentModel from "@/models/agent";
 import InvitationModel from "@/models/invitation";
 import MemberModel from "@/models/member";
 import SessionModel from "@/models/session";
 
-const { ssoConfig, syncSsoRole, syncSsoTeams } =
-  config.enterpriseLicenseActivated
-    ? // biome-ignore lint/style/noRestrictedImports: EE-only SSO config
-      await import("./idp.ee")
-    : {
-        ssoConfig: undefined,
-        syncSsoRole: () => {},
-        syncSsoTeams: () => {},
-      };
+const { ssoConfig, syncSsoRole, syncSsoTeams } = config.enterpriseFeatures.core
+  ? // biome-ignore lint/style/noRestrictedImports: EE-only SSO config
+    await import("./idp.ee")
+  : {
+      ssoConfig: undefined,
+      syncSsoRole: () => {},
+      syncSsoTeams: () => {},
+    };
 
-const APP_NAME = "Archestra";
+const APP_NAME = DEFAULT_APP_NAME;
 const {
   api: { apiKeyAuthorizationHeaderName },
   frontendBaseUrl,
-  auth: {
-    secret,
-    cookieDomain,
-    trustedOrigins,
-    additionalTrustedSsoProviderIds,
-  },
+  auth: { secret, cookieDomain, trustedOrigins: staticTrustedOrigins },
 } = config;
 
 const ac = createAccessControl(allAvailableActions);
@@ -61,11 +54,30 @@ const adminRole = ac.newRole(allAvailableActions);
 const editorRole = ac.newRole(editorPermissions);
 const memberRole = ac.newRole(memberPermissions);
 
-// biome-ignore lint/suspicious/noExplicitAny: better-auth bs https://github.com/better-auth/better-auth/issues/5666
-export const auth: any = betterAuth({
+export const auth = betterAuth({
   appName: APP_NAME,
   baseURL: frontendBaseUrl,
   secret,
+  logger: {
+    disabled: LOG_LEVEL === "silent",
+    level: getBetterAuthLogLevel(LOG_LEVEL),
+    log(level, message, ...args) {
+      const formattedMessage = `[Better Auth] ${message}`;
+      const payload = args.length > 0 ? { args } : {};
+
+      if (level === "error") {
+        logger.error(payload, formattedMessage);
+        return;
+      }
+
+      if (level === "warn") {
+        logger.warn(payload, formattedMessage);
+        return;
+      }
+
+      logger.info(payload, formattedMessage);
+    },
+  },
   // Prevent JWT plugin's /token endpoint from conflicting with OAuth provider's /oauth2/token
   disabledPaths: ["/token"],
   ...(config.authRateLimitDisabled ? { rateLimit: { enabled: false } } : {}),
@@ -76,7 +88,12 @@ export const auth: any = betterAuth({
       ac,
       dynamicAccessControl: {
         enabled: true,
-        maximumRolesPerOrganization: 50, // Configurable limit for custom roles
+        /**
+         * By default, the maximum number of roles that can be created for an organization is infinite
+         * You can also pass a function that returns a number.
+         * https://better-auth.com/docs/plugins/organization#maximumrolesperorganization
+         */
+        // maximumRolesPerOrganization: 50,
         validateRoleName: async (roleName: string) => {
           // Role names must be lowercase alphanumeric with underscores
           if (!/^[a-z0-9_]+$/.test(roleName)) {
@@ -104,6 +121,10 @@ export const auth: any = betterAuth({
               type: "string",
               required: true,
             },
+            description: {
+              type: "string",
+              required: false,
+            },
           },
         },
       },
@@ -124,6 +145,11 @@ export const auth: any = betterAuth({
       enableSessionForAPIKeys: true,
       apiKeyHeaders: [apiKeyAuthorizationHeaderName],
       defaultPrefix: ARCHESTRA_TOKEN_PREFIX,
+      startingCharactersConfig: {
+        shouldStore: true,
+        // Store enough characters to show `archestra_8594...` style previews.
+        charactersLength: 14,
+      },
       rateLimit: {
         enabled: false,
       },
@@ -159,6 +185,10 @@ export const auth: any = betterAuth({
       allowDynamicClientRegistration: true,
       allowUnauthenticatedClientRegistration: true,
       scopes: [...OAUTH_SCOPES],
+      silenceWarnings: {
+        oauthAuthServerConfig: true,
+        openidConfig: true,
+      },
     }),
   ],
 
@@ -168,7 +198,7 @@ export const auth: any = betterAuth({
     },
   },
 
-  trustedOrigins,
+  trustedOrigins: getTrustedOriginsForAuthRequest,
 
   database: drizzleAdapter(db, {
     provider: "pg", // or "mysql", "sqlite"
@@ -206,16 +236,11 @@ export const auth: any = betterAuth({
     accountLinking: {
       enabled: true,
       /**
-       * Trust SSO providers for automatic account linking
-       * This allows existing users to sign in with SSO without manual linking
-       *
-       * Combines default trusted providers from @shared with additional ones
-       * configured via ARCHESTRA_AUTH_TRUSTED_SSO_PROVIDER_IDS env var
+       * Trust built-in SSO providers plus any identity providers configured by users.
+       * This allows existing users to sign in with built-in providers and custom
+       * generic OIDC/SAML providers without an env var override.
        */
-      trustedProviders: [
-        ...SSO_TRUSTED_PROVIDER_IDS,
-        ...additionalTrustedSsoProviderIds,
-      ],
+      trustedProviders: getTrustedAccountLinkingProviderIds,
       /**
        * Don't allow linking accounts with different emails. From the better-auth typescript
        * annotations they mention for this attribute:
@@ -345,7 +370,89 @@ export const auth: any = betterAuth({
   },
 });
 
+function getBetterAuthLogLevel(
+  logLevel: string,
+): "debug" | "info" | "warn" | "error" | undefined {
+  if (logLevel === "trace") {
+    return "debug";
+  }
+
+  if (logLevel === "fatal") {
+    return "error";
+  }
+
+  if (
+    logLevel === "debug" ||
+    logLevel === "info" ||
+    logLevel === "warn" ||
+    logLevel === "error"
+  ) {
+    return logLevel;
+  }
+
+  return undefined;
+}
+
 export type BetterAuth = typeof auth;
+
+/**
+ * Better Auth applies `trustedOrigins` to OIDC discovery during SSO provider
+ * registration, which means custom IdP setup can fail before the provider is
+ * saved unless the discovery origin is already trusted:
+ * https://better-auth.com/docs/plugins/sso#trusted-origins
+ *
+ * Archestra admins are explicitly configuring their own IdPs, so we widen
+ * origin trust only for provider registration instead of requiring per-IdP
+ * allowlisting. Better Auth also invokes this callback with `request`
+ * undefined during internal `auth.api` calls, which is the registration path
+ * used by `IdentityProviderModel.create()`.
+ */
+async function getTrustedOriginsForAuthRequest(request?: Request) {
+  const trustedOrigins = [...staticTrustedOrigins];
+
+  if (!shouldTrustAllOriginsForSsoRegistration(request)) {
+    return trustedOrigins;
+  }
+
+  return [
+    ...new Set([
+      ...trustedOrigins,
+      "http://*:*",
+      "https://*:*",
+      "http://*",
+      "https://*",
+    ]),
+  ];
+}
+
+async function getTrustedAccountLinkingProviderIds(): Promise<string[]> {
+  if (!config.enterpriseFeatures.core) {
+    return [...IDENTITY_TRUSTED_PROVIDER_IDS];
+  }
+
+  const { default: IdentityProviderModel } = await import(
+    // biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
+    "@/models/identity-provider.ee"
+  );
+
+  return IdentityProviderModel.getTrustedAccountLinkingProviderIds();
+}
+
+/**
+ * Keep the wildcard expansion scoped to SSO provider registration so every
+ * other auth request still uses the configured trusted origins unchanged.
+ */
+function shouldTrustAllOriginsForSsoRegistration(request?: Request) {
+  if (!request) {
+    return true;
+  }
+
+  try {
+    return new URL(request.url).pathname.endsWith("/sso/register");
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Validates requests before they are processed by better-auth.
@@ -362,7 +469,7 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
     return ctx;
   }
 
-  logger.debug({ path, method }, "[auth:beforeHook] Processing auth request");
+  logger.trace({ path, method }, "[auth:beforeHook] Processing auth request");
 
   // Block invitation creation when invitations are disabled
   if (path === "/organization/invite-member" && method === "POST") {
@@ -445,7 +552,10 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
       "[auth:beforeHook] Invitation found, validating",
     );
 
-    if (status !== "pending") {
+    if (
+      status !== "pending" &&
+      !status?.startsWith(AUTO_PROVISIONED_INVITATION_STATUS)
+    ) {
       logger.debug(
         { invitationId, status },
         "[auth:beforeHook] Invitation not pending",
@@ -479,6 +589,67 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
       });
     }
 
+    // Handle auto-provisioned users: they already have a user record but no account.
+    // Delete the placeholder user and re-create the invitation as "pending" so
+    // better-auth can proceed with normal sign-up (creates fresh user + account).
+    if (status?.startsWith(AUTO_PROVISIONED_INVITATION_STATUS)) {
+      const [existingUser] = await db
+        .select({ id: schema.usersTable.id })
+        .from(schema.usersTable)
+        .where(eq(schema.usersTable.email, invitation.email))
+        .limit(1);
+
+      if (existingUser) {
+        // Find another user for inviterId FK (the original will be cascade-deleted)
+        const [inviterUser] = await db
+          .select({ id: schema.usersTable.id })
+          .from(schema.usersTable)
+          .where(ne(schema.usersTable.id, existingUser.id))
+          .limit(1);
+
+        if (!inviterUser) {
+          throw new APIError("BAD_REQUEST", {
+            message: "Cannot complete signup",
+          });
+        }
+
+        logger.info(
+          { userId: existingUser.id, email: invitation.email },
+          "[auth:beforeHook] Removing auto-provisioned placeholder for sign-up",
+        );
+
+        // Save invitation data before cascade delete removes it
+        const savedInvitation = {
+          id: invitation.id,
+          organizationId: invitation.organizationId,
+          email: invitation.email,
+          role: invitation.role,
+          expiresAt: invitation.expiresAt,
+        };
+
+        // Delete placeholder user (cascades to member, invitation, user tokens)
+        await db
+          .delete(schema.usersTable)
+          .where(eq(schema.usersTable.id, existingUser.id));
+
+        // Re-create invitation as "pending" for better-auth's normal sign-up flow
+        await db.insert(schema.invitationsTable).values({
+          id: savedInvitation.id,
+          organizationId: savedInvitation.organizationId,
+          email: savedInvitation.email,
+          role: savedInvitation.role,
+          status: "pending",
+          expiresAt: savedInvitation.expiresAt,
+          inviterId: inviterUser.id,
+        });
+
+        logger.debug(
+          { invitationId: savedInvitation.id },
+          "[auth:beforeHook] Re-created invitation as pending for sign-up",
+        );
+      }
+    }
+
     logger.debug(
       { invitationId },
       "[auth:beforeHook] Invitation validated successfully",
@@ -500,13 +671,13 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
  * - Setting active organization for new sessions
  */
 export async function handleAfterHook(ctx: HookEndpointContext) {
-  const { path, method, body, context } = ctx;
+  const { path, method, body, context, request } = ctx;
 
   if (!path) {
     return ctx;
   }
 
-  logger.debug({ path, method }, "[auth:afterHook] Processing post-auth hook");
+  logger.trace({ path, method }, "[auth:afterHook] Processing post-auth hook");
 
   // Delete invitation from DB when canceled (instead of marking as canceled)
   if (path === "/organization/cancel-invitation" && method === "POST") {
@@ -648,20 +819,78 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         logger.error({ err: error }, "❌ Failed to set active organization:");
       }
 
+      // Ensure user has a personal default chat agent (idempotent)
+      const orgId =
+        newSession.session.activeOrganizationId ||
+        (await MemberModel.getFirstMembershipForUser(userId))?.organizationId;
+      if (orgId) {
+        try {
+          await AgentModel.ensurePersonalChatAgent({
+            userId,
+            organizationId: orgId,
+          });
+        } catch (error) {
+          logger.error(
+            { err: error },
+            "Failed to ensure personal chat agent on sign-in",
+          );
+        }
+      }
+
       // SSO Role & Team Sync: Synchronize role and team memberships based on SSO claims
       // Only applies to SSO logins (not regular email/password logins)
       if (path.startsWith("/sso/callback")) {
+        const providerIdHint = getSsoCallbackProviderId({
+          path,
+          requestUrl: request?.url,
+        });
+
         logger.debug(
-          { userId, email: user.email },
+          { userId, email: user.email, providerIdHint },
           "[auth:afterHook] Processing SSO role and team sync",
         );
 
         // Sync role first (based on role mapping rules)
-        await syncSsoRole(userId, user.email);
+        await syncSsoRole(userId, user.email, providerIdHint);
 
         // Then sync teams (based on SSO groups)
-        await syncSsoTeams(userId, user.email);
+        await syncSsoTeams(userId, user.email, providerIdHint);
       }
     }
   }
+}
+
+function getSsoCallbackProviderId(params: {
+  path: string;
+  requestUrl?: string;
+}): string | undefined {
+  const callbackPrefix = "/sso/callback/";
+
+  if (params.requestUrl) {
+    try {
+      const callbackPath = new URL(params.requestUrl).pathname;
+      const callbackIndex = callbackPath.indexOf(callbackPrefix);
+      if (callbackIndex >= 0) {
+        const providerId = callbackPath
+          .slice(callbackIndex + callbackPrefix.length)
+          .split("/")[0];
+        if (providerId) {
+          return providerId;
+        }
+      }
+    } catch {
+      // Fall back to the normalized route path below.
+    }
+  }
+
+  if (!params.path.startsWith(callbackPrefix)) {
+    return undefined;
+  }
+
+  const providerId = params.path.slice(callbackPrefix.length).split("/")[0];
+  if (providerId.startsWith(":")) {
+    return undefined;
+  }
+
+  return providerId || undefined;
 }

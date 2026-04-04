@@ -18,9 +18,12 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { CodeText } from "@/components/code-text";
+import {
+  CodeBlock,
+  CodeBlockCopyButton,
+} from "@/components/ai-elements/code-block";
 import { ConnectionBaseUrlSelect } from "@/components/connection-base-url-select";
-import { CopyableCode } from "@/components/copyable-code";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -42,15 +45,20 @@ import {
   useAgentDelegations,
   useAllProfileTools,
 } from "@/lib/agent-tools.query";
-import { useHasPermissions } from "@/lib/auth.query";
-import { useChatProfileMcpTools } from "@/lib/chat.query";
-import config from "@/lib/config";
-import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useChatProfileMcpTools } from "@/lib/chat/chat.query";
+import config from "@/lib/config/config";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
+import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
   useMcpServers,
   useMcpServersGroupedByCatalog,
-} from "@/lib/mcp-server.query";
-import { useFetchTeamTokenValue, useTokens } from "@/lib/team-token.query";
+} from "@/lib/mcp/mcp-server.query";
+import {
+  useFetchTeamTokenValue,
+  useTokens,
+} from "@/lib/teams/team-token.query";
 import { useFetchUserTokenValue, useUserToken } from "@/lib/user-token.query";
 
 const { externalProxyUrls, internalProxyUrl } = config.api;
@@ -68,14 +76,22 @@ export function McpConnectionInstructions({
   agentId,
   hideProfileSelector = false,
 }: McpConnectionInstructionsProps) {
+  const { catalogName, serverName } = useArchestraMcpIdentity();
+  const mcpAuthDocsUrl = getFrontendDocsUrl("mcp-authentication");
   const { data: profiles = [] } = useProfiles({
     filters: { agentTypes: ["profile", "mcp_gateway"] },
   });
   const { data: mcpServers = [] } = useMcpServers();
   const { data: catalogItems = [] } = useInternalMcpCatalog();
   const { data: userToken } = useUserToken();
+  const { data: canReadTeams } = useHasPermissions({
+    team: ["read"],
+  });
   const { data: hasAdminPermission } = useHasPermissions({
     mcpGateway: ["admin"],
+  });
+  const { data: hasTeamAdminPermission } = useHasPermissions({
+    mcpGateway: ["team-admin"],
   });
 
   const [copiedConfig, setCopiedConfig] = useState(false);
@@ -87,7 +103,10 @@ export function McpConnectionInstructions({
   );
 
   // Fetch tokens filtered by the selected profile's teams
-  const { data: tokensData } = useTokens({ profileId: selectedProfileId });
+  const { data: tokensData } = useTokens({
+    profileId: selectedProfileId,
+    enabled: !!canReadTeams,
+  });
   const tokens = tokensData?.tokens;
   const [showExposedToken, setShowExposedToken] = useState(false);
   const [exposedTokenValue, setExposedTokenValue] = useState<string | null>(
@@ -131,8 +150,11 @@ export function McpConnectionInstructions({
               name: string;
               description?: string | null;
             }>;
-            credentialSourceMcpServerId?: string | null;
-            useDynamicTeamCredential?: boolean;
+            mcpServerId?: string | null;
+            credentialResolutionMode?:
+              | "static"
+              | "dynamic"
+              | "enterprise_managed";
           }
         >(),
         archestraTools: [] as Array<{
@@ -147,8 +169,8 @@ export function McpConnectionInstructions({
       {
         server: (typeof mcpServers)[number];
         tools: Array<{ id: string; name: string; description?: string | null }>;
-        credentialSourceMcpServerId?: string | null;
-        useDynamicTeamCredential?: boolean;
+        mcpServerId?: string | null;
+        credentialResolutionMode?: "static" | "dynamic" | "enterprise_managed";
       }
     >();
 
@@ -183,15 +205,11 @@ export function McpConnectionInstructions({
           if (existing) {
             existing.tools.push(toolData);
           } else {
-            // Get credential source from the agent tool assignment
-            const credentialSource =
-              agentTool.credentialSourceMcpServerId ??
-              agentTool.executionSourceMcpServerId;
             groups.set(tool.catalogId, {
               server,
               tools: [toolData],
-              credentialSourceMcpServerId: credentialSource,
-              useDynamicTeamCredential: agentTool.useDynamicTeamCredential,
+              mcpServerId: agentTool.mcpServerId,
+              credentialResolutionMode: agentTool.credentialResolutionMode,
             });
           }
         }
@@ -261,7 +279,7 @@ export function McpConnectionInstructions({
         ? userToken
           ? `${userToken.tokenStart}***`
           : "ask-admin-for-access-token"
-        : hasAdminPermission && selectedTeamToken
+        : (hasAdminPermission || hasTeamAdminPermission) && selectedTeamToken
           ? `${selectedTeamToken.tokenStart}***`
           : "ask-admin-for-access-token";
 
@@ -270,7 +288,7 @@ export function McpConnectionInstructions({
       JSON.stringify(
         {
           mcpServers: {
-            archestra: {
+            [serverName]: {
               url: mcpUrl,
               headers: {
                 Authorization: `Bearer ${tokenForDisplay}`,
@@ -281,7 +299,7 @@ export function McpConnectionInstructions({
         null,
         2,
       ),
-    [mcpUrl, tokenForDisplay],
+    [mcpUrl, serverName, tokenForDisplay],
   );
 
   const handleExposeToken = useCallback(async () => {
@@ -325,7 +343,7 @@ export function McpConnectionInstructions({
     const fullConfig = JSON.stringify(
       {
         mcpServers: {
-          archestra: {
+          [serverName]: {
             url: mcpUrl,
             headers: {
               Authorization: `Bearer ${tokenForDisplay}`,
@@ -371,7 +389,7 @@ export function McpConnectionInstructions({
     const fullConfig = JSON.stringify(
       {
         mcpServers: {
-          archestra: {
+          [serverName]: {
             url: mcpUrl,
             headers: {
               Authorization: `Bearer ${tokenValue}`,
@@ -390,6 +408,7 @@ export function McpConnectionInstructions({
     setIsCopyingConfig(false);
   }, [
     mcpUrl,
+    serverName,
     isPersonalTokenSelected,
     selectedTeamToken,
     fetchUserTokenMutation,
@@ -446,26 +465,24 @@ export function McpConnectionInstructions({
             <div className="flex flex-wrap gap-2">
               {/* Archestra built-in tools */}
               {archestraTools.length > 0 && (
-                <ReadOnlyArchestraPill tools={archestraTools} />
+                <ReadOnlyArchestraPill
+                  tools={archestraTools}
+                  catalogName={catalogName}
+                />
               )}
               {/* MCP server tools */}
               {Array.from(mcpServerToolGroups.entries()).map(
                 ([
                   serverId,
-                  {
-                    server,
-                    tools,
-                    credentialSourceMcpServerId,
-                    useDynamicTeamCredential,
-                  },
+                  { server, tools, mcpServerId, credentialResolutionMode },
                 ]) => (
                   <ReadOnlyMcpServerPill
                     key={serverId}
                     server={server}
                     tools={tools}
-                    credentialSourceMcpServerId={credentialSourceMcpServerId}
+                    mcpServerId={mcpServerId}
                     catalogItems={catalogItems}
-                    useDynamicTeamCredential={useDynamicTeamCredential}
+                    credentialResolutionMode={credentialResolutionMode}
                   />
                 ),
               )}
@@ -508,20 +525,36 @@ export function McpConnectionInstructions({
             <TabsTrigger value="static-token" className="flex-1">
               Static Token
             </TabsTrigger>
+            <TabsTrigger value="enterprise-sso" className="flex-1">
+              Enterprise SSO
+            </TabsTrigger>
             <TabsTrigger value="oauth" className="flex-1">
               OAuth 2.1
             </TabsTrigger>
           </TabsList>
           <p className="text-xs text-muted-foreground">
             For external identity providers, use{" "}
-            <a
-              href="https://archestra.ai/docs/mcp-authentication#external-idp-jwks"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline hover:text-foreground"
-            >
-              JWKS authentication
-            </a>
+            {mcpAuthDocsUrl ? (
+              <>
+                <ExternalDocsLink
+                  href={`${mcpAuthDocsUrl}#enterprise-managed-authorization`}
+                  className="underline hover:text-foreground"
+                  showIcon={false}
+                >
+                  enterprise-managed authorization
+                </ExternalDocsLink>
+                {" or "}
+                <ExternalDocsLink
+                  href={`${mcpAuthDocsUrl}#external-idp-jwks`}
+                  className="underline hover:text-foreground"
+                  showIcon={false}
+                >
+                  JWKS authentication
+                </ExternalDocsLink>
+              </>
+            ) : (
+              "enterprise-managed authorization or JWKS authentication"
+            )}
           </p>
         </div>
 
@@ -601,71 +634,76 @@ export function McpConnectionInstructions({
             <p className="text-sm text-muted-foreground">
               Configuration for MCP clients:
             </p>
-            <div className="bg-muted rounded-md p-3 relative">
-              <div className="flex justify-end gap-2">
+            <CodeBlock
+              code={mcpConfig}
+              language="json"
+              contentStyle={{
+                fontSize: "0.75rem",
+                paddingRight: "5rem",
+              }}
+            >
+              <div className="flex gap-1 rounded-md border bg-background/95 p-1 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
                 <Button
                   variant="ghost"
-                  size="sm"
-                  className="gap-2 bg-transparent"
+                  size="icon"
+                  title={showExposedToken ? "Hide token" : "Expose token"}
                   onClick={handleExposeToken}
                   disabled={
                     isLoadingToken ||
-                    (!isPersonalTokenSelected && !hasAdminPermission)
+                    (!isPersonalTokenSelected &&
+                      !hasAdminPermission &&
+                      !hasTeamAdminPermission)
                   }
                 >
                   {isLoadingToken ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>Loading...</span>
-                    </>
+                    <Loader2 className="h-4 w-4 animate-spin" />
                   ) : showExposedToken ? (
-                    <>
-                      <EyeOff className="h-4 w-4" />
-                      <span>Hide token</span>
-                    </>
+                    <EyeOff className="h-4 w-4" />
                   ) : (
-                    <>
-                      <Eye className="h-4 w-4" />
-                      <span>Expose token</span>
-                    </>
+                    <Eye className="h-4 w-4" />
                   )}
+                  <span className="sr-only">
+                    {showExposedToken ? "Hide token" : "Expose token"}
+                  </span>
                 </Button>
                 <Button
                   variant="ghost"
-                  size="sm"
-                  className="gap-2 bg-transparent"
+                  size="icon"
+                  title="Copy with exposed token"
                   onClick={
-                    isPersonalTokenSelected || hasAdminPermission
+                    isPersonalTokenSelected ||
+                    hasAdminPermission ||
+                    hasTeamAdminPermission
                       ? handleCopyConfig
                       : handleCopyConfigWithoutRealToken
                   }
                   disabled={isCopyingConfig}
                 >
                   {isCopyingConfig ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>Copying...</span>
-                    </>
+                    <Loader2 className="h-4 w-4 animate-spin" />
                   ) : copiedConfig ? (
-                    <>
-                      <Check className="h-4 w-4 text-green-500" />
-                      <span>Copied!</span>
-                    </>
+                    <Check className="h-4 w-4 text-green-500" />
                   ) : (
-                    <>
-                      <Copy className="h-4 w-4" />
-                      <span>Copy with exposed token</span>
-                    </>
+                    <Copy className="h-4 w-4" />
                   )}
+                  <span className="sr-only">Copy with exposed token</span>
                 </Button>
               </div>
-              <pre className="text-xs whitespace-pre-wrap break-all">
-                <CodeText className="text-sm whitespace pre-wrap break-all">
-                  {mcpConfig}
-                </CodeText>
-              </pre>
-            </div>
+            </CodeBlock>
           </div>
+        </TabsContent>
+
+        <TabsContent value="enterprise-sso" className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Use this when your MCP client signs users into your enterprise
+            identity provider and supports the MCP
+            enterprise-managed-authorization flow. The client should obtain an
+            ID-JAG from your IdP and exchange it with the gateway&apos;s token
+            endpoint automatically. You only need the MCP Gateway URL in the
+            client configuration.
+          </p>
+
+          <OAuthConfigBlock mcpUrl={mcpUrl} />
         </TabsContent>
 
         {/* OAuth 2.1 Tab */}
@@ -706,13 +744,20 @@ function OAuthConfigBlock({ mcpUrl }: { mcpUrl: string }) {
       <p className="text-sm text-muted-foreground">
         Configuration for MCP clients:
       </p>
-      <CopyableCode value={oauthConfig} toastMessage="Configuration copied">
-        <pre className="text-xs whitespace-pre-wrap break-all">
-          <CodeText className="text-sm whitespace pre-wrap break-all">
-            {oauthConfig}
-          </CodeText>
-        </pre>
-      </CopyableCode>
+      <CodeBlock
+        code={oauthConfig}
+        language="json"
+        contentStyle={{
+          fontSize: "0.75rem",
+          paddingRight: "3.5rem",
+        }}
+      >
+        <CodeBlockCopyButton
+          title="Copy configuration"
+          onCopy={() => toast.success("Configuration copied")}
+          onError={() => toast.error("Failed to copy configuration")}
+        />
+      </CodeBlock>
     </div>
   );
 }
@@ -726,21 +771,21 @@ interface ReadOnlyMcpServerPillProps {
     catalogId?: string | null;
   };
   tools: Array<{ id: string; name: string; description?: string | null }>;
-  credentialSourceMcpServerId?: string | null;
+  mcpServerId?: string | null;
   catalogItems: Array<{
     id: string;
     name: string;
     description?: string | null;
   }>;
-  useDynamicTeamCredential?: boolean;
+  credentialResolutionMode?: "static" | "dynamic" | "enterprise_managed";
 }
 
 function ReadOnlyMcpServerPill({
   server,
   tools,
-  credentialSourceMcpServerId,
+  mcpServerId,
   catalogItems,
-  useDynamicTeamCredential,
+  credentialResolutionMode,
 }: ReadOnlyMcpServerPillProps) {
   const [open, setOpen] = useState(false);
 
@@ -763,22 +808,23 @@ function ReadOnlyMcpServerPill({
     : [];
 
   // Find the credential server to get owner email/team name
-  const credentialServer = credentialSourceMcpServerId
-    ? credentialServers.find((s) => s.id === credentialSourceMcpServerId)
+  const credentialServer = mcpServerId
+    ? credentialServers.find((s) => s.id === mcpServerId)
     : null;
 
   // Get credential display text (owner email or team name)
-  const credentialDisplayText = useDynamicTeamCredential
-    ? null
-    : credentialServer
-      ? (credentialServer.teamDetails?.name ??
-        credentialServer.ownerEmail ??
-        "Deleted user")
-      : null;
+  const credentialDisplayText =
+    credentialResolutionMode === "dynamic"
+      ? null
+      : credentialServer
+        ? (credentialServer.teamDetails?.name ??
+          credentialServer.ownerEmail ??
+          "Deleted user")
+        : null;
 
   // Check if we should show credential section
   const showCredentialSection =
-    useDynamicTeamCredential || credentialDisplayText;
+    credentialResolutionMode === "dynamic" || credentialDisplayText;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -822,7 +868,7 @@ function ReadOnlyMcpServerPill({
         {showCredentialSection && (
           <div className="p-4 border-b space-y-2 opacity-60">
             <Label className="text-sm font-medium">Credential</Label>
-            {useDynamicTeamCredential ? (
+            {credentialResolutionMode === "dynamic" ? (
               <div className="flex items-center gap-1 text-sm">
                 <Zap className="h-3 w-3 text-amber-500" />
                 <span className="font-medium">Resolve at call time</span>
@@ -973,10 +1019,14 @@ function ReadOnlySubagentPill({ agent }: ReadOnlySubagentPillProps) {
 
 // Read-only Archestra Tools Pill with popover
 interface ReadOnlyArchestraPillProps {
+  catalogName: string;
   tools: Array<{ id: string; name: string; description?: string | null }>;
 }
 
-function ReadOnlyArchestraPill({ tools }: ReadOnlyArchestraPillProps) {
+function ReadOnlyArchestraPill({
+  catalogName,
+  tools,
+}: ReadOnlyArchestraPillProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -987,7 +1037,7 @@ function ReadOnlyArchestraPill({ tools }: ReadOnlyArchestraPillProps) {
           size="sm"
           className="h-8 px-3 gap-1.5 text-xs"
         >
-          <span className="font-medium">Archestra</span>
+          <span className="font-medium">{catalogName}</span>
           <span className="text-muted-foreground">({tools.length})</span>
         </Button>
       </PopoverTrigger>
@@ -1000,9 +1050,9 @@ function ReadOnlyArchestraPill({ tools }: ReadOnlyArchestraPillProps) {
       >
         <div className="p-4 border-b flex items-start justify-between gap-2">
           <div>
-            <h4 className="font-semibold">Archestra Built-in Tools</h4>
+            <h4 className="font-semibold">{catalogName} Built-in Tools</h4>
             <p className="text-sm text-muted-foreground mt-1">
-              Built-in tools for managing Archestra resources
+              Built-in tools for managing {catalogName} resources
             </p>
           </div>
           <Button

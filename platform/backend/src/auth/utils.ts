@@ -9,7 +9,7 @@ export const hasPermission = async (
   requestHeaders: IncomingHttpHeaders,
 ): Promise<{ success: boolean; error: Error | null }> => {
   const headers = new Headers(requestHeaders as HeadersInit);
-  logger.debug(
+  logger.trace(
     { permissionCount: Object.keys(permissions).length },
     "[hasPermission] Checking permissions",
   );
@@ -21,7 +21,7 @@ export const hasPermission = async (
         permissions,
       },
     });
-    logger.debug(
+    logger.trace(
       { success: result.success },
       "[hasPermission] Session-based permission check result",
     );
@@ -31,7 +31,7 @@ export const hasPermission = async (
      * Handle API key sessions that don't have organization context
      * API keys have all permissions by default (see auth config)
      */
-    logger.debug(
+    logger.trace(
       { error: error instanceof Error ? error.message : "unknown" },
       "[hasPermission] Session permission check failed, trying API key",
     );
@@ -40,25 +40,25 @@ export const hasPermission = async (
     if (authHeader) {
       try {
         // Verify if this is a valid API key
-        logger.debug("[hasPermission] Verifying API key for permission check");
+        logger.trace("[hasPermission] Verifying API key for permission check");
         const apiKeyResult = await betterAuth.api.verifyApiKey({
           body: { key: authHeader },
         });
         if (apiKeyResult?.valid) {
           // API keys have all permissions, so allow the request
-          logger.debug(
+          logger.trace(
             "[hasPermission] Valid API key found, granting all permissions",
           );
           return { success: true, error: null };
         }
-        logger.debug("[hasPermission] API key verification returned invalid");
+        logger.trace("[hasPermission] API key verification returned invalid");
       } catch (_apiKeyError) {
         // Not a valid API key, return original error
-        logger.debug("[hasPermission] API key verification failed");
+        logger.trace("[hasPermission] API key verification failed");
         return { success: false, error: new Error("Invalid API key") };
       }
     }
-    logger.debug("[hasPermission] No valid API key provided");
+    logger.trace("[hasPermission] No valid API key provided");
     return { success: false, error: new Error("No API key provided") };
   }
 };

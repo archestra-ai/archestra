@@ -21,7 +21,9 @@ import {
   useRef,
   useState,
 } from "react";
+import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
+import { DialogStickyFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   Popover,
@@ -29,8 +31,13 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
-import { useBrowserStream } from "@/hooks/use-browser-stream";
-import { useConversation, useHasPlaywrightMcpTools } from "@/lib/chat.query";
+import { useProfile } from "@/lib/agent.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useBrowserStream } from "@/lib/browser-stream.hook";
+import {
+  useConversation,
+  useHasPlaywrightMcpTools,
+} from "@/lib/chat/chat.query";
 import { cn } from "@/lib/utils";
 import { LoadingSpinner } from "../loading";
 
@@ -67,9 +74,16 @@ export function BrowserPreviewContent({
   initialNavigateUrl,
   onInitialNavigateComplete,
 }: BrowserPreviewContentProps) {
+  const { data: canUpdateAgent } = useHasPermissions({ agent: ["team-admin"] });
+
   // Resolve agentId: prefer conversation's agentId, fall back to prop
   const { data: conversation } = useConversation(conversationId);
   const resolvedAgentId = conversation?.agentId ?? agentIdProp;
+
+  const { data: agent } = useProfile(resolvedAgentId);
+  const isSharedAgent = agent?.scope !== "personal";
+
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
 
   const {
     hasPlaywrightMcpTools,
@@ -82,7 +96,9 @@ export function BrowserPreviewContent({
     installBrowser,
     reinstallBrowser,
     assignToolsToAgent,
-  } = useHasPlaywrightMcpTools(resolvedAgentId, conversationId);
+  } = useHasPlaywrightMcpTools(resolvedAgentId, conversationId, {
+    autoAssignAfterInstall: !!canUpdateAgent,
+  });
   const [typeText, setTypeText] = useState("");
   const imageRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -502,14 +518,20 @@ export function BrowserPreviewContent({
                 // Installed but tools not assigned to current agent
                 <>
                   <Button
-                    onClick={() =>
-                      resolvedAgentId &&
-                      assignToolsToAgent({
-                        agentId: resolvedAgentId,
-                        conversationId,
-                      })
-                    }
-                    disabled={!resolvedAgentId}
+                    onClick={() => {
+                      if (!resolvedAgentId) return;
+                      const action = () =>
+                        assignToolsToAgent({
+                          agentId: resolvedAgentId,
+                          conversationId,
+                        });
+                      if (isSharedAgent) {
+                        setPendingAction(() => action);
+                      } else {
+                        action();
+                      }
+                    }}
+                    disabled={!resolvedAgentId || !canUpdateAgent}
                     className="mt-10"
                   >
                     Assign tools to agent
@@ -564,6 +586,41 @@ export function BrowserPreviewContent({
           </div>
         )}
       </div>
+
+      <FormDialog
+        open={!!pendingAction}
+        onOpenChange={(open) => {
+          if (!open) setPendingAction(null);
+        }}
+        title="Modify shared agent?"
+        description={
+          <>
+            This agent is shared across your{" "}
+            {agent?.scope === "team" ? "team" : "organization"}. Adding browser
+            tools will affect all users of this agent.
+          </>
+        }
+        size="small"
+      >
+        <DialogStickyFooter className="mt-0">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setPendingAction(null)}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={() => {
+              pendingAction?.();
+              setPendingAction(null);
+            }}
+          >
+            Confirm
+          </Button>
+        </DialogStickyFooter>
+      </FormDialog>
     </div>
   );
 }

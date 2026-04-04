@@ -149,7 +149,7 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
         {
           id: skillId,
           name: agent.name,
-          description: agent.description || agent.userPrompt || "",
+          description: agent.description || "",
           tags: [],
           inputModes: ["text"],
           outputModes: ["text"],
@@ -158,10 +158,9 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       return reply.send({
         name: agent.name,
-        description:
-          agent.description || agent.systemPrompt || agent.userPrompt || "",
+        description: agent.description || agent.systemPrompt || "",
         url: `${baseUrl}${endpoint}/${agent.id}`,
-        version: String(agent.promptVersion || 1),
+        version: "1",
         capabilities: {
           streaming: false,
           pushNotifications: false,

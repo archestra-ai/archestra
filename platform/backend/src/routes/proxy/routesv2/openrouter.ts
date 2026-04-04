@@ -41,7 +41,7 @@ const openrouterProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.OpenrouterChatCompletionsWithDefaultAgent,
         description:
           "Create a chat completion with OpenRouter (uses default agent)",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         body: Openrouter.API.ChatCompletionRequestSchema,
         headers: Openrouter.API.ChatCompletionsHeadersSchema,
         response: constructResponseSchema(
@@ -71,7 +71,7 @@ const openrouterProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.OpenrouterChatCompletionsWithAgent,
         description:
           "Create a chat completion with OpenRouter for a specific agent",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
         }),

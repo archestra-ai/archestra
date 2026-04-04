@@ -1,5 +1,10 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { handleApiError } from "./utils";
 
 const {
@@ -12,7 +17,6 @@ const {
   getAgentDelegations,
   syncAgentDelegations,
   deleteAgentDelegation,
-  getAllDelegationConnections,
 } = archestraApiSdk;
 
 type GetAllProfileToolsQueryParams = NonNullable<
@@ -40,7 +44,7 @@ export function useAllProfileTools({
     search?: string;
     agentId?: string;
     origin?: string;
-    credentialSourceMcpServerId?: string;
+    mcpServerId?: string;
     mcpServerOwnerId?: string;
   };
   skipPagination?: boolean;
@@ -57,7 +61,7 @@ export function useAllProfileTools({
         search: filters?.search,
         agentId: filters?.agentId,
         origin: filters?.origin,
-        credentialSourceMcpServerId: filters?.credentialSourceMcpServerId,
+        mcpServerId: filters?.mcpServerId,
         mcpServerOwnerId: filters?.mcpServerOwnerId,
         skipPagination,
       },
@@ -105,32 +109,32 @@ export function useAssignTool() {
     mutationFn: async ({
       agentId,
       toolId,
-      credentialSourceMcpServerId,
-      executionSourceMcpServerId,
-      useDynamicTeamCredential,
+      mcpServerId,
+      resolveAtCallTime,
+      credentialResolutionMode,
       skipInvalidation,
     }: {
       agentId: string;
       toolId: string;
-      credentialSourceMcpServerId?: string | null;
-      executionSourceMcpServerId?: string | null;
-      useDynamicTeamCredential?: boolean;
+      mcpServerId?: string | null;
+      resolveAtCallTime?: boolean;
+      credentialResolutionMode?: "static" | "dynamic" | "enterprise_managed";
       skipInvalidation?: boolean;
     }) => {
+      const body =
+        mcpServerId ||
+        resolveAtCallTime !== undefined ||
+        credentialResolutionMode
+          ? {
+              mcpServerId: mcpServerId ?? undefined,
+              resolveAtCallTime,
+              credentialResolutionMode,
+            }
+          : null;
+
       const { data } = await assignToolToAgent({
         path: { agentId, toolId },
-        body:
-          credentialSourceMcpServerId ||
-          executionSourceMcpServerId ||
-          useDynamicTeamCredential !== undefined
-            ? {
-                credentialSourceMcpServerId:
-                  credentialSourceMcpServerId || undefined,
-                executionSourceMcpServerId:
-                  executionSourceMcpServerId || undefined,
-                useDynamicTeamCredential,
-              }
-            : undefined,
+        body,
       });
       return { success: data?.success ?? false, agentId, skipInvalidation };
     },
@@ -168,14 +172,7 @@ export function useBulkAssignTools() {
       assignments,
       mcpServerId,
       skipInvalidation,
-    }: {
-      assignments: Array<{
-        agentId: string;
-        toolId: string;
-        credentialSourceMcpServerId?: string | null;
-        executionSourceMcpServerId?: string | null;
-        useDynamicTeamCredential?: boolean;
-      }>;
+    }: NonNullable<archestraApiTypes.BulkAssignToolsData["body"]> & {
       mcpServerId?: string | null;
       skipInvalidation?: boolean;
     }) => {
@@ -334,6 +331,9 @@ export function useAutoConfigurePolicies() {
         queryKey: ["tools"],
       });
       queryClient.invalidateQueries({
+        queryKey: ["tools-with-assignments"],
+      });
+      queryClient.invalidateQueries({
         queryKey: ["tool-invocation-policies"],
       });
       queryClient.invalidateQueries({
@@ -357,28 +357,6 @@ export const agentDelegationsQueryKeys = {
 };
 
 /**
- * Get all delegation connections for the organization.
- * Used for canvas visualization.
- */
-export function useAllDelegationConnections() {
-  return useQuery({
-    queryKey: agentDelegationsQueryKeys.connections,
-    queryFn: async () => {
-      const response = await getAllDelegationConnections();
-      if (response.error) {
-        handleApiError(response.error);
-      }
-      return (
-        response.data ?? {
-          connections: [],
-          agents: [],
-        }
-      );
-    },
-  });
-}
-
-/**
  * Get all delegation targets for an internal agent.
  */
 export function useAgentDelegations(agentId: string | undefined) {
@@ -394,6 +372,7 @@ export function useAgentDelegations(agentId: string | undefined) {
     },
     enabled: !!agentId,
     staleTime: 0, // Always refetch to ensure fresh data
+    placeholderData: keepPreviousData,
   });
 }
 

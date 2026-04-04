@@ -1,13 +1,21 @@
-import type { OrganizationCustomFont, OrganizationTheme } from "@shared";
+import type {
+  OrganizationCustomFont,
+  OrganizationTheme,
+  SupportedProvider,
+} from "@shared";
 import {
   boolean,
+  integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
+  uuid,
   varchar,
 } from "drizzle-orm/pg-core";
 import type {
   GlobalToolPolicy,
+  OrganizationChatLink,
   OrganizationCompressionScope,
   OrganizationLimitCleanupInterval,
 } from "@/types";
@@ -17,6 +25,7 @@ const organizationsTable = pgTable("organization", {
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
   logo: text("logo"),
+  logoDark: text("logo_dark"),
   createdAt: timestamp("created_at").notNull(),
   metadata: text("metadata"),
   limitCleanupInterval: varchar("limit_cleanup_interval")
@@ -38,9 +47,6 @@ const organizationsTable = pgTable("organization", {
     .$type<OrganizationCompressionScope>()
     .notNull()
     .default("organization"),
-  autoConfigureNewTools: boolean("auto_configure_new_tools")
-    .notNull()
-    .default(false),
   globalToolPolicy: varchar("global_tool_policy")
     .$type<GlobalToolPolicy>()
     .notNull()
@@ -53,6 +59,83 @@ const organizationsTable = pgTable("organization", {
   allowChatFileUploads: boolean("allow_chat_file_uploads")
     .notNull()
     .default(true),
+
+  /** Embedding model for knowledge base RAG — set explicitly when user configures embedding */
+  embeddingModel: text("embedding_model"),
+
+  /**
+   * @deprecated temporary transition field while embedding dimensions move to `models.embeddingDimensions`.
+   *
+   * TODO: Remove references and drop this column in a future release after existing org configs have been migrated.
+   */
+  embeddingDimensions: integer("embedding_dimensions"),
+
+  /**
+   * Chat API key used for generating embeddings.
+   * FK to chat_api_keys(id) ON DELETE SET NULL — enforced by migration only
+   * (Drizzle .references() causes TS circular inference: organization → chat-api-key → team → organization).
+   */
+  embeddingChatApiKeyId: uuid("embedding_chat_api_key_id"),
+
+  /**
+   * Chat API key used for reranking search results.
+   * FK to chat_api_keys(id) ON DELETE SET NULL — enforced by migration only (same circular issue).
+   */
+  rerankerChatApiKeyId: uuid("reranker_chat_api_key_id"),
+
+  /** LLM model used for reranking (e.g. "gpt-4o") */
+  rerankerModel: text("reranker_model"),
+
+  /** Organization-wide default LLM model ID (e.g. "gpt-4o") */
+  defaultLlmModel: text("default_llm_model"),
+
+  /** Provider for the default LLM model (e.g. "openai") */
+  defaultLlmProvider: text("default_llm_provider").$type<SupportedProvider>(),
+
+  /**
+   * Chat API key used for the default LLM model.
+   * FK to chat_api_keys(id) ON DELETE SET NULL — enforced by migration only (same circular issue).
+   */
+  defaultLlmApiKeyId: uuid("default_llm_api_key_id"),
+
+  /**
+   * Organization-wide default agent ID (fallback when member has no personal default).
+   * FK to agents(id) ON DELETE SET NULL — enforced by migration only
+   * (Drizzle .references() causes TS circular inference: organization → agent → ... → organization).
+   */
+  defaultAgentId: uuid("default_agent_id"),
+
+  /** Custom favicon (base64 PNG, same validation as logo) */
+  favicon: text("favicon"),
+
+  /** Custom browser tab title */
+  appName: text("app_name"),
+
+  /** OpenGraph description for link previews */
+  ogDescription: text("og_description"),
+
+  /** Custom footer text (replaces version display) */
+  footerText: text("footer_text"),
+
+  /** Optional quick links shown on the new chat page */
+  chatLinks: jsonb("chat_links").$type<OrganizationChatLink[]>(),
+
+  /** Chat input placeholder texts (cycles with typing animation) */
+  chatPlaceholders: text("chat_placeholders").array(),
+
+  /** Whether chat placeholders should use the typing animation */
+  animateChatPlaceholders: boolean("animate_chat_placeholders")
+    .notNull()
+    .default(true),
+
+  /** Square icon logo (28x28px recommended) for collapsed sidebar and chat loading indicator */
+  iconLogo: text("icon_logo"),
+
+  /** Support contact message shown in chat error cards */
+  chatErrorSupportMessage: text("chat_error_support_message"),
+
+  /** Organization-level 2FA visibility toggle */
+  showTwoFactor: boolean("show_two_factor").notNull().default(false),
 });
 
 export default organizationsTable;

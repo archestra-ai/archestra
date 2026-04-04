@@ -1,12 +1,19 @@
 "use client";
 import { SignedIn, UserButton } from "@daveyplate/better-auth-ui";
-import { E2eTestId } from "@shared";
+import {
+  COMMUNITY_DOCS_URL,
+  COMMUNITY_SLACK_URL,
+  E2eTestId,
+  GITHUB_REPO_NEW_ISSUE_URL,
+  GITHUB_REPO_URL,
+} from "@shared";
 import { requiredPagePermissionsMap } from "@shared/access-control";
 import {
   BookOpen,
   Bot,
   Bug,
   Cable,
+  Database,
   Github,
   type LucideIcon,
   MessageCircle,
@@ -17,11 +24,11 @@ import {
   Slack,
   Star,
 } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import React from "react";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
+import { AppLogo } from "@/components/app-logo";
 import { SidebarWarningsAccordion } from "@/components/sidebar-warnings-accordion";
 import {
   Sidebar,
@@ -36,14 +43,16 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
-  SidebarRail,
+  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { useIsAuthenticated } from "@/lib/auth.hook";
-import { usePermissionMap } from "@/lib/auth.query";
-import config from "@/lib/config";
-import { useGithubStars } from "@/lib/github.query";
-import { useOrgTheme } from "@/lib/theme.hook";
+import { useIsAuthenticated } from "@/lib/auth/auth.hook";
+import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
+import config from "@/lib/config/config";
+import { useEnterpriseFeature } from "@/lib/config/config.query";
+import { useGithubStars } from "@/lib/github/github.query";
+import { useAppIconLogo } from "@/lib/hooks/use-app-name";
+import { cn } from "@/lib/utils";
 
 interface NavSubItem {
   title: string;
@@ -74,8 +83,7 @@ const headerNavItems: NavItem[] = [
     title: "New Chat",
     url: "/chat",
     icon: MessageCircle,
-    customIsActive: (pathname: string, searchParams: URLSearchParams) =>
-      pathname === "/chat" && !searchParams.get("conversation"),
+    customIsActive: (pathname: string) => pathname === "/chat",
   },
 ];
 
@@ -88,12 +96,15 @@ const contentNavGroups: NavGroup[] = [
         title: "Agents",
         url: "/agents",
         icon: Bot,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/agents") &&
+          !pathname.startsWith("/agents/triggers"),
         subItems: [
           {
             title: "Triggers",
-            url: "/agent-triggers/ms-teams",
+            url: "/agents/triggers",
             customIsActive: (pathname: string) =>
-              pathname.startsWith("/agent-triggers"),
+              pathname.startsWith("/agents/triggers"),
           },
         ],
       },
@@ -104,23 +115,23 @@ const contentNavGroups: NavGroup[] = [
     items: [
       {
         title: "MCPs",
-        url: "/mcp-catalog/registry",
+        url: "/mcp/registry",
         icon: Route,
         customIsActive: (pathname: string) =>
-          pathname.startsWith("/mcp-catalog"),
+          pathname.startsWith("/mcp/registry"),
         subItems: [
           {
             title: "Gateways",
-            url: "/mcp-gateways",
+            url: "/mcp/gateways",
             customIsActive: (pathname: string) =>
-              pathname.startsWith("/mcp-gateways"),
+              pathname.startsWith("/mcp/gateways"),
           },
           {
             title: "Guardrails",
-            url: "/tool-policies",
+            url: "/mcp/tool-guardrails",
             testId: E2eTestId.SidebarNavGuardrails,
             customIsActive: (pathname: string) =>
-              pathname.startsWith("/tool-policies"),
+              pathname.startsWith("/mcp/tool-guardrails"),
           },
         ],
       },
@@ -131,19 +142,19 @@ const contentNavGroups: NavGroup[] = [
     items: [
       {
         title: "LLM Proxies",
-        url: "/llm-proxies",
+        url: "/llm/proxies",
         icon: Network,
-        customIsActive: (pathname: string) => pathname === "/llm-proxies",
+        customIsActive: (pathname: string) => pathname === "/llm/proxies",
         subItems: [
           {
             title: "Providers",
-            url: "/llm-proxies/provider-settings",
+            url: "/llm/providers/api-keys",
             customIsActive: (pathname: string) =>
-              pathname.startsWith("/llm-proxies/provider-settings"),
+              pathname.startsWith("/llm/providers"),
           },
           {
-            title: "Cost & Limits",
-            url: "/cost",
+            title: "Costs & Limits",
+            url: "/llm/costs",
           },
         ],
       },
@@ -153,21 +164,27 @@ const contentNavGroups: NavGroup[] = [
     label: "Other",
     items: [
       {
+        title: "Knowledge",
+        url: "/knowledge/knowledge-bases",
+        icon: Database,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/knowledge") &&
+          !pathname.startsWith("/knowledge/connectors"),
+        subItems: [
+          {
+            title: "Connectors",
+            url: "/knowledge/connectors",
+            customIsActive: (pathname: string) =>
+              pathname.startsWith("/knowledge/connectors"),
+          },
+        ],
+      },
+      {
         title: "Logs",
-        url: "/logs/llm-proxy",
+        url: "/llm/logs",
         icon: MessagesSquare,
-        customIsActive: (pathname: string) => pathname.startsWith("/logs"),
-      },
-      {
-        title: "Connect",
-        url: "/connection",
-        icon: Cable,
-      },
-      {
-        title: "Settings",
-        url: "/settings",
-        icon: Settings,
-        customIsActive: (pathname: string) => pathname.startsWith("/settings"),
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/llm/logs") || pathname.startsWith("/mcp/logs"),
       },
     ],
   },
@@ -195,6 +212,7 @@ const NavPrimary = ({
     <SidebarMenuItem key={item.title}>
       <SidebarMenuButton
         asChild
+        tooltip={item.title}
         isActive={
           item.customIsActive?.(pathname, searchParams) ??
           pathname.startsWith(item.url)
@@ -214,27 +232,29 @@ const NavPrimary = ({
       {item.title === "New Chat" && chatSection}
       {item.subItems && item.subItems.length > 0 && (
         <SidebarMenuSub className="mx-0 ml-3.5 px-0 pl-2.5">
-          {item.subItems.map((sub) => (
-            <SidebarMenuSubItem key={sub.title}>
-              <SidebarMenuSubButton
-                asChild
-                isActive={
-                  sub.customIsActive?.(pathname, searchParams) ??
-                  pathname.startsWith(sub.url)
-                }
-              >
-                <Link
-                  href={sub.url}
-                  data-testid={sub.testId}
-                  onClick={() => {
-                    if (isMobile) setOpenMobile(false);
-                  }}
+          {item.subItems
+            .filter((sub) => permissionMap[sub.url] ?? true)
+            .map((sub) => (
+              <SidebarMenuSubItem key={sub.title}>
+                <SidebarMenuSubButton
+                  asChild
+                  isActive={
+                    sub.customIsActive?.(pathname, searchParams) ??
+                    pathname.startsWith(sub.url)
+                  }
                 >
-                  <span>{sub.title}</span>
-                </Link>
-              </SidebarMenuSubButton>
-            </SidebarMenuSubItem>
-          ))}
+                  <Link
+                    href={sub.url}
+                    data-testid={sub.testId}
+                    onClick={() => {
+                      if (isMobile) setOpenMobile(false);
+                    }}
+                  >
+                    <span>{sub.title}</span>
+                  </Link>
+                </SidebarMenuSubButton>
+              </SidebarMenuSubItem>
+            ))}
         </SidebarMenuSub>
       )}
     </SidebarMenuItem>
@@ -292,6 +312,7 @@ const NavSecondary = ({
             <SidebarMenuItem key={item.title}>
               <SidebarMenuButton
                 asChild
+                tooltip={item.title}
                 isActive={
                   item.customIsActive?.(pathname, searchParams) ??
                   pathname.startsWith(item.url)
@@ -304,12 +325,12 @@ const NavSecondary = ({
               </SidebarMenuButton>
             </SidebarMenuItem>
           ))}
-          {!config.enterpriseLicenseActivated && (
+          {!config.enterpriseFeatures.fullWhiteLabeling && (
             <>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild>
+                <SidebarMenuButton asChild tooltip="Star us on GitHub">
                   <a
-                    href="https://github.com/archestra-ai/archestra"
+                    href={GITHUB_REPO_URL}
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -325,9 +346,9 @@ const NavSecondary = ({
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild>
+                <SidebarMenuButton asChild tooltip="Documentation">
                   <a
-                    href="https://archestra.ai/docs/"
+                    href={COMMUNITY_DOCS_URL}
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -337,9 +358,9 @@ const NavSecondary = ({
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild>
+                <SidebarMenuButton asChild tooltip="Talk to developers">
                   <a
-                    href="https://archestra.ai/join-slack"
+                    href={COMMUNITY_SLACK_URL}
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -349,9 +370,9 @@ const NavSecondary = ({
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild>
+                <SidebarMenuButton asChild tooltip="Report a bug">
                   <a
-                    href="https://github.com/archestra-ai/archestra/issues/new"
+                    href={GITHUB_REPO_NEW_ISSUE_URL}
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -374,48 +395,78 @@ export function AppSidebar() {
   const isAuthenticated = useIsAuthenticated();
   const { data: starCount } = useGithubStars();
   const formattedStarCount = starCount ?? "";
-  const { logo, isLoadingAppearance } = useOrgTheme() ?? {};
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
+  const appIconLogo = useAppIconLogo();
+  const knowledgeBaseEnabled = useEnterpriseFeature("knowledgeBase");
+  // Connect page requires at least one of these (OR logic)
+  const { data: canReadAgent } = useHasPermissions({ agent: ["read"] });
+  const { data: canReadLlmProxy } = useHasPermissions({
+    llmProxy: ["read"],
+  });
+  const { data: canReadMcpGateway } = useHasPermissions({
+    mcpGateway: ["read"],
+  });
+  const showConnect = canReadAgent || canReadLlmProxy || canReadMcpGateway;
 
-  const logoToShow = logo ? (
-    <div className="flex justify-center">
-      <div className="flex flex-col items-center gap-1">
-        <Image
-          src={logo || "/logo.png"}
-          alt="Organization logo"
-          width={200}
-          height={60}
-          className="object-contain h-12 w-auto max-w-[calc(100vw-6rem)]"
-        />
-        <p className="text-[10px] text-muted-foreground">
-          Powered by Archestra
-        </p>
-      </div>
-    </div>
-  ) : (
-    <div className="flex items-center gap-2 pl-8">
-      <Image
-        src="/logo.png"
-        alt="Logo"
-        width={28}
-        height={28}
-        className="h-auto w-auto"
-      />
-      <span className="text-base font-semibold">Archestra.AI</span>
-    </div>
-  );
+  // Filter nav groups based on enterprise features
+  const filteredNavGroups = React.useMemo(() => {
+    if (knowledgeBaseEnabled) return contentNavGroups;
+    return contentNavGroups.map((group) => ({
+      ...group,
+      items: group.items.filter((item) => item.title !== "Knowledge"),
+    }));
+  }, [knowledgeBaseEnabled]);
+
+  // Build additional links for UserButton popout menu
+  const userMenuLinks = React.useMemo(() => {
+    const links: {
+      href: string;
+      icon?: React.ReactNode;
+      label: React.ReactNode;
+      separator?: boolean;
+    }[] = [];
+
+    if (showConnect) {
+      links.push({
+        href: "/connection",
+        icon: <Cable className="h-4 w-4" />,
+        label: "Connect",
+      });
+    }
+
+    links.push({
+      href: "/settings/account",
+      icon: <Settings className="h-4 w-4" />,
+      label: "Settings",
+      separator: true,
+    });
+
+    return links;
+  }, [showConnect]);
 
   return (
-    <Sidebar>
-      <SidebarHeader className="pt-4">
-        {isLoadingAppearance ? <div className="h-[47px]" /> : logoToShow}
+    <Sidebar collapsible="icon">
+      <SidebarHeader className="pt-4 group-data-[collapsible=icon]:pt-2 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:gap-1">
+        <div className="flex items-center justify-between group-data-[collapsible=icon]:hidden">
+          <Link href="/chat">
+            <AppLogo centered={false} />
+          </Link>
+          <SidebarTrigger className="size-7 cursor-pointer" />
+        </div>
+        <Link
+          href="/chat"
+          className="hidden group-data-[collapsible=icon]:flex"
+        >
+          <img src={appIconLogo} alt="Logo" className="size-7" />
+        </Link>
+        <SidebarTrigger className="hidden group-data-[collapsible=icon]:flex size-8 cursor-pointer" />
       </SidebarHeader>
       <SidebarContent>
         {isAuthenticated && permissionMap && (
           <>
             <NavPrimary
               items={headerNavItems}
-              groups={contentNavGroups}
+              groups={filteredNavGroups}
               pathname={pathname}
               searchParams={searchParams}
               permissionMap={permissionMap}
@@ -431,7 +482,7 @@ export function AppSidebar() {
             />
           </>
         )}
-        {!isAuthenticated && !config.enterpriseLicenseActivated && (
+        {!isAuthenticated && !config.enterpriseFeatures.fullWhiteLabeling && (
           <NavSecondary
             items={[]}
             pathname={pathname}
@@ -444,21 +495,35 @@ export function AppSidebar() {
       <SidebarFooter>
         <SidebarWarningsAccordion />
         <SignedIn>
-          <SidebarGroup className="mt-auto">
+          <SidebarGroup className="mt-auto p-0">
             <SidebarGroupContent>
-              <div data-testid={E2eTestId.SidebarUserProfile}>
+              <div
+                data-testid={E2eTestId.SidebarUserProfile}
+                className={cn(
+                  "overflow-hidden",
+                  // Collapsed: hide text/chevron, show only avatar circle
+                  "group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center",
+                  "group-data-[collapsible=icon]:[&_button]:size-7 group-data-[collapsible=icon]:[&_button]:min-w-0 group-data-[collapsible=icon]:[&_button]:rounded-full group-data-[collapsible=icon]:[&_button]:p-0",
+                  "group-data-[collapsible=icon]:[&_[data-slot=avatar]]:size-7",
+                  "group-data-[collapsible=icon]:[&_[data-slot=avatar-fallback]]:text-[9px]",
+                  "group-data-[collapsible=icon]:[&_button>div]:gap-0",
+                  "group-data-[collapsible=icon]:[&_button>div>div:not([data-slot=avatar])]:hidden",
+                  "group-data-[collapsible=icon]:[&_button>svg]:hidden",
+                )}
+              >
                 <UserButton
                   size="default"
                   align="center"
+                  side="top"
                   className="w-full bg-transparent hover:bg-transparent text-foreground"
                   disableDefaultLinks
+                  additionalLinks={userMenuLinks}
                 />
               </div>
             </SidebarGroupContent>
           </SidebarGroup>
         </SignedIn>
       </SidebarFooter>
-      <SidebarRail />
     </Sidebar>
   );
 }

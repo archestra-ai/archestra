@@ -5,9 +5,9 @@ import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { IdentityProviderIcon } from "@/components/identity-provider-icons.ee";
 import { Button } from "@/components/ui/button";
+import { usePublicIdentityProviders } from "@/lib/auth/identity-provider.query.ee";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import config from "@/lib/config";
-import { usePublicIdentityProviders } from "@/lib/identity-provider.query.ee";
+import config from "@/lib/config/config";
 import { getValidatedCallbackURLWithDefault } from "@/lib/utils/redirect-validation";
 
 interface IdentityProviderSelectorProps {
@@ -53,7 +53,7 @@ export function IdentityProviderSelector({
 
   // Don't show SSO options if the enterprise license is not activated
   if (
-    !config.enterpriseLicenseActivated ||
+    !config.enterpriseFeatures.core ||
     isLoading ||
     identityProviders.length === 0
   ) {

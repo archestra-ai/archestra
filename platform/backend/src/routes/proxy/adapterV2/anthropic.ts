@@ -22,7 +22,7 @@ import type {
   ToolCompressionStats,
   UsageView,
 } from "@/types";
-import { MockAnthropicClient } from "../mock-anthropic-client";
+import { extractCommonMessageText } from "@/types";
 import {
   hasImageContent,
   isImageTooLarge,
@@ -240,9 +240,7 @@ class AnthropicRequestAdapter
       messages = this.applyUpdates(messages, this.toolResultUpdates);
     }
 
-    if (config.features.browserStreamingEnabled) {
-      messages = this.convertToolResultContent(messages);
-    }
+    messages = this.convertToolResultContent(messages);
 
     return {
       ...this.request,
@@ -286,6 +284,7 @@ class AnthropicRequestAdapter
     for (const message of messages) {
       const commonMessage: CommonMessage = {
         role: message.role as CommonMessage["role"],
+        content: extractCommonMessageText(message),
       };
 
       // Handle user messages that may contain tool results
@@ -1137,17 +1136,14 @@ export const anthropicAdapterFactory: LLMProvider<
 
   createClient(
     apiKey: string | undefined,
-    options?: CreateClientOptions,
+    options: CreateClientOptions,
   ): AnthropicProvider {
-    if (options?.mockMode) {
-      return new MockAnthropicClient() as unknown as AnthropicProvider;
-    }
-
     // Use observable fetch for request duration metrics if agent is provided
-    const customFetch = options?.agent
+    const customFetch = options.agent
       ? metrics.llm.getObservableFetch(
           "anthropic",
           options.agent,
+          options.source,
           options.externalAgentId,
         )
       : undefined;
@@ -1160,9 +1156,9 @@ export const anthropicAdapterFactory: LLMProvider<
     return new AnthropicProvider({
       apiKey: regularApiKey,
       authToken: token,
-      baseURL: options?.baseUrl,
+      baseURL: options.baseUrl,
       fetch: customFetch,
-      defaultHeaders: options?.defaultHeaders,
+      defaultHeaders: options.defaultHeaders,
     });
   },
 

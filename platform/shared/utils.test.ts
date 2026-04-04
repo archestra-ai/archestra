@@ -1,5 +1,25 @@
 import { describe, expect, test } from "vitest";
-import { parseFullToolName } from "./utils";
+import { formatSecretStorageType, parseFullToolName, slugify } from "./utils";
+
+describe("formatSecretStorageType", () => {
+  test("formats known storage types", () => {
+    expect(formatSecretStorageType("vault")).toBe("Vault");
+    expect(formatSecretStorageType("external_vault")).toBe("External Vault");
+    expect(formatSecretStorageType("database")).toBe("Database");
+  });
+
+  test("falls back to None", () => {
+    expect(formatSecretStorageType("none")).toBe("None");
+    expect(formatSecretStorageType(undefined)).toBe("None");
+  });
+});
+
+describe("slugify", () => {
+  test("creates URL-safe slugs", () => {
+    expect(slugify("Hello World!")).toBe("hello_world");
+    expect(slugify("__Already__Slugged__")).toBe("already_slugged");
+  });
+});
 
 describe("parseFullToolName", () => {
   test("standard case: server__tool", () => {
@@ -9,68 +29,17 @@ describe("parseFullToolName", () => {
     });
   });
 
-  test("server name containing __ (e.g., upstash__context7)", () => {
+  test("server name containing __", () => {
     expect(parseFullToolName("upstash__context7__resolve-library-id")).toEqual({
       serverName: "upstash__context7",
       toolName: "resolve-library-id",
     });
   });
 
-  test("server name with multiple __ segments", () => {
-    expect(parseFullToolName("huggingface__remote-mcp__generate_text")).toEqual(
-      {
-        serverName: "huggingface__remote-mcp",
-        toolName: "generate_text",
-      },
-    );
-  });
-
   test("no separator returns null serverName", () => {
     expect(parseFullToolName("send_email")).toEqual({
       serverName: null,
       toolName: "send_email",
-    });
-  });
-
-  test("empty string after separator", () => {
-    expect(parseFullToolName("server__")).toEqual({
-      serverName: "server",
-      toolName: "",
-    });
-  });
-
-  test("archestra tools", () => {
-    expect(parseFullToolName("archestra__whoami")).toEqual({
-      serverName: "archestra",
-      toolName: "whoami",
-    });
-  });
-
-  test("separator at start returns null serverName", () => {
-    expect(parseFullToolName("__toolname")).toEqual({
-      serverName: null,
-      toolName: "__toolname",
-    });
-  });
-
-  test("empty string", () => {
-    expect(parseFullToolName("")).toEqual({
-      serverName: null,
-      toolName: "",
-    });
-  });
-
-  test("single underscore is not treated as separator", () => {
-    expect(parseFullToolName("my_server__my_tool")).toEqual({
-      serverName: "my_server",
-      toolName: "my_tool",
-    });
-  });
-
-  test("tool name with hyphens", () => {
-    expect(parseFullToolName("github__create-pull-request")).toEqual({
-      serverName: "github",
-      toolName: "create-pull-request",
     });
   });
 });

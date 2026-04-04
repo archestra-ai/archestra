@@ -105,9 +105,14 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { team: ["update"] },
         headers,
       );
+      const { success: hasMcpGatewayTeamAdmin } = await hasPermission(
+        { mcpGateway: ["team-admin"] },
+        headers,
+      );
 
-      // User can access team tokens if they have team:admin OR team:update
-      const canAccessTeamTokens = isTeamAdmin || hasTeamUpdate;
+      // User can access team tokens if they have team:admin OR team:update OR mcpGateway:team-admin
+      const canAccessTeamTokens =
+        isTeamAdmin || hasTeamUpdate || hasMcpGatewayTeamAdmin;
 
       // Ensure org token exists
       await TeamTokenModel.ensureOrganizationToken();
@@ -127,13 +132,13 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Filter team tokens based on user permissions
       if (!isTeamAdmin) {
-        if (!hasTeamUpdate) {
-          // No team:update permission = no team tokens visible
+        if (!hasTeamUpdate && !hasMcpGatewayTeamAdmin) {
+          // No team:update or mcpGateway:team-admin permission = no team tokens visible
           visibleTokens = visibleTokens.filter(
             (token) => token.isOrganizationToken,
           );
         } else {
-          // Only own team tokens visible
+          // Only own team tokens visible (team:update or mcpGateway:team-admin + membership)
           const userTeamIds = await TeamModel.getUserTeamIds(user.id);
           visibleTokens = visibleTokens.filter(
             (token) =>

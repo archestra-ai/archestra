@@ -1,20 +1,23 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import { PROVIDERS_WITH_OPTIONAL_API_KEY } from "@shared";
+import { E2eTestId } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Bot,
-  Edit,
+  CornerDownLeftIcon,
   FileText,
   Globe,
-  Loader2,
+  MicIcon,
   MoreVertical,
+  PaperclipIcon,
   Plus,
+  Share2,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   useCallback,
   useEffect,
@@ -23,14 +26,18 @@ import {
   useRef,
   useState,
 } from "react";
-import { useForm } from "react-hook-form";
-import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
-import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
+import { CreateCatalogDialog } from "@/app/mcp/registry/_parts/create-catalog-dialog";
+import { CustomServerRequestDialog } from "@/app/mcp/registry/_parts/custom-server-request-dialog";
 import { AgentDialog } from "@/components/agent-dialog";
-import type { PromptInputProps } from "@/components/ai-elements/prompt-input";
+import type {
+  PromptInputMessage,
+  PromptInputProps,
+} from "@/components/ai-elements/prompt-input";
+import { Suggestion } from "@/components/ai-elements/suggestion";
+import { AppLogo } from "@/components/app-logo";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
-import { AgentSelector } from "@/components/chat/agent-selector";
 import { BrowserPanel } from "@/components/chat/browser-panel";
+import { ChatLinkButton } from "@/components/chat/chat-help-link";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
@@ -38,15 +45,16 @@ import {
   PlaywrightInstallDialog,
   usePlaywrightSetupRequired,
 } from "@/components/chat/playwright-install-dialog";
-import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { RightSidePanel } from "@/components/chat/right-side-panel";
+import { ShareConversationDialog } from "@/components/chat/share-conversation-dialog";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
-import {
-  ChatApiKeyForm,
-  type ChatApiKeyFormValues,
-  PLACEHOLDER_KEY,
-} from "@/components/chat-api-key-form";
+import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
+import type { LlmProviderApiKeyFormValues } from "@/components/llm-provider-api-key-form";
 import { LoadingSpinner } from "@/components/loading";
+import MessageThread, {
+  type PartialUIMessage,
+} from "@/components/message-thread";
+import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -55,15 +63,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogForm,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -78,65 +77,77 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { PermissionButton } from "@/components/ui/permission-button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { TypingText } from "@/components/ui/typing-text";
 import { Version } from "@/components/version";
-import { useChatSession } from "@/contexts/global-chat-context";
-import { useInternalAgents } from "@/lib/agent.query";
-import { useHasPermissions } from "@/lib/auth.query";
-import { useRecentlyGeneratedTitles } from "@/lib/chat.hook";
+import { useDefaultAgentId, useInternalAgents } from "@/lib/agent.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useRecentlyGeneratedTitles } from "@/lib/chat/chat.hook";
 import {
   fetchConversationEnabledTools,
   useConversation,
   useCreateConversation,
+  useHasPlaywrightMcpTools,
   useStopChatStream,
   useUpdateConversation,
   useUpdateConversationEnabledTools,
-} from "@/lib/chat.query";
-import { useChatModels, useModelsByProvider } from "@/lib/chat-models.query";
+} from "@/lib/chat/chat.query";
+import { useChatAgentState } from "@/lib/chat/chat-agent-state.hook";
 import {
-  type SupportedChatProvider,
-  useChatApiKeys,
-  useCreateChatApiKey,
-} from "@/lib/chat-settings.query";
+  useConversationShare,
+  useForkSharedConversation,
+} from "@/lib/chat/chat-share.query";
 import {
   conversationStorageKeys,
   getConversationDisplayTitle,
-} from "@/lib/chat-utils";
-import { useFeatures } from "@/lib/config.query";
-import { useDialogs } from "@/lib/dialog.hook";
-import { useFeatureFlag } from "@/lib/features.hook";
-import { useOrganization } from "@/lib/organization.query";
+} from "@/lib/chat/chat-utils";
+import { useChatSession } from "@/lib/chat/global-chat.context";
 import {
   applyPendingActions,
   clearPendingActions,
   getPendingActions,
-} from "@/lib/pending-tool-state";
-import { useTeams } from "@/lib/team.query";
+} from "@/lib/chat/pending-tool-state";
+import {
+  clearModelOverride,
+  getSavedAgent,
+  getSavedModelOverride,
+  type ModelSource,
+  saveAgent,
+  saveModelOverride,
+} from "@/lib/chat/use-chat-preferences";
+import { useConfig } from "@/lib/config/config.query";
+import { useDialogs } from "@/lib/hooks/use-dialog";
+import { useIsMobile } from "@/lib/hooks/use-mobile";
+import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
+import {
+  type SupportedProvider,
+  useLlmProviderApiKeys,
+} from "@/lib/llm-provider-api-keys.query";
+import { useOrganization } from "@/lib/organization.query";
+import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
+import {
+  buildCreateConversationInput,
+  resolveChatModelState,
+  resolveInitialAgentState,
+  resolvePreferredModelForProvider,
+  shouldResetInitialChatState,
+} from "./chat-initial-state";
 import ArchestraPromptInput from "./prompt-input";
 
-const CONVERSATION_QUERY_PARAM = "conversation";
+const BROWSER_OPEN_KEY = "archestra-chat-browser-open";
 
-const LocalStorageKeys = {
-  browserOpen: "archestra-chat-browser-open",
-  selectedChatModel: "archestra-chat-selected-chat-model",
-} as const;
-
-export default function ChatPage() {
+export function ChatPageContent({
+  routeConversationId,
+}: {
+  routeConversationId?: string;
+}) {
   const queryClient = useQueryClient();
   const router = useRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const [conversationId, setConversationId] = useState<string | undefined>(
-    () => searchParams.get(CONVERSATION_QUERY_PARAM) || undefined,
+    routeConversationId,
   );
 
   // Hide version display from layout - chat page has its own version display
@@ -145,18 +156,26 @@ export default function ChatPage() {
     return () => document.body.classList.remove("hide-version");
   }, []);
   const [isArtifactOpen, setIsArtifactOpen] = useState(false);
-  const loadedConversationRef = useRef<string | undefined>(undefined);
   const pendingPromptRef = useRef<string | undefined>(undefined);
   const pendingFilesRef = useRef<
     Array<{ url: string; mediaType: string; filename?: string }>
   >([]);
   const userMessageJustEdited = useRef(false);
+  const pendingInitialSendConversationRef = useRef<string | undefined>(
+    undefined,
+  );
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const autoSendTriggeredRef = useRef(false);
   // Store pending URL for browser navigation after conversation is created
   const [pendingBrowserUrl, setPendingBrowserUrl] = useState<
     string | undefined
   >(undefined);
+
+  const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
+  const [isForkDialogOpen, setIsForkDialogOpen] = useState(false);
+  const [forkAgentId, setForkAgentId] = useState<string | null>(null);
+  const forkSharedConversationMutation = useForkSharedConversation();
+  const { data: session } = useSession();
 
   // Dialog management for MCP installation
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<
@@ -165,7 +184,7 @@ export default function ChatPage() {
 
   // Check if user can create catalog items directly
   const { data: canCreateCatalog } = useHasPermissions({
-    internalMcpCatalog: ["create"],
+    mcpRegistry: ["create"],
   });
 
   const { data: isAgentAdmin } = useHasPermissions({
@@ -174,223 +193,304 @@ export default function ChatPage() {
   const { data: canCreateAgent } = useHasPermissions({
     agent: ["create"],
   });
-  const { data: teams } = useTeams();
+  const { data: canReadAgent } = useHasPermissions({
+    agent: ["read"],
+  });
+  const { data: canReadLlmProvider } = useHasPermissions({
+    llmProviderApiKey: ["read"],
+  });
+  const { data: canReadTeams } = useHasPermissions({
+    team: ["read"],
+  });
+  const { data: canUpdateAgent } = useHasPermissions({
+    agent: ["team-admin"],
+  });
+  const { data: teams } = useTeams({ enabled: !!canReadTeams });
 
   // Non-admin users with no teams cannot create agents
   const cannotCreateDueToNoTeams =
     !isAgentAdmin && (!teams || teams.length === 0);
 
+  const _isMobile = useIsMobile();
+
   // State for browser panel - initialize from localStorage
   const [isBrowserPanelOpen, setIsBrowserPanelOpen] = useState(() => {
     if (typeof window !== "undefined") {
-      return localStorage.getItem(LocalStorageKeys.browserOpen) === "true";
+      return localStorage.getItem(BROWSER_OPEN_KEY) === "true";
     }
     return false;
   });
 
+  const hasChatAccess = canReadAgent !== false && canReadLlmProvider !== false;
+
   // Fetch internal agents for dialog editing
   const { data: internalAgents = [], isPending: isLoadingAgents } =
-    useInternalAgents();
+    useInternalAgents({ enabled: hasChatAccess });
+  const { data: defaultAgentId } = useDefaultAgentId();
 
   // Fetch profiles and models for initial chat (no conversation)
   const { modelsByProvider, isPending: isModelsLoading } =
-    useModelsByProvider();
+    useLlmModelsByProvider();
   const { data: chatApiKeys = [], isLoading: isLoadingApiKeys } =
-    useChatApiKeys();
+    useLlmProviderApiKeys({ enabled: hasChatAccess });
+  const { data: organization, isPending: isOrgLoading } = useOrganization();
 
   // State for initial chat (when no conversation exists yet)
   const [initialAgentId, setInitialAgentId] = useState<string | null>(null);
   const [initialModel, setInitialModel] = useState<string>("");
   const [initialApiKeyId, setInitialApiKeyId] = useState<string | null>(null);
-  // Track if URL params have been consumed (so we don't re-apply them after user clears selection)
-  const urlParamsConsumedRef = useRef(false);
-
-  // Version history dialog state
-  const [versionHistoryAgent, setVersionHistoryAgent] = useState<
-    (typeof internalAgents)[number] | null
-  >(null);
+  const [initialModelSource, setInitialModelSource] =
+    useState<ModelSource | null>(null);
+  const previousRouteConversationIdRef = useRef<string | undefined>(
+    routeConversationId,
+  );
+  // Track which agentId URL param has been consumed (so we don't re-apply the same one after user clears selection,
+  // but do apply a new one when navigating from a different agent page)
+  const urlParamsConsumedRef = useRef<string | null>(null);
 
   // Resolve which agent to use on page load (URL param > localStorage > first available).
   // Stores the resolved agent in a ref so the model init effect can read it synchronously.
   const resolvedAgentRef = useRef<(typeof internalAgents)[number] | null>(null);
 
+  const applyInitialAgentSelection = useCallback(
+    (agent: (typeof internalAgents)[number]) => {
+      setInitialAgentId(agent.id);
+      resolvedAgentRef.current = agent;
+
+      const resolved = resolveInitialAgentState({
+        agent,
+        modelsByProvider,
+        chatApiKeys,
+        organization: organization
+          ? {
+              defaultLlmModel: organization.defaultLlmModel,
+              defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
+            }
+          : null,
+      });
+
+      if (resolved) {
+        setInitialModel(resolved.modelId);
+        setInitialApiKeyId(resolved.apiKeyId);
+        setInitialModelSource(resolved.modelSource);
+      } else {
+        setInitialModel("");
+        setInitialApiKeyId(null);
+        setInitialModelSource(null);
+      }
+    },
+    [modelsByProvider, chatApiKeys, organization],
+  );
+
   useEffect(() => {
     if (internalAgents.length === 0) return;
+    // Wait for organization data to avoid race condition where agents load
+    // before org, causing the org default to be skipped
+    if (isOrgLoading) return;
 
-    // Only process URL params once (don't re-apply after user clears selection)
-    if (!urlParamsConsumedRef.current) {
-      const urlAgentId = searchParams.get("agentId");
-      if (urlAgentId) {
-        const matchingAgent = internalAgents.find((a) => a.id === urlAgentId);
-        if (matchingAgent) {
-          setInitialAgentId(urlAgentId);
-          resolvedAgentRef.current = matchingAgent;
-          urlParamsConsumedRef.current = true;
-          return;
-        }
-      }
-    }
-
-    // Try to restore from localStorage, then default to first internal agent
-    if (!initialAgentId) {
-      const savedAgentId = localStorage.getItem("selected-chat-agent");
-      const savedAgent = internalAgents.find((a) => a.id === savedAgentId);
-      if (savedAgent) {
-        setInitialAgentId(savedAgentId);
-        resolvedAgentRef.current = savedAgent;
+    // Process URL agentId param, but only if it's a new value (not one we already consumed).
+    // This allows navigating from different agent pages while preventing re-application
+    // after the user manually changes the agent.
+    const urlAgentId = searchParams.get("agentId");
+    if (urlAgentId && urlAgentId !== urlParamsConsumedRef.current) {
+      const matchingAgent = internalAgents.find((a) => a.id === urlAgentId);
+      if (matchingAgent) {
+        applyInitialAgentSelection(matchingAgent);
+        urlParamsConsumedRef.current = urlAgentId;
         return;
       }
-      setInitialAgentId(internalAgents[0].id);
-      resolvedAgentRef.current = internalAgents[0];
-    }
-  }, [initialAgentId, searchParams, internalAgents]);
-
-  // Initialize model and API key once agent is resolved.
-  // Priority: agent config > localStorage > first available model.
-  // Separated from agent resolution but uses ref to avoid race conditions —
-  // the ref is written synchronously in the same render cycle, so this effect
-  // always sees the correct agent even when both effects fire together.
-  useEffect(() => {
-    if (!initialAgentId) return;
-    if (initialModel) return; // Already initialized
-
-    const agent = resolvedAgentRef.current;
-    const agentData = agent as Record<string, unknown> | undefined;
-
-    // 1. Agent-configured model takes priority
-    if (agentData?.llmModel) {
-      setInitialModel(agentData.llmModel as string);
-      if (agentData.llmApiKeyId) {
-        setInitialApiKeyId(agentData.llmApiKeyId as string);
-      }
-      return;
     }
 
-    // 2. Fall back to localStorage / first available (needs models loaded)
-    const allModels = Object.values(modelsByProvider).flat();
-    if (allModels.length === 0) return;
-
-    // Helper: auto-select the first API key for a given provider
-    const autoSelectKeyForProvider = (provider: string) => {
-      if (initialApiKeyId) return; // Already have a key selected
-      const matchingKey = chatApiKeys.find((k) => k.provider === provider);
-      if (matchingKey) {
-        setInitialApiKeyId(matchingKey.id);
-      }
-    };
-
-    const savedModelId = localStorage.getItem(
-      LocalStorageKeys.selectedChatModel,
-    );
-    if (savedModelId && allModels.some((m) => m.id === savedModelId)) {
-      setInitialModel(savedModelId);
-      // Find provider for saved model and auto-select key
-      for (const [provider, models] of Object.entries(modelsByProvider)) {
-        if (models?.some((m) => m.id === savedModelId)) {
-          autoSelectKeyForProvider(provider);
-          break;
-        }
-      }
-      return;
-    }
-
-    // 3. Fall back to first available model
-    const providers = Object.keys(modelsByProvider);
-    if (providers.length > 0) {
-      const firstProvider = providers[0];
-      const models =
-        modelsByProvider[firstProvider as keyof typeof modelsByProvider];
-      if (models && models.length > 0) {
-        setInitialModel(models[0].id);
-        autoSelectKeyForProvider(firstProvider);
-      }
-    }
-  }, [
-    initialAgentId,
-    initialModel,
-    initialApiKeyId,
-    modelsByProvider,
-    chatApiKeys,
-  ]);
-
-  // Save model to localStorage when changed
-  const handleInitialModelChange = useCallback((modelId: string) => {
-    setInitialModel(modelId);
-    localStorage.setItem(LocalStorageKeys.selectedChatModel, modelId);
-  }, []);
-
-  // Handle provider change from API key selector - auto-select a model from new provider
-  const handleInitialProviderChange = useCallback(
-    (newProvider: SupportedChatProvider, _apiKeyId: string) => {
-      const providerModels = modelsByProvider[newProvider];
-      if (providerModels && providerModels.length > 0) {
-        // Try to restore from localStorage for this provider
-        const savedModelKey = `selected-chat-model-${newProvider}`;
-        const savedModelId = localStorage.getItem(savedModelKey);
-        if (savedModelId && providerModels.some((m) => m.id === savedModelId)) {
-          setInitialModel(savedModelId);
-          localStorage.setItem("selected-chat-model", savedModelId);
+    // Priority: org default > localStorage > member default > first available
+    // Org default always wins when set (admin-configured for the whole org).
+    // localStorage only overrides when no org default is configured.
+    // Also skip if a URL param was consumed but state hasn't flushed yet.
+    if (!initialAgentId && !urlParamsConsumedRef.current) {
+      // Try org's default agent first (admin-configured, takes precedence)
+      if (organization?.defaultAgentId) {
+        const orgDefaultAgent = internalAgents.find(
+          (a) => a.id === organization.defaultAgentId,
+        );
+        if (orgDefaultAgent) {
+          applyInitialAgentSelection(orgDefaultAgent);
+          saveAgent(organization.defaultAgentId);
           return;
         }
-        // Fall back to first model for this provider
-        const firstModel = providerModels[0];
-        setInitialModel(firstModel.id);
-        localStorage.setItem("selected-chat-model", firstModel.id);
+      }
+      // Try localStorage (user's previous selection, only when no org default)
+      const savedAgentId = getSavedAgent();
+      const savedAgent = internalAgents.find((a) => a.id === savedAgentId);
+      if (savedAgent) {
+        applyInitialAgentSelection(savedAgent);
+        return;
+      }
+      // Try member's default agent
+      if (defaultAgentId) {
+        const defaultAgent = internalAgents.find(
+          (a) => a.id === defaultAgentId,
+        );
+        if (defaultAgent) {
+          applyInitialAgentSelection(defaultAgent);
+          saveAgent(defaultAgentId);
+          return;
+        }
+      }
+      applyInitialAgentSelection(internalAgents[0]);
+      saveAgent(internalAgents[0].id);
+    }
+  }, [
+    applyInitialAgentSelection,
+    initialAgentId,
+    searchParams,
+    internalAgents,
+    defaultAgentId,
+    organization?.defaultAgentId,
+    isOrgLoading,
+  ]);
+
+  // Initialize model and API key once agent is resolved.
+  // Priority: agent config > org default > first available.
+  // Uses modelInitializedRef instead of checking initialModel to avoid a race condition:
+  // ModelSelector's auto-select fires before this effect and sets initialModel, which would
+  // cause an early return and skip the proper priority chain (org default, etc.).
+  const modelInitializedRef = useRef(false);
+  useEffect(() => {
+    if (!initialAgentId) return;
+    if (modelInitializedRef.current) return;
+
+    const resolved = resolveChatModelState({
+      agent: resolvedAgentRef.current,
+      modelsByProvider,
+      chatApiKeys,
+      organization: organization
+        ? {
+            defaultLlmModel: organization.defaultLlmModel,
+            defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
+          }
+        : null,
+    });
+
+    if (!resolved) return; // No models available yet
+
+    setInitialModel(resolved.modelId);
+    setInitialModelSource(resolved.modelSource);
+    if (resolved.apiKeyId) {
+      setInitialApiKeyId(resolved.apiKeyId);
+    }
+    modelInitializedRef.current = true;
+  }, [
+    initialAgentId,
+    modelsByProvider,
+    chatApiKeys,
+    organization?.defaultLlmModel,
+    organization?.defaultLlmApiKeyId,
+    organization,
+  ]);
+
+  // Model change callback for the initial (no conversation) state.
+  // After init, only accept explicit user selections (dialog was opened).
+  // This prevents ModelSelector's auto-select (triggered by apiKeyId changes)
+  // from overwriting the agent default or org default.
+  const modelSelectorWasOpenRef = useRef(false);
+  const handleInitialModelChange = useCallback((modelId: string) => {
+    if (modelInitializedRef.current && !modelSelectorWasOpenRef.current) {
+      return;
+    }
+    setInitialModel(modelId);
+    if (modelSelectorWasOpenRef.current) {
+      setInitialModelSource("user");
+      saveModelOverride(modelId);
+    }
+    modelSelectorWasOpenRef.current = false;
+  }, []);
+  const handleInitialModelSelectorOpenChange = useCallback((open: boolean) => {
+    if (open) {
+      modelSelectorWasOpenRef.current = true;
+    }
+  }, []);
+
+  // Handle API key change - preselect best model for the new key's provider
+  const handleInitialProviderChange = useCallback(
+    (newProvider: SupportedProvider, _apiKeyId: string) => {
+      const preferredModel = resolvePreferredModelForProvider({
+        provider: newProvider,
+        modelsByProvider,
+      });
+      if (preferredModel) {
+        setInitialModel(preferredModel.modelId);
+        setInitialModelSource("user");
+        saveModelOverride(preferredModel.modelId);
       }
     },
     [modelsByProvider],
   );
 
+  // Reset model override: clear localStorage and re-resolve from agent/org defaults
+  const handleResetModelOverride = useCallback(() => {
+    clearModelOverride();
+    modelInitializedRef.current = false;
+
+    const resolved = resolveChatModelState({
+      agent: resolvedAgentRef.current,
+      modelsByProvider,
+      chatApiKeys,
+      organization: organization
+        ? {
+            defaultLlmModel: organization.defaultLlmModel,
+            defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
+          }
+        : null,
+    });
+
+    if (resolved) {
+      setInitialModel(resolved.modelId);
+      setInitialApiKeyId(resolved.apiKeyId);
+      setInitialModelSource(resolved.modelSource);
+    }
+    modelInitializedRef.current = true;
+  }, [modelsByProvider, chatApiKeys, organization]);
+
   // Derive provider from initial model for API key filtering
-  const initialProvider = useMemo((): SupportedChatProvider | undefined => {
+  const initialProvider = useMemo((): SupportedProvider | undefined => {
     if (!initialModel) return undefined;
     for (const [provider, models] of Object.entries(modelsByProvider)) {
       if (models?.some((m) => m.id === initialModel)) {
-        return provider as SupportedChatProvider;
+        return provider as SupportedProvider;
       }
     }
     return undefined;
   }, [initialModel, modelsByProvider]);
 
-  const chatSession = useChatSession(conversationId);
-
-  const { isLoading: isLoadingFeatures } = useFeatures();
-  const { data: organization } = useOrganization();
-  const { data: chatModels = [] } = useChatModels();
+  const { isLoading: isLoadingFeatures } = useConfig();
+  const { data: chatModels = [] } = useLlmModels();
   // Check if user has any API keys (including system keys for keyless providers
   // like Vertex AI Gemini, vLLM, or Ollama which don't require secrets)
   const hasAnyApiKey = chatApiKeys.length > 0;
   const isLoadingApiKeyCheck = isLoadingApiKeys || isLoadingFeatures;
 
-  // Sync conversation ID with URL and reset initial state when navigating to base /chat
-  // Use a ref for the comparison so the effect only fires when the URL changes,
-  // not when conversationId is set programmatically by selectConversation().
-  // Without this, router.push() + setConversationId() creates a race: the effect
-  // re-runs before the URL catches up and resets conversationId back to undefined.
-  const conversationIdRef = useRef(conversationId);
-  conversationIdRef.current = conversationId;
-
   useEffect(() => {
-    // Normalize null to undefined for consistent comparison
-    const conversationParam =
-      searchParams.get(CONVERSATION_QUERY_PARAM) ?? undefined;
-    if (conversationParam !== conversationIdRef.current) {
-      setConversationId(conversationParam);
+    setConversationId(routeConversationId);
 
-      // Reset initial state when navigating to /chat without a conversation
-      // This ensures a fresh state when user clicks "New chat" or navigates back
-      if (!conversationParam) {
-        // Reset initialAgentId to trigger re-selection from useEffect
-        setInitialAgentId(null);
-      }
+    const previousRouteConversationId = previousRouteConversationIdRef.current;
+    previousRouteConversationIdRef.current = routeConversationId;
 
-      // Focus textarea after navigation (e.g., from search dialog)
-      // Use requestAnimationFrame to ensure DOM is ready
-      requestAnimationFrame(() => {
-        textareaRef.current?.focus();
-      });
+    if (
+      shouldResetInitialChatState({
+        previousRouteConversationId,
+        routeConversationId,
+      })
+    ) {
+      setInitialAgentId(null);
+      setInitialModel("");
+      setInitialApiKeyId(null);
+      setInitialModelSource(null);
+      modelInitializedRef.current = false;
     }
-  }, [searchParams]);
+
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+    });
+  }, [routeConversationId]);
 
   // Get user_prompt from URL for auto-sending
   const initialUserPrompt = useMemo(() => {
@@ -402,17 +502,45 @@ export default function ChatPage() {
     (id: string | undefined) => {
       setConversationId(id);
       if (id) {
-        router.push(`${pathname}?${CONVERSATION_QUERY_PARAM}=${id}`);
+        router.push(`/chat/${id}`);
       } else {
-        router.push(pathname);
+        router.push("/chat");
       }
     },
-    [pathname, router],
+    [router],
   );
 
   // Fetch conversation with messages
   const { data: conversation, isLoading: isLoadingConversation } =
     useConversation(conversationId);
+  const canManageShare =
+    !!conversationId &&
+    !!conversation &&
+    conversation.userId === session?.user.id;
+  useConversationShare(canManageShare ? conversationId : undefined);
+  const isShared = !!conversation?.share;
+  const isReadOnlySharedConversation =
+    !!conversationId &&
+    !!conversation?.share &&
+    conversation.userId !== session?.user.id;
+  const persistedConversationMessages = useMemo(
+    () => (conversation?.messages ?? []) as UIMessage[],
+    [conversation?.messages],
+  );
+  const shouldEnableChatSession =
+    !!conversationId &&
+    !isReadOnlySharedConversation &&
+    (!routeConversationId || !!conversation);
+  const chatSession = useChatSession({
+    conversationId: shouldEnableChatSession ? conversationId : undefined,
+    initialMessages: persistedConversationMessages,
+    enabled: shouldEnableChatSession,
+  });
+  const sharedConversationMessages = useMemo(
+    () => (conversation?.messages ?? []) as PartialUIMessage[],
+    [conversation?.messages],
+  );
+  const effectiveForkAgentId = forkAgentId ?? internalAgents[0]?.id ?? null;
 
   // Track title generation for typing animation in the header
   const conversationForTitleTracking = useMemo(
@@ -451,11 +579,45 @@ export default function ChatPage() {
   }, [conversationId, conversation?.artifact, isLoadingConversation]);
 
   // Derive current provider from selected model
-  const currentProvider = useMemo((): SupportedChatProvider | undefined => {
+  const currentProvider = useMemo((): SupportedProvider | undefined => {
     if (!conversation?.selectedModel) return undefined;
     const model = chatModels.find((m) => m.id === conversation.selectedModel);
-    return model?.provider as SupportedChatProvider | undefined;
+    return model?.provider;
   }, [conversation?.selectedModel, chatModels]);
+
+  // Derive model source for existing conversations by comparing with agent/org defaults.
+  // Check localStorage override first — if the user explicitly saved this model as their
+  // override, it's a user override even if it matches the agent or org default.
+  const conversationModelSource = useMemo((): ModelSource | null => {
+    if (!conversation?.selectedModel) return null;
+
+    const userOverride = getSavedModelOverride();
+    if (userOverride && conversation.selectedModel === userOverride) {
+      return "user";
+    }
+
+    const agentId = conversation?.agentId;
+    if (agentId) {
+      const agent = internalAgents.find((a) => a.id === agentId) as
+        | (Record<string, unknown> & { llmModel?: string })
+        | undefined;
+      if (agent?.llmModel && conversation.selectedModel === agent.llmModel) {
+        return "agent";
+      }
+    }
+    if (
+      organization?.defaultLlmModel &&
+      conversation.selectedModel === organization.defaultLlmModel
+    ) {
+      return "organization";
+    }
+    return null;
+  }, [
+    conversation?.selectedModel,
+    conversation?.agentId,
+    internalAgents,
+    organization?.defaultLlmModel,
+  ]);
 
   // Get selected model's context length for the context indicator
   const selectedModelContextLength = useMemo((): number | null => {
@@ -474,69 +636,118 @@ export default function ChatPage() {
   }, [conversation?.selectedModel, initialModel, chatModels]);
 
   // Mutation for updating conversation model
+  // Use a ref so callbacks don't recreate when mutation state changes (isPending etc.),
+  // which would cause infinite re-render loops via Radix composeRefs during commit phase.
   const updateConversationMutation = useUpdateConversation();
+  const updateConversationMutateRef = useRef(updateConversationMutation.mutate);
+  updateConversationMutateRef.current = updateConversationMutation.mutate;
 
-  // Handle model change
-  const handleModelChange = useCallback(
-    (model: string) => {
-      if (!conversation) return;
+  // Handle model change — use refs for chatModels and conversation to keep
+  // callback reference stable. A new callback reference would re-trigger
+  // ModelSelector's auto-select effect on every chatModels refetch.
+  const chatModelsRef = useRef(chatModels);
+  chatModelsRef.current = chatModels;
+  const conversationRef = useRef(conversation);
+  conversationRef.current = conversation;
+  const handleModelChange = useCallback((model: string) => {
+    if (!conversationRef.current) return;
 
-      // Find the provider for this model
-      const modelInfo = chatModels.find((m) => m.id === model);
-      const provider = modelInfo?.provider as SupportedChatProvider | undefined;
+    // Find the provider for this model
+    const modelInfo = chatModelsRef.current.find((m) => m.id === model);
+    const provider = modelInfo?.provider;
 
-      updateConversationMutation.mutate({
-        id: conversation.id,
-        selectedModel: model,
-        selectedProvider: provider,
-      });
-    },
-    [conversation, chatModels, updateConversationMutation],
-  );
+    updateConversationMutateRef.current({
+      id: conversationRef.current.id,
+      selectedModel: model,
+      selectedProvider: provider,
+    });
+  }, []);
 
-  // Handle provider change from API key selector - auto-select a model from new provider
+  // Handle API key change - preselect best model for the new key's provider.
+  // Combines chatApiKeyId + model selection in a single mutation to avoid
+  // race conditions between competing updates.
   const handleProviderChange = useCallback(
-    (newProvider: SupportedChatProvider, _apiKeyId: string) => {
+    (newProvider: SupportedProvider, apiKeyId: string) => {
       if (!conversation) return;
 
-      const providerModels = modelsByProvider[newProvider];
-      if (providerModels && providerModels.length > 0) {
-        // Select first model from the new provider
-        const firstModel = providerModels[0];
-        updateConversationMutation.mutate({
+      const preferredModel = resolvePreferredModelForProvider({
+        provider: newProvider,
+        modelsByProvider,
+      });
+      if (preferredModel) {
+        updateConversationMutateRef.current({
           id: conversation.id,
-          selectedModel: firstModel.id,
-          selectedProvider: newProvider,
+          chatApiKeyId: apiKeyId,
+          selectedModel: preferredModel.modelId,
+          selectedProvider: preferredModel.provider,
+        });
+      } else {
+        // No models for this provider yet, still update the key
+        updateConversationMutateRef.current({
+          id: conversation.id,
+          chatApiKeyId: apiKeyId,
         });
       }
     },
-    [conversation, modelsByProvider, updateConversationMutation],
+    [conversation, modelsByProvider],
   );
 
-  // Find the specific internal agent for this conversation (if any)
-  const _conversationInternalAgent = conversation?.agentId
-    ? internalAgents.find((a) => a.id === conversation.agentId)
-    : undefined;
+  // Handle agent change in existing conversation
+  const handleConversationAgentChange = useCallback(
+    (agentId: string) => {
+      if (!conversation) return;
+      updateConversationMutateRef.current({
+        id: conversation.id,
+        agentId,
+      });
+    },
+    [conversation],
+  );
 
-  // Get current agent info
-  const currentProfileId = conversation?.agentId;
-  const browserToolsAgentId = conversationId
-    ? (conversation?.agentId ?? conversation?.agent?.id)
-    : (initialAgentId ?? undefined);
+  // Reset model override for an existing conversation: clear localStorage,
+  // resolve default from the conversation's agent, and update the conversation.
+  const handleConversationResetModelOverride = useCallback(() => {
+    clearModelOverride();
+    if (!conversation) return;
 
-  const playwrightSetupAgentId = conversationId
-    ? (conversation?.agentId ?? undefined)
-    : (initialAgentId ?? undefined);
-  const {
-    isLoading: isPlaywrightCheckLoading,
-    isRequired: isPlaywrightSetupRequired,
-  } = usePlaywrightSetupRequired(playwrightSetupAgentId, conversationId);
-  // Treat both loading and required as "visible" for disabling submit, hiding arrow, etc.
-  const isPlaywrightSetupVisible =
-    isPlaywrightSetupRequired || isPlaywrightCheckLoading;
+    const agent = conversation.agentId
+      ? (internalAgents.find((a) => a.id === conversation.agentId) as
+          | (Record<string, unknown> & {
+              id: string;
+              llmModel?: string;
+              llmApiKeyId?: string;
+            })
+          | undefined)
+      : null;
 
-  // Check if browser streaming feature is enabled
-  const isBrowserStreamingEnabled = useFeatureFlag("browserStreamingEnabled");
+    const resolved = resolveChatModelState({
+      agent: agent ?? null,
+      modelsByProvider,
+      chatApiKeys,
+      organization: organization
+        ? {
+            defaultLlmModel: organization.defaultLlmModel,
+            defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
+          }
+        : null,
+      chatModels,
+    });
+
+    if (resolved) {
+      updateConversationMutateRef.current({
+        id: conversation.id,
+        selectedModel: resolved.modelId,
+        selectedProvider: resolved.provider,
+      });
+    }
+  }, [
+    conversation,
+    internalAgents,
+    modelsByProvider,
+    chatApiKeys,
+    organization,
+    chatModels,
+  ]);
 
   // Create conversation mutation (requires agentId)
   const createConversationMutation = useCreateConversation();
@@ -588,8 +799,10 @@ export default function ChatPage() {
     previousArtifactRef.current = conversation?.artifact;
   }, [conversation?.artifact, isArtifactOpen, conversationId]);
 
-  // Extract chat session properties (or use defaults if session not ready)
-  const messages = chatSession?.messages ?? [];
+  // While a conversation tab is open, useChat owns the thread.
+  // We only fall back to persisted messages before the session initializes or
+  // for read-only shared conversations that do not create a live chat session.
+  const messages = chatSession?.messages ?? persistedConversationMessages;
   const sendMessage = chatSession?.sendMessage;
   const status = chatSession?.status ?? "ready";
   const setMessages = chatSession?.setMessages;
@@ -598,9 +811,78 @@ export default function ChatPage() {
   const addToolResult = chatSession?.addToolResult;
   const addToolApprovalResponse = chatSession?.addToolApprovalResponse;
   const pendingCustomServerToolCall = chatSession?.pendingCustomServerToolCall;
+  const optimisticToolCalls = chatSession?.optimisticToolCalls ?? [];
   const setPendingCustomServerToolCall =
     chatSession?.setPendingCustomServerToolCall;
   const tokenUsage = chatSession?.tokenUsage;
+
+  const {
+    conversationAgentId,
+    activeAgentId,
+    promptAgentId,
+    swappedAgentName,
+  } = useChatAgentState({
+    conversation,
+    initialAgentId,
+    messages,
+    agents: internalAgents.map((agent) => ({
+      id: agent.id,
+      name: agent.name,
+    })),
+  });
+  const newChatAgentId =
+    activeAgentId ?? initialAgentId ?? internalAgents[0]?.id ?? null;
+
+  // Find the specific internal agent for this conversation (if any)
+  const _conversationInternalAgent = conversationAgentId
+    ? internalAgents.find((a) => a.id === conversationAgentId)
+    : undefined;
+
+  // Get current agent info
+  const currentProfileId = conversationAgentId;
+  const conversationToolsStateId = isReadOnlySharedConversation
+    ? undefined
+    : conversationId;
+  const browserToolsAgentId = isReadOnlySharedConversation
+    ? undefined
+    : conversationId
+      ? (conversationAgentId ?? promptAgentId ?? undefined)
+      : (initialAgentId ?? undefined);
+
+  const playwrightSetupAgentId = isReadOnlySharedConversation
+    ? undefined
+    : conversationId
+      ? (conversationAgentId ?? undefined)
+      : (initialAgentId ?? undefined);
+
+  const { hasPlaywrightMcpTools, isLoading: isLoadingBrowserTools } =
+    useHasPlaywrightMcpTools(browserToolsAgentId, conversationToolsStateId);
+  // Show while loading so it doesn't flash hidden for members whose agent already has playwright
+  // tools. Once loading is done, hides only if the user lacks permission AND agent has no tools.
+  const showBrowserButton =
+    !isReadOnlySharedConversation &&
+    (canUpdateAgent ||
+      hasPlaywrightMcpTools ||
+      (!!conversationId && isLoadingConversation) ||
+      (!!browserToolsAgentId && isLoadingBrowserTools));
+
+  const {
+    isLoading: isPlaywrightCheckLoading,
+    isRequired: isPlaywrightSetupRequired,
+  } = usePlaywrightSetupRequired(
+    playwrightSetupAgentId,
+    conversationToolsStateId,
+    {
+      enabled:
+        !isReadOnlySharedConversation &&
+        hasChatAccess &&
+        canUpdateAgent !== false,
+    },
+  );
+  // Treat both loading and required as "visible" for disabling submit, hiding arrow, etc.
+  // Only applies to users who can actually perform the installation.
+  const isPlaywrightSetupVisible =
+    !!canUpdateAgent && (isPlaywrightSetupRequired || isPlaywrightCheckLoading);
 
   // Use actual token usage when available from the stream (no fallback to estimation)
   const tokensUsed = tokenUsage?.totalTokens;
@@ -650,136 +932,99 @@ export default function ChatPage() {
     openDialog,
   ]);
 
-  // Sync messages when conversation loads or changes
+  // Send a deferred initial prompt once the newly-created conversation's chat
+  // session is ready. Existing conversations seed useChat with persisted
+  // messages, so we do not rehydrate them via setMessages here.
   useEffect(() => {
     if (!setMessages || !sendMessage) {
       return;
-    }
-
-    // When switching to a different conversation, reset the loaded ref
-    if (loadedConversationRef.current !== conversationId) {
-      loadedConversationRef.current = undefined;
-    }
-
-    // Sync messages from backend only on initial load or when recovering from empty state
-    // The AI SDK manages message state correctly during streaming, so we shouldn't overwrite it
-    const shouldSync =
-      conversation?.messages &&
-      conversation.id === conversationId &&
-      status !== "submitted" &&
-      status !== "streaming" &&
-      !userMessageJustEdited.current &&
-      (loadedConversationRef.current !== conversationId ||
-        messages.length === 0);
-
-    if (shouldSync) {
-      setMessages(conversation.messages as UIMessage[]);
-      loadedConversationRef.current = conversationId;
-
-      // If there's a pending prompt/files and the conversation is empty, send it
-      if (
-        (pendingPromptRef.current || pendingFilesRef.current.length > 0) &&
-        conversation.messages.length === 0
-      ) {
-        const promptToSend = pendingPromptRef.current;
-        const filesToSend = pendingFilesRef.current;
-        pendingPromptRef.current = undefined;
-        pendingFilesRef.current = [];
-
-        // Build message parts
-        const parts: Array<
-          | { type: "text"; text: string }
-          | { type: "file"; url: string; mediaType: string; filename?: string }
-        > = [];
-
-        if (promptToSend) {
-          parts.push({ type: "text", text: promptToSend });
-        }
-
-        for (const file of filesToSend) {
-          parts.push({
-            type: "file",
-            url: file.url,
-            mediaType: file.mediaType,
-            filename: file.filename,
-          });
-        }
-
-        sendMessage({
-          role: "user",
-          parts,
-        });
-      }
     }
 
     // Clear the edit flag when status changes to ready (streaming finished)
     if (status === "ready" && userMessageJustEdited.current) {
       userMessageJustEdited.current = false;
     }
+
+    const hasPendingInitialMessage =
+      !!pendingPromptRef.current || pendingFilesRef.current.length > 0;
+    const shouldSendPendingInitialMessage =
+      conversationId &&
+      conversation?.id === conversationId &&
+      conversation.messages.length === 0 &&
+      messages.length === 0 &&
+      status === "ready" &&
+      hasPendingInitialMessage &&
+      pendingInitialSendConversationRef.current !== conversationId;
+
+    if (!shouldSendPendingInitialMessage) {
+      return;
+    }
+
+    pendingInitialSendConversationRef.current = conversationId;
+    const promptToSend = pendingPromptRef.current;
+    const filesToSend = pendingFilesRef.current;
+    pendingPromptRef.current = undefined;
+    pendingFilesRef.current = [];
+
+    const parts: Array<
+      | { type: "text"; text: string }
+      | { type: "file"; url: string; mediaType: string; filename?: string }
+    > = [];
+
+    if (promptToSend) {
+      parts.push({ type: "text", text: promptToSend });
+    }
+
+    for (const file of filesToSend) {
+      parts.push({
+        type: "file",
+        url: file.url,
+        mediaType: file.mediaType,
+        filename: file.filename,
+      });
+    }
+
+    sendMessage({
+      role: "user",
+      parts,
+    });
   }, [
-    conversationId,
     conversation,
-    setMessages,
-    sendMessage,
-    status,
+    conversationId,
     messages.length,
+    sendMessage,
+    setMessages,
+    status,
   ]);
 
-  // Merge database UUIDs from backend into local message state
-  // This runs after streaming completes and backend query has fetched
+  // Poll for the assistant response when the page was reloaded mid-stream.
+  // After reload the DB may only contain the user message (persisted early by
+  // the backend). The assistant response arrives once the backend stream
+  // finishes. We poll until the last message is no longer a user message.
   useEffect(() => {
-    if (
-      !setMessages ||
-      !conversation?.messages ||
-      conversation.id !== conversationId ||
-      status === "streaming" ||
-      status === "submitted"
-    ) {
+    if (!conversationId || status === "streaming" || status === "submitted") {
       return;
     }
 
-    // Only merge IDs if backend has same or more messages than local state
-    if (conversation.messages.length < messages.length) {
-      return;
-    }
+    const lastMsg = conversation?.messages?.at(-1) as UIMessage | undefined;
+    const isWaitingForAssistant =
+      lastMsg?.role === "user" && messages.length > 0;
 
-    // Check if any message has a non-UUID ID that needs updating
-    const needsIdUpdate = messages.some((localMsg, idx) => {
-      const backendMsg = conversation.messages[idx] as UIMessage | undefined;
-      return (
-        backendMsg &&
-        backendMsg.id !== localMsg.id &&
-        // Check if backend ID looks like a UUID (has dashes)
-        backendMsg.id.includes("-")
-      );
-    });
+    if (!isWaitingForAssistant) return;
 
-    if (!needsIdUpdate) {
-      return;
-    }
+    const interval = setInterval(() => {
+      queryClient.invalidateQueries({
+        queryKey: ["conversation", conversationId],
+      });
+    }, 3000);
 
-    // Merge IDs from backend into local messages
-    const mergedMessages = messages.map((localMsg, idx) => {
-      const backendMsg = conversation.messages[idx] as UIMessage | undefined;
-      if (
-        backendMsg &&
-        backendMsg.id !== localMsg.id &&
-        backendMsg.id.includes("-")
-      ) {
-        // Update only the ID, keep everything else from local state
-        return { ...localMsg, id: backendMsg.id };
-      }
-      return localMsg;
-    });
-
-    setMessages(mergedMessages as UIMessage[]);
+    return () => clearInterval(interval);
   }, [
     conversationId,
     conversation?.messages,
-    conversation?.id,
-    messages,
-    setMessages,
+    messages.length,
     status,
+    queryClient,
   ]);
 
   // Auto-focus textarea when status becomes ready (message sent or stream finished)
@@ -792,7 +1037,6 @@ export default function ChatPage() {
 
   // Auto-focus textarea on initial page load
   useEffect(() => {
-    // Use requestAnimationFrame to ensure DOM is ready
     requestAnimationFrame(() => {
       textareaRef.current?.focus();
     });
@@ -881,48 +1125,40 @@ export default function ChatPage() {
   const toggleBrowserPanel = useCallback(() => {
     const newValue = !isBrowserPanelOpen;
     setIsBrowserPanelOpen(newValue);
-    localStorage.setItem(LocalStorageKeys.browserOpen, String(newValue));
+    localStorage.setItem(BROWSER_OPEN_KEY, String(newValue));
   }, [isBrowserPanelOpen]);
 
   // Close browser panel handler (also persists to localStorage)
   const closeBrowserPanel = useCallback(() => {
     setIsBrowserPanelOpen(false);
-    localStorage.setItem(LocalStorageKeys.browserOpen, "false");
+    localStorage.setItem(BROWSER_OPEN_KEY, "false");
   }, []);
 
   // Handle creating conversation from browser URL input (when no conversation exists)
-  const handleCreateConversationWithUrl = useCallback(
-    (url: string) => {
-      if (!initialAgentId || createConversationMutation.isPending) {
-        return;
+  const createInitialConversation = useCallback(
+    (onSuccess?: (newConversation: { id: string }) => void | Promise<void>) => {
+      if (createConversationMutation.isPending) {
+        return false;
       }
 
-      // Store the URL to navigate to after conversation is created
-      setPendingBrowserUrl(url);
+      const input = buildCreateConversationInput({
+        agentId: initialAgentId,
+        modelId: initialModel,
+        chatApiKeyId: initialApiKeyId,
+        chatModels,
+      });
+      if (!input) {
+        return false;
+      }
 
-      // Find the provider for the initial model
-      const modelInfo = chatModels.find((m) => m.id === initialModel);
-      const selectedProvider = modelInfo?.provider as
-        | SupportedChatProvider
-        | undefined;
-
-      // Create conversation with the selected agent
-      createConversationMutation.mutate(
-        {
-          agentId: initialAgentId,
-          selectedModel: initialModel,
-          selectedProvider,
-          chatApiKeyId: initialApiKeyId,
+      createConversationMutation.mutate(input, {
+        onSuccess: (newConversation) => {
+          if (newConversation) {
+            void onSuccess?.(newConversation);
+          }
         },
-        {
-          onSuccess: (newConversation) => {
-            if (newConversation) {
-              selectConversation(newConversation.id);
-              // URL navigation will happen via useBrowserStream after conversation connects
-            }
-          },
-        },
-      );
+      });
+      return true;
     },
     [
       initialAgentId,
@@ -930,8 +1166,24 @@ export default function ChatPage() {
       initialApiKeyId,
       chatModels,
       createConversationMutation,
-      selectConversation,
     ],
+  );
+
+  const handleCreateConversationWithUrl = useCallback(
+    (url: string) => {
+      // Store the URL to navigate to after conversation is created
+      setPendingBrowserUrl(url);
+
+      const started = createInitialConversation((newConversation) => {
+        selectConversation(newConversation.id);
+        // URL navigation will happen via useBrowserStream after conversation connects
+      });
+
+      if (!started) {
+        setPendingBrowserUrl(undefined);
+      }
+    },
+    [createInitialConversation, selectConversation],
   );
 
   // Callback to clear pending browser URL after navigation completes
@@ -939,32 +1191,45 @@ export default function ChatPage() {
     setPendingBrowserUrl(undefined);
   }, []);
 
+  const handleForkSharedConversation = useCallback(async () => {
+    if (!conversation?.share?.id || !effectiveForkAgentId) {
+      return;
+    }
+
+    const result = await forkSharedConversationMutation.mutateAsync({
+      shareId: conversation.share.id,
+      agentId: effectiveForkAgentId,
+    });
+
+    if (result) {
+      setIsForkDialogOpen(false);
+      router.push(`/chat/${result.id}`);
+    }
+  }, [
+    conversation?.share?.id,
+    effectiveForkAgentId,
+    forkSharedConversationMutation,
+    router,
+  ]);
+
   // Handle initial agent change (when no conversation exists)
   const handleInitialAgentChange = useCallback(
     (agentId: string) => {
       setInitialAgentId(agentId);
-      localStorage.setItem("selected-chat-agent", agentId);
+      saveAgent(agentId);
 
-      // Apply agent's LLM config if present
+      // Resolve model/key for the new agent using the same priority chain
       const selectedAgent = internalAgents.find((a) => a.id === agentId);
       if (selectedAgent) {
-        resolvedAgentRef.current = selectedAgent;
-        const agentData = selectedAgent as Record<string, unknown>;
-        if (agentData.llmModel) {
-          setInitialModel(agentData.llmModel as string);
-        }
-        if (agentData.llmApiKeyId) {
-          setInitialApiKeyId(agentData.llmApiKeyId as string);
-        }
+        applyInitialAgentSelection(selectedAgent);
       }
     },
-    [internalAgents],
+    [applyInitialAgentSelection, internalAgents],
   );
 
-  // Handle initial submit (when no conversation exists)
-  const handleInitialSubmit: PromptInputProps["onSubmit"] = useCallback(
-    (message, e) => {
-      e.preventDefault();
+  // Core logic for starting a new conversation with a message
+  const submitInitialMessage = useCallback(
+    (message: Partial<PromptInputMessage>) => {
       if (isPlaywrightSetupVisible) return;
       const hasText = message.text?.trim();
       const hasFiles = message.files && message.files.length > 0;
@@ -972,7 +1237,7 @@ export default function ChatPage() {
       if (
         (!hasText && !hasFiles) ||
         !initialAgentId ||
-        // !initialModel ||
+        !initialModel ||
         createConversationMutation.isPending
       ) {
         return;
@@ -985,82 +1250,72 @@ export default function ChatPage() {
       // Check if there are pending tool actions to apply
       const pendingActions = getPendingActions(initialAgentId);
 
-      // Find the provider for the initial model
-      const modelInfo = chatModels.find((m) => m.id === initialModel);
-      const selectedProvider = modelInfo?.provider as
-        | SupportedChatProvider
-        | undefined;
+      createInitialConversation(async (newConversation) => {
+        // Apply pending tool actions if any
+        if (pendingActions.length > 0) {
+          // Get the default enabled tools from the conversation (backend sets these)
+          // We need to fetch them first to apply our pending actions on top
+          try {
+            // The backend creates conversation with default enabled tools
+            // We need to apply pending actions to modify that default
+            const enabledToolsResult = await fetchConversationEnabledTools(
+              newConversation.id,
+            );
+            if (enabledToolsResult?.data) {
+              const baseEnabledToolIds =
+                enabledToolsResult.data.enabledToolIds || [];
+              const newEnabledToolIds = applyPendingActions(
+                baseEnabledToolIds,
+                pendingActions,
+              );
 
-      // Create conversation with the selected agent and prompt
-      createConversationMutation.mutate(
-        {
-          agentId: initialAgentId,
-          selectedModel: initialModel,
-          selectedProvider,
-          chatApiKeyId: initialApiKeyId,
-        },
-        {
-          onSuccess: async (newConversation) => {
-            if (newConversation) {
-              // Apply pending tool actions if any
-              if (pendingActions.length > 0) {
-                // Get the default enabled tools from the conversation (backend sets these)
-                // We need to fetch them first to apply our pending actions on top
-                try {
-                  // The backend creates conversation with default enabled tools
-                  // We need to apply pending actions to modify that default
-                  const data = await fetchConversationEnabledTools(
-                    newConversation.id,
-                  );
-                  if (data) {
-                    const baseEnabledToolIds = data.enabledToolIds || [];
-                    const newEnabledToolIds = applyPendingActions(
-                      baseEnabledToolIds,
-                      pendingActions,
-                    );
+              // Pre-populate the query cache so useConversationEnabledTools
+              // immediately sees the correct state when conversationId is set.
+              // Without this, the hook would briefly see default data (with
+              // Playwright tools still enabled) causing flickering.
+              queryClient.setQueryData(
+                ["conversation", newConversation.id, "enabled-tools"],
+                {
+                  hasCustomSelection: true,
+                  enabledToolIds: newEnabledToolIds,
+                },
+              );
 
-                    // Pre-populate the query cache so useConversationEnabledTools
-                    // immediately sees the correct state when conversationId is set.
-                    // Without this, the hook would briefly see default data (with
-                    // Playwright tools still enabled) causing flickering.
-                    queryClient.setQueryData(
-                      ["conversation", newConversation.id, "enabled-tools"],
-                      {
-                        hasCustomSelection: true,
-                        enabledToolIds: newEnabledToolIds,
-                      },
-                    );
-
-                    // Update the enabled tools
-                    updateEnabledToolsMutation.mutate({
-                      conversationId: newConversation.id,
-                      toolIds: newEnabledToolIds,
-                    });
-                  }
-                } catch {
-                  // Silently fail - the default tools will be used
-                }
-                // Clear pending actions regardless of success
-                clearPendingActions();
-              }
-
-              selectConversation(newConversation.id);
+              // Update the enabled tools
+              updateEnabledToolsMutation.mutate({
+                conversationId: newConversation.id,
+                toolIds: newEnabledToolIds,
+              });
             }
-          },
-        },
-      );
+          } catch {
+            // Silently fail - the default tools will be used
+          }
+          // Clear pending actions regardless of success
+          clearPendingActions();
+        }
+
+        selectConversation(newConversation.id);
+      });
     },
     [
       isPlaywrightSetupVisible,
       initialAgentId,
       initialModel,
-      initialApiKeyId,
-      chatModels,
-      createConversationMutation,
+      createInitialConversation,
       updateEnabledToolsMutation,
       selectConversation,
       queryClient,
+      createConversationMutation.isPending,
     ],
+  );
+
+  // Form submit handler wraps submitInitialMessage with event.preventDefault
+  const handleInitialSubmit: PromptInputProps["onSubmit"] = useCallback(
+    (message, e) => {
+      e.preventDefault();
+      submitInitialMessage(message);
+    },
+    [submitInitialMessage],
   );
 
   // Auto-send message from URL when conditions are met (deep link support)
@@ -1073,6 +1328,7 @@ export default function ChatPage() {
 
     // Wait for agent to be ready.
     if (!initialAgentId) return;
+    if (!initialModel) return;
 
     // Skip if mutation is already in progress
     if (createConversationMutation.isPending) return;
@@ -1083,44 +1339,59 @@ export default function ChatPage() {
     // Store the message to send after conversation is created
     pendingPromptRef.current = initialUserPrompt;
 
-    // Find the provider for the initial model
-    const modelInfo = chatModels.find((m) => m.id === initialModel);
-    const selectedProvider = modelInfo?.provider as
-      | SupportedChatProvider
-      | undefined;
-
-    // Create conversation and send message
-    createConversationMutation.mutate(
-      {
-        agentId: initialAgentId,
-        selectedModel: initialModel,
-        selectedProvider,
-        chatApiKeyId: initialApiKeyId,
-      },
-      {
-        onSuccess: (newConversation) => {
-          if (newConversation) {
-            selectConversation(newConversation.id);
-          }
-        },
-      },
-    );
+    createInitialConversation((newConversation) => {
+      selectConversation(newConversation.id);
+    });
   }, [
     initialUserPrompt,
     conversationId,
     initialAgentId,
     initialModel,
-    initialApiKeyId,
-    chatModels,
-    createConversationMutation,
+    createInitialConversation,
     selectConversation,
+    createConversationMutation.isPending,
   ]);
-
-  // Determine which agent ID to use for prompt input
-  const activeAgentId = conversation?.agent?.id ?? initialAgentId;
 
   // Check if the conversation's agent was deleted
   const isAgentDeleted = conversationId && conversation && !conversation.agent;
+
+  // If user lacks permission to read agents or LLM providers, show access denied
+  // Must check before loading state since disabled queries stay in pending state
+  if (
+    !conversationId &&
+    (canReadAgent === false || canReadLlmProvider === false)
+  ) {
+    const missingPermissions: string[] = [];
+    if (canReadAgent === false) missingPermissions.push("agent:read");
+    if (canReadLlmProvider === false)
+      missingPermissions.push("llmProviderApiKey:read");
+    return (
+      <Empty className="h-full">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <AlertTriangle />
+          </EmptyMedia>
+          <EmptyTitle>Access restricted</EmptyTitle>
+          <EmptyDescription>
+            You don&apos;t have the required permissions to use the chat. Ask
+            your administrator to grant you the following:
+          </EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent>
+          <div className="flex flex-col items-center gap-1">
+            {missingPermissions.map((p) => (
+              <code
+                key={p}
+                className="rounded bg-muted px-2 py-1 text-sm font-mono"
+              >
+                {p}
+              </code>
+            ))}
+          </div>
+        </EmptyContent>
+      </Empty>
+    );
+  }
 
   // Show loading spinner while essential data is loading
   if (isLoadingApiKeyCheck || isLoadingAgents || isPlaywrightCheckLoading) {
@@ -1207,78 +1478,66 @@ export default function ChatPage() {
         <div className="flex flex-col h-full">
           <StreamTimeoutWarning status={status} messages={messages} />
 
-          <div className="sticky top-0 z-10 bg-background border-b p-2">
+          <div
+            className={cn(
+              "sticky top-0 z-10 bg-background border-b p-2",
+              !conversationId && "hidden",
+            )}
+          >
             <div className="relative flex items-center justify-between gap-2">
-              {/* Left side - agent selector */}
-              <div className="flex items-center gap-2 flex-shrink-0">
-                {isAgentDeleted ? null : conversationId ? (
-                  <AgentSelector
-                    currentPromptId={
-                      conversation?.agent?.agentType === "agent"
-                        ? (conversation?.agentId ?? null)
-                        : null
-                    }
-                    currentAgentId={conversation?.agentId ?? ""}
-                    currentModel={conversation?.selectedModel ?? ""}
-                  />
-                ) : (
-                  <InitialAgentSelector
-                    currentAgentId={initialAgentId}
-                    onAgentChange={handleInitialAgentChange}
-                  />
-                )}
-                {/* Edit agent button */}
-                {!isAgentDeleted &&
-                  (conversationId ? conversation?.agentId : initialAgentId) && (
-                    <PermissionButton
-                      permissions={{ agent: ["update"] }}
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => openDialog("edit-agent")}
-                      title="Edit agent, tools, sub-agents"
-                      className="h-8 px-2"
-                    >
-                      <Edit className="h-4 w-4" />
-                    </PermissionButton>
-                  )}
-              </div>
-              {/* Center - conversation title (absolutely positioned for true centering) */}
+              {/* Left side - conversation title */}
               {conversationId && conversation && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="text-sm text-muted-foreground truncate max-w-[300px] cursor-default pointer-events-auto">
-                          {headerAnimatingTitles.has(conversation.id) ? (
-                            <TypingText
-                              text={getConversationDisplayTitle(
-                                conversation.title,
-                                conversation.messages,
-                              )}
-                              typingSpeed={35}
-                              showCursor
-                              cursorClassName="bg-muted-foreground"
-                            />
-                          ) : (
-                            getConversationDisplayTitle(
-                              conversation.title,
-                              conversation.messages,
-                            )
+                <div className="flex items-center flex-shrink min-w-0">
+                  <TruncatedTooltip
+                    content={getConversationDisplayTitle(
+                      conversation.title,
+                      conversation.messages,
+                    )}
+                  >
+                    <h1 className="text-base font-normal text-muted-foreground truncate max-w-[360px] cursor-default">
+                      {headerAnimatingTitles.has(conversation.id) ? (
+                        <TypingText
+                          text={getConversationDisplayTitle(
+                            conversation.title,
+                            conversation.messages,
                           )}
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        {getConversationDisplayTitle(
+                          typingSpeed={35}
+                          showCursor
+                          cursorClassName="bg-muted-foreground"
+                        />
+                      ) : (
+                        getConversationDisplayTitle(
                           conversation.title,
                           conversation.messages,
-                        )}
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                        )
+                      )}
+                    </h1>
+                  </TruncatedTooltip>
                 </div>
               )}
               {/* Right side - desktop: original buttons */}
               <div className="hidden md:flex items-center gap-2 flex-shrink-0">
+                {canManageShare && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsShareDialogOpen(true)}
+                    className="text-xs"
+                  >
+                    {isShared ? (
+                      <>
+                        <Users className="h-3 w-3 mr-1 text-primary" />
+                        <span className="text-primary">Shared</span>
+                      </>
+                    ) : (
+                      <>
+                        <Share2 className="h-3 w-3 mr-1" />
+                        Share
+                      </>
+                    )}
+                  </Button>
+                )}
+                {canManageShare && <div className="w-px h-4 bg-border" />}
                 <Button
                   variant={isArtifactOpen ? "secondary" : "ghost"}
                   size="sm"
@@ -1288,7 +1547,8 @@ export default function ChatPage() {
                   <FileText className="h-3 w-3 mr-1" />
                   Artifact
                 </Button>
-                {isBrowserStreamingEnabled && (
+
+                {showBrowserButton && (
                   <>
                     <div className="w-px h-4 bg-border" />
                     <Button
@@ -1323,11 +1583,28 @@ export default function ChatPage() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
+                    {canManageShare && (
+                      <DropdownMenuItem
+                        onSelect={() => setIsShareDialogOpen(true)}
+                      >
+                        {isShared ? (
+                          <>
+                            <Users className="h-4 w-4 text-primary" />
+                            <span className="text-primary">Shared</span>
+                          </>
+                        ) : (
+                          <>
+                            <Share2 className="h-4 w-4" />
+                            Share
+                          </>
+                        )}
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuItem onSelect={toggleArtifactPanel}>
                       <FileText className="h-4 w-4" />
                       {isArtifactOpen ? "Hide Artifact" : "Show Artifact"}
                     </DropdownMenuItem>
-                    {isBrowserStreamingEnabled && (
+                    {showBrowserButton && (
                       <DropdownMenuItem
                         onSelect={toggleBrowserPanel}
                         disabled={isPlaywrightSetupVisible}
@@ -1346,17 +1623,13 @@ export default function ChatPage() {
 
           {/* Mobile: Inline artifact/browser panels below header */}
           {(isArtifactOpen ||
-            (isBrowserPanelOpen &&
-              isBrowserStreamingEnabled &&
-              !isPlaywrightSetupVisible)) && (
+            (isBrowserPanelOpen && !isPlaywrightSetupVisible)) && (
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden md:hidden">
               {isArtifactOpen && (
                 <div
                   className={cn(
                     "min-h-0 overflow-auto",
-                    isBrowserPanelOpen &&
-                      isBrowserStreamingEnabled &&
-                      !isPlaywrightSetupVisible
+                    isBrowserPanelOpen && !isPlaywrightSetupVisible
                       ? "h-1/2 border-b"
                       : "flex-1",
                   )}
@@ -1369,234 +1642,308 @@ export default function ChatPage() {
                   />
                 </div>
               )}
-              {isBrowserPanelOpen &&
-                isBrowserStreamingEnabled &&
-                !isPlaywrightSetupVisible && (
-                  <div
-                    className={cn(
-                      "min-h-0 overflow-auto",
-                      isArtifactOpen ? "h-1/2" : "flex-1",
-                    )}
-                  >
-                    <BrowserPanel
-                      isOpen={true}
-                      onClose={closeBrowserPanel}
-                      conversationId={conversationId}
-                      agentId={browserToolsAgentId}
-                      onCreateConversationWithUrl={
-                        handleCreateConversationWithUrl
-                      }
-                      isCreatingConversation={
-                        createConversationMutation.isPending
-                      }
-                      initialNavigateUrl={pendingBrowserUrl}
-                      onInitialNavigateComplete={handleInitialNavigateComplete}
-                    />
-                  </div>
-                )}
+              {isBrowserPanelOpen && !isPlaywrightSetupVisible && (
+                <div
+                  className={cn(
+                    "min-h-0 overflow-auto",
+                    isArtifactOpen ? "h-1/2" : "flex-1",
+                  )}
+                >
+                  <BrowserPanel
+                    isOpen={true}
+                    onClose={closeBrowserPanel}
+                    conversationId={conversationId}
+                    agentId={browserToolsAgentId}
+                    onCreateConversationWithUrl={
+                      handleCreateConversationWithUrl
+                    }
+                    isCreatingConversation={
+                      createConversationMutation.isPending
+                    }
+                    initialNavigateUrl={pendingBrowserUrl}
+                    onInitialNavigateComplete={handleInitialNavigateComplete}
+                  />
+                </div>
+              )}
             </div>
           )}
 
-          {/* Chat content - hidden on mobile when panels are open */}
-          <div
-            className={cn(
-              "flex-1 overflow-y-auto relative",
-              (isArtifactOpen ||
-                (isBrowserPanelOpen &&
-                  isBrowserStreamingEnabled &&
-                  !isPlaywrightSetupVisible)) &&
-                "hidden md:block",
-            )}
-          >
-            {isPlaywrightSetupRequired && !conversationId && (
-              <PlaywrightInstallDialog
-                agentId={playwrightSetupAgentId}
-                conversationId={conversationId}
-              />
-            )}
-            <ChatMessages
-              conversationId={conversationId}
-              agentId={currentProfileId || initialAgentId || undefined}
-              agentName={
-                _conversationInternalAgent?.name ||
-                internalAgents.find((a) => a.id === initialAgentId)?.name
-              }
-              suggestedPrompt={
-                conversationId
-                  ? undefined
-                  : internalAgents.find((a) => a.id === initialAgentId)
-                      ?.userPrompt
-              }
-              onSuggestedPromptClick={
-                conversationId
-                  ? undefined
-                  : () => {
-                      const selectedAgent = internalAgents.find(
-                        (a) => a.id === initialAgentId,
-                      );
-                      const userPrompt = selectedAgent?.userPrompt;
-                      if (!userPrompt) return;
-                      const syntheticEvent = {
-                        preventDefault: () => {},
-                      } as React.FormEvent<HTMLFormElement>;
-                      handleInitialSubmit(
-                        { text: userPrompt, files: [] },
-                        syntheticEvent,
-                      );
+          {conversationId ? (
+            <>
+              {/* Chat content - hidden on mobile when panels are open */}
+              <div
+                className={cn(
+                  "flex-1 min-h-0 relative",
+                  (isArtifactOpen ||
+                    (isBrowserPanelOpen && !isPlaywrightSetupVisible)) &&
+                    "hidden md:block",
+                )}
+              >
+                {isReadOnlySharedConversation ? (
+                  <MessageThread
+                    messages={sharedConversationMessages}
+                    containerClassName="h-full"
+                    hideDivider
+                    profileId={conversation?.agent?.id}
+                  />
+                ) : (
+                  <ChatMessages
+                    conversationId={conversationId}
+                    agentId={currentProfileId || initialAgentId || undefined}
+                    messages={messages}
+                    status={status}
+                    optimisticToolCalls={optimisticToolCalls}
+                    isLoadingConversation={isLoadingConversation}
+                    onMessagesUpdate={setMessages}
+                    agentName={
+                      (currentProfileId
+                        ? internalAgents.find((a) => a.id === currentProfileId)
+                        : internalAgents.find((a) => a.id === initialAgentId)
+                      )?.name
                     }
-              }
-              hideArrow={isPlaywrightSetupVisible}
-              messages={messages}
-              status={status}
-              isLoadingConversation={isLoadingConversation}
-              onMessagesUpdate={setMessages}
-              onUserMessageEdit={(
-                editedMessage,
-                updatedMessages,
-                editedPartIndex,
-              ) => {
-                // After user message is edited, set messages WITHOUT the edited one, then send it fresh
-                if (setMessages && sendMessage) {
-                  // Set flag to prevent message sync from overwriting our state
-                  userMessageJustEdited.current = true;
-
-                  // Remove the edited message (last one) - we'll re-send it via sendMessage()
-                  const messagesWithoutEditedMessage = updatedMessages.slice(
-                    0,
-                    -1,
-                  );
-                  setMessages(messagesWithoutEditedMessage);
-
-                  // Send the edited message to generate new response (same as handleSubmit)
-                  // Use the specific part that was edited (via editedPartIndex) instead of finding
-                  // the first text part, in case the message has multiple text parts
-                  const editedPart = editedMessage.parts?.[editedPartIndex];
-                  const editedText =
-                    editedPart?.type === "text" ? editedPart.text : "";
-                  if (editedText?.trim()) {
-                    sendMessage({
-                      role: "user",
-                      parts: [{ type: "text", text: editedText }],
-                    });
-                  }
-                }
-              }}
-              error={error}
-              onToolApprovalResponse={
-                addToolApprovalResponse
-                  ? ({ id, approved, reason }) => {
-                      addToolApprovalResponse({ id, approved, reason });
+                    selectedModel={conversation?.selectedModel ?? initialModel}
+                    modelSource={conversationModelSource ?? initialModelSource}
+                    onUserMessageEdit={(
+                      editedMessage,
+                      updatedMessages,
+                      editedPartIndex,
+                    ) => {
+                      if (setMessages && sendMessage) {
+                        userMessageJustEdited.current = true;
+                        const messagesWithoutEditedMessage =
+                          updatedMessages.slice(0, -1);
+                        setMessages(messagesWithoutEditedMessage);
+                        const editedPart =
+                          editedMessage.parts?.[editedPartIndex];
+                        const editedText =
+                          editedPart?.type === "text" ? editedPart.text : "";
+                        if (editedText?.trim()) {
+                          sendMessage({
+                            role: "user",
+                            parts: [{ type: "text", text: editedText }],
+                          });
+                        }
+                      }
+                    }}
+                    error={error}
+                    onToolApprovalResponse={
+                      addToolApprovalResponse
+                        ? ({ id, approved, reason }) => {
+                            addToolApprovalResponse({ id, approved, reason });
+                          }
+                        : undefined
                     }
-                  : undefined
-              }
-            />
-          </div>
-
-          {isAgentDeleted ? (
-            <div className="sticky bottom-0 bg-background border-t p-4">
-              <div className="max-w-4xl mx-auto">
-                <div className="flex items-center justify-between gap-4 p-4 rounded-lg border border-muted bg-muted/50">
-                  <div className="flex items-center gap-3 text-muted-foreground">
-                    <AlertTriangle className="h-5 w-5 text-amber-500" />
-                    <span>
-                      The agent associated with this conversation has been
-                      deleted.
-                    </span>
-                  </div>
-                  <Button onClick={() => router.push("/chat")}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    New Conversation
-                  </Button>
-                </div>
+                  />
+                )}
               </div>
-            </div>
+
+              {isReadOnlySharedConversation ? (
+                <div className="sticky bottom-0 bg-background border-t p-4">
+                  <div className="max-w-4xl mx-auto space-y-3">
+                    <div className="relative">
+                      <div className="border-input dark:bg-input/30 relative flex w-full flex-col rounded-md border shadow-xs opacity-30 blur-[3px] pointer-events-none select-none">
+                        <div className="px-4 py-5 min-h-[120px]">
+                          <span className="text-sm text-muted-foreground">
+                            Type a message...
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between w-full px-3 pb-3">
+                          <div className="flex items-center gap-1">
+                            <div className="size-8 flex items-center justify-center">
+                              <PaperclipIcon className="size-4 text-muted-foreground" />
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="size-8 flex items-center justify-center">
+                              <MicIcon className="size-4 text-muted-foreground" />
+                            </div>
+                            <div className="size-8 flex items-center justify-center rounded-md bg-primary">
+                              <CornerDownLeftIcon className="size-4 text-primary-foreground" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-auto">
+                        <Button onClick={() => setIsForkDialogOpen(true)}>
+                          <Plus className="h-4 w-4 mr-2" />
+                          Start New Chat from here
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <Version inline />
+                    </div>
+                  </div>
+                </div>
+              ) : isAgentDeleted ? (
+                <div className="sticky bottom-0 bg-background border-t p-4">
+                  <div className="max-w-4xl mx-auto">
+                    <div className="flex items-center justify-between gap-4 p-4 rounded-lg border border-muted bg-muted/50">
+                      <div className="flex items-center gap-3 text-muted-foreground">
+                        <AlertTriangle className="h-5 w-5 text-amber-500" />
+                        <span>
+                          The agent associated with this conversation has been
+                          deleted.
+                        </span>
+                      </div>
+                      <Button onClick={() => router.push("/chat")}>
+                        <Plus className="h-4 w-4 mr-2" />
+                        New Conversation
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                activeAgentId && (
+                  <div className="sticky bottom-0 bg-background border-t p-4">
+                    <div className="max-w-4xl mx-auto space-y-3">
+                      <ArchestraPromptInput
+                        onSubmit={handleSubmit}
+                        status={status}
+                        selectedModel={conversation?.selectedModel ?? ""}
+                        onModelChange={handleModelChange}
+                        agentId={promptAgentId ?? activeAgentId}
+                        conversationId={conversationId}
+                        currentConversationChatApiKeyId={
+                          conversation?.chatApiKeyId
+                        }
+                        currentProvider={currentProvider}
+                        textareaRef={textareaRef}
+                        onProviderChange={handleProviderChange}
+                        allowFileUploads={
+                          organization?.allowChatFileUploads ?? false
+                        }
+                        isModelsLoading={isModelsLoading}
+                        tokensUsed={tokensUsed}
+                        maxContextLength={selectedModelContextLength}
+                        inputModalities={selectedModelInputModalities}
+                        agentLlmApiKeyId={
+                          conversation?.agent?.llmApiKeyId ?? null
+                        }
+                        submitDisabled={isPlaywrightSetupVisible}
+                        isPlaywrightSetupVisible={isPlaywrightSetupVisible}
+                        selectorAgentId={activeAgentId}
+                        selectorAgentName={swappedAgentName ?? undefined}
+                        onAgentChange={handleConversationAgentChange}
+                        modelSource={conversationModelSource}
+                        onResetModelOverride={
+                          handleConversationResetModelOverride
+                        }
+                      />
+                      <div className="text-center">
+                        <Version inline />
+                      </div>
+                    </div>
+                  </div>
+                )
+              )}
+            </>
           ) : (
-            activeAgentId && (
-              <div className="sticky bottom-0 bg-background border-t p-4">
-                <div className="max-w-4xl mx-auto space-y-3">
-                  <ArchestraPromptInput
-                    onSubmit={
-                      conversationId && conversation?.agent?.id
-                        ? handleSubmit
-                        : handleInitialSubmit
-                    }
-                    status={
-                      conversationId && conversation?.agent?.id
-                        ? status
-                        : createConversationMutation.isPending
+            /* No active chat: centered prompt input */
+            newChatAgentId && (
+              // biome-ignore lint/a11y/noStaticElementInteractions: click-to-focus container
+              // biome-ignore lint/a11y/useKeyWithClickEvents: click-to-focus container
+              <div
+                className="relative flex-1 flex flex-col min-h-0"
+                onClick={(e) => {
+                  // Focus textarea when clicking empty space outside interactive elements
+                  if (
+                    e.target === e.currentTarget ||
+                    !(e.target as HTMLElement).closest(
+                      "button, a, input, textarea, [role=combobox], [data-slot=input-group]",
+                    )
+                  ) {
+                    textareaRef.current?.focus();
+                  }
+                }}
+              >
+                {organization?.chatLinks &&
+                  organization.chatLinks.length > 0 && (
+                    <div className="absolute top-4 right-4 z-10 flex flex-wrap justify-end gap-2 max-w-[min(100%,36rem)]">
+                      {organization.chatLinks.map((link) => (
+                        <ChatLinkButton
+                          key={`${link.label}-${link.url}`}
+                          url={link.url}
+                          label={link.label}
+                        />
+                      ))}
+                    </div>
+                  )}
+                {isPlaywrightSetupRequired && canUpdateAgent && (
+                  <PlaywrightInstallDialog
+                    agentId={playwrightSetupAgentId}
+                    conversationId={conversationId}
+                  />
+                )}
+                <div className="flex-1 flex flex-col items-center justify-center p-4 gap-8">
+                  <div className="scale-150">
+                    <AppLogo />
+                  </div>
+                  {(() => {
+                    const currentAgent = internalAgents.find(
+                      (a) => a.id === initialAgentId,
+                    );
+                    const prompts = currentAgent?.suggestedPrompts;
+                    if (!prompts || prompts.length === 0) return null;
+                    return (
+                      <div className="flex flex-wrap items-center justify-center gap-2 max-w-2xl">
+                        {prompts.map((sp) => (
+                          <Suggestion
+                            key={`${sp.summaryTitle}-${sp.prompt}`}
+                            suggestion={sp.summaryTitle}
+                            onClick={() =>
+                              submitInitialMessage({
+                                text: sp.prompt,
+                                files: [],
+                              })
+                            }
+                          />
+                        ))}
+                      </div>
+                    );
+                  })()}
+                  <div className="w-full max-w-4xl">
+                    <ArchestraPromptInput
+                      onSubmit={handleInitialSubmit}
+                      status={
+                        createConversationMutation.isPending
                           ? "submitted"
                           : "ready"
-                    }
-                    selectedModel={
-                      conversationId && conversation?.agent?.id
-                        ? (conversation?.selectedModel ?? "")
-                        : initialModel
-                    }
-                    onModelChange={
-                      conversationId && conversation?.agent?.id
-                        ? handleModelChange
-                        : handleInitialModelChange
-                    }
-                    messageCount={
-                      conversationId && conversation?.agent?.id
-                        ? messages.length
-                        : undefined
-                    }
-                    agentId={
-                      conversationId && conversation?.agent?.id
-                        ? conversation.agent?.id
-                        : activeAgentId
-                    }
-                    conversationId={conversationId}
-                    currentConversationChatApiKeyId={
-                      conversationId && conversation?.agent?.id
-                        ? conversation?.chatApiKeyId
-                        : undefined
-                    }
-                    currentProvider={
-                      conversationId && conversation?.agent?.id
-                        ? currentProvider
-                        : initialProvider
-                    }
-                    textareaRef={textareaRef}
-                    initialApiKeyId={
-                      conversationId && conversation?.agent?.id
-                        ? undefined
-                        : initialApiKeyId
-                    }
-                    onApiKeyChange={
-                      conversationId && conversation?.agent?.id
-                        ? undefined
-                        : setInitialApiKeyId
-                    }
-                    onProviderChange={
-                      conversationId && conversation?.agent?.id
-                        ? handleProviderChange
-                        : handleInitialProviderChange
-                    }
-                    allowFileUploads={
-                      organization?.allowChatFileUploads ?? false
-                    }
-                    isModelsLoading={isModelsLoading}
-                    onEditAgent={() => openDialog("edit-agent")}
-                    tokensUsed={tokensUsed}
-                    maxContextLength={selectedModelContextLength}
-                    inputModalities={selectedModelInputModalities}
-                    agentLlmApiKeyId={
-                      conversationId && conversation?.agent?.id
-                        ? (conversation.agent?.llmApiKeyId ?? null)
-                        : ((
-                            internalAgents.find(
-                              (a) => a.id === initialAgentId,
-                            ) as Record<string, unknown> | undefined
-                          )?.llmApiKeyId as string | null)
-                    }
-                    submitDisabled={isPlaywrightSetupVisible}
-                    isPlaywrightSetupVisible={isPlaywrightSetupVisible}
-                  />
-                  <div className="text-center">
-                    <Version inline />
+                      }
+                      selectedModel={initialModel}
+                      onModelChange={handleInitialModelChange}
+                      onModelSelectorOpenChange={
+                        handleInitialModelSelectorOpenChange
+                      }
+                      agentId={newChatAgentId}
+                      currentProvider={initialProvider}
+                      textareaRef={textareaRef}
+                      initialApiKeyId={initialApiKeyId}
+                      onApiKeyChange={setInitialApiKeyId}
+                      onProviderChange={handleInitialProviderChange}
+                      allowFileUploads={
+                        organization?.allowChatFileUploads ?? false
+                      }
+                      isModelsLoading={isModelsLoading}
+                      inputModalities={selectedModelInputModalities}
+                      agentLlmApiKeyId={
+                        (
+                          internalAgents.find((a) => a.id === initialAgentId) as
+                            | Record<string, unknown>
+                            | undefined
+                        )?.llmApiKeyId as string | null
+                      }
+                      submitDisabled={isPlaywrightSetupVisible}
+                      isPlaywrightSetupVisible={isPlaywrightSetupVisible}
+                      selectorAgentId={initialAgentId}
+                      onAgentChange={handleInitialAgentChange}
+                      modelSource={initialModelSource}
+                      onResetModelOverride={handleResetModelOverride}
+                    />
                   </div>
+                </div>
+                <div className="p-4 text-center">
+                  <Version inline />
                 </div>
               </div>
             )
@@ -1610,11 +1957,7 @@ export default function ChatPage() {
           artifact={conversation?.artifact}
           isArtifactOpen={isArtifactOpen}
           onArtifactToggle={toggleArtifactPanel}
-          isBrowserOpen={
-            isBrowserPanelOpen &&
-            isBrowserStreamingEnabled &&
-            !isPlaywrightSetupVisible
-          }
+          isBrowserOpen={isBrowserPanelOpen && !isPlaywrightSetupVisible}
           onBrowserClose={closeBrowserPanel}
           conversationId={conversationId}
           agentId={browserToolsAgentId}
@@ -1632,7 +1975,7 @@ export default function ChatPage() {
       <CreateCatalogDialog
         isOpen={isDialogOpened("create-catalog")}
         onClose={() => closeDialog("create-catalog")}
-        onSuccess={() => router.push("/mcp-catalog/registry")}
+        onSuccess={() => router.push("/mcp/registry")}
       />
       <AgentDialog
         open={isDialogOpened("edit-agent")}
@@ -1649,24 +1992,61 @@ export default function ChatPage() {
         agentType="agent"
       />
 
-      <PromptVersionHistoryDialog
-        open={!!versionHistoryAgent}
-        onOpenChange={(open) => {
-          if (!open) {
-            setVersionHistoryAgent(null);
-          }
-        }}
-        agent={versionHistoryAgent}
-      />
+      {canManageShare && conversationId && (
+        <ShareConversationDialog
+          conversationId={conversationId}
+          open={isShareDialogOpen}
+          onOpenChange={setIsShareDialogOpen}
+        />
+      )}
+
+      <StandardDialog
+        open={isForkDialogOpen}
+        onOpenChange={setIsForkDialogOpen}
+        title="Start New Chat"
+        description="Select an agent to start a new chat with the preloaded messages from this conversation."
+        size="small"
+        bodyClassName="py-1"
+        footer={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => setIsForkDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleForkSharedConversation}
+              disabled={
+                !effectiveForkAgentId ||
+                forkSharedConversationMutation.isPending
+              }
+            >
+              {forkSharedConversationMutation.isPending
+                ? "Creating..."
+                : "Start Chat"}
+            </Button>
+          </>
+        }
+      >
+        <InitialAgentSelector
+          currentAgentId={forkAgentId}
+          onAgentChange={setForkAgentId}
+        />
+      </StandardDialog>
     </div>
   );
+}
+
+export default function ChatPage() {
+  return <ChatPageContent key="new-chat" />;
 }
 
 // =========================================================================
 // No API Key Setup — shown when user has no API keys configured
 // =========================================================================
 
-const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
+const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   name: "",
   provider: "anthropic",
   apiKey: null,
@@ -1681,57 +2061,6 @@ const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
 function NoApiKeySetup() {
   const router = useRouter();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const createMutation = useCreateChatApiKey();
-  const byosEnabled = useFeatureFlag("byosEnabled");
-  const geminiVertexAiEnabled = useFeatureFlag("geminiVertexAiEnabled");
-
-  const form = useForm<ChatApiKeyFormValues>({
-    defaultValues: DEFAULT_FORM_VALUES,
-  });
-
-  useEffect(() => {
-    if (isDialogOpen) {
-      form.reset(DEFAULT_FORM_VALUES);
-    }
-  }, [isDialogOpen, form]);
-
-  const formValues = form.watch();
-  const isValid =
-    formValues.apiKey !== PLACEHOLDER_KEY &&
-    formValues.name &&
-    (formValues.scope !== "team" || formValues.teamId) &&
-    (byosEnabled
-      ? formValues.vaultSecretPath && formValues.vaultSecretKey
-      : PROVIDERS_WITH_OPTIONAL_API_KEY.has(formValues.provider) ||
-        formValues.apiKey);
-
-  const handleCreate = form.handleSubmit(async (values) => {
-    try {
-      await createMutation.mutateAsync({
-        name: values.name,
-        provider: values.provider,
-        apiKey: values.apiKey || undefined,
-        baseUrl: values.baseUrl || undefined,
-        scope: values.scope,
-        teamId:
-          values.scope === "team" && values.teamId ? values.teamId : undefined,
-        isPrimary: values.isPrimary,
-        vaultSecretPath:
-          byosEnabled && values.vaultSecretPath
-            ? values.vaultSecretPath
-            : undefined,
-        vaultSecretKey:
-          byosEnabled && values.vaultSecretKey
-            ? values.vaultSecretKey
-            : undefined,
-      });
-      setIsDialogOpen(false);
-      // Navigate to clean /chat URL so there's no stale conversation param
-      router.push("/chat");
-    } catch {
-      // Error handled by mutation
-    }
-  });
 
   return (
     <div className="flex h-full w-full items-center justify-center p-8">
@@ -1742,51 +2071,26 @@ function NoApiKeySetup() {
             Connect an LLM provider to start chatting
           </p>
         </div>
-        <Button onClick={() => setIsDialogOpen(true)}>
+        <Button
+          data-testid={E2eTestId.QuickstartAddApiKeyButton}
+          onClick={() => setIsDialogOpen(true)}
+        >
           <Plus className="h-4 w-4 mr-2" />
           Add API Key
         </Button>
       </div>
-
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Add API Key</DialogTitle>
-            <DialogDescription>
-              Add an LLM provider API key to start chatting
-            </DialogDescription>
-          </DialogHeader>
-          <DialogForm onSubmit={handleCreate}>
-            <div className="py-2">
-              <ChatApiKeyForm
-                mode="full"
-                showConsoleLink
-                form={form}
-                isPending={createMutation.isPending}
-                geminiVertexAiEnabled={geminiVertexAiEnabled}
-              />
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={!isValid || createMutation.isPending}
-              >
-                {createMutation.isPending && (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                )}
-                Test & Create
-              </Button>
-            </DialogFooter>
-          </DialogForm>
-        </DialogContent>
-      </Dialog>
+      <CreateLlmProviderApiKeyDialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        title="Add API Key"
+        description="Add an LLM provider API key to start chatting"
+        defaultValues={DEFAULT_FORM_VALUES}
+        showConsoleLink
+        onSuccess={() => {
+          // Navigate to clean /chat URL so there's no stale conversation param
+          router.push("/chat");
+        }}
+      />
     </div>
   );
 }

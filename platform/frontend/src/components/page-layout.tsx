@@ -69,14 +69,14 @@ export function PageLayout({
     <div className="flex h-full w-full flex-col">
       <div className="border-b border-border bg-card/30">
         <div className={cn("mx-auto", maxWidth, "px-6 pt-6 md:px-6")}>
-          <div className="flex justify-between items-start sm:flex-row sm:justify-between sm:items-start">
-            <h1 className="mb-2 text-2xl font-semibold tracking-tight">
-              {title}
-            </h1>
-            {actionButton}
-          </div>
-          <div className="text-sm text-muted-foreground mb-6">
-            {description}
+          <div className="mb-6 flex items-center justify-between gap-6">
+            <div className="min-w-0 flex-1">
+              <h1 className="mb-2 text-2xl font-semibold tracking-tight">
+                {title}
+              </h1>
+              <div className="text-sm text-muted-foreground">{description}</div>
+            </div>
+            {actionButton && <div className="shrink-0">{actionButton}</div>}
           </div>
           {tabs.length > 0 && (
             <>
@@ -89,7 +89,7 @@ export function PageLayout({
                       key={tab.href}
                       href={tab.href}
                       className={cn(
-                        "relative pb-3 text-sm font-medium transition-colors hover:text-foreground",
+                        "relative cursor-pointer pb-3 text-sm font-medium transition-colors hover:text-foreground",
                         isActive ? "text-foreground" : "text-muted-foreground",
                       )}
                     >
@@ -111,7 +111,7 @@ export function PageLayout({
                       key={tab.href}
                       href={tab.href}
                       className={cn(
-                        "relative pb-1 text-sm font-medium transition-colors hover:text-foreground",
+                        "relative cursor-pointer pb-1 text-sm font-medium transition-colors hover:text-foreground",
                         isActive ? "text-foreground" : "text-muted-foreground",
                       )}
                     >
@@ -131,7 +131,7 @@ export function PageLayout({
                         <Button
                           variant="ghost"
                           className={cn(
-                            "relative pb-3 px-1 h-auto rounded-none text-sm font-medium transition-colors hover:text-foreground hover:bg-transparent flex items-center gap-1",
+                            "relative h-auto cursor-pointer rounded-none px-1 pb-3 text-sm font-medium transition-colors hover:bg-transparent hover:text-foreground flex items-center gap-1",
                             activeOverflowTab
                               ? "text-foreground"
                               : "text-muted-foreground",
@@ -160,7 +160,7 @@ export function PageLayout({
                               href={tab.href}
                               onClick={() => setOverflowOpen(false)}
                               className={cn(
-                                "px-3 py-2 text-sm rounded-md transition-colors hover:bg-muted",
+                                "cursor-pointer rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted",
                                 isActive
                                   ? "font-medium text-foreground bg-muted"
                                   : "text-muted-foreground",

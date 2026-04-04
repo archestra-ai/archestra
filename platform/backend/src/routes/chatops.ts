@@ -1,9 +1,19 @@
-import { RouteId } from "@shared";
+import {
+  AUTO_PROVISIONED_INVITATION_STATUS,
+  createPaginatedResponseSchema,
+  PaginationQuerySchema,
+  RouteId,
+} from "@shared";
 import { WebClient } from "@slack/web-api";
 import { ActivityTypes, TeamsInfo, TurnContext } from "botbuilder";
 import { MicrosoftAppCredentials } from "botframework-connector";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import {
+  autoProvisionUser,
+  buildWelcomeMessage,
+  isSsoConfigured,
+} from "@/agents/chatops/auto-provision";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import {
   CHATOPS_COMMANDS,
@@ -18,16 +28,23 @@ import {
   AgentModel,
   ChatOpsChannelBindingModel,
   ChatOpsConfigModel,
+  InvitationModel,
   OrganizationModel,
   UserModel,
 } from "@/models";
-import { ApiError, constructResponseSchema } from "@/types";
 import {
+  ApiError,
+  type ChatOpsConnectionMode,
+  ChatOpsConnectionModeSchema,
   type ChatOpsProvider,
   type ChatOpsProviderType,
   ChatOpsProviderTypeSchema,
+  ChatOpsStatusResponseSchema,
+  ChatOpsStatusSchema,
+  constructResponseSchema,
+  createSortingQuerySchema,
   type IncomingChatMessage,
-} from "@/types/chatops";
+} from "@/types";
 import {
   ChatOpsChannelBindingResponseSchema,
   UpdateChatOpsChannelBindingSchema,
@@ -181,7 +198,11 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
               };
               // Resolve sender email and verify they are a registered Archestra user
               if (
-                !(await resolveAndVerifySender(context, provider, cardMessage))
+                !(await resolveAndVerifySenderForMSTeams(
+                  context,
+                  provider,
+                  cardMessage,
+                ))
               ) {
                 return;
               }
@@ -272,7 +293,13 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }
 
             // Resolve sender email and verify they are a registered Archestra user
-            if (!(await resolveAndVerifySender(context, provider, message))) {
+            if (
+              !(await resolveAndVerifySenderForMSTeams(
+                context,
+                provider,
+                message,
+              ))
+            ) {
               return;
             }
 
@@ -312,7 +339,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         },
                         {
                           type: "TextBlock",
-                          text: "Or just send a message to interact with the bound agent.",
+                          text: "Or just send a message to interact with the assigned agent.",
                           wrap: true,
                           spacing: "Medium",
                         },
@@ -345,7 +372,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         body: [
                           {
                             type: "TextBlock",
-                            text: `This channel is bound to agent: **${agent?.name || binding.agentId}** which means it will handle all requests in the channel by default.`,
+                            text: `This channel is assigned to agent: **${agent?.name || binding.agentId}** which means it will handle all requests in the channel by default.`,
                             wrap: true,
                           },
                           {
@@ -377,7 +404,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         body: [
                           {
                             type: "TextBlock",
-                            text: "No agent is bound to this channel yet.",
+                            text: "No agent is assigned to this channel yet.",
                             wrap: true,
                           },
                           {
@@ -397,11 +424,14 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
             if (trimmedText === CHATOPS_COMMANDS.SELECT_AGENT) {
               // Send agent selection card
+              const isTeamsDm =
+                context.activity.conversation?.conversationType === "personal";
               await sendAgentSelectionCard({
                 provider,
                 message,
                 isWelcome: false,
                 providerContext: context,
+                isDm: isTeamsDm,
               });
               return;
             }
@@ -414,11 +444,11 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             });
 
             if (!binding || !binding.agentId) {
+              const isTeamsDm =
+                context.activity.conversation?.conversationType === "personal";
+
               // Create binding early (without agent) so the DM/channel appears in the UI
               if (!binding) {
-                const isTeamsDm =
-                  context.activity.conversation?.conversationType ===
-                  "personal";
                 const resolvedNames = await resolveTeamsNames(
                   context,
                   message.channelId,
@@ -447,6 +477,34 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 });
               }
 
+              // If this is a DM and user has a pending auto-provisioned invitation,
+              // send the signup link before the agent selection card.
+              // Skip when SSO is enabled — users just sign in via their IdP.
+              if (
+                isTeamsDm &&
+                message.senderEmail &&
+                !(await isSsoConfigured())
+              ) {
+                const invitations = await InvitationModel.findByEmail(
+                  message.senderEmail.toLowerCase(),
+                );
+                const autoProvInv = invitations.find((inv) =>
+                  inv.status?.startsWith(AUTO_PROVISIONED_INVITATION_STATUS),
+                );
+                if (autoProvInv) {
+                  const welcome = buildWelcomeMessage({
+                    invitationId: autoProvInv.id,
+                    email: message.senderEmail,
+                    name: message.senderName,
+                  });
+                  await context
+                    .sendActivity(
+                      `${welcome.text}\n\n[${welcome.actionLabel}](${welcome.actionUrl})`,
+                    )
+                    .catch(() => {});
+                }
+              }
+
               // Discover channels + show agent selection
               await awaitDiscovery(provider, context);
               await sendAgentSelectionCard({
@@ -454,6 +512,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 message,
                 isWelcome: true,
                 providerContext: context,
+                isDm: isTeamsDm,
               });
               return;
             }
@@ -464,7 +523,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
               awaitDiscovery(provider, context),
             ]);
 
-            // Process message through bound agent
+            // Process message through assigned agent
             await chatOpsManager.processMessage({
               message,
               provider,
@@ -830,25 +889,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetChatOpsStatus,
         description: "Get chatops provider configuration status",
         tags: ["ChatOps"],
-        response: constructResponseSchema(
-          z.object({
-            providers: z.array(
-              z.object({
-                id: z.string(),
-                displayName: z.string(),
-                configured: z.boolean(),
-                credentials: z.record(z.string(), z.string()).optional(),
-                dmInfo: z
-                  .object({
-                    botUserId: z.string().optional(),
-                    teamId: z.string().optional(),
-                    appId: z.string().optional(),
-                  })
-                  .optional(),
-              }),
-            ),
-          }),
-        ),
+        response: constructResponseSchema(ChatOpsStatusResponseSchema),
       },
     },
     async (_, reply) => {
@@ -863,39 +904,71 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
-   * List all channel bindings for the organization
+   * List channel bindings for the organization with server-side pagination
    */
   fastify.get(
     "/api/chatops/bindings",
     {
       schema: {
         operationId: RouteId.ListChatOpsBindings,
-        description: "List all chatops channel bindings",
+        description: "List chatops channel bindings with pagination",
         tags: ["ChatOps"],
+        querystring: z
+          .object({
+            provider: ChatOpsProviderTypeSchema.optional(),
+            workspaceId: z.string().optional(),
+            search: z.string().optional(),
+            status: ChatOpsStatusSchema.optional(),
+          })
+          .merge(PaginationQuerySchema)
+          .merge(
+            createSortingQuerySchema(["channelName", "createdAt"] as const),
+          ),
         response: constructResponseSchema(
-          z.array(ChatOpsChannelBindingResponseSchema),
+          createPaginatedResponseSchema(
+            ChatOpsChannelBindingResponseSchema,
+          ).extend({
+            counts: z.object({
+              configured: z.number(),
+              unassigned: z.number(),
+            }),
+            workspaces: z.array(z.object({ id: z.string(), name: z.string() })),
+            hasDmBinding: z.boolean(),
+          }),
         ),
       },
     },
     async (request, reply) => {
-      const bindings = await ChatOpsChannelBindingModel.findByOrganization(
-        request.organizationId,
-      );
+      const {
+        limit,
+        offset,
+        sortBy,
+        sortDirection,
+        provider,
+        workspaceId,
+        search,
+        status,
+      } = request.query;
 
-      // Filter out DM bindings that belong to other users
-      const userEmail = request.user.email;
-      const visibleBindings = bindings.filter((b) => {
-        if (!b.isDm) return true;
-        return b.dmOwnerEmail === userEmail;
+      const result = await ChatOpsChannelBindingModel.findAllPaginated({
+        organizationId: request.organizationId,
+        userEmail: request.user.email,
+        pagination: { limit, offset },
+        sorting: { sortBy, sortDirection },
+        filters: { provider, workspaceId, search, status },
       });
 
-      return reply.send(
-        visibleBindings.map((b) => ({
+      return reply.send({
+        data: result.data.map((b) => ({
           ...b,
           createdAt: b.createdAt.toISOString(),
           updatedAt: b.updatedAt.toISOString(),
         })),
-      );
+        pagination: result.pagination,
+        counts: result.counts,
+        workspaces: result.workspaces,
+        hasDmBinding: result.hasDmBinding,
+      });
     },
   );
 
@@ -961,6 +1034,15 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Binding not found");
       }
 
+      // Validate personal agent assignment
+      if (request.body.agentId) {
+        await validateAgentChannelAssignment({
+          agentId: request.body.agentId,
+          isDm: existing.isDm,
+          userId: request.user.id,
+        });
+      }
+
       const updated = await ChatOpsChannelBindingModel.update(id, request.body);
 
       if (!updated) {
@@ -998,14 +1080,19 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { provider, agentId } = request.body;
       const userEmail = request.user.email;
 
+      // Validate personal agent assignment for DM
+      if (agentId) {
+        await validateAgentChannelAssignment({
+          agentId,
+          isDm: true,
+          userId: request.user.id,
+        });
+      }
+
       // Check if user already has a DM binding (real or pending) for this provider
-      const existingBindings =
-        await ChatOpsChannelBindingModel.findByOrganization(
-          request.organizationId,
-        );
-      const existingDm = existingBindings.find(
-        (b) =>
-          b.provider === provider && b.isDm && b.dmOwnerEmail === userEmail,
+      const existingDm = await ChatOpsChannelBindingModel.findDmBindingByEmail(
+        provider,
+        userEmail,
       );
 
       if (existingDm) {
@@ -1065,6 +1152,32 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { ids, agentId } = request.body;
+
+      // Validate personal agent cannot be assigned to channel bindings
+      if (agentId) {
+        // Fetch all bindings to check which are DMs
+        const bindings = await ChatOpsChannelBindingModel.findByIds(
+          ids,
+          request.organizationId,
+        );
+        const hasChannelBindings = bindings.some((b) => !b.isDm);
+        if (hasChannelBindings) {
+          await validateAgentChannelAssignment({
+            agentId,
+            isDm: false,
+            userId: request.user.id,
+          });
+        }
+        // For DM bindings, validate the user owns them
+        const dmBindings = bindings.filter((b) => b.isDm);
+        if (dmBindings.length > 0) {
+          await validateAgentChannelAssignment({
+            agentId,
+            isDm: true,
+            userId: request.user.id,
+          });
+        }
+      }
 
       const updated = await ChatOpsChannelBindingModel.bulkUpdateAgent(
         ids,
@@ -1156,7 +1269,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           botToken: z.string().max(512).optional(),
           signingSecret: z.string().max(256).optional(),
           appId: z.string().max(256).optional(),
-          connectionMode: z.enum(["webhook", "socket"]).optional(),
+          connectionMode: ChatOpsConnectionModeSchema.optional(),
           appLevelToken: z.string().max(512).optional(),
         }),
         response: constructResponseSchema(z.object({ success: z.boolean() })),
@@ -1296,7 +1409,15 @@ async function getProviderInfo(providerType: ChatOpsProviderType): Promise<{
   id: ChatOpsProviderType;
   displayName: string;
   configured: boolean;
-  credentials?: Record<string, string>;
+  credentials?: {
+    botToken?: string;
+    appId?: string;
+    appSecret?: string;
+    tenantId?: string;
+    signingSecret?: string;
+    appLevelToken?: string;
+    connectionMode?: ChatOpsConnectionMode;
+  };
   dmInfo?: { botUserId?: string; teamId?: string; appId?: string };
 }> {
   switch (providerType) {
@@ -1319,17 +1440,15 @@ async function getProviderInfo(providerType: ChatOpsProviderType): Promise<{
       const provider = chatOpsManager.getSlackProvider();
       const dbConfig = await ChatOpsConfigModel.getSlackConfig();
       const isSocket = dbConfig?.connectionMode === "socket";
-      const credentials: Record<string, string> = {
+      const credentials = {
         botToken: maskValue(dbConfig?.botToken ?? ""),
         appId: maskValue(dbConfig?.appId ?? ""),
-        connectionMode:
-          dbConfig?.connectionMode ?? SLACK_DEFAULT_CONNECTION_MODE,
+        connectionMode: (dbConfig?.connectionMode ??
+          SLACK_DEFAULT_CONNECTION_MODE) as ChatOpsConnectionMode,
+        ...(isSocket
+          ? { appLevelToken: maskValue(dbConfig?.appLevelToken ?? "") }
+          : { signingSecret: dbConfig?.signingSecret ? "••••••••" : "" }),
       };
-      if (isSocket) {
-        credentials.appLevelToken = maskValue(dbConfig?.appLevelToken ?? "");
-      } else {
-        credentials.signingSecret = dbConfig?.signingSecret ? "••••••••" : "";
-      }
       return {
         id: "slack",
         displayName: "Slack",
@@ -1354,6 +1473,34 @@ function maskValue(value: string): string {
 }
 
 /**
+ * Validate that a personal agent is not assigned to a shared channel.
+ * Personal agents may only be assigned to DM bindings owned by the agent's author.
+ */
+async function validateAgentChannelAssignment(params: {
+  agentId: string;
+  isDm: boolean;
+  userId: string;
+}): Promise<void> {
+  const agent = await AgentModel.findById(params.agentId);
+  if (!agent || agent.scope !== "personal") return;
+
+  if (!params.isDm) {
+    throw new ApiError(
+      400,
+      "Personal agents cannot be assigned to channels. Use an org-scoped or team-scoped agent instead.",
+    );
+  }
+
+  // For DMs, only the author can assign their own personal agent
+  if (agent.authorId !== params.userId) {
+    throw new ApiError(
+      403,
+      "You can only assign your own personal agents to your DM.",
+    );
+  }
+}
+
+/**
  * Shared helper: get accessible agents and send agent selection card via the provider.
  * Both MS Teams and Slack handlers call this instead of provider-specific functions.
  */
@@ -1362,9 +1509,11 @@ async function sendAgentSelectionCard(params: {
   message: IncomingChatMessage;
   isWelcome: boolean;
   providerContext?: unknown;
+  isDm: boolean;
 }): Promise<void> {
   const agents = await chatOpsManager.getAccessibleChatopsAgents({
     senderEmail: params.message.senderEmail,
+    isDm: params.isDm,
   });
 
   if (agents.length === 0) {
@@ -1472,7 +1621,7 @@ async function handleAgentSelection(
       "[ChatOps] handleAgentSelection: about to send 'processing' message",
     );
     await context.sendActivity(
-      `Agent **${agent.name}** is now bound to this ${isTeamsDm ? "conversation" : "channel"}. Processing your message...`,
+      `Agent **${agent.name}** is now assigned to this ${isTeamsDm ? "conversation" : "channel"}. Processing your message...`,
     );
     logger.debug(
       "[ChatOps] handleAgentSelection: 'processing' message sent, about to call processMessage",
@@ -1522,7 +1671,7 @@ async function handleAgentSelection(
     }
   } else {
     await context.sendActivity(
-      `Agent **${agent.name}** is now bound to this ${isTeamsDm ? "conversation" : "channel"}.\n` +
+      `Agent **${agent.name}** is now assigned to this ${isTeamsDm ? "conversation" : "channel"}.\n` +
         "Send a message (with @mention) to start interacting!",
     );
   }
@@ -1539,7 +1688,7 @@ function isCommand(text: string): boolean {
  * Resolve sender email (TeamsInfo → Graph API fallback) and verify they are a registered Archestra user.
  * Sets message.senderEmail and returns true if verified, false if rejected (with error sent to Teams).
  */
-async function resolveAndVerifySender(
+async function resolveAndVerifySenderForMSTeams(
   context: TurnContext,
   provider: { getUserEmail(aadObjectId: string): Promise<string | null> },
   message: IncomingChatMessage,
@@ -1576,17 +1725,58 @@ async function resolveAndVerifySender(
     return false;
   }
 
-  const user = await UserModel.findByEmail(message.senderEmail.toLowerCase());
+  let user = await UserModel.findByEmail(message.senderEmail.toLowerCase());
   if (!user) {
-    logger.warn("[ChatOps] Sender is not a registered Archestra user");
-    logger.debug(
-      { senderEmail: message.senderEmail },
-      "[ChatOps] Unregistered sender email",
-    );
-    await context.sendActivity(
-      `You (${message.senderEmail}) are not a registered Archestra user. Contact your administrator for access.`,
-    );
-    return false;
+    // Auto-provision: create user + member from Teams identity
+    try {
+      await autoProvisionUser({
+        email: message.senderEmail,
+        name: message.senderName,
+        provider: "ms-teams",
+      });
+      user = await UserModel.findByEmail(message.senderEmail.toLowerCase());
+      if (!user) {
+        logger.error(
+          { senderEmail: message.senderEmail },
+          "[ChatOps] Auto-provisioned user not found after creation",
+        );
+        await context.sendActivity(
+          "Something went wrong while setting up your account. Please try again.",
+        );
+        return false;
+      }
+
+      // In channels, don't expose the signup link — ask user to DM the bot.
+      // In DMs, the signup link is sent later (before the agent selection card).
+      // Skip entirely when SSO is enabled — users just sign in via their IdP.
+      const isDm =
+        context.activity.conversation?.conversationType === "personal";
+      if (!isDm && !(await isSsoConfigured())) {
+        const botId = context.activity.recipient.id;
+        const dmDeepLink = `https://teams.microsoft.com/l/chat/0/0?users=${encodeURIComponent(botId)}`;
+        await context
+          .sendActivity(
+            `Hey there 👋 We created an Archestra user for you (${message.senderEmail}). ` +
+              `To finish signing up so you can use Archestra web app, send me a direct message and I'll send you a link to finish signing up.\n\n` +
+              `[Open DM with me](${dmDeepLink})`,
+          )
+          .catch(() => {});
+      }
+
+      logger.info(
+        { senderEmail: message.senderEmail },
+        "[ChatOps] Auto-provisioned user from Teams",
+      );
+    } catch (error) {
+      logger.error(
+        { error: error instanceof Error ? error.message : String(error) },
+        "[ChatOps] Failed to auto-provision user from Teams",
+      );
+      await context.sendActivity(
+        "Something went wrong while setting up your account. Please try again.",
+      );
+      return false;
+    }
   }
 
   return true;

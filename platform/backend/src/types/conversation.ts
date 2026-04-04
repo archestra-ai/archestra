@@ -1,3 +1,4 @@
+import { SupportedProvidersSchema } from "@shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -5,17 +6,24 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
-import { SupportedChatProviderSchema } from "./chat-api-key";
+import { ConversationShareVisibilitySchema } from "./conversation-share";
+
+const ConversationShareSummarySchema = z
+  .object({
+    id: z.string().uuid(),
+    visibility: ConversationShareVisibilitySchema,
+  })
+  .nullable();
 
 // Override selectedProvider to use the proper enum type
 // For select schema, it's nullable (matches DB schema)
 const selectExtendedFields = {
-  selectedProvider: SupportedChatProviderSchema.nullable(),
+  selectedProvider: SupportedProvidersSchema.nullable(),
 };
 
 // For insert/update schema, selectedProvider is optional
 const insertUpdateExtendedFields = {
-  selectedProvider: SupportedChatProviderSchema.optional(),
+  selectedProvider: SupportedProvidersSchema.optional(),
 };
 
 export const SelectConversationSchema = createSelectSchema(
@@ -27,11 +35,11 @@ export const SelectConversationSchema = createSelectSchema(
       id: z.string(),
       name: z.string(),
       systemPrompt: z.string().nullable(),
-      userPrompt: z.string().nullable(),
       agentType: z.enum(["profile", "mcp_gateway", "llm_proxy", "agent"]),
       llmApiKeyId: z.string().nullable(),
     })
     .nullable(),
+  share: ConversationShareSummarySchema,
   messages: z.array(z.any()), // UIMessage[] from AI SDK
   ...selectExtendedFields,
 });

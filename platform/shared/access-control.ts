@@ -13,102 +13,328 @@ import {
 import { RouteId } from "./routes";
 
 export const allAvailableActions: Record<Resource, Action[]> = {
-  // Start with better-auth defaults
-  ...defaultStatements,
-  // Override with Archestra-specific actions
-  agent: ["create", "read", "update", "delete", "team-admin", "admin"],
-  mcpGateway: ["create", "read", "update", "delete", "team-admin", "admin"],
-  llmProxy: ["create", "read", "update", "delete", "team-admin", "admin"],
-  tool: ["create", "read", "update", "delete"],
-  policy: ["create", "read", "update", "delete"],
-  dualLlmConfig: ["create", "read", "update", "delete"],
-  dualLlmResult: ["create", "read", "update", "delete"],
-  interaction: ["create", "read", "update", "delete"],
-  organization: ["read", "update", "delete"],
-  identityProvider: ["create", "read", "update", "delete"],
-  member: ["create", "update", "delete"],
-  invitation: ["create", "cancel"],
-  internalMcpCatalog: ["create", "read", "update", "delete"],
-  mcpServer: ["create", "read", "update", "delete", "admin"],
-  mcpServerInstallationRequest: ["create", "read", "update", "delete", "admin"],
-  team: ["create", "read", "update", "delete", "admin"],
-  mcpToolCall: ["read"],
-  conversation: ["create", "read", "update", "delete"],
-  limit: ["create", "read", "update", "delete"],
-  llmModels: ["create", "read", "update", "delete"],
-  chatSettings: ["create", "read", "update", "delete"],
-  /**
-   * Better-auth access control resource - needed for organization role management
-   * See: https://github.com/better-auth/better-auth/issues/2336#issuecomment-2820620809
+  /*
+   * Spread better-auth's defaultStatements first, then define all Archestra resources.
+   * defaultStatements provides base actions for better-auth's internal resources
+   * (organization, member, invitation, team, ac). We override some of these below
+   * to add "read" or extra actions that better-auth doesn't include by default.
    *
-   * The "ac" resource is part of better-auth's defaultStatements from organization plugin
-   * and is required for dynamic access control to work correctly with custom roles
+   * "organization" is explicitly listed at the bottom for type safety but is a
+   * better-auth internal resource not exposed to users.
    */
-  ac: ["create", "read", "update", "delete"],
+  ...(defaultStatements as unknown as Record<string, Action[]>),
+
+  // Agents
+  agent: ["read", "create", "update", "delete", "team-admin", "admin"],
+  agentTrigger: ["read", "create", "update", "delete"],
+
+  // LLM
+  llmProxy: ["read", "create", "update", "delete", "team-admin", "admin"],
+  llmProviderApiKey: ["read", "create", "update", "delete", "admin"],
+  llmVirtualKey: ["read", "create", "update", "delete", "admin"],
+  llmModel: ["read", "update"],
+  llmLimit: ["read", "create", "update", "delete"],
+  optimizationRule: ["read", "create", "update", "delete"],
+  llmCost: ["read"],
+
+  // MCP
+  mcpGateway: ["read", "create", "update", "delete", "team-admin", "admin"],
+  toolPolicy: ["read", "create", "update", "delete"],
+  mcpRegistry: ["read", "create", "update", "delete"],
+  mcpServerInstallation: ["read", "create", "update", "delete", "admin"],
+  mcpServerInstallationRequest: ["read", "create", "update", "delete", "admin"],
+
+  // Knowledge
+  knowledgeSource: ["read", "create", "update", "delete", "query", "admin"],
+
+  // Other
+  chat: ["read", "create", "update", "delete"],
+  log: ["read"],
+
+  // Administration (overrides better-auth defaults to add "read" where needed)
+  apiKey: ["read", "create", "delete"],
+  agentSettings: ["read", "update"],
+  llmSettings: ["read", "update"],
+  knowledgeSettings: ["read", "update"],
+  member: ["read", "create", "update", "delete"],
+  invitation: ["create", "cancel"],
+  ac: ["read", "create", "update", "delete"],
+  team: ["read", "create", "update", "delete", "admin"],
+  identityProvider: ["read", "create", "update", "delete"],
+  secret: ["read", "update"],
+  organizationSettings: ["read", "update"],
+
+  // UI behavior resources
+  simpleView: ["enable"],
+  chatAgentPicker: ["enable"],
+  chatProviderSettings: ["enable"],
+  chatExpandToolCalls: ["enable"],
+
+  // better-auth internal resource — not exposed to users, kept for ACL compatibility
+  organization: ["update", "delete"],
 };
 
 export const editorPermissions: Record<Resource, Action[]> = {
-  agent: ["create", "read", "update", "delete", "team-admin"],
-  mcpGateway: ["create", "read", "update", "delete", "team-admin"],
-  llmProxy: ["create", "read", "update", "delete", "team-admin"],
-  tool: ["create", "read", "update", "delete"],
-  policy: ["create", "read", "update", "delete"],
-  interaction: ["create", "read", "update", "delete"],
-  dualLlmConfig: ["read"],
-  dualLlmResult: ["read"],
-  internalMcpCatalog: ["create", "read", "update", "delete"],
-  mcpServer: ["create", "read", "update", "delete"],
-  mcpServerInstallationRequest: ["create", "read", "update", "delete"],
-  organization: ["read"],
+  // Agents
+  agent: ["read", "create", "update", "delete", "team-admin"],
+  agentTrigger: ["read", "create", "update", "delete"],
+
+  // LLM
+  llmProxy: ["read", "create", "update", "delete", "team-admin"],
+  llmProviderApiKey: ["read", "create", "update", "delete"],
+  llmVirtualKey: ["read", "create", "update", "delete"],
+  llmModel: ["read", "update"],
+  llmLimit: ["read", "create", "update", "delete"],
+  optimizationRule: ["read", "create", "update", "delete"],
+  llmCost: ["read"],
+
+  // MCP
+  mcpGateway: ["read", "create", "update", "delete", "team-admin"],
+  toolPolicy: ["read", "create", "update", "delete"],
+  mcpRegistry: ["read", "create", "update", "delete"],
+  mcpServerInstallation: ["read", "create", "update", "delete"],
+  mcpServerInstallationRequest: ["read", "create", "update", "delete"],
+
+  // Knowledge
+  knowledgeSource: ["read", "create", "update", "delete", "query"],
+
+  // Other
+  chat: ["read", "create", "update", "delete"],
+  log: ["read"],
+
+  // Administration (overrides better-auth defaults to add "read" where needed)
+  apiKey: ["read", "create", "delete"],
+  agentSettings: [],
+  llmSettings: ["read", "update"],
+  knowledgeSettings: ["read", "update"],
+  member: ["read"],
+  invitation: ["read"],
+  ac: ["read"],
   team: ["read"],
-  mcpToolCall: ["read"],
-  conversation: ["create", "read", "update", "delete"],
-  limit: ["create", "read", "update", "delete"],
-  llmModels: ["create", "read", "update", "delete"],
-  chatSettings: ["create", "read", "update", "delete"],
-  // Empty arrays required for Record<Resource, Action[]> type compatibility
-  member: [],
-  invitation: [],
-  identityProvider: [],
-  ac: [],
+  identityProvider: ["read"],
+  secret: ["read"],
+  organizationSettings: ["read", "update"],
+
+  // UI behavior resources
+  simpleView: [],
+  chatAgentPicker: ["enable"],
+  chatProviderSettings: ["enable"],
+  chatExpandToolCalls: ["enable"],
+
+  // better-auth internal resource — not exposed to users, kept for ACL compatibility
+  organization: [],
 };
 
 export const memberPermissions: Record<Resource, Action[]> = {
-  agent: ["create", "read", "update", "delete"],
-  mcpGateway: ["create", "read", "update", "delete"],
-  llmProxy: ["create", "read", "update", "delete"],
-  tool: ["create", "read", "update", "delete"],
-  policy: ["read"],
-  interaction: ["create", "read", "update", "delete"],
-  dualLlmConfig: ["read"],
-  dualLlmResult: ["read"],
-  internalMcpCatalog: ["read"],
-  mcpServer: ["create", "read", "delete"],
-  mcpServerInstallationRequest: ["create", "read", "update"],
-  organization: ["read"],
-  team: ["read"],
-  mcpToolCall: ["read"],
-  conversation: ["create", "read", "update", "delete"],
-  limit: ["read"],
-  llmModels: ["read"],
-  chatSettings: ["read"],
-  // Empty arrays required for Record<Resource, Action[]> type compatibility
+  // Agents
+  agent: ["read", "create", "update", "delete"],
+  agentTrigger: [],
+
+  // LLM
+  llmProxy: ["read", "create", "update", "delete"],
+  llmProviderApiKey: ["read"],
+  llmVirtualKey: ["read"],
+  llmModel: ["read"],
+  llmLimit: [],
+  optimizationRule: [],
+  llmCost: [],
+
+  // MCP
+  mcpGateway: ["read", "create", "update", "delete"],
+  toolPolicy: ["read"],
+  mcpRegistry: ["read"],
+  mcpServerInstallation: ["read", "create", "delete"],
+  mcpServerInstallationRequest: ["read", "create", "update"],
+
+  // Knowledge
+  knowledgeSource: ["read", "query"],
+
+  // Other
+  chat: ["read", "create", "update", "delete"],
+  log: [],
+
+  // Administration (overrides better-auth defaults to add "read" where needed)
+  apiKey: ["read", "create", "delete"],
+  agentSettings: [],
+  llmSettings: [],
+  knowledgeSettings: [],
   member: [],
   invitation: [],
-  identityProvider: [],
   ac: [],
+  team: ["read"],
+  identityProvider: [],
+  secret: [],
+  organizationSettings: [],
+
+  // UI behavior resources
+  simpleView: ["enable"],
+  chatAgentPicker: [],
+  chatProviderSettings: [],
+  chatExpandToolCalls: ["enable"],
+
+  // better-auth internal resource — not exposed to users, kept for ACL compatibility
+  organization: [],
+};
+
+export const adminPermissions: Record<Resource, Action[]> = {
+  ...allAvailableActions,
+  simpleView: [],
 };
 
 export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
   {
-    [ADMIN_ROLE_NAME]: allAvailableActions,
+    [ADMIN_ROLE_NAME]: adminPermissions,
     [EDITOR_ROLE_NAME]: editorPermissions,
     [MEMBER_ROLE_NAME]: memberPermissions,
   };
 
 /**
- * Available resources and actions
+ * Human-readable descriptions for each resource:action permission combination.
+ * Used in documentation generation and potentially in UI tooltips.
+ *
+ * A runtime check in the codegen script validates that every combination
+ * in allAvailableActions has a corresponding entry here.
  */
+export const permissionDescriptions: Record<string, string> = {
+  // Agents
+  "agent:read": "View and list agents",
+  "agent:create": "Create new agents",
+  "agent:update": "Modify agent configuration and settings",
+  "agent:delete": "Delete agents",
+  "agent:team-admin": "Manage team assignments for agents",
+  "agent:admin":
+    "Full administrative control over all agents, bypassing team restrictions",
+  "agentTrigger:read":
+    "View agent trigger configurations (Slack, MS Teams, email)",
+  "agentTrigger:create": "Set up new agent triggers",
+  "agentTrigger:update": "Modify agent trigger configurations",
+  "agentTrigger:delete": "Remove agent triggers",
+
+  // MCP
+  "mcpGateway:read": "View and list MCP gateways",
+  "mcpGateway:create": "Create new MCP gateways",
+  "mcpGateway:update": "Modify MCP gateway configuration",
+  "mcpGateway:delete": "Delete MCP gateways",
+  "mcpGateway:team-admin": "Manage team assignments for MCP gateways",
+  "mcpGateway:admin":
+    "Full administrative control over all MCP gateways, bypassing team restrictions",
+  "toolPolicy:read":
+    "View tools, tool invocation policies, and trusted data policies",
+  "toolPolicy:create": "Register tools and create security policies",
+  "toolPolicy:update":
+    "Modify tools, tool configuration, and security policies",
+  "toolPolicy:delete": "Remove tools and security policies",
+  "mcpRegistry:read": "Browse the MCP server registry",
+  "mcpRegistry:create": "Add servers to the MCP registry",
+  "mcpRegistry:update": "Modify MCP registry entries",
+  "mcpRegistry:delete": "Remove servers from the MCP registry",
+  "mcpServerInstallation:read": "View installed MCP servers and their status",
+  "mcpServerInstallation:create": "Install MCP servers from the registry",
+  "mcpServerInstallation:update": "Modify installed MCP server configuration",
+  "mcpServerInstallation:delete": "Uninstall MCP servers",
+  "mcpServerInstallation:admin":
+    "Approve or manage all MCP server installations",
+  "mcpServerInstallationRequest:read": "View MCP server installation requests",
+  "mcpServerInstallationRequest:create":
+    "Submit requests to install MCP servers",
+  "mcpServerInstallationRequest:update": "Add notes to installation requests",
+  "mcpServerInstallationRequest:delete": "Delete installation requests",
+  "mcpServerInstallationRequest:admin":
+    "Approve or decline installation requests",
+
+  // LLM
+  "llmProxy:read": "View and list LLM proxies",
+  "llmProxy:create": "Create new LLM proxies",
+  "llmProxy:update": "Modify LLM proxy configuration",
+  "llmProxy:delete": "Delete LLM proxies",
+  "llmProxy:team-admin": "Manage team assignments for LLM proxies",
+  "llmProxy:admin":
+    "Full administrative control over all LLM proxies, bypassing team restrictions",
+  "llmProviderApiKey:read": "View LLM provider API keys",
+  "llmProviderApiKey:create": "Add new LLM provider API keys",
+  "llmProviderApiKey:update":
+    "Modify LLM provider API key configuration and visibility",
+  "llmProviderApiKey:delete": "Remove LLM provider API keys",
+  "llmProviderApiKey:admin":
+    "Manage all LLM provider API keys, including org-wide keys",
+  "llmVirtualKey:read": "View LLM virtual keys",
+  "llmVirtualKey:create": "Create LLM virtual keys",
+  "llmVirtualKey:update": "Modify LLM virtual keys and their visibility",
+  "llmVirtualKey:delete": "Delete LLM virtual keys",
+  "llmVirtualKey:admin": "Manage all LLM virtual keys and view every scope",
+  "llmModel:read": "View synced LLM models and capabilities",
+  "llmModel:update": "Modify LLM model pricing and modality settings",
+  "llmLimit:read": "View token usage limits",
+  "llmLimit:create": "Create new usage limits",
+  "llmLimit:update": "Modify existing usage limits",
+  "llmLimit:delete": "Remove usage limits",
+  "optimizationRule:read": "View optimization rules",
+  "optimizationRule:create": "Create new optimization rules",
+  "optimizationRule:update": "Modify optimization rules",
+  "optimizationRule:delete": "Remove optimization rules",
+  "llmSettings:read": "View LLM settings (compression, cleanup interval)",
+  "llmSettings:update": "Modify LLM settings",
+  "agentSettings:read":
+    "View agent settings (default model, default agent, security engine, file uploads)",
+  "agentSettings:update":
+    "Modify agent settings (default model, default agent, security engine, file uploads)",
+  "llmCost:read": "View LLM usage cost statistics and analytics",
+
+  // Other
+  "chat:read": "View and access chat conversations",
+  "chat:create": "Start new chat conversations",
+  "chat:update": "Edit chat messages and conversation settings",
+  "chat:delete": "Delete chat conversations",
+  "log:read": "View LLM proxy and MCP tool call logs",
+
+  // Administration
+  "member:read": "View organization members and their roles",
+  "member:create": "Add new members to the organization",
+  "member:update": "Change member roles and settings",
+  "member:delete": "Remove members from the organization",
+  "ac:read": "View custom roles and their permissions",
+  "ac:create": "Create new custom roles",
+  "ac:update": "Modify custom role permissions",
+  "ac:delete": "Delete custom roles",
+  "team:read": "View teams and their members",
+  "team:create": "Create new teams",
+  "team:update": "Modify team settings",
+  "team:delete": "Delete teams",
+  "team:admin": "Manage team membership (add/remove members)",
+  "invitation:create": "Send invitations to new users",
+  "invitation:cancel": "Cancel pending invitations",
+  "identityProvider:read": "View identity provider configurations (SSO)",
+  "identityProvider:create": "Set up new identity providers",
+  "identityProvider:update": "Modify identity provider settings",
+  "identityProvider:delete": "Remove identity providers",
+  "secret:read": "View secrets manager configuration",
+  "secret:update": "Modify secrets manager settings and test connectivity",
+  "apiKey:read": "View API keys",
+  "apiKey:create": "Create API keys",
+  "apiKey:delete": "Delete API keys",
+  "organizationSettings:read":
+    "View organization settings (appearance, authentication, etc)",
+  "organizationSettings:update":
+    "Customize organization appearance, authentication, etc",
+  "knowledgeSource:read": "View knowledge bases and connectors",
+  "knowledgeSource:create": "Create knowledge bases and connectors",
+  "knowledgeSource:update": "Modify knowledge bases and connectors",
+  "knowledgeSource:delete": "Delete knowledge bases and connectors",
+  "knowledgeSource:query":
+    "Query knowledge sources for information retrieval",
+  "knowledgeSource:admin":
+    "View all knowledge bases and connectors, bypassing visibility restrictions",
+  "knowledgeSettings:read":
+    "View knowledge settings (embedding and reranking models)",
+  "knowledgeSettings:update":
+    "Modify knowledge settings (embedding and reranking models)",
+
+  // UI behavior
+  "simpleView:enable": "Sidebar is collapsed by default on page load",
+  "chatAgentPicker:enable": "Show agent picker in chat",
+  "chatProviderSettings:enable": "Show model and API key selectors in chat",
+  "chatExpandToolCalls:enable": "Allow expanding tool call details in chat",
+};
 
 /**
  * Routes not configured throws 403.
@@ -120,6 +346,13 @@ export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
 export const requiredEndpointPermissionsMap: Partial<
   Record<RouteId, Permissions>
 > = {
+  /**
+   * Getting basic info about the organization and marking onboarding as complete
+   * require the user to be authenticated but don't require any specific permissions.
+   */
+  [RouteId.GetOrganization]: {},
+  [RouteId.CompleteOnboarding]: {},
+
   // Generic agent CRUD routes - enforcement is handled dynamically in route handlers
   // based on agentType (agent, mcp_gateway, llm_proxy map to agent, mcpGateway, llmProxy resources)
   [RouteId.GetAgents]: {},
@@ -128,12 +361,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateAgent]: {},
   [RouteId.UpdateAgent]: {},
   [RouteId.DeleteAgent]: {},
-  [RouteId.GetAgentVersions]: {
-    agent: ["read"],
-  },
-  [RouteId.RollbackAgent]: {
-    agent: ["update"],
-  },
   [RouteId.GetDefaultMcpGateway]: {
     mcpGateway: ["read"],
   },
@@ -142,27 +369,27 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   // Agent-tool routes: tool:read checked statically, agent-type read checked dynamically in handler
   [RouteId.GetAgentTools]: {
-    tool: ["read"],
+    toolPolicy: ["read"],
   },
   [RouteId.GetAllAgentTools]: {
-    tool: ["read"],
+    toolPolicy: ["read"],
   },
   [RouteId.GetAgentAvailableTokens]: {},
   [RouteId.GetUnassignedTools]: {
-    tool: ["read"],
+    toolPolicy: ["read"],
   },
   // Tool-assignment routes: agent-type update checked dynamically in handler
   [RouteId.AssignToolToAgent]: {},
   [RouteId.BulkAssignTools]: {},
   [RouteId.BulkUpdateAgentTools]: {
-    tool: ["update"],
+    toolPolicy: ["update"],
   },
   [RouteId.AutoConfigureAgentToolPolicies]: {
-    tool: ["update"],
+    toolPolicy: ["update"],
   },
   [RouteId.UnassignToolFromAgent]: {},
   [RouteId.UpdateAgentTool]: {
-    tool: ["update"],
+    toolPolicy: ["update"],
   },
   // Labels are cross-type — any agent-type read permission suffices (checked in handler)
   [RouteId.GetLabelKeys]: {},
@@ -177,157 +404,133 @@ export const requiredEndpointPermissionsMap: Partial<
     team: ["update"],
   },
   [RouteId.GetTools]: {
-    tool: ["read"],
+    toolPolicy: ["read"],
   },
   [RouteId.GetToolsWithAssignments]: {
-    tool: ["read"],
+    toolPolicy: ["read"],
   },
   [RouteId.DeleteTool]: {
-    tool: ["delete"],
+    toolPolicy: ["delete"],
   },
   [RouteId.GetInteractions]: {
-    interaction: ["read"],
+    log: ["read"],
   },
   [RouteId.GetInteraction]: {
-    interaction: ["read"],
+    log: ["read"],
   },
   [RouteId.GetUniqueExternalAgentIds]: {
-    interaction: ["read"],
+    log: ["read"],
   },
   [RouteId.GetUniqueUserIds]: {
-    interaction: ["read"],
+    log: ["read"],
   },
   [RouteId.GetInteractionSessions]: {
-    interaction: ["read"],
+    log: ["read"],
   },
   [RouteId.GetOperators]: {
-    policy: ["read"],
+    toolPolicy: ["read"],
   },
   [RouteId.GetToolInvocationPolicies]: {
-    policy: ["read"],
+    toolPolicy: ["read"],
   },
   [RouteId.CreateToolInvocationPolicy]: {
-    policy: ["create"],
+    toolPolicy: ["create"],
   },
   [RouteId.GetToolInvocationPolicy]: {
-    policy: ["read"],
+    toolPolicy: ["read"],
   },
   [RouteId.UpdateToolInvocationPolicy]: {
-    policy: ["update"],
+    toolPolicy: ["update"],
   },
   [RouteId.DeleteToolInvocationPolicy]: {
-    policy: ["delete"],
+    toolPolicy: ["delete"],
   },
   [RouteId.BulkUpsertDefaultCallPolicy]: {
-    policy: ["update"],
+    toolPolicy: ["update"],
   },
   [RouteId.GetTrustedDataPolicies]: {
-    policy: ["read"],
+    toolPolicy: ["read"],
   },
   [RouteId.CreateTrustedDataPolicy]: {
-    policy: ["create"],
+    toolPolicy: ["create"],
   },
   [RouteId.GetTrustedDataPolicy]: {
-    policy: ["read"],
+    toolPolicy: ["read"],
   },
   [RouteId.UpdateTrustedDataPolicy]: {
-    policy: ["update"],
+    toolPolicy: ["update"],
   },
   [RouteId.DeleteTrustedDataPolicy]: {
-    policy: ["delete"],
+    toolPolicy: ["delete"],
   },
   [RouteId.BulkUpsertDefaultResultPolicy]: {
-    policy: ["update"],
-  },
-  [RouteId.GetPolicyConfigSubagentPrompt]: {
-    organization: ["read"],
-  },
-  [RouteId.GetDefaultDualLlmConfig]: {
-    dualLlmConfig: ["read"],
-  },
-  [RouteId.GetDualLlmConfigs]: {
-    dualLlmConfig: ["read"],
-  },
-  [RouteId.GetDualLlmResultsByInteraction]: {
-    dualLlmResult: ["read"],
-  },
-  [RouteId.CreateDualLlmConfig]: {
-    dualLlmConfig: ["create"],
-  },
-  [RouteId.GetDualLlmConfig]: {
-    dualLlmConfig: ["read"],
-  },
-  [RouteId.UpdateDualLlmConfig]: {
-    dualLlmConfig: ["update"],
-  },
-  [RouteId.DeleteDualLlmConfig]: {
-    dualLlmConfig: ["delete"],
-  },
-  [RouteId.GetDualLlmResultByToolCallId]: {
-    dualLlmResult: ["read"],
+    toolPolicy: ["update"],
   },
   [RouteId.GetInternalMcpCatalog]: {
-    internalMcpCatalog: ["read"],
+    mcpRegistry: ["read"],
   },
   [RouteId.CreateInternalMcpCatalogItem]: {
-    internalMcpCatalog: ["create"],
+    mcpRegistry: ["create"],
   },
   [RouteId.GetInternalMcpCatalogItem]: {
-    internalMcpCatalog: ["read"],
+    mcpRegistry: ["read"],
   },
   [RouteId.GetInternalMcpCatalogTools]: {
-    internalMcpCatalog: ["read"],
+    mcpRegistry: ["read"],
   },
   [RouteId.UpdateInternalMcpCatalogItem]: {
-    internalMcpCatalog: ["update"],
+    mcpRegistry: ["update"],
   },
   [RouteId.DeleteInternalMcpCatalogItem]: {
-    internalMcpCatalog: ["delete"],
+    mcpRegistry: ["delete"],
   },
   [RouteId.DeleteInternalMcpCatalogItemByName]: {
-    internalMcpCatalog: ["delete"],
+    mcpRegistry: ["delete"],
   },
   [RouteId.GetInternalMcpCatalogLabelKeys]: {
-    internalMcpCatalog: ["read"],
+    mcpRegistry: ["read"],
   },
   [RouteId.GetInternalMcpCatalogLabelValues]: {
-    internalMcpCatalog: ["read"],
+    mcpRegistry: ["read"],
   },
   [RouteId.GetDeploymentYamlPreview]: {
-    internalMcpCatalog: ["read"],
+    mcpRegistry: ["read"],
   },
   [RouteId.ValidateDeploymentYaml]: {
-    internalMcpCatalog: ["read"],
+    mcpRegistry: ["read"],
   },
   [RouteId.ResetDeploymentYaml]: {
-    internalMcpCatalog: ["update"],
+    mcpRegistry: ["update"],
   },
   [RouteId.GetK8sImagePullSecrets]: {
-    internalMcpCatalog: ["read"],
+    mcpRegistry: ["read"],
   },
   [RouteId.GetMcpServers]: {
-    mcpServer: ["read"],
+    mcpServerInstallation: ["read"],
   },
   [RouteId.GetMcpServer]: {
-    mcpServer: ["read"],
+    mcpServerInstallation: ["read"],
   },
   [RouteId.GetMcpServerTools]: {
-    mcpServer: ["read"],
+    mcpServerInstallation: ["read"],
+  },
+  [RouteId.InspectMcpServer]: {
+    mcpServerInstallation: ["read"],
   },
   [RouteId.InstallMcpServer]: {
-    mcpServer: ["create"],
+    mcpServerInstallation: ["create"],
   },
   [RouteId.DeleteMcpServer]: {
-    mcpServer: ["delete"],
+    mcpServerInstallation: ["delete"],
   },
   [RouteId.ReauthenticateMcpServer]: {
-    mcpServer: ["update"],
+    mcpServerInstallation: ["update"],
   },
   [RouteId.ReinstallMcpServer]: {
-    mcpServer: ["update"],
+    mcpServerInstallation: ["update"],
   },
   [RouteId.GetMcpServerInstallationStatus]: {
-    mcpServer: ["read"],
+    mcpServerInstallation: ["read"],
   },
   [RouteId.GetMcpServerInstallationRequests]: {
     mcpServerInstallationRequest: ["read"],
@@ -354,10 +557,10 @@ export const requiredEndpointPermissionsMap: Partial<
     mcpServerInstallationRequest: ["delete"],
   },
   [RouteId.InitiateOAuth]: {
-    mcpServer: ["create"],
+    mcpServerInstallation: ["create"],
   },
   [RouteId.HandleOAuthCallback]: {
-    mcpServer: ["create"],
+    mcpServerInstallation: ["create"],
   },
   [RouteId.GetTeams]: {
     team: ["read"],
@@ -414,106 +617,139 @@ export const requiredEndpointPermissionsMap: Partial<
     team: ["read"],
   },
   [RouteId.GetRoles]: {
-    organization: ["read"],
+    ac: ["read"],
   },
   [RouteId.CreateRole]: {
-    organization: ["update"],
+    ac: ["create"],
   },
   [RouteId.GetRole]: {
-    organization: ["read"],
+    ac: ["read"],
   },
   [RouteId.UpdateRole]: {
-    organization: ["update"],
+    ac: ["update"],
   },
   [RouteId.DeleteRole]: {
-    organization: ["update"],
+    ac: ["delete"],
   },
   [RouteId.GetMcpToolCalls]: {
-    mcpToolCall: ["read"],
+    log: ["read"],
   },
   [RouteId.GetMcpToolCall]: {
-    mcpToolCall: ["read"],
+    log: ["read"],
   },
   [RouteId.StreamChat]: {
-    conversation: ["read"],
+    chat: ["read"],
   },
   [RouteId.StopChatStream]: {
-    conversation: ["read"],
+    chat: ["read"],
   },
   [RouteId.GetChatConversations]: {
-    conversation: ["read"],
+    chat: ["read"],
   },
   [RouteId.GetChatConversation]: {
-    conversation: ["read"],
+    chat: ["read"],
   },
   [RouteId.GetChatAgentMcpTools]: {
     agent: ["read"],
   },
   [RouteId.CreateChatConversation]: {
-    conversation: ["create"],
+    chat: ["create"],
   },
   [RouteId.UpdateChatConversation]: {
-    conversation: ["update"],
+    chat: ["update"],
   },
   [RouteId.DeleteChatConversation]: {
-    conversation: ["delete"],
+    chat: ["delete"],
   },
   [RouteId.GenerateChatConversationTitle]: {
-    conversation: ["update"],
+    chat: ["update"],
   },
   [RouteId.GetChatMcpTools]: {
-    conversation: ["read"],
+    chat: ["read"],
   },
-  [RouteId.GetChatModels]: {
-    conversation: ["read"],
+  [RouteId.GetLlmModels]: {
+    llmModel: ["read"],
   },
-  [RouteId.SyncChatModels]: {
-    chatSettings: ["update"],
+  [RouteId.SyncLlmModels]: {
+    llmModel: ["update"],
   },
   [RouteId.UpdateChatMessage]: {
-    conversation: ["update"],
+    chat: ["update"],
   },
   [RouteId.GetConversationEnabledTools]: {
-    conversation: ["read"],
+    chat: ["read"],
   },
   [RouteId.UpdateConversationEnabledTools]: {
-    conversation: ["update"],
+    chat: ["update"],
   },
   [RouteId.DeleteConversationEnabledTools]: {
-    conversation: ["update"],
+    chat: ["update"],
   },
-  [RouteId.GetChatApiKeys]: {
-    chatSettings: ["read"],
+  [RouteId.ShareConversation]: {
+    chat: ["update"],
   },
-  [RouteId.GetAvailableChatApiKeys]: {
-    chatSettings: ["read"],
+  [RouteId.UnshareConversation]: {
+    chat: ["update"],
   },
-  [RouteId.CreateChatApiKey]: {
-    chatSettings: ["create"],
+  [RouteId.GetConversationShare]: {
+    chat: ["read"],
   },
-  [RouteId.GetChatApiKey]: {
-    chatSettings: ["read"],
+  [RouteId.GetSharedConversation]: {
+    chat: ["read"],
   },
-  [RouteId.UpdateChatApiKey]: {
-    chatSettings: ["update"],
+  [RouteId.ForkSharedConversation]: {
+    chat: ["create"],
   },
-  [RouteId.DeleteChatApiKey]: {
-    chatSettings: ["delete"],
+  [RouteId.GetLlmProviderApiKeys]: {
+    llmProviderApiKey: ["read"],
+  },
+  [RouteId.GetAvailableLlmProviderApiKeys]: {
+    llmProviderApiKey: ["read"],
+  },
+  [RouteId.CreateLlmProviderApiKey]: {
+    llmProviderApiKey: ["create"],
+  },
+  [RouteId.GetLlmProviderApiKey]: {
+    llmProviderApiKey: ["read"],
+  },
+  [RouteId.UpdateLlmProviderApiKey]: {
+    llmProviderApiKey: ["update"],
+  },
+  [RouteId.DeleteLlmProviderApiKey]: {
+    llmProviderApiKey: ["delete"],
+  },
+  [RouteId.GetApiKeys]: {
+    apiKey: ["read"],
+  },
+  [RouteId.GetApiKey]: {
+    apiKey: ["read"],
+  },
+  [RouteId.CreateApiKey]: {
+    apiKey: ["create"],
+  },
+  [RouteId.DeleteApiKey]: {
+    apiKey: ["delete"],
   },
   [RouteId.GetVirtualApiKeys]: {
-    chatSettings: ["read"],
+    llmVirtualKey: ["read"],
   },
   [RouteId.GetAllVirtualApiKeys]: {
-    chatSettings: ["read"],
+    llmVirtualKey: ["read"],
   },
   [RouteId.CreateVirtualApiKey]: {
-    chatSettings: ["create"],
+    llmVirtualKey: ["create"],
+  },
+  [RouteId.UpdateVirtualApiKey]: {
+    llmVirtualKey: ["update"],
   },
   [RouteId.DeleteVirtualApiKey]: {
-    chatSettings: ["delete"],
+    llmVirtualKey: ["delete"],
   },
   [RouteId.GetModelsWithApiKeys]: {
-    chatSettings: ["read"],
+    llmModel: ["read"],
+  },
+  [RouteId.UpdateModel]: {
+    llmModel: ["update"],
   },
   // Delegation routes: agent-type permission checked dynamically in handler
   [RouteId.GetAgentDelegations]: {},
@@ -521,25 +757,52 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteAgentDelegation]: {},
   [RouteId.GetAllDelegationConnections]: {},
   [RouteId.GetLimits]: {
-    limit: ["read"],
+    llmLimit: ["read"],
   },
   [RouteId.CreateLimit]: {
-    limit: ["create"],
+    llmLimit: ["create"],
   },
   [RouteId.GetLimit]: {
-    limit: ["read"],
+    llmLimit: ["read"],
   },
   [RouteId.UpdateLimit]: {
-    limit: ["update"],
+    llmLimit: ["update"],
   },
   [RouteId.DeleteLimit]: {
-    limit: ["delete"],
+    llmLimit: ["delete"],
   },
-  [RouteId.GetOrganization]: {
-    organization: ["read"],
+  [RouteId.GetOptimizationRules]: {
+    optimizationRule: ["read"],
   },
-  [RouteId.UpdateOrganization]: {
-    organization: ["update"],
+  [RouteId.CreateOptimizationRule]: {
+    optimizationRule: ["create"],
+  },
+  [RouteId.UpdateOptimizationRule]: {
+    optimizationRule: ["update"],
+  },
+  [RouteId.DeleteOptimizationRule]: {
+    optimizationRule: ["delete"],
+  },
+  [RouteId.UpdateAppearanceSettings]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.UpdateSecuritySettings]: {
+    agentSettings: ["update"],
+  },
+  [RouteId.UpdateLlmSettings]: {
+    llmSettings: ["update"],
+  },
+  [RouteId.UpdateAgentSettings]: {
+    agentSettings: ["update"],
+  },
+  [RouteId.UpdateKnowledgeSettings]: {
+    knowledgeSettings: ["update"],
+  },
+  [RouteId.DropEmbeddingConfig]: {
+    knowledgeSettings: ["update"],
+  },
+  [RouteId.TestEmbeddingConnection]: {
+    knowledgeSettings: ["update"],
   },
 
   /**
@@ -549,11 +812,17 @@ export const requiredEndpointPermissionsMap: Partial<
    */
   [RouteId.GetPublicIdentityProviders]: {},
   /**
+   * Get public config for login and invitation UI
+   * Available to unauthenticated users
+   * Note: Auth is skipped in middleware for this route
+   */
+  [RouteId.GetPublicConfig]: {},
+  /**
    * Get public appearance settings (theme, logo, font) for login page
    * Available to unauthenticated users
    * Note: Auth is skipped in middleware for this route
    */
-  [RouteId.GetPublicAppearance]: {},
+  [RouteId.GetAppearanceSettings]: {},
   /**
    * Get all identity providers with full config (admin only)
    * Returns sensitive data including client secrets
@@ -576,99 +845,125 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetIdentityProviderIdpLogoutUrl]: {},
 
   [RouteId.GetOnboardingStatus]: {}, // Onboarding status route - available to all authenticated users (no specific permissions required)
+  [RouteId.GetMemberSignupStatus]: {}, // Member signup status - available to all authenticated users
+  [RouteId.GetMembers]: { member: ["read"] }, // List organization members (paginated)
+  [RouteId.GetOrganizationMembers]: { member: ["read"] }, // List organization members
+  [RouteId.GetOrganizationMember]: { member: ["read"] }, // Get organization member by ID or email
+  [RouteId.DeletePendingSignupMember]: { member: ["delete"] }, // Delete auto-provisioned member who hasn't signed up
   [RouteId.GetUserPermissions]: {}, // User permissions route - available to all authenticated users (no specific permissions required)
+
+  // Member default agent routes - available to all authenticated users (manages their own default agent)
+  [RouteId.GetMemberDefaultAgent]: {},
 
   // User token routes - available to all authenticated users (manages their own personal token)
   [RouteId.GetUserToken]: {},
   [RouteId.GetUserTokenValue]: {},
   [RouteId.RotateUserToken]: {},
-  [RouteId.UpdateModelPricing]: {
-    llmModels: ["update"],
-  },
   [RouteId.GetTeamStatistics]: {
-    interaction: ["read"],
+    llmCost: ["read"],
   },
   [RouteId.GetAgentStatistics]: {
-    interaction: ["read"],
+    llmCost: ["read"],
   },
   [RouteId.GetModelStatistics]: {
-    interaction: ["read"],
+    llmCost: ["read"],
   },
   [RouteId.GetOverviewStatistics]: {
-    interaction: ["read"],
+    llmCost: ["read"],
   },
   [RouteId.GetCostSavingsStatistics]: {
-    interaction: ["read"],
+    llmCost: ["read"],
   },
-  [RouteId.GetOptimizationRules]: {
-    llmProxy: ["read"],
-  },
-  [RouteId.CreateOptimizationRule]: {
-    llmProxy: ["create"],
-  },
-  [RouteId.UpdateOptimizationRule]: {
-    llmProxy: ["update"],
-  },
-  [RouteId.DeleteOptimizationRule]: {
-    llmProxy: ["delete"],
-  },
-
   // Secrets Routes
   [RouteId.GetSecretsType]: {
-    organization: ["read"],
+    secret: ["read"],
   },
   [RouteId.CheckSecretsConnectivity]: {
-    organization: ["update"],
+    secret: ["update"],
   },
   [RouteId.GetSecret]: {
-    organization: ["read"],
+    secret: ["read"],
   },
 
-  // Incoming Email Routes (admin-only for management, read for email addresses)
+  // Incoming Email Routes
   [RouteId.GetIncomingEmailStatus]: {
-    organization: ["read"],
+    agentTrigger: ["read"],
   },
   [RouteId.SetupIncomingEmailWebhook]: {
-    organization: ["update"],
+    agentTrigger: ["create"],
   },
   [RouteId.RenewIncomingEmailSubscription]: {
-    organization: ["update"],
+    agentTrigger: ["update"],
   },
   [RouteId.DeleteIncomingEmailSubscription]: {
-    organization: ["update"],
+    agentTrigger: ["delete"],
   },
   [RouteId.GetAgentEmailAddress]: {}, // Any authenticated user can view agent email addresses
 
-  // ChatOps Routes (admin-only for management)
+  // ChatOps Routes
   [RouteId.GetChatOpsStatus]: {
-    organization: ["read"],
+    agentTrigger: ["read"],
   },
   [RouteId.ListChatOpsBindings]: {
-    organization: ["read"],
+    agentTrigger: ["read"],
   },
   [RouteId.DeleteChatOpsBinding]: {
-    organization: ["update"],
+    agentTrigger: ["delete"],
   },
   [RouteId.UpdateChatOpsBinding]: {
-    organization: ["update"],
+    agentTrigger: ["update"],
   },
   [RouteId.BulkUpdateChatOpsBindings]: {
-    organization: ["update"],
+    agentTrigger: ["update"],
   },
   [RouteId.CreateChatOpsDmBinding]: {
-    organization: ["update"],
+    agentTrigger: ["create"],
   },
   [RouteId.UpdateChatOpsConfigInQuickstart]: {
-    organization: ["update"],
+    agentTrigger: ["update"],
   },
   [RouteId.UpdateSlackChatOpsConfig]: {
-    organization: ["update"],
+    agentTrigger: ["update"],
   },
   [RouteId.RefreshChatOpsChannelDiscovery]: {
-    organization: ["update"],
+    agentTrigger: ["read"],
   },
+  // Knowledge Base Routes
+  [RouteId.GetKnowledgeBases]: { knowledgeSource: ["read"] },
+  [RouteId.CreateKnowledgeBase]: { knowledgeSource: ["create"] },
+  [RouteId.GetKnowledgeBase]: { knowledgeSource: ["read"] },
+  [RouteId.UpdateKnowledgeBase]: { knowledgeSource: ["update"] },
+  [RouteId.DeleteKnowledgeBase]: { knowledgeSource: ["delete"] },
+  [RouteId.GetKnowledgeBaseHealth]: { knowledgeSource: ["read"] },
+
+  // Knowledge Base Connector Routes
+  [RouteId.GetConnectors]: { knowledgeSource: ["read"] },
+  [RouteId.CreateConnector]: { knowledgeSource: ["create"] },
+  [RouteId.GetConnector]: { knowledgeSource: ["read"] },
+  [RouteId.UpdateConnector]: { knowledgeSource: ["update"] },
+  [RouteId.DeleteConnector]: { knowledgeSource: ["delete"] },
+  [RouteId.SyncConnector]: { knowledgeSource: ["update"] },
+  [RouteId.ForceResyncConnector]: { knowledgeSource: ["update"] },
+  [RouteId.TestConnectorConnection]: { knowledgeSource: ["read"] },
+
+  // Connector Knowledge Base Assignment Routes
+  [RouteId.AssignConnectorToKnowledgeBases]: { knowledgeSource: ["update"] },
+  [RouteId.UnassignConnectorFromKnowledgeBase]: {
+    knowledgeSource: ["update"],
+  },
+  [RouteId.GetConnectorKnowledgeBases]: { knowledgeSource: ["read"] },
+
+  // Connector Run Routes
+  [RouteId.GetConnectorRuns]: { knowledgeSource: ["read"] },
+  [RouteId.GetConnectorRun]: { knowledgeSource: ["read"] },
+
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},
+
+  // MCP Gateway Routes - available to all authenticated users
+  [RouteId.McpGatewayGet]: {}, // Server discovery endpoint
+  [RouteId.McpGatewayPost]: {}, // JSON-RPC endpoint for resources/read and tools/call
+  [RouteId.McpProxyPost]: {}, // Frontend proxy to MCP Gateway with session auth
 };
 
 /**
@@ -676,105 +971,56 @@ export const requiredEndpointPermissionsMap: Partial<
  * Used to control page-level access and UI element visibility.
  */
 export const requiredPagePermissionsMap: Record<string, Permissions> = {
-  "/chat": {
-    conversation: ["read"],
-  },
+  // Chat
+  "/chat": { chat: ["read"] },
+  "/chat/[conversationId]": { chat: ["read"] },
 
-  "/mcp-gateways": {
-    mcpGateway: ["read"],
-  },
-  "/llm-proxies": {
-    llmProxy: ["read"],
-  },
-  "/agents": {
-    agent: ["read"],
-  },
+  // Agents
+  "/agents": { agent: ["read"] },
+  "/agents/triggers": { agentTrigger: ["read"] },
+  "/agents/triggers/slack": { agentTrigger: ["read"] },
+  "/agents/triggers/ms-teams": { agentTrigger: ["read"] },
+  "/agents/triggers/email": { agentTrigger: ["read"] },
 
-  "/logs": {
-    interaction: ["read"],
+  // LLM
+  "/llm/proxies": { llmProxy: ["read"] },
+  "/llm/providers/api-keys": { llmProviderApiKey: ["read"] },
+  "/llm/providers/virtual-keys": {
+    llmVirtualKey: ["read"],
+    llmProviderApiKey: ["read"],
   },
-  "/logs/llm-proxy": {
-    interaction: ["read"],
-  },
-  "/logs/mcp-gateway": {
-    mcpToolCall: ["read"],
-  },
+  "/llm/providers/models": { llmModel: ["read"] },
+  "/llm/limits": { llmLimit: ["read"] },
+  "/llm/costs": { llmCost: ["read"] },
+  "/llm/optimization-rules": { optimizationRule: ["read"] },
 
-  "/tool-policies": {
-    policy: ["read"],
-  },
-
-  "/mcp-catalog": {
-    internalMcpCatalog: ["read"],
-  },
-  "/mcp-catalog/registry": {
-    internalMcpCatalog: ["read"],
-  },
-  "/mcp-catalog/installation-requests": {
+  // MCP
+  "/mcp/registry": { mcpRegistry: ["read"] },
+  "/mcp/gateways": { mcpGateway: ["read"] },
+  "/mcp/tool-policies": { toolPolicy: ["read"] },
+  "/mcp/tool-guardrails": { toolPolicy: ["read"] },
+  "/mcp/registry/installation-requests": {
     mcpServerInstallationRequest: ["read"],
   },
 
-  "/settings": {
-    organization: ["read"],
-  },
-  "/settings/gateways": {
-    mcpServer: ["read"],
-  },
-  "/settings/dual-llm": {
-    dualLlmConfig: ["read"],
-  },
-  "/settings/account": {
-    organization: ["read"],
-  },
-  "/settings/members": {
-    organization: ["read"],
-  },
-  "/settings/teams": {
-    team: ["read"],
-  },
-  "/settings/roles": {
-    organization: ["read"],
-  },
-  "/settings/security": {
-    organization: ["read"],
-  },
-  "/settings/appearance": {
-    organization: ["read"],
-  },
-  "/llm-proxies/provider-settings": {
-    chatSettings: ["read"],
-  },
-  "/settings/identity-providers": {
-    identityProvider: ["read"],
-  },
-  "/settings/secrets": {
-    organization: ["read"],
-  },
-  // Agent Triggers
-  "/agent-triggers": {
-    organization: ["update"],
-  },
-  "/agent-triggers/slack": {
-    organization: ["update"],
-  },
-  "/agent-triggers/ms-teams": {
-    organization: ["update"],
-  },
-  "/agent-triggers/email": {
-    organization: ["update"],
-  },
+  // Logs
+  "/llm/logs": { log: ["read"] },
+  "/mcp/logs": { log: ["read"] },
 
-  // Cost & Limits
-  "/cost": {
-    interaction: ["read"],
-  },
-  "/cost/statistics": {
-    interaction: ["read"],
-  },
-  "/cost/limits": {
-    limit: ["read"],
-  },
-  "/cost/optimization-rules": {
-    llmProxy: ["read"],
-  },
+  // Knowledge
+  "/knowledge/knowledge-bases": { knowledgeSource: ["read"] },
+  "/knowledge/connectors": { knowledgeSource: ["read"] },
+
+  // Settings
+  "/settings/account": {},
+  "/settings/api-keys": { apiKey: ["read"] },
+  "/settings/llm": { llmSettings: ["read"] },
+  "/settings/agents": { agentSettings: ["read"] },
+  "/settings/knowledge": { knowledgeSettings: ["read"] },
+  "/settings/users": { member: ["read"] },
+  "/settings/teams": { team: ["read"] },
+  "/settings/roles": { ac: ["read"] },
+  "/settings/identity-providers": { identityProvider: ["read"] },
+  "/settings/secrets": { secret: ["read"] },
+  "/settings/organization": { organizationSettings: ["read"] },
 };

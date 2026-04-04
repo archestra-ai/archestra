@@ -1,7 +1,7 @@
 import {
   generateDeploymentYamlTemplate,
   mergeLocalConfigIntoYaml,
-} from "@/mcp-server-runtime/k8s-yaml-generator";
+} from "@/k8s/mcp-server-runtime/k8s-yaml-generator";
 import { InternalMcpCatalogModel } from "@/models";
 import { describe, expect, test } from "@/test";
 
@@ -163,6 +163,7 @@ describe("Internal MCP Catalog - Environment Variables", () => {
       expect(catalog.deploymentSpecYaml).toContain("value: ${env.LOG_LEVEL}");
       expect(catalog.deploymentSpecYaml).toContain("name: API_KEY");
       expect(catalog.deploymentSpecYaml).toContain("secretKeyRef");
+      expect(catalog.deploymentSpecYaml).toContain("enableServiceLinks: false");
     });
 
     test("1.5 creates catalog with mounted secret", async () => {

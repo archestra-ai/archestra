@@ -104,7 +104,7 @@ Resolve <link-to-the-issue>
 
 ![Exploit prevented](/docs/platfrom/mastra-attack-prevented.png)
 
-Here, Archestra's ["Dynamic Tools" feature](/docs/platform-dynamic-tools) is reducing the context trustworthiness and preventing the read from a private repository. You can check the details of the blocked tool call in the platform UI at http://localhost:3000/logs/:
+Here, Archestra's [AI tool guardrails](/docs/platform-ai-tool-guardrails) reduce the context trustworthiness and prevent the read from a private repository. You can check the details of the blocked tool call in the platform UI at http://localhost:3000/logs/:
 
 ![Platform logs](/docs/platfrom/mastra-platform-logs.png)
 

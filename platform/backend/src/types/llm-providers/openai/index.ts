@@ -28,6 +28,14 @@ namespace OpenAi {
     >;
     export type Usage = z.infer<typeof OpenAiAPI.ChatCompletionUsageSchema>;
 
+    export type EmbeddingRequest = z.infer<
+      typeof OpenAiAPI.EmbeddingRequestSchema
+    >;
+    export type EmbeddingResponse = z.infer<
+      typeof OpenAiAPI.EmbeddingResponseSchema
+    >;
+    export type EmbeddingUsage = z.infer<typeof OpenAiAPI.EmbeddingUsageSchema>;
+
     export type FinishReason = z.infer<typeof OpenAiAPI.FinishReasonSchema>;
     export type Message = z.infer<typeof OpenAiMessages.MessageParamSchema>;
     export type Role = Message["role"];

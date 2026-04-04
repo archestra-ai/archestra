@@ -1,5 +1,5 @@
 import type { IdpRoleMappingConfig } from "@shared";
-import { MEMBER_ROLE_NAME } from "@shared";
+import { IDENTITY_TRUSTED_PROVIDER_IDS, MEMBER_ROLE_NAME } from "@shared";
 import { APIError } from "better-auth";
 import { vi } from "vitest";
 import { retrieveIdpGroups } from "@/auth/idp-team-sync-cache.ee";
@@ -65,6 +65,75 @@ function createParams(
 }
 
 describe("IdentityProviderModel", () => {
+  describe("create", () => {
+    test("persists enterprise-managed credentials inside oidcConfig", async ({
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+
+      const registerSSOProvider = vi.fn(async ({ body }) => {
+        await db.insert(schema.identityProvidersTable).values({
+          id: crypto.randomUUID(),
+          providerId: body.providerId,
+          issuer: body.issuer,
+          domain: body.domain,
+          organizationId: org.id,
+          userId: user.id,
+          oidcConfig: JSON.stringify(
+            body.oidcConfig,
+          ) as unknown as typeof schema.identityProvidersTable.$inferInsert.oidcConfig,
+        });
+      });
+
+      const created = await IdentityProviderModel.create(
+        {
+          providerId: "keycloak",
+          issuer: "http://localhost:30081/realms/archestra",
+          domain: "example.com",
+          userId: user.id,
+          oidcConfig: {
+            issuer: "http://localhost:30081/realms/archestra",
+            pkce: true,
+            clientId: "archestra-oidc",
+            clientSecret: "archestra-oidc-secret",
+            discoveryEndpoint:
+              "http://localhost:30081/realms/archestra/.well-known/openid-configuration",
+            enterpriseManagedCredentials: {
+              clientId: "archestra-oidc",
+              clientSecret: "archestra-oidc-secret",
+              tokenEndpoint:
+                "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+              tokenEndpointAuthentication: "client_secret_post",
+              subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+            },
+          },
+        },
+        org.id,
+        new Headers(),
+        {
+          api: {
+            registerSSOProvider,
+          },
+        } as unknown as Parameters<typeof IdentityProviderModel.create>[3],
+      );
+
+      expect(registerSSOProvider).toHaveBeenCalled();
+      expect(created.oidcConfig?.enterpriseManagedCredentials?.clientId).toBe(
+        "archestra-oidc",
+      );
+      expect(
+        created.oidcConfig?.enterpriseManagedCredentials?.tokenEndpoint,
+      ).toBe(
+        "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+      );
+      expect(
+        created.oidcConfig?.enterpriseManagedCredentials?.subjectTokenType,
+      ).toBe("urn:ietf:params:oauth:token-type:access_token");
+    });
+  });
+
   describe("findAllPublic", () => {
     test("returns empty array when no providers exist", async () => {
       const providers = await IdentityProviderModel.findAllPublic();
@@ -120,6 +189,83 @@ describe("IdentityProviderModel", () => {
       expect(providerIds).toContain("Okta");
       expect(providerIds).toContain("Google");
       expect(providerIds).toContain("GitHub");
+    });
+  });
+
+  describe("getTrustedAccountLinkingProviderIds", () => {
+    test("returns built-in trusted providers when no custom identity providers exist", async () => {
+      await expect(
+        IdentityProviderModel.getTrustedAccountLinkingProviderIds(),
+      ).resolves.toEqual([...IDENTITY_TRUSTED_PROVIDER_IDS]);
+    });
+
+    test("includes configured generic OIDC and SAML provider IDs", async ({
+      makeOrganization,
+      makeIdentityProvider,
+    }) => {
+      const org = await makeOrganization();
+
+      await makeIdentityProvider(org.id, {
+        providerId: "custom-oidc",
+        oidcConfig: { clientId: "client-id" },
+      });
+      await makeIdentityProvider(org.id, {
+        providerId: "custom-saml",
+        samlConfig: { entryPoint: "https://example.com/saml" },
+      });
+
+      await expect(
+        IdentityProviderModel.getTrustedAccountLinkingProviderIds(),
+      ).resolves.toEqual([
+        ...IDENTITY_TRUSTED_PROVIDER_IDS,
+        "custom-oidc",
+        "custom-saml",
+      ]);
+    });
+
+    test("deduplicates built-in providers that are also configured in the database", async ({
+      makeOrganization,
+      makeIdentityProvider,
+    }) => {
+      const org = await makeOrganization();
+
+      await makeIdentityProvider(org.id, { providerId: "Okta" });
+
+      await expect(
+        IdentityProviderModel.getTrustedAccountLinkingProviderIds(),
+      ).resolves.toEqual([...IDENTITY_TRUSTED_PROVIDER_IDS]);
+    });
+
+    test("returns the built-in trusted providers before database initialization", async () => {
+      vi.resetModules();
+      vi.doMock("@/database", async () => {
+        const actual =
+          await vi.importActual<typeof import("@/database")>("@/database");
+
+        return {
+          ...actual,
+          default: new Proxy(
+            {},
+            {
+              get() {
+                throw new Error(
+                  "Database not initialized. Call initializeDatabase() first.",
+                );
+              },
+            },
+          ),
+        };
+      });
+
+      const { default: IsolatedIdentityProviderModel } = await import(
+        "./identity-provider.ee"
+      );
+
+      await expect(
+        IsolatedIdentityProviderModel.getTrustedAccountLinkingProviderIds(),
+      ).resolves.toEqual([...IDENTITY_TRUSTED_PROVIDER_IDS]);
+
+      vi.doUnmock("@/database");
     });
   });
 
@@ -411,6 +557,57 @@ describe("IdentityProviderModel", () => {
       expect(updated).not.toBeNull();
       expect(updated?.oidcConfig?.clientId).toBe("new-client-id");
       expect(updated?.oidcConfig?.clientSecret).toBe("new-secret");
+    });
+
+    test("can update enterprise-managed credentials inside oidcConfig", async ({
+      makeOrganization,
+      makeIdentityProvider,
+    }) => {
+      const org = await makeOrganization();
+
+      const inserted = await makeIdentityProvider(org.id, {
+        providerId: "keycloak",
+        oidcConfig: {
+          clientId: "archestra-oidc",
+          clientSecret: "old-secret",
+          issuer: "http://localhost:30081/realms/archestra",
+          pkce: true,
+          discoveryEndpoint:
+            "http://localhost:30081/realms/archestra/.well-known/openid-configuration",
+        },
+      });
+
+      const updated = await IdentityProviderModel.update(
+        inserted.id,
+        {
+          oidcConfig: {
+            clientId: "archestra-oidc",
+            clientSecret: "new-secret",
+            issuer: "http://localhost:30081/realms/archestra",
+            pkce: true,
+            discoveryEndpoint:
+              "http://localhost:30081/realms/archestra/.well-known/openid-configuration",
+            enterpriseManagedCredentials: {
+              clientId: "archestra-oidc",
+              clientSecret: "archestra-oidc-secret",
+              tokenEndpoint:
+                "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+              tokenEndpointAuthentication: "client_secret_post",
+              subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+            },
+          } as never,
+        },
+        org.id,
+      );
+
+      expect(updated).not.toBeNull();
+      expect(
+        updated?.oidcConfig?.enterpriseManagedCredentials?.clientSecret,
+      ).toBe("archestra-oidc-secret");
+      expect(
+        updated?.oidcConfig?.enterpriseManagedCredentials
+          ?.tokenEndpointAuthentication,
+      ).toBe("client_secret_post");
     });
   });
 

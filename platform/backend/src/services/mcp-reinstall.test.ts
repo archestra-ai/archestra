@@ -1,7 +1,7 @@
 import { vi } from "vitest";
 
 // Mock dependencies before other imports
-vi.mock("@/mcp-server-runtime", () => ({
+vi.mock("@/k8s/mcp-server-runtime", () => ({
   McpServerRuntimeManager: {
     restartServer: vi.fn(),
     getOrLoadDeployment: vi.fn(),
@@ -25,7 +25,7 @@ vi.mock("@/models", async (importOriginal) => {
   };
 });
 
-import { McpServerRuntimeManager } from "@/mcp-server-runtime";
+import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import { McpServerModel, ToolModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { InternalMcpCatalog, McpServer } from "@/types";
@@ -860,6 +860,39 @@ describe("mcp-reinstall", () => {
       expect(McpServerModel.update).toHaveBeenCalledWith(server.id, {
         name: "microsoft__playwright-mcp-user-123",
       });
+    });
+
+    test("passes _meta and annotations as meta when syncing tools", async () => {
+      const server = createServer({ serverType: "remote" });
+      const catalog = createCatalog({ serverType: "remote" });
+
+      const toolMeta = { ui: { resourceUri: "mcp://app/view" } };
+      const toolAnnotations = { readOnlyHint: true };
+
+      vi.mocked(McpServerModel.getToolsFromServer).mockResolvedValue([
+        {
+          name: "ui-tool",
+          description: "Tool with UI",
+          inputSchema: {},
+          _meta: toolMeta,
+          annotations: toolAnnotations,
+        },
+      ]);
+      vi.mocked(ToolModel.syncToolsForCatalog).mockResolvedValue({
+        created: [],
+        updated: [],
+        unchanged: [],
+        deleted: [],
+      });
+      vi.mocked(McpServerModel.update).mockResolvedValue({} as McpServer);
+
+      await autoReinstallServer(server, catalog);
+
+      expect(ToolModel.syncToolsForCatalog).toHaveBeenCalledWith([
+        expect.objectContaining({
+          meta: { _meta: toolMeta, annotations: toolAnnotations },
+        }),
+      ]);
     });
 
     test("succeeds for local server with full flow", async () => {

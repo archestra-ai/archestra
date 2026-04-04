@@ -29,6 +29,7 @@
  */
 
 import type {
+  InteractionSource,
   SupportedProvider,
   SupportedProviderDiscriminator,
 } from "@shared";
@@ -40,7 +41,7 @@ import type { Agent } from "./agent";
  * Follows OTEL GenAI Semantic Conventions.
  * Span names are constructed as `{operationName} {model}`.
  */
-export type GenAiOperationName = "chat" | "generate_content";
+export type GenAiOperationName = "chat" | "generate_content" | "embedding";
 
 import type {
   CommonMcpToolDefinition,
@@ -56,14 +57,14 @@ import type { ToolCompressionStats } from "./tool-result-compression";
 export interface CreateClientOptions {
   /** Base URL override for the provider API */
   baseUrl?: string;
-  /** Enable mock mode for testing */
-  mockMode?: boolean;
   /** Agent for observability metrics (request duration, tokens) */
   agent?: Agent;
   /** External agent ID from X-Archestra-Agent-Id header */
   externalAgentId?: string;
   /** Default headers to include with every request */
   defaultHeaders?: Record<string, string>;
+  /** Interaction source for observability metrics (e.g. "api", "chat", "knowledge:embedding") */
+  source: InteractionSource;
 }
 
 /**
@@ -380,7 +381,7 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
    */
   createClient(
     apiKey: string | undefined,
-    options?: CreateClientOptions,
+    options: CreateClientOptions,
   ): unknown;
 
   // ---------------------------------------------------------------------------

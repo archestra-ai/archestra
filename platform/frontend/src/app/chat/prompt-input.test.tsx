@@ -2,12 +2,32 @@ import { E2eTestId } from "@shared";
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const { mockUseOrganization, mockUseChatPlaceholder } = vi.hoisted(() => ({
+  mockUseOrganization: vi.fn(),
+  mockUseChatPlaceholder: vi.fn(),
+}));
+
 // Mock ResizeObserver which is used by Radix UI components
 global.ResizeObserver = vi.fn().mockImplementation(() => ({
   observe: vi.fn(),
   unobserve: vi.fn(),
   disconnect: vi.fn(),
 }));
+
+// Mock window.matchMedia for useIsMobile hook
+Object.defineProperty(window, "matchMedia", {
+  writable: true,
+  value: vi.fn().mockImplementation((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })),
+});
 
 // Mock all the complex dependencies
 vi.mock("@/components/ai-elements/prompt-input", () => ({
@@ -59,7 +79,9 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
   ),
   PromptInputSpeechButton: () => <button type="button">Speech</button>,
   PromptInputSubmit: () => <button type="submit">Submit</button>,
-  PromptInputTextarea: () => <textarea />,
+  PromptInputTextarea: ({ placeholder }: { placeholder?: string }) => (
+    <textarea placeholder={placeholder} />
+  ),
   PromptInputTools: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="prompt-tools">{children}</div>
   ),
@@ -76,17 +98,17 @@ vi.mock("@/components/chat/agent-tools-display", () => ({
   AgentToolsDisplay: () => <div data-testid="agent-tools-display" />,
 }));
 
-vi.mock("@/components/chat/chat-api-key-selector", () => ({
-  ChatApiKeySelector: () => <div data-testid="chat-api-key-selector" />,
+vi.mock("@/components/chat/llm-provider-api-key-selector", () => ({
+  LlmProviderApiKeySelector: () => <div data-testid="chat-api-key-selector" />,
 }));
 
 vi.mock("@/components/chat/chat-tools-display", () => ({
   ChatToolsDisplay: () => <div data-testid="chat-tools-display" />,
 }));
 
-vi.mock("@/components/chat/knowledge-graph-upload-indicator", () => ({
-  KnowledgeGraphUploadIndicator: () => (
-    <div data-testid="knowledge-graph-indicator" />
+vi.mock("@/components/chat/knowledge-base-upload-indicator", () => ({
+  KnowledgeBaseUploadIndicator: () => (
+    <div data-testid="knowledge-base-indicator" />
   ),
 }));
 
@@ -107,6 +129,15 @@ vi.mock("@/components/ui/tooltip", () => ({
   ),
 }));
 
+// Mock agent query hooks
+vi.mock("@/lib/agent.query", () => ({
+  useProfile: () => ({
+    data: null,
+    isLoading: false,
+    error: null,
+  }),
+}));
+
 // Mock the React Query hooks that the component uses
 vi.mock("@/lib/agent-tools.query", () => ({
   useAgentDelegations: () => ({
@@ -116,12 +147,20 @@ vi.mock("@/lib/agent-tools.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/chat.query", () => ({
+vi.mock("@/lib/chat/chat.query", () => ({
   useProfileToolsWithIds: () => ({
     data: [],
     isLoading: false,
     error: null,
   }),
+}));
+
+vi.mock("@/lib/organization.query", () => ({
+  useOrganization: () => mockUseOrganization(),
+}));
+
+vi.mock("@/lib/chat/chat-placeholder.hook", () => ({
+  useChatPlaceholder: (...args: unknown[]) => mockUseChatPlaceholder(...args),
 }));
 
 // Mock for useHasPermissions - default to non-admin
@@ -131,7 +170,7 @@ const mockUseHasPermissions = vi.fn().mockReturnValue({
   isLoading: false,
 });
 
-vi.mock("@/lib/auth.query", () => ({
+vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => mockUseHasPermissions(),
 }));
 
@@ -150,6 +189,14 @@ describe("ArchestraPromptInput", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseOrganization.mockReturnValue({
+      data: null,
+      isLoading: false,
+    });
+    mockUseChatPlaceholder.mockReturnValue({
+      placeholder: "Animated placeholder",
+      isAnimating: true,
+    });
   });
 
   describe("File Upload Button", () => {
@@ -198,7 +245,7 @@ describe("ArchestraPromptInput", () => {
         <ArchestraPromptInput
           {...defaultProps}
           allowFileUploads={true}
-          inputModalities={["text"]}
+          inputModalities={null}
         />,
       );
 
@@ -215,8 +262,25 @@ describe("ArchestraPromptInput", () => {
       );
     });
 
+    it("should render enabled file upload button for text-only models", () => {
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          allowFileUploads={true}
+          inputModalities={["text"]}
+        />,
+      );
+
+      expect(
+        screen.getByTestId(E2eTestId.ChatFileUploadButton),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId("tooltip-content")).toHaveTextContent(
+        "Supports: chat prompts, .txt, .csv, and .md uploads",
+      );
+    });
+
     it("should show settings link in tooltip for admins when file uploads disabled", () => {
-      // Mock admin user with organization update permission
+      // Mock admin user with agentSettings update permission
       mockUseHasPermissions.mockReturnValue({
         data: true,
         isPending: false,
@@ -237,16 +301,16 @@ describe("ArchestraPromptInput", () => {
       expect(tooltip).toHaveTextContent("Enable in settings");
       expect(screen.getByRole("link")).toHaveAttribute(
         "href",
-        "/settings/security",
+        "/settings/agents",
       );
       expect(screen.getByRole("link")).toHaveAttribute(
         "aria-label",
-        "Enable file uploads in security settings",
+        "Enable file uploads in agent settings",
       );
     });
 
     it("should show admin message in tooltip for non-admins when file uploads disabled", () => {
-      // Mock non-admin user without organization update permission
+      // Mock non-admin user without agentSettings update permission
       mockUseHasPermissions.mockReturnValue({
         data: false,
         isPending: false,
@@ -280,7 +344,13 @@ describe("ArchestraPromptInput", () => {
       expect(screen.getByTestId("prompt-input")).toBeInTheDocument();
     });
 
-    it("should render model selector", () => {
+    it("should render model selector when user has provider settings permission", () => {
+      mockUseHasPermissions.mockReturnValue({
+        data: true,
+        isPending: false,
+        isLoading: false,
+      });
+
       render(
         <ArchestraPromptInput {...defaultProps} allowFileUploads={true} />,
       );
@@ -288,18 +358,61 @@ describe("ArchestraPromptInput", () => {
       expect(screen.getByTestId("model-selector")).toBeInTheDocument();
     });
 
-    it("should render 'Add tools & sub-agents' button when no tools or delegations exist", () => {
+    it("should keep a single organization placeholder static", () => {
+      mockUseOrganization.mockReturnValue({
+        data: {
+          chatPlaceholders: ["Ask the support agent"],
+          animateChatPlaceholders: true,
+        },
+        isLoading: false,
+      });
+      mockUseChatPlaceholder.mockReturnValue({
+        placeholder: "Ask the support agent",
+        isAnimating: false,
+      });
+
       render(
         <ArchestraPromptInput {...defaultProps} allowFileUploads={true} />,
       );
 
-      // With empty tools and delegations from mocks, should show the "Add tools" button
-      expect(screen.getByText("Add tools & sub-agents")).toBeInTheDocument();
+      expect(mockUseChatPlaceholder).toHaveBeenCalledWith({
+        animate: true,
+        placeholders: ["Ask the support agent"],
+      });
       expect(
-        screen.queryByTestId("chat-tools-display"),
+        screen.getByPlaceholderText("Ask the support agent"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByPlaceholderText("Animated placeholder"),
       ).not.toBeInTheDocument();
+    });
+
+    it("should keep placeholders static when animation is disabled", () => {
+      mockUseOrganization.mockReturnValue({
+        data: {
+          chatPlaceholders: ["First placeholder", "Second placeholder"],
+          animateChatPlaceholders: false,
+        },
+        isLoading: false,
+      });
+      mockUseChatPlaceholder.mockReturnValue({
+        placeholder: "Second placeholder",
+        isAnimating: false,
+      });
+
+      render(
+        <ArchestraPromptInput {...defaultProps} allowFileUploads={true} />,
+      );
+
+      expect(mockUseChatPlaceholder).toHaveBeenCalledWith({
+        animate: false,
+        placeholders: ["First placeholder", "Second placeholder"],
+      });
       expect(
-        screen.queryByTestId("agent-tools-display"),
+        screen.getByPlaceholderText("Second placeholder"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByPlaceholderText("Animated placeholder"),
       ).not.toBeInTheDocument();
     });
   });

@@ -1,10 +1,14 @@
 import {
+  BUILT_IN_AGENT_IDS,
+  BUILT_IN_AGENT_NAMES,
   PLAYWRIGHT_MCP_CATALOG_ID,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
+import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import AgentModel from "./agent";
+import MemberModel from "./member";
 import TeamModel from "./team";
 
 describe("AgentModel", () => {
@@ -13,6 +17,78 @@ describe("AgentModel", () => {
     await AgentModel.create({ name: "Test Agent 2", teams: [], scope: "org" });
 
     expect(await AgentModel.findAll()).toHaveLength(2);
+  });
+
+  describe("findBasicByOrganizationIdAndIds", () => {
+    test("returns only agents from the requested organization", async ({
+      makeOrganization,
+    }) => {
+      const organization = await makeOrganization();
+      const otherOrganization = await makeOrganization();
+
+      const includedAgent = await AgentModel.create({
+        name: "Included Agent",
+        organizationId: organization.id,
+        teams: [],
+        scope: "org",
+      });
+      const excludedAgent = await AgentModel.create({
+        name: "Excluded Agent",
+        organizationId: otherOrganization.id,
+        teams: [],
+        scope: "org",
+      });
+
+      const result = await AgentModel.findBasicByOrganizationIdAndIds({
+        organizationId: organization.id,
+        agentIds: [includedAgent.id, excludedAgent.id],
+      });
+
+      expect(result).toEqual([
+        {
+          id: includedAgent.id,
+          name: "Included Agent",
+          agentType: includedAgent.agentType,
+        },
+      ]);
+    });
+
+    test("returns basic agent fields ordered by newest first", async ({
+      makeOrganization,
+    }) => {
+      const organization = await makeOrganization();
+
+      const olderAgent = await AgentModel.create({
+        name: "Older Agent",
+        organizationId: organization.id,
+        teams: [],
+        scope: "org",
+      });
+      const newerAgent = await AgentModel.create({
+        name: "Newer Agent",
+        organizationId: organization.id,
+        teams: [],
+        scope: "org",
+      });
+
+      const result = await AgentModel.findBasicByOrganizationIdAndIds({
+        organizationId: organization.id,
+        agentIds: [olderAgent.id, newerAgent.id],
+      });
+
+      expect(result).toEqual([
+        {
+          id: newerAgent.id,
+          name: "Newer Agent",
+          agentType: newerAgent.agentType,
+        },
+        {
+          id: olderAgent.id,
+          name: "Older Agent",
+          agentType: olderAgent.agentType,
+        },
+      ]);
+    });
   });
 
   describe("exists", () => {
@@ -936,6 +1012,85 @@ describe("AgentModel", () => {
       expect(resultByTeam.data).toHaveLength(4);
     });
 
+    test("sortBy knowledgeSourcesCount orders by combined knowledge base and connector count", async ({
+      makeAdmin,
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+
+      // Create 3 agents with varying knowledge sources
+      await AgentModel.create({
+        name: "No Sources",
+        teams: [],
+        scope: "org",
+      });
+      const agentSome = await AgentModel.create({
+        name: "Some Sources",
+        teams: [],
+        scope: "org",
+      });
+      const agentMany = await AgentModel.create({
+        name: "Many Sources",
+        teams: [],
+        scope: "org",
+      });
+
+      // agentSome: 1 knowledge base + 1 connector = 2 sources
+      const kb1 = await makeKnowledgeBase(org.id);
+      const connector1 = await makeKnowledgeBaseConnector(kb1.id, org.id);
+      await db.insert(schema.agentKnowledgeBasesTable).values({
+        agentId: agentSome.id,
+        knowledgeBaseId: kb1.id,
+      });
+      await db.insert(schema.agentConnectorAssignmentsTable).values({
+        agentId: agentSome.id,
+        connectorId: connector1.id,
+      });
+
+      // agentMany: 2 knowledge bases + 2 connectors = 4 sources
+      const kb2 = await makeKnowledgeBase(org.id);
+      const kb3 = await makeKnowledgeBase(org.id);
+      const connector2 = await makeKnowledgeBaseConnector(kb2.id, org.id);
+      const connector3 = await makeKnowledgeBaseConnector(kb3.id, org.id);
+      await db.insert(schema.agentKnowledgeBasesTable).values([
+        { agentId: agentMany.id, knowledgeBaseId: kb2.id },
+        { agentId: agentMany.id, knowledgeBaseId: kb3.id },
+      ]);
+      await db.insert(schema.agentConnectorAssignmentsTable).values([
+        { agentId: agentMany.id, connectorId: connector2.id },
+        { agentId: agentMany.id, connectorId: connector3.id },
+      ]);
+
+      // Sort descending - Many Sources (4) > Some Sources (2) > No Sources (0)
+      const resultDesc = await AgentModel.findAllPaginated(
+        { limit: 10, offset: 0 },
+        { sortBy: "knowledgeSourcesCount", sortDirection: "desc" },
+        {},
+        admin.id,
+        true,
+      );
+      expect(resultDesc.data).toHaveLength(3);
+      expect(resultDesc.data[0].name).toBe("Many Sources");
+      expect(resultDesc.data[1].name).toBe("Some Sources");
+      expect(resultDesc.data[2].name).toBe("No Sources");
+
+      // Sort ascending - No Sources (0) > Some Sources (2) > Many Sources (4)
+      const resultAsc = await AgentModel.findAllPaginated(
+        { limit: 10, offset: 0 },
+        { sortBy: "knowledgeSourcesCount", sortDirection: "asc" },
+        {},
+        admin.id,
+        true,
+      );
+      expect(resultAsc.data).toHaveLength(3);
+      expect(resultAsc.data[0].name).toBe("No Sources");
+      expect(resultAsc.data[1].name).toBe("Some Sources");
+      expect(resultAsc.data[2].name).toBe("Many Sources");
+    });
+
     test("pagination offset works correctly with many tools", async ({
       makeAdmin,
       makeTool,
@@ -993,6 +1148,41 @@ describe("AgentModel", () => {
       const page2Ids = page2.data.map((a) => a.id);
       const intersection = page1Ids.filter((id) => page2Ids.includes(id));
       expect(intersection).toHaveLength(0);
+    });
+
+    test("prioritizes the current user's personal agent ahead of other sort results", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+
+      await AgentModel.create(
+        {
+          name: "Alpha Shared Agent",
+          teams: [],
+          scope: "org",
+        },
+        admin.id,
+      );
+      await AgentModel.create(
+        {
+          name: "Zulu Personal Agent",
+          teams: [],
+          scope: "personal",
+        },
+        admin.id,
+      );
+
+      const result = await AgentModel.findAllPaginated(
+        { limit: 10, offset: 0 },
+        { sortBy: "name", sortDirection: "asc" },
+        {},
+        admin.id,
+        true,
+      );
+
+      expect(result.data).toHaveLength(2);
+      expect(result.data[0].name).toBe("Zulu Personal Agent");
+      expect(result.data[0].scope).toBe("personal");
     });
   });
 
@@ -1698,6 +1888,640 @@ describe("AgentModel", () => {
       const toolNames = foundAgent.tools.map((t) => t.name);
       expect(toolNames).toContain("default_regular_tool");
       expect(toolNames).toContain("archestra__default_tool");
+    });
+  });
+
+  describe("getBuiltInAgent", () => {
+    test("returns null when no built-in agent exists", async () => {
+      const result = await AgentModel.getBuiltInAgent(
+        BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+      );
+      expect(result).toBeNull();
+    });
+
+    test("returns the built-in agent by config name", async () => {
+      await AgentModel.create({
+        name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+        teams: [],
+        scope: "org",
+        agentType: "agent",
+        builtInAgentConfig: {
+          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+          autoConfigureOnToolDiscovery: false,
+        },
+      });
+
+      const result = await AgentModel.getBuiltInAgent(
+        BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+      );
+      expect(result).not.toBeNull();
+      expect(result?.name).toBe(BUILT_IN_AGENT_NAMES.POLICY_CONFIG);
+      expect(result?.builtInAgentConfig).toEqual(
+        expect.objectContaining({
+          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+          autoConfigureOnToolDiscovery: false,
+        }),
+      );
+    });
+
+    test("supports dual LLM built-in config variants", async () => {
+      await AgentModel.create({
+        name: BUILT_IN_AGENT_NAMES.DUAL_LLM_MAIN,
+        teams: [],
+        scope: "org",
+        agentType: "agent",
+        builtInAgentConfig: {
+          name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+          maxRounds: 7,
+        },
+      });
+
+      const result = await AgentModel.getBuiltInAgent(
+        BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+      );
+
+      expect(result).not.toBeNull();
+      expect(result?.builtInAgentConfig).toEqual(
+        expect.objectContaining({
+          name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+          maxRounds: 7,
+        }),
+      );
+    });
+
+    test("does not return agents without built-in config", async () => {
+      await AgentModel.create({
+        name: "Regular Agent",
+        teams: [],
+        scope: "org",
+        agentType: "agent",
+      });
+
+      const result = await AgentModel.getBuiltInAgent(
+        BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+      );
+      expect(result).toBeNull();
+    });
+  });
+
+  describe("findAll with excludeBuiltIn", () => {
+    test("excludes built-in agents when excludeBuiltIn is true", async () => {
+      await AgentModel.create({
+        name: "Regular Agent",
+        teams: [],
+        scope: "org",
+        agentType: "agent",
+      });
+      await AgentModel.create({
+        name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+        teams: [],
+        scope: "org",
+        agentType: "agent",
+        builtInAgentConfig: {
+          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+          autoConfigureOnToolDiscovery: false,
+        },
+      });
+
+      const all = await AgentModel.findAll(undefined, true, {
+        agentType: "agent",
+      });
+      expect(all).toHaveLength(2);
+
+      const filtered = await AgentModel.findAll(undefined, true, {
+        agentType: "agent",
+        excludeBuiltIn: true,
+      });
+      expect(filtered).toHaveLength(1);
+      expect(filtered[0].name).toBe("Regular Agent");
+    });
+
+    test("includes built-in agents when excludeBuiltIn is false", async () => {
+      await AgentModel.create({
+        name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+        teams: [],
+        scope: "org",
+        agentType: "agent",
+        builtInAgentConfig: {
+          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+          autoConfigureOnToolDiscovery: false,
+        },
+      });
+
+      const all = await AgentModel.findAll(undefined, true, {
+        agentType: "agent",
+      });
+      expect(all).toHaveLength(1);
+      expect(all[0].builtInAgentConfig).toBeTruthy();
+    });
+
+    test("hides built-in agents from non-admin users", async () => {
+      await AgentModel.create({
+        name: "Regular Agent",
+        teams: [],
+        scope: "org",
+        agentType: "agent",
+      });
+      await AgentModel.create({
+        name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+        teams: [],
+        scope: "org",
+        agentType: "agent",
+        builtInAgentConfig: {
+          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+          autoConfigureOnToolDiscovery: false,
+        },
+      });
+
+      // Admin can see built-in agents
+      const adminResults = await AgentModel.findAll(undefined, true, {
+        agentType: "agent",
+      });
+      expect(adminResults).toHaveLength(2);
+
+      // Non-admin cannot see built-in agents
+      const nonAdminResults = await AgentModel.findAll(undefined, false, {
+        agentType: "agent",
+      });
+      expect(nonAdminResults).toHaveLength(1);
+      expect(nonAdminResults[0].name).toBe("Regular Agent");
+    });
+
+    test("findAllPaginated hides built-in agents from non-admin users", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+
+      await AgentModel.create({
+        name: "Regular Agent",
+        teams: [],
+        scope: "org",
+        agentType: "agent",
+      });
+      await AgentModel.create({
+        name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+        teams: [],
+        scope: "org",
+        agentType: "agent",
+        builtInAgentConfig: {
+          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+          autoConfigureOnToolDiscovery: false,
+        },
+      });
+
+      // Admin without scope filter excludes built-in agents by default
+      const adminResults = await AgentModel.findAllPaginated(
+        { limit: 20, offset: 0 },
+        { sortBy: "createdAt", sortDirection: "desc" },
+        { agentType: "agent" },
+        admin.id,
+        true,
+      );
+      expect(adminResults.data).toHaveLength(1);
+      expect(adminResults.data[0].name).toBe("Regular Agent");
+
+      // Admin with scope=built_in sees only built-in agents
+      const builtInResults = await AgentModel.findAllPaginated(
+        { limit: 20, offset: 0 },
+        { sortBy: "createdAt", sortDirection: "desc" },
+        { agentType: "agent", scope: "built_in" },
+        admin.id,
+        true,
+      );
+      expect(builtInResults.data).toHaveLength(1);
+      expect(builtInResults.data[0].name).toBe(
+        BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+      );
+
+      // Non-admin cannot see built-in agents
+      const nonAdminResults = await AgentModel.findAllPaginated(
+        { limit: 20, offset: 0 },
+        { sortBy: "createdAt", sortDirection: "desc" },
+        { agentType: "agent" },
+        admin.id,
+        false,
+      );
+      expect(nonAdminResults.data).toHaveLength(1);
+      expect(nonAdminResults.data[0].name).toBe("Regular Agent");
+    });
+  });
+
+  describe("findAll with scope filter", () => {
+    test("returns only org-scoped agents when scope is org", async () => {
+      await AgentModel.create({
+        name: "Org Agent",
+        teams: [],
+        scope: "org",
+        agentType: "agent",
+      });
+      await AgentModel.create({
+        name: "Personal Agent",
+        teams: [],
+        scope: "personal",
+        agentType: "agent",
+      });
+      await AgentModel.create({
+        name: "Team Agent",
+        teams: [],
+        scope: "team",
+        agentType: "agent",
+      });
+
+      const results = await AgentModel.findAll(undefined, true, {
+        agentType: "agent",
+        scope: "org",
+      });
+
+      expect(results).toHaveLength(1);
+      expect(results[0].name).toBe("Org Agent");
+    });
+
+    test("excludes personal and team agents when scope is org", async () => {
+      await AgentModel.create({
+        name: "Personal Agent",
+        teams: [],
+        scope: "personal",
+        agentType: "agent",
+      });
+      await AgentModel.create({
+        name: "Team Agent",
+        teams: [],
+        scope: "team",
+        agentType: "agent",
+      });
+
+      const results = await AgentModel.findAll(undefined, true, {
+        agentType: "agent",
+        scope: "org",
+      });
+
+      expect(results).toHaveLength(0);
+    });
+
+    test("excludes built-in agents when both scope and excludeBuiltIn are set", async () => {
+      await AgentModel.create({
+        name: "Org Agent",
+        teams: [],
+        scope: "org",
+        agentType: "agent",
+      });
+      await AgentModel.create({
+        name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+        teams: [],
+        scope: "org",
+        agentType: "agent",
+        builtInAgentConfig: {
+          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+          autoConfigureOnToolDiscovery: false,
+        },
+      });
+
+      const results = await AgentModel.findAll(undefined, true, {
+        agentType: "agent",
+        scope: "org",
+        excludeBuiltIn: true,
+      });
+
+      expect(results).toHaveLength(1);
+      expect(results[0].name).toBe("Org Agent");
+    });
+
+    test("returns only personal agents when scope is personal", async () => {
+      await AgentModel.create({
+        name: "Org Agent",
+        teams: [],
+        scope: "org",
+        agentType: "agent",
+      });
+      await AgentModel.create({
+        name: "Personal Agent",
+        teams: [],
+        scope: "personal",
+        agentType: "agent",
+      });
+
+      const results = await AgentModel.findAll(undefined, true, {
+        agentType: "agent",
+        scope: "personal",
+      });
+
+      expect(results).toHaveLength(1);
+      expect(results[0].name).toBe("Personal Agent");
+    });
+  });
+
+  describe("ensurePersonalChatAgent", () => {
+    test("creates personal agent and sets member defaultAgentId", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id);
+
+      await AgentModel.ensurePersonalChatAgent({
+        userId: user.id,
+        organizationId: org.id,
+      });
+
+      const defaultAgentId = await MemberModel.getDefaultAgentId(
+        user.id,
+        org.id,
+      );
+      if (!defaultAgentId) throw new Error("expected default agent");
+
+      const agent = await AgentModel.findById(defaultAgentId, user.id, true);
+      expect(agent).not.toBeNull();
+      expect(agent?.name).toBe("My Assistant");
+      expect(agent?.scope).toBe("personal");
+      expect(agent?.agentType).toBe("agent");
+      expect(agent?.authorId).toBe(user.id);
+    });
+
+    test("is idempotent - second call does not create duplicate", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id);
+
+      await AgentModel.ensurePersonalChatAgent({
+        userId: user.id,
+        organizationId: org.id,
+      });
+      const firstDefault = await MemberModel.getDefaultAgentId(user.id, org.id);
+
+      await AgentModel.ensurePersonalChatAgent({
+        userId: user.id,
+        organizationId: org.id,
+      });
+      const secondDefault = await MemberModel.getDefaultAgentId(
+        user.id,
+        org.id,
+      );
+
+      expect(firstDefault).toBe(secondDefault);
+
+      // Should only have 1 agent total
+      const agents = await AgentModel.findAll(user.id, true);
+      const personalAgents = agents.filter(
+        (a) => a.name === "My Assistant" && a.authorId === user.id,
+      );
+      expect(personalAgents).toHaveLength(1);
+    });
+
+    test("does not recreate if user changed default to another agent", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id);
+
+      await AgentModel.ensurePersonalChatAgent({
+        userId: user.id,
+        organizationId: org.id,
+      });
+
+      // User changes default to another agent
+      const otherAgent = await AgentModel.create({
+        name: "Other Agent",
+        agentType: "agent",
+        scope: "personal",
+        organizationId: org.id,
+      });
+      await MemberModel.setDefaultAgent(user.id, org.id, otherAgent.id);
+
+      // Call again - should NOT create new agent since defaultAgentId is set
+      await AgentModel.ensurePersonalChatAgent({
+        userId: user.id,
+        organizationId: org.id,
+      });
+
+      const currentDefault = await MemberModel.getDefaultAgentId(
+        user.id,
+        org.id,
+      );
+      expect(currentDefault).toBe(otherAgent.id);
+    });
+
+    test("creates separate agents per organization for multi-org users", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org1 = await makeOrganization();
+      const org2 = await makeOrganization();
+      await makeMember(user.id, org1.id);
+      await makeMember(user.id, org2.id);
+
+      await AgentModel.ensurePersonalChatAgent({
+        userId: user.id,
+        organizationId: org1.id,
+      });
+      await AgentModel.ensurePersonalChatAgent({
+        userId: user.id,
+        organizationId: org2.id,
+      });
+
+      const default1 = await MemberModel.getDefaultAgentId(user.id, org1.id);
+      const default2 = await MemberModel.getDefaultAgentId(user.id, org2.id);
+
+      expect(default1).not.toBeNull();
+      expect(default2).not.toBeNull();
+      expect(default1).not.toBe(default2);
+    });
+  });
+
+  describe("isAgentDefault / deletion guard", () => {
+    test("isAgentDefault returns true for a default agent", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id);
+
+      await AgentModel.ensurePersonalChatAgent({
+        userId: user.id,
+        organizationId: org.id,
+      });
+
+      const defaultAgentId = await MemberModel.getDefaultAgentId(
+        user.id,
+        org.id,
+      );
+      if (!defaultAgentId) throw new Error("expected default agent");
+      expect(await MemberModel.isAgentDefault(defaultAgentId)).toBe(true);
+    });
+
+    test("isAgentDefault returns false for non-default agents", async () => {
+      const agent = await AgentModel.create({
+        name: "Regular Agent",
+        teams: [],
+        scope: "org",
+      });
+      expect(await MemberModel.isAgentDefault(agent.id)).toBe(false);
+    });
+
+    test("changing default removes agent from being default", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id);
+
+      await AgentModel.ensurePersonalChatAgent({
+        userId: user.id,
+        organizationId: org.id,
+      });
+      const originalDefault = await MemberModel.getDefaultAgentId(
+        user.id,
+        org.id,
+      );
+      if (!originalDefault) throw new Error("expected default agent");
+      expect(await MemberModel.isAgentDefault(originalDefault)).toBe(true);
+
+      // Change default to another agent
+      const otherAgent = await AgentModel.create({
+        name: "Other Agent",
+        agentType: "agent",
+        scope: "personal",
+        organizationId: org.id,
+      });
+      await MemberModel.setDefaultAgent(user.id, org.id, otherAgent.id);
+
+      // Original agent is no longer default
+      expect(await MemberModel.isAgentDefault(originalDefault)).toBe(false);
+      // New agent is now default
+      expect(await MemberModel.isAgentDefault(otherAgent.id)).toBe(true);
+    });
+  });
+
+  describe("findByIdsForPermissionCheck", () => {
+    test("returns agentType, scope, authorId, and teamIds for each agent", async ({
+      makeAgent,
+      makeOrganization,
+      makeUser,
+      makeTeam,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id, { name: "Eng" });
+
+      const agent = await makeAgent({
+        name: "Perm Check Agent",
+        agentType: "profile",
+        scope: "org",
+        organizationId: org.id,
+        authorId: user.id,
+        teams: [team.id],
+      });
+
+      const result = await AgentModel.findByIdsForPermissionCheck([agent.id]);
+
+      expect(result.size).toBe(1);
+      const entry = result.get(agent.id);
+      expect(entry).toBeDefined();
+      expect(entry?.agentType).toBe("profile");
+      expect(entry?.scope).toBe("org");
+      expect(entry?.authorId).toBe(user.id);
+      expect(entry?.teamIds).toEqual([team.id]);
+    });
+
+    test("returns multiple agents in a single batch", async ({ makeAgent }) => {
+      const agent1 = await makeAgent({ name: "Agent A", agentType: "agent" });
+      const agent2 = await makeAgent({
+        name: "Agent B",
+        agentType: "llm_proxy",
+      });
+      const agent3 = await makeAgent({
+        name: "Agent C",
+        agentType: "mcp_gateway",
+      });
+
+      const result = await AgentModel.findByIdsForPermissionCheck([
+        agent1.id,
+        agent2.id,
+        agent3.id,
+      ]);
+
+      expect(result.size).toBe(3);
+      expect(result.get(agent1.id)?.agentType).toBe("agent");
+      expect(result.get(agent2.id)?.agentType).toBe("llm_proxy");
+      expect(result.get(agent3.id)?.agentType).toBe("mcp_gateway");
+    });
+
+    test("returns empty map for empty input", async () => {
+      const result = await AgentModel.findByIdsForPermissionCheck([]);
+      expect(result.size).toBe(0);
+    });
+
+    test("omits non-existent agent IDs from result", async ({ makeAgent }) => {
+      const agent = await makeAgent({ name: "Exists" });
+
+      const result = await AgentModel.findByIdsForPermissionCheck([
+        agent.id,
+        "00000000-0000-0000-0000-000000000000",
+      ]);
+
+      expect(result.size).toBe(1);
+      expect(result.has(agent.id)).toBe(true);
+      expect(result.has("00000000-0000-0000-0000-000000000000")).toBe(false);
+    });
+
+    test("returns multiple team IDs when agent has multiple teams", async ({
+      makeAgent,
+      makeOrganization,
+      makeUser,
+      makeTeam,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team1 = await makeTeam(org.id, user.id, { name: "Frontend" });
+      const team2 = await makeTeam(org.id, user.id, { name: "Backend" });
+
+      const agent = await makeAgent({
+        name: "Multi-Team Agent",
+        organizationId: org.id,
+        teams: [team1.id, team2.id],
+      });
+
+      const result = await AgentModel.findByIdsForPermissionCheck([agent.id]);
+
+      const entry = result.get(agent.id);
+      expect(entry).toBeDefined();
+      expect(entry?.teamIds).toHaveLength(2);
+      expect(entry?.teamIds).toContain(team1.id);
+      expect(entry?.teamIds).toContain(team2.id);
+    });
+
+    test("returns empty teamIds for agent with no teams", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ name: "No Teams Agent" });
+
+      const result = await AgentModel.findByIdsForPermissionCheck([agent.id]);
+
+      expect(result.get(agent.id)?.teamIds).toEqual([]);
+    });
+
+    test("returns null authorId for agent without an author", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ name: "No Author", scope: "org" });
+
+      const result = await AgentModel.findByIdsForPermissionCheck([agent.id]);
+
+      expect(result.get(agent.id)?.authorId).toBeNull();
     });
   });
 });

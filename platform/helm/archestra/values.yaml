@@ -9,7 +9,7 @@ archestra:
   # We use the "generic" updater with inline annotation to preserve YAML comments throughout the file.
   # See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
   # See: https://github.com/googleapis/release-please/issues/2195
-  imageTag: "1.0.52" # x-release-please-version
+  imageTag: "1.2.3" # x-release-please-version
 
   # Image pull policy for the Archestra container
   # Options: Always, IfNotPresent, Never
@@ -61,14 +61,13 @@ archestra:
 
   # Deployment strategy configuration for the Deployment
   # See https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/deployment-v1/#:~:text=strategy%20(DeploymentStrategy)
-  # Default is RollingUpdate with maxUnavailable: 0 to ensure zero-downtime deployments.
-  # This ensures at least one pod is always available during updates, which is critical
-  # for GKE ingress health checks to always have healthy endpoints.
+  # Default is RollingUpdate with percentage-based surge/unavailability so larger
+  # deployments roll out faster while keeping most capacity available.
   deploymentStrategy:
     type: RollingUpdate
     rollingUpdate:
-      maxUnavailable: 0
-      maxSurge: 1
+      maxUnavailable: "25%"
+      maxSurge: "25%"
 
   # Additional environment variables to pass to the container
   # These will be merged with the default DATABASE_URL environment variable
@@ -84,7 +83,28 @@ archestra:
   #     CUSTOM_VAR: "custom-value"
   #     # Reference another env var (defined via envWithValueFrom below)
   #     ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT: "http://$(NODE_IP):4317"
+  #     # MCP App sandbox domain for full browser API access (localStorage, CORS, OAuth)
+  #     # Requires wildcard DNS (*.mcp.example.com) and wildcard TLS certificate
+  #     # Not needed for local dev — automatic localhost swap provides isolation
+  #     ARCHESTRA_MCP_SANDBOX_DOMAIN: "mcp.example.com"
   env: {}
+
+  # Authentication secret source configuration.
+  #
+  # By default, the chart creates a <release>-auth Secret and auto-generates
+  # auth-secret on first install. For external secret managers, point the chart
+  # at an existing Secret instead.
+  authSecret:
+    # When set, the deployment reads ARCHESTRA_AUTH_SECRET from this Secret
+    # instead of the Helm-managed <release>-auth Secret.
+    existingSecretName: ""
+    # Key within existingSecretName containing the auth secret value.
+    existingSecretKey: auth-secret
+    # Extra key/value pairs to add to the Helm-managed <release>-auth Secret.
+    # This is useful when you want to mount additional secret-backed files from
+    # the same Secret via archestra.extraVolumes, without creating a second Secret.
+    # Values should be plain strings and will be base64-encoded by Helm.
+    extraData: {}
 
   # Environment variables with valueFrom (for fieldRef, resourceFieldRef, configMapKeyRef)
   # Use this for Kubernetes downward API or other valueFrom sources
@@ -139,6 +159,42 @@ archestra:
   #         optional: true
   envFrom: []
 
+  # Additional volumes to mount into the platform and worker pods
+  # Useful for mounting credential files such as a Vertex AI service account key
+  # Example:
+  #   extraVolumes:
+  #     - name: vertex-ai-credentials
+  #       secret:
+  #         secretName: vertex-ai-credentials
+  #         items:
+  #           - key: service-account.json
+  #             path: vertex-ai-key.json
+  extraVolumes: []
+
+  # Additional volume mounts for the platform and worker containers
+  # Example:
+  #   extraVolumeMounts:
+  #     - name: vertex-ai-credentials
+  #       mountPath: /var/run/gcp
+  #       readOnly: true
+  extraVolumeMounts: []
+
+  # Persistent storage for Node diagnostic reports written to /var/diagnostics.
+  diagnostics:
+    enabled: false
+    # Use an existing PVC instead of creating one via this chart.
+    existingClaimName: ""
+    # StorageClass for the chart-managed PVC. Leave empty to use the cluster default.
+    storageClassName: ""
+    # Storage request for the diagnostics PVC.
+    size: 10Gi
+    # Access modes for the diagnostics PVC.
+    accessModes:
+      - ReadWriteOnce
+    # Optionally tell Node to write heap snapshots as it approaches the heap limit.
+    # Set to a positive integer such as 1 to enable during targeted investigations.
+    heapSnapshotsNearHeapLimit: 0
+
   # Init containers configuration
   initContainers:
     # Wait for PostgreSQL to be ready before starting the application
@@ -190,6 +246,10 @@ archestra:
       # Namespace where MCP server pods will be created
       # If not set, defaults to the namespace specified in the helm release
       namespace: ""
+
+      # Kubernetes cluster DNS domain for internal service URL construction (streamable-http MCP servers)
+      # If not set, defaults to cluster.local
+      clusterDomain: ""
 
       # Kubeconfig configuration
       # Choose one of the following methods:
@@ -344,6 +404,48 @@ archestra:
         #       name: custom-binding-name  # Optional: override the auto-generated binding name
         additionalRoleBindings: []
 
+  # Background worker configuration
+  # Deploys a separate Deployment for processing background jobs from the postgres queue
+  # (e.g., knowledge base connector syncs, batch embeddings).
+  #
+  # When enabled, the main platform pods run as web-only (ARCHESTRA_PROCESS_TYPE=web)
+  # and the worker pods handle all background job processing (ARCHESTRA_PROCESS_TYPE=worker).
+  # When disabled, the main platform pods run both the web server and the worker in-process.
+  worker:
+    # Enable or disable the separate worker Deployment
+    enabled: true
+
+    # Number of worker pod replicas
+    replicaCount: 1
+
+    # Resource requests and limits for worker pods
+    # If not set, inherits from archestra.resources
+    # Workers typically need less memory than the web server
+    resources:
+      requests:
+        memory: "1Gi"
+      limits:
+        memory: "2Gi"
+
+    # Deployment strategy for the worker Deployment
+    deploymentStrategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxUnavailable: "25%"
+        maxSurge: "25%"
+
+    # Pod annotations for worker pods
+    # If not set, inherits from archestra.podAnnotations
+    podAnnotations: {}
+
+    # Node selector for worker pods
+    # If not set, inherits from archestra.nodeSelector
+    nodeSelector: {}
+
+    # Tolerations for worker pods
+    # If not set, inherits from archestra.tolerations
+    tolerations: []
+
   # Service configuration
   service:
     # Service type - ClusterIP, NodePort, or LoadBalancer
@@ -366,6 +468,23 @@ archestra:
     annotations: {}
 
     # Complete ingress specification
+    # When using ARCHESTRA_MCP_SANDBOX_DOMAIN, add a wildcard rule for sandbox subdomains:
+    #   spec:
+    #     tls:
+    #       - hosts:
+    #           - "*.mcp.example.com"
+    #         secretName: mcp-sandbox-wildcard-tls
+    #     rules:
+    #       - host: "*.mcp.example.com"
+    #         http:
+    #           paths:
+    #             - path: /_sandbox/
+    #               pathType: Prefix
+    #               backend:
+    #                 service:
+    #                   name: archestra-platform
+    #                   port:
+    #                     number: 9000
     spec: {}
 
   # HorizontalPodAutoscaler configuration
@@ -527,6 +646,12 @@ postgresql:
   # Resource configuration for PostgreSQL
   # See: https://artifacthub.io/packages/helm/bitnami/postgresql for all options
   primary:
+    # Grant superuser to the archestra user so migrations can create extensions (e.g., pgvector).
+    # Bitnami initdb scripts run as postgres superuser during DB initialization.
+    initdb:
+      scripts:
+        grant-superuser.sql: |
+          ALTER USER archestra WITH SUPERUSER;
     resources:
       requests:
         cpu: "1000m"
@@ -534,6 +659,14 @@ postgresql:
       limits:
         cpu: "1000m"
         memory: "1Gi"
+  # PostgreSQL exporter sidecar for Prometheus metrics (port 9187)
+  # Metrics are scraped by the observability stack (Grafana Alloy or Prometheus)
+  # and visualized in the Application Metrics Grafana dashboard (PostgreSQL section)
+  metrics:
+    enabled: true
+    service:
+      ports:
+        metrics: 9187
   # NOTE: Bitnami is archiving their image.. see these github comments for details
   # (this is essentially why we need to override image.repository and image.tag and global.security.allowInsecureImages)
   #

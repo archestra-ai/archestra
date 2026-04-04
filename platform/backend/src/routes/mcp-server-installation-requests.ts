@@ -38,7 +38,7 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
     },
     async ({ query: { status }, user, headers }, reply) => {
       const { success: isMcpServerAdmin } = await hasPermission(
-        { mcpServer: ["admin"] },
+        { mcpServerInstallation: ["admin"] },
         headers,
       );
 
@@ -126,7 +126,7 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
       }
 
       const { success: isMcpServerAdmin } = await hasPermission(
-        { mcpServer: ["admin"] },
+        { mcpServerInstallation: ["admin"] },
         headers,
       );
 
@@ -167,7 +167,7 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
       // MCP server admins can update status, non-MCP server admins can only update their own requests
       if (status || adminResponse || reviewedBy || reviewedAt) {
         const { success: isMcpServerAdmin } = await hasPermission(
-          { mcpServer: ["admin"] },
+          { mcpServerInstallation: ["admin"] },
           headers,
         );
 
@@ -299,7 +299,7 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
       }
 
       const { success: isMcpServerAdmin } = await hasPermission(
-        { mcpServer: ["admin"] },
+        { mcpServerInstallation: ["admin"] },
         headers,
       );
 

@@ -1,6 +1,6 @@
 ---
 title: Private MCP Registry
-category: MCP Gateway
+category: MCP
 order: 2
 description: Managing your organization's MCP servers in a private registry
 lastUpdated: 2025-10-31

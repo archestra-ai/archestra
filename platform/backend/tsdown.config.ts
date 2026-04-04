@@ -122,7 +122,7 @@ export default defineConfig((options: UserConfig) => {
     entry: ["src/server.ts", "src/standalone-scripts/vault-env-injector.ee.ts"],
 
     // Copy SQL migrations and other assets that need to exist at runtime
-    copy: ["src/database/migrations"],
+    copy: ["src/database/migrations", "src/static"],
 
     // Only clean if NOT in watch mode, to avoid race conditions during rebuilds where
     // the output directory is deleted while the server process is trying to restart.
@@ -144,6 +144,7 @@ export default defineConfig((options: UserConfig) => {
       "**/*.spec.ts",
       "src/test/**/*",
       "src/standalone-scripts/**/*",
+      "src/entrypoints/**/*",
     ],
 
     // Only set onSuccess handler when in watch mode

@@ -2,8 +2,8 @@ import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import mcpClient from "@/clients/mcp-client";
 import db, { schema } from "@/database";
+import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
-import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import { secretManager } from "@/secrets-manager";
 import { computeSecretStorageType } from "@/secrets-manager/utils";
 import type { InsertMcpServer, McpServer, UpdateMcpServer } from "@/types";
@@ -496,6 +496,8 @@ class McpServerModel {
       name: string;
       description: string;
       inputSchema: Record<string, unknown>;
+      _meta?: Record<string, unknown>;
+      annotations?: Record<string, unknown>;
     }>
   > {
     // Get catalog information if this server was installed from a catalog
@@ -533,6 +535,8 @@ class McpServerModel {
         name: tool.name,
         description: tool.description || `Tool: ${tool.name}`,
         inputSchema: tool.inputSchema,
+        _meta: tool._meta,
+        annotations: tool.annotations,
       }));
     } catch (error) {
       logger.error(

@@ -1,4 +1,3 @@
-import config from "@/config";
 import {
   BrowserStreamService,
   type BrowserUserContext,
@@ -38,7 +37,7 @@ class BrowserStreamFeature {
    * Check if browser streaming feature is enabled
    */
   isEnabled(): boolean {
-    return config.features.browserStreamingEnabled;
+    return true;
   }
 
   /**

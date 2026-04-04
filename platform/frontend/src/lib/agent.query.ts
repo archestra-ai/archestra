@@ -1,11 +1,12 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  DEFAULT_AGENTS_PAGE_SIZE,
   DEFAULT_SORT_BY,
   DEFAULT_SORT_DIRECTION,
-  handleApiError,
-} from "./utils";
+  DEFAULT_TABLE_LIMIT,
+} from "@/consts";
+import { incomingEmailKeys } from "@/lib/chatops/incoming-email.query";
+import { handleApiError } from "@/lib/utils";
 
 const {
   createAgent,
@@ -18,8 +19,7 @@ const {
   updateAgent,
   getLabelKeys,
   getLabelValues,
-  getAgentVersions,
-  rollbackAgent,
+  getMemberDefaultAgent,
 } = archestraApiSdk;
 
 // Returns all agents as an array
@@ -29,10 +29,14 @@ export function useProfiles(
     filters?: archestraApiTypes.GetAllAgentsData["query"];
   } = {},
 ) {
+  const filters = {
+    excludeBuiltIn: true,
+    ...params?.filters,
+  } satisfies archestraApiTypes.GetAllAgentsData["query"];
   return useQuery({
-    queryKey: ["agents", "all", params?.filters],
+    queryKey: ["agents", "all", filters],
     queryFn: async () => {
-      const response = await getAllAgents({ query: params?.filters });
+      const response = await getAllAgents({ query: filters });
       return response.data ?? [];
     },
     initialData: params?.initialData,
@@ -40,15 +44,11 @@ export function useProfiles(
 }
 
 // Paginated hook for the agents page
-export function useProfilesPaginated(params?: {
-  initialData?: archestraApiTypes.GetAgentsResponses["200"];
-  limit?: number;
-  offset?: number;
-  sortBy?: "name" | "createdAt" | "toolsCount" | "team";
-  sortDirection?: "asc" | "desc";
-  name?: string;
-  agentTypes?: ("profile" | "mcp_gateway" | "llm_proxy" | "agent")[];
-}) {
+export function useProfilesPaginated(
+  params?: archestraApiTypes.GetAgentsData["query"] & {
+    initialData?: archestraApiTypes.GetAgentsResponses["200"];
+  },
+) {
   const {
     initialData,
     limit,
@@ -57,23 +57,45 @@ export function useProfilesPaginated(params?: {
     sortDirection,
     name,
     agentTypes,
+    scope,
+    teamIds,
+    authorIds,
+    excludeAuthorIds,
+    labels,
   } = params || {};
 
   // Check if we can use initialData (server-side fetched data)
   // Only use it for the first page (offset 0), default sorting, no search filter,
-  // no agentTypes filter, AND matching default page size (20)
+  // no scope filter, AND matching default table page size
+  // Note: agentTypes is allowed since the server fetches with the page-specific agentTypes
   const useInitialData =
     offset === 0 &&
     (sortBy === undefined || sortBy === DEFAULT_SORT_BY) &&
     (sortDirection === undefined || sortDirection === DEFAULT_SORT_DIRECTION) &&
     name === undefined &&
-    agentTypes === undefined &&
-    (limit === undefined || limit === DEFAULT_AGENTS_PAGE_SIZE);
+    scope === undefined &&
+    teamIds === undefined &&
+    authorIds === undefined &&
+    excludeAuthorIds === undefined &&
+    labels === undefined &&
+    (limit === undefined || limit === DEFAULT_TABLE_LIMIT);
 
   return useQuery({
     queryKey: [
       "agents",
-      { limit, offset, sortBy, sortDirection, name, agentTypes },
+      {
+        limit,
+        offset,
+        sortBy,
+        sortDirection,
+        name,
+        agentTypes,
+        scope,
+        teamIds,
+        authorIds,
+        excludeAuthorIds,
+        labels,
+      },
     ],
     queryFn: async () =>
       (
@@ -85,6 +107,11 @@ export function useProfilesPaginated(params?: {
             sortDirection,
             name,
             agentTypes,
+            scope,
+            teamIds,
+            authorIds,
+            excludeAuthorIds,
+            labels,
           },
         })
       ).data ?? null,
@@ -173,6 +200,9 @@ export function useUpdateProfile() {
     },
     onSuccess: (data, variables) => {
       if (!data) return;
+      // Immediately update the specific agent's cache so navigating to
+      // chat (or any other page using useProfile) shows fresh data
+      queryClient.setQueryData(["agents", variables.id], data);
       queryClient.invalidateQueries({ queryKey: ["agents"] });
       // Invalidate profile tokens when teams change (tokens are auto-created/deleted)
       queryClient.invalidateQueries({
@@ -180,6 +210,13 @@ export function useUpdateProfile() {
       });
       // Invalidate tokens queries since team changes affect which tokens are visible for a profile
       queryClient.invalidateQueries({ queryKey: ["tokens"] });
+      queryClient.invalidateQueries({
+        queryKey: incomingEmailKeys.promptEmailAddress(variables.id),
+      });
+      // Invalidate knowledge bases when knowledgeBaseIds change (updates assignedAgents)
+      if (variables.data?.knowledgeBaseIds !== undefined) {
+        queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });
+      }
     },
   });
 }
@@ -219,60 +256,44 @@ export function useLabelValues(params?: { key?: string }) {
   });
 }
 
-// ============================================================================
-// Internal Agents (Prompt-based agents) - Version History & Rollback
-// ============================================================================
-
 /**
- * Get internal agents only (agents with prompts).
- * Non-suspense version for components that need loading states.
+ * Get the current user's default agent ID.
  */
-export function useInternalAgents() {
+export function useDefaultAgentId() {
   return useQuery({
-    queryKey: ["agents", "all", { agentType: "agent" }],
+    queryKey: ["member-default-agent"],
     queryFn: async () => {
-      const response = await getAllAgents({ query: { agentType: "agent" } });
+      const response = await getMemberDefaultAgent();
+      return response.data?.defaultAgentId ?? null;
+    },
+  });
+}
+
+export function useInternalAgents(params?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ["agents", "all", { agentType: "agent", excludeBuiltIn: true }],
+    queryFn: async () => {
+      const response = await getAllAgents({
+        query: { agentType: "agent", excludeBuiltIn: true },
+      });
       return response.data ?? [];
     },
+    enabled: params?.enabled,
   });
 }
 
-/**
- * Get version history for an internal agent.
- * Only applicable to internal agents (agents with prompts).
- */
-export function useAgentVersions(id: string | undefined) {
+export function useOrgScopedAgents() {
   return useQuery({
-    queryKey: ["agents", id, "versions"],
+    queryKey: [
+      "agents",
+      "all",
+      { agentType: "agent", excludeBuiltIn: true, scope: "org" as const },
+    ],
     queryFn: async () => {
-      if (!id) return null;
-      const response = await getAgentVersions({ path: { id } });
-      return response.data ?? null;
-    },
-    enabled: !!id,
-  });
-}
-
-/**
- * Rollback an internal agent to a previous version.
- * Only applicable to internal agents (agents with prompts).
- */
-export function useRollbackAgent() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, version }: { id: string; version: number }) => {
-      const response = await rollbackAgent({
-        path: { id },
-        body: { version },
+      const response = await getAllAgents({
+        query: { agentType: "agent", excludeBuiltIn: true, scope: "org" },
       });
-      return response.data;
-    },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["agents"] });
-      queryClient.invalidateQueries({ queryKey: ["agents", variables.id] });
-      queryClient.invalidateQueries({
-        queryKey: ["agents", variables.id, "versions"],
-      });
+      return response.data ?? [];
     },
   });
 }

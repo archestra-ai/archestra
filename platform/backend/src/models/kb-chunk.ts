@@ -1,0 +1,197 @@
+import { getEmbeddingColumnName } from "@shared";
+import { count, eq, sql } from "drizzle-orm";
+import db, { schema } from "@/database";
+import type { AclEntry, InsertKbChunk, KbChunk } from "@/types";
+
+export interface VectorSearchResult {
+  id: string;
+  content: string;
+  chunkIndex: number;
+  documentId: string;
+  title: string;
+  sourceUrl: string | null;
+  metadata: Record<string, unknown> | null;
+  connectorType: string | null;
+  score: number;
+}
+
+class KbChunkModel {
+  static async findByDocument(documentId: string): Promise<KbChunk[]> {
+    return await db
+      .select()
+      .from(schema.kbChunksTable)
+      .where(eq(schema.kbChunksTable.documentId, documentId))
+      .orderBy(schema.kbChunksTable.chunkIndex);
+  }
+
+  static async insertMany(chunks: InsertKbChunk[]): Promise<KbChunk[]> {
+    if (chunks.length === 0) return [];
+
+    return await db.insert(schema.kbChunksTable).values(chunks).returning();
+  }
+
+  static async deleteByDocument(documentId: string): Promise<number> {
+    const result = await db
+      .delete(schema.kbChunksTable)
+      .where(eq(schema.kbChunksTable.documentId, documentId));
+
+    return result.rowCount ?? 0;
+  }
+
+  static async countByDocument(documentId: string): Promise<number> {
+    const [result] = await db
+      .select({ count: count() })
+      .from(schema.kbChunksTable)
+      .where(eq(schema.kbChunksTable.documentId, documentId));
+
+    return result?.count ?? 0;
+  }
+
+  static async updateAclByConnector(
+    connectorId: string,
+    acl: AclEntry[],
+  ): Promise<number> {
+    // Skip rows that already have the target ACL to avoid unnecessary rewrites,
+    // WAL churn, and vacuum work when connector visibility is re-applied.
+    const result = await db.execute(sql`
+      WITH updated AS (
+        UPDATE ${schema.kbChunksTable} AS chunk
+        SET acl = ${JSON.stringify(acl)}::jsonb
+        FROM ${schema.kbDocumentsTable} AS document
+        WHERE chunk.document_id = document.id
+          AND document.connector_id = ${connectorId}
+          AND chunk.acl IS DISTINCT FROM ${JSON.stringify(acl)}::jsonb
+        RETURNING 1
+      )
+      SELECT COUNT(*)::int AS count FROM updated
+    `);
+
+    const count = result.rows[0]?.count;
+    return typeof count === "number" ? count : Number(count ?? 0);
+  }
+
+  static async vectorSearch(params: {
+    connectorIds: string[];
+    queryEmbedding: number[];
+    dimensions: number;
+    userAcl: AclEntry[];
+    bypassAcl?: boolean;
+    limit?: number;
+  }): Promise<VectorSearchResult[]> {
+    const {
+      connectorIds,
+      queryEmbedding,
+      dimensions,
+      userAcl,
+      bypassAcl = false,
+      limit = 10,
+    } = params;
+    if (connectorIds.length === 0) return [];
+    if (!bypassAcl && userAcl.length === 0) return [];
+    const embeddingStr = `[${queryEmbedding.join(",")}]`;
+    const ids = sql.join(
+      connectorIds.map((id) => sql`${id}`),
+      sql`, `,
+    );
+    const aclEntries = bypassAcl
+      ? null
+      : sql.join(
+          userAcl.map((entry) => sql`${entry}`),
+          sql`, `,
+        );
+
+    const col = sql.raw(getEmbeddingColumnName(dimensions));
+    const vectorCast = sql.raw(`::vector(${dimensions})`);
+    const rows = await db.execute(sql`
+      SELECT
+        c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
+        d.title, d.source_url AS "sourceUrl", d.metadata,
+        kbc.connector_type AS "connectorType",
+        1 - (c.${col} <=> ${embeddingStr}${vectorCast}) AS score
+      FROM kb_chunks c
+      JOIN kb_documents d ON d.id = c.document_id
+      LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
+      WHERE d.connector_id IN (${ids})
+        AND c.${col} IS NOT NULL
+        ${bypassAcl ? sql`` : sql`AND c.acl ?| ARRAY[${aclEntries}]`}
+      ORDER BY c.${col} <=> ${embeddingStr}${vectorCast}
+      LIMIT ${limit}
+    `);
+
+    return rows.rows as unknown as VectorSearchResult[];
+  }
+
+  static async fullTextSearch(params: {
+    connectorIds: string[];
+    queryText: string;
+    userAcl: AclEntry[];
+    bypassAcl?: boolean;
+    limit?: number;
+  }): Promise<VectorSearchResult[]> {
+    const {
+      connectorIds,
+      queryText,
+      userAcl,
+      bypassAcl = false,
+      limit = 10,
+    } = params;
+    if (connectorIds.length === 0) return [];
+    if (!bypassAcl && userAcl.length === 0) return [];
+    const ids = sql.join(
+      connectorIds.map((id) => sql`${id}`),
+      sql`, `,
+    );
+    const aclEntries = bypassAcl
+      ? null
+      : sql.join(
+          userAcl.map((entry) => sql`${entry}`),
+          sql`, `,
+        );
+
+    const orQuery = queryText.split(/\s+/).filter(Boolean).join(" OR ");
+
+    const rows = await db.execute(sql`
+      SELECT
+        c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
+        d.title, d.source_url AS "sourceUrl", d.metadata,
+        kbc.connector_type AS "connectorType",
+        ts_rank(c.search_vector, websearch_to_tsquery('english', ${orQuery})) AS score
+      FROM kb_chunks c
+      JOIN kb_documents d ON d.id = c.document_id
+      LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
+      WHERE d.connector_id IN (${ids})
+        AND c.search_vector @@ websearch_to_tsquery('english', ${orQuery})
+        ${bypassAcl ? sql`` : sql`AND c.acl ?| ARRAY[${aclEntries}]`}
+      ORDER BY score DESC
+      LIMIT ${limit}
+    `);
+
+    return rows.rows as unknown as VectorSearchResult[];
+  }
+
+  static async updateEmbeddings(
+    updates: Array<{ chunkId: string; embedding: number[] }>,
+    dimensions: number,
+  ): Promise<void> {
+    if (updates.length === 0) return;
+
+    const col = getEmbeddingColumnName(dimensions);
+    const values = updates
+      .map(
+        (u) =>
+          `('${u.chunkId}'::uuid, '[${u.embedding.join(",")}]'::vector(${dimensions}))`,
+      )
+      .join(", ");
+
+    await db.execute(
+      sql.raw(`
+        UPDATE kb_chunks AS c
+        SET ${col} = v.embedding
+        FROM (VALUES ${values}) AS v(id, embedding)
+        WHERE c.id = v.id
+      `),
+    );
+  }
+}
+
+export default KbChunkModel;

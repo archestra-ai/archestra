@@ -1,6 +1,6 @@
 import type { APIRequestContext } from "@playwright/test";
 import { API_BASE_URL, WIREMOCK_INTERNAL_URL } from "../../../consts";
-import { expect, test } from "../fixtures";
+import { expect, LLM_PROVIDER_API_KEYS_ROUTE, test } from "../fixtures";
 
 /**
  * E2E tests for virtual API keys in the LLM Proxy.
@@ -41,12 +41,12 @@ async function createChatApiKey(
   const response = await makeApiRequest({
     request,
     method: "post",
-    urlSuffix: "/api/chat-api-keys",
+    urlSuffix: LLM_PROVIDER_API_KEYS_ROUTE,
     data: {
       name: uniqueName,
       provider,
       apiKey: opts?.apiKey ?? "sk-e2e-test-key-for-wiremock",
-      scope: "org_wide",
+      scope: "org",
       baseUrl: opts?.baseUrl ?? null,
     },
   });
@@ -69,7 +69,7 @@ async function createVirtualKey(
   const response = await makeApiRequest({
     request,
     method: "post",
-    urlSuffix: `/api/chat-api-keys/${chatApiKeyId}/virtual-keys`,
+    urlSuffix: `/api/llm-provider-api-keys/${chatApiKeyId}/virtual-keys`,
     data: {
       name: opts?.name ?? "test-vk",
       ...(opts?.expiresAt !== undefined && { expiresAt: opts.expiresAt }),
@@ -97,7 +97,7 @@ async function cleanupChatApiKey(
   await makeApiRequest({
     request,
     method: "delete",
-    urlSuffix: `/api/chat-api-keys/${chatApiKeyId}`,
+    urlSuffix: `/api/llm-provider-api-keys/${chatApiKeyId}`,
     ignoreStatusCheck: true,
   });
 }
@@ -182,7 +182,7 @@ test.describe("Virtual API Keys - CRUD API", () => {
       const listResp = await makeApiRequest({
         request,
         method: "get",
-        urlSuffix: `/api/chat-api-keys/${chatApiKey.id}/virtual-keys`,
+        urlSuffix: `/api/llm-provider-api-keys/${chatApiKey.id}/virtual-keys`,
       });
       const keys = (await listResp.json()) as Array<{
         id: string;
@@ -225,7 +225,7 @@ test.describe("Virtual API Keys - CRUD API", () => {
       const listResp = await makeApiRequest({
         request,
         method: "get",
-        urlSuffix: "/api/virtual-api-keys?limit=50&offset=0",
+        urlSuffix: "/api/llm-virtual-keys?limit=50&offset=0",
       });
       const result = (await listResp.json()) as {
         data: Array<{
@@ -275,14 +275,14 @@ test.describe("Virtual API Keys - CRUD API", () => {
       await makeApiRequest({
         request,
         method: "delete",
-        urlSuffix: `/api/chat-api-keys/${chatApiKey.id}/virtual-keys/${vk.id}`,
+        urlSuffix: `/api/llm-provider-api-keys/${chatApiKey.id}/virtual-keys/${vk.id}`,
       });
 
       // Verify it's gone from the list
       const listResp = await makeApiRequest({
         request,
         method: "get",
-        urlSuffix: `/api/chat-api-keys/${chatApiKey.id}/virtual-keys`,
+        urlSuffix: `/api/llm-provider-api-keys/${chatApiKey.id}/virtual-keys`,
       });
       const keys = (await listResp.json()) as Array<{ id: string }>;
       const ids = keys.map((k) => k.id);
@@ -302,11 +302,11 @@ test.describe("Virtual API Keys - CRUD API", () => {
     const createResp = await makeApiRequest({
       request,
       method: "post",
-      urlSuffix: "/api/chat-api-keys",
+      urlSuffix: LLM_PROVIDER_API_KEYS_ROUTE,
       data: {
         name: uniqueName,
         provider: "ollama",
-        scope: "org_wide",
+        scope: "org",
       },
     });
     const chatApiKey = (await createResp.json()) as {
@@ -341,7 +341,7 @@ test.describe("Virtual API Keys - CRUD API", () => {
       const response = await makeApiRequest({
         request,
         method: "post",
-        urlSuffix: `/api/chat-api-keys/${chatApiKey.id}/virtual-keys`,
+        urlSuffix: `/api/llm-provider-api-keys/${chatApiKey.id}/virtual-keys`,
         data: {
           name: "expired-from-the-start",
           expiresAt: new Date(Date.now() - 60_000).toISOString(), // 1 minute ago
@@ -612,7 +612,7 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
     await makeApiRequest({
       request,
       method: "delete",
-      urlSuffix: `/api/chat-api-keys/${chatApiKey.id}/virtual-keys/${vk.id}`,
+      urlSuffix: `/api/llm-provider-api-keys/${chatApiKey.id}/virtual-keys/${vk.id}`,
     });
 
     try {
@@ -655,7 +655,7 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
     await makeApiRequest({
       request,
       method: "delete",
-      urlSuffix: `/api/chat-api-keys/${chatApiKey.id}`,
+      urlSuffix: `/api/llm-provider-api-keys/${chatApiKey.id}`,
     });
 
     try {

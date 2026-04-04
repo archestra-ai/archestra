@@ -1,20 +1,15 @@
 "use client";
 
+import type { AgentType, DocsPage } from "@shared";
 import type { LucideIcon } from "lucide-react";
 import { ArrowRight, Bot, ExternalLink, Network, Route } from "lucide-react";
 import type { ReactNode } from "react";
+import { ExternalDocsLink } from "@/components/external-docs-link";
+import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-
-type DocsPage =
-  | "platform-agents"
-  | "platform-llm-proxy"
-  | "platform-mcp-gateway";
+import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { cn } from "@/lib/utils";
 
 const AGENT_TYPE_CONFIG: Record<
   string,
@@ -29,7 +24,7 @@ const AGENT_TYPE_CONFIG: Record<
 interface ConnectDialogProps {
   agent: {
     name: string;
-    agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
+    agentType: AgentType;
   };
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -44,59 +39,81 @@ export function ConnectDialog({
   docsPage,
   children,
 }: ConnectDialogProps) {
+  const docsUrl = getFrontendDocsUrl(docsPage);
   const config = AGENT_TYPE_CONFIG[agent.agentType] ?? AGENT_TYPE_CONFIG.agent;
   const Icon = config.icon;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl h-[90vh] p-0 flex flex-col border-0">
-        {/* Header with gradient */}
-        <div className="relative bg-gradient-to-br from-primary/10 via-primary/5 to-background px-6 pt-6 pb-5 shrink-0">
-          <div className="absolute inset-0 bg-grid-white/[0.02] pointer-events-none" />
-          <div className="relative">
-            <DialogHeader>
-              <div className="flex items-center gap-2 mb-1">
-                <div className="p-1.5 rounded-full bg-primary/10">
-                  <Icon className="h-4 w-4 text-primary" />
-                </div>
-                <DialogTitle className="text-xl font-semibold">
-                  {config.titlePrefix} "{agent.name}"
-                </DialogTitle>
-              </div>
-            </DialogHeader>
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
+            <Icon className="h-4 w-4 text-primary" />
           </div>
+          <span>
+            {config.titlePrefix} "{agent.name}"
+          </span>
         </div>
+      }
+      size="large"
+      className="h-auto max-h-[90vh]"
+    >
+      <DialogBody className="pb-4">{children}</DialogBody>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t bg-muted/30 shrink-0">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-            <span>
-              Need help? Check our{" "}
-              <a
-                href={`https://archestra.ai/docs/${docsPage}`}
-                target="_blank"
-                className="text-primary hover:underline font-medium"
-                rel="noopener"
-              >
-                documentation
-              </a>
-            </span>
-          </div>
-          <Button
-            type="button"
-            onClick={() => onOpenChange(false)}
-            size="default"
-            className="min-w-[100px]"
-          >
-            Done
-            <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
+      <DialogStickyFooter className="mt-0 sm:justify-between sm:[&>*:first-child]:mr-auto">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          {docsUrl && (
+            <>
+              <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+              <span>
+                Need help? Check our{" "}
+                <ExternalDocsLink
+                  href={docsUrl}
+                  className="font-medium text-primary"
+                  showIcon={false}
+                >
+                  documentation
+                </ExternalDocsLink>
+              </span>
+            </>
+          )}
         </div>
-      </DialogContent>
-    </Dialog>
+        <Button
+          type="button"
+          onClick={() => onOpenChange(false)}
+          size="default"
+          className="min-w-[100px]"
+        >
+          Done
+          <ArrowRight className="ml-2 h-4 w-4" />
+        </Button>
+      </DialogStickyFooter>
+    </FormDialog>
+  );
+}
+
+export function ConnectDialogSection({
+  title,
+  description,
+  className,
+  children,
+}: {
+  title: string;
+  description?: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className={cn("space-y-4", className)}>
+      <div className="space-y-1">
+        <h3 className="text-sm font-semibold">{title}</h3>
+        {description ? (
+          <p className="text-sm text-muted-foreground">{description}</p>
+        ) : null}
+      </div>
+      {children}
+    </section>
   );
 }

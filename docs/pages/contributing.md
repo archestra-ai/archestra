@@ -21,7 +21,7 @@ Archestra is a project with a full-time core team. While we work hard to make ou
 1.  We might already have designs or plans related to your idea.
 2.  We can support you during the idea stage, which is much more effective than providing feedback after you've already written the code.
 
-You can find the entire development team in our [Slack Community](https://join.slack.com/t/archestracommunity/shared_invite/zt-39yk4skox-zBF1NoJ9u4t59OU8XxQChg). Just post a message in the **#general** channel! If you're not sure what to write, here’s a helpful template:
+You can find the entire development team in our [Slack Community](https://archestra.ai/join-slack). Just post a message in the **#general** channel! If you're not sure what to write, here’s a helpful template:
 
 > Hey, my name is {your name}, and I would love to work on {your idea}!
 

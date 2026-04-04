@@ -1,6 +1,7 @@
 import type { AnyRoleName } from "@shared";
-import { and, count, eq } from "drizzle-orm";
+import { and, count, eq, ilike, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { createPaginatedResult } from "@/database/utils/pagination";
 import logger from "@/logging";
 
 class MemberModel {
@@ -161,6 +162,151 @@ class MemberModel {
   }
 
   /**
+   * Get all members of an organization with user details
+   */
+  static async findAllByOrganization(organizationId: string) {
+    logger.debug(
+      { organizationId },
+      "MemberModel.findAllByOrganization: fetching members",
+    );
+    const results = await db
+      .select({
+        id: schema.usersTable.id,
+        name: schema.usersTable.name,
+        email: schema.usersTable.email,
+      })
+      .from(schema.membersTable)
+      .innerJoin(
+        schema.usersTable,
+        eq(schema.membersTable.userId, schema.usersTable.id),
+      )
+      .where(eq(schema.membersTable.organizationId, organizationId))
+      .orderBy(schema.usersTable.name);
+    logger.debug(
+      { organizationId, count: results.length },
+      "MemberModel.findAllByOrganization: completed",
+    );
+    return results;
+  }
+
+  static async findUserIdsInOrganization(params: {
+    organizationId: string;
+    userIds: string[];
+  }): Promise<string[]> {
+    if (params.userIds.length === 0) {
+      return [];
+    }
+
+    const rows = await db
+      .select({ userId: schema.membersTable.userId })
+      .from(schema.membersTable)
+      .where(
+        and(
+          eq(schema.membersTable.organizationId, params.organizationId),
+          inArray(schema.membersTable.userId, params.userIds),
+        ),
+      );
+
+    return rows.map((row) => row.userId);
+  }
+
+  /**
+   * Get paginated members of an organization with optional filters
+   */
+  static async findAllPaginated(params: {
+    organizationId: string;
+    pagination: { limit: number; offset: number };
+    name?: string;
+    role?: string;
+  }) {
+    const { organizationId, pagination, name, role } = params;
+    const searchPattern = name ? `%${name}%` : null;
+
+    const filters = [
+      eq(schema.membersTable.organizationId, organizationId),
+      ...(role ? [eq(schema.membersTable.role, role)] : []),
+      ...(searchPattern
+        ? [
+            or(
+              ilike(schema.usersTable.name, searchPattern),
+              ilike(schema.usersTable.email, searchPattern),
+            ),
+          ]
+        : []),
+    ];
+
+    const [data, totalResult] = await Promise.all([
+      db
+        .select({
+          id: schema.membersTable.id,
+          userId: schema.membersTable.userId,
+          role: schema.membersTable.role,
+          createdAt: schema.membersTable.createdAt,
+          name: schema.usersTable.name,
+          email: schema.usersTable.email,
+          image: schema.usersTable.image,
+        })
+        .from(schema.membersTable)
+        .innerJoin(
+          schema.usersTable,
+          eq(schema.membersTable.userId, schema.usersTable.id),
+        )
+        .where(and(...filters))
+        .orderBy(schema.usersTable.name)
+        .limit(pagination.limit)
+        .offset(pagination.offset),
+      db
+        .select({ count: count() })
+        .from(schema.membersTable)
+        .innerJoin(
+          schema.usersTable,
+          eq(schema.membersTable.userId, schema.usersTable.id),
+        )
+        .where(and(...filters)),
+    ]);
+
+    const total = totalResult[0]?.count ?? 0;
+    return createPaginatedResult(data, total, pagination);
+  }
+
+  /**
+   * Find a member by user ID or email within an organization
+   */
+  static async findByIdOrEmail(idOrEmail: string, organizationId: string) {
+    logger.debug(
+      { idOrEmail, organizationId },
+      "MemberModel.findByIdOrEmail: fetching member",
+    );
+    const [result] = await db
+      .select({
+        id: schema.usersTable.id,
+        name: schema.usersTable.name,
+        email: schema.usersTable.email,
+        role: schema.membersTable.role,
+      })
+      .from(schema.membersTable)
+      .innerJoin(
+        schema.usersTable,
+        eq(schema.membersTable.userId, schema.usersTable.id),
+      )
+      .where(
+        and(
+          eq(schema.membersTable.organizationId, organizationId),
+          or(
+            eq(schema.usersTable.id, idOrEmail),
+            eq(schema.usersTable.email, idOrEmail),
+          ),
+        ),
+      )
+      .limit(1);
+    logger.debug(
+      { idOrEmail, organizationId, found: !!result },
+      "MemberModel.findByIdOrEmail: completed",
+    );
+    return result;
+  }
+
+  /**
    * Delete a member by member ID or user ID + organization ID
    */
   static async deleteByMemberOrUserId(
@@ -195,6 +341,55 @@ class MemberModel {
       "MemberModel.deleteByMemberOrUserId: completed",
     );
     return deleted[0];
+  }
+  /**
+   * Set the default agent for a member
+   */
+  static async setDefaultAgent(
+    userId: string,
+    organizationId: string,
+    agentId: string | null,
+  ) {
+    await db
+      .update(schema.membersTable)
+      .set({ defaultAgentId: agentId })
+      .where(
+        and(
+          eq(schema.membersTable.userId, userId),
+          eq(schema.membersTable.organizationId, organizationId),
+        ),
+      );
+  }
+
+  /**
+   * Get the default agent ID for a member
+   */
+  static async getDefaultAgentId(
+    userId: string,
+    organizationId: string,
+  ): Promise<string | null> {
+    const [member] = await db
+      .select({ defaultAgentId: schema.membersTable.defaultAgentId })
+      .from(schema.membersTable)
+      .where(
+        and(
+          eq(schema.membersTable.userId, userId),
+          eq(schema.membersTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+    return member?.defaultAgentId ?? null;
+  }
+
+  /**
+   * Check if any member references the given agent as their default
+   */
+  static async isAgentDefault(agentId: string): Promise<boolean> {
+    const [result] = await db
+      .select({ count: count() })
+      .from(schema.membersTable)
+      .where(eq(schema.membersTable.defaultAgentId, agentId));
+    return (result?.count ?? 0) > 0;
   }
 }
 

@@ -1,4 +1,9 @@
 import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  type PaginationQuery,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+} from "@shared";
+import {
   and,
   asc,
   count,
@@ -7,24 +12,26 @@ import {
   getTableColumns,
   inArray,
   isNotNull,
+  isNull,
+  ne,
   or,
   type SQL,
   sql,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
+import { archestraMcpBranding } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
 import {
   createPaginatedResult,
   type PaginatedResult,
 } from "@/database/utils/pagination";
-import logger from "@/logging";
 import type {
   AgentTool,
   AgentToolFilters,
   AgentToolSortBy,
-  AgentToolSortDirection,
+  CredentialResolutionMode,
   InsertAgentTool,
-  PaginationQuery,
+  SortDirection,
   UpdateAgentTool,
 } from "@/types";
 import AgentTeamModel from "./agent-team";
@@ -263,63 +270,53 @@ class AgentToolModel {
     agentId: string,
     toolId: string,
     options?: Partial<
-      Pick<
-        InsertAgentTool,
-        | "responseModifierTemplate"
-        | "credentialSourceMcpServerId"
-        | "executionSourceMcpServerId"
-      >
+      Pick<InsertAgentTool, "mcpServerId" | "credentialResolutionMode">
     >,
+    _organizationId?: string,
   ) {
     const [agentTool] = await db
       .insert(schema.agentToolsTable)
       .values({
         agentId,
         toolId,
-        ...options,
+        ...(options?.mcpServerId ? { mcpServerId: options.mcpServerId } : {}),
+        ...(options?.credentialResolutionMode
+          ? { credentialResolutionMode: options.credentialResolutionMode }
+          : {}),
       })
       .returning();
 
-    // Auto-configure policies if enabled (run in background)
-    // Import at top of method to avoid circular dependency
-    const { toolAutoPolicyService } = await import("./agent-tool-auto-policy");
-    const { default: OrganizationModel } = await import("./organization");
-
-    // Get agent's organization via team relationship and trigger auto-configure in background
-    db.select({ organizationId: schema.teamsTable.organizationId })
-      .from(schema.agentTeamsTable)
-      .innerJoin(
-        schema.teamsTable,
-        eq(schema.agentTeamsTable.teamId, schema.teamsTable.id),
-      )
-      .where(eq(schema.agentTeamsTable.agentId, agentId))
-      .limit(1)
-      .then(async (rows) => {
-        if (rows.length === 0) return;
-
-        const organizationId = rows[0].organizationId;
-        const organization = await OrganizationModel.getById(organizationId);
-
-        if (organization?.autoConfigureNewTools) {
-          // Use the unified method with timeout and loading state management
-          await toolAutoPolicyService.configurePoliciesForToolWithTimeout(
-            toolId,
-            organizationId,
-          );
-        }
-      })
-      .catch((error) => {
-        logger.error(
-          {
-            agentToolId: agentTool.id,
-            agentId,
-            error: error instanceof Error ? error.message : String(error),
-          },
-          "Failed to trigger auto-configure for new agent-tool",
-        );
-      });
-
     return agentTool;
+  }
+
+  /**
+   * Bulk insert multiple agent-tool assignments in a single query.
+   * Checks auto-configure setting once (not per-row) to avoid N+1 queries.
+   */
+  static async bulkCreate(
+    values: Array<{
+      agentId: string;
+      toolId: string;
+      mcpServerId?: string | null;
+      credentialResolutionMode?: CredentialResolutionMode;
+    }>,
+    _organizationId?: string,
+  ) {
+    if (values.length === 0) return [];
+
+    const rows = await db
+      .insert(schema.agentToolsTable)
+      .values(
+        values.map((value) => ({
+          agentId: value.agentId,
+          toolId: value.toolId,
+          ...(value.mcpServerId ? { mcpServerId: value.mcpServerId } : {}),
+          credentialResolutionMode: normalizeCredentialResolutionMode(value),
+        })),
+      )
+      .returning();
+
+    return rows;
   }
 
   static async delete(agentId: string, toolId: string): Promise<boolean> {
@@ -374,28 +371,13 @@ class AgentToolModel {
   static async createIfNotExists(
     agentId: string,
     toolId: string,
-    credentialSourceMcpServerId?: string | null,
-    executionSourceMcpServerId?: string | null,
+    mcpServerId?: string | null,
   ) {
     const exists = await AgentToolModel.exists(agentId, toolId);
     if (!exists) {
-      const options: Partial<
-        Pick<
-          InsertAgentTool,
-          | "responseModifierTemplate"
-          | "credentialSourceMcpServerId"
-          | "executionSourceMcpServerId"
-        >
-      > = {};
-
-      // Only include credentialSourceMcpServerId if it has a real value
-      if (credentialSourceMcpServerId) {
-        options.credentialSourceMcpServerId = credentialSourceMcpServerId;
-      }
-
-      // Only include executionSourceMcpServerId if it has a real value
-      if (executionSourceMcpServerId) {
-        options.executionSourceMcpServerId = executionSourceMcpServerId;
+      const options: Partial<Pick<InsertAgentTool, "mcpServerId">> = {};
+      if (mcpServerId) {
+        options.mcpServerId = mcpServerId;
       }
 
       return await AgentToolModel.create(agentId, toolId, options);
@@ -446,14 +428,7 @@ class AgentToolModel {
   static async bulkCreateForAgentsAndTools(
     agentIds: string[],
     toolIds: string[],
-    options?: Partial<
-      Pick<
-        InsertAgentTool,
-        | "responseModifierTemplate"
-        | "credentialSourceMcpServerId"
-        | "executionSourceMcpServerId"
-      >
-    >,
+    options?: Partial<Pick<InsertAgentTool, "mcpServerId">>,
   ): Promise<void> {
     if (agentIds.length === 0 || toolIds.length === 0) return;
 
@@ -461,9 +436,7 @@ class AgentToolModel {
     const assignments: Array<{
       agentId: string;
       toolId: string;
-      responseModifierTemplate?: string | null;
-      credentialSourceMcpServerId?: string | null;
-      executionSourceMcpServerId?: string | null;
+      mcpServerId?: string | null;
     }> = [];
 
     for (const agentId of agentIds) {
@@ -471,7 +444,7 @@ class AgentToolModel {
         assignments.push({
           agentId,
           toolId,
-          ...options,
+          ...(options?.mcpServerId ? { mcpServerId: options.mcpServerId } : {}),
         });
       }
     }
@@ -514,10 +487,13 @@ class AgentToolModel {
   static async createOrUpdateCredentials(
     agentId: string,
     toolId: string,
-    credentialSourceMcpServerId?: string | null,
-    executionSourceMcpServerId?: string | null,
-    useDynamicTeamCredential?: boolean,
+    mcpServerId?: string | null,
+    credentialResolutionMode?: CredentialResolutionMode | null,
   ): Promise<{ status: "created" | "updated" | "unchanged" }> {
+    const normalizedMcpServerId = mcpServerId ?? null;
+    const normalizedMode = normalizeCredentialResolutionMode({
+      credentialResolutionMode,
+    });
     // Check if assignment already exists
     const [existing] = await db
       .select()
@@ -533,26 +509,14 @@ class AgentToolModel {
     if (!existing) {
       // Create new assignment
       const options: Partial<
-        Pick<
-          InsertAgentTool,
-          | "responseModifierTemplate"
-          | "credentialSourceMcpServerId"
-          | "executionSourceMcpServerId"
-          | "useDynamicTeamCredential"
-        >
+        Pick<InsertAgentTool, "mcpServerId" | "credentialResolutionMode">
       > = {};
 
-      if (credentialSourceMcpServerId) {
-        options.credentialSourceMcpServerId = credentialSourceMcpServerId;
+      if (normalizedMcpServerId) {
+        options.mcpServerId = normalizedMcpServerId;
       }
 
-      if (executionSourceMcpServerId) {
-        options.executionSourceMcpServerId = executionSourceMcpServerId;
-      }
-
-      if (useDynamicTeamCredential !== undefined) {
-        options.useDynamicTeamCredential = useDynamicTeamCredential;
-      }
+      options.credentialResolutionMode = normalizedMode;
 
       await AgentToolModel.create(agentId, toolId, options);
       return { status: "created" };
@@ -560,33 +524,17 @@ class AgentToolModel {
 
     // Check if credentials need updating
     const needsUpdate =
-      existing.credentialSourceMcpServerId !==
-        (credentialSourceMcpServerId ?? null) ||
-      existing.executionSourceMcpServerId !==
-        (executionSourceMcpServerId ?? null) ||
-      (useDynamicTeamCredential !== undefined &&
-        existing.useDynamicTeamCredential !== useDynamicTeamCredential);
+      existing.mcpServerId !== normalizedMcpServerId ||
+      existing.credentialResolutionMode !== normalizedMode;
 
     if (needsUpdate) {
       // Update credentials
       const updateData: Partial<
-        Pick<
-          UpdateAgentTool,
-          | "credentialSourceMcpServerId"
-          | "executionSourceMcpServerId"
-          | "useDynamicTeamCredential"
-        >
+        Pick<UpdateAgentTool, "mcpServerId" | "credentialResolutionMode">
       > = {};
 
-      // Always set credential fields to ensure they're updated correctly
-      updateData.credentialSourceMcpServerId =
-        credentialSourceMcpServerId ?? null;
-      updateData.executionSourceMcpServerId =
-        executionSourceMcpServerId ?? null;
-
-      if (useDynamicTeamCredential !== undefined) {
-        updateData.useDynamicTeamCredential = useDynamicTeamCredential;
-      }
+      updateData.mcpServerId = normalizedMcpServerId;
+      updateData.credentialResolutionMode = normalizedMode;
 
       await AgentToolModel.update(existing.id, updateData);
       return { status: "updated" };
@@ -595,22 +543,133 @@ class AgentToolModel {
     return { status: "unchanged" };
   }
 
+  /**
+   * Bulk create-or-update agent-tool assignments.
+   * Fetches all existing assignments in a single query, then batch-inserts new ones
+   * and individually updates those that need credential changes.
+   */
+  static async bulkCreateOrUpdateCredentials(
+    assignments: Array<{
+      agentId: string;
+      toolId: string;
+      mcpServerId?: string | null;
+      credentialResolutionMode?: CredentialResolutionMode;
+    }>,
+    organizationId?: string,
+  ): Promise<
+    Array<{
+      agentId: string;
+      toolId: string;
+      status: "created" | "updated" | "unchanged";
+    }>
+  > {
+    if (assignments.length === 0) return [];
+
+    // Build OR conditions for all (agentId, toolId) pairs
+    const pairConditions = assignments.map((a) =>
+      and(
+        eq(schema.agentToolsTable.agentId, a.agentId),
+        eq(schema.agentToolsTable.toolId, a.toolId),
+      ),
+    );
+
+    // Batch fetch all existing assignments in one query
+    const existing = await db
+      .select()
+      .from(schema.agentToolsTable)
+      .where(or(...pairConditions));
+
+    const existingMap = new Map(
+      existing.map((e) => [`${e.agentId}:${e.toolId}`, e]),
+    );
+
+    const toCreate: Array<{
+      agentId: string;
+      toolId: string;
+      mcpServerId?: string | null;
+      resolveAtCallTime?: boolean;
+      credentialResolutionMode?: CredentialResolutionMode;
+    }> = [];
+    const results: Array<{
+      agentId: string;
+      toolId: string;
+      status: "created" | "updated" | "unchanged";
+    }> = [];
+
+    for (const assignment of assignments) {
+      const key = `${assignment.agentId}:${assignment.toolId}`;
+      const existingRow = existingMap.get(key);
+
+      if (!existingRow) {
+        // New assignment - collect for batch insert
+        toCreate.push(assignment);
+        results.push({
+          agentId: assignment.agentId,
+          toolId: assignment.toolId,
+          status: "created",
+        });
+      } else {
+        // Check if credentials need updating
+        const needsUpdate =
+          existingRow.mcpServerId !== (assignment.mcpServerId ?? null) ||
+          existingRow.credentialResolutionMode !==
+            normalizeCredentialResolutionMode(assignment);
+
+        if (needsUpdate) {
+          const updateData: Partial<
+            Pick<UpdateAgentTool, "mcpServerId" | "credentialResolutionMode">
+          > = {
+            mcpServerId: assignment.mcpServerId ?? null,
+            credentialResolutionMode:
+              normalizeCredentialResolutionMode(assignment),
+          };
+          await AgentToolModel.update(existingRow.id, updateData);
+          results.push({
+            agentId: assignment.agentId,
+            toolId: assignment.toolId,
+            status: "updated",
+          });
+        } else {
+          results.push({
+            agentId: assignment.agentId,
+            toolId: assignment.toolId,
+            status: "unchanged",
+          });
+        }
+      }
+    }
+
+    // Batch insert all new assignments in a single query
+    if (toCreate.length > 0) {
+      await AgentToolModel.bulkCreate(
+        toCreate.map((a) => ({
+          agentId: a.agentId,
+          toolId: a.toolId,
+          ...(a.mcpServerId ? { mcpServerId: a.mcpServerId } : {}),
+          credentialResolutionMode: normalizeCredentialResolutionMode(a),
+        })),
+        organizationId,
+      );
+    }
+
+    return results;
+  }
+
   static async update(
     id: string,
     data: Partial<
-      Pick<
-        UpdateAgentTool,
-        | "responseModifierTemplate"
-        | "credentialSourceMcpServerId"
-        | "executionSourceMcpServerId"
-        | "useDynamicTeamCredential"
-      >
+      Pick<UpdateAgentTool, "mcpServerId" | "credentialResolutionMode">
     >,
   ) {
     const [agentTool] = await db
       .update(schema.agentToolsTable)
       .set({
-        ...data,
+        ...(data.mcpServerId !== undefined
+          ? { mcpServerId: data.mcpServerId }
+          : {}),
+        ...(data.credentialResolutionMode
+          ? { credentialResolutionMode: data.credentialResolutionMode }
+          : {}),
         updatedAt: new Date(),
       })
       .where(eq(schema.agentToolsTable.id, id))
@@ -661,7 +720,7 @@ class AgentToolModel {
     pagination?: PaginationQuery;
     sorting?: {
       sortBy?: AgentToolSortBy;
-      sortDirection?: AgentToolSortDirection;
+      sortDirection?: SortDirection;
     };
     filters?: AgentToolFilters;
     userId?: string;
@@ -701,31 +760,16 @@ class AgentToolModel {
         await AgentToolModel.getUserAccessibleMcpServerIds(userId);
 
       // Build credential access condition:
-      // - No credential required (both null), OR
-      // - Uses dynamic team credential, OR
-      // - Credential source is accessible, OR
-      // - Execution source is accessible
+      // - No static MCP server binding, OR
+      // - Assigned MCP server is accessible
       const credentialAccessConditions: SQL[] = [
-        // No credential required (both null)
-        and(
-          sql`${schema.agentToolsTable.credentialSourceMcpServerId} IS NULL`,
-          sql`${schema.agentToolsTable.executionSourceMcpServerId} IS NULL`,
-        ) as SQL,
-        // Uses dynamic team credential
-        eq(schema.agentToolsTable.useDynamicTeamCredential, true),
+        isNull(schema.agentToolsTable.mcpServerId) as SQL,
       ];
 
-      // Add accessible credential/execution sources if user has any
+      // Add accessible static MCP server bindings if user has any
       if (accessibleMcpServerIds.length > 0) {
         credentialAccessConditions.push(
-          inArray(
-            schema.agentToolsTable.credentialSourceMcpServerId,
-            accessibleMcpServerIds,
-          ),
-          inArray(
-            schema.agentToolsTable.executionSourceMcpServerId,
-            accessibleMcpServerIds,
-          ),
+          inArray(schema.agentToolsTable.mcpServerId, accessibleMcpServerIds),
         );
       }
 
@@ -752,7 +796,7 @@ class AgentToolModel {
       whereConditions.push(eq(schema.toolsTable.catalogId, filters.origin));
     }
 
-    // Filter by credential owner (check both credential source and execution source)
+    // Filter by assigned MCP server owner
     if (filters?.mcpServerOwnerId) {
       // First, get all MCP server IDs owned by this user
       const mcpServerIds = await db
@@ -762,15 +806,9 @@ class AgentToolModel {
         .then((rows) => rows.map((r) => r.id));
 
       if (mcpServerIds.length > 0) {
-        const credentialCondition = or(
-          inArray(
-            schema.agentToolsTable.credentialSourceMcpServerId,
-            mcpServerIds,
-          ),
-          inArray(
-            schema.agentToolsTable.executionSourceMcpServerId,
-            mcpServerIds,
-          ),
+        const credentialCondition = inArray(
+          schema.agentToolsTable.mcpServerId,
+          mcpServerIds,
         );
         if (credentialCondition) {
           whereConditions.push(credentialCondition);
@@ -779,13 +817,26 @@ class AgentToolModel {
     }
 
     // Exclude Archestra built-in tools for test isolation
-    // Note: Use escape character to treat underscores literally (not as wildcards)
-    // Double backslash needed: JS consumes one level, SQL gets the other
     if (filters?.excludeArchestraTools) {
-      whereConditions.push(
-        sql`${schema.toolsTable.name} NOT LIKE 'archestra\\_\\_%' ESCAPE '\\'`,
+      const excludeBuiltInToolsCondition = or(
+        isNull(schema.toolsTable.catalogId),
+        ne(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
       );
+
+      if (excludeBuiltInToolsCondition) {
+        whereConditions.push(excludeBuiltInToolsCondition);
+      }
     }
+
+    // Always exclude the knowledge sources tool (auto-injected, not user-assignable)
+    whereConditions.push(
+      ne(
+        schema.toolsTable.name,
+        archestraMcpBranding.getToolName(
+          TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+        ),
+      ),
+    );
 
     const whereClause =
       whereConditions.length > 0 ? and(...whereConditions) : undefined;
@@ -878,39 +929,30 @@ class AgentToolModel {
   }
 
   /**
-   * Delete all agent-tool assignments that use a specific MCP server as their execution source.
-   * Used when a local MCP server is deleted/uninstalled.
+   * Delete all static agent-tool assignments that use a specific MCP server.
    */
   static async deleteByExecutionSourceMcpServerId(
     mcpServerId: string,
   ): Promise<number> {
     const result = await db
       .delete(schema.agentToolsTable)
-      .where(
-        eq(schema.agentToolsTable.executionSourceMcpServerId, mcpServerId),
-      );
+      .where(eq(schema.agentToolsTable.mcpServerId, mcpServerId));
     return result.rowCount ?? 0;
   }
 
   /**
-   * Delete all agent-tool assignments that use a specific MCP server as their credential source.
-   * Used when a remote MCP server is deleted/uninstalled.
+   * Delete all static agent-tool assignments that use a specific MCP server.
    */
   static async deleteByCredentialSourceMcpServerId(
     mcpServerId: string,
   ): Promise<number> {
-    const result = await db
-      .delete(schema.agentToolsTable)
-      .where(
-        eq(schema.agentToolsTable.credentialSourceMcpServerId, mcpServerId),
-      );
-    return result.rowCount ?? 0;
+    return AgentToolModel.deleteByExecutionSourceMcpServerId(mcpServerId);
   }
 
   /**
-   * Clean up invalid credential sources when a user is removed from a team.
-   * Sets credentialSourceMcpServerId to null for agent-tools where:
-   * - The credential source is a personal token owned by the removed user
+   * Clean up invalid static MCP server assignments when a user is removed from a team.
+   * Sets mcpServerId to null for agent-tools where:
+   * - The assigned MCP server is owned by the removed user
    * - The user no longer has access to the agent through any team
    */
   static async cleanupInvalidCredentialSourcesForUser(
@@ -957,14 +999,11 @@ class AgentToolModel {
       if (!hasAccess) {
         const result = await db
           .update(schema.agentToolsTable)
-          .set({ credentialSourceMcpServerId: null })
+          .set({ mcpServerId: null })
           .where(
             and(
               eq(schema.agentToolsTable.agentId, agentId),
-              inArray(
-                schema.agentToolsTable.credentialSourceMcpServerId,
-                serverIds,
-              ),
+              inArray(schema.agentToolsTable.mcpServerId, serverIds),
             ),
           );
 
@@ -977,3 +1016,14 @@ class AgentToolModel {
 }
 
 export default AgentToolModel;
+
+function normalizeCredentialResolutionMode(params: {
+  resolveAtCallTime?: boolean;
+  credentialResolutionMode?: CredentialResolutionMode | null;
+}) {
+  if (params.credentialResolutionMode) {
+    return params.credentialResolutionMode;
+  }
+
+  return params.resolveAtCallTime ? "dynamic" : "static";
+}

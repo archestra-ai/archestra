@@ -1,0 +1,21 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/custom-base-url-test/v1/models.*"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "object": "list",
+      "data": [
+        {
+          "id": "gpt-4o",
+          "name": "GPT-4o"
+        }
+      ]
+    }
+  }
+}

@@ -1,9 +1,14 @@
 import {
+  EmbeddingDimensionsSchema,
   ModelInputModalitySchema,
   ModelOutputModalitySchema,
   SupportedProvidersSchema,
 } from "@shared";
-import { createInsertSchema, createSelectSchema } from "drizzle-zod";
+import {
+  createInsertSchema,
+  createSelectSchema,
+  createUpdateSchema,
+} from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 
@@ -16,6 +21,7 @@ export { ModelInputModalitySchema, ModelOutputModalitySchema } from "@shared";
  */
 const fieldsToExtend = {
   provider: SupportedProvidersSchema,
+  embeddingDimensions: EmbeddingDimensionsSchema.nullable(),
   inputModalities: z.array(ModelInputModalitySchema).nullable(),
   outputModalities: z.array(ModelOutputModalitySchema).nullable(),
 };
@@ -39,12 +45,9 @@ export const CreateModelSchema = InsertModelSchema.omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  embeddingDimensions: EmbeddingDimensionsSchema.nullable().optional(),
 });
-
-/**
- * Schema for updating model (all fields optional)
- */
-export const UpdateModelSchema = CreateModelSchema.partial();
 
 /**
  * Exported types
@@ -52,7 +55,6 @@ export const UpdateModelSchema = CreateModelSchema.partial();
 export type Model = z.infer<typeof SelectModelSchema>;
 export type InsertModel = z.infer<typeof InsertModelSchema>;
 export type CreateModel = z.infer<typeof CreateModelSchema>;
-export type UpdateModel = z.infer<typeof UpdateModelSchema>;
 
 /**
  * Price source indicates where the effective price comes from.
@@ -82,18 +84,49 @@ export const ModelCapabilitiesSchema = SelectModelSchema.pick({
 export type ModelCapabilities = z.infer<typeof ModelCapabilitiesSchema>;
 
 /**
- * Schema for updating custom model pricing
+ * Schema for updating model details (pricing + modalities) from the edit dialog.
  */
-export const UpdateModelPricingSchema = z
-  .object({
-    customPricePerMillionInput: z.string().nullable(),
-    customPricePerMillionOutput: z.string().nullable(),
+export const PatchModelBodySchema = createUpdateSchema(
+  schema.modelsTable,
+  fieldsToExtend,
+)
+  .pick({
+    customPricePerMillionInput: true,
+    customPricePerMillionOutput: true,
+    ignored: true,
+    embeddingDimensions: true,
+    inputModalities: true,
+    outputModalities: true,
+  })
+  .extend({
+    customPricePerMillionInput: z.string().nullable().optional(),
+    customPricePerMillionOutput: z.string().nullable().optional(),
+    ignored: z.boolean().optional(),
+    embeddingDimensions: EmbeddingDimensionsSchema.nullable().optional(),
+    inputModalities: z
+      .array(ModelInputModalitySchema)
+      .min(1, "At least one input modality is required")
+      .nullable()
+      .optional(),
+    outputModalities: z
+      .array(ModelOutputModalitySchema)
+      .min(1, "At least one output modality is required")
+      .nullable()
+      .optional(),
   })
   .refine(
     (data) => {
-      const inputSet = data.customPricePerMillionInput !== null;
-      const outputSet = data.customPricePerMillionOutput !== null;
-      return inputSet === outputSet;
+      // If either pricing field is provided, both must be provided
+      const inputProvided = data.customPricePerMillionInput !== undefined;
+      const outputProvided = data.customPricePerMillionOutput !== undefined;
+      if (inputProvided !== outputProvided) return false;
+      // If both provided, both must be null or both non-null
+      if (inputProvided && outputProvided) {
+        const inputSet = data.customPricePerMillionInput !== null;
+        const outputSet = data.customPricePerMillionOutput !== null;
+        if (inputSet !== outputSet) return false;
+      }
+      return true;
     },
     {
       message: "Both custom prices must be set together or both must be null",
@@ -101,11 +134,17 @@ export const UpdateModelPricingSchema = z
   )
   .refine(
     (data) => {
-      if (data.customPricePerMillionInput !== null) {
+      if (
+        data.customPricePerMillionInput != null &&
+        data.customPricePerMillionInput !== undefined
+      ) {
         const price = parseFloat(data.customPricePerMillionInput);
         if (Number.isNaN(price) || price < 0) return false;
       }
-      if (data.customPricePerMillionOutput !== null) {
+      if (
+        data.customPricePerMillionOutput != null &&
+        data.customPricePerMillionOutput !== undefined
+      ) {
         const price = parseFloat(data.customPricePerMillionOutput);
         if (Number.isNaN(price) || price < 0) return false;
       }
@@ -113,7 +152,7 @@ export const UpdateModelPricingSchema = z
     },
     { message: "Prices must be non-negative numbers" },
   );
-export type UpdateModelPricing = z.infer<typeof UpdateModelPricingSchema>;
+export type PatchModelBody = z.infer<typeof PatchModelBodySchema>;
 
 /**
  * Schema for linked API key info (minimal info for display)
@@ -137,7 +176,13 @@ export const ModelWithApiKeysSchema = SelectModelSchema.extend({
   isBest: z.boolean(),
   /** API keys that provide access to this model */
   apiKeys: z.array(LinkedApiKeySchema),
-  /** Computed capabilities with pricing */
-  capabilities: ModelCapabilitiesSchema,
+  /** Price per million tokens for input (computed from raw/custom pricing) */
+  pricePerMillionInput: z.string().nullable(),
+  /** Price per million tokens for output (computed from raw/custom pricing) */
+  pricePerMillionOutput: z.string().nullable(),
+  /** Whether the effective price is a custom admin-set override */
+  isCustomPrice: z.boolean(),
+  /** Source of the effective price */
+  priceSource: PriceSourceSchema,
 });
 export type ModelWithApiKeys = z.infer<typeof ModelWithApiKeysSchema>;

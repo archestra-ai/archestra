@@ -7,20 +7,12 @@ import {
   PinOff,
   Sparkles,
   Trash2,
+  UsersRound,
 } from "lucide-react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { TruncatedText } from "@/components/truncated-text";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -43,21 +35,23 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { TypingText } from "@/components/ui/typing-text";
-import { useIsAuthenticated } from "@/lib/auth.hook";
-import { useHasPermissions } from "@/lib/auth.query";
-import { useRecentlyGeneratedTitles } from "@/lib/chat.hook";
+import { useIsAuthenticated } from "@/lib/auth/auth.hook";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useRecentlyGeneratedTitles } from "@/lib/chat/chat.hook";
 import {
   useConversations,
   useDeleteConversation,
   useGenerateConversationTitle,
   usePinConversation,
   useUpdateConversation,
-} from "@/lib/chat.query";
-import { getConversationDisplayTitle } from "@/lib/chat-utils";
-import { useStableConversations } from "@/lib/use-stable-conversations";
+} from "@/lib/chat/chat.query";
+import {
+  getConversationDisplayTitle,
+  getConversationShareTooltip,
+} from "@/lib/chat/chat-utils";
+import { useStableConversations } from "@/lib/hooks/use-stable-conversations";
 import { cn } from "@/lib/utils";
 
-const CONVERSATION_QUERY_PARAM = "conversation";
 const SIDEBAR_CHAT_SLOTS = 3;
 const MAX_TITLE_LENGTH = 100;
 
@@ -73,10 +67,12 @@ function AISparkleIcon({ isAnimating = false }: { isAnimating?: boolean }) {
 export function ChatSidebarSection() {
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const isAuthenticated = useIsAuthenticated();
+  const { data: canReadConversation } = useHasPermissions({
+    chat: ["read"],
+  });
   const { data: conversations = [], isLoading } = useConversations({
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && canReadConversation === true,
   });
   const updateConversationMutation = useUpdateConversation();
   const deleteConversationMutation = useDeleteConversation();
@@ -90,10 +86,10 @@ export function ChatSidebarSection() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { data: canUpdateConversation } = useHasPermissions({
-    conversation: ["update"],
+    chat: ["update"],
   });
   const { data: canDeleteConversation } = useHasPermissions({
-    conversation: ["delete"],
+    chat: ["delete"],
   });
 
   // Track conversations with recently auto-generated titles for animation
@@ -102,8 +98,8 @@ export function ChatSidebarSection() {
 
   const { isMobile, setOpenMobile } = useSidebar();
 
-  const currentConversationId = pathname.startsWith("/chat")
-    ? searchParams.get(CONVERSATION_QUERY_PARAM)
+  const currentConversationId = pathname.startsWith("/chat/")
+    ? (pathname.split("/").at(-1) ?? null)
     : null;
 
   // Stabilize conversation order to prevent sidebar "jumping" when React Query
@@ -141,7 +137,7 @@ export function ChatSidebarSection() {
     if (isMobile) {
       setOpenMobile(false);
     }
-    router.push(`/chat?${CONVERSATION_QUERY_PARAM}=${id}`);
+    router.push(`/chat/${id}`);
   };
 
   const handleStartEdit = (id: string, currentTitle: string | null) => {
@@ -279,6 +275,18 @@ export function ChatSidebarSection() {
                 {showPinIcon && (
                   <Pin className="h-3 w-3 shrink-0 text-muted-foreground" />
                 )}
+                {conv.share && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <UsersRound className="h-3.5 w-3.5 shrink-0 text-primary/80" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top">
+                        {getConversationShareTooltip(conv.share.visibility)}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
                 {(hasRecentlyGeneratedTitle || isRegenerating) && (
                   <AISparkleIcon isAnimating />
                 )}
@@ -411,7 +419,7 @@ export function ChatSidebarSection() {
               pinnedChats.length + recentUnpinnedChats.length && (
               <SidebarMenuSubItem>
                 <SidebarMenuSubButton
-                  className="text-sidebar-foreground/70"
+                  className="cursor-pointer text-sidebar-foreground/70"
                   onClick={openConversationSearch}
                 >
                   <MoreHorizontal />
@@ -423,46 +431,21 @@ export function ChatSidebarSection() {
         )}
       </SidebarMenuSub>
 
-      <AlertDialog
+      <DeleteConfirmDialog
         open={deleteConfirmId !== null}
         onOpenChange={(open) => !open && setDeleteConfirmId(null)}
-      >
-        <AlertDialogContent
-          onOpenAutoFocus={(e) => {
-            e.preventDefault();
-            const target = e.currentTarget as HTMLElement | null;
-            const action = target?.querySelector<HTMLButtonElement>(
-              "[data-slot='alert-dialog-action']",
-            );
-            action?.focus();
-          }}
-        >
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete conversation?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the
-              conversation and all its messages.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteConversationMutation.isPending}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={async () => {
-                if (deleteConfirmId) {
-                  await handleDeleteConversation(deleteConfirmId);
-                  setDeleteConfirmId(null); // Close dialog only after successful deletion
-                }
-              }}
-              disabled={deleteConversationMutation.isPending}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleteConversationMutation.isPending ? "Deleting..." : "Delete"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        title="Delete conversation?"
+        description="This action cannot be undone. This will permanently delete the conversation and all its messages."
+        isPending={deleteConversationMutation.isPending}
+        onConfirm={async () => {
+          if (deleteConfirmId) {
+            await handleDeleteConversation(deleteConfirmId);
+            setDeleteConfirmId(null);
+          }
+        }}
+        confirmLabel="Delete"
+        pendingLabel="Deleting..."
+      />
     </>
   );
 }

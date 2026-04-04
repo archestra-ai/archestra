@@ -2,10 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import logger from "@/logging";
+import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
 import {
   createFastifyInstance,
   registerApiRoutes,
-  registerHealthEndpoint,
   registerSwaggerPlugin,
 } from "@/server";
 
@@ -23,9 +23,6 @@ async function generateOpenApiSpec() {
   // Register swagger plugin with custom servers for the docs
   await registerSwaggerPlugin(fastify);
 
-  // Register health endpoint
-  registerHealthEndpoint(fastify);
-
   // Register all API routes (includes EE routes if license is activated)
   await registerApiRoutes(fastify);
 
@@ -33,7 +30,7 @@ async function generateOpenApiSpec() {
   await fastify.ready();
 
   // Generate the OpenAPI spec
-  const spec = fastify.swagger();
+  const spec = enrichOpenApiWithRbac(fastify.swagger());
 
   // Output path - write to docs/openapi.json
   const outputPath = path.join(__dirname, "../../../../docs/openapi.json");

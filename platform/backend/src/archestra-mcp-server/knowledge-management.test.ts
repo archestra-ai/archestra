@@ -5,7 +5,10 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
 import { vi } from "vitest";
-import { queryService } from "@/knowledge-base";
+import {
+  knowledgeSourceAccessControlService,
+  queryService,
+} from "@/knowledge-base";
 import { KbChunkModel, KbDocumentModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent, KnowledgeBase, KnowledgeBaseConnector } from "@/types";
@@ -868,6 +871,39 @@ describe("knowledge-management tool execution", () => {
       const refreshedChunks = await KbChunkModel.findByDocument(document.id);
       expect(refreshedDocument?.acl).toEqual([`team:${team.id}`]);
       expect(refreshedChunks[0]?.acl).toEqual([`team:${team.id}`]);
+    });
+
+    test("update_knowledge_connector skips ACL refresh when visibility inputs are unchanged", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const kb = await makeKnowledgeBase(mockContext.organizationId!);
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        mockContext.organizationId!,
+        {
+          visibility: "team-scoped",
+          teamIds: ["team-a"],
+        },
+      );
+
+      const refreshSpy = vi.spyOn(
+        knowledgeSourceAccessControlService,
+        "refreshConnectorDocumentAccessControlLists",
+      );
+
+      const result = await executeArchestraTool(
+        t("update_knowledge_connector"),
+        {
+          id: connector.id,
+          visibility: "team-scoped",
+          team_ids: ["team-a"],
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      expect(refreshSpy).not.toHaveBeenCalled();
     });
   });
 

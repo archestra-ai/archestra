@@ -6,7 +6,10 @@ import {
 } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { knowledgeSourceAccessControlService } from "@/knowledge-base";
+import {
+  didKnowledgeSourceAclInputsChange,
+  knowledgeSourceAccessControlService,
+} from "@/knowledge-base";
 import { getConnector } from "@/knowledge-base/connectors/registry";
 import logger from "@/logging";
 import {
@@ -583,7 +586,17 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Connector not found");
       }
 
-      if (body.visibility !== undefined || body.teamIds !== undefined) {
+      if (
+        didKnowledgeSourceAclInputsChange({
+          current: connector,
+          updates: {
+            visibility: updateData.visibility,
+            teamIds: updateData.teamIds,
+          },
+        })
+      ) {
+        // This rewrites ACLs across every document and chunk for the connector,
+        // so only run it when the connector's actual ACL inputs changed.
         await knowledgeSourceAccessControlService.refreshConnectorDocumentAccessControlLists(
           id,
         );
@@ -808,6 +821,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await KnowledgeBaseConnectorModel.assignToKnowledgeBase(id, kbId);
       }
 
+      // Assignment can change the connector's effective visibility, so we
+      // eagerly rewrite stored ACLs to keep existing documents/chunks aligned.
       await knowledgeSourceAccessControlService.refreshConnectorDocumentAccessControlLists(
         id,
       );
@@ -845,6 +860,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Assignment not found");
       }
 
+      // Unassignment can change the connector's effective visibility, so we
+      // eagerly rewrite stored ACLs to keep existing documents/chunks aligned.
       await knowledgeSourceAccessControlService.refreshConnectorDocumentAccessControlLists(
         id,
       );

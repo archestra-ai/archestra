@@ -1,8 +1,54 @@
 import { KbChunkModel, KbDocumentModel } from "@/models";
 import { describe, expect, test } from "@/test";
-import { knowledgeSourceAccessControlService } from "./source-access-control";
+import {
+  didKnowledgeSourceAclInputsChange,
+  knowledgeSourceAccessControlService,
+} from "./source-access-control";
 
 describe("knowledgeSourceAccessControlService", () => {
+  test("does not report ACL changes when visibility inputs are unchanged", () => {
+    expect(
+      didKnowledgeSourceAclInputsChange({
+        current: {
+          visibility: "team-scoped",
+          teamIds: ["team-b", "team-a"],
+        },
+        updates: {
+          visibility: "team-scoped",
+          teamIds: ["team-a", "team-b"],
+        },
+      }),
+    ).toBe(false);
+  });
+
+  test("reports ACL changes when visibility changes", () => {
+    expect(
+      didKnowledgeSourceAclInputsChange({
+        current: {
+          visibility: "org-wide",
+          teamIds: [],
+        },
+        updates: {
+          visibility: "team-scoped",
+        },
+      }),
+    ).toBe(true);
+  });
+
+  test("reports ACL changes when team ids change", () => {
+    expect(
+      didKnowledgeSourceAclInputsChange({
+        current: {
+          visibility: "team-scoped",
+          teamIds: ["team-a"],
+        },
+        updates: {
+          teamIds: ["team-b"],
+        },
+      }),
+    ).toBe(true);
+  });
+
   test("allows org-wide knowledge sources for users with read access", async ({
     makeOrganization,
     makeUser,

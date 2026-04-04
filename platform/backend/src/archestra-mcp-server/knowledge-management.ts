@@ -20,6 +20,7 @@ import {
 import { z } from "zod";
 import {
   buildUserAccessControlList,
+  didKnowledgeSourceAclInputsChange,
   knowledgeSourceAccessControlService,
   queryService,
 } from "@/knowledge-base";
@@ -902,7 +903,17 @@ async function handleUpdateKnowledgeConnector(params: {
     if (!connector) {
       return errorResult(`Knowledge connector not found: ${args.id}`);
     }
-    if (updates.visibility !== undefined || updates.teamIds !== undefined) {
+    if (
+      didKnowledgeSourceAclInputsChange({
+        current: existingConnector,
+        updates: {
+          visibility: updates.visibility,
+          teamIds: updates.teamIds,
+        },
+      })
+    ) {
+      // This rewrites ACLs across every document and chunk for the connector,
+      // so only run it when the connector's actual ACL inputs changed.
       await knowledgeSourceAccessControlService.refreshConnectorDocumentAccessControlLists(
         args.id,
       );
@@ -965,6 +976,8 @@ async function handleAssignKnowledgeConnectorToKnowledgeBase(params: {
       args.connector_id,
       args.knowledge_base_id,
     );
+    // Assignment can change the connector's effective visibility, so we
+    // eagerly rewrite stored ACLs to keep existing documents/chunks aligned.
     await knowledgeSourceAccessControlService.refreshConnectorDocumentAccessControlLists(
       args.connector_id,
     );
@@ -995,6 +1008,8 @@ async function handleUnassignKnowledgeConnectorFromKnowledgeBase(params: {
       args.connector_id,
       args.knowledge_base_id,
     );
+    // Unassignment can change the connector's effective visibility, so we
+    // eagerly rewrite stored ACLs to keep existing documents/chunks aligned.
     await knowledgeSourceAccessControlService.refreshConnectorDocumentAccessControlLists(
       args.connector_id,
     );

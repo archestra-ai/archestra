@@ -17,6 +17,11 @@ type VisibilityScopedKnowledgeSource = {
   teamIds: string[];
 };
 
+type VisibilityScopedKnowledgeSourceUpdates = Partial<{
+  visibility: KnowledgeSourceVisibility;
+  teamIds: string[];
+}>;
+
 export interface KnowledgeSourceAccessControlContext {
   canReadAll: boolean;
   teamIds: string[];
@@ -50,6 +55,19 @@ export function buildUserAccessControlList(params: {
   }
 
   return acl;
+}
+
+export function didKnowledgeSourceAclInputsChange(params: {
+  current: VisibilityScopedKnowledgeSource;
+  updates: VisibilityScopedKnowledgeSourceUpdates;
+}): boolean {
+  const nextVisibility = params.updates.visibility ?? params.current.visibility;
+  const nextTeamIds = params.updates.teamIds ?? params.current.teamIds;
+
+  return (
+    nextVisibility !== params.current.visibility ||
+    !haveSameTeamIds(params.current.teamIds, nextTeamIds)
+  );
 }
 
 class KnowledgeSourceAccessControlService {
@@ -150,3 +168,14 @@ class KnowledgeSourceAccessControlService {
 
 export const knowledgeSourceAccessControlService =
   new KnowledgeSourceAccessControlService();
+
+function haveSameTeamIds(current: string[], next: string[]) {
+  if (current.length !== next.length) {
+    return false;
+  }
+
+  const currentSorted = [...current].sort();
+  const nextSorted = [...next].sort();
+
+  return currentSorted.every((teamId, index) => teamId === nextSorted[index]);
+}

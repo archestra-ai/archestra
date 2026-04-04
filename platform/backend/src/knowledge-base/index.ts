@@ -6,5 +6,6 @@ export { queryService } from "./query";
 export {
   buildDocumentAccessControlList,
   buildUserAccessControlList,
+  didKnowledgeSourceAclInputsChange,
   knowledgeSourceAccessControlService,
 } from "./source-access-control";

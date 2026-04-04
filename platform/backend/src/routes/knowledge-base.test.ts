@@ -4,9 +4,10 @@ import {
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
 } from "@/models";
+import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import type { User } from "@/types";
 
 describe("knowledge base routes", () => {
@@ -546,6 +547,72 @@ describe("knowledge base routes", () => {
 
       expect(getResponse.statusCode).toBe(200);
       expect(getResponse.json().name).toBe("Persisted Name");
+    });
+
+    test("does not refresh ACLs when visibility inputs are unchanged", async () => {
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "No ACL Refresh Connector",
+        connectorType: "jira",
+        visibility: "team-scoped",
+        teamIds: ["team-a"],
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://test.atlassian.net",
+          isCloud: true,
+          projectKey: "TEST",
+        },
+      });
+
+      const refreshSpy = vi.spyOn(
+        knowledgeSourceAccessControlService,
+        "refreshConnectorDocumentAccessControlLists",
+      );
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: {
+          visibility: "team-scoped",
+          teamIds: ["team-a"],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(refreshSpy).not.toHaveBeenCalled();
+    });
+
+    test("refreshes ACLs when visibility inputs change", async () => {
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Refresh ACL Connector",
+        connectorType: "jira",
+        visibility: "org-wide",
+        teamIds: [],
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://test.atlassian.net",
+          isCloud: true,
+          projectKey: "TEST",
+        },
+      });
+
+      const refreshSpy = vi.spyOn(
+        knowledgeSourceAccessControlService,
+        "refreshConnectorDocumentAccessControlLists",
+      );
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: {
+          visibility: "team-scoped",
+          teamIds: ["team-a"],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(refreshSpy).toHaveBeenCalledWith(connector.id);
     });
 
     test("returns 404 for non-existent connector", async () => {

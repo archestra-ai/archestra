@@ -1,6 +1,6 @@
 "use client";
 
-import { Mail } from "lucide-react";
+import { Mail, Clock } from "lucide-react";
 import { useMemo } from "react";
 import { PageLayout } from "@/components/page-layout";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -52,6 +52,7 @@ export default function AgentTriggersLayout({
     msTeams: msTeamsActive,
     slack: slackActive,
     email: emailActive,
+    schedule: scheduleActive,
   } = useTriggerStatuses();
 
   const tabs = useMemo(() => {
@@ -82,6 +83,11 @@ export default function AgentTriggersLayout({
         label: <TabLabel icon={Mail} label="Email" active={emailActive} />,
         href: "/agents/triggers/email",
         active: emailActive,
+      },
+      {
+        label: <TabLabel icon={Clock} label="Schedule" active={scheduleActive} />,
+        href: "/agents/triggers/schedule",
+        active: scheduleActive,
       },
     ];
 

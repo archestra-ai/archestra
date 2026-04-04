@@ -47,6 +47,7 @@ export function useTriggerStatuses() {
     msTeams: msTeamsActive,
     slack: slackActive,
     email: emailActive,
+    schedule: true,
     firstActiveHref,
     isLoading:
       chatOpsLoading || featuresLoading || emailLoading || apiKeysLoading,

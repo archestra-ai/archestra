@@ -10,6 +10,10 @@ export const RouteId = {
   DeleteAgent: "deleteAgent",
   GetLabelKeys: "getLabelKeys",
   GetLabelValues: "getLabelValues",
+  GetAgentSchedules: "getAgentSchedules",
+  CreateAgentSchedule: "createAgentSchedule",
+  UpdateAgentSchedule: "updateAgentSchedule",
+  DeleteAgentSchedule: "deleteAgentSchedule",
 
   // Agent Tool Routes
   AssignToolToAgent: "assignToolToAgent",

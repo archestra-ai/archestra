@@ -8,6 +8,7 @@ type PeriodicTaskDefinition = {
 
 const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
   { taskType: "check_due_connectors", intervalSeconds: 60, payload: {} },
+  { taskType: "check_due_agent_schedules", intervalSeconds: 60, payload: {} },
 ];
 
 export default PERIODIC_TASK_DEFINITIONS;

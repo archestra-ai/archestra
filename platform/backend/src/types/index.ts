@@ -1,5 +1,6 @@
 export * from "./account";
 export * from "./agent";
+export * from "./agent-schedule";
 export * from "./agent-connector-assignment";
 export * from "./agent-knowledge-base";
 export * from "./agent-suggested-prompt";

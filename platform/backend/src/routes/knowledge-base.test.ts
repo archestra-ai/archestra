@@ -554,8 +554,8 @@ describe("knowledge base routes", () => {
         organizationId,
         name: "No ACL Refresh Connector",
         connectorType: "jira",
-        visibility: "team-scoped",
-        teamIds: ["team-a"],
+        visibility: "org-wide",
+        teamIds: [],
         config: {
           type: "jira",
           jiraBaseUrl: "https://test.atlassian.net",
@@ -573,8 +573,8 @@ describe("knowledge base routes", () => {
         method: "PUT",
         url: `/api/connectors/${connector.id}`,
         payload: {
-          visibility: "team-scoped",
-          teamIds: ["team-a"],
+          visibility: "org-wide",
+          teamIds: [],
         },
       });
 
@@ -607,7 +607,7 @@ describe("knowledge base routes", () => {
         url: `/api/connectors/${connector.id}`,
         payload: {
           visibility: "team-scoped",
-          teamIds: ["team-a"],
+          teamIds: [crypto.randomUUID()],
         },
       });
 

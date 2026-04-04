@@ -260,6 +260,51 @@ describe("McpClient", () => {
       });
     });
 
+    test("expires idle active connections and recreates them on the next tool call", async () => {
+      vi.useFakeTimers();
+
+      try {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__ttl_reconnect",
+          description: "TTL reconnect test",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId,
+          credentialResolutionMode: "static",
+        });
+
+        mockConnect.mockResolvedValue(undefined);
+        mockPing.mockResolvedValue(undefined);
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "ok" }],
+          isError: false,
+        });
+
+        const toolCall = {
+          id: "call_ttl_reconnect",
+          name: tool.name,
+          arguments: {},
+        };
+
+        const firstResult = await mcpClient.executeToolCall(toolCall, agentId);
+        expect(firstResult.isError).toBe(false);
+        expect(mockConnect).toHaveBeenCalledTimes(1);
+
+        await vi.advanceTimersByTimeAsync(15 * 60 * 1000 + 1);
+
+        const secondResult = await mcpClient.executeToolCall(toolCall, agentId);
+        expect(secondResult.isError).toBe(false);
+
+        expect(mockConnect).toHaveBeenCalledTimes(2);
+        expect(mockClose).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     describe("Concurrency limiter", () => {
       test("limits HTTP concurrency to 4", async () => {
         const clientWithInternals = mcpClient as unknown as {

@@ -152,6 +152,26 @@ class TaskModel {
     return (rows[0] as { exists: boolean } | undefined)?.exists ?? false;
   }
 
+  static async countPendingOrProcessingAgentExecution(
+    triggerId: string,
+  ): Promise<{ pending: number; processing: number }> {
+    const { rows } = await db.execute<{ status: string; count: number }>(sql`
+      SELECT status, COUNT(*)::int as count
+      FROM tasks
+      WHERE task_type = 'agent_execution'
+        AND status IN ('pending', 'processing')
+        AND payload->>'triggerId' = ${triggerId}
+      GROUP BY status
+    `);
+
+    const result = { pending: 0, processing: 0 };
+    for (const row of rows) {
+      if (row.status === "pending") result.pending = row.count;
+      if (row.status === "processing") result.processing = row.count;
+    }
+    return result;
+  }
+
   static async hasPendingOrProcessingByType(
     taskType: string,
   ): Promise<boolean> {

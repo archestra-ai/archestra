@@ -1,5 +1,9 @@
 import { ClientSecretCredential } from "@azure/identity";
-import { Client, ResponseType } from "@microsoft/microsoft-graph-client";
+import {
+  Client,
+  type GraphRequest,
+  ResponseType,
+} from "@microsoft/microsoft-graph-client";
 import { TokenCredentialAuthenticationProvider } from "@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials/index.js";
 import JSZip from "jszip";
 import mammoth from "mammoth";
@@ -23,6 +27,10 @@ const DEFAULT_BATCH_SIZE = 50;
 const MAX_CONTENT_LENGTH = 500_000; // 500 KB text limit per document
 const MAX_IMAGE_SIZE_BYTES = 4 * 1024 * 1024; // 4 MB image size limit
 const INCREMENTAL_SAFETY_BUFFER_MS = 5 * 60 * 1000;
+
+const GRAPH_MAX_RETRIES = 4;
+const GRAPH_RETRY_BASE_DELAY_MS = 1000;
+const GRAPH_RETRY_MAX_DELAY_MS = 30_000;
 
 // File extensions whose text content we can extract via Graph download
 const SUPPORTED_TEXT_EXTENSIONS = new Set([
@@ -197,6 +205,51 @@ export class SharePointConnector extends BaseConnector {
     });
 
     return Client.initWithMiddleware({ authProvider });
+  }
+
+  /**
+   * Execute a Graph API GET request with retry handling for HTTP 429
+   * (throttling) and 5xx (transient server errors).
+   *
+   * Respects the `Retry-After` header when present; otherwise falls back
+   * to exponential backoff with jitter.
+   */
+  private async graphGet<T>(request: GraphRequest): Promise<T> {
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= GRAPH_MAX_RETRIES; attempt++) {
+      try {
+        return (await request.get()) as T;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+
+        const statusCode = extractGraphStatusCode(error);
+        const retryable =
+          statusCode === 429 || (statusCode !== null && statusCode >= 500);
+
+        if (!retryable || attempt >= GRAPH_MAX_RETRIES) {
+          throw lastError;
+        }
+
+        const retryAfterMs = extractRetryAfterMs(error);
+        const delay =
+          retryAfterMs ?? calculateGraphBackoffDelay(attempt);
+
+        this.log.warn(
+          {
+            attempt: attempt + 1,
+            maxRetries: GRAPH_MAX_RETRIES,
+            statusCode,
+            delayMs: Math.round(delay),
+          },
+          "Graph API retryable error, will retry",
+        );
+
+        await sleep(delay);
+      }
+    }
+
+    throw lastError ?? new Error("Unknown error during Graph API retry");
   }
 
   private async resolveSiteId(

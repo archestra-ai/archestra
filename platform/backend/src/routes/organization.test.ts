@@ -505,6 +505,80 @@ describe("organization routes", () => {
       expect(response.statusCode).toBe(200);
       expect(response.json().embeddingModel).toBe(model.modelId);
     });
+
+    test("rejects changing embedding API key once embedding config is locked", async ({
+      makeSecret,
+    }) => {
+      const secret1 = await makeSecret({ secret: { apiKey: "test-key-1" } });
+      const secret2 = await makeSecret({ secret: { apiKey: "test-key-2" } });
+      const apiKey1 = await LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: secret1.id,
+        name: "Embedding Key 1",
+        provider: "gemini",
+        scope: "personal",
+        userId: user.id,
+      });
+      const apiKey2 = await LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: secret2.id,
+        name: "Embedding Key 2",
+        provider: "gemini",
+        scope: "personal",
+        userId: user.id,
+      });
+      const model = await ModelModel.create({
+        externalId: "gemini/gemini-embedding-001",
+        provider: "gemini",
+        modelId: "gemini-embedding-001",
+        description: "Gemini Embedding 001",
+        contextLength: null,
+        inputModalities: ["text"],
+        outputModalities: [],
+        supportsToolCalling: false,
+        promptPricePerToken: null,
+        completionPricePerToken: null,
+        embeddingDimensions: 3072,
+        lastSyncedAt: new Date(),
+      });
+
+      await Promise.all([
+        LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+          apiKey1.id,
+          [{ id: model.id, modelId: model.modelId }],
+          "gemini",
+        ),
+        LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+          apiKey2.id,
+          [{ id: model.id, modelId: model.modelId }],
+          "gemini",
+        ),
+      ]);
+
+      const setResponse = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: {
+          embeddingChatApiKeyId: apiKey1.id,
+          embeddingModel: model.modelId,
+        },
+      });
+
+      expect(setResponse.statusCode).toBe(200);
+
+      const changeKeyResponse = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: {
+          embeddingChatApiKeyId: apiKey2.id,
+        },
+      });
+
+      expect(changeKeyResponse.statusCode).toBe(400);
+      expect(changeKeyResponse.json().error.message).toContain(
+        "Embedding API key cannot be changed once configured",
+      );
+    });
   });
 
   describe("POST /api/organization/knowledge-settings/test-embedding", () => {

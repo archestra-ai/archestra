@@ -6,6 +6,11 @@ import {
 } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import {
+  didKnowledgeSourceAclInputsChange,
+  isTeamScopedWithoutTeams,
+  knowledgeSourceAccessControlService,
+} from "@/knowledge-base";
 import { getConnector } from "@/knowledge-base/connectors/registry";
 import logger from "@/logging";
 import {
@@ -29,7 +34,7 @@ import {
   ConnectorTypeSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
-  KnowledgeBaseVisibilitySchema,
+  KnowledgeSourceVisibilitySchema,
   SelectConnectorRunListSchema,
   SelectConnectorRunSchema,
   SelectKnowledgeBaseConnectorSchema,
@@ -72,7 +77,15 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ query: { limit, offset, search }, organizationId }, reply) => {
+    async (
+      { query: { limit, offset, search }, organizationId, user },
+      reply,
+    ) => {
+      const access =
+        await knowledgeSourceAccessControlService.buildAccessControlContext({
+          userId: user.id,
+          organizationId,
+        });
       const [knowledgeBases, total] = await Promise.all([
         KnowledgeBaseModel.findByOrganization({
           organizationId,
@@ -80,13 +93,19 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           offset,
           search,
         }),
-        KnowledgeBaseModel.countByOrganization({ organizationId, search }),
+        KnowledgeBaseModel.countByOrganization({
+          organizationId,
+          search,
+        }),
       ]);
 
       const kbIds = knowledgeBases.map((kb) => kb.id);
       const [allConnectors, docsIndexedByKbId, agentIdsByKbId] =
         await Promise.all([
-          KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(kbIds),
+          KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(kbIds, {
+            canReadAll: access.canReadAll,
+            viewerTeamIds: access.teamIds,
+          }),
           KbDocumentModel.countByKnowledgeBaseIds(kbIds),
           AgentKnowledgeBaseModel.getAgentIdsForKnowledgeBases(kbIds),
         ]);
@@ -153,8 +172,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: z.object({
           name: z.string().min(1),
           description: z.string().optional(),
-          visibility: KnowledgeBaseVisibilitySchema.optional(),
-          teamIds: z.array(z.string()).optional(),
         }),
         response: constructResponseSchema(SelectKnowledgeBaseSchema),
       },
@@ -166,8 +183,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...(body.description !== undefined && {
           description: body.description,
         }),
-        ...(body.visibility && { visibility: body.visibility }),
-        ...(body.teamIds && { teamIds: body.teamIds }),
       });
 
       return reply.send(kg);
@@ -185,8 +200,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectKnowledgeBaseSchema),
       },
     },
-    async ({ params: { id }, organizationId }, reply) => {
-      const kg = await findKnowledgeBaseOrThrow(id, organizationId);
+    async ({ params: { id }, organizationId, user }, reply) => {
+      const kg = await findKnowledgeBaseOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
       return reply.send(kg);
     },
   );
@@ -202,14 +221,16 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: z.object({
           name: z.string().min(1).optional(),
           description: z.string().nullable().optional(),
-          visibility: KnowledgeBaseVisibilitySchema.optional(),
-          teamIds: z.array(z.string()).optional(),
         }),
         response: constructResponseSchema(SelectKnowledgeBaseSchema),
       },
     },
-    async ({ params: { id }, body, organizationId }, reply) => {
-      await findKnowledgeBaseOrThrow(id, organizationId);
+    async ({ params: { id }, body, organizationId, user }, reply) => {
+      await findKnowledgeBaseOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
 
       const updated = await KnowledgeBaseModel.update(id, body);
       if (!updated) {
@@ -232,8 +253,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { id }, organizationId }, reply) => {
-      await findKnowledgeBaseOrThrow(id, organizationId);
+    async ({ params: { id }, organizationId, user }, reply) => {
+      await findKnowledgeBaseOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
 
       const success = await KnowledgeBaseModel.delete(id);
       if (!success) {
@@ -260,8 +285,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { id }, organizationId }, reply) => {
-      await findKnowledgeBaseOrThrow(id, organizationId);
+    async ({ params: { id }, organizationId, user }, reply) => {
+      await findKnowledgeBaseOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
 
       // TODO: Replace with pgvector-based health check (verify vector extension,
       // check document/chunk counts, embedding processing status)
@@ -299,20 +328,33 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       {
         query: { limit, offset, knowledgeBaseId, search, connectorType },
         organizationId,
+        user,
       },
       reply,
     ) => {
+      const access =
+        await knowledgeSourceAccessControlService.buildAccessControlContext({
+          userId: user.id,
+          organizationId,
+        });
       let data: Awaited<
         ReturnType<typeof KnowledgeBaseConnectorModel.findByOrganization>
       >;
       let total: number;
 
       if (knowledgeBaseId) {
-        await findKnowledgeBaseOrThrow(knowledgeBaseId, organizationId);
-        data =
-          await KnowledgeBaseConnectorModel.findByKnowledgeBaseId(
-            knowledgeBaseId,
-          );
+        await findKnowledgeBaseOrThrow({
+          id: knowledgeBaseId,
+          organizationId,
+          userId: user.id,
+        });
+        data = await KnowledgeBaseConnectorModel.findByKnowledgeBaseId(
+          knowledgeBaseId,
+          {
+            canReadAll: access.canReadAll,
+            viewerTeamIds: access.teamIds,
+          },
+        );
         total = data.length;
       } else {
         const result =
@@ -322,6 +364,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             offset,
             search,
             connectorType,
+            canReadAll: access.canReadAll,
+            viewerTeamIds: access.teamIds,
           });
         data = result.data;
         total = result.total;
@@ -392,6 +436,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: z.object({
           name: z.string().min(1),
           description: z.string().nullable().optional(),
+          visibility: KnowledgeSourceVisibilitySchema.optional(),
+          teamIds: z.array(z.string()).optional(),
           connectorType: ConnectorTypeSchema,
           config: ConnectorConfigSchema,
           credentials: ConnectorCredentialsSchema,
@@ -402,7 +448,16 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectKnowledgeBaseConnectorSchema),
       },
     },
-    async ({ body, organizationId }, reply) => {
+    async ({ body, organizationId, user }, reply) => {
+      const teamIds = body.teamIds ?? [];
+      const visibility = body.visibility ?? "org-wide";
+      if (isTeamScopedWithoutTeams({ visibility, teamIds })) {
+        throw new ApiError(
+          400,
+          "At least one team must be selected for team-scoped connectors",
+        );
+      }
+
       // Validate connector config
       const connectorImpl = getConnector(body.connectorType);
       const validation = await connectorImpl.validateConfig(body.config);
@@ -416,7 +471,11 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Validate knowledge base IDs if provided
       if (body.knowledgeBaseIds && body.knowledgeBaseIds.length > 0) {
         for (const kbId of body.knowledgeBaseIds) {
-          await findKnowledgeBaseOrThrow(kbId, organizationId);
+          await findKnowledgeBaseOrThrow({
+            id: kbId,
+            organizationId,
+            userId: user.id,
+          });
         }
       }
 
@@ -431,6 +490,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         name: body.name,
         description: body.description ?? null,
+        visibility: body.visibility,
+        teamIds: body.teamIds,
         connectorType: body.connectorType,
         config: body.config,
         secretId: secret.id,
@@ -477,8 +538,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { id }, organizationId }, reply) => {
-      const connector = await findConnectorOrThrow(id, organizationId);
+    async ({ params: { id }, organizationId, user }, reply) => {
+      const connector = await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
       const totalDocsIngested = await KbDocumentModel.countByConnector(id);
       return reply.send({ ...connector, totalDocsIngested });
     },
@@ -495,6 +560,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: z.object({
           name: z.string().min(1).optional(),
           description: z.string().nullable().optional(),
+          visibility: KnowledgeSourceVisibilitySchema.optional(),
+          teamIds: z.array(z.string()).optional(),
           config: ConnectorConfigSchema.optional(),
           credentials: ConnectorCredentialsSchema.optional(),
           schedule: z.string().optional(),
@@ -503,8 +570,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectKnowledgeBaseConnectorSchema),
       },
     },
-    async ({ params: { id }, body, organizationId }, reply) => {
-      const connector = await findConnectorOrThrow(id, organizationId);
+    async ({ params: { id }, body, organizationId, user }, reply) => {
+      const connector = await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
 
       // Update credentials secret if provided
       if (body.credentials && connector.secretId) {
@@ -515,6 +586,20 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const { credentials: _, ...updateData } = body;
+      const nextVisibility = updateData.visibility ?? connector.visibility;
+      const nextTeamIds = updateData.teamIds ?? connector.teamIds;
+      if (
+        isTeamScopedWithoutTeams({
+          visibility: nextVisibility,
+          teamIds: nextTeamIds,
+        })
+      ) {
+        throw new ApiError(
+          400,
+          "At least one team must be selected for team-scoped connectors",
+        );
+      }
+
       // Reset checkpoint when config changes to force a full re-sync
       // (filters, queries, inclusion/exclusion criteria affect which items get synced)
       const updated = await KnowledgeBaseConnectorModel.update(id, {
@@ -523,6 +608,22 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       if (!updated) {
         throw new ApiError(404, "Connector not found");
+      }
+
+      if (
+        didKnowledgeSourceAclInputsChange({
+          current: connector,
+          updates: {
+            visibility: updateData.visibility,
+            teamIds: updateData.teamIds,
+          },
+        })
+      ) {
+        // This rewrites ACLs across every document and chunk for the connector,
+        // so only run it when the connector's actual ACL inputs changed.
+        await knowledgeSourceAccessControlService.refreshConnectorDocumentAccessControlLists(
+          id,
+        );
       }
 
       return reply.send(updated);
@@ -540,8 +641,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { id }, organizationId }, reply) => {
-      const connector = await findConnectorOrThrow(id, organizationId);
+    async ({ params: { id }, organizationId, user }, reply) => {
+      const connector = await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
 
       // Delete the secret
       if (connector.secretId) {
@@ -583,8 +688,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { id }, organizationId }, reply) => {
-      await findConnectorOrThrow(id, organizationId);
+    async ({ params: { id }, organizationId, user }, reply) => {
+      await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
 
       const hasPendingOrProcessing = await TaskModel.hasPendingOrProcessing(
         "connector_sync",
@@ -628,8 +737,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { id }, organizationId }, reply) => {
-      await findConnectorOrThrow(id, organizationId);
+    async ({ params: { id }, organizationId, user }, reply) => {
+      await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
 
       const hasPendingOrProcessing = await TaskModel.hasPendingOrProcessing(
         "connector_sync",
@@ -679,8 +792,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { id }, organizationId }, reply) => {
-      const connector = await findConnectorOrThrow(id, organizationId);
+    async ({ params: { id }, organizationId, user }, reply) => {
+      const connector = await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
 
       // Load credentials
       const credentials = await loadConnectorCredentials(connector.secretId);
@@ -712,11 +829,19 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
-    async ({ params: { id }, body, organizationId }, reply) => {
-      await findConnectorOrThrow(id, organizationId);
+    async ({ params: { id }, body, organizationId, user }, reply) => {
+      await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
 
       for (const kbId of body.knowledgeBaseIds) {
-        await findKnowledgeBaseOrThrow(kbId, organizationId);
+        await findKnowledgeBaseOrThrow({
+          id: kbId,
+          organizationId,
+          userId: user.id,
+        });
         await KnowledgeBaseConnectorModel.assignToKnowledgeBase(id, kbId);
       }
 
@@ -735,9 +860,17 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { id, kbId }, organizationId }, reply) => {
-      await findConnectorOrThrow(id, organizationId);
-      await findKnowledgeBaseOrThrow(kbId, organizationId);
+    async ({ params: { id, kbId }, organizationId, user }, reply) => {
+      await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
+      await findKnowledgeBaseOrThrow({
+        id: kbId,
+        organizationId,
+        userId: user.id,
+      });
 
       const success =
         await KnowledgeBaseConnectorModel.unassignFromKnowledgeBase(id, kbId);
@@ -764,15 +897,28 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { id }, organizationId }, reply) => {
-      await findConnectorOrThrow(id, organizationId);
+    async ({ params: { id }, organizationId, user }, reply) => {
+      const access =
+        await knowledgeSourceAccessControlService.buildAccessControlContext({
+          userId: user.id,
+          organizationId,
+        });
+      await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
 
       const kbIds = await KnowledgeBaseConnectorModel.getKnowledgeBaseIds(id);
       const knowledgeBases: z.infer<typeof SelectKnowledgeBaseSchema>[] = [];
 
       for (const kbId of kbIds) {
         const kb = await KnowledgeBaseModel.findById(kbId);
-        if (kb && kb.organizationId === organizationId) {
+        if (
+          kb &&
+          kb.organizationId === organizationId &&
+          knowledgeSourceAccessControlService.canAccessKnowledgeBase(access, kb)
+        ) {
           knowledgeBases.push(kb);
         }
       }
@@ -798,10 +944,14 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { params: { id }, query: { limit, offset }, organizationId },
+      { params: { id }, query: { limit, offset }, organizationId, user },
       reply,
     ) => {
-      await findConnectorOrThrow(id, organizationId);
+      await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
 
       const [data, total] = await Promise.all([
         ConnectorRunModel.findByConnectorList({
@@ -843,8 +993,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectConnectorRunSchema),
       },
     },
-    async ({ params: { id, runId }, organizationId }, reply) => {
-      await findConnectorOrThrow(id, organizationId);
+    async ({ params: { id, runId }, organizationId, user }, reply) => {
+      await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
 
       const run = await ConnectorRunModel.findById(runId);
       if (!run || run.connectorId !== id) {
@@ -860,17 +1014,35 @@ export default knowledgeBaseRoutes;
 
 // ===== Internal Helpers =====
 
-async function findKnowledgeBaseOrThrow(id: string, organizationId: string) {
-  const kg = await KnowledgeBaseModel.findById(id);
-  if (!kg || kg.organizationId !== organizationId) {
+async function findKnowledgeBaseOrThrow(params: {
+  id: string;
+  organizationId: string;
+  userId: string;
+}) {
+  const kg = await KnowledgeBaseModel.findById(params.id);
+  if (!kg || kg.organizationId !== params.organizationId) {
     throw new ApiError(404, "Knowledge base not found");
   }
   return kg;
 }
 
-async function findConnectorOrThrow(id: string, organizationId: string) {
-  const connector = await KnowledgeBaseConnectorModel.findById(id);
-  if (!connector || connector.organizationId !== organizationId) {
+async function findConnectorOrThrow(params: {
+  id: string;
+  organizationId: string;
+  userId: string;
+}) {
+  const connector = await KnowledgeBaseConnectorModel.findById(params.id);
+  if (!connector || connector.organizationId !== params.organizationId) {
+    throw new ApiError(404, "Connector not found");
+  }
+  const access =
+    await knowledgeSourceAccessControlService.buildAccessControlContext({
+      userId: params.userId,
+      organizationId: params.organizationId,
+    });
+  if (
+    !knowledgeSourceAccessControlService.canAccessConnector(access, connector)
+  ) {
     throw new ApiError(404, "Connector not found");
   }
   return connector;

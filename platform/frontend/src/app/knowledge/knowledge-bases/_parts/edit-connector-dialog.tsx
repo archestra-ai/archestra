@@ -2,8 +2,9 @@
 
 import { type archestraApiTypes, getConnectorNamePlaceholder } from "@shared";
 import { ChevronDown } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
+import { KnowledgeSourceVisibilitySelector } from "@/app/knowledge/_parts/knowledge-source-visibility-selector";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,6 +40,8 @@ type ConnectorItem = Pick<
   | "id"
   | "name"
   | "description"
+  | "visibility"
+  | "teamIds"
   | "connectorType"
   | "config"
   | "schedule"
@@ -65,6 +68,8 @@ export function EditConnectorDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const updateConnector = useUpdateConnector();
+  const [visibility, setVisibility] = useState(connector.visibility);
+  const [teamIds, setTeamIds] = useState<string[]>(connector.teamIds);
 
   const form = useForm<EditConnectorFormValues>({
     defaultValues: {
@@ -80,6 +85,8 @@ export function EditConnectorDialog({
 
   useEffect(() => {
     if (open) {
+      setVisibility(connector.visibility);
+      setTeamIds(connector.teamIds);
       form.reset({
         name: connector.name,
         description: connector.description ?? "",
@@ -106,6 +113,8 @@ export function EditConnectorDialog({
       body: {
         name: values.name,
         description: values.description || null,
+        visibility,
+        teamIds: visibility === "team-scoped" ? teamIds : [],
         enabled: values.enabled,
         config: transformConfigArrayFields(
           values.config,
@@ -217,6 +226,14 @@ export function EditConnectorDialog({
                 <FormMessage />
               </FormItem>
             )}
+          />
+
+          <KnowledgeSourceVisibilitySelector
+            visibility={visibility}
+            onVisibilityChange={setVisibility}
+            teamIds={teamIds}
+            onTeamIdsChange={setTeamIds}
+            showTeamRequired
           />
 
           {urlConfig && (

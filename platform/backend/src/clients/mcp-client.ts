@@ -22,6 +22,7 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   type McpToolError,
   parseFullToolName,
+  TimeInMs,
 } from "@shared";
 import QuickLRU from "quick-lru";
 import { LRUCacheManager } from "@/cache-manager";
@@ -172,6 +173,13 @@ class ConnectionLimiter {
 type TransportKind = "stdio" | "http";
 
 const HTTP_CONCURRENCY_LIMIT = 4;
+// Idle TTL for shared MCP active connections. These clients can retain HTTP
+// session affinity, tool-name caches, and browser-backed remote state, so we
+// want them to age out after inactivity instead of accumulating forever.
+// Fifteen minutes keeps sequential tool calls in an active chat warm while
+// reclaiming abandoned connections on a reasonable operational timescale.
+const ACTIVE_CONNECTION_CACHE_TTL_MS = 15 * TimeInMs.Minute;
+const ACTIVE_CONNECTION_CACHE_MAX_SIZE = 500;
 
 const RESOURCE_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 1 day
 const RESOURCE_CACHE_MAX_SIZE = 1000;
@@ -191,7 +199,21 @@ class McpClient {
   private static readonly ENTERPRISE_CREDENTIAL_CACHE_FALLBACK_TTL_MS = 30_000;
 
   private clients = new Map<string, Client>();
-  private activeConnections = new Map<string, Client>();
+  private activeConnections = new LRUCacheManager<Client>({
+    maxSize: ACTIVE_CONNECTION_CACHE_MAX_SIZE,
+    defaultTtl: ACTIVE_CONNECTION_CACHE_TTL_MS,
+    onEviction: (key: string, value: unknown) => {
+      const client = value as Client;
+      Promise.resolve(client.close()).catch((error) => {
+        logger.warn(
+          { connectionKey: key, error },
+          "Error closing evicted active MCP connection",
+        );
+      });
+      this.toolNameCache.delete(key);
+      this.pendingHttpSessionMetadata.delete(key);
+    },
+  });
   private connectionLimiter = new ConnectionLimiter();
   // Cache of actual tool names per connection key: lowercased name -> original cased name
   private toolNameCache = new LRUCacheManager<Map<string, string>>({
@@ -669,6 +691,7 @@ class McpClient {
           { connectionKey },
           "Client ping successful, reusing cached client",
         );
+        this.activeConnections.set(connectionKey, existingClient);
         return existingClient;
       } catch (error) {
         // Connection is dead, invalidate cache and create fresh client
@@ -1264,12 +1287,17 @@ class McpClient {
         if (enterpriseTransportCredential) {
           localHeaders[enterpriseTransportCredential.headerName] =
             enterpriseTransportCredential.headerValue;
-        } else if (tokenAuth?.isExternalIdp && tokenAuth.rawToken) {
-          localHeaders.Authorization = `Bearer ${tokenAuth.rawToken}`;
         } else if (secrets.access_token) {
+          // Prefer upstream server credentials when available (e.g. GitHub PAT, OAuth token).
+          // This enables JWKS-authenticated users to access servers with their own credentials
+          // rather than propagating the IdP JWT which the upstream server wouldn't understand.
           localHeaders.Authorization = `Bearer ${secrets.access_token}`;
         } else if (secrets.raw_access_token) {
           localHeaders.Authorization = String(secrets.raw_access_token);
+        } else if (tokenAuth?.isExternalIdp && tokenAuth.rawToken) {
+          // Fallback: propagate external IdP JWT for end-to-end JWKS pattern
+          // (upstream server validates the same JWT against the IdP's JWKS)
+          localHeaders.Authorization = `Bearer ${tokenAuth.rawToken}`;
         }
 
         return new StreamableHTTPClientTransport(new URL(endpointUrl), {
@@ -1287,13 +1315,17 @@ class McpClient {
         if (enterpriseTransportCredential) {
           headers[enterpriseTransportCredential.headerName] =
             enterpriseTransportCredential.headerValue;
-        } else if (tokenAuth?.isExternalIdp && tokenAuth.rawToken) {
-          // Propagate external IdP JWT to the underlying MCP server
-          headers.Authorization = `Bearer ${tokenAuth.rawToken}`;
         } else if (secrets.access_token) {
+          // Prefer upstream server credentials when available (e.g. GitHub PAT, OAuth token).
+          // This enables JWKS-authenticated users to access servers with their own credentials
+          // rather than propagating the IdP JWT which the upstream server wouldn't understand.
           headers.Authorization = `Bearer ${secrets.access_token}`;
         } else if (secrets.raw_access_token) {
           headers.Authorization = String(secrets.raw_access_token);
+        } else if (tokenAuth?.isExternalIdp && tokenAuth.rawToken) {
+          // Fallback: propagate external IdP JWT for end-to-end JWKS pattern
+          // (upstream server validates the same JWT against the IdP's JWKS)
+          headers.Authorization = `Bearer ${tokenAuth.rawToken}`;
         }
 
         return new StreamableHTTPClientTransport(
@@ -1959,8 +1991,13 @@ class McpClient {
 
     // Also disconnect active connections
     const activeDisconnectPromises = Array.from(
-      this.activeConnections.values(),
-    ).map(async (client) => {
+      this.activeConnections.keys(),
+    ).map(async (connectionKey) => {
+      const client = this.activeConnections.get(connectionKey);
+      if (!client) {
+        return;
+      }
+
       try {
         await client.close();
       } catch (error) {

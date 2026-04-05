@@ -3,7 +3,11 @@ title: Knowledge Connectors
 category: Knowledge
 order: 2
 description: Supported connector types, configuration, and management
+<<<<<<< HEAD
 lastUpdated: 2026-04-04
+=======
+lastUpdated: 2026-04-03
+>>>>>>> main
 ---
 
 <!--
@@ -13,7 +17,7 @@ Check ../docs_writer_prompt.md before changing this file.
 
 Connectors pull data from external tools into knowledge bases on a schedule. Sync is incremental by default, so only new or changed content is processed after the first run. A connector can also be assigned to multiple knowledge bases.
 
-Large syncs continue automatically from their last checkpoint, so they do not need to finish in a single run.
+Connector visibility is part of the broader knowledge source access model. See [Overview - Visibility Modes](/docs/platform-knowledge-bases#visibility-modes) for how connector visibility determines which connector data each user can query.
 
 ## Jira
 

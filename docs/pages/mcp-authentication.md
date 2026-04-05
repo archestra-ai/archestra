@@ -108,7 +108,9 @@ This is why a single gateway can front multiple upstream systems. Gateway authen
 
 Identity Providers (IdPs) configured in Archestra can also be used to authenticate external MCP clients. When an IdP is linked to an Archestra MCP Gateway, the gateway validates incoming JWT bearer tokens against the IdP's JWKS (JSON Web Key Set) endpoint and matches the caller to an Archestra user account. The same team-based access control that applies to Bearer tokens and OAuth also applies here — the JWT's email claim must correspond to an Archestra user who has permission to access the gateway.
 
-After authentication, the gateway propagates the original JWT to upstream MCP servers as an `Authorization: Bearer` header. This enables end-to-end identity propagation — upstream servers can validate the same JWT against the IdP's JWKS and extract user identity from the claims without any Archestra-specific integration. See [End-to-End JWKS](#end-to-end-jwks-without-gateway) below for how to build servers that consume these tokens.
+After authentication, the gateway resolves credentials for the upstream MCP server. If the upstream server has its own credentials configured (e.g., a GitHub PAT or OAuth token), those are used. If no upstream credentials are configured, the gateway propagates the original JWT as an `Authorization: Bearer` header, enabling end-to-end identity propagation where the upstream server validates the same JWT against the IdP's JWKS. See [End-to-End JWKS](#end-to-end-jwks-without-gateway) below for how to build servers that consume propagated JWTs.
+
+This credential resolution enables a powerful workflow: an admin installs upstream MCP servers (GitHub, Jira, etc.) with service credentials once, and any user who authenticates via their org's IdP can access those tools seamlessly — the gateway resolves the appropriate upstream token automatically. Both [static and per-user credentials](#upstream-credentials) work with JWKS authentication.
 
 #### How It Works
 
@@ -119,7 +121,7 @@ After authentication, the gateway propagates the original JWT to upstream MCP se
 5. Gateway discovers the JWKS URL from the IdP's OIDC discovery endpoint
 6. Gateway validates the JWT signature, issuer, audience (IdP's client ID), and expiration
 7. Gateway extracts the `email` claim from the JWT and matches it to an Archestra user account
-8. Gateway propagates the original JWT to upstream MCP servers
+8. Gateway resolves upstream credentials: if the server has its own credentials, those are used; otherwise the original JWT is propagated
 
 #### Requirements
 

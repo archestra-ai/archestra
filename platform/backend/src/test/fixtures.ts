@@ -891,7 +891,13 @@ async function makeKnowledgeBaseConnector(
   overrides: Partial<
     Pick<
       InsertKnowledgeBaseConnector,
-      "name" | "connectorType" | "config" | "schedule" | "enabled"
+      | "name"
+      | "visibility"
+      | "teamIds"
+      | "connectorType"
+      | "config"
+      | "schedule"
+      | "enabled"
     >
   > = {},
 ): Promise<KnowledgeBaseConnector> {

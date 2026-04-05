@@ -25432,8 +25432,6 @@ export type GetKnowledgeBasesResponses = {
             organizationId: string;
             name: string;
             description: string | null;
-            visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
-            teamIds: Array<string>;
             status: string;
             createdAt: string;
             updatedAt: string;
@@ -25466,8 +25464,6 @@ export type CreateKnowledgeBaseData = {
     body: {
         name: string;
         description?: string;
-        visibility?: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
-        teamIds?: Array<string>;
     };
     path?: never;
     query?: never;
@@ -25542,8 +25538,6 @@ export type CreateKnowledgeBaseResponses = {
         organizationId: string;
         name: string;
         description: string | null;
-        visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
-        teamIds: Array<string>;
         status: string;
         createdAt: string;
         updatedAt: string;
@@ -25708,8 +25702,6 @@ export type GetKnowledgeBaseResponses = {
         organizationId: string;
         name: string;
         description: string | null;
-        visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
-        teamIds: Array<string>;
         status: string;
         createdAt: string;
         updatedAt: string;
@@ -25722,8 +25714,6 @@ export type UpdateKnowledgeBaseData = {
     body: {
         name?: string;
         description?: string | null;
-        visibility?: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
-        teamIds?: Array<string>;
     };
     path: {
         id: string;
@@ -25800,8 +25790,6 @@ export type UpdateKnowledgeBaseResponses = {
         organizationId: string;
         name: string;
         description: string | null;
-        visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
-        teamIds: Array<string>;
         status: string;
         createdAt: string;
         updatedAt: string;
@@ -25972,7 +25960,13 @@ export type GetConnectorsResponses = {
             organizationId: string;
             name: string;
             description: string | null;
+<<<<<<< HEAD
             connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint';
+=======
+            visibility: 'org-wide' | 'team-scoped';
+            teamIds: Array<string>;
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion';
+>>>>>>> main
             config: {
                 type: 'jira';
                 jiraBaseUrl: unknown;
@@ -26068,7 +26062,13 @@ export type CreateConnectorData = {
     body: {
         name: string;
         description?: string | null;
+<<<<<<< HEAD
         connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint';
+=======
+        visibility?: 'org-wide' | 'team-scoped';
+        teamIds?: Array<string>;
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion';
+>>>>>>> main
         config: {
             type: 'jira';
             jiraBaseUrl: string;
@@ -26211,7 +26211,13 @@ export type CreateConnectorResponses = {
         organizationId: string;
         name: string;
         description: string | null;
+<<<<<<< HEAD
         connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint';
+=======
+        visibility: 'org-wide' | 'team-scoped';
+        teamIds: Array<string>;
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion';
+>>>>>>> main
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -26445,7 +26451,13 @@ export type GetConnectorResponses = {
         organizationId: string;
         name: string;
         description: string | null;
+<<<<<<< HEAD
         connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint';
+=======
+        visibility: 'org-wide' | 'team-scoped';
+        teamIds: Array<string>;
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion';
+>>>>>>> main
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -26528,6 +26540,8 @@ export type UpdateConnectorData = {
     body: {
         name?: string;
         description?: string | null;
+        visibility?: 'org-wide' | 'team-scoped';
+        teamIds?: Array<string>;
         config?: {
             type: 'jira';
             jiraBaseUrl: string;
@@ -26671,7 +26685,13 @@ export type UpdateConnectorResponses = {
         organizationId: string;
         name: string;
         description: string | null;
+<<<<<<< HEAD
         connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint';
+=======
+        visibility: 'org-wide' | 'team-scoped';
+        teamIds: Array<string>;
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion';
+>>>>>>> main
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -27067,8 +27087,6 @@ export type GetConnectorKnowledgeBasesResponses = {
             organizationId: string;
             name: string;
             description: string | null;
-            visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
-            teamIds: Array<string>;
             status: string;
             createdAt: string;
             updatedAt: string;

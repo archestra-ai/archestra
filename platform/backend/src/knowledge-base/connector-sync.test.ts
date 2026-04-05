@@ -217,6 +217,11 @@ describe("ConnectorSyncService", () => {
     expect(doc?.title).toBe("Doc 1 Updated");
     expect(doc?.content).toBe("New content");
     expect(doc?.embeddingStatus).toBe("pending");
+    expect(doc?.acl).toEqual(["org:*"]);
+
+    const chunks = await KbChunkModel.findByDocument(existingDoc.id);
+    expect(chunks).toHaveLength(2);
+    expect(chunks.every((chunk) => chunk.acl.includes("org:*"))).toBe(true);
   });
 
   test("executeSync marks run as failed when sync generator throws", async ({
@@ -321,17 +326,31 @@ describe("ConnectorSyncService", () => {
 
     const run = await ConnectorRunModel.findById(result.runId);
     expect(run?.status).toBe("partial");
+
+    const updatedConnector = await KnowledgeBaseConnectorModel.findById(
+      connector.id,
+    );
+    expect(updatedConnector?.checkpoint).toEqual({ page: 1 });
   });
 
   test("executeSync creates chunks for new documents", async ({
     makeOrganization,
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
+    makeTeam,
+    makeUser,
   }) => {
     const org = await makeOrganization();
+    const teamOwner = await makeUser();
+    const connectorTeam = await makeTeam(org.id, teamOwner.id, {
+      name: "Connector Team",
+    });
     const kb = await makeKnowledgeBase(org.id);
     const secretId = await createSecret();
-    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+      visibility: "team-scoped",
+      teamIds: [connectorTeam.id],
+    });
 
     await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
 
@@ -365,5 +384,8 @@ describe("ConnectorSyncService", () => {
     expect(chunks).toHaveLength(2);
     expect(chunks[0].content).toBe("chunk 1");
     expect(chunks[1].content).toBe("chunk 2");
+    expect(doc.acl).toEqual([`team:${connectorTeam.id}`]);
+    expect(chunks[0].acl).toEqual([`team:${connectorTeam.id}`]);
+    expect(chunks[1].acl).toEqual([`team:${connectorTeam.id}`]);
   });
 });

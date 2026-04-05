@@ -81,6 +81,8 @@ describe("McpClient", () => {
   let catalogId: string;
 
   beforeEach(async () => {
+    await mcpClient.disconnectAll();
+
     // Create test agent
     const agent = await AgentModel.create({
       name: "Test Agent",
@@ -256,6 +258,51 @@ describe("McpClient", () => {
 
         getSecretSpy.mockRestore();
       });
+    });
+
+    test("expires idle active connections and recreates them on the next tool call", async () => {
+      vi.useFakeTimers();
+
+      try {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__ttl_reconnect",
+          description: "TTL reconnect test",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId,
+          credentialResolutionMode: "static",
+        });
+
+        mockConnect.mockResolvedValue(undefined);
+        mockPing.mockResolvedValue(undefined);
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "ok" }],
+          isError: false,
+        });
+
+        const toolCall = {
+          id: "call_ttl_reconnect",
+          name: tool.name,
+          arguments: {},
+        };
+
+        const firstResult = await mcpClient.executeToolCall(toolCall, agentId);
+        expect(firstResult.isError).toBe(false);
+        expect(mockConnect).toHaveBeenCalledTimes(1);
+
+        await vi.advanceTimersByTimeAsync(15 * 60 * 1000 + 1);
+
+        const secondResult = await mcpClient.executeToolCall(toolCall, agentId);
+        expect(secondResult.isError).toBe(false);
+
+        expect(mockConnect).toHaveBeenCalledTimes(2);
+        expect(mockClose).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     describe("Concurrency limiter", () => {
@@ -2251,6 +2298,386 @@ describe("McpClient", () => {
           name: "search_issues",
           arguments: {},
         });
+      });
+    });
+
+    describe("Credential resolution priority (JWKS auth)", () => {
+      test("JWKS auth with upstream credentials uses upstream token, not JWT (remote server)", async () => {
+        // The existing setup creates a remote server with access_token: "test-github-token-123"
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__jwks_cred_test",
+          description: "Test JWKS credential priority",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: mcpServerId,
+        });
+
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "GitHub response" }],
+          isError: false,
+        });
+
+        const toolCall = {
+          id: "call_jwks_cred",
+          name: "github-mcp-server__jwks_cred_test",
+          arguments: {},
+        };
+
+        // Call with JWKS tokenAuth — the gateway has both the JWT and upstream credentials
+        await mcpClient.executeToolCall(toolCall, agentId, {
+          tokenId: "ext-token",
+          teamId: null,
+          isOrganizationToken: false,
+          isExternalIdp: true,
+          rawToken: "keycloak-jwt-should-not-be-forwarded",
+          userId: "ext-user-123",
+        });
+
+        // Verify the transport was created with the upstream GitHub token, NOT the Keycloak JWT
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        const transportCalls = vi.mocked(StreamableHTTPClientTransport).mock
+          .calls;
+        expect(transportCalls.length).toBeGreaterThan(0);
+        const lastCall = transportCalls[transportCalls.length - 1];
+        const headers = lastCall[1]?.requestInit?.headers as Headers;
+        expect(headers.get("authorization")).toBe(
+          "Bearer test-github-token-123",
+        );
+      });
+
+      test("JWKS auth without upstream credentials falls back to JWT propagation (remote server)", async () => {
+        // Create a remote server WITHOUT credentials
+        const noCredCatalog = await InternalMcpCatalogModel.create({
+          name: "jwks-echo-server",
+          serverType: "remote",
+          serverUrl: "https://jwks-echo.example.com/mcp",
+        });
+
+        const noCredServer = await McpServerModel.create({
+          name: "jwks-echo-server",
+          catalogId: noCredCatalog.id,
+          serverType: "remote",
+          // No secretId — this server has no upstream credentials
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "jwks-echo-server__get_info",
+          description: "Get info with JWT passthrough",
+          parameters: {},
+          catalogId: noCredCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: noCredServer.id,
+        });
+
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "JWT validated" }],
+          isError: false,
+        });
+
+        const toolCall = {
+          id: "call_jwks_passthrough",
+          name: "jwks-echo-server__get_info",
+          arguments: {},
+        };
+
+        await mcpClient.executeToolCall(toolCall, agentId, {
+          tokenId: "ext-token",
+          teamId: null,
+          isOrganizationToken: false,
+          isExternalIdp: true,
+          rawToken: "keycloak-jwt-for-passthrough",
+          userId: "ext-user-456",
+        });
+
+        // Verify the transport was created with the Keycloak JWT (fallback)
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        const transportCalls = vi.mocked(StreamableHTTPClientTransport).mock
+          .calls;
+        expect(transportCalls.length).toBeGreaterThan(0);
+        const lastCall = transportCalls[transportCalls.length - 1];
+        const headers = lastCall[1]?.requestInit?.headers as Headers;
+        expect(headers.get("authorization")).toBe(
+          "Bearer keycloak-jwt-for-passthrough",
+        );
+      });
+
+      test("JWKS auth with raw_access_token uses raw token (remote server)", async () => {
+        // Create a server with raw_access_token instead of access_token
+        const rawTokenCatalog = await InternalMcpCatalogModel.create({
+          name: "raw-token-server",
+          serverType: "remote",
+          serverUrl: "https://raw-token.example.com/mcp",
+        });
+
+        const rawTokenSecret = await secretManager().createSecret(
+          { raw_access_token: "Token github_pat_raw_abc123" },
+          "raw-token-secret",
+        );
+
+        const rawTokenServer = await McpServerModel.create({
+          name: "raw-token-server",
+          secretId: rawTokenSecret.id,
+          catalogId: rawTokenCatalog.id,
+          serverType: "remote",
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "raw-token-server__list_items",
+          description: "List items with raw token",
+          parameters: {},
+          catalogId: rawTokenCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: rawTokenServer.id,
+        });
+
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "Raw token response" }],
+          isError: false,
+        });
+
+        const toolCall = {
+          id: "call_jwks_raw",
+          name: "raw-token-server__list_items",
+          arguments: {},
+        };
+
+        await mcpClient.executeToolCall(toolCall, agentId, {
+          tokenId: "ext-token",
+          teamId: null,
+          isOrganizationToken: false,
+          isExternalIdp: true,
+          rawToken: "keycloak-jwt-should-not-be-used",
+          userId: "ext-user-789",
+        });
+
+        // Verify raw_access_token was used (not the JWT)
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        const transportCalls = vi.mocked(StreamableHTTPClientTransport).mock
+          .calls;
+        expect(transportCalls.length).toBeGreaterThan(0);
+        const lastCall = transportCalls[transportCalls.length - 1];
+        const headers = lastCall[1]?.requestInit?.headers as Headers;
+        expect(headers.get("authorization")).toBe(
+          "Token github_pat_raw_abc123",
+        );
+      });
+
+      test("non-JWKS auth (OAuth/Bearer) still uses upstream credentials", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__oauth_cred_test",
+          description: "Test OAuth credential behavior",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: mcpServerId,
+        });
+
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "OAuth response" }],
+          isError: false,
+        });
+
+        const toolCall = {
+          id: "call_oauth_cred",
+          name: "github-mcp-server__oauth_cred_test",
+          arguments: {},
+        };
+
+        // Call with standard (non-JWKS) tokenAuth — isExternalIdp is false
+        await mcpClient.executeToolCall(toolCall, agentId, {
+          tokenId: "user-token",
+          teamId: null,
+          isOrganizationToken: false,
+          isUserToken: true,
+          userId: "user-123",
+        });
+
+        // Verify upstream credentials are used (unchanged behavior)
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        const transportCalls = vi.mocked(StreamableHTTPClientTransport).mock
+          .calls;
+        expect(transportCalls.length).toBeGreaterThan(0);
+        const lastCall = transportCalls[transportCalls.length - 1];
+        const headers = lastCall[1]?.requestInit?.headers as Headers;
+        expect(headers.get("authorization")).toBe(
+          "Bearer test-github-token-123",
+        );
+      });
+
+      test("JWKS auth with dynamic credentials resolves server and uses its credentials", async ({
+        makeUser,
+      }) => {
+        const testUser = await makeUser({
+          email: "jwks-dynamic@example.com",
+        });
+
+        // Create a catalog with dynamic credentials enabled
+        const dynCatalog = await InternalMcpCatalogModel.create({
+          name: "github-dynamic",
+          serverType: "remote",
+          serverUrl: "https://api.github.com/mcp",
+        });
+
+        // Create a server owned by the test user with credentials
+        const dynSecret = await secretManager().createSecret(
+          { access_token: "ghp_dynamic_user_token" },
+          "github-dynamic-secret",
+        );
+
+        await McpServerModel.create({
+          name: "github-dynamic",
+          catalogId: dynCatalog.id,
+          secretId: dynSecret.id,
+          serverType: "remote",
+          ownerId: testUser.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-dynamic__list_repos",
+          description: "List repos",
+          parameters: {},
+          catalogId: dynCatalog.id,
+        });
+
+        // Enable dynamic credential resolution
+        await AgentToolModel.createOrUpdateCredentials(
+          agentId,
+          tool.id,
+          null,
+          "dynamic",
+        );
+
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "Dynamic response" }],
+          isError: false,
+        });
+
+        const toolCall = {
+          id: "call_jwks_dynamic",
+          name: "github-dynamic__list_repos",
+          arguments: {},
+        };
+
+        // Call with JWKS tokenAuth, userId matching the server owner
+        await mcpClient.executeToolCall(toolCall, agentId, {
+          tokenId: "ext-dynamic-token",
+          teamId: null,
+          isOrganizationToken: false,
+          isExternalIdp: true,
+          rawToken: "keycloak-jwt-not-for-github",
+          userId: testUser.id,
+        });
+
+        // Verify the dynamically resolved server credentials were used
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        const transportCalls = vi.mocked(StreamableHTTPClientTransport).mock
+          .calls;
+        expect(transportCalls.length).toBeGreaterThan(0);
+        const lastCall = transportCalls[transportCalls.length - 1];
+        const headers = lastCall[1]?.requestInit?.headers as Headers;
+        expect(headers.get("authorization")).toBe(
+          "Bearer ghp_dynamic_user_token",
+        );
+      });
+
+      test("JWKS auth with local streamable-http server uses upstream credentials over JWT", async ({
+        makeUser,
+      }) => {
+        const testUser = await makeUser({
+          email: "jwks-local@example.com",
+        });
+
+        // Create local server with credentials
+        const localCatalog = await InternalMcpCatalogModel.create({
+          name: "local-github-jwks",
+          serverType: "local",
+          localConfig: {
+            command: "npx",
+            arguments: ["github-mcp-server"],
+            transportType: "streamable-http",
+            httpPort: 3001,
+            httpPath: "/mcp",
+          },
+        });
+
+        const localSecret = await secretManager().createSecret(
+          { access_token: "ghp_local_server_token" },
+          "local-github-secret",
+        );
+
+        const localServer = await McpServerModel.create({
+          name: "local-github-jwks",
+          catalogId: localCatalog.id,
+          secretId: localSecret.id,
+          serverType: "local",
+          userId: testUser.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "local-github-jwks__get_repos",
+          description: "Get repos",
+          parameters: {},
+          catalogId: localCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: localServer.id,
+        });
+
+        mockUsesStreamableHttp.mockResolvedValue(true);
+        mockGetHttpEndpointUrl.mockReturnValue("http://localhost:30456/mcp");
+
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "Local GitHub response" }],
+          isError: false,
+        });
+
+        const toolCall = {
+          id: "call_jwks_local",
+          name: "local-github-jwks__get_repos",
+          arguments: {},
+        };
+
+        await mcpClient.executeToolCall(toolCall, agentId, {
+          tokenId: "ext-local-token",
+          teamId: null,
+          isOrganizationToken: false,
+          isExternalIdp: true,
+          rawToken: "keycloak-jwt-not-for-local",
+          userId: "ext-user-local",
+        });
+
+        // Verify local server used upstream credentials, not JWT
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        const transportCalls = vi.mocked(StreamableHTTPClientTransport).mock
+          .calls;
+        expect(transportCalls.length).toBeGreaterThan(0);
+        const lastCall = transportCalls[transportCalls.length - 1];
+        const headers = lastCall[1]?.requestInit?.headers as Headers;
+        expect(headers.get("authorization")).toBe(
+          "Bearer ghp_local_server_token",
+        );
       });
     });
 

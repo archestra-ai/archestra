@@ -37,10 +37,18 @@ class QueryService {
     organizationId: string;
     queryText: string;
     userAcl: AclEntry[];
+    bypassAcl?: boolean;
     limit?: number;
   }): Promise<ChunkResult[]> {
-    const { connectorIds, organizationId, queryText, limit = 10 } = params;
+    const {
+      connectorIds,
+      organizationId,
+      queryText,
+      bypassAcl = false,
+      limit = 10,
+    } = params;
     if (connectorIds.length === 0) return [];
+    if (!bypassAcl && params.userAcl.length === 0) return [];
 
     const queryStartTime = Date.now();
     const hybridEnabled = config.kb.hybridSearchEnabled;
@@ -64,6 +72,8 @@ class QueryService {
           embeddingConfig,
           connectorIds,
           limit: overFetchLimit,
+          userAcl: params.userAcl,
+          bypassAcl,
           type: eq.type,
           hybridEnabled,
         }),
@@ -119,6 +129,8 @@ class QueryService {
     embeddingConfig: EmbeddingConfig;
     connectorIds: string[];
     limit: number;
+    userAcl: AclEntry[];
+    bypassAcl: boolean;
     type: "semantic" | "keyword";
     hybridEnabled: boolean;
   }): Promise<VectorSearchResult[]> {
@@ -127,6 +139,8 @@ class QueryService {
       embeddingConfig,
       connectorIds,
       limit,
+      userAcl,
+      bypassAcl,
       type,
       hybridEnabled,
     } = params;
@@ -182,6 +196,8 @@ class QueryService {
           connectorIds,
           queryText,
           limit,
+          userAcl,
+          bypassAcl,
         })
       : Promise.resolve([] as VectorSearchResult[]);
 
@@ -191,6 +207,8 @@ class QueryService {
         queryEmbedding,
         dimensions: embeddingConfig.dimensions,
         limit,
+        userAcl,
+        bypassAcl,
       }),
       fullTextPromise,
     ]);

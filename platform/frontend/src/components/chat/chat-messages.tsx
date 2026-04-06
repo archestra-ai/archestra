@@ -2,7 +2,6 @@ import type { UIMessage } from "@ai-sdk/react";
 import {
   type ArchestraToolShortName,
   type archestraApiTypes,
-  extractMcpToolError,
   parseFullToolName,
   SWAP_AGENT_FAILED_POKE_TEXT,
   SWAP_AGENT_POKE_PREFIX,
@@ -57,15 +56,22 @@ import {
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useProfileToolsWithIds } from "@/lib/chat/chat.query";
 import { useUpdateChatMessage } from "@/lib/chat/chat-message.query";
+import {
+  getCompactToolState,
+  getToolErrorText,
+  getToolHeaderState,
+  getToolNameFromPart,
+} from "@/lib/chat/chat-tools-display.utils";
 import { useGlobalChat } from "@/lib/chat/global-chat.context";
 import {
-  extractCatalogIdFromInstallUrl,
-  extractIdsFromReauthUrl,
-  parseAuthRequired,
-  parseExpiredAuth,
+  hasToolPartsWithAuthErrors,
+  isAuthInstructionText,
   parsePolicyDenied,
+  resolveAssistantTextAuthState,
+  resolveToolAuthState,
 } from "@/lib/chat/mcp-error-ui";
 import { hasThinkingTags, parseThinkingTags } from "@/lib/chat/parse-thinking";
+import { getSwapToolShortName } from "@/lib/chat/swap-agent.utils";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
@@ -80,11 +86,6 @@ import {
   hasTextPart,
   identifyCompactToolGroups,
 } from "./chat-messages.utils";
-import {
-  getCompactToolState,
-  getToolErrorText,
-  getToolHeaderState,
-} from "./chat-tools-display.utils";
 import { CompactToolGroup, type ToolIconMap } from "./compact-tool-call";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
@@ -101,10 +102,7 @@ import {
   UnsafeContextStartsHereDivider,
 } from "./message-boundary-divider";
 import { PolicyDeniedTool } from "./policy-denied-tool";
-import {
-  getSwapToolShortName,
-  SwapAgentBoundaryDivider,
-} from "./swap-agent-boundary";
+import { SwapAgentBoundaryDivider } from "./swap-agent-boundary";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
 import { ToolStatusRow } from "./tool-status-row";
@@ -529,11 +527,16 @@ export function ChatMessages({
                         }
 
                         // Anthropic sends policy denials as text blocks (see MessageTool for OpenAI path)
-                        const policyDenied = parsePolicyDenied(part.text);
-                        if (policyDenied) {
+                        const assistantAuthState =
+                          resolveAssistantTextAuthState(part.text);
+                        const textToolAuthState = resolveToolAuthState({
+                          errorText: part.text,
+                        });
+                        if (textToolAuthState?.kind === "policy-denied") {
                           const shouldRenderPolicyDeniedUnsafeBoundary =
                             !!canReadToolPolicy &&
-                            policyDenied.unsafeContextActiveAtRequestStart &&
+                            textToolAuthState.policyDenied
+                              .unsafeContextActiveAtRequestStart &&
                             !hasUnsafeBoundaryBefore({
                               messages,
                               beforeMessageIndex: idx,
@@ -549,7 +552,7 @@ export function ChatMessages({
                                 />
                               )}
                               <PolicyDeniedTool
-                                policyDenied={policyDenied}
+                                policyDenied={textToolAuthState.policyDenied}
                                 {...(agentId
                                   ? { editable: true, profileId: agentId }
                                   : { editable: false })}
@@ -572,8 +575,8 @@ export function ChatMessages({
                           }
 
                           const authToolPart = renderAssistantAuthPart({
-                            text: part.text,
                             toolName: "authentication",
+                            authState: assistantAuthState,
                             onInstallMcp:
                               orchestrator.triggerInstallByCatalogId,
                             onReauthMcp:
@@ -1350,135 +1353,28 @@ const MessageTool = memo(
       [shouldDefaultOpen],
     );
 
-    const structuredMcpError = extractMcpToolError(rawOutput);
-    let authToolBody: React.ReactNode = null;
+    const toolAuthState = resolveToolAuthState({
+      errorText,
+      rawOutput,
+    });
 
-    // OpenAI sends policy denials as tool errors (see case "text" above for Anthropic path)
-    if (errorText) {
-      if (structuredMcpError?.type === "auth_expired") {
-        authToolBody = (
-          <ExpiredAuthTool
-            toolName={toolName}
-            catalogName={structuredMcpError.catalogName}
-            reauthUrl={structuredMcpError.reauthUrl}
-            onReauth={
-              onReauthMcp
-                ? () =>
-                    onReauthMcp(
-                      structuredMcpError.catalogId,
-                      structuredMcpError.serverId,
-                    )
-                : undefined
-            }
-          />
-        );
-      }
-
-      if (structuredMcpError?.type === "auth_required") {
-        authToolBody = (
-          <AuthRequiredTool
-            toolName={toolName}
-            catalogName={structuredMcpError.catalogName}
-            installUrl={structuredMcpError.installUrl}
-            onInstall={
-              onInstallMcp
-                ? () => onInstallMcp(structuredMcpError.catalogId)
-                : undefined
-            }
-          />
-        );
-      }
-
-      const policyDenied = parsePolicyDenied(errorText);
-      if (policyDenied) {
-        return (
-          <PolicyDeniedTool
-            policyDenied={policyDenied}
-            {...(agentId
-              ? { editable: true, profileId: agentId }
-              : { editable: false })}
-          />
-        );
-      }
-
-      const expiredAuth = parseExpiredAuth(errorText);
-      if (expiredAuth && !authToolBody) {
-        const ids = extractIdsFromReauthUrl(expiredAuth.reauthUrl);
-        authToolBody = (
-          <ExpiredAuthTool
-            toolName={toolName}
-            catalogName={expiredAuth.catalogName}
-            reauthUrl={expiredAuth.reauthUrl}
-            onReauth={
-              onReauthMcp && ids.catalogId && ids.serverId
-                ? () =>
-                    onReauthMcp(ids.catalogId as string, ids.serverId as string)
-                : undefined
-            }
-          />
-        );
-      }
-
-      const authRequired = parseAuthRequired(errorText);
-      if (authRequired && !authToolBody) {
-        const catalogId = extractCatalogIdFromInstallUrl(
-          authRequired.installUrl,
-        );
-        authToolBody = (
-          <AuthRequiredTool
-            toolName={toolName}
-            catalogName={authRequired.catalogName}
-            installUrl={authRequired.installUrl}
-            onInstall={
-              onInstallMcp && catalogId
-                ? () => onInstallMcp(catalogId)
-                : undefined
-            }
-          />
-        );
-      }
+    if (toolAuthState?.kind === "policy-denied") {
+      return (
+        <PolicyDeniedTool
+          policyDenied={toolAuthState.policyDenied}
+          {...(agentId
+            ? { editable: true, profileId: agentId }
+            : { editable: false })}
+        />
+      );
     }
 
-    // Also check tool output for auth-related patterns (tool errors returned as
-    // successful results to avoid crashing the AI SDK stream still need the UI)
-    if (typeof rawOutput === "string" && !authToolBody) {
-      const expiredAuth = parseExpiredAuth(rawOutput);
-      if (expiredAuth) {
-        const ids = extractIdsFromReauthUrl(expiredAuth.reauthUrl);
-        authToolBody = (
-          <ExpiredAuthTool
-            toolName={toolName}
-            catalogName={expiredAuth.catalogName}
-            reauthUrl={expiredAuth.reauthUrl}
-            onReauth={
-              onReauthMcp && ids.catalogId && ids.serverId
-                ? () =>
-                    onReauthMcp(ids.catalogId as string, ids.serverId as string)
-                : undefined
-            }
-          />
-        );
-      }
-
-      const authRequired = parseAuthRequired(rawOutput);
-      if (authRequired && !authToolBody) {
-        const catalogId = extractCatalogIdFromInstallUrl(
-          authRequired.installUrl,
-        );
-        authToolBody = (
-          <AuthRequiredTool
-            toolName={toolName}
-            catalogName={authRequired.catalogName}
-            installUrl={authRequired.installUrl}
-            onInstall={
-              onInstallMcp && catalogId
-                ? () => onInstallMcp(catalogId)
-                : undefined
-            }
-          />
-        );
-      }
-    }
+    const authToolBody = renderToolAuthPart({
+      toolName,
+      authState: toolAuthState,
+      onInstallMcp,
+      onReauthMcp,
+    });
 
     // swap_agent / swap_to_default_agent are rendered as dividers after all message parts (see SwapAgentDivider below)
     // Show the raw tool call when the user's name ends with "(debugging)"
@@ -1993,20 +1889,6 @@ function toolPartMatchesUnsafeContextBoundary(
   return partToolName === boundary.toolName;
 }
 
-function getToolNameFromPart(
-  part: DynamicToolUIPart | ToolUIPart,
-): string | undefined {
-  if ("toolName" in part && typeof part.toolName === "string") {
-    return part.toolName;
-  }
-
-  if (typeof part.type === "string" && part.type.startsWith("tool-")) {
-    return part.type.replace("tool-", "");
-  }
-
-  return undefined;
-}
-
 function inferUnsafeTextBoundary(params: {
   messages: UIMessage[];
   canReadToolPolicy: boolean;
@@ -2193,39 +2075,78 @@ function isMessagePositionBefore(params: {
   return params.boundaryPartIndex < params.beforePartIndex;
 }
 
-function renderAssistantAuthPart(params: {
-  text: string;
+function renderToolAuthPart(params: {
   toolName: string;
+  authState: ReturnType<typeof resolveToolAuthState>;
   onInstallMcp?: (catalogId: string) => void;
   onReauthMcp?: (catalogId: string, serverId: string) => void;
 }) {
-  const { text, toolName, onInstallMcp, onReauthMcp } = params;
+  const { authState, toolName, onInstallMcp, onReauthMcp } = params;
 
-  const expiredAuth = parseExpiredAuth(text);
-  if (expiredAuth) {
-    const ids = extractIdsFromReauthUrl(expiredAuth.reauthUrl);
+  if (authState?.kind === "auth-expired") {
+    const { catalogId, serverId } = authState;
     return (
       <ExpiredAuthTool
         toolName={toolName}
-        catalogName={expiredAuth.catalogName}
-        reauthUrl={expiredAuth.reauthUrl}
+        catalogName={authState.catalogName}
+        reauthUrl={authState.reauthUrl}
         onReauth={
-          onReauthMcp && ids.catalogId && ids.serverId
-            ? () => onReauthMcp(ids.catalogId as string, ids.serverId as string)
+          onReauthMcp && catalogId && serverId
+            ? () => onReauthMcp(catalogId, serverId)
             : undefined
         }
       />
     );
   }
 
-  const authRequired = parseAuthRequired(text);
-  if (authRequired) {
-    const catalogId = extractCatalogIdFromInstallUrl(authRequired.installUrl);
+  if (authState?.kind === "auth-required") {
+    const { catalogId } = authState;
     return (
       <AuthRequiredTool
         toolName={toolName}
-        catalogName={authRequired.catalogName}
-        installUrl={authRequired.installUrl}
+        catalogName={authState.catalogName}
+        installUrl={authState.installUrl}
+        onInstall={
+          onInstallMcp && catalogId ? () => onInstallMcp(catalogId) : undefined
+        }
+      />
+    );
+  }
+
+  return null;
+}
+
+function renderAssistantAuthPart(params: {
+  toolName: string;
+  authState: ReturnType<typeof resolveAssistantTextAuthState>;
+  onInstallMcp?: (catalogId: string) => void;
+  onReauthMcp?: (catalogId: string, serverId: string) => void;
+}) {
+  const { authState, toolName, onInstallMcp, onReauthMcp } = params;
+
+  if (authState?.kind === "auth-expired") {
+    const { catalogId, serverId } = authState;
+    return (
+      <ExpiredAuthTool
+        toolName={toolName}
+        catalogName={authState.catalogName}
+        reauthUrl={authState.reauthUrl}
+        onReauth={
+          onReauthMcp && catalogId && serverId
+            ? () => onReauthMcp(catalogId, serverId)
+            : undefined
+        }
+      />
+    );
+  }
+
+  if (authState?.kind === "auth-required") {
+    const { catalogId } = authState;
+    return (
+      <AuthRequiredTool
+        toolName={toolName}
+        catalogName={authState.catalogName}
+        installUrl={authState.installUrl}
         onInstall={
           onInstallMcp && catalogId ? () => onInstallMcp(catalogId) : undefined
         }
@@ -2237,33 +2158,19 @@ function renderAssistantAuthPart(params: {
 }
 
 function hasMessageAuthToolError(message: UIMessage): boolean {
-  for (const part of message.parts ?? []) {
-    if (!isToolPart(part)) continue;
-    const error = extractMcpToolError(part.output);
-    if (error?.type === "auth_required" || error?.type === "auth_expired") {
-      return true;
-    }
-
-    const errorText = getToolErrorText({ part, toolResultPart: null });
-    if (errorText) {
-      if (parseAuthRequired(errorText) || parseExpiredAuth(errorText)) {
-        return true;
+  return hasToolPartsWithAuthErrors(
+    (message.parts ?? []).flatMap((part) => {
+      if (!isToolPart(part)) {
+        return [];
       }
-    }
-  }
-  return false;
-}
 
-function isAuthInstructionText(text: string): boolean {
-  if (parseAuthRequired(text) || parseExpiredAuth(text)) {
-    return true;
-  }
-
-  return (
-    /(authentication|credentials)/i.test(text) &&
-    /(install=|reauth=|re-authenticate|set up your credentials|visiting this url|visit this url)/i.test(
-      text,
-    )
+      return [
+        {
+          output: part.output,
+          errorText: getToolErrorText({ part, toolResultPart: null }),
+        },
+      ];
+    }),
   );
 }
 

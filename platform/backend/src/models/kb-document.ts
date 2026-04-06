@@ -1,6 +1,11 @@
-import { and, count, desc, eq, inArray } from "drizzle-orm";
+import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { InsertKbDocument, KbDocument, UpdateKbDocument } from "@/types";
+import type {
+  AclEntry,
+  InsertKbDocument,
+  KbDocument,
+  UpdateKbDocument,
+} from "@/types";
 
 class KbDocumentModel {
   static async findById(id: string): Promise<KbDocument | null> {
@@ -161,6 +166,27 @@ class KbDocumentModel {
       .where(eq(schema.kbDocumentsTable.organizationId, organizationId));
 
     return result.rowCount ?? 0;
+  }
+
+  static async updateAclByConnector(
+    connectorId: string,
+    acl: AclEntry[],
+  ): Promise<number> {
+    // Skip rows that already have the target ACL to avoid unnecessary rewrites,
+    // WAL churn, and vacuum work when connector visibility is re-applied.
+    const result = await db.execute(sql`
+      WITH updated AS (
+        UPDATE ${schema.kbDocumentsTable}
+        SET acl = ${JSON.stringify(acl)}::jsonb
+        WHERE ${schema.kbDocumentsTable.connectorId} = ${connectorId}
+          AND ${schema.kbDocumentsTable.acl} IS DISTINCT FROM ${JSON.stringify(acl)}::jsonb
+        RETURNING 1
+      )
+      SELECT COUNT(*)::int AS count FROM updated
+    `);
+
+    const count = result.rows[0]?.count;
+    return typeof count === "number" ? count : Number(count ?? 0);
   }
 
   static async countByKnowledgeBaseIds(

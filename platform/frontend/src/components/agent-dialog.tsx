@@ -521,7 +521,7 @@ export function AgentDialog({
     identityProvider: ["read"],
   });
   const { data: canReadKnowledgeBase } = useHasPermissions({
-    knowledgeBase: ["read"],
+    knowledgeSource: ["read"],
   });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: identityProviders = [] } = useIdentityProviders({

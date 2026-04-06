@@ -53,15 +53,16 @@ import {
   UnsafeContextStartsHereDivider,
 } from "@/components/chat/message-boundary-divider";
 import { PolicyDeniedTool } from "@/components/chat/policy-denied-tool";
+import { SwapAgentBoundaryDivider } from "@/components/chat/swap-agent-boundary";
+import Divider from "@/components/divider";
+import { Button } from "@/components/ui/button";
+import { getToolNameFromPart } from "@/lib/chat/chat-tools-display.utils";
+import { preserveNewlines } from "@/lib/chat/chat-utils";
+import { parsePolicyDenied } from "@/lib/chat/mcp-error-ui";
 import {
   getRenderedToolName,
   getSwapToolShortName,
-  SwapAgentBoundaryDivider,
-} from "@/components/chat/swap-agent-boundary";
-import Divider from "@/components/divider";
-import { Button } from "@/components/ui/button";
-import { preserveNewlines } from "@/lib/chat/chat-utils";
-import { parsePolicyDenied } from "@/lib/chat/mcp-error-ui";
+} from "@/lib/chat/swap-agent.utils";
 import { cn } from "@/lib/utils";
 
 const MessageThread = ({
@@ -987,20 +988,6 @@ function hasSwapToolErrorInMessageThread(
       typeof candidate.errorText === "string" &&
       candidate.errorText.length > 0,
   );
-}
-
-function getToolNameFromPart(
-  part: PartialUIMessage["parts"][number],
-): string | undefined {
-  if ("toolName" in part && typeof part.toolName === "string") {
-    return part.toolName;
-  }
-
-  if (typeof part.type === "string" && part.type.startsWith("tool-")) {
-    return part.type.replace("tool-", "");
-  }
-
-  return undefined;
 }
 
 function getPartKey(

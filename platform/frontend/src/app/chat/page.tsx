@@ -93,7 +93,6 @@ import {
   useUpdateConversationEnabledTools,
 } from "@/lib/chat/chat.query";
 import { useChatAgentState } from "@/lib/chat/chat-agent-state.hook";
-import { chooseDisplayedMessages } from "@/lib/chat/chat-session-utils";
 import {
   useConversationShare,
   useForkSharedConversation,
@@ -113,7 +112,6 @@ import {
   getSavedAgent,
   getSavedModelOverride,
   type ModelSource,
-  resolveInitialModel,
   saveAgent,
   saveModelOverride,
 } from "@/lib/chat/use-chat-preferences";
@@ -129,8 +127,10 @@ import { useOrganization } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import {
-  getProviderForModelId,
+  buildCreateConversationInput,
+  resolveChatModelState,
   resolveInitialAgentState,
+  resolvePreferredModelForProvider,
   shouldResetInitialChatState,
 } from "./chat-initial-state";
 import ArchestraPromptInput from "./prompt-input";
@@ -156,16 +156,14 @@ export function ChatPageContent({
     return () => document.body.classList.remove("hide-version");
   }, []);
   const [isArtifactOpen, setIsArtifactOpen] = useState(false);
-  const loadedConversationRef = useRef<string | undefined>(undefined);
   const pendingPromptRef = useRef<string | undefined>(undefined);
   const pendingFilesRef = useRef<
     Array<{ url: string; mediaType: string; filename?: string }>
   >([]);
-  const lastVisibleMessagesRef = useRef<UIMessage[]>([]);
-  const lastVisibleMessagesConversationRef = useRef<string | undefined>(
-    routeConversationId,
-  );
   const userMessageJustEdited = useRef(false);
+  const pendingInitialSendConversationRef = useRef<string | undefined>(
+    undefined,
+  );
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const autoSendTriggeredRef = useRef(false);
   // Store pending URL for browser navigation after conversation is created
@@ -360,11 +358,9 @@ export function ChatPageContent({
     if (!initialAgentId) return;
     if (modelInitializedRef.current) return;
 
-    const agent = resolvedAgentRef.current;
-
-    const resolved = resolveInitialModel({
+    const resolved = resolveChatModelState({
+      agent: resolvedAgentRef.current,
       modelsByProvider,
-      agent: agent ?? null,
       chatApiKeys,
       organization: organization
         ? {
@@ -377,9 +373,7 @@ export function ChatPageContent({
     if (!resolved) return; // No models available yet
 
     setInitialModel(resolved.modelId);
-    setInitialModelSource(
-      resolved.source === "fallback" ? null : resolved.source,
-    );
+    setInitialModelSource(resolved.modelSource);
     if (resolved.apiKeyId) {
       setInitialApiKeyId(resolved.apiKeyId);
     }
@@ -418,13 +412,14 @@ export function ChatPageContent({
   // Handle API key change - preselect best model for the new key's provider
   const handleInitialProviderChange = useCallback(
     (newProvider: SupportedProvider, _apiKeyId: string) => {
-      const providerModels = modelsByProvider[newProvider];
-      if (providerModels && providerModels.length > 0) {
-        const bestModel =
-          providerModels.find((m) => m.isBest) ?? providerModels[0];
-        setInitialModel(bestModel.id);
+      const preferredModel = resolvePreferredModelForProvider({
+        provider: newProvider,
+        modelsByProvider,
+      });
+      if (preferredModel) {
+        setInitialModel(preferredModel.modelId);
         setInitialModelSource("user");
-        saveModelOverride(bestModel.id);
+        saveModelOverride(preferredModel.modelId);
       }
     },
     [modelsByProvider],
@@ -435,10 +430,9 @@ export function ChatPageContent({
     clearModelOverride();
     modelInitializedRef.current = false;
 
-    const agent = resolvedAgentRef.current;
-    const resolved = resolveInitialModel({
+    const resolved = resolveChatModelState({
+      agent: resolvedAgentRef.current,
       modelsByProvider,
-      agent: agent ?? null,
       chatApiKeys,
       organization: organization
         ? {
@@ -451,9 +445,7 @@ export function ChatPageContent({
     if (resolved) {
       setInitialModel(resolved.modelId);
       setInitialApiKeyId(resolved.apiKeyId);
-      setInitialModelSource(
-        resolved.source === "fallback" ? null : resolved.source,
-      );
+      setInitialModelSource(resolved.modelSource);
     }
     modelInitializedRef.current = true;
   }, [modelsByProvider, chatApiKeys, organization]);
@@ -531,9 +523,19 @@ export function ChatPageContent({
     !!conversationId &&
     !!conversation?.share &&
     conversation.userId !== session?.user.id;
-  const chatSession = useChatSession(
-    isReadOnlySharedConversation ? undefined : conversationId,
+  const persistedConversationMessages = useMemo(
+    () => (conversation?.messages ?? []) as UIMessage[],
+    [conversation?.messages],
   );
+  const shouldEnableChatSession =
+    !!conversationId &&
+    !isReadOnlySharedConversation &&
+    (!routeConversationId || !!conversation);
+  const chatSession = useChatSession({
+    conversationId: shouldEnableChatSession ? conversationId : undefined,
+    initialMessages: persistedConversationMessages,
+    enabled: shouldEnableChatSession,
+  });
   const sharedConversationMessages = useMemo(
     () => (conversation?.messages ?? []) as PartialUIMessage[],
     [conversation?.messages],
@@ -668,15 +670,16 @@ export function ChatPageContent({
     (newProvider: SupportedProvider, apiKeyId: string) => {
       if (!conversation) return;
 
-      const providerModels = modelsByProvider[newProvider];
-      if (providerModels && providerModels.length > 0) {
-        const bestModel =
-          providerModels.find((m) => m.isBest) ?? providerModels[0];
+      const preferredModel = resolvePreferredModelForProvider({
+        provider: newProvider,
+        modelsByProvider,
+      });
+      if (preferredModel) {
         updateConversationMutateRef.current({
           id: conversation.id,
           chatApiKeyId: apiKeyId,
-          selectedModel: bestModel.id,
-          selectedProvider: newProvider,
+          selectedModel: preferredModel.modelId,
+          selectedProvider: preferredModel.provider,
         });
       } else {
         // No models for this provider yet, still update the key
@@ -710,15 +713,16 @@ export function ChatPageContent({
     const agent = conversation.agentId
       ? (internalAgents.find((a) => a.id === conversation.agentId) as
           | (Record<string, unknown> & {
+              id: string;
               llmModel?: string;
               llmApiKeyId?: string;
             })
           | undefined)
       : null;
 
-    const resolved = resolveInitialModel({
-      modelsByProvider,
+    const resolved = resolveChatModelState({
       agent: agent ?? null,
+      modelsByProvider,
       chatApiKeys,
       organization: organization
         ? {
@@ -726,15 +730,14 @@ export function ChatPageContent({
             defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
           }
         : null,
+      chatModels,
     });
 
     if (resolved) {
       updateConversationMutateRef.current({
         id: conversation.id,
         selectedModel: resolved.modelId,
-        selectedProvider:
-          chatModels.find((m) => m.id === resolved.modelId)?.provider ??
-          undefined,
+        selectedProvider: resolved.provider,
       });
     }
   }, [
@@ -796,37 +799,10 @@ export function ChatPageContent({
     previousArtifactRef.current = conversation?.artifact;
   }, [conversation?.artifact, isArtifactOpen, conversationId]);
 
-  useEffect(() => {
-    if (lastVisibleMessagesConversationRef.current !== conversationId) {
-      lastVisibleMessagesConversationRef.current = conversationId;
-      lastVisibleMessagesRef.current = [];
-    }
-  }, [conversationId]);
-
-  const persistedConversationMessages = useMemo(
-    () => (conversation?.messages ?? []) as UIMessage[],
-    [conversation?.messages],
-  );
-
-  // Keep the last visible thread around so brief session dropouts do not blank
-  // the chat while the backend/persistence layer catches up.
-  useEffect(() => {
-    if (chatSession?.messages && chatSession.messages.length > 0) {
-      lastVisibleMessagesRef.current = chatSession.messages;
-      return;
-    }
-
-    if (persistedConversationMessages.length > 0) {
-      lastVisibleMessagesRef.current = persistedConversationMessages;
-    }
-  }, [chatSession?.messages, persistedConversationMessages]);
-
-  // Extract chat session properties (or use persisted / last visible state if session dips)
-  const messages = chooseDisplayedMessages({
-    liveMessages: chatSession?.messages,
-    persistedMessages: persistedConversationMessages,
-    lastVisibleMessages: lastVisibleMessagesRef.current,
-  });
+  // While a conversation tab is open, useChat owns the thread.
+  // We only fall back to persisted messages before the session initializes or
+  // for read-only shared conversations that do not create a live chat session.
+  const messages = chatSession?.messages ?? persistedConversationMessages;
   const sendMessage = chatSession?.sendMessage;
   const status = chatSession?.status ?? "ready";
   const setMessages = chatSession?.setMessages;
@@ -956,74 +932,70 @@ export function ChatPageContent({
     openDialog,
   ]);
 
-  // Sync messages when conversation loads or changes
+  // Send a deferred initial prompt once the newly-created conversation's chat
+  // session is ready. Existing conversations seed useChat with persisted
+  // messages, so we do not rehydrate them via setMessages here.
   useEffect(() => {
     if (!setMessages || !sendMessage) {
       return;
-    }
-
-    // When switching to a different conversation, reset the loaded ref
-    if (loadedConversationRef.current !== conversationId) {
-      loadedConversationRef.current = undefined;
-    }
-
-    // Sync messages from backend only on the initial conversation load.
-    // Once a live chat session exists, the AI SDK session state is authoritative.
-    // Overwriting from the DB after that can race with persistence and temporarily
-    // replace streamed assistant content with stale user-only messages.
-    const shouldSync =
-      conversation?.messages &&
-      conversation.id === conversationId &&
-      status !== "submitted" &&
-      status !== "streaming" &&
-      !userMessageJustEdited.current &&
-      loadedConversationRef.current !== conversationId;
-
-    if (shouldSync) {
-      setMessages(conversation.messages as UIMessage[]);
-      loadedConversationRef.current = conversationId;
-
-      // If there's a pending prompt/files and the conversation is empty, send it
-      if (
-        (pendingPromptRef.current || pendingFilesRef.current.length > 0) &&
-        conversation.messages.length === 0
-      ) {
-        const promptToSend = pendingPromptRef.current;
-        const filesToSend = pendingFilesRef.current;
-        pendingPromptRef.current = undefined;
-        pendingFilesRef.current = [];
-
-        // Build message parts
-        const parts: Array<
-          | { type: "text"; text: string }
-          | { type: "file"; url: string; mediaType: string; filename?: string }
-        > = [];
-
-        if (promptToSend) {
-          parts.push({ type: "text", text: promptToSend });
-        }
-
-        for (const file of filesToSend) {
-          parts.push({
-            type: "file",
-            url: file.url,
-            mediaType: file.mediaType,
-            filename: file.filename,
-          });
-        }
-
-        sendMessage({
-          role: "user",
-          parts,
-        });
-      }
     }
 
     // Clear the edit flag when status changes to ready (streaming finished)
     if (status === "ready" && userMessageJustEdited.current) {
       userMessageJustEdited.current = false;
     }
-  }, [conversationId, conversation, setMessages, sendMessage, status]);
+
+    const hasPendingInitialMessage =
+      !!pendingPromptRef.current || pendingFilesRef.current.length > 0;
+    const shouldSendPendingInitialMessage =
+      conversationId &&
+      conversation?.id === conversationId &&
+      conversation.messages.length === 0 &&
+      messages.length === 0 &&
+      status === "ready" &&
+      hasPendingInitialMessage &&
+      pendingInitialSendConversationRef.current !== conversationId;
+
+    if (!shouldSendPendingInitialMessage) {
+      return;
+    }
+
+    pendingInitialSendConversationRef.current = conversationId;
+    const promptToSend = pendingPromptRef.current;
+    const filesToSend = pendingFilesRef.current;
+    pendingPromptRef.current = undefined;
+    pendingFilesRef.current = [];
+
+    const parts: Array<
+      | { type: "text"; text: string }
+      | { type: "file"; url: string; mediaType: string; filename?: string }
+    > = [];
+
+    if (promptToSend) {
+      parts.push({ type: "text", text: promptToSend });
+    }
+
+    for (const file of filesToSend) {
+      parts.push({
+        type: "file",
+        url: file.url,
+        mediaType: file.mediaType,
+        filename: file.filename,
+      });
+    }
+
+    sendMessage({
+      role: "user",
+      parts,
+    });
+  }, [
+    conversation,
+    conversationId,
+    messages.length,
+    sendMessage,
+    setMessages,
+    status,
+  ]);
 
   // Poll for the assistant response when the page was reloaded mid-stream.
   // After reload the DB may only contain the user message (persisted early by
@@ -1053,63 +1025,6 @@ export function ChatPageContent({
     messages.length,
     status,
     queryClient,
-  ]);
-
-  // Merge database UUIDs from backend into local message state
-  // This runs after streaming completes and backend query has fetched
-  useEffect(() => {
-    if (
-      !setMessages ||
-      !conversation?.messages ||
-      conversation.id !== conversationId ||
-      status === "streaming" ||
-      status === "submitted"
-    ) {
-      return;
-    }
-
-    // Only merge IDs if backend has same or more messages than local state
-    if (conversation.messages.length < messages.length) {
-      return;
-    }
-
-    // Check if any message has a non-UUID ID that needs updating
-    const needsIdUpdate = messages.some((localMsg, idx) => {
-      const backendMsg = conversation.messages[idx] as UIMessage | undefined;
-      return (
-        backendMsg &&
-        backendMsg.id !== localMsg.id &&
-        // Check if backend ID looks like a UUID (has dashes)
-        backendMsg.id.includes("-")
-      );
-    });
-
-    if (!needsIdUpdate) {
-      return;
-    }
-
-    // Merge IDs from backend into local messages
-    const mergedMessages = messages.map((localMsg, idx) => {
-      const backendMsg = conversation.messages[idx] as UIMessage | undefined;
-      if (
-        backendMsg &&
-        backendMsg.id !== localMsg.id &&
-        backendMsg.id.includes("-")
-      ) {
-        // Update only the ID, keep everything else from local state
-        return { ...localMsg, id: backendMsg.id };
-      }
-      return localMsg;
-    });
-
-    setMessages(mergedMessages as UIMessage[]);
-  }, [
-    conversationId,
-    conversation?.messages,
-    conversation?.id,
-    messages,
-    setMessages,
-    status,
   ]);
 
   // Auto-focus textarea when status becomes ready (message sent or stream finished)
@@ -1220,42 +1135,30 @@ export function ChatPageContent({
   }, []);
 
   // Handle creating conversation from browser URL input (when no conversation exists)
-  const handleCreateConversationWithUrl = useCallback(
-    (url: string) => {
-      if (!initialAgentId || createConversationMutation.isPending) {
-        return;
+  const createInitialConversation = useCallback(
+    (onSuccess?: (newConversation: { id: string }) => void | Promise<void>) => {
+      if (createConversationMutation.isPending) {
+        return false;
       }
 
-      if (!initialModel) {
-        return;
-      }
-
-      // Store the URL to navigate to after conversation is created
-      setPendingBrowserUrl(url);
-
-      // Find the provider for the initial model
-      const selectedProvider = getProviderForModelId({
+      const input = buildCreateConversationInput({
+        agentId: initialAgentId,
         modelId: initialModel,
+        chatApiKeyId: initialApiKeyId,
         chatModels,
       });
+      if (!input) {
+        return false;
+      }
 
-      // Create conversation with the selected agent
-      createConversationMutation.mutate(
-        {
-          agentId: initialAgentId,
-          selectedModel: initialModel,
-          selectedProvider,
-          chatApiKeyId: initialApiKeyId,
+      createConversationMutation.mutate(input, {
+        onSuccess: (newConversation) => {
+          if (newConversation) {
+            void onSuccess?.(newConversation);
+          }
         },
-        {
-          onSuccess: (newConversation) => {
-            if (newConversation) {
-              selectConversation(newConversation.id);
-              // URL navigation will happen via useBrowserStream after conversation connects
-            }
-          },
-        },
-      );
+      });
+      return true;
     },
     [
       initialAgentId,
@@ -1263,8 +1166,24 @@ export function ChatPageContent({
       initialApiKeyId,
       chatModels,
       createConversationMutation,
-      selectConversation,
     ],
+  );
+
+  const handleCreateConversationWithUrl = useCallback(
+    (url: string) => {
+      // Store the URL to navigate to after conversation is created
+      setPendingBrowserUrl(url);
+
+      const started = createInitialConversation((newConversation) => {
+        selectConversation(newConversation.id);
+        // URL navigation will happen via useBrowserStream after conversation connects
+      });
+
+      if (!started) {
+        setPendingBrowserUrl(undefined);
+      }
+    },
+    [createInitialConversation, selectConversation],
   );
 
   // Callback to clear pending browser URL after navigation completes
@@ -1331,81 +1250,62 @@ export function ChatPageContent({
       // Check if there are pending tool actions to apply
       const pendingActions = getPendingActions(initialAgentId);
 
-      // Find the provider for the initial model
-      const selectedProvider = getProviderForModelId({
-        modelId: initialModel,
-        chatModels,
-      });
+      createInitialConversation(async (newConversation) => {
+        // Apply pending tool actions if any
+        if (pendingActions.length > 0) {
+          // Get the default enabled tools from the conversation (backend sets these)
+          // We need to fetch them first to apply our pending actions on top
+          try {
+            // The backend creates conversation with default enabled tools
+            // We need to apply pending actions to modify that default
+            const enabledToolsResult = await fetchConversationEnabledTools(
+              newConversation.id,
+            );
+            if (enabledToolsResult?.data) {
+              const baseEnabledToolIds =
+                enabledToolsResult.data.enabledToolIds || [];
+              const newEnabledToolIds = applyPendingActions(
+                baseEnabledToolIds,
+                pendingActions,
+              );
 
-      // Create conversation with the selected agent and prompt
-      createConversationMutation.mutate(
-        {
-          agentId: initialAgentId,
-          selectedModel: initialModel,
-          selectedProvider,
-          chatApiKeyId: initialApiKeyId,
-        },
-        {
-          onSuccess: async (newConversation) => {
-            if (newConversation) {
-              // Apply pending tool actions if any
-              if (pendingActions.length > 0) {
-                // Get the default enabled tools from the conversation (backend sets these)
-                // We need to fetch them first to apply our pending actions on top
-                try {
-                  // The backend creates conversation with default enabled tools
-                  // We need to apply pending actions to modify that default
-                  const enabledToolsResult =
-                    await fetchConversationEnabledTools(newConversation.id);
-                  if (enabledToolsResult?.data) {
-                    const baseEnabledToolIds =
-                      enabledToolsResult.data.enabledToolIds || [];
-                    const newEnabledToolIds = applyPendingActions(
-                      baseEnabledToolIds,
-                      pendingActions,
-                    );
+              // Pre-populate the query cache so useConversationEnabledTools
+              // immediately sees the correct state when conversationId is set.
+              // Without this, the hook would briefly see default data (with
+              // Playwright tools still enabled) causing flickering.
+              queryClient.setQueryData(
+                ["conversation", newConversation.id, "enabled-tools"],
+                {
+                  hasCustomSelection: true,
+                  enabledToolIds: newEnabledToolIds,
+                },
+              );
 
-                    // Pre-populate the query cache so useConversationEnabledTools
-                    // immediately sees the correct state when conversationId is set.
-                    // Without this, the hook would briefly see default data (with
-                    // Playwright tools still enabled) causing flickering.
-                    queryClient.setQueryData(
-                      ["conversation", newConversation.id, "enabled-tools"],
-                      {
-                        hasCustomSelection: true,
-                        enabledToolIds: newEnabledToolIds,
-                      },
-                    );
-
-                    // Update the enabled tools
-                    updateEnabledToolsMutation.mutate({
-                      conversationId: newConversation.id,
-                      toolIds: newEnabledToolIds,
-                    });
-                  }
-                } catch {
-                  // Silently fail - the default tools will be used
-                }
-                // Clear pending actions regardless of success
-                clearPendingActions();
-              }
-
-              selectConversation(newConversation.id);
+              // Update the enabled tools
+              updateEnabledToolsMutation.mutate({
+                conversationId: newConversation.id,
+                toolIds: newEnabledToolIds,
+              });
             }
-          },
-        },
-      );
+          } catch {
+            // Silently fail - the default tools will be used
+          }
+          // Clear pending actions regardless of success
+          clearPendingActions();
+        }
+
+        selectConversation(newConversation.id);
+      });
     },
     [
       isPlaywrightSetupVisible,
       initialAgentId,
       initialModel,
-      initialApiKeyId,
-      chatModels,
-      createConversationMutation,
+      createInitialConversation,
       updateEnabledToolsMutation,
       selectConversation,
       queryClient,
+      createConversationMutation.isPending,
     ],
   );
 
@@ -1439,37 +1339,17 @@ export function ChatPageContent({
     // Store the message to send after conversation is created
     pendingPromptRef.current = initialUserPrompt;
 
-    // Find the provider for the initial model
-    const selectedProvider = getProviderForModelId({
-      modelId: initialModel,
-      chatModels,
+    createInitialConversation((newConversation) => {
+      selectConversation(newConversation.id);
     });
-
-    // Create conversation and send message
-    createConversationMutation.mutate(
-      {
-        agentId: initialAgentId,
-        selectedModel: initialModel,
-        selectedProvider,
-        chatApiKeyId: initialApiKeyId,
-      },
-      {
-        onSuccess: (newConversation) => {
-          if (newConversation) {
-            selectConversation(newConversation.id);
-          }
-        },
-      },
-    );
   }, [
     initialUserPrompt,
     conversationId,
     initialAgentId,
     initialModel,
-    initialApiKeyId,
-    chatModels,
-    createConversationMutation,
+    createInitialConversation,
     selectConversation,
+    createConversationMutation.isPending,
   ]);
 
   // Check if the conversation's agent was deleted

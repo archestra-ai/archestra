@@ -1422,6 +1422,13 @@
       "when": 1775092832669,
       "tag": "0202_special_spiral",
       "breakpoints": true
+    },
+    {
+      "idx": 203,
+      "version": "7",
+      "when": 1775240898368,
+      "tag": "0203_last_killmonger",
+      "breakpoints": true
     }
   ]
 }

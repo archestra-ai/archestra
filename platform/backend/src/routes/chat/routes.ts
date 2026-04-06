@@ -1892,11 +1892,11 @@ async function persistNewMessages(
     // Get existing messages count to know how many are new
     const existingMessages =
       await MessageModel.findByConversation(conversationId);
-    const existingCount = existingMessages.length;
-
-    // Use input messages to find new messages
     const uiMessages = messages as ChatMessage[];
-    const newMessages = uiMessages.slice(existingCount);
+    const newMessages = getMessagesNotYetPersisted({
+      existingMessages,
+      uiMessages,
+    });
 
     if (newMessages.length === 0) {
       return 0;
@@ -1960,6 +1960,41 @@ async function persistNewMessages(
     );
     throw error;
   }
+}
+
+function getMessagesNotYetPersisted(params: {
+  existingMessages: Array<{ id: string; content: unknown }>;
+  uiMessages: ChatMessage[];
+}): ChatMessage[] {
+  const existingIds = new Set<string>();
+
+  for (const message of params.existingMessages) {
+    existingIds.add(message.id);
+
+    // Persisted messages are re-keyed to DB UUIDs when conversations reload, but
+    // in-flight useChat requests can still carry the original temporary content
+    // ids. Track both forms so follow-up turns after swap_agent do not get
+    // dropped just because the incoming thread is shorter than the DB thread.
+    const contentId =
+      typeof message.content === "object" &&
+      message.content !== null &&
+      "id" in message.content &&
+      typeof message.content.id === "string"
+        ? message.content.id
+        : null;
+
+    if (contentId) {
+      existingIds.add(contentId);
+    }
+  }
+
+  return params.uiMessages.filter((message) => {
+    if (!message.id || typeof message.id !== "string") {
+      return true;
+    }
+
+    return !existingIds.has(message.id);
+  });
 }
 
 function prepareMessagesForProvider(params: {
@@ -2138,6 +2173,7 @@ async function validateChatApiKeyAccess(
 }
 
 export const __test = {
+  getMessagesNotYetPersisted,
   prepareMessagesForProvider,
 };
 

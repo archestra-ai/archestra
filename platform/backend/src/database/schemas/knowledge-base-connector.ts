@@ -13,6 +13,7 @@ import type {
   ConnectorSyncStatus,
   ConnectorType,
 } from "@/types";
+import type { KnowledgeSourceVisibility } from "@/types/knowledge-base";
 import knowledgeBasesTable from "./knowledge-base";
 import secretTable from "./secret";
 
@@ -23,6 +24,11 @@ const knowledgeBaseConnectorsTable = pgTable(
     organizationId: text("organization_id").notNull(),
     name: text("name").notNull(),
     description: text("description"),
+    visibility: text("visibility")
+      .$type<KnowledgeSourceVisibility>()
+      .notNull()
+      .default("org-wide"),
+    teamIds: jsonb("team_ids").$type<string[]>().notNull().default([]),
     connectorType: text("connector_type").$type<ConnectorType>().notNull(),
     config: jsonb("config").$type<ConnectorConfig>().notNull(),
     secretId: uuid("secret_id").references(() => secretTable.id, {

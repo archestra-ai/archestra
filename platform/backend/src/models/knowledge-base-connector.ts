@@ -1,4 +1,4 @@
-import { and, count, desc, eq, ilike, inArray, or } from "drizzle-orm";
+import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   InsertKnowledgeBaseConnector,
@@ -15,14 +15,22 @@ class KnowledgeBaseConnectorModel {
     organizationId: string;
     limit?: number;
     offset?: number;
+    canReadAll?: boolean;
+    viewerTeamIds?: string[];
   }): Promise<KnowledgeBaseConnector[]> {
     let query = db
       .select()
       .from(schema.knowledgeBaseConnectorsTable)
       .where(
-        eq(
-          schema.knowledgeBaseConnectorsTable.organizationId,
-          params.organizationId,
+        and(
+          eq(
+            schema.knowledgeBaseConnectorsTable.organizationId,
+            params.organizationId,
+          ),
+          buildVisibilityFilter({
+            canReadAll: params.canReadAll,
+            teamIds: params.viewerTeamIds,
+          }),
         ),
       )
       .orderBy(desc(schema.knowledgeBaseConnectorsTable.createdAt))
@@ -55,12 +63,23 @@ class KnowledgeBaseConnectorModel {
     offset: number;
     search?: string;
     connectorType?: ConnectorType;
+    canReadAll?: boolean;
+    viewerTeamIds?: string[];
   }): Promise<{ data: KnowledgeBaseConnector[]; total: number }> {
-    const { organizationId, limit, offset, search, connectorType } = params;
+    const {
+      organizationId,
+      limit,
+      offset,
+      search,
+      connectorType,
+      canReadAll,
+      viewerTeamIds,
+    } = params;
     const searchPattern = search ? `%${search}%` : null;
 
     const filters = [
       eq(schema.knowledgeBaseConnectorsTable.organizationId, organizationId),
+      buildVisibilityFilter({ canReadAll, teamIds: viewerTeamIds }),
       ...(connectorType
         ? [eq(schema.knowledgeBaseConnectorsTable.connectorType, connectorType)]
         : []),
@@ -96,6 +115,10 @@ class KnowledgeBaseConnectorModel {
 
   static async findByKnowledgeBaseId(
     knowledgeBaseId: string,
+    params?: {
+      canReadAll?: boolean;
+      viewerTeamIds?: string[];
+    },
   ): Promise<KnowledgeBaseConnector[]> {
     return await db
       .select({
@@ -103,6 +126,8 @@ class KnowledgeBaseConnectorModel {
         organizationId: schema.knowledgeBaseConnectorsTable.organizationId,
         name: schema.knowledgeBaseConnectorsTable.name,
         description: schema.knowledgeBaseConnectorsTable.description,
+        visibility: schema.knowledgeBaseConnectorsTable.visibility,
+        teamIds: schema.knowledgeBaseConnectorsTable.teamIds,
         connectorType: schema.knowledgeBaseConnectorsTable.connectorType,
         config: schema.knowledgeBaseConnectorsTable.config,
         secretId: schema.knowledgeBaseConnectorsTable.secretId,
@@ -124,9 +149,15 @@ class KnowledgeBaseConnectorModel {
         ),
       )
       .where(
-        eq(
-          schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
-          knowledgeBaseId,
+        and(
+          eq(
+            schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
+            knowledgeBaseId,
+          ),
+          buildVisibilityFilter({
+            canReadAll: params?.canReadAll,
+            teamIds: params?.viewerTeamIds,
+          }),
         ),
       )
       .orderBy(desc(schema.knowledgeBaseConnectorsTable.createdAt));
@@ -134,6 +165,10 @@ class KnowledgeBaseConnectorModel {
 
   static async findByKnowledgeBaseIds(
     knowledgeBaseIds: string[],
+    params?: {
+      canReadAll?: boolean;
+      viewerTeamIds?: string[];
+    },
   ): Promise<(KnowledgeBaseConnector & { knowledgeBaseId: string })[]> {
     if (knowledgeBaseIds.length === 0) return [];
     return await db
@@ -142,6 +177,8 @@ class KnowledgeBaseConnectorModel {
         organizationId: schema.knowledgeBaseConnectorsTable.organizationId,
         name: schema.knowledgeBaseConnectorsTable.name,
         description: schema.knowledgeBaseConnectorsTable.description,
+        visibility: schema.knowledgeBaseConnectorsTable.visibility,
+        teamIds: schema.knowledgeBaseConnectorsTable.teamIds,
         connectorType: schema.knowledgeBaseConnectorsTable.connectorType,
         config: schema.knowledgeBaseConnectorsTable.config,
         secretId: schema.knowledgeBaseConnectorsTable.secretId,
@@ -165,9 +202,15 @@ class KnowledgeBaseConnectorModel {
         ),
       )
       .where(
-        inArray(
-          schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
-          knowledgeBaseIds,
+        and(
+          inArray(
+            schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
+            knowledgeBaseIds,
+          ),
+          buildVisibilityFilter({
+            canReadAll: params?.canReadAll,
+            teamIds: params?.viewerTeamIds,
+          }),
         ),
       );
   }
@@ -320,3 +363,28 @@ class KnowledgeBaseConnectorModel {
 }
 
 export default KnowledgeBaseConnectorModel;
+
+function buildVisibilityFilter(params: {
+  canReadAll?: boolean;
+  teamIds?: string[];
+}) {
+  if (params.canReadAll) {
+    return undefined;
+  }
+
+  // No access context means "org-wide only" by default; callers must opt into
+  // team-scoped connectors by passing the viewer's team IDs or canReadAll.
+  if (!params.teamIds || params.teamIds.length === 0) {
+    return sql`${schema.knowledgeBaseConnectorsTable.visibility} != 'team-scoped'`;
+  }
+
+  const teamIds = sql.join(
+    params.teamIds.map((teamId) => sql`${teamId}`),
+    sql`, `,
+  );
+
+  return sql`(
+    ${schema.knowledgeBaseConnectorsTable.visibility} != 'team-scoped'
+    OR ${schema.knowledgeBaseConnectorsTable.teamIds} ?| ARRAY[${teamIds}]
+  )`;
+}

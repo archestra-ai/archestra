@@ -87,7 +87,7 @@ describe("checkToolPermission", () => {
   });
 
   test("allows member to use tools they have permission for", async () => {
-    // Members have knowledgeBase:read by default
+    // Members have knowledgeSources:read by default
     const result = await checkToolPermission(
       t("get_knowledge_bases"),
       memberContext,
@@ -102,7 +102,7 @@ describe("checkToolPermission", () => {
     makeCustomRole,
     makeAgent,
   }) => {
-    // Create a user with a custom role that has NO knowledgeBase permissions
+    // Create a user with a custom role that has NO knowledgeSources permissions
     const org = await makeOrganization();
     const user = await makeUser();
     const role = await makeCustomRole(org.id, {
@@ -192,7 +192,7 @@ describe("filterToolNamesByPermission", () => {
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
-    // Custom role with only agent:read — no knowledgeBase permissions
+    // Custom role with only agent:read — no knowledgeSources permissions
     const role = await makeCustomRole(org.id, {
       permission: { agent: ["read"] },
     });
@@ -211,8 +211,8 @@ describe("filterToolNamesByPermission", () => {
 
     expect(result.has(t("whoami"))).toBe(true); // null perm
     expect(result.has(t("get_agent"))).toBe(true); // agent:read ✓
-    expect(result.has(t("create_knowledge_base"))).toBe(false); // knowledgeBase:create ✗
-    expect(result.has(t("get_knowledge_bases"))).toBe(false); // knowledgeBase:read ✗
+    expect(result.has(t("create_knowledge_base"))).toBe(false); // knowledgeSources:create ✗
+    expect(result.has(t("get_knowledge_bases"))).toBe(false); // knowledgeSources:read ✗
   });
 
   test("admin sees all tools", async ({

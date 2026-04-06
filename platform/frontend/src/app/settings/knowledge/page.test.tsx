@@ -1,7 +1,7 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -118,6 +118,16 @@ vi.mock("@/lib/llm-models.query", () => ({
 
 vi.mock("@/lib/config/config.query", () => ({
   useFeature: () => false,
+  useProviderBaseUrls: () => ({
+    data: {},
+  }),
+}));
+
+vi.mock("@/lib/team.query", () => ({
+  useTeams: () => ({
+    data: [],
+    isPending: false,
+  }),
 }));
 
 vi.mock("@/lib/auth/auth.query", () => ({
@@ -478,6 +488,29 @@ describe("KnowledgeSettingsPage", () => {
         ),
       ).not.toBeInTheDocument();
     });
+
+    it("disables the embedding API key selector when embedding config is locked", () => {
+      mockOrganization = {
+        embeddingChatApiKeyId: "key-1",
+        embeddingModel: "text-embedding-3-small",
+        rerankerChatApiKeyId: null,
+        rerankerModel: null,
+      };
+      mockApiKeys = [
+        {
+          id: "key-1",
+          name: "OpenAI Key",
+          provider: "openai",
+          scope: "org",
+        },
+      ];
+
+      renderPage();
+
+      const triggers = screen.getAllByRole("combobox");
+      const embeddingKeyTrigger = triggers[0];
+      expect(embeddingKeyTrigger).toBeDisabled();
+    });
   });
 
   describe("embedding model disabled state", () => {
@@ -586,6 +619,42 @@ describe("KnowledgeSettingsPage", () => {
       // No element should have animate-pulse
       const pulsing = document.querySelectorAll(".animate-pulse");
       expect(pulsing.length).toBe(0);
+    });
+  });
+
+  describe("embedding api key dialog", () => {
+    it("shows provider options for adding an embedding API key", () => {
+      mockOrganization = {
+        embeddingChatApiKeyId: null,
+        embeddingModel: null,
+        rerankerChatApiKeyId: null,
+        rerankerModel: null,
+      };
+
+      renderPage();
+
+      const addButtons = screen.getAllByRole("button", {
+        name: /Add LLM Provider Key/,
+      });
+      fireEvent.click(addButtons[0]);
+
+      const providerTrigger = screen.getByRole("combobox", {
+        name: /Provider/i,
+      });
+      fireEvent.click(providerTrigger);
+
+      expect(
+        screen.getByRole("option", { name: /OpenAI/i }),
+      ).not.toHaveAttribute("data-disabled");
+      expect(
+        screen.getByRole("option", { name: /Ollama/i }),
+      ).not.toHaveAttribute("data-disabled");
+      expect(
+        screen.getByRole("option", { name: /Anthropic/i }),
+      ).not.toHaveAttribute("data-disabled");
+      expect(
+        screen.getByRole("option", { name: /Gemini/i }),
+      ).not.toHaveAttribute("data-disabled");
     });
   });
 

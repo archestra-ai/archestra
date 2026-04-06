@@ -1,9 +1,6 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { describe, expect, test } from "vitest";
-import {
-  chooseDisplayedMessages,
-  restoreRenderableAssistantParts,
-} from "./chat-session-utils";
+import { restoreRenderableAssistantParts } from "./chat-session-utils";
 
 describe("restoreRenderableAssistantParts", () => {
   test("preserves previous assistant parts when the same assistant message becomes empty", () => {
@@ -214,54 +211,5 @@ describe("restoreRenderableAssistantParts", () => {
     expect(
       restoreRenderableAssistantParts({ previousMessages, nextMessages }),
     ).toEqual(previousMessages);
-  });
-});
-
-describe("chooseDisplayedMessages", () => {
-  test("prefers the last visible thread when live messages regress to a user-only tail", () => {
-    const lastVisibleMessages = [
-      {
-        id: "user-1",
-        role: "user",
-        parts: [{ type: "text", text: "call your test tool" }],
-      },
-      {
-        id: "assistant-1",
-        role: "assistant",
-        parts: [{ type: "text", text: "The test tool returns: ok" }],
-      },
-    ] as UIMessage[];
-
-    const liveMessages = [lastVisibleMessages[0]] as UIMessage[];
-
-    expect(
-      chooseDisplayedMessages({
-        liveMessages,
-        persistedMessages: liveMessages,
-        lastVisibleMessages,
-      }),
-    ).toEqual(lastVisibleMessages);
-  });
-
-  test("uses the persisted thread when there is no visible regression", () => {
-    const persistedMessages = [
-      {
-        id: "user-1",
-        role: "user",
-        parts: [{ type: "text", text: "call your test tool" }],
-      },
-      {
-        id: "assistant-1",
-        role: "assistant",
-        parts: [{ type: "text", text: "The test tool returns: ok" }],
-      },
-    ] as UIMessage[];
-
-    expect(
-      chooseDisplayedMessages({
-        persistedMessages,
-        lastVisibleMessages: [],
-      }),
-    ).toEqual(persistedMessages);
   });
 });

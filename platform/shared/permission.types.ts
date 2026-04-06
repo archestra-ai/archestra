@@ -30,7 +30,7 @@ export const resources = [
   "identityProvider",
   "mcpRegistry",
   "mcpServerInstallation",
-  "knowledgeBase",
+  "knowledgeSource",
   "knowledgeSettings",
   "mcpServerInstallationRequest",
   "chat",
@@ -83,7 +83,7 @@ export const resourceLabels: Record<Resource, string> = {
   invitation: "Invitations",
   mcpRegistry: "MCP Registry",
   mcpServerInstallation: "MCP Server Installations",
-  knowledgeBase: "Knowledge Bases",
+  knowledgeSource: "Knowledge Sources",
   knowledgeSettings: "Knowledge Settings",
   mcpServerInstallationRequest: "MCP Server Installation Requests",
   team: "Teams",
@@ -136,8 +136,8 @@ export const resourceDescriptions: Record<Resource, string> = {
   apiKey: "User API keys for programmatic access",
   organizationSettings:
     "Organization settings (appearance, authentication, etc)",
-  knowledgeBase:
-    "Knowledge bases and connectors for RAG-based document retrieval",
+  knowledgeSource:
+    "Knowledge sources including knowledge bases and connectors for RAG-based document retrieval",
   knowledgeSettings:
     "Knowledge settings (embedding and reranking models configuration)",
   simpleView: "Controls if the simple view of the app is enabled",
@@ -178,7 +178,7 @@ export const resourceCategories: Record<string, Resource[]> = {
     "llmSettings",
     "llmCost",
   ],
-  Knowledge: ["knowledgeBase", "knowledgeSettings"],
+  Knowledge: ["knowledgeSource", "knowledgeSettings"],
   Other: [
     "chat",
     "log",

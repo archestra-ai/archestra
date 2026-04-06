@@ -70,6 +70,13 @@ const RENDERABLE_UI_MIME_TYPES = [RESOURCE_MIME_TYPE];
  */
 const MCP_GATEWAY_BASE_URL = `http://localhost:${config.api.port}/v1/mcp`;
 
+// Idle TTL for conversation-scoped MCP clients. These sessions are expensive
+// enough that we do not want them to linger forever after a chat/browser tab
+// is abandoned, but they should survive normal pauses within an active session.
+// Fifteen minutes is long enough to avoid thrashing during typical chat usage
+// while still reclaiming orphaned browser/MCP state within the same workday.
+const CHAT_MCP_CLIENT_IDLE_TTL_MS = 15 * TimeInMs.Minute;
+
 /**
  * Maximum client cache size to prevent unbounded memory growth.
  * Each entry is an MCP Client connection, which consumes resources.
@@ -85,7 +92,7 @@ const MAX_CLIENT_CACHE_SIZE = 500;
  */
 const clientCache = new LRUCacheManager<Client>({
   maxSize: MAX_CLIENT_CACHE_SIZE,
-  defaultTtl: 0, // No TTL - clients remain until evicted or manually removed
+  defaultTtl: CHAT_MCP_CLIENT_IDLE_TTL_MS,
   onEviction: (key: string, client: unknown) => {
     try {
       (client as Client).close();
@@ -182,8 +189,8 @@ function getToolCacheKey(
 }
 
 export const __test = {
-  setCachedClient(cacheKey: string, client: Client) {
-    clientCache.set(cacheKey, client, 0); // No TTL for clients
+  setCachedClient(cacheKey: string, client: Client, ttl?: number) {
+    clientCache.set(cacheKey, client, ttl);
   },
   async clearToolCache(cacheKey?: string) {
     if (cacheKey) {
@@ -464,6 +471,7 @@ export async function getChatMcpClient(
         { agentId, userId },
         "✅ Returning cached MCP client for agent/user (ping succeeded, session will be reused)",
       );
+      clientCache.set(cacheKey, cachedClient);
       return cachedClient;
     } catch (error) {
       // Connection is dead, invalidate cache and create fresh client
@@ -574,8 +582,9 @@ export async function getChatMcpClient(
       "Successfully connected to MCP Gateway (new session initialized)",
     );
 
-    // Cache the client (no TTL - clients remain until evicted or manually removed)
-    clientCache.set(cacheKey, client, 0);
+    // Cache the client with idle expiration to prevent abandoned
+    // conversation-scoped sessions from accumulating indefinitely.
+    clientCache.set(cacheKey, client);
 
     logger.info(
       {

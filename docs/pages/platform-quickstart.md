@@ -13,26 +13,9 @@ This document is human-built, shouldn't be updated with AI. Don't change anythin
 
 -->
 
-👋 Welcome!
-
-Archestra.AI is an open source "AI Platform" for your organization, whether it's a small startup or a large enterprise, helping you build and deploy practical agents that safely operate on internal and external data.
-
-![Agent Platform Swarm](/docs/platform-agents-swarm.png)
-
-Archestra is an open source platform built from multiple components:
-
-- ChatGPT-like UI
-- Agent Builder
-- Powerful MCP orchestrator
-- Unique deterministic security layer (this is important!) preventing agents from going rogue
-
-...and a few others built for those considering Archestra for real-world production, like OTEL exporter, cost tracker, and optimizer.
-
-> Fun fact: The team behind Archestra.AI previously worked on Grafana OnCall.
-
 ## Run it locally to try!
 
-We've prepared a all-in-one Docker image for you. Once it's up, follow http://localhost:3000
+The fact that you're reading this means that you're willing to give it a try. First of all, thank you! We've prepared an all-in-one Docker image and hope it will make the first meeting with Archestra simple and pleasant ☺️ 
 
 **Linux / macOS:**
 
@@ -58,6 +41,8 @@ docker run -p 9000:9000 -p 3000:3000 `
    archestra/platform;
 ```
 
+Once it's up, follow http://localhost:3000
+
 ## Build Your First Agent `Easy`
 
 1. Go to **MCP Registry**, search for `microsoft__playwright-mcp`, install it.
@@ -71,7 +56,7 @@ docker run -p 9000:9000 -p 3000:3000 `
 
 ## Connect to Your Agent via MCP Gateway `Advanced`
 
-Archestra is not just a Chat UI, it's a very capable MCP Gateway. Let's connect our "Archestra Docs Reader Agent" to **Claude Code** to make sure we could trigger it as an MCP server!
+Archestra is not just a Chat UI, it's a very capable MCP Gateway. Let's connect our "Archestra Docs Reader Agent" to **Claude Code** to make sure we can trigger it as an MCP server!
 
 ```mermaid
 graph LR
@@ -108,7 +93,7 @@ I converted it to the command for claude:
 claude mcp add archestra "http://localhost:9000/v1/mcp/e1b0272c-3839-4575-a49d-aabb864d638d" --transport http --header "Authorization: Bearer archestra_119220a7bfc485d66b678d3e9fb2db36"
 ```
 
-, and now ask Claude:
+Now ask Claude:
 
 ```
 Ask archestra to give you all the deployment options.

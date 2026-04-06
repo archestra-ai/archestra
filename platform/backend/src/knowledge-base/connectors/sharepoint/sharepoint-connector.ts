@@ -561,7 +561,12 @@ function getFileExtension(fileName: string): string {
 }
 
 function encodeFolderPath(folderPath: string): string {
-  return folderPath.split("/").map(encodeURIComponent).join("/");
+  // Decode each segment before re-encoding to avoid double-encoding already-escaped
+  // paths like "Shared%20Documents/Reports" → "Shared%2520Documents/Reports".
+  return folderPath
+    .split("/")
+    .map((s) => encodeURIComponent(decodeURIComponent(s)))
+    .join("/");
 }
 
 function isSupportedFile(

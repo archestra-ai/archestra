@@ -509,6 +509,35 @@ describe("SharePointConnector", () => {
       expect(itemsUrl).toContain("root:/Documents/Reports:/delta");
     });
 
+    it("does not double-encode pre-encoded folderPath segments", async () => {
+      const connector = new SharePointConnector();
+      const fetchMock = vi.spyOn(
+        connector as unknown as {
+          fetchWithRetry: (...args: unknown[]) => unknown;
+        },
+        "fetchWithRetry",
+      );
+
+      fetchMock.mockResolvedValueOnce(makeTokenResponse());
+      fetchMock.mockResolvedValueOnce(makeSiteResponse());
+      fetchMock.mockResolvedValueOnce(makeDefaultDriveResponse());
+      fetchMock.mockResolvedValueOnce(makeItemListResponse([]));
+
+      // "Shared%20Documents" is already percent-encoded; the URL must not
+      // become "Shared%2520Documents" after encodeFolderPath re-encodes it.
+      for await (const _ of connector.sync({
+        config: { ...validConfig, folderPath: "Shared%20Documents/Reports" },
+        credentials,
+        checkpoint: null,
+      })) {
+        // consume
+      }
+
+      const itemsUrl = (fetchMock.mock.calls[3] as unknown[])[0] as string;
+      expect(itemsUrl).toContain("root:/Shared%20Documents/Reports:/delta");
+      expect(itemsUrl).not.toContain("%2520");
+    });
+
     it("uses delta query when checkpoint has deltaLink", async () => {
       const connector = new SharePointConnector();
       const fetchMock = vi.spyOn(

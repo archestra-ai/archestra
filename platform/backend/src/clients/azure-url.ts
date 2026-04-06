@@ -24,7 +24,9 @@ export function createAzureFetchWithApiVersion(params: {
   };
 }
 
-export function normalizeAzureApiKey(apiKey: string | undefined): string | undefined {
+export function normalizeAzureApiKey(
+  apiKey: string | undefined,
+): string | undefined {
   if (!apiKey) {
     return apiKey;
   }

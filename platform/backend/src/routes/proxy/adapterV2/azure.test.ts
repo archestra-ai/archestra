@@ -1,4 +1,4 @@
-import OpenAIProvider from "openai";
+import type OpenAIProvider from "openai";
 import { vi } from "vitest";
 import { describe, expect, test } from "@/test";
 

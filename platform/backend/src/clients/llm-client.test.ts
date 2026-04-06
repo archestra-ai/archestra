@@ -240,8 +240,11 @@ describe("createDirectLLMModel", () => {
 
       const fetchWithVersion = capturedCreateOpenAIOptions.fetch;
       expect(fetchWithVersion).toBeDefined();
+      if (!fetchWithVersion) {
+        throw new Error("Expected Azure fetchWithVersion to be configured");
+      }
 
-      await fetchWithVersion!(
+      await fetchWithVersion(
         "https://my-resource.openai.azure.com/openai/deployments/gpt-4o/chat/completions",
         {},
       );
@@ -268,11 +271,14 @@ describe("createDirectLLMModel", () => {
 
       const fetchWithVersion = capturedCreateOpenAIOptions.fetch;
       expect(fetchWithVersion).toBeDefined();
+      if (!fetchWithVersion) {
+        throw new Error("Expected Azure fetchWithVersion to be configured");
+      }
 
       const urlObj = new URL(
         "https://my-resource.openai.azure.com/openai/deployments/gpt-4o/chat/completions",
       );
-      await fetchWithVersion!(urlObj, {});
+      await fetchWithVersion(urlObj, {});
 
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining("api-version="),
@@ -296,11 +302,14 @@ describe("createDirectLLMModel", () => {
 
       const fetchWithVersion = capturedCreateOpenAIOptions.fetch;
       expect(fetchWithVersion).toBeDefined();
+      if (!fetchWithVersion) {
+        throw new Error("Expected Azure fetchWithVersion to be configured");
+      }
 
       const request = new Request(
         "https://my-resource.openai.azure.com/openai/deployments/gpt-4o/chat/completions",
       );
-      await fetchWithVersion!(request, {});
+      await fetchWithVersion(request, {});
 
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining("api-version="),
@@ -324,8 +333,11 @@ describe("createDirectLLMModel", () => {
 
       const fetchWithVersion = capturedCreateOpenAIOptions.fetch;
       expect(fetchWithVersion).toBeDefined();
+      if (!fetchWithVersion) {
+        throw new Error("Expected Azure fetchWithVersion to be configured");
+      }
 
-      await fetchWithVersion!(
+      await fetchWithVersion(
         "https://my-resource.openai.azure.com/openai/deployments/gpt-4o/chat/completions",
         {},
       );

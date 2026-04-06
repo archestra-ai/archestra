@@ -36,22 +36,24 @@ RUN uv pip sync \
 # Node.js stage
 FROM ${NODE_IMAGE} AS node-builder
 
-# Upgrade npm to a version whose bundled dependencies already include the tar/minimatch fixes
-RUN npm install -g npm@11.12.0
+# Enable pnpm via corepack (avoids npm and its bundled transitive CVEs like picomatch)
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 
 WORKDIR /opt/node-deps
 
 # Copy package manifests for the MCP Node.js runtime dependencies.
 # Security-sensitive transitive packages are constrained in package.json overrides
 # where they still affect the resolved dependency graph.
-COPY package.json package-lock.json ./
+COPY package.json pnpm-lock.yaml ./
 
-RUN npm ci
+RUN pnpm install --frozen-lockfile
 
 # Final stage - minimal runtime image with Python 3.12
 FROM ${PYTHON_IMAGE}
 
-# Install runtime dependencies only (npm copied from node-builder stage to avoid Alpine CVE)
+# Install runtime dependencies only
 RUN apk add --no-cache \
    nodejs \
    libstdc++ \
@@ -81,13 +83,14 @@ RUN apk add --no-cache \
    # CVE-2025-61732: Go vulnerability fixed in 1.25.7-r0
    # CVE-2026-22184: zlib vulnerability fixed in 1.3.2-r0
    # CVE-2026-32767: expat XML parser vulnerability
-   apk upgrade --no-cache nodejs bind openssl go zlib expat
+   apk upgrade --no-cache nodejs bind openssl go zlib expat && \
+   # Remove Alpine's npm/npx to avoid bundled transitive CVEs (use pnpm instead)
+   rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx 2>/dev/null || true
 
-# Copy npm from node-builder stage to avoid Alpine's vulnerable npm package
-# node:20-alpine has npm in /usr/local/lib/node_modules/npm
-COPY --from=node-builder /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
-RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
-    ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
+# Copy pnpm from node-builder stage (avoids npm's bundled transitive CVEs)
+COPY --from=node-builder /pnpm /pnpm
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
 
 # Upgrade system pip to fix CVE-2025-8869 (Link Following vulnerability in pip <= 25.2)
 RUN pip install --upgrade pip>=25.3

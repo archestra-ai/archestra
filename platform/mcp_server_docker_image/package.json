@@ -2,15 +2,18 @@
   "name": "mcp-server-deps",
   "description": "Node.js dependencies for MCP server base image",
   "private": true,
+  "packageManager": "pnpm@10.33.0",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
     "typescript": "^5.9.3",
     "zod": "^4.3.6",
     "express": "^5.2.1"
   },
-  "overrides": {
-    "cross-spawn": ">=7.0.6",
-    "hono": ">=4.12.2",
-    "path-to-regexp": ">=8.4.0"
+  "pnpm": {
+    "overrides": {
+      "cross-spawn": ">=7.0.6",
+      "hono": ">=4.12.2",
+      "path-to-regexp": ">=8.4.0"
+    }
   }
 }

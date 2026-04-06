@@ -419,6 +419,7 @@ class ModelsDevClient {
       zhipuai: ["zhipuai/"],
       deepseek: ["deepseek/"],
       minimax: ["minimax/"],
+      azure: ["azure/"],
     };
 
     const getSourcePriority = (model: CreateModel): number => {

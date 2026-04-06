@@ -1,4 +1,5 @@
 import anthropicProxyRoutesV2 from "./proxy/routesv2/anthropic";
+import azureProxyRoutesV2 from "./proxy/routesv2/azure";
 import bedrockProxyRoutesV2 from "./proxy/routesv2/bedrock";
 import cerebrasProxyRoutesV2 from "./proxy/routesv2/cerebras";
 import cohereProxyRoutesV2 from "./proxy/routesv2/cohere";
@@ -48,6 +49,7 @@ export { default as organizationRoleRoutes } from "./organization-role";
 export { default as virtualApiKeysRoutes } from "./virtual-api-keys";
 // Proxy routes
 export const anthropicProxyRoutes = anthropicProxyRoutesV2;
+export const azureProxyRoutes = azureProxyRoutesV2;
 export const cerebrasProxyRoutes = cerebrasProxyRoutesV2;
 export const cohereProxyRoutes = cohereProxyRoutesV2;
 export const geminiProxyRoutes = geminiProxyRoutesV2;

@@ -91,6 +91,11 @@ const PROVIDER_CONFIG: Record<
     label: providerDisplayNames.bedrock,
     originalUrl: "https://bedrock-runtime.your-region.amazonaws.com/",
   },
+  azure: {
+    label: providerDisplayNames.azure,
+    originalUrl:
+      "https://<resource>.openai.azure.com/openai/deployments/<deployment>/",
+  },
   "claude-code": { label: "Claude Code", isCommand: true },
 };
 

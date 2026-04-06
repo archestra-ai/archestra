@@ -201,6 +201,17 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://www.minimax.io/",
     consoleName: "MiniMax Platform",
   },
+  azure: {
+    name: "Azure AI Foundry",
+    icon: "/icons/azure.png",
+    placeholder: "your-azure-openai-api-key",
+    enabled: true,
+    consoleUrl:
+      "https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/OpenAI",
+    consoleName: "Azure Portal",
+    description:
+      "Set Base URL to: https://<resource>.openai.azure.com/openai/deployments/<deployment>",
+  },
 } as const;
 
 export { PROVIDER_CONFIG };

@@ -423,6 +423,38 @@ describe("SharePointConnector", () => {
       expect(batches[0].documents).toHaveLength(2);
     });
 
+    it("resolves default drive via /drive endpoint, not /drives index 0", async () => {
+      const connector = new SharePointConnector();
+      const fetchMock = vi.spyOn(
+        connector as unknown as {
+          fetchWithRetry: (...args: unknown[]) => unknown;
+        },
+        "fetchWithRetry",
+      );
+
+      fetchMock.mockResolvedValueOnce(makeTokenResponse());
+      fetchMock.mockResolvedValueOnce(makeSiteResponse());
+      fetchMock.mockResolvedValueOnce(makeDefaultDriveResponse("default-drive-id"));
+      fetchMock.mockResolvedValueOnce(makeItemListResponse([]));
+
+      for await (const _ of connector.sync({
+        config: validConfig, // no explicit driveId
+        credentials,
+        checkpoint: null,
+      })) {
+        // consume
+      }
+
+      // Third call should be /drive (singular), not /drives (plural)
+      const driveUrl = (fetchMock.mock.calls[2] as unknown[])[0] as string;
+      expect(driveUrl).toContain("/sites/");
+      expect(driveUrl).toMatch(/\/drive$/);
+      expect(driveUrl).not.toContain("/drives");
+      // Items URL should use the resolved drive id
+      const itemsUrl = (fetchMock.mock.calls[3] as unknown[])[0] as string;
+      expect(itemsUrl).toContain("default-drive-id");
+    });
+
     it("uses driveId from config when provided", async () => {
       const connector = new SharePointConnector();
       const fetchMock = vi.spyOn(

@@ -13,7 +13,7 @@ WITH ranked AS (
   FROM agents
   WHERE slug IS NOT NULL
 )
-UPDATE agents SET slug = agents.slug || '-' || substr(md5(random()::text), 1, 6)
+UPDATE agents SET slug = agents.slug || '-' || substr(gen_random_uuid()::text, 1, 6)
 FROM ranked
 WHERE agents.id = ranked.id AND ranked.rn > 1;
 

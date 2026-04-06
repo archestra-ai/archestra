@@ -167,15 +167,12 @@ class AgentModel {
         ? await AgentModel.generateUniqueSlug(agent.name)
         : undefined;
 
-    const [createdAgent] = await db
-      .insert(schema.agentsTable)
-      .values({
-        ...agent,
-        organizationId,
-        ...(slug && { slug }),
-        ...(authorId && { authorId }),
-      })
-      .returning();
+    const [createdAgent] = await AgentModel.insertWithSlugRetry({
+      ...agent,
+      organizationId,
+      ...(slug && { slug }),
+      ...(authorId && { authorId }),
+    });
 
     // Assign teams to the agent if provided
     if (teams && teams.length > 0) {
@@ -1514,21 +1511,18 @@ class AgentModel {
 
   /**
    * Resolve a UUID or slug to an agent ID.
-   * Returns the ID directly if the input is a valid UUID (fast path).
-   * Otherwise, looks up the agent by slug.
+   * Checks both the id and slug columns in a single query.
    */
   static async resolveIdFromIdOrSlug(idOrSlug: string): Promise<string | null> {
-    // Fast path: if it looks like a UUID, return as-is
-    const uuidRegex =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (uuidRegex.test(idOrSlug)) {
-      return idOrSlug;
-    }
-
     const [row] = await db
       .select({ id: schema.agentsTable.id })
       .from(schema.agentsTable)
-      .where(eq(schema.agentsTable.slug, idOrSlug))
+      .where(
+        or(
+          sql`${schema.agentsTable.id}::text = ${idOrSlug}`,
+          eq(schema.agentsTable.slug, idOrSlug),
+        ),
+      )
       .limit(1);
 
     return row?.id ?? null;
@@ -1536,19 +1530,45 @@ class AgentModel {
 
   private static async generateUniqueSlug(name: string): Promise<string> {
     const baseSlug = urlSlugify(name) || "agent";
-    let slug = baseSlug;
 
     const [existing] = await db
       .select({ id: schema.agentsTable.id })
       .from(schema.agentsTable)
-      .where(eq(schema.agentsTable.slug, slug))
+      .where(eq(schema.agentsTable.slug, baseSlug))
       .limit(1);
 
     if (existing) {
-      slug = `${baseSlug}-${crypto.randomUUID().slice(0, 6)}`;
+      return `${baseSlug}-${crypto.randomUUID().slice(0, 6)}`;
     }
 
-    return slug;
+    return baseSlug;
+  }
+
+  private static async insertWithSlugRetry(
+    values: typeof schema.agentsTable.$inferInsert,
+  ) {
+    const maxRetries = 3;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        return await db
+          .insert(schema.agentsTable)
+          .values(values)
+          .returning();
+      } catch (error: unknown) {
+        const isSlugConflict =
+          error instanceof Error &&
+          error.message.includes("agents_slug_idx");
+        if (!isSlugConflict || !values.slug || attempt === maxRetries - 1) {
+          throw error;
+        }
+        const baseSlug = values.slug.replace(/-[a-f0-9]{6}$/, "");
+        values = {
+          ...values,
+          slug: `${baseSlug}-${crypto.randomUUID().slice(0, 6)}`,
+        };
+      }
+    }
+    throw new Error("Unreachable");
   }
 }
 

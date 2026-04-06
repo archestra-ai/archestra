@@ -2580,10 +2580,21 @@ describe("AgentModel", () => {
   });
 
   describe("resolveIdFromIdOrSlug", () => {
-    test("returns UUID as-is for valid UUID input", async () => {
+    test("returns null for non-existent UUID", async () => {
       const uuid = "f47ac10b-58cc-4372-a567-0e02b2c3d479";
       const result = await AgentModel.resolveIdFromIdOrSlug(uuid);
-      expect(result).toBe(uuid);
+      expect(result).toBeNull();
+    });
+
+    test("returns ID for existing UUID", async () => {
+      const agent = await AgentModel.create({
+        name: "UUID Resolve Test",
+        agentType: "mcp_gateway",
+        teams: [],
+        scope: "org",
+      });
+      const result = await AgentModel.resolveIdFromIdOrSlug(agent.id);
+      expect(result).toBe(agent.id);
     });
 
     test("resolves slug to agent ID", async () => {

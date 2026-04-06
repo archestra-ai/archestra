@@ -52,12 +52,10 @@ function makeSiteResponse(siteId = "contoso.sharepoint.com,site-id-123") {
   } as unknown as Response;
 }
 
-function makeDrivesResponse(driveIds = ["drive-abc"]) {
+function makeDefaultDriveResponse(driveId = "drive-abc") {
   return {
     ok: true,
-    json: async () => ({
-      value: driveIds.map((id) => ({ id })),
-    }),
+    json: async () => ({ id: driveId }),
   } as unknown as Response;
 }
 
@@ -140,6 +138,33 @@ describe("SharePointConnector", () => {
       });
 
       expect(result.success).toBe(true);
+    });
+
+    it("does not double-encode percent-encoded characters in site URL path", async () => {
+      const connector = new SharePointConnector();
+      const fetchMock = vi.spyOn(
+        connector as unknown as {
+          fetchWithRetry: (...args: unknown[]) => unknown;
+        },
+        "fetchWithRetry",
+      );
+
+      fetchMock.mockResolvedValueOnce(makeTokenResponse());
+      fetchMock.mockResolvedValueOnce(makeSiteResponse());
+
+      await connector.testConnection({
+        // siteUrl with a space that gets percent-encoded by the URL constructor
+        config: {
+          ...validConfig,
+          siteUrl: "https://contoso.sharepoint.com/sites/my%20team",
+        },
+        credentials,
+      });
+
+      // The Graph API URL must contain "my%20team", NOT double-encoded "my%2520team"
+      const siteUrl = (fetchMock.mock.calls[1] as unknown[])[0] as string;
+      expect(siteUrl).toContain("my%20team");
+      expect(siteUrl).not.toContain("my%2520team");
     });
 
     it("returns failure on invalid credentials", async () => {
@@ -250,10 +275,10 @@ describe("SharePointConnector", () => {
         makeDriveItem("item-2", "notes.md"),
       ];
 
-      // token -> site -> drives -> items list -> content x2
+      // token -> site -> default drive -> items list -> content x2
       fetchMock.mockResolvedValueOnce(makeTokenResponse());
       fetchMock.mockResolvedValueOnce(makeSiteResponse());
-      fetchMock.mockResolvedValueOnce(makeDrivesResponse());
+      fetchMock.mockResolvedValueOnce(makeDefaultDriveResponse());
       fetchMock.mockResolvedValueOnce(makeItemListResponse(items));
       fetchMock.mockResolvedValueOnce(makeContentResponse("Report content"));
       fetchMock.mockResolvedValueOnce(makeContentResponse("Notes content"));
@@ -298,7 +323,7 @@ describe("SharePointConnector", () => {
 
       fetchMock.mockResolvedValueOnce(makeTokenResponse());
       fetchMock.mockResolvedValueOnce(makeSiteResponse());
-      fetchMock.mockResolvedValueOnce(makeDrivesResponse());
+      fetchMock.mockResolvedValueOnce(makeDefaultDriveResponse());
       fetchMock.mockResolvedValueOnce(makeItemListResponse(items as never));
       fetchMock.mockResolvedValueOnce(makeContentResponse("Report text"));
 
@@ -329,7 +354,7 @@ describe("SharePointConnector", () => {
 
       fetchMock.mockResolvedValueOnce(makeTokenResponse());
       fetchMock.mockResolvedValueOnce(makeSiteResponse());
-      fetchMock.mockResolvedValueOnce(makeDrivesResponse());
+      fetchMock.mockResolvedValueOnce(makeDefaultDriveResponse());
       // First page with nextLink
       fetchMock.mockResolvedValueOnce(
         makeItemListResponse([item1], {
@@ -378,7 +403,7 @@ describe("SharePointConnector", () => {
 
       fetchMock.mockResolvedValueOnce(makeTokenResponse());
       fetchMock.mockResolvedValueOnce(makeSiteResponse());
-      fetchMock.mockResolvedValueOnce(makeDrivesResponse());
+      fetchMock.mockResolvedValueOnce(makeDefaultDriveResponse());
       fetchMock.mockResolvedValueOnce(makeItemListResponse(items));
       fetchMock.mockResolvedValueOnce(makeContentResponse("Content A"));
       fetchMock.mockResolvedValueOnce(makeContentResponse("Content B"));
@@ -437,7 +462,7 @@ describe("SharePointConnector", () => {
 
       fetchMock.mockResolvedValueOnce(makeTokenResponse());
       fetchMock.mockResolvedValueOnce(makeSiteResponse());
-      fetchMock.mockResolvedValueOnce(makeDrivesResponse());
+      fetchMock.mockResolvedValueOnce(makeDefaultDriveResponse());
       fetchMock.mockResolvedValueOnce(makeItemListResponse([]));
 
       for await (const _ of connector.sync({
@@ -467,7 +492,7 @@ describe("SharePointConnector", () => {
 
       fetchMock.mockResolvedValueOnce(makeTokenResponse());
       fetchMock.mockResolvedValueOnce(makeSiteResponse());
-      fetchMock.mockResolvedValueOnce(makeDrivesResponse());
+      fetchMock.mockResolvedValueOnce(makeDefaultDriveResponse());
       // Delta response
       fetchMock.mockResolvedValueOnce(
         makeItemListResponse([item], {
@@ -520,7 +545,7 @@ describe("SharePointConnector", () => {
 
       fetchMock.mockResolvedValueOnce(makeTokenResponse());
       fetchMock.mockResolvedValueOnce(makeSiteResponse());
-      fetchMock.mockResolvedValueOnce(makeDrivesResponse());
+      fetchMock.mockResolvedValueOnce(makeDefaultDriveResponse());
       fetchMock.mockResolvedValueOnce(makeItemListResponse(items));
       fetchMock.mockResolvedValueOnce(makeContentResponse("Good content"));
       fetchMock.mockResolvedValueOnce({
@@ -564,7 +589,7 @@ describe("SharePointConnector", () => {
 
       fetchMock.mockResolvedValueOnce(makeTokenResponse());
       fetchMock.mockResolvedValueOnce(makeSiteResponse());
-      fetchMock.mockResolvedValueOnce(makeDrivesResponse());
+      fetchMock.mockResolvedValueOnce(makeDefaultDriveResponse());
       fetchMock.mockResolvedValueOnce(makeItemListResponse(items));
       fetchMock.mockResolvedValueOnce(makeContentResponse("First"));
       fetchMock.mockResolvedValueOnce(makeContentResponse("Second"));
@@ -594,7 +619,7 @@ describe("SharePointConnector", () => {
 
       fetchMock.mockResolvedValueOnce(makeTokenResponse());
       fetchMock.mockResolvedValueOnce(makeSiteResponse());
-      fetchMock.mockResolvedValueOnce(makeDrivesResponse());
+      fetchMock.mockResolvedValueOnce(makeDefaultDriveResponse());
       fetchMock.mockResolvedValueOnce(makeItemListResponse([]));
 
       const batches: ConnectorSyncBatch[] = [];
@@ -624,7 +649,7 @@ describe("SharePointConnector", () => {
 
       fetchMock.mockResolvedValueOnce(makeTokenResponse());
       fetchMock.mockResolvedValueOnce(makeSiteResponse());
-      fetchMock.mockResolvedValueOnce(makeDrivesResponse());
+      fetchMock.mockResolvedValueOnce(makeDefaultDriveResponse());
       fetchMock.mockResolvedValueOnce({
         ok: false,
         status: 403,
@@ -659,7 +684,7 @@ describe("SharePointConnector", () => {
 
       fetchMock.mockResolvedValueOnce(makeTokenResponse());
       fetchMock.mockResolvedValueOnce(makeSiteResponse());
-      fetchMock.mockResolvedValueOnce(makeDrivesResponse());
+      fetchMock.mockResolvedValueOnce(makeDefaultDriveResponse());
       fetchMock.mockResolvedValueOnce(makeItemListResponse([item]));
       fetchMock.mockResolvedValueOnce(makeContentResponse("Report text"));
 
@@ -697,7 +722,7 @@ describe("SharePointConnector", () => {
 
       fetchMock.mockResolvedValueOnce(makeTokenResponse());
       fetchMock.mockResolvedValueOnce(makeSiteResponse());
-      fetchMock.mockResolvedValueOnce(makeDrivesResponse());
+      fetchMock.mockResolvedValueOnce(makeDefaultDriveResponse());
       fetchMock.mockResolvedValueOnce(makeItemListResponse(items));
       // Only .pdf should be downloaded
       fetchMock.mockResolvedValueOnce(makeContentResponse("PDF content"));
@@ -728,7 +753,7 @@ describe("SharePointConnector", () => {
 
       fetchMock.mockResolvedValueOnce(makeTokenResponse());
       fetchMock.mockResolvedValueOnce(makeSiteResponse());
-      fetchMock.mockResolvedValueOnce(makeDrivesResponse());
+      fetchMock.mockResolvedValueOnce(makeDefaultDriveResponse());
       // First page: only nextLink (no deltaLink yet — mid-pagination)
       fetchMock.mockResolvedValueOnce(
         makeItemListResponse([item1], {
@@ -772,7 +797,7 @@ describe("SharePointConnector", () => {
 
       fetchMock.mockResolvedValueOnce(makeTokenResponse());
       fetchMock.mockResolvedValueOnce(makeSiteResponse());
-      fetchMock.mockResolvedValueOnce(makeDrivesResponse());
+      fetchMock.mockResolvedValueOnce(makeDefaultDriveResponse());
       // Resume from nextLink page — returns deltaLink on this final page
       fetchMock.mockResolvedValueOnce(
         makeItemListResponse([item2], {
@@ -821,7 +846,7 @@ describe("SharePointConnector", () => {
 
       fetchMock.mockResolvedValueOnce(makeTokenResponse());
       fetchMock.mockResolvedValueOnce(makeSiteResponse());
-      fetchMock.mockResolvedValueOnce(makeDrivesResponse());
+      fetchMock.mockResolvedValueOnce(makeDefaultDriveResponse());
       // Resume from nextLink — final page returns new deltaLink
       fetchMock.mockResolvedValueOnce(
         makeItemListResponse([item], {

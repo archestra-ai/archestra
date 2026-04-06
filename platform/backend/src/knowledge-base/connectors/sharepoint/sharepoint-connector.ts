@@ -212,24 +212,24 @@ export class SharePointConnector extends BaseConnector {
     siteId: string,
     token: string,
   ): Promise<string> {
+    // Use /drive (singular) to resolve the default document library directly,
+    // rather than /drives which returns all libraries and picking index 0.
+    // The /drives list is not ordered by "default" and index 0 may resolve to
+    // the wrong library if a site has multiple document libraries.
     const response = await this.fetchWithRetry(
-      `${GRAPH_API_BASE}/sites/${siteId}/drives`,
+      `${GRAPH_API_BASE}/sites/${siteId}/drive`,
       { headers: buildGraphHeaders(token) },
     );
 
     if (!response.ok) {
       const body = await response.text();
       throw new Error(
-        `Failed to list drives: HTTP ${response.status}: ${body.slice(0, 200)}`,
+        `Failed to get default drive: HTTP ${response.status}: ${body.slice(0, 200)}`,
       );
     }
 
-    const data = (await response.json()) as { value: Array<{ id: string }> };
-    if (!data.value.length) {
-      throw new Error("No document libraries found on this site");
-    }
-
-    return data.value[0].id;
+    const data = (await response.json()) as { id: string };
+    return data.id;
   }
 
   private async *syncDriveItems(params: {
@@ -529,8 +529,14 @@ function parseSiteUrl(siteUrl: string): {
 } {
   const url = new URL(siteUrl);
   const hostname = url.hostname;
-  // Strip leading slash from pathname
-  const serverRelativePath = url.pathname.replace(/^\//, "");
+  // URL.pathname is always percent-encoded (e.g. "my%20team").  Decode each
+  // segment here so callers that re-encode individual segments with
+  // encodeURIComponent() don't produce double-encoded values like "my%2520team".
+  const serverRelativePath = url.pathname
+    .replace(/^\//, "")
+    .split("/")
+    .map((s) => decodeURIComponent(s))
+    .join("/");
   return { hostname, serverRelativePath };
 }
 

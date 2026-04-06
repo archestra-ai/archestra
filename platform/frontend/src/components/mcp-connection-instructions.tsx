@@ -3,6 +3,7 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   type archestraApiTypes,
+  DocsPage,
   parseFullToolName,
 } from "@shared";
 import {
@@ -62,6 +63,8 @@ import {
 import { useFetchUserTokenValue, useUserToken } from "@/lib/user-token.query";
 
 const { externalProxyUrls, internalProxyUrl } = config.api;
+type CredentialResolutionMode =
+  archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number]["credentialResolutionMode"];
 
 interface McpConnectionInstructionsProps {
   agentId: string;
@@ -77,7 +80,10 @@ export function McpConnectionInstructions({
   hideProfileSelector = false,
 }: McpConnectionInstructionsProps) {
   const { catalogName, serverName } = useArchestraMcpIdentity();
-  const mcpAuthDocsUrl = getFrontendDocsUrl("mcp-authentication");
+  const enterpriseGatewayAuthDocsUrl = getFrontendDocsUrl(
+    DocsPage.McpAuthentication,
+    "enterprise-gateway-auth",
+  );
   const { data: profiles = [] } = useProfiles({
     filters: { agentTypes: ["profile", "mcp_gateway"] },
   });
@@ -151,10 +157,7 @@ export function McpConnectionInstructions({
               description?: string | null;
             }>;
             mcpServerId?: string | null;
-            credentialResolutionMode?:
-              | "static"
-              | "dynamic"
-              | "enterprise_managed";
+            credentialResolutionMode?: CredentialResolutionMode;
           }
         >(),
         archestraTools: [] as Array<{
@@ -170,7 +173,7 @@ export function McpConnectionInstructions({
         server: (typeof mcpServers)[number];
         tools: Array<{ id: string; name: string; description?: string | null }>;
         mcpServerId?: string | null;
-        credentialResolutionMode?: "static" | "dynamic" | "enterprise_managed";
+        credentialResolutionMode?: CredentialResolutionMode;
       }
     >();
 
@@ -525,37 +528,10 @@ export function McpConnectionInstructions({
             <TabsTrigger value="static-token" className="flex-1">
               Static Token
             </TabsTrigger>
-            <TabsTrigger value="enterprise-sso" className="flex-1">
-              Enterprise SSO
-            </TabsTrigger>
             <TabsTrigger value="oauth" className="flex-1">
               OAuth 2.1
             </TabsTrigger>
           </TabsList>
-          <p className="text-xs text-muted-foreground">
-            For external identity providers, use{" "}
-            {mcpAuthDocsUrl ? (
-              <>
-                <ExternalDocsLink
-                  href={`${mcpAuthDocsUrl}#enterprise-managed-authorization`}
-                  className="underline hover:text-foreground"
-                  showIcon={false}
-                >
-                  enterprise-managed authorization
-                </ExternalDocsLink>
-                {" or "}
-                <ExternalDocsLink
-                  href={`${mcpAuthDocsUrl}#external-idp-jwks`}
-                  className="underline hover:text-foreground"
-                  showIcon={false}
-                >
-                  JWKS authentication
-                </ExternalDocsLink>
-              </>
-            ) : (
-              "enterprise-managed authorization or JWKS authentication"
-            )}
-          </p>
         </div>
 
         {/* Static Token Tab */}
@@ -693,19 +669,6 @@ export function McpConnectionInstructions({
           </div>
         </TabsContent>
 
-        <TabsContent value="enterprise-sso" className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Use this when your MCP client signs users into your enterprise
-            identity provider and supports the MCP
-            enterprise-managed-authorization flow. The client should obtain an
-            ID-JAG from your IdP and exchange it with the gateway&apos;s token
-            endpoint automatically. You only need the MCP Gateway URL in the
-            client configuration.
-          </p>
-
-          <OAuthConfigBlock mcpUrl={mcpUrl} />
-        </TabsContent>
-
         {/* OAuth 2.1 Tab */}
         <TabsContent value="oauth" className="space-y-4">
           <p className="text-sm text-muted-foreground">
@@ -718,6 +681,20 @@ export function McpConnectionInstructions({
           <OAuthConfigBlock mcpUrl={mcpUrl} />
         </TabsContent>
       </Tabs>
+
+      {config.enterpriseFeatures.core && (
+        <p className="text-sm text-muted-foreground">
+          Enterprise deployments can also authenticate this gateway with ID-JAG
+          or direct JWKS JWTs.{" "}
+          <ExternalDocsLink
+            href={enterpriseGatewayAuthDocsUrl}
+            className="text-sm"
+          >
+            Learn how enterprise gateway auth works
+          </ExternalDocsLink>
+          .
+        </p>
+      )}
     </div>
   );
 }
@@ -777,7 +754,7 @@ interface ReadOnlyMcpServerPillProps {
     name: string;
     description?: string | null;
   }>;
-  credentialResolutionMode?: "static" | "dynamic" | "enterprise_managed";
+  credentialResolutionMode?: CredentialResolutionMode;
 }
 
 function ReadOnlyMcpServerPill({

@@ -16,7 +16,10 @@
  * - Keycloak running (deployed via e2e Helm chart)
  * - WireMock running with jwks-cred-priority-e2e stubs loaded
  */
-import { MCP_SERVER_TOOL_NAME_SEPARATOR, WIREMOCK_INTERNAL_URL } from "../../consts";
+import {
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
+  WIREMOCK_INTERNAL_URL,
+} from "../../consts";
 import { getKeycloakJwt } from "../../utils";
 import { expect, test } from "./fixtures";
 import {
@@ -104,12 +107,10 @@ test.describe("MCP Gateway - JWKS Credential Resolution Priority", () => {
       serverId = mcpServer.id;
 
       // STEP 6: Wait for tool discovery
-      const agentTool = await waitForAgentTool(
-        request,
-        pid,
-        echoAuthToolName,
-        { maxAttempts: 30, delayMs: 2000 },
-      );
+      const agentTool = await waitForAgentTool(request, pid, echoAuthToolName, {
+        maxAttempts: 30,
+        delayMs: 2000,
+      });
       expect(agentTool).toBeDefined();
 
       // STEP 7: Initialize MCP session with the external JWT
@@ -227,12 +228,10 @@ test.describe("MCP Gateway - JWKS Credential Resolution Priority", () => {
       serverId = mcpServer.id;
 
       // STEP 6: Wait for tool discovery
-      const agentTool = await waitForAgentTool(
-        request,
-        pid,
-        echoAuthToolName,
-        { maxAttempts: 30, delayMs: 2000 },
-      );
+      const agentTool = await waitForAgentTool(request, pid, echoAuthToolName, {
+        maxAttempts: 30,
+        delayMs: 2000,
+      });
       expect(agentTool).toBeDefined();
 
       // STEP 7: Initialize MCP session with the external JWT
@@ -259,8 +258,7 @@ test.describe("MCP Gateway - JWKS Credential Resolution Priority", () => {
 
       // Verify the upstream server received a JWT (three dot-separated base64url segments)
       expect(responseText).toContain("RECEIVED_AUTH=Bearer ");
-      const receivedToken = responseText
-        ?.replace("RECEIVED_AUTH=Bearer ", "");
+      const receivedToken = responseText?.replace("RECEIVED_AUTH=Bearer ", "");
       expect(receivedToken?.split(".")).toHaveLength(3);
     } finally {
       if (profileId) {

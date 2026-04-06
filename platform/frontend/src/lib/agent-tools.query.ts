@@ -22,6 +22,9 @@ const {
 type GetAllProfileToolsQueryParams = NonNullable<
   archestraApiTypes.GetAllAgentToolsData["query"]
 >;
+type CredentialResolutionMode = NonNullable<
+  archestraApiTypes.AssignToolToAgentData["body"]
+>["credentialResolutionMode"];
 
 export function useAllProfileTools({
   initialData,
@@ -118,7 +121,7 @@ export function useAssignTool() {
       toolId: string;
       mcpServerId?: string | null;
       resolveAtCallTime?: boolean;
-      credentialResolutionMode?: "static" | "dynamic" | "enterprise_managed";
+      credentialResolutionMode?: CredentialResolutionMode;
       skipInvalidation?: boolean;
     }) => {
       const body =

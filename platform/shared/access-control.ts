@@ -320,8 +320,7 @@ export const permissionDescriptions: Record<string, string> = {
   "knowledgeSource:create": "Create knowledge bases and connectors",
   "knowledgeSource:update": "Modify knowledge bases and connectors",
   "knowledgeSource:delete": "Delete knowledge bases and connectors",
-  "knowledgeSource:query":
-    "Query knowledge sources for information retrieval",
+  "knowledgeSource:query": "Query knowledge sources for information retrieval",
   "knowledgeSource:admin":
     "View all knowledge bases and connectors, bypassing visibility restrictions",
   "knowledgeSettings:read":

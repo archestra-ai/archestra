@@ -22,7 +22,9 @@ async function runDataMigrationStatements() {
     .filter(Boolean);
 
   const dataStatements = rawStatements.filter(
-    (s) => s.toUpperCase().startsWith("UPDATE") || s.toUpperCase().startsWith("WITH"),
+    (s) =>
+      s.toUpperCase().startsWith("UPDATE") ||
+      s.toUpperCase().startsWith("WITH"),
   );
 
   for (const statement of dataStatements) {
@@ -47,9 +49,7 @@ async function insertAgent(params: {
     })
     .returning();
   // Clear slug so we can test the migration populating it
-  await db.execute(
-    sql`UPDATE agents SET slug = NULL WHERE id = ${agent.id}`,
-  );
+  await db.execute(sql`UPDATE agents SET slug = NULL WHERE id = ${agent.id}`);
   return agent;
 }
 
@@ -62,9 +62,7 @@ async function getSlug(agentId: string): Promise<string | null> {
 }
 
 describe("0204 migration: mcp_gateway slug population", () => {
-  test("generates slug from mcp_gateway name", async ({
-    makeOrganization,
-  }) => {
+  test("generates slug from mcp_gateway name", async ({ makeOrganization }) => {
     const org = await makeOrganization();
     const agent = await insertAgent({
       organizationId: org.id,

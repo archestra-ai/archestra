@@ -1550,14 +1550,10 @@ class AgentModel {
     const maxRetries = 3;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        return await db
-          .insert(schema.agentsTable)
-          .values(values)
-          .returning();
+        return await db.insert(schema.agentsTable).values(values).returning();
       } catch (error: unknown) {
         const isSlugConflict =
-          error instanceof Error &&
-          error.message.includes("agents_slug_idx");
+          error instanceof Error && error.message.includes("agents_slug_idx");
         if (!isSlugConflict || !values.slug || attempt === maxRetries - 1) {
           throw error;
         }

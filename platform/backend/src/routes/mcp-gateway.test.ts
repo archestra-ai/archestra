@@ -245,7 +245,11 @@ describe("MCP Gateway (stateless mode)", () => {
     makeOrganization,
   }) => {
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Slug Test Gateway", organizationId: org.id, agentType: "mcp_gateway" });
+    const agent = await makeAgent({
+      name: "Slug Test Gateway",
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+    });
 
     const token = await TeamTokenModel.create({
       organizationId: org.id,
@@ -271,7 +275,11 @@ describe("MCP Gateway (stateless mode)", () => {
     makeOrganization,
   }) => {
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Slug POST Test", organizationId: org.id, agentType: "mcp_gateway" });
+    const agent = await makeAgent({
+      name: "Slug POST Test",
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+    });
 
     const token = await TeamTokenModel.create({
       organizationId: org.id,

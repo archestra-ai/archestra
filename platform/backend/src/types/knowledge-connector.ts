@@ -8,6 +8,7 @@ const GITHUB = z.literal("github");
 const GITLAB = z.literal("gitlab");
 const SERVICENOW = z.literal("servicenow");
 const NOTION = z.literal("notion");
+const SHAREPOINT = z.literal("sharepoint");
 
 export const ConnectorTypeSchema = z.union([
   JIRA,
@@ -16,6 +17,7 @@ export const ConnectorTypeSchema = z.union([
   GITLAB,
   SERVICENOW,
   NOTION,
+  SHAREPOINT,
 ]);
 export type ConnectorType = z.infer<typeof ConnectorTypeSchema>;
 
@@ -172,6 +174,27 @@ export const NotionCheckpointSchema = z.object({
 });
 export type NotionCheckpoint = z.infer<typeof NotionCheckpointSchema>;
 
+// ===== SharePoint Config & Checkpoint =====
+
+export const SharePointConfigSchema = z.object({
+  type: SHAREPOINT,
+  siteUrl: connectorUrlSchema,
+  tenantId: z.string().min(1),
+  clientId: z.string().min(1),
+  driveId: z.string().optional(),
+  folderPath: z.string().optional(),
+  includeFileTypes: z.array(z.string()).optional(),
+  batchSize: z.number().min(1).max(200).optional(),
+});
+export type SharePointConfig = z.infer<typeof SharePointConfigSchema>;
+
+export const SharePointCheckpointSchema = z.object({
+  type: SHAREPOINT,
+  lastSyncedAt: z.string().optional(),
+  deltaLink: z.string().optional(),
+});
+export type SharePointCheckpoint = z.infer<typeof SharePointCheckpointSchema>;
+
 // ===== Discriminated Unions =====
 
 export const ConnectorConfigSchema = z.discriminatedUnion("type", [
@@ -181,6 +204,7 @@ export const ConnectorConfigSchema = z.discriminatedUnion("type", [
   GitlabConfigSchema,
   ServiceNowConfigSchema,
   NotionConfigSchema,
+  SharePointConfigSchema,
 ]);
 export type ConnectorConfig = z.infer<typeof ConnectorConfigSchema>;
 
@@ -191,6 +215,7 @@ export const ConnectorCheckpointSchema = z.discriminatedUnion("type", [
   GitlabCheckpointSchema,
   ServiceNowCheckpointSchema,
   NotionCheckpointSchema,
+  SharePointCheckpointSchema,
 ]);
 export type ConnectorCheckpoint = z.infer<typeof ConnectorCheckpointSchema>;
 

@@ -2605,7 +2605,10 @@ describe("AgentModel", () => {
         scope: "org",
       });
 
-      const result = await AgentModel.resolveIdFromIdOrSlug(agent.slug!);
+      expect(agent.slug).not.toBeNull();
+      const result = await AgentModel.resolveIdFromIdOrSlug(
+        agent.slug as string,
+      );
       expect(result).toBe(agent.id);
     });
 

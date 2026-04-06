@@ -20,7 +20,10 @@ import {
   USER_ID_HEADER,
 } from "@shared";
 import type { streamText } from "ai";
-import { createAzureFetchWithApiVersion } from "@/clients/azure-url";
+import {
+  createAzureFetchWithApiVersion,
+  normalizeAzureApiKey,
+} from "@/clients/azure-url";
 import {
   getBedrockCredentialProvider,
   getBedrockRegion,
@@ -462,10 +465,13 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
         apiVersion: config.llm.azure.apiVersion,
         fetch: providedFetch,
       });
+      const normalizedApiKey = normalizeAzureApiKey(apiKey);
       return createOpenAI({
         apiKey,
         baseURL,
-        headers: { ...headers, "api-key": apiKey ?? "" },
+        headers: normalizedApiKey
+          ? { ...headers, "api-key": normalizedApiKey }
+          : headers,
         fetch: fetchWithVersion,
       }).chat(modelName);
     },

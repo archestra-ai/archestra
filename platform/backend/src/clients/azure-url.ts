@@ -24,6 +24,14 @@ export function createAzureFetchWithApiVersion(params: {
   };
 }
 
+export function normalizeAzureApiKey(apiKey: string | undefined): string | undefined {
+  if (!apiKey) {
+    return apiKey;
+  }
+
+  return apiKey.replace(/^Bearer\s+/i, "");
+}
+
 function getRequestUrl(input: URL | RequestInfo): string {
   if (typeof input === "string") {
     return input;

@@ -1,3 +1,4 @@
+import OpenAIProvider from "openai";
 import { vi } from "vitest";
 import { describe, expect, test } from "@/test";
 
@@ -53,6 +54,32 @@ describe("azureAdapterFactory", () => {
         source: "api",
       });
       expect(client).toBeDefined();
+    });
+
+    test("sets api-key header without the Bearer prefix", () => {
+      const client = azureAdapterFactory.createClient("Bearer my-azure-key", {
+        baseUrl:
+          "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
+        defaultHeaders: {},
+        source: "api",
+      }) as OpenAIProvider & {
+        _options?: { defaultHeaders?: Record<string, string> };
+      };
+
+      expect(client._options?.defaultHeaders?.["api-key"]).toBe("my-azure-key");
+    });
+
+    test("preserves the original key when no Bearer prefix is present", () => {
+      const client = azureAdapterFactory.createClient("my-azure-key", {
+        baseUrl:
+          "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
+        defaultHeaders: {},
+        source: "api",
+      }) as OpenAIProvider & {
+        _options?: { defaultHeaders?: Record<string, string> };
+      };
+
+      expect(client._options?.defaultHeaders?.["api-key"]).toBe("my-azure-key");
     });
   });
 

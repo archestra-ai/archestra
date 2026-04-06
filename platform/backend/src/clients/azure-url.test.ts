@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "@/test";
 import {
   buildAzureDeploymentsUrl,
   createAzureFetchWithApiVersion,
+  normalizeAzureApiKey,
 } from "./azure-url";
 
 describe("buildAzureDeploymentsUrl", () => {
@@ -24,6 +25,36 @@ describe("buildAzureDeploymentsUrl", () => {
         baseUrl: "not-a-valid-url",
       }),
     ).toBeNull();
+  });
+
+  it("handles a single-segment path", () => {
+    expect(
+      buildAzureDeploymentsUrl({
+        apiVersion: "2024-02-01",
+        baseUrl: "https://my-resource.openai.azure.com/gpt-4o",
+      }),
+    ).toBe("https://my-resource.openai.azure.com?api-version=2024-02-01");
+  });
+
+  it("handles a root path URL", () => {
+    expect(
+      buildAzureDeploymentsUrl({
+        apiVersion: "2024-02-01",
+        baseUrl: "https://my-resource.openai.azure.com",
+      }),
+    ).toBe("https://my-resource.openai.azure.com/?api-version=2024-02-01");
+  });
+
+  it("handles paths with trailing slashes", () => {
+    expect(
+      buildAzureDeploymentsUrl({
+        apiVersion: "2024-02-01",
+        baseUrl:
+          "https://my-resource.openai.azure.com/openai/deployments/gpt-4o/",
+      }),
+    ).toBe(
+      "https://my-resource.openai.azure.com/openai/deployments?api-version=2024-02-01",
+    );
   });
 });
 
@@ -84,5 +115,23 @@ describe("createAzureFetchWithApiVersion", () => {
       "https://my-resource.openai.azure.com/openai/deployments/gpt-4o/chat/completions?existing=value&api-version=2024-02-01",
       {},
     );
+  });
+});
+
+describe("normalizeAzureApiKey", () => {
+  it("strips a Bearer prefix", () => {
+    expect(normalizeAzureApiKey("Bearer my-azure-key")).toBe("my-azure-key");
+  });
+
+  it("strips a bearer prefix case-insensitively", () => {
+    expect(normalizeAzureApiKey("bearer my-azure-key")).toBe("my-azure-key");
+  });
+
+  it("returns the original key when no Bearer prefix is present", () => {
+    expect(normalizeAzureApiKey("my-azure-key")).toBe("my-azure-key");
+  });
+
+  it("returns undefined when the key is undefined", () => {
+    expect(normalizeAzureApiKey(undefined)).toBeUndefined();
   });
 });

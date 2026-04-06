@@ -15,6 +15,7 @@ import type {
   ChatCompletionCreateParamsNonStreaming,
   ChatCompletionCreateParamsStreaming,
 } from "openai/resources/chat/completions/completions";
+import { normalizeAzureApiKey } from "@/clients/azure-url";
 import config from "@/config";
 import { metrics } from "@/observability";
 import type {
@@ -230,6 +231,7 @@ export const azureAdapterFactory: LLMProvider<
           options.externalAgentId,
         )
       : undefined;
+    const normalizedApiKey = normalizeAzureApiKey(apiKey);
 
     return new OpenAIProvider({
       apiKey,
@@ -238,7 +240,7 @@ export const azureAdapterFactory: LLMProvider<
       fetch: customFetch,
       defaultHeaders: {
         ...options.defaultHeaders,
-        "api-key": apiKey,
+        "api-key": normalizedApiKey,
       },
     });
   },

@@ -22,6 +22,8 @@ export async function fetchAzureModels(
   }
 
   try {
+    // Azure lists deployments at GET /openai/deployments?api-version=...
+    // and returns { data: [{ id, ... }] }, which we map into ModelInfo.
     const response = await fetch(url, {
       headers: { "api-key": apiKey },
     });

@@ -29,6 +29,7 @@ vi.mock("@ai-sdk/anthropic", () => ({
 // Capture the fetch option passed to createOpenAI for azure fetchWithVersion tests
 const capturedCreateOpenAIOptions = vi.hoisted(() => ({
   fetch: undefined as typeof globalThis.fetch | undefined,
+  headers: undefined as Record<string, string> | undefined,
 }));
 vi.mock("@ai-sdk/openai", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@ai-sdk/openai")>();
@@ -38,6 +39,9 @@ vi.mock("@ai-sdk/openai", async (importOriginal) => {
       capturedCreateOpenAIOptions.fetch = (
         options as { fetch?: typeof globalThis.fetch }
       ).fetch;
+      capturedCreateOpenAIOptions.headers = (
+        options as { headers?: Record<string, string> }
+      ).headers;
       return actual.createOpenAI(options);
     },
   };
@@ -239,6 +243,26 @@ describe("createDirectLLMModel", () => {
       baseUrl: "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
     });
     expect(model).toBeDefined();
+    expect(capturedCreateOpenAIOptions.headers).toEqual(
+      expect.objectContaining({
+        "api-key": "test-key",
+      }),
+    );
+  });
+
+  it("strips a Bearer prefix before setting the azure api-key header", () => {
+    createDirectLLMModel({
+      provider: "azure",
+      apiKey: "Bearer test-key",
+      modelName: "gpt-4o",
+      baseUrl: "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
+    });
+
+    expect(capturedCreateOpenAIOptions.headers).toEqual(
+      expect.objectContaining({
+        "api-key": "test-key",
+      }),
+    );
   });
 
   // createDirectLLMModel doesn't expose a `fetch` parameter — the azure createModel

@@ -12,7 +12,6 @@ import {
   type SupportedProvider,
   SupportedProviders,
   testMcpServerCommand,
-  urlSlugify,
 } from "@shared";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import config, { getProviderEnvApiKey } from "@/config";
@@ -113,7 +112,6 @@ export async function syncBuiltInAgents(): Promise<void> {
         await db.insert(schema.agentsTable).values({
           organizationId: organization.id,
           name: builtInAgent.name,
-          slug: `${urlSlugify(builtInAgent.name)}-${crypto.randomUUID().slice(0, 6)}`,
           agentType: "agent",
           scope: "org",
           description: builtInAgent.description,

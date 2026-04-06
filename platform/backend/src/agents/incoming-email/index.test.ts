@@ -44,7 +44,6 @@ async function createTestInternalAgent(
       id: crypto.randomUUID(),
       organizationId,
       name: `Test Internal Agent ${suffix}`,
-      slug: `test-internal-agent-${suffix}`,
       agentType: "agent",
       systemPrompt: "You are a helpful assistant",
       scope: options?.scope ?? "org",

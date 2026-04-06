@@ -2526,9 +2526,10 @@ describe("AgentModel", () => {
   });
 
   describe("slug generation", () => {
-    test("generates slug from name on creation", async () => {
+    test("generates slug from name for mcp_gateway", async () => {
       const agent = await AgentModel.create({
         name: "My Test Gateway",
+        agentType: "mcp_gateway",
         teams: [],
         scope: "org",
       });
@@ -2536,14 +2537,27 @@ describe("AgentModel", () => {
       expect(agent.slug).toBe("my-test-gateway");
     });
 
+    test("does not generate slug for non-mcp_gateway agents", async () => {
+      const agent = await AgentModel.create({
+        name: "My Agent",
+        agentType: "agent",
+        teams: [],
+        scope: "org",
+      });
+
+      expect(agent.slug).toBeNull();
+    });
+
     test("generates unique slug when name collides", async () => {
       const agent1 = await AgentModel.create({
         name: "Duplicate Name",
+        agentType: "mcp_gateway",
         teams: [],
         scope: "org",
       });
       const agent2 = await AgentModel.create({
         name: "Duplicate Name",
+        agentType: "mcp_gateway",
         teams: [],
         scope: "org",
       });
@@ -2556,6 +2570,7 @@ describe("AgentModel", () => {
     test("handles special characters in name", async () => {
       const agent = await AgentModel.create({
         name: "Test @#$ Gateway!",
+        agentType: "mcp_gateway",
         teams: [],
         scope: "org",
       });
@@ -2574,11 +2589,12 @@ describe("AgentModel", () => {
     test("resolves slug to agent ID", async () => {
       const agent = await AgentModel.create({
         name: "Slug Resolve Test",
+        agentType: "mcp_gateway",
         teams: [],
         scope: "org",
       });
 
-      const result = await AgentModel.resolveIdFromIdOrSlug(agent.slug);
+      const result = await AgentModel.resolveIdFromIdOrSlug(agent.slug!);
       expect(result).toBe(agent.id);
     });
 

@@ -6,7 +6,7 @@ import type { AgentScope, AgentType } from "@/types";
 type MockAgentRaw = {
   id: string;
   name: string;
-  slug: string;
+  slug: string | null;
   organizationId: string;
   authorId: string | null;
   scope: AgentScope;
@@ -49,7 +49,7 @@ export function generateMockAgents(
       agents.push({
         id: randomUUID(),
         name,
-        slug: urlSlugify(name),
+        slug: params.agentType === "mcp_gateway" ? urlSlugify(name) : null,
         organizationId: params.organizationId,
         authorId: user.id,
         scope: "personal",
@@ -69,7 +69,7 @@ export function generateMockAgents(
       agents.push({
         id: randomUUID(),
         name,
-        slug: urlSlugify(name),
+        slug: params.agentType === "mcp_gateway" ? urlSlugify(name) : null,
         organizationId: params.organizationId,
         authorId: null,
         scope: "team",
@@ -88,7 +88,7 @@ export function generateMockAgents(
     agents.push({
       id: randomUUID(),
       name,
-      slug: urlSlugify(name),
+      slug: params.agentType === "mcp_gateway" ? urlSlugify(name) : null,
       organizationId: params.organizationId,
       authorId: null,
       scope: "org",

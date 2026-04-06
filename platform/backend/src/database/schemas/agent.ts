@@ -44,7 +44,7 @@ const agentsTable = pgTable(
     }),
     scope: text("scope").$type<AgentScope>().notNull().default("personal"),
     name: text("name").notNull(),
-    slug: text("slug").notNull(),
+    slug: text("slug"),
     isDefault: boolean("is_default").notNull().default(false),
     considerContextUntrusted: boolean("consider_context_untrusted")
       .notNull()
@@ -109,7 +109,9 @@ const agentsTable = pgTable(
       .$onUpdate(() => new Date()),
   },
   (table) => [
-    uniqueIndex("agents_slug_idx").on(table.slug),
+    uniqueIndex("agents_slug_idx")
+      .on(table.slug)
+      .where(sql`${table.slug} IS NOT NULL`),
     index("agents_organization_id_idx").on(table.organizationId),
     index("agents_agent_type_idx").on(table.agentType),
     index("agents_identity_provider_id_idx").on(table.identityProviderId),

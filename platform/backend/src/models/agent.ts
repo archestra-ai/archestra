@@ -162,14 +162,17 @@ class AgentModel {
       organizationId = firstOrg?.id || "";
     }
 
-    const slug = await AgentModel.generateUniqueSlug(agent.name);
+    const slug =
+      agent.agentType === "mcp_gateway"
+        ? await AgentModel.generateUniqueSlug(agent.name)
+        : undefined;
 
     const [createdAgent] = await db
       .insert(schema.agentsTable)
       .values({
         ...agent,
         organizationId,
-        slug,
+        ...(slug && { slug }),
         ...(authorId && { authorId }),
       })
       .returning();

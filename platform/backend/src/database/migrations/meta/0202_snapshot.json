@@ -1,5 +1,5 @@
 {
-  "id": "f0868a0f-aa2e-4455-b9cb-e17ba3e3605b",
+  "id": "6d28a6d4-a53f-4d7a-a01e-a2c22fd97b84",
   "prevId": "52155df2-5d8c-4048-a65c-390c2024ff06",
   "version": "7",
   "dialect": "postgresql",
@@ -692,12 +692,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "slug": {
-          "name": "slug",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
         "is_default": {
           "name": "is_default",
           "type": "boolean",
@@ -807,21 +801,6 @@
         }
       },
       "indexes": {
-        "agents_slug_idx": {
-          "name": "agents_slug_idx",
-          "columns": [
-            {
-              "expression": "slug",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "agents_organization_id_idx": {
           "name": "agents_organization_id_idx",
           "columns": [
@@ -2269,6 +2248,12 @@
         },
         "dual_llm_analyses": {
           "name": "dual_llm_analyses",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "unsafe_context_boundary": {
+          "name": "unsafe_context_boundary",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false

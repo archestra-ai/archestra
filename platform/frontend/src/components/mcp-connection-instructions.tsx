@@ -521,180 +521,181 @@ export function McpConnectionInstructions({
       />
 
       {/* Auth Method Tabs */}
-      <Tabs defaultValue="static-token" className="space-y-4">
-        <div className="space-y-1">
-          <Label className="text-sm font-medium">Authentication</Label>
-          <TabsList className="w-full">
-            <TabsTrigger value="static-token" className="flex-1">
-              Static Token
-            </TabsTrigger>
-            <TabsTrigger value="oauth" className="flex-1">
-              OAuth 2.1
-            </TabsTrigger>
-          </TabsList>
-        </div>
-
-        {/* Static Token Tab */}
-        <TabsContent value="static-token" className="space-y-4">
-          {/* Token Selector */}
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">Select token</Label>
-            <Select
-              value={effectiveTokenId}
-              onValueChange={(value) => {
-                setSelectedTokenId(value);
-                setShowExposedToken(false);
-                setExposedTokenValue(null);
-              }}
-            >
-              <SelectTrigger className="w-full min-h-[60px] py-2.5">
-                <SelectValue placeholder="Select token">
-                  {effectiveTokenId && (
-                    <div className="flex flex-col gap-0.5 items-start text-left">
-                      <div>{getTokenDisplayName()}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {isPersonalTokenSelected
-                          ? "The most secure option."
-                          : selectedTeamToken?.isOrganizationToken
-                            ? "To share org-wide"
-                            : "To share with your teammates"}
-                      </div>
-                    </div>
-                  )}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {userToken && (
-                  <SelectItem value={PERSONAL_TOKEN_ID}>
-                    <div className="flex flex-col gap-0.5 items-start">
-                      <div>Personal Token</div>
-                      <div className="text-xs text-muted-foreground">
-                        The most secure option.
-                      </div>
-                    </div>
-                  </SelectItem>
-                )}
-                {tokens
-                  ?.filter((token) => !token.isOrganizationToken)
-                  .map((token) => (
-                    <SelectItem key={token.id} value={token.id}>
-                      <div className="flex flex-col gap-0.5 items-start">
-                        <div>
-                          {token.team?.name
-                            ? `Team Token (${token.team.name})`
-                            : token.name}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          To share with your teammates
-                        </div>
-                      </div>
-                    </SelectItem>
-                  ))}
-                {tokens
-                  ?.filter((token) => token.isOrganizationToken)
-                  .map((token) => (
-                    <SelectItem key={token.id} value={token.id}>
-                      <div className="flex flex-col gap-0.5 items-start">
-                        <div>Organization Token</div>
-                        <div className="text-xs text-muted-foreground">
-                          To share org-wide
-                        </div>
-                      </div>
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
+      <div className="space-y-2">
+        <Tabs defaultValue="static-token" className="space-y-4">
+          <div className="space-y-1">
+            <Label className="text-sm font-medium">Authentication</Label>
+            <TabsList className="w-full">
+              <TabsTrigger value="static-token" className="flex-1">
+                Static Token
+              </TabsTrigger>
+              <TabsTrigger value="oauth" className="flex-1">
+                OAuth 2.1
+              </TabsTrigger>
+            </TabsList>
           </div>
 
-          <div className="space-y-2">
+          {/* Static Token Tab */}
+          <TabsContent value="static-token" className="space-y-4">
+            {/* Token Selector */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Select token</Label>
+              <Select
+                value={effectiveTokenId}
+                onValueChange={(value) => {
+                  setSelectedTokenId(value);
+                  setShowExposedToken(false);
+                  setExposedTokenValue(null);
+                }}
+              >
+                <SelectTrigger className="w-full min-h-[60px] py-2.5">
+                  <SelectValue placeholder="Select token">
+                    {effectiveTokenId && (
+                      <div className="flex flex-col gap-0.5 items-start text-left">
+                        <div>{getTokenDisplayName()}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {isPersonalTokenSelected
+                            ? "The most secure option."
+                            : selectedTeamToken?.isOrganizationToken
+                              ? "To share org-wide"
+                              : "To share with your teammates"}
+                        </div>
+                      </div>
+                    )}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {userToken && (
+                    <SelectItem value={PERSONAL_TOKEN_ID}>
+                      <div className="flex flex-col gap-0.5 items-start">
+                        <div>Personal Token</div>
+                        <div className="text-xs text-muted-foreground">
+                          The most secure option.
+                        </div>
+                      </div>
+                    </SelectItem>
+                  )}
+                  {tokens
+                    ?.filter((token) => !token.isOrganizationToken)
+                    .map((token) => (
+                      <SelectItem key={token.id} value={token.id}>
+                        <div className="flex flex-col gap-0.5 items-start">
+                          <div>
+                            {token.team?.name
+                              ? `Team Token (${token.team.name})`
+                              : token.name}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            To share with your teammates
+                          </div>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  {tokens
+                    ?.filter((token) => token.isOrganizationToken)
+                    .map((token) => (
+                      <SelectItem key={token.id} value={token.id}>
+                        <div className="flex flex-col gap-0.5 items-start">
+                          <div>Organization Token</div>
+                          <div className="text-xs text-muted-foreground">
+                            To share org-wide
+                          </div>
+                        </div>
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Configuration for MCP clients:
+              </p>
+              <CodeBlock
+                code={mcpConfig}
+                language="json"
+                contentStyle={{
+                  fontSize: "0.75rem",
+                  paddingRight: "5rem",
+                }}
+              >
+                <div className="flex gap-1 rounded-md border bg-background/95 p-1 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    title={showExposedToken ? "Hide token" : "Expose token"}
+                    onClick={handleExposeToken}
+                    disabled={
+                      isLoadingToken ||
+                      (!isPersonalTokenSelected &&
+                        !hasAdminPermission &&
+                        !hasTeamAdminPermission)
+                    }
+                  >
+                    {isLoadingToken ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : showExposedToken ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                    <span className="sr-only">
+                      {showExposedToken ? "Hide token" : "Expose token"}
+                    </span>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    title="Copy with exposed token"
+                    onClick={
+                      isPersonalTokenSelected ||
+                      hasAdminPermission ||
+                      hasTeamAdminPermission
+                        ? handleCopyConfig
+                        : handleCopyConfigWithoutRealToken
+                    }
+                    disabled={isCopyingConfig}
+                  >
+                    {isCopyingConfig ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : copiedConfig ? (
+                      <Check className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                    <span className="sr-only">Copy with exposed token</span>
+                  </Button>
+                </div>
+              </CodeBlock>
+            </div>
+          </TabsContent>
+
+          {/* OAuth 2.1 Tab */}
+          <TabsContent value="oauth" className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Configuration for MCP clients:
+              MCP clients that support OAuth 2.1 will handle authentication
+              automatically. Just provide the MCP Gateway URL — the client
+              discovers the authorization server, registers itself, and walks
+              the user through a browser-based login and consent flow.
             </p>
-            <CodeBlock
-              code={mcpConfig}
-              language="json"
-              contentStyle={{
-                fontSize: "0.75rem",
-                paddingRight: "5rem",
-              }}
-            >
-              <div className="flex gap-1 rounded-md border bg-background/95 p-1 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  title={showExposedToken ? "Hide token" : "Expose token"}
-                  onClick={handleExposeToken}
-                  disabled={
-                    isLoadingToken ||
-                    (!isPersonalTokenSelected &&
-                      !hasAdminPermission &&
-                      !hasTeamAdminPermission)
-                  }
-                >
-                  {isLoadingToken ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : showExposedToken ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                  <span className="sr-only">
-                    {showExposedToken ? "Hide token" : "Expose token"}
-                  </span>
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  title="Copy with exposed token"
-                  onClick={
-                    isPersonalTokenSelected ||
-                    hasAdminPermission ||
-                    hasTeamAdminPermission
-                      ? handleCopyConfig
-                      : handleCopyConfigWithoutRealToken
-                  }
-                  disabled={isCopyingConfig}
-                >
-                  {isCopyingConfig ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : copiedConfig ? (
-                    <Check className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
-                  <span className="sr-only">Copy with exposed token</span>
-                </Button>
-              </div>
-            </CodeBlock>
-          </div>
-        </TabsContent>
 
-        {/* OAuth 2.1 Tab */}
-        <TabsContent value="oauth" className="space-y-4">
+            <OAuthConfigBlock mcpUrl={mcpUrl} />
+          </TabsContent>
+        </Tabs>
+
+        {config.enterpriseFeatures.core && enterpriseGatewayAuthDocsUrl && (
           <p className="text-sm text-muted-foreground">
-            MCP clients that support OAuth 2.1 will handle authentication
-            automatically. Just provide the MCP Gateway URL — the client
-            discovers the authorization server, registers itself, and walks the
-            user through a browser-based login and consent flow.
+            Enterprise deployments can also authenticate this gateway with
+            ID-JAG or direct JWKS JWTs.{" "}
+            <ExternalDocsLink
+              href={enterpriseGatewayAuthDocsUrl}
+              className="text-sm"
+            >
+              Learn how enterprise gateway auth works.
+            </ExternalDocsLink>
           </p>
-
-          <OAuthConfigBlock mcpUrl={mcpUrl} />
-        </TabsContent>
-      </Tabs>
-
-      {config.enterpriseFeatures.core && (
-        <p className="text-sm text-muted-foreground">
-          Enterprise deployments can also authenticate this gateway with ID-JAG
-          or direct JWKS JWTs.{" "}
-          <ExternalDocsLink
-            href={enterpriseGatewayAuthDocsUrl}
-            className="text-sm"
-          >
-            Learn how enterprise gateway auth works
-          </ExternalDocsLink>
-          .
-        </p>
-      )}
+        )}
+      </div>
     </div>
   );
 }

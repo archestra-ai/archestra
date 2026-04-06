@@ -249,11 +249,13 @@ export class SharePointConnector extends BaseConnector {
       allowedExtensions,
     } = params;
 
-    // Use the delta endpoint from the start so we get a proper deltaLink for future syncs
+    // Use the delta endpoint from the start so we get a proper deltaLink for future syncs.
+    // If the previous run was interrupted mid-pagination, resume from the saved nextLink.
     const encodedDriveId = encodeURIComponent(driveId);
-    let url = folderPath
+    const initialUrl = folderPath
       ? `${GRAPH_API_BASE}/drives/${encodedDriveId}/root:/${encodeFolderPath(folderPath)}:/delta?$top=${batchSize}`
       : `${GRAPH_API_BASE}/drives/${encodedDriveId}/root/delta?$top=${batchSize}`;
+    let url = checkpoint.nextLink ?? initialUrl;
 
     let batchIndex = 0;
 
@@ -337,7 +339,12 @@ export class SharePointConnector extends BaseConnector {
           type: "sharepoint",
           itemUpdatedAt: lastModified,
           previousLastSyncedAt: checkpoint.lastSyncedAt,
-          extra: { deltaLink: deltaLink ?? checkpoint.deltaLink },
+          extra: {
+            deltaLink: deltaLink ?? checkpoint.deltaLink,
+            // Persist nextLink so an interrupted pagination run can resume from
+            // the correct page rather than restarting from root/delta.
+            nextLink: nextLink,
+          },
         }),
         hasMore: !!nextLink,
       };
@@ -355,7 +362,8 @@ export class SharePointConnector extends BaseConnector {
   }): AsyncGenerator<ConnectorSyncBatch> {
     const { driveId, getToken, checkpoint, allowedExtensions } = params;
 
-    let url = checkpoint.deltaLink as string;
+    // Resume from nextLink if the previous delta run was interrupted mid-pagination.
+    let url = (checkpoint.nextLink ?? checkpoint.deltaLink) as string;
     let batchIndex = 0;
 
     while (url) {
@@ -435,7 +443,12 @@ export class SharePointConnector extends BaseConnector {
           type: "sharepoint",
           itemUpdatedAt: lastModified,
           previousLastSyncedAt: checkpoint.lastSyncedAt,
-          extra: { deltaLink: deltaLink ?? checkpoint.deltaLink },
+          extra: {
+            deltaLink: deltaLink ?? checkpoint.deltaLink,
+            // Persist nextLink so an interrupted delta pagination run can resume
+            // from the correct page rather than re-fetching from deltaLink page 1.
+            nextLink: nextLink,
+          },
         }),
         hasMore: !!nextLink,
       };

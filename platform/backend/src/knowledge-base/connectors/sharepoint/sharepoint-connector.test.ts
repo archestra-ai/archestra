@@ -714,5 +714,148 @@ describe("SharePointConnector", () => {
       expect(batches[0].documents).toHaveLength(1);
       expect(batches[0].documents[0].title).toBe("report.pdf");
     });
+
+    it("saves nextLink in checkpoint during initial scan pagination", async () => {
+      const connector = new SharePointConnector();
+      const fetchMock = vi.spyOn(
+        connector as unknown as {
+          fetchWithRetry: (...args: unknown[]) => unknown;
+        },
+        "fetchWithRetry",
+      );
+
+      const item1 = makeDriveItem("item-1", "first.txt");
+
+      fetchMock.mockResolvedValueOnce(makeTokenResponse());
+      fetchMock.mockResolvedValueOnce(makeSiteResponse());
+      fetchMock.mockResolvedValueOnce(makeDrivesResponse());
+      // First page: only nextLink (no deltaLink yet — mid-pagination)
+      fetchMock.mockResolvedValueOnce(
+        makeItemListResponse([item1], {
+          nextLink: "https://graph.microsoft.com/v1.0/drives/d1/root/delta?token=page2",
+        }),
+      );
+      fetchMock.mockResolvedValueOnce(makeContentResponse("First content"));
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: validConfig,
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+        // Simulate time-budget stop: only consume first batch
+        break;
+      }
+
+      expect(batches).toHaveLength(1);
+      expect(batches[0].hasMore).toBe(true);
+      const cp = batches[0].checkpoint as Record<string, unknown>;
+      // nextLink must be persisted so the next run can resume from page 2
+      expect(cp.nextLink).toBe(
+        "https://graph.microsoft.com/v1.0/drives/d1/root/delta?token=page2",
+      );
+      // deltaLink not yet available from Graph
+      expect(cp.deltaLink).toBeUndefined();
+    });
+
+    it("resumes initial scan from checkpoint nextLink instead of root/delta", async () => {
+      const connector = new SharePointConnector();
+      const fetchMock = vi.spyOn(
+        connector as unknown as {
+          fetchWithRetry: (...args: unknown[]) => unknown;
+        },
+        "fetchWithRetry",
+      );
+
+      const item2 = makeDriveItem("item-2", "second.txt");
+
+      fetchMock.mockResolvedValueOnce(makeTokenResponse());
+      fetchMock.mockResolvedValueOnce(makeSiteResponse());
+      fetchMock.mockResolvedValueOnce(makeDrivesResponse());
+      // Resume from nextLink page — returns deltaLink on this final page
+      fetchMock.mockResolvedValueOnce(
+        makeItemListResponse([item2], {
+          deltaLink: "https://graph.microsoft.com/v1.0/drives/d1/root/delta?token=final",
+        }),
+      );
+      fetchMock.mockResolvedValueOnce(makeContentResponse("Second content"));
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: validConfig,
+        credentials,
+        checkpoint: {
+          type: "sharepoint",
+          nextLink:
+            "https://graph.microsoft.com/v1.0/drives/d1/root/delta?token=page2",
+        },
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches).toHaveLength(1);
+      // Should have fetched the nextLink URL, not root/delta
+      const resumeUrl = (fetchMock.mock.calls[3] as unknown[])[0] as string;
+      expect(resumeUrl).toContain("token=page2");
+      // deltaLink now captured for future incremental syncs
+      const cp = batches[0].checkpoint as Record<string, unknown>;
+      expect(cp.deltaLink).toBe(
+        "https://graph.microsoft.com/v1.0/drives/d1/root/delta?token=final",
+      );
+      expect(cp.nextLink).toBeUndefined();
+    });
+
+    it("resumes delta sync from checkpoint nextLink when pagination was interrupted", async () => {
+      const connector = new SharePointConnector();
+      const fetchMock = vi.spyOn(
+        connector as unknown as {
+          fetchWithRetry: (...args: unknown[]) => unknown;
+        },
+        "fetchWithRetry",
+      );
+
+      const item = makeDriveItem("delta-item-2", "page2.txt", {
+        lastModified: "2024-03-01T00:00:00.000Z",
+      });
+
+      fetchMock.mockResolvedValueOnce(makeTokenResponse());
+      fetchMock.mockResolvedValueOnce(makeSiteResponse());
+      fetchMock.mockResolvedValueOnce(makeDrivesResponse());
+      // Resume from nextLink — final page returns new deltaLink
+      fetchMock.mockResolvedValueOnce(
+        makeItemListResponse([item], {
+          deltaLink:
+            "https://graph.microsoft.com/v1.0/drives/d1/root/delta?token=new-delta",
+        }),
+      );
+      fetchMock.mockResolvedValueOnce(makeContentResponse("Page 2 content"));
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: validConfig,
+        credentials,
+        checkpoint: {
+          type: "sharepoint",
+          lastSyncedAt: "2024-01-15T00:00:00.000Z",
+          deltaLink:
+            "https://graph.microsoft.com/v1.0/drives/d1/root/delta?token=old-delta",
+          nextLink:
+            "https://graph.microsoft.com/v1.0/drives/d1/root/delta?token=delta-page2",
+        },
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches).toHaveLength(1);
+      // Should have resumed from nextLink, not the old deltaLink
+      const resumeUrl = (fetchMock.mock.calls[3] as unknown[])[0] as string;
+      expect(resumeUrl).toContain("token=delta-page2");
+      const cp = batches[0].checkpoint as Record<string, unknown>;
+      expect(cp.deltaLink).toBe(
+        "https://graph.microsoft.com/v1.0/drives/d1/root/delta?token=new-delta",
+      );
+      expect(cp.nextLink).toBeUndefined();
+    });
   });
 });

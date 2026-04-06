@@ -192,6 +192,7 @@ export const SharePointCheckpointSchema = z.object({
   type: SHAREPOINT,
   lastSyncedAt: z.string().optional(),
   deltaLink: z.string().optional(),
+  nextLink: z.string().optional(),
 });
 export type SharePointCheckpoint = z.infer<typeof SharePointCheckpointSchema>;
 

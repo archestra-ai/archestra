@@ -195,7 +195,7 @@ export class BrowserStreamSocketClientContext {
       // The browser stream shares the same MCP client (keyed by agentId:userId:conversationId)
       // as the chat agentic loop. Closing it here would kill in-flight tool calls
       // from the agentic loop, causing AI_MissingToolResultsError.
-      // The MCP client manages its own lifecycle via the LRU cache in chat-mcp-client.ts.
+      // Idle conversation clients are reaped by the LRU TTL in chat-mcp-client.ts.
 
       logger.info(
         {

@@ -257,6 +257,66 @@ describe("normalizeJsonSchema", () => {
 });
 
 describe("chat-mcp-client health check", () => {
+  test("expires idle cached conversation clients and closes them on cleanup", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    vi.useFakeTimers();
+
+    try {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id);
+      const agent = await makeAgent({ teams: [team.id] });
+      await makeTeamMember(team.id, user.id);
+      await TeamTokenModel.createTeamToken(team.id, team.name);
+
+      const cacheKey = chatClient.__test.getCacheKey(
+        agent.id,
+        user.id,
+        "conv-1",
+      );
+      chatClient.clearChatMcpClient(agent.id);
+      await chatClient.__test.clearToolCache(cacheKey);
+
+      const expiredClient = {
+        ping: vi.fn(),
+        listTools: vi.fn(),
+        callTool: vi.fn(),
+        close: vi.fn(),
+      };
+
+      chatClient.__test.setCachedClient(
+        cacheKey,
+        expiredClient as unknown as Client,
+        1_000,
+      );
+
+      await vi.advanceTimersByTimeAsync(1_001);
+
+      const tools = await chatClient.getChatMcpTools({
+        agentName: agent.name,
+        agentId: agent.id,
+        userId: user.id,
+        organizationId: org.id,
+        userIsAgentAdmin: false,
+        conversationId: "conv-1",
+      });
+
+      expect(expiredClient.ping).not.toHaveBeenCalled();
+      expect(expiredClient.close).toHaveBeenCalledTimes(1);
+      expect(tools).toEqual({});
+
+      chatClient.clearChatMcpClient(agent.id);
+      await chatClient.__test.clearToolCache(cacheKey);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("discards cached client when ping fails and fetches fresh tools", async ({
     makeAgent,
     makeUser,

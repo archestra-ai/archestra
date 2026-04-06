@@ -37702,6 +37702,7 @@
                             "type": "string"
                           },
                           "slug": {
+                            "nullable": true,
                             "type": "string"
                           },
                           "isDefault": {
@@ -38601,6 +38602,7 @@
                       "type": "string"
                     },
                     "slug": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "isDefault": {
@@ -39298,6 +39300,7 @@
                         "type": "string"
                       },
                       "slug": {
+                        "nullable": true,
                         "type": "string"
                       },
                       "isDefault": {
@@ -39935,6 +39938,7 @@
                       "type": "string"
                     },
                     "slug": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "isDefault": {
@@ -40572,6 +40576,7 @@
                       "type": "string"
                     },
                     "slug": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "isDefault": {
@@ -41221,6 +41226,7 @@
                       "type": "string"
                     },
                     "slug": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "isDefault": {
@@ -42077,6 +42083,7 @@
                       "type": "string"
                     },
                     "slug": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "isDefault": {

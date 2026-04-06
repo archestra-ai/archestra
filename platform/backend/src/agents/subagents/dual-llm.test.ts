@@ -58,6 +58,7 @@ function makeBuiltInAgent(params: {
     incomingEmailAllowedDomain: null,
     llmApiKeyId: null,
     llmModel: null,
+    passthroughHeaders: null,
     identityProviderId: null,
     builtInAgentConfig:
       params.name === BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN

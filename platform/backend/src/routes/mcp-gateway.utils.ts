@@ -95,6 +95,7 @@ export type AgentInfo = {
   id: string;
   agentType?: AgentType;
   labels?: Array<{ key: string; value: string }>;
+  passthroughHeaders?: string[] | null;
 };
 
 type TokenHashes = {
@@ -563,6 +564,29 @@ export async function extractProfileIdAndTokenFromRequest(
 
   const profileId = await AgentModel.resolveIdFromIdOrSlug(idOrSlug);
   return profileId ? { profileId, token } : null;
+}
+
+/**
+ * Extract headers from an incoming request that match the gateway's passthrough allowlist.
+ * Returns a map of header name → value, or undefined if none matched.
+ */
+export function extractPassthroughHeaders(
+  allowlist: string[] | null | undefined,
+  requestHeaders: Record<string, string | string[] | undefined>,
+): Record<string, string> | undefined {
+  if (!allowlist || allowlist.length === 0) {
+    return undefined;
+  }
+  const extracted: Record<string, string> = {};
+  for (const headerName of allowlist) {
+    const value = requestHeaders[headerName];
+    if (typeof value === "string") {
+      extracted[headerName] = value;
+    } else if (Array.isArray(value)) {
+      extracted[headerName] = value.join(", ");
+    }
+  }
+  return Object.keys(extracted).length > 0 ? extracted : undefined;
 }
 
 /**

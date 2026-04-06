@@ -61,6 +61,7 @@ import {
   AssignmentCombobox,
   type AssignmentComboboxItem,
 } from "@/components/ui/assignment-combobox";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -148,6 +149,22 @@ const { useIdentityProviders } = config.enterpriseFeatures.core
     };
 
 type Agent = archestraApiTypes.GetAllAgentsResponses["200"][number];
+
+// Hop-by-hop (RFC 7230) and protocol-level headers that cannot be forwarded
+const BLOCKED_PASSTHROUGH_HEADERS = new Set([
+  "connection",
+  "keep-alive",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "te",
+  "trailers",
+  "transfer-encoding",
+  "upgrade",
+  "host",
+  "content-length",
+]);
+const MAX_PASSTHROUGH_HEADERS = 20;
+const HEADER_NAME_REGEX = /^[a-zA-Z\d-]+$/;
 
 // Component to display tools for a specific agent
 function AgentToolsList({ agentId }: { agentId: string }) {
@@ -591,6 +608,7 @@ export function AgentDialog({
   const [autoConfigureOnToolDiscovery, setAutoConfigureOnToolDiscovery] =
     useState(false);
   const [dualLlmMaxRounds, setDualLlmMaxRounds] = useState("5");
+  const [passthroughHeaders, setPassthroughHeaders] = useState<string[]>([]);
 
   // Determine type-specific visibility based on agentType prop
   const isInternalAgent = agentType === "agent";
@@ -658,6 +676,7 @@ export function AgentDialog({
         setIdentityProviderId(agentData.identityProviderId ?? undefined);
         setKnowledgeBaseIds(agentData.knowledgeBaseIds);
         setConnectorIds(agentData.connectorIds);
+        setPassthroughHeaders(agentData.passthroughHeaders ?? []);
         setScope(agentData.scope);
         setAutoConfigureOnToolDiscovery(
           agentData.builtInAgentConfig?.name ===
@@ -689,6 +708,7 @@ export function AgentDialog({
         setKnowledgeBaseIds([]);
         setConnectorIds([]);
         setScope("personal");
+        setPassthroughHeaders([]);
         setAutoConfigureOnToolDiscovery(false);
         setDualLlmMaxRounds("5");
       }
@@ -916,6 +936,10 @@ export function AgentDialog({
             labels: updatedLabels,
             scope,
             ...(showSecurity && { considerContextUntrusted }),
+            ...(agentType === "mcp_gateway" && {
+              passthroughHeaders:
+                passthroughHeaders.length > 0 ? passthroughHeaders : null,
+            }),
           },
         });
         savedAgentId = updated?.id ?? agent.id;
@@ -948,6 +972,10 @@ export function AgentDialog({
           labels: updatedLabels,
           scope,
           ...(showSecurity && { considerContextUntrusted }),
+          ...(agentType === "mcp_gateway" && {
+            passthroughHeaders:
+              passthroughHeaders.length > 0 ? passthroughHeaders : null,
+          }),
         });
         if (!created) return;
         savedAgentId = created?.id ?? "";
@@ -1022,6 +1050,7 @@ export function AgentDialog({
     onCreated,
     onOpenChange,
     supportsIdentityProvider,
+    passthroughHeaders,
   ]);
 
   const handleClose = useCallback(() => {
@@ -1799,6 +1828,78 @@ export function AgentDialog({
                               onCheckedChange={setConsiderContextUntrusted}
                             />
                           </div>
+                        </div>
+                      )}
+
+                      {/* Custom Header Passthrough (MCP Gateway only) */}
+                      {agentType === "mcp_gateway" && (
+                        <div className="space-y-2">
+                          <Label>Custom Header Passthrough</Label>
+                          <p className="text-sm text-muted-foreground">
+                            HTTP headers from client requests to forward to
+                            downstream MCP servers. Case-insensitive.
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {passthroughHeaders.map((header) => (
+                              <Badge
+                                key={header}
+                                variant="secondary"
+                                className="gap-1 pr-1"
+                              >
+                                {header}
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-4 w-4 p-0 hover:bg-transparent"
+                                  onClick={() =>
+                                    setPassthroughHeaders((prev) =>
+                                      prev.filter((h) => h !== header),
+                                    )
+                                  }
+                                >
+                                  <X className="h-3 w-3" />
+                                </Button>
+                              </Badge>
+                            ))}
+                          </div>
+                          {passthroughHeaders.length <
+                            MAX_PASSTHROUGH_HEADERS && (
+                            <Input
+                              placeholder="Type header name and press Enter"
+                              onKeyDown={(e) => {
+                                if (e.key !== "Enter") return;
+                                e.preventDefault();
+                                const value = e.currentTarget.value
+                                  .trim()
+                                  .toLowerCase();
+                                if (!value) return;
+                                if (!HEADER_NAME_REGEX.test(value)) {
+                                  toast.error(
+                                    "Header name must contain only alphanumeric characters and hyphens",
+                                  );
+                                  return;
+                                }
+                                if (BLOCKED_PASSTHROUGH_HEADERS.has(value)) {
+                                  toast.error(
+                                    `"${value}" is a hop-by-hop or protocol-level header and cannot be forwarded`,
+                                  );
+                                  return;
+                                }
+                                if (passthroughHeaders.includes(value)) {
+                                  toast.error(
+                                    `"${value}" is already in the list`,
+                                  );
+                                  return;
+                                }
+                                setPassthroughHeaders((prev) => [
+                                  ...prev,
+                                  value,
+                                ]);
+                                e.currentTarget.value = "";
+                              }}
+                            />
+                          )}
                         </div>
                       )}
 

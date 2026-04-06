@@ -109,6 +109,8 @@ export type TokenAuthContext = {
   rawToken?: string;
   /** True if authenticated via browser session (MCP proxy route) */
   isSessionAuth?: boolean;
+  /** Headers to forward to downstream MCP servers (extracted from incoming request per gateway allowlist) */
+  passthroughHeaders?: Record<string, string>;
 };
 
 /**
@@ -1300,6 +1302,20 @@ class McpClient {
           localHeaders.Authorization = `Bearer ${tokenAuth.rawToken}`;
         }
 
+        // Merge passthrough headers (don't override existing headers, case-insensitive)
+        if (tokenAuth?.passthroughHeaders) {
+          const existingKeys = new Set(
+            Object.keys(localHeaders).map((k) => k.toLowerCase()),
+          );
+          for (const [name, value] of Object.entries(
+            tokenAuth.passthroughHeaders,
+          )) {
+            if (!existingKeys.has(name.toLowerCase())) {
+              localHeaders[name] = value;
+            }
+          }
+        }
+
         return new StreamableHTTPClientTransport(new URL(endpointUrl), {
           sessionId,
           requestInit: { headers: new Headers(localHeaders) },
@@ -1326,6 +1342,20 @@ class McpClient {
           // Fallback: propagate external IdP JWT for end-to-end JWKS pattern
           // (upstream server validates the same JWT against the IdP's JWKS)
           headers.Authorization = `Bearer ${tokenAuth.rawToken}`;
+        }
+
+        // Merge passthrough headers (don't override existing headers, case-insensitive)
+        if (tokenAuth?.passthroughHeaders) {
+          const existingKeys = new Set(
+            Object.keys(headers).map((k) => k.toLowerCase()),
+          );
+          for (const [name, value] of Object.entries(
+            tokenAuth.passthroughHeaders,
+          )) {
+            if (!existingKeys.has(name.toLowerCase())) {
+              headers[name] = value;
+            }
+          }
         }
 
         return new StreamableHTTPClientTransport(

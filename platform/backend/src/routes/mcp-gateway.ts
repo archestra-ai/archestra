@@ -9,12 +9,14 @@ import { z } from "zod";
 
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
-import { McpToolCallModel } from "@/models";
+import { AgentModel, McpToolCallModel } from "@/models";
 import { UuidOrSlugSchema } from "@/types";
 import {
+  type AgentInfo,
   createAgentServer,
   createStatelessTransport,
   deriveAuthMethod,
+  extractPassthroughHeaders,
   extractProfileIdAndTokenFromRequest,
   validateMCPGatewayToken,
 } from "./mcp-gateway.utils";
@@ -48,6 +50,7 @@ async function handleMcpPostRequest(
   reply: FastifyReply,
   profileId: string,
   tokenAuthContext: TokenAuthContext | undefined,
+  preloadedAgent?: AgentInfo,
 ): Promise<unknown> {
   const body = request.body as Record<string, unknown>;
   const isInitialize =
@@ -65,7 +68,11 @@ async function handleMcpPostRequest(
 
   try {
     // Create fresh server and transport for each request (stateless mode)
-    const { server } = await createAgentServer(profileId, tokenAuthContext);
+    const { server } = await createAgentServer(
+      profileId,
+      tokenAuthContext,
+      preloadedAgent,
+    );
     const transport = createStatelessTransport(profileId);
 
     fastify.log.trace({ profileId }, "Connecting server to transport");
@@ -283,12 +290,33 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...(tokenAuth.rawToken && { rawToken: tokenAuth.rawToken }),
       };
 
+      // Load agent to extract passthrough headers and reuse as preloadedAgent
+      const agent = await AgentModel.findById(profileId);
+      let preloadedAgent: AgentInfo | undefined;
+      if (agent) {
+        const passthroughHeaders = extractPassthroughHeaders(
+          agent.passthroughHeaders,
+          request.headers,
+        );
+        if (passthroughHeaders) {
+          tokenAuthContext.passthroughHeaders = passthroughHeaders;
+        }
+        preloadedAgent = {
+          id: agent.id,
+          name: agent.name,
+          agentType: agent.agentType,
+          labels: agent.labels,
+          passthroughHeaders: agent.passthroughHeaders,
+        };
+      }
+
       return handleMcpPostRequest(
         fastify,
         request,
         reply,
         profileId,
         tokenAuthContext,
+        preloadedAgent,
       );
     },
   );

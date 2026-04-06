@@ -1,3 +1,4 @@
+import { buildAzureDeploymentsUrl } from "@/clients/azure-url";
 import config from "@/config";
 import logger from "@/logging";
 import type { ModelInfo } from "./types";
@@ -11,16 +12,14 @@ export async function fetchAzureModels(
     return [];
   }
 
-  // Derive the resource endpoint from the deployment baseUrl:
-  // https://<resource>.openai.azure.com/openai/deployments/<name>
-  //   → https://<resource>.openai.azure.com
-  const endpointMatch = baseUrl.match(/^(https?:\/\/[^/]+)/);
-  if (!endpointMatch) {
+  const url = buildAzureDeploymentsUrl({
+    apiVersion: config.llm.azure.apiVersion,
+    baseUrl,
+  });
+  if (!url) {
     logger.warn({ baseUrl }, "Could not extract Azure endpoint from baseUrl");
     return [];
   }
-  const endpoint = endpointMatch[1];
-  const url = `${endpoint}/openai/deployments?api-version=${config.llm.azure.apiVersion}`;
 
   try {
     const response = await fetch(url, {

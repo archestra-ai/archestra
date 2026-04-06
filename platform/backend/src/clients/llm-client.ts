@@ -20,6 +20,7 @@ import {
   USER_ID_HEADER,
 } from "@shared";
 import type { streamText } from "ai";
+import { createAzureFetchWithApiVersion } from "@/clients/azure-url";
 import {
   getBedrockCredentialProvider,
   getBedrockRegion,
@@ -563,21 +564,11 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       headers,
       fetch: providedFetch,
     }) => {
-      // The Vercel AI SDK's createOpenAI() has no defaultQuery option (unlike the
-      // openai package used by adapterV2), so we inject api-version at the fetch
-      // level — Azure requires it on every request.
-      const fetchWithVersion: typeof globalThis.fetch = (input, init) => {
-        const url = new URL(
-          typeof input === "string"
-            ? input
-            : input instanceof URL
-              ? input.href
-              : (input as Request).url,
-        );
-        url.searchParams.set("api-version", config.llm.azure.apiVersion);
-        const fetchFn = providedFetch ?? globalThis.fetch;
-        return fetchFn(url.toString(), init);
-      };
+      const fetchWithVersion = createAzureFetchWithApiVersion({
+        apiVersion: config.llm.azure.apiVersion,
+        fetch: providedFetch,
+      });
+
       return createOpenAI({
         apiKey,
         baseURL,

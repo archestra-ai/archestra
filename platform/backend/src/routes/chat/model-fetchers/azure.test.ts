@@ -149,4 +149,24 @@ describe("fetchAzureModels", () => {
 
     vi.unstubAllGlobals();
   });
+
+  test("builds deployments URL from a localhost wiremock deployment base URL", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ id: "gpt-4o" }] }),
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    await fetchAzureModels(
+      "test-key",
+      "http://localhost:9092/azure/openai/deployments/test-deployment",
+    );
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://localhost:9092/azure/openai/deployments?api-version=2024-02-01",
+      expect.any(Object),
+    );
+
+    vi.unstubAllGlobals();
+  });
 });

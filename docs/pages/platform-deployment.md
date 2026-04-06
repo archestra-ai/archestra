@@ -725,8 +725,6 @@ These environment variables set the default base URL for each LLM provider. Per-
 - **`ARCHESTRA_AZURE_OPENAI_API_VERSION`** - Azure OpenAI REST API version.
   - Default: `2024-02-01`
 
-- **`ARCHESTRA_CHAT_AZURE_OPENAI_API_KEY`** - API key for the Azure AI Foundry chat endpoint (used by Archestra's built-in chat feature).
-
 - **`ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS`** - Maximum number of virtual API keys per LLM API key.
   - Default: `10`
   - Virtual keys are `archestra_`-prefixed tokens used by external LLM Proxy clients

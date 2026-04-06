@@ -360,7 +360,7 @@ const testConfigsMap = {
   minimax: minimaxConfig,
   bedrock: bedrockConfig,
   azure: makeOpenAiCompatibleCostConfig({
-    providerName: "Azure AI Foundry",
+    providerName: "Azure",
     modelName: "test-azure-cost-limit",
     provider: "azure",
   }),

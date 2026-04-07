@@ -1823,8 +1823,8 @@ export function AgentDialog({
                         <div className="space-y-2">
                           <Label>Custom Header Passthrough</Label>
                           <p className="text-sm text-muted-foreground">
-                            Client request headers to pass through to
-                            downstream MCP servers. Case-insensitive.
+                            Client request headers to pass through to downstream
+                            MCP servers. Case-insensitive.
                           </p>
                           <div className="flex flex-wrap gap-1.5">
                             {passthroughHeaders.map((header) => (

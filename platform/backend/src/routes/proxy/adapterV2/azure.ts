@@ -234,7 +234,7 @@ export const azureAdapterFactory: LLMProvider<
     const normalizedApiKey = normalizeAzureApiKey(apiKey);
 
     return new OpenAIProvider({
-      apiKey,
+      apiKey: normalizedApiKey,
       baseURL: options.baseUrl,
       defaultQuery: { "api-version": config.llm.azure.apiVersion },
       fetch: customFetch,

@@ -467,7 +467,7 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       });
       const normalizedApiKey = normalizeAzureApiKey(apiKey);
       return createOpenAI({
-        apiKey,
+        apiKey: normalizedApiKey,
         baseURL,
         headers: normalizedApiKey
           ? { ...headers, "api-key": normalizedApiKey }

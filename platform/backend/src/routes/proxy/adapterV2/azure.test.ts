@@ -67,6 +67,7 @@ describe("azureAdapterFactory", () => {
       };
 
       expect(client._options?.defaultHeaders?.["api-key"]).toBe("my-azure-key");
+      expect(client._options?.apiKey).toBe("my-azure-key");
     });
 
     test("preserves the original key when no Bearer prefix is present", () => {
@@ -80,6 +81,7 @@ describe("azureAdapterFactory", () => {
       };
 
       expect(client._options?.defaultHeaders?.["api-key"]).toBe("my-azure-key");
+      expect(client._options?.apiKey).toBe("my-azure-key");
     });
   });
 

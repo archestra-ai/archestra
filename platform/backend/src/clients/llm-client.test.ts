@@ -30,6 +30,7 @@ vi.mock("@ai-sdk/anthropic", () => ({
 const capturedCreateOpenAIOptions = vi.hoisted(() => ({
   fetch: undefined as typeof globalThis.fetch | undefined,
   headers: undefined as Record<string, string> | undefined,
+  apiKey: undefined as string | undefined,
 }));
 vi.mock("@ai-sdk/openai", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@ai-sdk/openai")>();
@@ -42,6 +43,9 @@ vi.mock("@ai-sdk/openai", async (importOriginal) => {
       capturedCreateOpenAIOptions.headers = (
         options as { headers?: Record<string, string> }
       ).headers;
+      capturedCreateOpenAIOptions.apiKey = (
+        options as { apiKey?: string }
+      ).apiKey;
       return actual.createOpenAI(options);
     },
   };
@@ -248,6 +252,7 @@ describe("createDirectLLMModel", () => {
         "api-key": "test-key",
       }),
     );
+    expect(capturedCreateOpenAIOptions.apiKey).toBe("test-key");
   });
 
   it("strips a Bearer prefix before setting the azure api-key header", () => {
@@ -263,6 +268,7 @@ describe("createDirectLLMModel", () => {
         "api-key": "test-key",
       }),
     );
+    expect(capturedCreateOpenAIOptions.apiKey).toBe("test-key");
   });
 
   // createDirectLLMModel doesn't expose a `fetch` parameter — the azure createModel

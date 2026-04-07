@@ -4,6 +4,8 @@ export function buildAzureDeploymentsUrl(params: {
 }): string | null {
   try {
     const url = new URL(params.baseUrl);
+    // Expected input is the Azure deployment base URL:
+    // https://<resource>.openai.azure.com/openai/deployments/<deployment>
     const pathname = url.pathname.replace(/\/[^/]+\/?$/, "");
     return `${url.origin}${pathname}?api-version=${params.apiVersion}`;
   } catch {

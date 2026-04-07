@@ -1258,3 +1258,51 @@ describe("createAgentServer tools/list", () => {
     archestraMcpBranding.syncFromOrganization(null);
   });
 });
+
+describe("extractPassthroughHeaders", async () => {
+  const { extractPassthroughHeaders } = await import("./mcp-gateway.utils");
+
+  test("returns undefined when allowlist is null", () => {
+    expect(extractPassthroughHeaders(null, { "x-foo": "bar" })).toBeUndefined();
+  });
+
+  test("returns undefined when allowlist is empty", () => {
+    expect(extractPassthroughHeaders([], { "x-foo": "bar" })).toBeUndefined();
+  });
+
+  test("extracts matching headers from request", () => {
+    const result = extractPassthroughHeaders(
+      ["x-correlation-id", "x-tenant-id"],
+      {
+        "x-correlation-id": "abc-123",
+        "x-tenant-id": "tenant-1",
+        "x-other": "ignored",
+      },
+    );
+    expect(result).toEqual({
+      "x-correlation-id": "abc-123",
+      "x-tenant-id": "tenant-1",
+    });
+  });
+
+  test("returns undefined when no headers match", () => {
+    const result = extractPassthroughHeaders(["x-correlation-id"], {
+      "x-other": "value",
+    });
+    expect(result).toBeUndefined();
+  });
+
+  test("joins array header values with comma", () => {
+    const result = extractPassthroughHeaders(["x-multi"], {
+      "x-multi": ["val1", "val2"],
+    });
+    expect(result).toEqual({ "x-multi": "val1, val2" });
+  });
+
+  test("skips undefined header values", () => {
+    const result = extractPassthroughHeaders(["x-present", "x-missing"], {
+      "x-present": "yes",
+    });
+    expect(result).toEqual({ "x-present": "yes" });
+  });
+});

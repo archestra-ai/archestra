@@ -10696,6 +10696,7 @@ export type GetAgentsResponses = {
             llmApiKeyId: string | null;
             llmModel: string | null;
             identityProviderId: string | null;
+            passthroughHeaders: Array<string> | null;
             builtInAgentConfig: {
                 name: 'policy-configuration-subagent';
                 autoConfigureOnToolDiscovery: boolean;
@@ -10788,6 +10789,7 @@ export type CreateAgentData = {
         llmApiKeyId?: string | null;
         llmModel?: string | null;
         identityProviderId?: string | null;
+        passthroughHeaders?: Array<string> | null;
         builtInAgentConfig?: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -10898,6 +10900,7 @@ export type CreateAgentResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
+        passthroughHeaders: Array<string> | null;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -11070,6 +11073,7 @@ export type GetAllAgentsResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
+        passthroughHeaders: Array<string> | null;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -11225,6 +11229,7 @@ export type GetDefaultMcpGatewayResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
+        passthroughHeaders: Array<string> | null;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -11380,6 +11385,7 @@ export type GetDefaultLlmProxyResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
+        passthroughHeaders: Array<string> | null;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -11616,6 +11622,7 @@ export type GetAgentResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
+        passthroughHeaders: Array<string> | null;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -11699,6 +11706,7 @@ export type UpdateAgentData = {
         llmApiKeyId?: string | null;
         llmModel?: string | null;
         identityProviderId?: string | null;
+        passthroughHeaders?: Array<string> | null;
         builtInAgentConfig?: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -11811,6 +11819,7 @@ export type UpdateAgentResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
+        passthroughHeaders: Array<string> | null;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;

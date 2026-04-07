@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.3"
+    "version": "1.2.4"
   },
   "components": {
     "schemas": {
@@ -37761,6 +37761,13 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "passthroughHeaders": {
+                            "nullable": true,
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "builtInAgentConfig": {
                             "nullable": true,
                             "oneOf": [
@@ -38066,6 +38073,7 @@
                           "llmApiKeyId",
                           "llmModel",
                           "identityProviderId",
+                          "passthroughHeaders",
                           "builtInAgentConfig",
                           "builtIn",
                           "createdAt",
@@ -38430,6 +38438,17 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "passthroughHeaders": {
+                    "nullable": true,
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[a-zA-Z0-9-]+$"
+                    }
+                  },
                   "builtInAgentConfig": {
                     "nullable": true,
                     "oneOf": [
@@ -38660,6 +38679,13 @@
                     "identityProviderId": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "passthroughHeaders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     },
                     "builtInAgentConfig": {
                       "nullable": true,
@@ -38966,6 +38992,7 @@
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
+                    "passthroughHeaders",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -39359,6 +39386,13 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "passthroughHeaders": {
+                        "nullable": true,
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
                       "builtInAgentConfig": {
                         "nullable": true,
                         "oneOf": [
@@ -39664,6 +39698,7 @@
                       "llmApiKeyId",
                       "llmModel",
                       "identityProviderId",
+                      "passthroughHeaders",
                       "builtInAgentConfig",
                       "builtIn",
                       "createdAt",
@@ -39997,6 +40032,13 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "passthroughHeaders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
@@ -40302,6 +40344,7 @@
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
+                    "passthroughHeaders",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -40635,6 +40678,13 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "passthroughHeaders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
@@ -40940,6 +40990,7 @@
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
+                    "passthroughHeaders",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -41285,6 +41336,13 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "passthroughHeaders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
@@ -41590,6 +41648,7 @@
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
+                    "passthroughHeaders",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -41906,6 +41965,17 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "passthroughHeaders": {
+                    "nullable": true,
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[a-zA-Z0-9-]+$"
+                    }
+                  },
                   "builtInAgentConfig": {
                     "nullable": true,
                     "oneOf": [
@@ -42141,6 +42211,13 @@
                     "identityProviderId": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "passthroughHeaders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     },
                     "builtInAgentConfig": {
                       "nullable": true,
@@ -42447,6 +42524,7 @@
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
+                    "passthroughHeaders",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",

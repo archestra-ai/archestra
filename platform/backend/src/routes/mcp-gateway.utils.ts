@@ -95,6 +95,7 @@ export type AgentInfo = {
   id: string;
   agentType?: AgentType;
   labels?: Array<{ key: string; value: string }>;
+  passthroughHeaders?: string[] | null;
 };
 
 type TokenHashes = {
@@ -128,13 +129,10 @@ const rawArchestraTokenCache =
 
 /**
  * Creates an MCP server for the given agent.
- * Pass `preloadedAgent` (e.g. from the proxy's access cache) to skip the
- * redundant DB lookup that would otherwise happen inside this function.
  */
 export async function createAgentServer(
   agentId: string,
   tokenAuth?: TokenAuthContext,
-  preloadedAgent?: AgentInfo,
 ): Promise<{ server: McpServer; agent: AgentInfo }> {
   const extensionCapabilities = {
     ...MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
@@ -160,14 +158,8 @@ export async function createAgentServer(
   );
   const { server } = mcpServer;
 
-  let agent: AgentInfo;
-  if (preloadedAgent) {
-    agent = preloadedAgent;
-  } else {
-    const fetched = await AgentModel.findById(agentId);
-    if (!fetched) throw new Error(`Agent not found: ${agentId}`);
-    agent = fetched;
-  }
+  const agent = await AgentModel.findById(agentId);
+  if (!agent) throw new Error(`Agent not found: ${agentId}`);
 
   // Create a map of Archestra tool names to their titles
   // This is needed because the database schema doesn't include a title field
@@ -563,6 +555,29 @@ export async function extractProfileIdAndTokenFromRequest(
 
   const profileId = await AgentModel.resolveIdFromIdOrSlug(idOrSlug);
   return profileId ? { profileId, token } : null;
+}
+
+/**
+ * Extract headers from an incoming request that match the gateway's passthrough allowlist.
+ * Returns a map of header name → value, or undefined if none matched.
+ */
+export function extractPassthroughHeaders(
+  allowlist: string[] | null | undefined,
+  requestHeaders: Record<string, string | string[] | undefined>,
+): Record<string, string> | undefined {
+  if (!allowlist || allowlist.length === 0) {
+    return undefined;
+  }
+  const extracted: Record<string, string> = {};
+  for (const headerName of allowlist) {
+    const value = requestHeaders[headerName.toLowerCase()];
+    if (typeof value === "string") {
+      extracted[headerName] = value;
+    } else if (Array.isArray(value)) {
+      extracted[headerName] = value.join(", ");
+    }
+  }
+  return Object.keys(extracted).length > 0 ? extracted : undefined;
 }
 
 /**

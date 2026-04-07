@@ -269,6 +269,18 @@ The user follows the link, installs the server with their credentials, and retri
 
 For upstream servers that use OAuth, Archestra handles the token lifecycle automatically. When the upstream server returns a 401, Archestra uses the stored refresh token to obtain a new access token and retries the request without any user intervention. Refresh failures are tracked per server and are visible in the MCP server status page.
 
+## Custom Header Passthrough
+
+MCP Gateways can pass through client request headers to downstream MCP servers. This is useful for passing correlation IDs, tenant identifiers, or other application-specific headers through the gateway.
+
+Configure the allowlist in the MCP Gateway's **Advanced** section under **Custom Header Passthrough**. Only headers whose names appear in the allowlist are forwarded; all others are dropped. Header names are case-insensitive and stored in lowercase.
+
+Hop-by-hop headers (`Connection`, `Transfer-Encoding`, `Upgrade`, etc.) and protocol-level headers (`Host`, `Content-Length`) cannot be added to the allowlist. Application-level headers like `Authorization` and `Cookie` are allowed — adding them to the allowlist is an explicit opt-in.
+
+Passthrough headers do not override credentials already set by Archestra's upstream credential resolution. If a header name conflicts with an existing credential header (e.g., `Authorization`), the credential takes precedence.
+
+Passthrough headers only apply to HTTP-based transports (streamable-http and remote servers). Stdio-based servers do not support HTTP headers.
+
 ## Building MCP Servers
 
 There are three authentication patterns available for MCP servers deployed through Archestra, depending on whether the server needs external credentials and whether those credentials differ per user.

@@ -2729,6 +2729,106 @@ describe("McpClient", () => {
       });
     });
 
+    describe("passthrough headers", () => {
+      test("includes passthrough headers in transport for remote servers", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__passthrough_test",
+          description: "Passthrough header test",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId,
+          credentialResolutionMode: "static",
+        });
+
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "ok" }],
+        });
+
+        await mcpClient.executeToolCall(
+          {
+            id: "call_passthrough_1",
+            name: "github-mcp-server__passthrough_test",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: "tok-1",
+            teamId: null,
+            isOrganizationToken: true,
+            passthroughHeaders: {
+              "x-correlation-id": "abc-123",
+              "x-tenant-id": "tenant-1",
+            },
+          },
+        );
+
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        const transportCalls = vi.mocked(StreamableHTTPClientTransport).mock
+          .calls;
+        expect(transportCalls.length).toBeGreaterThan(0);
+        const lastCall = transportCalls[transportCalls.length - 1];
+        const headers = lastCall[1]?.requestInit?.headers as Headers;
+        expect(headers.get("x-correlation-id")).toBe("abc-123");
+        expect(headers.get("x-tenant-id")).toBe("tenant-1");
+      });
+
+      test("passthrough headers do not override existing auth headers", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__passthrough_no_override",
+          description: "Passthrough should not override auth",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId,
+          credentialResolutionMode: "static",
+        });
+
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "ok" }],
+        });
+
+        await mcpClient.executeToolCall(
+          {
+            id: "call_passthrough_2",
+            name: "github-mcp-server__passthrough_no_override",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: "tok-1",
+            teamId: null,
+            isOrganizationToken: true,
+            passthroughHeaders: {
+              authorization: "Bearer malicious-override",
+              "x-custom": "allowed",
+            },
+          },
+        );
+
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        const transportCalls = vi.mocked(StreamableHTTPClientTransport).mock
+          .calls;
+        expect(transportCalls.length).toBeGreaterThan(0);
+        const lastCall = transportCalls[transportCalls.length - 1];
+        const headers = lastCall[1]?.requestInit?.headers as Headers;
+        // Auth header should be the server's credential, not the passthrough
+        expect(headers.get("authorization")).toBe(
+          "Bearer test-github-token-123",
+        );
+        // Custom header should still be included
+        expect(headers.get("x-custom")).toBe("allowed");
+      });
+    });
+
     describe("_meta and structuredContent passthrough", () => {
       test("passes _meta from callTool result into CommonToolResult", async () => {
         const tool = await ToolModel.createToolIfNotExists({

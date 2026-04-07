@@ -1,8 +1,10 @@
 import {
+  BLOCKED_PASSTHROUGH_HEADERS,
   BUILT_IN_AGENT_IDS,
   DOMAIN_VALIDATION_REGEX,
   IncomingEmailSecurityModeSchema,
   MAX_DOMAIN_LENGTH,
+  MAX_PASSTHROUGH_HEADERS,
   MAX_SUGGESTED_PROMPTS,
 } from "@shared";
 import {
@@ -86,6 +88,25 @@ export const AgentTeamInfoSchema = z.object({
   name: z.string(),
 });
 
+const PassthroughHeaderSchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(
+    /^[a-zA-Z0-9-]+$/,
+    "Header name must contain only alphanumeric characters and hyphens",
+  )
+  .transform((h) => h.toLowerCase())
+  .refine((h) => !BLOCKED_PASSTHROUGH_HEADERS.has(h), {
+    message: "This header name is not allowed (hop-by-hop or protocol-level)",
+  });
+
+export const PassthroughHeadersSchema = z
+  .array(PassthroughHeaderSchema)
+  .max(MAX_PASSTHROUGH_HEADERS)
+  .nullable()
+  .optional();
+
 // Extended field schemas for drizzle-zod
 // agentType override is needed because the column uses text().$type<AgentType>()
 // which drizzle-zod infers as z.string() instead of the narrower enum schema
@@ -94,6 +115,7 @@ const selectExtendedFields = {
   agentType: AgentTypeSchema,
   scope: AgentScopeSchema,
   builtInAgentConfig: BuiltInAgentConfigSchema.nullable(),
+  passthroughHeaders: z.array(z.string()).nullable(),
 };
 
 const insertExtendedFields = {
@@ -101,6 +123,7 @@ const insertExtendedFields = {
   agentType: AgentTypeSchema.optional(),
   scope: AgentScopeSchema.optional(),
   builtInAgentConfig: BuiltInAgentConfigSchema.nullable().optional(),
+  passthroughHeaders: PassthroughHeadersSchema,
 };
 
 /**

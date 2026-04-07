@@ -109,6 +109,8 @@ export type TokenAuthContext = {
   rawToken?: string;
   /** True if authenticated via browser session (MCP proxy route) */
   isSessionAuth?: boolean;
+  /** Headers to forward to downstream MCP servers (extracted from incoming request per gateway allowlist) */
+  passthroughHeaders?: Record<string, string>;
 };
 
 /**
@@ -1300,6 +1302,8 @@ class McpClient {
           localHeaders.Authorization = `Bearer ${tokenAuth.rawToken}`;
         }
 
+        mergePassthroughHeaders(localHeaders, tokenAuth?.passthroughHeaders);
+
         return new StreamableHTTPClientTransport(new URL(endpointUrl), {
           sessionId,
           requestInit: { headers: new Headers(localHeaders) },
@@ -1327,6 +1331,8 @@ class McpClient {
           // (upstream server validates the same JWT against the IdP's JWKS)
           headers.Authorization = `Bearer ${tokenAuth.rawToken}`;
         }
+
+        mergePassthroughHeaders(headers, tokenAuth?.passthroughHeaders);
 
         return new StreamableHTTPClientTransport(
           new URL(catalogItem.serverUrl),
@@ -2490,4 +2496,18 @@ function formatActionableAuthError(params: {
     "",
     params.postAction,
   ].join("\n");
+}
+
+/** Merge passthrough headers into target, skipping keys already present (case-insensitive). */
+function mergePassthroughHeaders(
+  target: Record<string, string>,
+  passthrough: Record<string, string> | undefined,
+): void {
+  if (!passthrough) return;
+  const existing = new Set(Object.keys(target).map((k) => k.toLowerCase()));
+  for (const [name, value] of Object.entries(passthrough)) {
+    if (!existing.has(name.toLowerCase())) {
+      target[name] = value;
+    }
+  }
 }

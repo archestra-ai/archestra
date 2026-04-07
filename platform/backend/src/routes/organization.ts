@@ -380,7 +380,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       try {
         const response = await callEmbedding({
-          texts: [
+          inputs: [
             addNomicTaskPrefix(
               body.embeddingModel,
               "hello world",

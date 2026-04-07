@@ -19,6 +19,7 @@ const CONNECTOR_ICON_MAP: Partial<Record<ConnectorType, ConnectorIcon>> = {
   gitlab: { kind: "img", src: "/icons/gitlab.png" },
   servicenow: { kind: "img", src: "/icons/servicenow.png" },
   notion: { kind: "img", src: "/icons/notion.png" },
+  sharepoint: { kind: "img", src: "/icons/sharepoint.png" },
 };
 
 export function hasConnectorIcon(type: string): boolean {

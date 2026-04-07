@@ -3,7 +3,7 @@ title: Knowledge Connectors
 category: Knowledge
 order: 2
 description: Supported connector types, configuration, and management
-lastUpdated: 2026-04-03
+lastUpdated: 2026-04-05
 ---
 
 <!--
@@ -12,6 +12,15 @@ Check ../docs_writer_prompt.md before changing this file.
 -->
 
 Connectors pull data from external tools into knowledge bases on a schedule. Sync is incremental by default, so only new or changed content is processed after the first run. A connector can also be assigned to multiple knowledge bases.
+
+This page focuses on connector-specific setup. Every connector also shares a few common fields in the UI:
+
+- **Name** -- a label for your team
+- **Description** -- optional context for other admins
+- **Visibility** -- whether the connector is org-wide or team-scoped
+- **Schedule** -- when sync runs automatically
+
+Most connector-specific filters live under **Advanced** in the create/edit dialogs.
 
 Connector visibility is part of the broader knowledge source access model. See [Overview - Visibility Modes](/docs/platform-knowledge-bases#visibility-modes) for how connector visibility determines which connector data each user can query.
 
@@ -105,6 +114,35 @@ Ingests pages from Notion workspaces using the Notion API. Page content is fetch
 
 Authentication uses a [Notion integration token](https://www.notion.so/my-integrations) (starts with `secret_`). Create an internal integration in your Notion workspace and share the relevant pages or databases with it. Incremental sync uses the `last_edited_time` field to fetch only pages modified since the last run.
 
+## SharePoint
+
+Ingests documents and site pages from SharePoint Online via the Microsoft Graph API. Text is extracted from `.txt`, `.md`, `.csv`, `.json`, `.xml`, `.html`, `.htm`, `.yaml`, `.log` files, as well as `.docx`, `.pdf`, and `.pptx` documents. Site pages are synced with content extracted from web parts. When a multimodal embedding model is configured (e.g., `gemini-embedding-2-preview`), image files (`.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`) up to 4 MB are also ingested and embedded directly.
+
+| Field         | Description                                                                                         |
+| ------------- | --------------------------------------------------------------------------------------------------- |
+| Tenant ID     | Your Azure AD (Entra ID) tenant ID or domain (e.g., `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)       |
+| Site URL      | Your SharePoint site URL (e.g., `https://your-tenant.sharepoint.com/sites/your-site`)             |
+| Client ID     | Azure AD app registration Application (client) ID                                                  |
+| Client Secret | Azure AD app registration client secret value                                                      |
+| Drive IDs     | Comma-separated document library IDs to sync (optional -- leave blank to sync all site libraries)   |
+| Folder Path   | Restrict sync to a specific folder path within each drive (optional)                                |
+| Include Pages | Toggle to sync site pages and their web part content (default: on)                                  |
+
+Authentication uses an Azure AD app registration with client credentials (OAuth2). The app registration requires the `Sites.Read.All` application permission on Microsoft Graph, and admin consent must be granted.
+
+To configure the connector:
+
+- `Tenant ID` comes from **Microsoft Entra ID > App registrations > <your app> > Overview > Directory (tenant) ID**
+- `Client ID` comes from **Application (client) ID** on the same page
+- `Client Secret` is the secret **Value** from **Certificates & secrets**, not the secret ID
+- `Site URL` should be the exact SharePoint site web URL, not just the display name
+
+Known limitation:
+
+- SharePoint file sync currently lists only the direct children of the selected drive root or `Folder Path`. Nested subfolders are not traversed recursively. If you need multiple nested folders today, point `Folder Path` at the specific folder you want to sync or create separate connectors. Recursive traversal is tracked in [issue #3665](https://github.com/archestra-ai/archestra/issues/3665).
+
+Incremental sync uses the `lastModifiedDateTime` field to fetch only items modified since the last run.
+
 ## Managing Connectors
 
 Connectors can be managed from either the **Connectors** page or a knowledge base's detail page. After creation you can:
@@ -112,8 +150,6 @@ Connectors can be managed from either the **Connectors** page or a knowledge bas
 - **Toggle enabled/disabled** -- suspends or resumes the cron schedule
 - **Trigger sync** -- runs an immediate sync outside the schedule
 - **View runs** -- see sync history with status, document counts, and errors
-
-The knowledge base and connector list pages show which Agents and MCP Gateways are assigned to each connector.
 
 ## Adding New Connector Types
 

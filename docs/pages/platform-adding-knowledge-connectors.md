@@ -20,6 +20,7 @@ This guide covers how to add a new knowledge connector to Archestra Platform. Co
 2. **Connector class** extending `BaseConnector` with `validateConfig`, `testConnection`, and `sync`
 3. **Registry entry** so the runtime can instantiate the connector by type string
 4. **Frontend config fields** component for the creation dialog
+5. **User-facing docs update** in `docs/pages/platform-knowledge-connectors.md`
 
 When the external service provides an official SDK, prefer it over raw `fetch` calls. Official SDKs handle pagination, authentication, rate limiting, and type safety out of the box. For example, the GitHub connector uses [`@octokit/rest`](https://www.npmjs.com/package/@octokit/rest) and the GitLab connector uses [`@gitbeaker/rest`](https://www.npmjs.com/package/@gitbeaker/rest).
 
@@ -335,6 +336,21 @@ import { GithubConfigFields } from "./github-config-fields";
 ```
 
 Update the `CreateConnectorFormValues` type to include the new connector type in the `connectorType` union.
+
+## User-Facing Docs
+
+When you add a new connector, you must also add or update the matching section in `docs/pages/platform-knowledge-connectors.md`.
+
+That section should cover the actual setup and operating model for users, not just raw config fields:
+
+- what the connector syncs
+- how authentication works
+- where the required credentials come from
+- which fields are required vs optional
+- any important filters, defaults, or limitations
+- any connector-specific permissions or admin-consent requirements
+
+Only document options users can actually configure in the create/edit dialogs. Do not document internal schema fields or defaults that are not exposed in the UI.
 
 ## Database Schema
 

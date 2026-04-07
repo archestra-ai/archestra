@@ -25980,7 +25980,7 @@ export type GetKnowledgeBasesResponses = {
             connectors: Array<{
                 id: string;
                 name: string;
-                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion';
+                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint';
             }>;
             totalDocsIndexed: number;
             assignedAgents: Array<{
@@ -26428,7 +26428,7 @@ export type GetConnectorsData = {
         offset?: number;
         knowledgeBaseId?: string;
         search?: string;
-        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion';
+        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint';
     };
     url: '/api/connectors';
 };
@@ -26504,7 +26504,7 @@ export type GetConnectorsResponses = {
             description: string | null;
             visibility: 'org-wide' | 'team-scoped';
             teamIds: Array<string>;
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint';
             config: {
                 type: 'jira';
                 jiraBaseUrl: unknown;
@@ -26557,6 +26557,14 @@ export type GetConnectorsResponses = {
                 databaseIds?: Array<string>;
                 pageIds?: Array<string>;
                 batchSize?: number;
+            } | {
+                type: 'sharepoint';
+                tenantId: string;
+                siteUrl: unknown;
+                driveIds?: Array<string>;
+                folderPath?: string;
+                includePages?: boolean;
+                batchSize?: number;
             };
             secretId: string | null;
             schedule: string;
@@ -26594,7 +26602,7 @@ export type CreateConnectorData = {
         description?: string | null;
         visibility?: 'org-wide' | 'team-scoped';
         teamIds?: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint';
         config: {
             type: 'jira';
             jiraBaseUrl: string;
@@ -26646,6 +26654,14 @@ export type CreateConnectorData = {
             type: 'notion';
             databaseIds?: Array<string>;
             pageIds?: Array<string>;
+            batchSize?: number;
+        } | {
+            type: 'sharepoint';
+            tenantId: string;
+            siteUrl: string;
+            driveIds?: Array<string>;
+            folderPath?: string;
+            includePages?: boolean;
             batchSize?: number;
         };
         credentials: {
@@ -26731,7 +26747,7 @@ export type CreateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -26783,6 +26799,14 @@ export type CreateConnectorResponses = {
             type: 'notion';
             databaseIds?: Array<string>;
             pageIds?: Array<string>;
+            batchSize?: number;
+        } | {
+            type: 'sharepoint';
+            tenantId: string;
+            siteUrl: unknown;
+            driveIds?: Array<string>;
+            folderPath?: string;
+            includePages?: boolean;
             batchSize?: number;
         };
         secretId: string | null;
@@ -26959,7 +26983,7 @@ export type GetConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -27011,6 +27035,14 @@ export type GetConnectorResponses = {
             type: 'notion';
             databaseIds?: Array<string>;
             pageIds?: Array<string>;
+            batchSize?: number;
+        } | {
+            type: 'sharepoint';
+            tenantId: string;
+            siteUrl: unknown;
+            driveIds?: Array<string>;
+            folderPath?: string;
+            includePages?: boolean;
             batchSize?: number;
         };
         secretId: string | null;
@@ -27087,6 +27119,14 @@ export type UpdateConnectorData = {
             type: 'notion';
             databaseIds?: Array<string>;
             pageIds?: Array<string>;
+            batchSize?: number;
+        } | {
+            type: 'sharepoint';
+            tenantId: string;
+            siteUrl: string;
+            driveIds?: Array<string>;
+            folderPath?: string;
+            includePages?: boolean;
             batchSize?: number;
         };
         credentials?: {
@@ -27173,7 +27213,7 @@ export type UpdateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -27225,6 +27265,14 @@ export type UpdateConnectorResponses = {
             type: 'notion';
             databaseIds?: Array<string>;
             pageIds?: Array<string>;
+            batchSize?: number;
+        } | {
+            type: 'sharepoint';
+            tenantId: string;
+            siteUrl: unknown;
+            driveIds?: Array<string>;
+            folderPath?: string;
+            includePages?: boolean;
             batchSize?: number;
         };
         secretId: string | null;

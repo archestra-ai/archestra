@@ -98278,6 +98278,12 @@
                                       "enum": [
                                         "notion"
                                       ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "sharepoint"
+                                      ]
                                     }
                                   ]
                                 }
@@ -100085,6 +100091,12 @@
                   "enum": [
                     "notion"
                   ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "sharepoint"
+                  ]
                 }
               ]
             },
@@ -100170,6 +100182,12 @@
                                 "type": "string",
                                 "enum": [
                                   "notion"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "sharepoint"
                                 ]
                               }
                             ]
@@ -100422,6 +100440,43 @@
                                 },
                                 "required": [
                                   "type"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "sharepoint"
+                                    ]
+                                  },
+                                  "tenantId": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "siteUrl": {},
+                                  "driveIds": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "folderPath": {
+                                    "type": "string"
+                                  },
+                                  "includePages": {
+                                    "type": "boolean"
+                                  },
+                                  "batchSize": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "tenantId",
+                                  "siteUrl"
                                 ],
                                 "additionalProperties": false
                               }
@@ -100886,6 +100941,12 @@
                         "enum": [
                           "notion"
                         ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "sharepoint"
+                        ]
                       }
                     ]
                   },
@@ -101143,6 +101204,44 @@
                         "required": [
                           "type"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "sharepoint"
+                            ]
+                          },
+                          "tenantId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "siteUrl": {
+                            "type": "string"
+                          },
+                          "driveIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "folderPath": {
+                            "type": "string"
+                          },
+                          "includePages": {
+                            "type": "boolean"
+                          },
+                          "batchSize": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "tenantId",
+                          "siteUrl"
+                        ]
                       }
                     ]
                   },
@@ -101255,6 +101354,12 @@
                           "type": "string",
                           "enum": [
                             "notion"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "sharepoint"
                           ]
                         }
                       ]
@@ -101507,6 +101612,43 @@
                           },
                           "required": [
                             "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "sharepoint"
+                              ]
+                            },
+                            "tenantId": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "siteUrl": {},
+                            "driveIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "folderPath": {
+                              "type": "string"
+                            },
+                            "includePages": {
+                              "type": "boolean"
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "tenantId",
+                            "siteUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -101919,6 +102061,12 @@
                           "enum": [
                             "notion"
                           ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "sharepoint"
+                          ]
                         }
                       ]
                     },
@@ -102170,6 +102318,43 @@
                           },
                           "required": [
                             "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "sharepoint"
+                              ]
+                            },
+                            "tenantId": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "siteUrl": {},
+                            "driveIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "folderPath": {
+                              "type": "string"
+                            },
+                            "includePages": {
+                              "type": "boolean"
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "tenantId",
+                            "siteUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -102783,6 +102968,44 @@
                         "required": [
                           "type"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "sharepoint"
+                            ]
+                          },
+                          "tenantId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "siteUrl": {
+                            "type": "string"
+                          },
+                          "driveIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "folderPath": {
+                            "type": "string"
+                          },
+                          "includePages": {
+                            "type": "boolean"
+                          },
+                          "batchSize": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "tenantId",
+                          "siteUrl"
+                        ]
                       }
                     ]
                   },
@@ -102893,6 +103116,12 @@
                           "type": "string",
                           "enum": [
                             "notion"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "sharepoint"
                           ]
                         }
                       ]
@@ -103145,6 +103374,43 @@
                           },
                           "required": [
                             "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "sharepoint"
+                              ]
+                            },
+                            "tenantId": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "siteUrl": {},
+                            "driveIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "folderPath": {
+                              "type": "string"
+                            },
+                            "includePages": {
+                              "type": "boolean"
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "tenantId",
+                            "siteUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -109069,7 +109335,6 @@
                   },
                   "outputModalities": {
                     "nullable": true,
-                    "minItems": 1,
                     "type": "array",
                     "items": {
                       "type": "string",

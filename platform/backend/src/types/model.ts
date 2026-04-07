@@ -108,11 +108,7 @@ export const PatchModelBodySchema = createUpdateSchema(
       .min(1, "At least one input modality is required")
       .nullable()
       .optional(),
-    outputModalities: z
-      .array(ModelOutputModalitySchema)
-      .min(1, "At least one output modality is required")
-      .nullable()
-      .optional(),
+    outputModalities: z.array(ModelOutputModalitySchema).nullable().optional(),
   })
   .refine(
     (data) => {
@@ -130,6 +126,23 @@ export const PatchModelBodySchema = createUpdateSchema(
     },
     {
       message: "Both custom prices must be set together or both must be null",
+    },
+  )
+  .refine(
+    (data) => {
+      if (data.embeddingDimensions != null) {
+        return true;
+      }
+
+      if (data.outputModalities == null) {
+        return true;
+      }
+
+      return data.outputModalities.length > 0;
+    },
+    {
+      message: "At least one output modality is required",
+      path: ["outputModalities"],
     },
   )
   .refine(

@@ -6,6 +6,7 @@ import type {
   ServiceNowConfig,
 } from "@/types";
 import { ServiceNowConfigSchema } from "@/types";
+import { stripHtmlTags } from "@/utils/strip-html";
 import {
   BaseConnector,
   buildCheckpoint,
@@ -612,30 +613,3 @@ function businessAppToDocument(
       : undefined,
   };
 }
-
-/** Strip HTML tags to produce plain text. */
-export function stripHtmlTags(html: string): string {
-  let text = html;
-  text = text.replace(/<\/(p|div|h[1-6]|li|tr|br\s*\/?)>/gi, "\n");
-  text = text.replace(/<br\s*\/?>/gi, "\n");
-  let prev: string;
-  do {
-    prev = text;
-    text = text.replace(/<[^>]+>/g, "");
-  } while (text !== prev);
-  text = text.replace(
-    /&(amp|lt|gt|quot|#39|nbsp);/g,
-    (_match, entity: string) => HTML_ENTITY_MAP[entity] ?? _match,
-  );
-  text = text.replace(/\n{3,}/g, "\n\n");
-  return text.trim();
-}
-
-const HTML_ENTITY_MAP: Record<string, string> = {
-  amp: "&",
-  lt: "<",
-  gt: ">",
-  quot: '"',
-  "#39": "'",
-  nbsp: " ",
-};

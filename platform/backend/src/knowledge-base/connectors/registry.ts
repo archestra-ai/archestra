@@ -5,6 +5,7 @@ import { GitlabConnector } from "./gitlab/gitlab-connector";
 import { JiraConnector } from "./jira/jira-connector";
 import { NotionConnector } from "./notion/notion-connector";
 import { ServiceNowConnector } from "./servicenow/servicenow-connector";
+import { SharePointConnector } from "./sharepoint/sharepoint-connector";
 
 const connectorRegistry: Record<ConnectorType, () => Connector> = {
   jira: () => new JiraConnector(),
@@ -13,6 +14,7 @@ const connectorRegistry: Record<ConnectorType, () => Connector> = {
   gitlab: () => new GitlabConnector(),
   servicenow: () => new ServiceNowConnector(),
   notion: () => new NotionConnector(),
+  sharepoint: () => new SharePointConnector(),
 };
 
 export function getConnector(type: string): Connector {

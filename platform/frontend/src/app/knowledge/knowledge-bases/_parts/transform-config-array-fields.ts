@@ -14,6 +14,7 @@ export function transformConfigArrayFields(
     "commentEmailBlacklist",
     "states",
     "assignmentGroups",
+    "driveIds",
   ];
   for (const key of stringArrayFields) {
     if (typeof result[key] === "string") {

@@ -156,6 +156,19 @@ describe("ConnectorSyncService", () => {
       content,
       contentHash,
     });
+    const existingDoc = await KbDocumentModel.findBySourceId({
+      connectorId: connector.id,
+      sourceId: "ext-1",
+    });
+
+    if (!existingDoc) {
+      expect.fail("Existing document not found");
+      return;
+    }
+
+    await KbChunkModel.insertMany([
+      { documentId: existingDoc.id, content: "chunk 1", chunkIndex: 0 },
+    ]);
 
     setupSecret();
     const mockImpl = makeMockConnector([
@@ -222,6 +235,52 @@ describe("ConnectorSyncService", () => {
     const chunks = await KbChunkModel.findByDocument(existingDoc.id);
     expect(chunks).toHaveLength(2);
     expect(chunks.every((chunk) => chunk.acl.includes("org:*"))).toBe(true);
+  });
+
+  test("executeSync repairs unchanged documents that have no chunks", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const secretId = await createSecret();
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+    await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
+
+    const content = "Content of doc 1";
+    const contentHash = createHash("sha256").update(content).digest("hex");
+
+    const existingDoc = await KbDocumentModel.create({
+      organizationId: org.id,
+      sourceId: "ext-1",
+      connectorId: connector.id,
+      title: "Doc 1",
+      content,
+      contentHash,
+      embeddingStatus: "pending",
+    });
+
+    setupSecret();
+    const mockImpl = makeMockConnector([
+      { id: "ext-1", title: "Doc 1", content },
+    ]);
+    mockGetConnector.mockReturnValue(mockImpl);
+
+    const result = await connectorSyncService.executeSync(connector.id);
+
+    expect(result.status).toBe("success");
+
+    const run = await ConnectorRunModel.findById(result.runId);
+    expect(run?.documentsProcessed).toBe(1);
+    expect(run?.documentsIngested).toBe(1);
+
+    const repairedChunks = await KbChunkModel.findByDocument(existingDoc.id);
+    expect(repairedChunks).toHaveLength(2);
+
+    const repairedDoc = await KbDocumentModel.findById(existingDoc.id);
+    expect(repairedDoc?.embeddingStatus).toBe("pending");
   });
 
   test("executeSync marks run as failed when sync generator throws", async ({

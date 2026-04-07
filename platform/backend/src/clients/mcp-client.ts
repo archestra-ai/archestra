@@ -988,7 +988,7 @@ class McpClient {
       },
       "Determining target MCP server ID for catalog item",
     );
-    // Static credential case: use the pre-configured MCP server installation.
+    // Static credential case: tool has a bound MCP server credential to use.
     if (tool.credentialResolutionMode === "static") {
       if (!tool.mcpServerId) {
         return {
@@ -1015,6 +1015,8 @@ class McpClient {
       };
     }
 
+    // If mcp server is configured to use enterprise-managed credentials, we can use any pod.
+    // Mcp server pod will request credentials from the IDP.
     if (tool.credentialResolutionMode === "enterprise_managed") {
       const explicitTargetMcpServerId = tool.mcpServerId;
       if (explicitTargetMcpServerId) {
@@ -1074,9 +1076,9 @@ class McpClient {
     // Get all servers for this catalog
     const allServers = await McpServerModel.findByCatalogId(tool.catalogId);
 
-    // Priority 1: Personal credential owned by current user (no teamId)
-    // That happens only from chat UI when we know the user ID
+    // User token: try user's personal server, then team-owned servers for teams the user belongs to
     if (tokenAuth.userId) {
+      // Priority 1: Personal credential owned by current user
       const userServer = allServers.find(
         (s) => s.ownerId === tokenAuth.userId && !s.teamId,
       );
@@ -1088,66 +1090,59 @@ class McpClient {
             serverId: userServer.id,
             userId: tokenAuth.userId,
           },
-          `Dynamic resolution: using user-owned server of ${userServer.id} for tool ${toolCall.name}`,
+          `Dynamic resolution: using user-owned server for tool ${toolCall.name}`,
         );
         return {
           targetMcpServerId: userServer.id,
           mcpServerName: userServer.name,
         };
       }
+
+      // Priority 2: Team-owned server for a team the user is a member of
+      const userTeams = await TeamModel.getUserTeams(tokenAuth.userId);
+      const userTeamIds = new Set(userTeams.map((t) => t.id));
+      const teamServer = allServers.find(
+        (s) => s.teamId && userTeamIds.has(s.teamId),
+      );
+      if (teamServer) {
+        logger.info(
+          {
+            toolName: toolCall.name,
+            catalogId: tool.catalogId,
+            serverId: teamServer.id,
+            teamId: teamServer.teamId,
+            userId: tokenAuth.userId,
+          },
+          `Dynamic resolution: using team-owned server for user ${tokenAuth.userId}`,
+        );
+        return {
+          targetMcpServerId: teamServer.id,
+          mcpServerName: teamServer.name,
+        };
+      }
     }
 
-    // Priority 2 & 3: Team token used - batch-load team members once to avoid N+1 queries
+    // Team token: only try team-owned servers for the token's team
     if (tokenAuth.teamId) {
-      const teamMembers = await TeamModel.getTeamMembers(tokenAuth.teamId);
-      const teamMemberIds = new Set(teamMembers.map((m) => m.userId));
-
-      // Priority 2: Personal credential owned by a team member (no teamId on server)
-      for (const server of allServers) {
-        if (
-          server.ownerId &&
-          !server.teamId &&
-          teamMemberIds.has(server.ownerId)
-        ) {
-          logger.info(
-            {
-              toolName: toolCall.name,
-              catalogId: tool.catalogId,
-              serverId: server.id,
-              ownerId: server.ownerId,
-              teamId: tokenAuth.teamId,
-            },
-            `Dynamic resolution: using server owned by personal credential of ${server.ownerId} of ${server.id} for tool ${toolCall.name}`,
-          );
-          return {
-            targetMcpServerId: server.id,
-            mcpServerName: server.name,
-          };
-        }
-      }
-
-      // Priority 3: Any server owned by a team member
-      for (const server of allServers) {
-        if (server.ownerId && teamMemberIds.has(server.ownerId)) {
-          logger.info(
-            {
-              toolName: toolCall.name,
-              catalogId: tool.catalogId,
-              serverId: server.id,
-              ownerId: server.ownerId,
-              teamId: tokenAuth.teamId,
-            },
-            `Dynamic resolution: using server owned by team member ${server.ownerId} of ${server.id} for tool ${toolCall.name}`,
-          );
-          return {
-            targetMcpServerId: server.id,
-            mcpServerName: server.name,
-          };
-        }
+      const teamServer = allServers.find((s) => s.teamId === tokenAuth.teamId);
+      if (teamServer) {
+        logger.info(
+          {
+            toolName: toolCall.name,
+            catalogId: tool.catalogId,
+            serverId: teamServer.id,
+            teamId: tokenAuth.teamId,
+          },
+          `Dynamic resolution: using team-owned server for team ${tokenAuth.teamId}`,
+        );
+        return {
+          targetMcpServerId: teamServer.id,
+          mcpServerName: teamServer.name,
+        };
       }
     }
 
-    // Priority 4: Otherwise, if organization-wide token is used, use first available server
+    // Org-wide token: use first available server
     if (tokenAuth.isOrganizationToken && allServers.length > 0) {
       logger.info(
         {
@@ -1155,7 +1150,7 @@ class McpClient {
           catalogId: tool.catalogId,
           serverId: allServers[0].id,
         },
-        `Dynamic resolution: using org-wide server of ${allServers[0].id} for tool ${toolCall.name}`,
+        `Dynamic resolution: using org-wide server for tool ${toolCall.name}`,
       );
       return {
         targetMcpServerId: allServers[0].id,
@@ -1163,7 +1158,7 @@ class McpClient {
       };
     }
 
-    // Priority 5: Fallback for external IdP users if earlier team-based resolution didn't match
+    // Fallback for external IdP users if earlier resolution didn't match
     if (tokenAuth.isExternalIdp && allServers.length > 0) {
       logger.info(
         {

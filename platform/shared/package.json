@@ -25,14 +25,14 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "better-auth": "1.5.5",
+    "better-auth": "1.5.6",
     "zod": "^4.3.4"
   },
   "devDependencies": {
-    "@hey-api/openapi-ts": "^0.94.0",
+    "@hey-api/openapi-ts": "^0.94.5",
     "@types/node": "^25",
     "knip": "^5.85.0",
     "typescript": "^5.9.2",
-    "vitest": "^4.1.0"
+    "vitest": "^4.1.2"
   }
 }

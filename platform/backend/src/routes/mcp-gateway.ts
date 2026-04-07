@@ -293,6 +293,10 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
         if (passthroughHeaders) {
           tokenAuthContext.passthroughHeaders = passthroughHeaders;
+          fastify.log.info(
+            { profileId, passthroughHeaders: Object.keys(passthroughHeaders) },
+            "Passthrough headers forwarded to MCP servers",
+          );
         }
       }
 

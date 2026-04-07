@@ -9,6 +9,7 @@ import { DualLlmAnalysisSchema } from "./dual-llm";
 import { UnsafeContextBoundarySchema } from "./interaction-guardrails";
 import {
   Anthropic,
+  Azure,
   Bedrock,
   Cerebras,
   Cohere,
@@ -56,6 +57,7 @@ export const InteractionRequestSchema = z.union([
   Zhipuai.API.ChatCompletionRequestSchema,
   DeepSeek.API.ChatCompletionRequestSchema,
   Minimax.API.ChatCompletionRequestSchema,
+  Azure.API.ChatCompletionRequestSchema,
 ]);
 
 export const InteractionResponseSchema = z.union([
@@ -76,6 +78,7 @@ export const InteractionResponseSchema = z.union([
   Zhipuai.API.ChatCompletionResponseSchema,
   DeepSeek.API.ChatCompletionResponseSchema,
   Minimax.API.ChatCompletionResponseSchema,
+  Azure.API.ChatCompletionResponseSchema,
 ]);
 
 const extendedFields = {
@@ -258,6 +261,16 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest:
       Minimax.API.ChatCompletionRequestSchema.nullable().optional(),
     response: Minimax.API.ChatCompletionResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionSchema.extend({
+    type: z.enum(["azure:chatCompletions"]),
+    request: Azure.API.ChatCompletionRequestSchema,
+    processedRequest:
+      Azure.API.ChatCompletionRequestSchema.nullable().optional(),
+    response: Azure.API.ChatCompletionResponseSchema,
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),

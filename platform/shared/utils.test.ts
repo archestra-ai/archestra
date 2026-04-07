@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { formatSecretStorageType, parseFullToolName, slugify } from "./utils";
+import {
+  formatSecretStorageType,
+  parseFullToolName,
+  slugify,
+  urlSlugify,
+} from "./utils";
 
 describe("formatSecretStorageType", () => {
   test("formats known storage types", () => {
@@ -18,6 +23,32 @@ describe("slugify", () => {
   test("creates URL-safe slugs", () => {
     expect(slugify("Hello World!")).toBe("hello_world");
     expect(slugify("__Already__Slugged__")).toBe("already_slugged");
+  });
+});
+
+describe("urlSlugify", () => {
+  test("creates hyphen-separated URL slugs", () => {
+    expect(urlSlugify("Hello World!")).toBe("hello-world");
+    expect(urlSlugify("My MCP Gateway")).toBe("my-mcp-gateway");
+  });
+
+  test("strips special characters", () => {
+    expect(urlSlugify("Test @#$ Gateway!")).toBe("test-gateway");
+    expect(urlSlugify("foo---bar")).toBe("foo-bar");
+  });
+
+  test("trims leading and trailing hyphens", () => {
+    expect(urlSlugify("--Already--Slugged--")).toBe("already-slugged");
+    expect(urlSlugify("  spaces  ")).toBe("spaces");
+  });
+
+  test("returns empty string for empty/symbol-only input", () => {
+    expect(urlSlugify("")).toBe("");
+    expect(urlSlugify("@#$%")).toBe("");
+  });
+
+  test("handles numeric names", () => {
+    expect(urlSlugify("123 Test")).toBe("123-test");
   });
 });
 

@@ -50,6 +50,30 @@ const openaiConfig: ToolPersistenceTestConfig = {
   }),
 };
 
+const azureConfig: ToolPersistenceTestConfig = {
+  providerName: "Azure",
+
+  endpoint: (agentId) => `/v1/azure/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    model: "gpt-4o",
+    messages: [{ role: "user", content }],
+    tools: tools.map((t) => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    })),
+  }),
+};
+
 const anthropicConfig: ToolPersistenceTestConfig = {
   providerName: "Anthropic",
 
@@ -414,6 +438,7 @@ const testConfigsMap = {
   bedrock: bedrockConfig,
   openrouter: openrouterConfig,
   perplexity: null, // Perplexity does not support tool calling
+  azure: azureConfig,
 } satisfies Record<SupportedProvider, ToolPersistenceTestConfig | null>;
 
 const testConfigs = Object.values(testConfigsMap).filter(

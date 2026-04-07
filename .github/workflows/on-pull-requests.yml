@@ -6,6 +6,7 @@ on:
       - opened
       - edited
       - synchronize
+      - labeled
   # You can use the merge_group event to trigger your GitHub Actions workflow when
   # a pull request is added to a merge queue
   # https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue#triggering-merge-group-checks-with-github-actions
@@ -108,6 +109,7 @@ jobs:
 
   license-compliance-check:
     name: License Compliance Check
+    if: github.event.action != 'edited' && github.event.action != 'labeled'
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: read
@@ -147,73 +149,31 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "No GPL/AGPL/Unknown licenses found in dependencies." >> $GITHUB_STEP_SUMMARY
 
-  supply-chain-policy:
-    name: Supply Chain Policy
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+  # Fast feedback on every PR push: lint + typecheck + unit tests.
+  # Full E2E suite runs only in merge queue (or on-demand via "run-e2e" PR label).
+  platform-lint-and-unit-tests:
+    name: Platform Lint and Unit Tests
+    if: github.event_name == 'pull_request' && github.event.action != 'edited' && github.event.action != 'labeled'
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
+    defaults:
+      run:
+        working-directory: ./platform
     steps:
-      - name: Checkout repository
+      - name: Checkout project
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
           fetch-depth: 1
 
-      - name: Enforce image pinning and download verification policy
-        run: python3 .github/scripts/check-supply-chain-policy.py
-
-  dependency-review:
-    name: Dependency Review
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
         with:
-          persist-credentials: false
-          fetch-depth: 0
+          working-directory: ./platform
 
-      - name: Dependency review
-        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
-        with:
-          fail-on-severity: high
-          # NOTE: we don't use the license checker here as we already have our own script
-          # platform/standalone-scripts/license-check.ts (see license-compliance-check job above)
-          # allow-licenses: MIT
-          license-check: false
-          comment-summary-in-pr: on-failure
-
-  # Optional checks: runs the full platform linting + e2e tests on every PR commit.
-  # Not a required status check — PRs can merge without this passing (merge queue re-runs as required).
-  platform-linting-and-tests-pr:
-    name: Platform Linting and Tests (PR)
-    if: github.event_name == 'pull_request'
-    permissions:
-      contents: write
-      security-events: write
-      id-token: write # Required for Workload Identity Federation
-      pull-requests: write # Required for Docker Scout to write a comment to a PR
-    uses: ./.github/workflows/platform-linting-and-tests.yml
-    with:
-      should-skip-running-and-always-succeed: false
-      # Enable auto-commit of codegen changes for release-please PRs
-      # This handles the case where release-please bumps the version in package.json,
-      # causing generated files (like docs/openapi.json) to be out of date
-      is-release-please-pr: ${{ startsWith(github.head_ref, 'release-please--') }}
-      is-fork-pr: ${{ github.event.pull_request.head.repo.fork == true }}
-    secrets:
-      TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-      TURBOREPO_REMOTE_CACHING_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
-      # Pass GitHub App credentials for release-please PRs to enable codegen commit pushes
-      # that trigger workflow re-runs (pushes with GITHUB_TOKEN don't trigger workflows)
-      ARCHESTRA_RELEASER_GITHUB_APP_ID: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
-      ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+      - name: Type checking, linting, formatting, unit tests
+        run: pnpm check:ci
 
   # Required checks: auto-passes on PRs so they aren't blocked, actually runs on merge queue.
   platform-linting-and-tests-merge-queue:
@@ -229,6 +189,28 @@ jobs:
       # They should always succeed quickly in pull requests
       # while on merge queues they should run normally and fail if needed
       should-skip-running-and-always-succeed: ${{ github.event_name == 'pull_request' }}
+      is-fork-pr: ${{ github.event.pull_request.head.repo.fork == true }}
+    secrets:
+      TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+      TURBOREPO_REMOTE_CACHING_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+  # On-demand E2E: add the "run-e2e" label to a PR to trigger the full E2E suite.
+  # Runs natively on the PR branch with full secrets. Remove and re-add label to re-trigger.
+  platform-linting-and-tests-on-demand:
+    name: Platform Linting and Tests (On Demand)
+    if: github.event.action == 'labeled' && github.event.label.name == 'run-e2e'
+    permissions:
+      contents: write
+      security-events: write
+      id-token: write
+      pull-requests: write
+    uses: ./.github/workflows/platform-linting-and-tests.yml
+    with:
+      should-skip-running-and-always-succeed: false
       is-fork-pr: ${{ github.event.pull_request.head.repo.fork == true }}
     secrets:
       TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}

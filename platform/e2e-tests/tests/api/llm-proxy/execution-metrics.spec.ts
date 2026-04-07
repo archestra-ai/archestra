@@ -33,6 +33,22 @@ const openaiConfig: ExecutionMetricsTestConfig = {
   }),
 };
 
+const azureConfig: ExecutionMetricsTestConfig = {
+  providerName: "Azure",
+
+  endpoint: (agentId) => `/v1/azure/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content) => ({
+    model: "gpt-4o",
+    messages: [{ role: "user", content }],
+  }),
+};
+
 const anthropicConfig: ExecutionMetricsTestConfig = {
   providerName: "Anthropic",
 
@@ -286,6 +302,7 @@ const testConfigsMap = {
   openrouter: openrouterConfig,
   perplexity: null, // Perplexity has no tool calling - execution metrics require tool call flows
   xai: xaiConfig,
+  azure: azureConfig,
 } satisfies Record<SupportedProvider, ExecutionMetricsTestConfig | null>;
 
 const testConfigs = Object.values(testConfigsMap).filter(

@@ -26,6 +26,31 @@ vi.mock("@ai-sdk/anthropic", () => ({
   createAnthropic: mockCreateAnthropic,
 }));
 
+// Capture the fetch option passed to createOpenAI for azure fetchWithVersion tests
+const capturedCreateOpenAIOptions = vi.hoisted(() => ({
+  fetch: undefined as typeof globalThis.fetch | undefined,
+  headers: undefined as Record<string, string> | undefined,
+  apiKey: undefined as string | undefined,
+}));
+vi.mock("@ai-sdk/openai", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@ai-sdk/openai")>();
+  return {
+    ...actual,
+    createOpenAI: (options: Parameters<typeof actual.createOpenAI>[0]) => {
+      capturedCreateOpenAIOptions.fetch = (
+        options as { fetch?: typeof globalThis.fetch }
+      ).fetch;
+      capturedCreateOpenAIOptions.headers = (
+        options as { headers?: Record<string, string> }
+      ).headers;
+      capturedCreateOpenAIOptions.apiKey = (
+        options as { apiKey?: string }
+      ).apiKey;
+      return actual.createOpenAI(options);
+    },
+  };
+});
+
 import {
   createDirectLLMModel,
   createLLMModel,
@@ -212,6 +237,167 @@ describe("createDirectLLMModel", () => {
         baseUrl: null,
       }),
     ).toThrow("OpenAI API key is required. Please configure OPENAI_API_KEY.");
+  });
+
+  it("creates a model for azure provider", () => {
+    const model = createDirectLLMModel({
+      provider: "azure",
+      apiKey: "test-key",
+      modelName: "gpt-4o",
+      baseUrl: "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
+    });
+    expect(model).toBeDefined();
+    expect(capturedCreateOpenAIOptions.headers).toEqual(
+      expect.objectContaining({
+        "api-key": "test-key",
+      }),
+    );
+    expect(capturedCreateOpenAIOptions.apiKey).toBe("test-key");
+  });
+
+  it("strips a Bearer prefix before setting the azure api-key header", () => {
+    createDirectLLMModel({
+      provider: "azure",
+      apiKey: "Bearer test-key",
+      modelName: "gpt-4o",
+      baseUrl: "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
+    });
+
+    expect(capturedCreateOpenAIOptions.headers).toEqual(
+      expect.objectContaining({
+        "api-key": "test-key",
+      }),
+    );
+    expect(capturedCreateOpenAIOptions.apiKey).toBe("test-key");
+  });
+
+  // createDirectLLMModel doesn't expose a `fetch` parameter — the azure createModel
+  // closure always uses `providedFetch ?? globalThis.fetch`. We stub globalThis.fetch
+  // to observe the URL that fetchWithVersion passes through.
+  describe("azure fetchWithVersion", () => {
+    it("appends api-version to string URL", async () => {
+      const mockFetch = vi.fn().mockResolvedValue(new Response("{}"));
+      vi.stubGlobal("fetch", mockFetch);
+
+      createDirectLLMModel({
+        provider: "azure",
+        apiKey: "test-key",
+        modelName: "gpt-4o",
+        baseUrl:
+          "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
+      });
+
+      const fetchWithVersion = capturedCreateOpenAIOptions.fetch;
+      expect(fetchWithVersion).toBeDefined();
+      if (!fetchWithVersion) {
+        throw new Error("Expected Azure fetchWithVersion to be configured");
+      }
+
+      await fetchWithVersion(
+        "https://my-resource.openai.azure.com/openai/deployments/gpt-4o/chat/completions",
+        {},
+      );
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining("api-version="),
+        expect.anything(),
+      );
+
+      vi.unstubAllGlobals();
+    });
+
+    it("appends api-version when input is a URL object", async () => {
+      const mockFetch = vi.fn().mockResolvedValue(new Response("{}"));
+      vi.stubGlobal("fetch", mockFetch);
+
+      createDirectLLMModel({
+        provider: "azure",
+        apiKey: "test-key",
+        modelName: "gpt-4o",
+        baseUrl:
+          "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
+      });
+
+      const fetchWithVersion = capturedCreateOpenAIOptions.fetch;
+      expect(fetchWithVersion).toBeDefined();
+      if (!fetchWithVersion) {
+        throw new Error("Expected Azure fetchWithVersion to be configured");
+      }
+
+      const urlObj = new URL(
+        "https://my-resource.openai.azure.com/openai/deployments/gpt-4o/chat/completions",
+      );
+      await fetchWithVersion(urlObj, {});
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining("api-version="),
+        expect.anything(),
+      );
+
+      vi.unstubAllGlobals();
+    });
+
+    it("appends api-version when input is a Request object", async () => {
+      const mockFetch = vi.fn().mockResolvedValue(new Response("{}"));
+      vi.stubGlobal("fetch", mockFetch);
+
+      createDirectLLMModel({
+        provider: "azure",
+        apiKey: "test-key",
+        modelName: "gpt-4o",
+        baseUrl:
+          "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
+      });
+
+      const fetchWithVersion = capturedCreateOpenAIOptions.fetch;
+      expect(fetchWithVersion).toBeDefined();
+      if (!fetchWithVersion) {
+        throw new Error("Expected Azure fetchWithVersion to be configured");
+      }
+
+      const request = new Request(
+        "https://my-resource.openai.azure.com/openai/deployments/gpt-4o/chat/completions",
+      );
+      await fetchWithVersion(request, {});
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining("api-version="),
+        expect.anything(),
+      );
+
+      vi.unstubAllGlobals();
+    });
+
+    it("uses globalThis.fetch when no provider fetch is configured", async () => {
+      const globalMockFetch = vi.fn().mockResolvedValue(new Response("{}"));
+      vi.stubGlobal("fetch", globalMockFetch);
+
+      createDirectLLMModel({
+        provider: "azure",
+        apiKey: "test-key",
+        modelName: "gpt-4o",
+        baseUrl:
+          "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
+      });
+
+      const fetchWithVersion = capturedCreateOpenAIOptions.fetch;
+      expect(fetchWithVersion).toBeDefined();
+      if (!fetchWithVersion) {
+        throw new Error("Expected Azure fetchWithVersion to be configured");
+      }
+
+      await fetchWithVersion(
+        "https://my-resource.openai.azure.com/openai/deployments/gpt-4o/chat/completions",
+        {},
+      );
+
+      expect(globalMockFetch).toHaveBeenCalledWith(
+        expect.stringContaining("api-version="),
+        expect.anything(),
+      );
+
+      vi.unstubAllGlobals();
+    });
   });
 
   it("throws descriptive error for cerebras provider without API key", () => {

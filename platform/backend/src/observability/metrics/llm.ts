@@ -42,6 +42,7 @@ const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
   xai: getOpenAIUsage,
   openrouter: getOpenAIUsage,
   anthropic: getAnthropicUsage,
+  azure: getOpenAIUsage,
   cohere: getCohereUsage,
   zhipuai: getZhipuaiUsage,
   minimax: getMinimaxUsage,

@@ -630,6 +630,14 @@ const openrouterConfig: ToolInvocationTestConfig = {
   }),
 };
 
+const azureConfig: ToolInvocationTestConfig = {
+  ...makeOpenAiCompatibleToolConfig({
+    providerName: "Azure",
+    endpoint: (agentId) => `/v1/azure/${agentId}/chat/completions`,
+    model: "gpt-4o",
+  }),
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -652,6 +660,7 @@ const testConfigsMap = {
   bedrock: bedrockConfig,
   openrouter: openrouterConfig,
   perplexity: null, // Perplexity does not support tool calling
+  azure: azureConfig,
 } satisfies Record<SupportedProvider, ToolInvocationTestConfig | null>;
 
 const testConfigs = Object.values(testConfigsMap).filter(

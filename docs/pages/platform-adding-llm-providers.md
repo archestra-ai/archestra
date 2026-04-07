@@ -278,11 +278,12 @@ Existing provider implementations for reference:
 
 - Groq: `backend/src/routes/proxy/routesv2/groq.ts`, `backend/src/routes/proxy/adapterV2/groq.ts` (best starting point — cleanest example of OpenAI reuse)
 - xAI: `backend/src/routes/proxy/routesv2/xai.ts`, `backend/src/routes/proxy/adapterV2/xai.ts`
+- Azure AI Foundry: `backend/src/routes/proxy/routesv2/azure.ts`, `backend/src/routes/proxy/adapterV2/azure.ts` (reference for providers requiring custom request mutation — injects `api-version` query param via a custom `fetch` wrapper in `llm-client.ts` for the built-in chat feature, since the Vercel AI SDK's `createOpenAI()` has no `defaultQuery` option)
 - vLLM: `backend/src/routes/proxy/routesv2/vllm.ts`, `backend/src/routes/proxy/adapterV2/vllm.ts`
 - Ollama: `backend/src/routes/proxy/routesv2/ollama.ts`, `backend/src/routes/proxy/adapterV2/ollama.ts`
 - ZhipuAI: `backend/src/routes/proxy/routesv2/zhipuai.ts`, `backend/src/routes/proxy/adapterV2/zhipuai.ts`
 
-> **Tip:** If adding support for an OpenAI-compatible provider (e.g., Azure OpenAI, Together AI), use the Groq implementation as a starting point — it re-exports OpenAI's type definitions, message schemas, and tool schemas with minimal boilerplate.
+> **Tip:** If adding support for an OpenAI-compatible provider (e.g., Together AI), use the Groq implementation as a starting point — it re-exports OpenAI's type definitions, message schemas, and tool schemas with minimal boilerplate. For providers that require custom query parameters on every request, see the Azure AI Foundry implementation for the `fetchWithVersion` pattern.
 
 ## Smoke Testing
 

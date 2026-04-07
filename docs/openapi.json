@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.3"
+    "version": "1.2.4"
   },
   "components": {
     "schemas": {
@@ -37701,6 +37701,10 @@
                           "name": {
                             "type": "string"
                           },
+                          "slug": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "isDefault": {
                             "type": "boolean"
                           },
@@ -37756,6 +37760,13 @@
                           "identityProviderId": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "passthroughHeaders": {
+                            "nullable": true,
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
                           },
                           "builtInAgentConfig": {
                             "nullable": true,
@@ -38049,6 +38060,7 @@
                           "authorId",
                           "scope",
                           "name",
+                          "slug",
                           "isDefault",
                           "considerContextUntrusted",
                           "agentType",
@@ -38061,6 +38073,7 @@
                           "llmApiKeyId",
                           "llmModel",
                           "identityProviderId",
+                          "passthroughHeaders",
                           "builtInAgentConfig",
                           "builtIn",
                           "createdAt",
@@ -38425,6 +38438,17 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "passthroughHeaders": {
+                    "nullable": true,
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[a-zA-Z0-9-]+$"
+                    }
+                  },
                   "builtInAgentConfig": {
                     "nullable": true,
                     "oneOf": [
@@ -38596,6 +38620,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "slug": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "isDefault": {
                       "type": "boolean"
                     },
@@ -38651,6 +38679,13 @@
                     "identityProviderId": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "passthroughHeaders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     },
                     "builtInAgentConfig": {
                       "nullable": true,
@@ -38944,6 +38979,7 @@
                     "authorId",
                     "scope",
                     "name",
+                    "slug",
                     "isDefault",
                     "considerContextUntrusted",
                     "agentType",
@@ -38956,6 +38992,7 @@
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
+                    "passthroughHeaders",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -39289,6 +39326,10 @@
                       "name": {
                         "type": "string"
                       },
+                      "slug": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "isDefault": {
                         "type": "boolean"
                       },
@@ -39344,6 +39385,13 @@
                       "identityProviderId": {
                         "nullable": true,
                         "type": "string"
+                      },
+                      "passthroughHeaders": {
+                        "nullable": true,
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
                       },
                       "builtInAgentConfig": {
                         "nullable": true,
@@ -39637,6 +39685,7 @@
                       "authorId",
                       "scope",
                       "name",
+                      "slug",
                       "isDefault",
                       "considerContextUntrusted",
                       "agentType",
@@ -39649,6 +39698,7 @@
                       "llmApiKeyId",
                       "llmModel",
                       "identityProviderId",
+                      "passthroughHeaders",
                       "builtInAgentConfig",
                       "builtIn",
                       "createdAt",
@@ -39922,6 +39972,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "slug": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "isDefault": {
                       "type": "boolean"
                     },
@@ -39977,6 +40031,13 @@
                     "identityProviderId": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "passthroughHeaders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     },
                     "builtInAgentConfig": {
                       "nullable": true,
@@ -40270,6 +40331,7 @@
                     "authorId",
                     "scope",
                     "name",
+                    "slug",
                     "isDefault",
                     "considerContextUntrusted",
                     "agentType",
@@ -40282,6 +40344,7 @@
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
+                    "passthroughHeaders",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -40555,6 +40618,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "slug": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "isDefault": {
                       "type": "boolean"
                     },
@@ -40610,6 +40677,13 @@
                     "identityProviderId": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "passthroughHeaders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     },
                     "builtInAgentConfig": {
                       "nullable": true,
@@ -40903,6 +40977,7 @@
                     "authorId",
                     "scope",
                     "name",
+                    "slug",
                     "isDefault",
                     "considerContextUntrusted",
                     "agentType",
@@ -40915,6 +40990,7 @@
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
+                    "passthroughHeaders",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -41200,6 +41276,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "slug": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "isDefault": {
                       "type": "boolean"
                     },
@@ -41255,6 +41335,13 @@
                     "identityProviderId": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "passthroughHeaders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     },
                     "builtInAgentConfig": {
                       "nullable": true,
@@ -41548,6 +41635,7 @@
                     "authorId",
                     "scope",
                     "name",
+                    "slug",
                     "isDefault",
                     "considerContextUntrusted",
                     "agentType",
@@ -41560,6 +41648,7 @@
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
+                    "passthroughHeaders",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -41876,6 +41965,17 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "passthroughHeaders": {
+                    "nullable": true,
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[a-zA-Z0-9-]+$"
+                    }
+                  },
                   "builtInAgentConfig": {
                     "nullable": true,
                     "oneOf": [
@@ -42052,6 +42152,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "slug": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "isDefault": {
                       "type": "boolean"
                     },
@@ -42107,6 +42211,13 @@
                     "identityProviderId": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "passthroughHeaders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     },
                     "builtInAgentConfig": {
                       "nullable": true,
@@ -42400,6 +42511,7 @@
                     "authorId",
                     "scope",
                     "name",
+                    "slug",
                     "isDefault",
                     "considerContextUntrusted",
                     "agentType",
@@ -42412,6 +42524,7 @@
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
+                    "passthroughHeaders",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -53616,6 +53729,990 @@
         }
       }
     },
+    "/v1/azure/chat/completions": {
+      "post": {
+        "operationId": "azureChatCompletionsWithDefaultAgent",
+        "tags": [
+          "LLM Proxy"
+        ],
+        "description": "Create a chat completion with Azure AI Foundry (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/XaiChatCompletionRequestInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "user-agent",
+            "required": false,
+            "description": "The user agent of the client"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "description": "Bearer token for OpenAI"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "choices": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "finish_reason": {
+                            "type": "string",
+                            "enum": [
+                              "stop",
+                              "length",
+                              "tool_calls",
+                              "content_filter",
+                              "function_call"
+                            ]
+                          },
+                          "index": {
+                            "type": "number"
+                          },
+                          "logprobs": {
+                            "nullable": true
+                          },
+                          "message": {
+                            "type": "object",
+                            "properties": {
+                              "content": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "refusal": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "role": {
+                                "type": "string",
+                                "enum": [
+                                  "assistant"
+                                ]
+                              },
+                              "annotations": {
+                                "type": "array",
+                                "items": {}
+                              },
+                              "audio": {
+                                "nullable": true
+                              },
+                              "function_call": {
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431",
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "arguments": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "arguments",
+                                  "name"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "tool_calls": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string"
+                                        },
+                                        "type": {
+                                          "type": "string",
+                                          "enum": [
+                                            "function"
+                                          ]
+                                        },
+                                        "function": {
+                                          "type": "object",
+                                          "properties": {
+                                            "arguments": {
+                                              "type": "string"
+                                            },
+                                            "name": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "arguments",
+                                            "name"
+                                          ],
+                                          "additionalProperties": false,
+                                          "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "type",
+                                        "function"
+                                      ],
+                                      "additionalProperties": false,
+                                      "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1144"
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string"
+                                        },
+                                        "type": {
+                                          "type": "string",
+                                          "enum": [
+                                            "custom"
+                                          ]
+                                        },
+                                        "custom": {
+                                          "type": "object",
+                                          "properties": {
+                                            "input": {
+                                              "type": "string"
+                                            },
+                                            "name": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "input",
+                                            "name"
+                                          ],
+                                          "additionalProperties": false,
+                                          "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "type",
+                                        "custom"
+                                      ],
+                                      "additionalProperties": false,
+                                      "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1107"
+                                    }
+                                  ],
+                                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197"
+                                }
+                              }
+                            },
+                            "required": [
+                              "content",
+                              "role"
+                            ],
+                            "additionalProperties": false,
+                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000"
+                          }
+                        },
+                        "required": [
+                          "finish_reason",
+                          "index",
+                          "logprobs",
+                          "message"
+                        ],
+                        "additionalProperties": false,
+                        "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L311"
+                      }
+                    },
+                    "created": {
+                      "type": "number"
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "object": {
+                      "type": "string",
+                      "enum": [
+                        "chat.completion"
+                      ]
+                    },
+                    "server_tier": {
+                      "type": "string"
+                    },
+                    "system_fingerprint": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "completion_tokens": {
+                          "type": "number"
+                        },
+                        "prompt_tokens": {
+                          "type": "number"
+                        },
+                        "total_tokens": {
+                          "type": "number"
+                        },
+                        "completion_tokens_details": {
+                          "description": "https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144"
+                        },
+                        "prompt_tokens_details": {
+                          "description": "https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173"
+                        }
+                      },
+                      "required": [
+                        "completion_tokens",
+                        "prompt_tokens",
+                        "total_tokens"
+                      ],
+                      "additionalProperties": false,
+                      "description": "https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "choices",
+                    "created",
+                    "model",
+                    "object"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/azure/{agentId}/chat/completions": {
+      "post": {
+        "operationId": "azureChatCompletionsWithAgent",
+        "tags": [
+          "LLM Proxy"
+        ],
+        "description": "Create a chat completion with Azure AI Foundry for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/XaiChatCompletionRequestInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "agentId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "user-agent",
+            "required": false,
+            "description": "The user agent of the client"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "description": "Bearer token for OpenAI"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "choices": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "finish_reason": {
+                            "type": "string",
+                            "enum": [
+                              "stop",
+                              "length",
+                              "tool_calls",
+                              "content_filter",
+                              "function_call"
+                            ]
+                          },
+                          "index": {
+                            "type": "number"
+                          },
+                          "logprobs": {
+                            "nullable": true
+                          },
+                          "message": {
+                            "type": "object",
+                            "properties": {
+                              "content": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "refusal": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "role": {
+                                "type": "string",
+                                "enum": [
+                                  "assistant"
+                                ]
+                              },
+                              "annotations": {
+                                "type": "array",
+                                "items": {}
+                              },
+                              "audio": {
+                                "nullable": true
+                              },
+                              "function_call": {
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431",
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "arguments": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "arguments",
+                                  "name"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "tool_calls": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string"
+                                        },
+                                        "type": {
+                                          "type": "string",
+                                          "enum": [
+                                            "function"
+                                          ]
+                                        },
+                                        "function": {
+                                          "type": "object",
+                                          "properties": {
+                                            "arguments": {
+                                              "type": "string"
+                                            },
+                                            "name": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "arguments",
+                                            "name"
+                                          ],
+                                          "additionalProperties": false,
+                                          "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "type",
+                                        "function"
+                                      ],
+                                      "additionalProperties": false,
+                                      "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1144"
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string"
+                                        },
+                                        "type": {
+                                          "type": "string",
+                                          "enum": [
+                                            "custom"
+                                          ]
+                                        },
+                                        "custom": {
+                                          "type": "object",
+                                          "properties": {
+                                            "input": {
+                                              "type": "string"
+                                            },
+                                            "name": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "input",
+                                            "name"
+                                          ],
+                                          "additionalProperties": false,
+                                          "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "type",
+                                        "custom"
+                                      ],
+                                      "additionalProperties": false,
+                                      "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1107"
+                                    }
+                                  ],
+                                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197"
+                                }
+                              }
+                            },
+                            "required": [
+                              "content",
+                              "role"
+                            ],
+                            "additionalProperties": false,
+                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000"
+                          }
+                        },
+                        "required": [
+                          "finish_reason",
+                          "index",
+                          "logprobs",
+                          "message"
+                        ],
+                        "additionalProperties": false,
+                        "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L311"
+                      }
+                    },
+                    "created": {
+                      "type": "number"
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "object": {
+                      "type": "string",
+                      "enum": [
+                        "chat.completion"
+                      ]
+                    },
+                    "server_tier": {
+                      "type": "string"
+                    },
+                    "system_fingerprint": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "completion_tokens": {
+                          "type": "number"
+                        },
+                        "prompt_tokens": {
+                          "type": "number"
+                        },
+                        "total_tokens": {
+                          "type": "number"
+                        },
+                        "completion_tokens_details": {
+                          "description": "https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144"
+                        },
+                        "prompt_tokens_details": {
+                          "description": "https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173"
+                        }
+                      },
+                      "required": [
+                        "completion_tokens",
+                        "prompt_tokens",
+                        "total_tokens"
+                      ],
+                      "additionalProperties": false,
+                      "description": "https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "choices",
+                    "created",
+                    "model",
+                    "object"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/bedrock/converse": {
       "post": {
         "operationId": "bedrockConverseWithDefaultAgent",
@@ -60680,7 +61777,8 @@
                           "ollama",
                           "zhipuai",
                           "deepseek",
-                          "minimax"
+                          "minimax",
+                          "azure"
                         ]
                       },
                       "hasCustomToolSelection": {
@@ -61088,7 +62186,8 @@
                       "ollama",
                       "zhipuai",
                       "deepseek",
-                      "minimax"
+                      "minimax",
+                      "azure"
                     ]
                   },
                   "chatApiKeyId": {
@@ -61162,7 +62261,8 @@
                         "ollama",
                         "zhipuai",
                         "deepseek",
-                        "minimax"
+                        "minimax",
+                        "azure"
                       ]
                     },
                     "hasCustomToolSelection": {
@@ -61603,7 +62703,8 @@
                         "ollama",
                         "zhipuai",
                         "deepseek",
-                        "minimax"
+                        "minimax",
+                        "azure"
                       ]
                     },
                     "hasCustomToolSelection": {
@@ -62005,7 +63106,8 @@
                       "ollama",
                       "zhipuai",
                       "deepseek",
-                      "minimax"
+                      "minimax",
+                      "azure"
                     ]
                   },
                   "chatApiKeyId": {
@@ -62103,7 +63205,8 @@
                         "ollama",
                         "zhipuai",
                         "deepseek",
-                        "minimax"
+                        "minimax",
+                        "azure"
                       ]
                     },
                     "hasCustomToolSelection": {
@@ -63965,7 +65068,8 @@
                         "ollama",
                         "zhipuai",
                         "deepseek",
-                        "minimax"
+                        "minimax",
+                        "azure"
                       ]
                     },
                     "hasCustomToolSelection": {
@@ -64430,7 +65534,8 @@
                         "ollama",
                         "zhipuai",
                         "deepseek",
-                        "minimax"
+                        "minimax",
+                        "azure"
                       ]
                     },
                     "hasCustomToolSelection": {
@@ -64887,7 +65992,8 @@
                         "ollama",
                         "zhipuai",
                         "deepseek",
-                        "minimax"
+                        "minimax",
+                        "azure"
                       ]
                     },
                     "hasCustomToolSelection": {
@@ -65354,7 +66460,8 @@
                         "ollama",
                         "zhipuai",
                         "deepseek",
-                        "minimax"
+                        "minimax",
+                        "azure"
                       ]
                     },
                     "hasCustomToolSelection": {
@@ -70655,7 +71762,8 @@
                         "ollama",
                         "zhipuai",
                         "deepseek",
-                        "minimax"
+                        "minimax",
+                        "azure"
                       ]
                     }
                   },
@@ -80879,6 +81987,501 @@
                               "createdAt"
                             ],
                             "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "profileId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "externalAgentId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "executionId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "userId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "sessionId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "sessionSource": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "source": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "api",
+                                  "chat",
+                                  "chatops:slack",
+                                  "chatops:ms-teams",
+                                  "email",
+                                  "knowledge:embedding",
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
+                                ]
+                              },
+                              "request": {
+                                "$ref": "#/components/schemas/XaiChatCompletionRequest"
+                              },
+                              "processedRequest": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/XaiChatCompletionRequest"
+                                  }
+                                ]
+                              },
+                              "response": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "choices": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "finish_reason": {
+                                          "type": "string",
+                                          "enum": [
+                                            "stop",
+                                            "length",
+                                            "tool_calls",
+                                            "content_filter",
+                                            "function_call"
+                                          ]
+                                        },
+                                        "index": {
+                                          "type": "number"
+                                        },
+                                        "logprobs": {
+                                          "nullable": true
+                                        },
+                                        "message": {
+                                          "type": "object",
+                                          "properties": {
+                                            "content": {
+                                              "nullable": true,
+                                              "type": "string"
+                                            },
+                                            "refusal": {
+                                              "nullable": true,
+                                              "type": "string"
+                                            },
+                                            "role": {
+                                              "type": "string",
+                                              "enum": [
+                                                "assistant"
+                                              ]
+                                            },
+                                            "annotations": {
+                                              "type": "array",
+                                              "items": {}
+                                            },
+                                            "audio": {
+                                              "nullable": true
+                                            },
+                                            "function_call": {
+                                              "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431",
+                                              "nullable": true,
+                                              "type": "object",
+                                              "properties": {
+                                                "arguments": {
+                                                  "type": "string"
+                                                },
+                                                "name": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "arguments",
+                                                "name"
+                                              ],
+                                              "additionalProperties": false
+                                            },
+                                            "tool_calls": {
+                                              "nullable": true,
+                                              "type": "array",
+                                              "items": {
+                                                "anyOf": [
+                                                  {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "id": {
+                                                        "type": "string"
+                                                      },
+                                                      "type": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "function"
+                                                        ]
+                                                      },
+                                                      "function": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                          "arguments": {
+                                                            "type": "string"
+                                                          },
+                                                          "name": {
+                                                            "type": "string"
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "arguments",
+                                                          "name"
+                                                        ],
+                                                        "additionalProperties": false,
+                                                        "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "id",
+                                                      "type",
+                                                      "function"
+                                                    ],
+                                                    "additionalProperties": false,
+                                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1144"
+                                                  },
+                                                  {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "id": {
+                                                        "type": "string"
+                                                      },
+                                                      "type": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "custom"
+                                                        ]
+                                                      },
+                                                      "custom": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                          "input": {
+                                                            "type": "string"
+                                                          },
+                                                          "name": {
+                                                            "type": "string"
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "input",
+                                                          "name"
+                                                        ],
+                                                        "additionalProperties": false,
+                                                        "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "id",
+                                                      "type",
+                                                      "custom"
+                                                    ],
+                                                    "additionalProperties": false,
+                                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1107"
+                                                  }
+                                                ],
+                                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197"
+                                              }
+                                            }
+                                          },
+                                          "required": [
+                                            "content",
+                                            "role"
+                                          ],
+                                          "additionalProperties": false,
+                                          "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000"
+                                        }
+                                      },
+                                      "required": [
+                                        "finish_reason",
+                                        "index",
+                                        "logprobs",
+                                        "message"
+                                      ],
+                                      "additionalProperties": false,
+                                      "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L311"
+                                    }
+                                  },
+                                  "created": {
+                                    "type": "number"
+                                  },
+                                  "model": {
+                                    "type": "string"
+                                  },
+                                  "object": {
+                                    "type": "string",
+                                    "enum": [
+                                      "chat.completion"
+                                    ]
+                                  },
+                                  "server_tier": {
+                                    "type": "string"
+                                  },
+                                  "system_fingerprint": {
+                                    "nullable": true,
+                                    "type": "string"
+                                  },
+                                  "usage": {
+                                    "type": "object",
+                                    "properties": {
+                                      "completion_tokens": {
+                                        "type": "number"
+                                      },
+                                      "prompt_tokens": {
+                                        "type": "number"
+                                      },
+                                      "total_tokens": {
+                                        "type": "number"
+                                      },
+                                      "completion_tokens_details": {
+                                        "description": "https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144"
+                                      },
+                                      "prompt_tokens_details": {
+                                        "description": "https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173"
+                                      }
+                                    },
+                                    "required": [
+                                      "completion_tokens",
+                                      "prompt_tokens",
+                                      "total_tokens"
+                                    ],
+                                    "additionalProperties": false,
+                                    "description": "https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "choices",
+                                  "created",
+                                  "model",
+                                  "object"
+                                ],
+                                "additionalProperties": {}
+                              },
+                              "dualLlmAnalyses": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "toolCallId": {
+                                      "type": "string"
+                                    },
+                                    "conversations": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "role": {
+                                            "type": "string",
+                                            "enum": [
+                                              "user",
+                                              "assistant"
+                                            ]
+                                          },
+                                          "content": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "role",
+                                          "content"
+                                        ],
+                                        "additionalProperties": false,
+                                        "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                      }
+                                    },
+                                    "result": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "toolCallId",
+                                    "conversations",
+                                    "result"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "unsafeContextBoundary": {
+                                "nullable": true,
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "preexisting_untrusted"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "tool_result"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      },
+                                      "toolCallId": {
+                                        "type": "string"
+                                      },
+                                      "toolName": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason",
+                                      "toolCallId",
+                                      "toolName"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "azure:chatCompletions"
+                                ]
+                              },
+                              "model": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "baselineModel": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "inputTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "outputTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "baselineCost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "toonTokensBefore": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "toonTokensAfter": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "toonCostSavings": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "toonSkipReason": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "not_enabled",
+                                  "not_effective",
+                                  "no_tool_results"
+                                ]
+                              },
+                              "createdAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "requestType": {
+                                "type": "string",
+                                "enum": [
+                                  "main",
+                                  "subagent"
+                                ]
+                              },
+                              "externalAgentIdLabel": {
+                                "nullable": true,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "profileId",
+                              "externalAgentId",
+                              "executionId",
+                              "userId",
+                              "sessionId",
+                              "sessionSource",
+                              "request",
+                              "response",
+                              "type",
+                              "model",
+                              "baselineModel",
+                              "inputTokens",
+                              "outputTokens",
+                              "baselineCost",
+                              "cost",
+                              "toonTokensBefore",
+                              "toonTokensAfter",
+                              "toonCostSavings",
+                              "createdAt"
+                            ],
+                            "additionalProperties": false
                           }
                         ]
                       }
@@ -88514,6 +90117,501 @@
                           "type": "string",
                           "enum": [
                             "minimax:chatCompletions"
+                          ]
+                        },
+                        "model": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "baselineModel": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "inputTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "outputTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "baselineCost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "toonTokensBefore": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "toonTokensAfter": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "toonCostSavings": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "toonSkipReason": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "not_enabled",
+                            "not_effective",
+                            "no_tool_results"
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "requestType": {
+                          "type": "string",
+                          "enum": [
+                            "main",
+                            "subagent"
+                          ]
+                        },
+                        "externalAgentIdLabel": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "profileId",
+                        "externalAgentId",
+                        "executionId",
+                        "userId",
+                        "sessionId",
+                        "sessionSource",
+                        "request",
+                        "response",
+                        "type",
+                        "model",
+                        "baselineModel",
+                        "inputTokens",
+                        "outputTokens",
+                        "baselineCost",
+                        "cost",
+                        "toonTokensBefore",
+                        "toonTokensAfter",
+                        "toonCostSavings",
+                        "createdAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "profileId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "externalAgentId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "executionId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "userId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "sessionId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "sessionSource": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "source": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "api",
+                            "chat",
+                            "chatops:slack",
+                            "chatops:ms-teams",
+                            "email",
+                            "knowledge:embedding",
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
+                          ]
+                        },
+                        "request": {
+                          "$ref": "#/components/schemas/XaiChatCompletionRequest"
+                        },
+                        "processedRequest": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/XaiChatCompletionRequest"
+                            }
+                          ]
+                        },
+                        "response": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "choices": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "finish_reason": {
+                                    "type": "string",
+                                    "enum": [
+                                      "stop",
+                                      "length",
+                                      "tool_calls",
+                                      "content_filter",
+                                      "function_call"
+                                    ]
+                                  },
+                                  "index": {
+                                    "type": "number"
+                                  },
+                                  "logprobs": {
+                                    "nullable": true
+                                  },
+                                  "message": {
+                                    "type": "object",
+                                    "properties": {
+                                      "content": {
+                                        "nullable": true,
+                                        "type": "string"
+                                      },
+                                      "refusal": {
+                                        "nullable": true,
+                                        "type": "string"
+                                      },
+                                      "role": {
+                                        "type": "string",
+                                        "enum": [
+                                          "assistant"
+                                        ]
+                                      },
+                                      "annotations": {
+                                        "type": "array",
+                                        "items": {}
+                                      },
+                                      "audio": {
+                                        "nullable": true
+                                      },
+                                      "function_call": {
+                                        "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431",
+                                        "nullable": true,
+                                        "type": "object",
+                                        "properties": {
+                                          "arguments": {
+                                            "type": "string"
+                                          },
+                                          "name": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "arguments",
+                                          "name"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      "tool_calls": {
+                                        "nullable": true,
+                                        "type": "array",
+                                        "items": {
+                                          "anyOf": [
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "id": {
+                                                  "type": "string"
+                                                },
+                                                "type": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "function"
+                                                  ]
+                                                },
+                                                "function": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "arguments": {
+                                                      "type": "string"
+                                                    },
+                                                    "name": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "arguments",
+                                                    "name"
+                                                  ],
+                                                  "additionalProperties": false,
+                                                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165"
+                                                }
+                                              },
+                                              "required": [
+                                                "id",
+                                                "type",
+                                                "function"
+                                              ],
+                                              "additionalProperties": false,
+                                              "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1144"
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "id": {
+                                                  "type": "string"
+                                                },
+                                                "type": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "custom"
+                                                  ]
+                                                },
+                                                "custom": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "input": {
+                                                      "type": "string"
+                                                    },
+                                                    "name": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "input",
+                                                    "name"
+                                                  ],
+                                                  "additionalProperties": false,
+                                                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128"
+                                                }
+                                              },
+                                              "required": [
+                                                "id",
+                                                "type",
+                                                "custom"
+                                              ],
+                                              "additionalProperties": false,
+                                              "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1107"
+                                            }
+                                          ],
+                                          "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "content",
+                                      "role"
+                                    ],
+                                    "additionalProperties": false,
+                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000"
+                                  }
+                                },
+                                "required": [
+                                  "finish_reason",
+                                  "index",
+                                  "logprobs",
+                                  "message"
+                                ],
+                                "additionalProperties": false,
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L311"
+                              }
+                            },
+                            "created": {
+                              "type": "number"
+                            },
+                            "model": {
+                              "type": "string"
+                            },
+                            "object": {
+                              "type": "string",
+                              "enum": [
+                                "chat.completion"
+                              ]
+                            },
+                            "server_tier": {
+                              "type": "string"
+                            },
+                            "system_fingerprint": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "usage": {
+                              "type": "object",
+                              "properties": {
+                                "completion_tokens": {
+                                  "type": "number"
+                                },
+                                "prompt_tokens": {
+                                  "type": "number"
+                                },
+                                "total_tokens": {
+                                  "type": "number"
+                                },
+                                "completion_tokens_details": {
+                                  "description": "https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144"
+                                },
+                                "prompt_tokens_details": {
+                                  "description": "https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173"
+                                }
+                              },
+                              "required": [
+                                "completion_tokens",
+                                "prompt_tokens",
+                                "total_tokens"
+                              ],
+                              "additionalProperties": false,
+                              "description": "https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "choices",
+                            "created",
+                            "model",
+                            "object"
+                          ],
+                          "additionalProperties": {}
+                        },
+                        "dualLlmAnalyses": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "toolCallId": {
+                                "type": "string"
+                              },
+                              "conversations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "role": {
+                                      "type": "string",
+                                      "enum": [
+                                        "user",
+                                        "assistant"
+                                      ]
+                                    },
+                                    "content": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "role",
+                                    "content"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                }
+                              },
+                              "result": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "toolCallId",
+                              "conversations",
+                              "result"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "unsafeContextBoundary": {
+                          "nullable": true,
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "preexisting_untrusted"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "tool_result"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                },
+                                "toolCallId": {
+                                  "type": "string"
+                                },
+                                "toolName": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason",
+                                "toolCallId",
+                                "toolName"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "azure:chatCompletions"
                           ]
                         },
                         "model": {
@@ -105802,7 +107900,8 @@
                 "ollama",
                 "zhipuai",
                 "deepseek",
-                "minimax"
+                "minimax",
+                "azure"
               ]
             },
             "in": "query",
@@ -105862,7 +107961,8 @@
                           "ollama",
                           "zhipuai",
                           "deepseek",
-                          "minimax"
+                          "minimax",
+                          "azure"
                         ]
                       },
                       "createdAt": {
@@ -106488,7 +108588,8 @@
                           "ollama",
                           "zhipuai",
                           "deepseek",
-                          "minimax"
+                          "minimax",
+                          "azure"
                         ]
                       },
                       "modelId": {
@@ -107030,7 +109131,8 @@
                         "ollama",
                         "zhipuai",
                         "deepseek",
-                        "minimax"
+                        "minimax",
+                        "azure"
                       ]
                     },
                     "modelId": {
@@ -107415,7 +109517,8 @@
                 "ollama",
                 "zhipuai",
                 "deepseek",
-                "minimax"
+                "minimax",
+                "azure"
               ]
             },
             "in": "query",
@@ -107462,7 +109565,8 @@
                           "ollama",
                           "zhipuai",
                           "deepseek",
-                          "minimax"
+                          "minimax",
+                          "azure"
                         ]
                       },
                       "secretId": {
@@ -107812,7 +109916,8 @@
                       "ollama",
                       "zhipuai",
                       "deepseek",
-                      "minimax"
+                      "minimax",
+                      "azure"
                     ]
                   },
                   "apiKey": {
@@ -107893,7 +109998,8 @@
                         "ollama",
                         "zhipuai",
                         "deepseek",
-                        "minimax"
+                        "minimax",
+                        "azure"
                       ]
                     },
                     "secretId": {
@@ -108203,7 +110309,8 @@
                 "ollama",
                 "zhipuai",
                 "deepseek",
-                "minimax"
+                "minimax",
+                "azure"
               ]
             },
             "in": "query",
@@ -108260,7 +110367,8 @@
                           "ollama",
                           "zhipuai",
                           "deepseek",
-                          "minimax"
+                          "minimax",
+                          "azure"
                         ]
                       },
                       "secretId": {
@@ -108632,7 +110740,8 @@
                         "ollama",
                         "zhipuai",
                         "deepseek",
-                        "minimax"
+                        "minimax",
+                        "azure"
                       ]
                     },
                     "secretId": {
@@ -109051,7 +111160,8 @@
                         "ollama",
                         "zhipuai",
                         "deepseek",
-                        "minimax"
+                        "minimax",
+                        "azure"
                       ]
                     },
                     "secretId": {
@@ -109600,8 +111710,7 @@
           {
             "schema": {
               "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+              "minLength": 1
             },
             "in": "path",
             "name": "profileId",
@@ -109725,8 +111834,7 @@
           {
             "schema": {
               "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+              "minLength": 1
             },
             "in": "path",
             "name": "profileId",
@@ -123527,7 +125635,8 @@
                           "ollama",
                           "zhipuai",
                           "deepseek",
-                          "minimax"
+                          "minimax",
+                          "azure"
                         ]
                       },
                       "targetModel": {
@@ -123858,7 +125967,8 @@
                       "ollama",
                       "zhipuai",
                       "deepseek",
-                      "minimax"
+                      "minimax",
+                      "azure"
                     ]
                   },
                   "targetModel": {
@@ -123956,7 +126066,8 @@
                         "ollama",
                         "zhipuai",
                         "deepseek",
-                        "minimax"
+                        "minimax",
+                        "azure"
                       ]
                     },
                     "targetModel": {
@@ -124288,7 +126399,8 @@
                       "ollama",
                       "zhipuai",
                       "deepseek",
-                      "minimax"
+                      "minimax",
+                      "azure"
                     ]
                   },
                   "targetModel": {
@@ -124391,7 +126503,8 @@
                         "ollama",
                         "zhipuai",
                         "deepseek",
-                        "minimax"
+                        "minimax",
+                        "azure"
                       ]
                     },
                     "targetModel": {
@@ -126730,7 +128843,8 @@
                         "ollama",
                         "zhipuai",
                         "deepseek",
-                        "minimax"
+                        "minimax",
+                        "azure"
                       ]
                     },
                     "defaultLlmApiKeyId": {
@@ -127352,7 +129466,8 @@
                         "ollama",
                         "zhipuai",
                         "deepseek",
-                        "minimax"
+                        "minimax",
+                        "azure"
                       ]
                     },
                     "defaultLlmApiKeyId": {
@@ -128220,7 +130335,8 @@
                         "ollama",
                         "zhipuai",
                         "deepseek",
-                        "minimax"
+                        "minimax",
+                        "azure"
                       ]
                     },
                     "defaultLlmApiKeyId": {
@@ -128750,7 +130866,8 @@
                         "ollama",
                         "zhipuai",
                         "deepseek",
-                        "minimax"
+                        "minimax",
+                        "azure"
                       ]
                     },
                     "defaultLlmApiKeyId": {
@@ -129123,7 +131240,8 @@
                       "ollama",
                       "zhipuai",
                       "deepseek",
-                      "minimax"
+                      "minimax",
+                      "azure"
                     ]
                   },
                   "defaultLlmApiKeyId": {
@@ -129297,7 +131415,8 @@
                         "ollama",
                         "zhipuai",
                         "deepseek",
-                        "minimax"
+                        "minimax",
+                        "azure"
                       ]
                     },
                     "defaultLlmApiKeyId": {
@@ -129827,7 +131946,8 @@
                         "ollama",
                         "zhipuai",
                         "deepseek",
-                        "minimax"
+                        "minimax",
+                        "azure"
                       ]
                     },
                     "defaultLlmApiKeyId": {
@@ -130324,7 +132444,8 @@
                         "ollama",
                         "zhipuai",
                         "deepseek",
-                        "minimax"
+                        "minimax",
+                        "azure"
                       ]
                     },
                     "defaultLlmApiKeyId": {
@@ -131116,7 +133237,8 @@
                         "ollama",
                         "zhipuai",
                         "deepseek",
-                        "minimax"
+                        "minimax",
+                        "azure"
                       ]
                     },
                     "defaultLlmApiKeyId": {

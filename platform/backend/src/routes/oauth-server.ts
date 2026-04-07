@@ -4,8 +4,8 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import db, { schema as dbSchema } from "@/database";
+import { AgentModel } from "@/models";
 import { JWT_BEARER_GRANT_TYPE } from "@/services/identity-providers/enterprise-managed/authorization";
-import { UuidIdSchema } from "@/types";
 
 /**
  * OAuth 2.1 well-known discovery endpoints.
@@ -52,7 +52,7 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Check if the profile has an external IdP configured
       const authorizationServers = [baseUrl];
-      const profileId = extractProfileIdFromResourcePath(resourcePath);
+      const profileId = await extractProfileIdFromResourcePath(resourcePath);
       if (profileId) {
         const externalIssuer = await getExternalIdpIssuerForProfile(profileId);
         if (externalIssuer) {
@@ -151,17 +151,15 @@ export default oauthServerRoutes;
 // =============================================================================
 
 /**
- * Extract profile ID from the resource path (e.g., /v1/mcp/<uuid>)
+ * Extract profile ID from the resource path (e.g., /v1/mcp/<uuid> or /v1/mcp/<slug>)
  */
-function extractProfileIdFromResourcePath(resourcePath: string): string | null {
+async function extractProfileIdFromResourcePath(
+  resourcePath: string,
+): Promise<string | null> {
   const segments = resourcePath.split("/").filter(Boolean);
   const lastSegment = segments.at(-1);
   if (!lastSegment) return null;
-  try {
-    return UuidIdSchema.parse(lastSegment);
-  } catch {
-    return null;
-  }
+  return AgentModel.resolveIdFromIdOrSlug(lastSegment);
 }
 
 /**

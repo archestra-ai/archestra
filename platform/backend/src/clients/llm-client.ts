@@ -21,6 +21,10 @@ import {
 } from "@shared";
 import type { streamText } from "ai";
 import {
+  createAzureFetchWithApiVersion,
+  normalizeAzureApiKey,
+} from "@/clients/azure-url";
+import {
   getBedrockCredentialProvider,
   getBedrockRegion,
   isBedrockIamAuthEnabled,
@@ -445,6 +449,35 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
     defaultBaseUrl: config.llm.deepseek.baseUrl,
     apiKeyRequiredMessage:
       "DeepSeek API key is required. Please configure DEEPSEEK_API_KEY.",
+  },
+
+  azure: {
+    createModel: ({
+      apiKey,
+      modelName,
+      baseURL,
+      headers,
+      fetch: providedFetch,
+    }) => {
+      // The AI SDK client can't set Azure's api-version as a default query param,
+      // so we wrap fetch and inject it on every request.
+      const fetchWithVersion = createAzureFetchWithApiVersion({
+        apiVersion: config.llm.azure.apiVersion,
+        fetch: providedFetch,
+      });
+      const normalizedApiKey = normalizeAzureApiKey(apiKey);
+      return createOpenAI({
+        apiKey: normalizedApiKey,
+        baseURL,
+        headers: normalizedApiKey
+          ? { ...headers, "api-key": normalizedApiKey }
+          : headers,
+        fetch: fetchWithVersion,
+      }).chat(modelName);
+    },
+    defaultBaseUrl: config.llm.azure.baseUrl || undefined,
+    apiKeyRequiredMessage:
+      "Azure AI Foundry API key is required. Please configure ARCHESTRA_CHAT_AZURE_OPENAI_API_KEY.",
   },
 
   // --- OpenAI-compatible providers with optional API key ---

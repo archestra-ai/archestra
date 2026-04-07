@@ -34,6 +34,8 @@ archestra:
     ARCHESTRA_PERPLEXITY_BASE_URL: "http://e2e-tests-wiremock:8080/perplexity/v1"
     ARCHESTRA_DEEPSEEK_BASE_URL: "http://e2e-tests-wiremock:8080/deepseek"
     ARCHESTRA_MINIMAX_BASE_URL: "http://e2e-tests-wiremock:8080/minimax/v1"
+    ARCHESTRA_AZURE_OPENAI_BASE_URL: "http://e2e-tests-wiremock:8080/azure/openai/deployments/test-deployment"
+    ARCHESTRA_AZURE_OPENAI_API_VERSION: "2024-02-01"
     # Chat API keys (for e2e testing)
     ARCHESTRA_CHAT_OPENAI_API_KEY: test-key
     ARCHESTRA_CHAT_ANTHROPIC_API_KEY: test-key
@@ -51,6 +53,7 @@ archestra:
     ARCHESTRA_CHAT_PERPLEXITY_API_KEY: test-key
     ARCHESTRA_CHAT_DEEPSEEK_API_KEY: test-key
     ARCHESTRA_CHAT_MINIMAX_API_KEY: test-key
+    ARCHESTRA_CHAT_AZURE_OPENAI_API_KEY: test-key
     ARCHESTRA_METRICS_SECRET: "foo-bar"
     ARCHESTRA_FRONTEND_URL: "http://localhost:3000"
     ARCHESTRA_AUTH_SECRET: "e2e-auth-secret-must-be-32-chars-long"

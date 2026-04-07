@@ -446,6 +446,7 @@ function getProviderDisplayName(provider: SupportedProvider): string {
     deepseek: "DeepSeek",
     bedrock: "AWS Bedrock",
     minimax: "MiniMax",
+    azure: "Azure AI Foundry",
   };
   return displayNames[provider];
 }

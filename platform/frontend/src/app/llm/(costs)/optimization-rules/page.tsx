@@ -69,6 +69,7 @@ function getProviderLogoName(provider: keyof typeof providerDisplayNames) {
     zhipuai: "zhipuai",
     deepseek: "deepseek",
     minimax: "minimax",
+    azure: "azure",
   } as const;
 
   return logoNames[provider];

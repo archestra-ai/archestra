@@ -616,3 +616,46 @@ ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS=
 ```
 
 Known region prefixes: `us`, `eu`, `ap`, `global`.
+
+## Azure AI Foundry
+
+[Azure AI Foundry](https://azure.microsoft.com/en-us/products/ai-foundry) (formerly Azure OpenAI) provides enterprise-grade access to OpenAI models through Microsoft Azure, with an OpenAI-compatible API.
+
+### Supported Azure AI Foundry APIs
+
+- Chat Completions (streaming and non-streaming)
+
+### Azure AI Foundry Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/azure/{profile-id}`
+- **Authentication**: Pass your Azure API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Azure AI Foundry Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ARCHESTRA_AZURE_OPENAI_BASE_URL` | Yes | Full deployment URL: `https://<resource>.openai.azure.com/openai/deployments/<deployment>` |
+| `ARCHESTRA_AZURE_OPENAI_API_VERSION` | No | Azure OpenAI API version (default: `2024-02-01`) |
+| `ARCHESTRA_CHAT_AZURE_OPENAI_API_KEY` | No | Default API key for Azure AI Foundry chat (can be overridden per conversation/team/org) |
+
+### Getting an Azure API Key
+
+You can generate an API key from the [Azure Portal](https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/OpenAI) under your Azure OpenAI resource.
+
+### Base URL Format
+
+The `ARCHESTRA_AZURE_OPENAI_BASE_URL` must be the full deployment URL including the deployment name:
+
+```
+https://<resource-name>.openai.azure.com/openai/deployments/<deployment-name>
+```
+
+For example: `https://my-company.openai.azure.com/openai/deployments/gpt-4o`
+
+The same format applies when configuring a Base URL in the API key settings UI.
+
+### Notes
+
+- **API Version**: The `api-version` query parameter is automatically appended to all requests using the configured `ARCHESTRA_AZURE_OPENAI_API_VERSION` value. You do not need to include it in the base URL.
+- **Multiple Deployments**: To use multiple Azure deployments, create separate API key entries in Settings, each with its own deployment URL as the Base URL.
+- **OpenAI-compatible API**: Azure AI Foundry uses the OpenAI Chat Completions request/response format, making it compatible with existing OpenAI client libraries.

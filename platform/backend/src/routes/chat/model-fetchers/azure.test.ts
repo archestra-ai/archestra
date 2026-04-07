@@ -1,0 +1,192 @@
+import { describe, expect, test, vi } from "vitest";
+import { fetchAzureModels } from "./azure";
+
+vi.mock("@/config", () => ({
+  default: {
+    llm: {
+      azure: {
+        baseUrl:
+          "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
+        apiVersion: "2024-02-01",
+      },
+    },
+  },
+}));
+
+vi.mock("@/logging", () => ({
+  default: { warn: vi.fn(), error: vi.fn() },
+}));
+
+describe("fetchAzureModels", () => {
+  test("returns empty array when baseUrl is empty and no override", async () => {
+    vi.doMock("@/config", () => ({
+      default: {
+        llm: {
+          azure: { baseUrl: "", apiVersion: "2024-02-01" },
+        },
+      },
+    }));
+
+    const result = await fetchAzureModels("test-key", "");
+    expect(result).toEqual([]);
+  });
+
+  test("returns empty array when baseUrl override is empty string", async () => {
+    const result = await fetchAzureModels("test-key", "");
+    expect(result).toEqual([]);
+  });
+
+  test("returns empty array when endpoint regex fails", async () => {
+    const result = await fetchAzureModels("test-key", "not-a-valid-url");
+    expect(result).toEqual([]);
+  });
+
+  test("returns models from successful response", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [{ id: "gpt-4o" }, { id: "gpt-4o-mini" }],
+      }),
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    const result = await fetchAzureModels(
+      "test-key",
+      "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
+    );
+
+    expect(result).toEqual([
+      { id: "gpt-4o", displayName: "gpt-4o", provider: "azure" },
+      { id: "gpt-4o-mini", displayName: "gpt-4o-mini", provider: "azure" },
+    ]);
+    expect(mockFetch).toHaveBeenCalledWith(
+      "https://my-resource.openai.azure.com/openai/deployments?api-version=2024-02-01",
+      { headers: { "api-key": "test-key" } },
+    );
+
+    vi.unstubAllGlobals();
+  });
+
+  test("strips a Bearer prefix before sending the api-key header", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ id: "gpt-4o" }] }),
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    await fetchAzureModels(
+      "Bearer test-key",
+      "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
+    );
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "https://my-resource.openai.azure.com/openai/deployments?api-version=2024-02-01",
+      { headers: { "api-key": "test-key" } },
+    );
+
+    vi.unstubAllGlobals();
+  });
+
+  test("returns empty array when response is not ok", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      text: async () => "Unauthorized",
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    const result = await fetchAzureModels(
+      "bad-key",
+      "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
+    );
+    expect(result).toEqual([]);
+
+    vi.unstubAllGlobals();
+  });
+
+  test("returns empty array when fetch throws", async () => {
+    const mockFetch = vi.fn().mockRejectedValue(new Error("Network error"));
+    vi.stubGlobal("fetch", mockFetch);
+
+    const result = await fetchAzureModels(
+      "test-key",
+      "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
+    );
+    expect(result).toEqual([]);
+
+    vi.unstubAllGlobals();
+  });
+
+  test("handles empty data array in response", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [] }),
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    const result = await fetchAzureModels(
+      "test-key",
+      "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
+    );
+    expect(result).toEqual([]);
+
+    vi.unstubAllGlobals();
+  });
+
+  test("handles missing data field in response", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    const result = await fetchAzureModels(
+      "test-key",
+      "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
+    );
+    expect(result).toEqual([]);
+
+    vi.unstubAllGlobals();
+  });
+
+  test("extracts endpoint correctly from deployment URL", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ id: "gpt-4o" }] }),
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    await fetchAzureModels(
+      "test-key",
+      "https://my-company.openai.azure.com/openai/deployments/my-gpt4-deployment",
+    );
+
+    // Should call the endpoint without the deployment name
+    expect(mockFetch).toHaveBeenCalledWith(
+      "https://my-company.openai.azure.com/openai/deployments?api-version=2024-02-01",
+      expect.any(Object),
+    );
+
+    vi.unstubAllGlobals();
+  });
+
+  test("builds deployments URL from a localhost wiremock deployment base URL", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ id: "gpt-4o" }] }),
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    await fetchAzureModels(
+      "test-key",
+      "http://localhost:9092/azure/openai/deployments/test-deployment",
+    );
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://localhost:9092/azure/openai/deployments?api-version=2024-02-01",
+      expect.any(Object),
+    );
+
+    vi.unstubAllGlobals();
+  });
+});

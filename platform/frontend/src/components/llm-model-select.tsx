@@ -22,6 +22,7 @@ const PROVIDER_LOGO_NAME: Record<SupportedProvider, string> = {
   zhipuai: "zhipuai",
   deepseek: "deepseek",
   minimax: "minimax",
+  azure: "azure",
 };
 
 export type LlmModelSelectOption = {

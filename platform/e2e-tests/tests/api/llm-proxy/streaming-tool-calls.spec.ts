@@ -82,6 +82,18 @@ const openaiConfig: StreamingToolCallTestConfig = {
   expectedToolName: "read_file",
 };
 
+const azureConfig: StreamingToolCallTestConfig = {
+  providerName: "Azure",
+  endpoint: (agentId) => `/v1/azure/${agentId}/chat/completions`,
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+  buildStreamingRequest: (content, tools) =>
+    buildOpenAIStreamingRequest("gpt-4o", content, tools),
+  expectedToolName: "read_file",
+};
+
 const anthropicConfig: StreamingToolCallTestConfig = {
   providerName: "Anthropic",
   endpoint: (agentId) => `/v1/anthropic/${agentId}/v1/messages`,
@@ -309,6 +321,7 @@ const testConfigsMap = {
   openrouter: openrouterConfig,
   perplexity: null, // Perplexity does not support tool calling
   xai: xaiConfig,
+  azure: azureConfig,
 } satisfies Record<SupportedProvider, StreamingToolCallTestConfig | null>;
 
 const testConfigs = Object.values(testConfigsMap).filter(

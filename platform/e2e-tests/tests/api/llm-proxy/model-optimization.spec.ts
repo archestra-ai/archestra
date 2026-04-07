@@ -93,6 +93,41 @@ const openaiConfig: ModelOptimizationTestConfig = {
   getModelFromResponse: (response) => response.model,
 };
 
+const azureConfig: ModelOptimizationTestConfig = {
+  providerName: "Azure",
+  provider: "azure",
+
+  endpoint: (agentId) => `/v1/azure/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => {
+    const request: Record<string, unknown> = {
+      model: "e2e-test-azure-baseline",
+      messages: [{ role: "user", content }],
+    };
+    if (tools && tools.length > 0) {
+      request.tools = tools.map((t) => ({
+        type: "function",
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+        },
+      }));
+    }
+    return request;
+  },
+
+  baselineModel: "e2e-test-azure-baseline",
+  optimizedModel: "e2e-test-azure-optimized",
+
+  getModelFromResponse: (response) => response.model,
+};
+
 const xaiConfig: ModelOptimizationTestConfig = {
   providerName: "xAI",
   provider: "xai",
@@ -630,6 +665,7 @@ const testConfigsMap = {
   deepseek: deepseekConfig,
   bedrock: null, // Bedrock messages use nested content arrays that the tokenizer doesn't count correctly
   openrouter: openrouterConfig,
+  azure: azureConfig,
 } satisfies Record<SupportedProvider, ModelOptimizationTestConfig | null>;
 
 const testConfigs = Object.values(testConfigsMap).filter(

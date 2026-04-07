@@ -123,6 +123,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           zhipuai: config.llm.zhipuai.baseUrl || null,
           minimax: config.llm.minimax.baseUrl || null,
           deepseek: config.llm.deepseek.baseUrl || null,
+          azure: config.llm.azure.baseUrl || null,
         },
       });
     },

@@ -67,6 +67,26 @@ describe("fetchAzureModels", () => {
     vi.unstubAllGlobals();
   });
 
+  test("strips a Bearer prefix before sending the api-key header", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ id: "gpt-4o" }] }),
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    await fetchAzureModels(
+      "Bearer test-key",
+      "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
+    );
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "https://my-resource.openai.azure.com/openai/deployments?api-version=2024-02-01",
+      { headers: { "api-key": "test-key" } },
+    );
+
+    vi.unstubAllGlobals();
+  });
+
   test("returns empty array when response is not ok", async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: false,

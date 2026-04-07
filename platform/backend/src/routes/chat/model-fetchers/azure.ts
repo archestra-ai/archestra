@@ -1,4 +1,7 @@
-import { buildAzureDeploymentsUrl } from "@/clients/azure-url";
+import {
+  buildAzureDeploymentsUrl,
+  normalizeAzureApiKey,
+} from "@/clients/azure-url";
 import config from "@/config";
 import logger from "@/logging";
 import type { ModelInfo } from "./types";
@@ -24,8 +27,9 @@ export async function fetchAzureModels(
   try {
     // Azure lists deployments at GET /openai/deployments?api-version=...
     // and returns { data: [{ id, ... }] }, which we map into ModelInfo.
+    const normalizedApiKey = normalizeAzureApiKey(apiKey);
     const response = await fetch(url, {
-      headers: { "api-key": apiKey },
+      headers: { "api-key": normalizedApiKey ?? "" },
     });
 
     if (!response.ok) {

@@ -149,6 +149,43 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "No GPL/AGPL/Unknown licenses found in dependencies." >> $GITHUB_STEP_SUMMARY
 
+  supply-chain-policy:
+    name: Supply Chain Policy
+    if: github.event_name == 'pull_request' && github.event.action != 'edited' && github.event.action != 'labeled'
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Enforce image pinning and download verification policy
+        run: python3 .github/scripts/check-supply-chain-policy.py
+
+  dependency-review:
+    name: Dependency Review
+    if: github.event_name == 'pull_request' && github.event.action != 'edited' && github.event.action != 'labeled'
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Dependency review
+        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
+        with:
+          fail-on-severity: high
+          allow-licenses: MIT
+          comment-summary-in-pr: on-failure
+
   # Fast feedback on every PR push: lint + typecheck + unit tests.
   # Full E2E suite runs only in merge queue (or on-demand via "run-e2e" PR label).
   platform-lint-and-unit-tests:

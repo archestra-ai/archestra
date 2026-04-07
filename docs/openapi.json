@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.3"
+    "version": "1.2.4"
   },
   "components": {
     "schemas": {
@@ -38446,7 +38446,7 @@
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 128,
-                      "pattern": "^[a-zA-Z0-9\\-]+$"
+                      "pattern": "^[a-zA-Z0-9-]+$"
                     }
                   },
                   "builtInAgentConfig": {
@@ -41973,7 +41973,7 @@
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 128,
-                      "pattern": "^[a-zA-Z0-9\\-]+$"
+                      "pattern": "^[a-zA-Z0-9-]+$"
                     }
                   },
                   "builtInAgentConfig": {

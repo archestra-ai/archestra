@@ -183,7 +183,9 @@ jobs:
         uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
         with:
           fail-on-severity: high
-          allow-licenses: MIT
+          # NOTE: disable license check here because we are already doing it in the license-compliance-check job
+          # allow-licenses: MIT
+          license-check: false
           comment-summary-in-pr: on-failure
 
   # Fast feedback on every PR push: lint + typecheck + unit tests.

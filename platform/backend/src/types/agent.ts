@@ -1,8 +1,10 @@
 import {
+  BLOCKED_PASSTHROUGH_HEADERS,
   BUILT_IN_AGENT_IDS,
   DOMAIN_VALIDATION_REGEX,
   IncomingEmailSecurityModeSchema,
   MAX_DOMAIN_LENGTH,
+  MAX_PASSTHROUGH_HEADERS,
   MAX_SUGGESTED_PROMPTS,
 } from "@shared";
 import {
@@ -85,22 +87,6 @@ export const AgentTeamInfoSchema = z.object({
   id: z.string(),
   name: z.string(),
 });
-
-// Hop-by-hop (RFC 7230) and protocol-level headers that must not be forwarded
-const BLOCKED_PASSTHROUGH_HEADERS = new Set([
-  "connection",
-  "keep-alive",
-  "proxy-authenticate",
-  "proxy-authorization",
-  "te",
-  "trailers",
-  "transfer-encoding",
-  "upgrade",
-  "host",
-  "content-length",
-]);
-
-const MAX_PASSTHROUGH_HEADERS = 20;
 
 const PassthroughHeaderSchema = z
   .string()

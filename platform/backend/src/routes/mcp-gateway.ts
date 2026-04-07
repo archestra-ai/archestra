@@ -12,7 +12,6 @@ import config from "@/config";
 import { AgentModel, McpToolCallModel } from "@/models";
 import { UuidOrSlugSchema } from "@/types";
 import {
-  type AgentInfo,
   createAgentServer,
   createStatelessTransport,
   deriveAuthMethod,
@@ -50,7 +49,6 @@ async function handleMcpPostRequest(
   reply: FastifyReply,
   profileId: string,
   tokenAuthContext: TokenAuthContext | undefined,
-  preloadedAgent?: AgentInfo,
 ): Promise<unknown> {
   const body = request.body as Record<string, unknown>;
   const isInitialize =
@@ -68,11 +66,7 @@ async function handleMcpPostRequest(
 
   try {
     // Create fresh server and transport for each request (stateless mode)
-    const { server } = await createAgentServer(
-      profileId,
-      tokenAuthContext,
-      preloadedAgent,
-    );
+    const { server } = await createAgentServer(profileId, tokenAuthContext);
     const transport = createStatelessTransport(profileId);
 
     fastify.log.trace({ profileId }, "Connecting server to transport");
@@ -290,9 +284,8 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...(tokenAuth.rawToken && { rawToken: tokenAuth.rawToken }),
       };
 
-      // Load agent to extract passthrough headers and reuse as preloadedAgent
+      // Extract passthrough headers from the incoming request per the agent's allowlist
       const agent = await AgentModel.findById(profileId);
-      let preloadedAgent: AgentInfo | undefined;
       if (agent) {
         const passthroughHeaders = extractPassthroughHeaders(
           agent.passthroughHeaders,
@@ -301,13 +294,6 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (passthroughHeaders) {
           tokenAuthContext.passthroughHeaders = passthroughHeaders;
         }
-        preloadedAgent = {
-          id: agent.id,
-          name: agent.name,
-          agentType: agent.agentType,
-          labels: agent.labels,
-          passthroughHeaders: agent.passthroughHeaders,
-        };
       }
 
       return handleMcpPostRequest(
@@ -316,7 +302,6 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         reply,
         profileId,
         tokenAuthContext,
-        preloadedAgent,
       );
     },
   );

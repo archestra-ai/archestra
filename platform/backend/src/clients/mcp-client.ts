@@ -1302,19 +1302,7 @@ class McpClient {
           localHeaders.Authorization = `Bearer ${tokenAuth.rawToken}`;
         }
 
-        // Merge passthrough headers (don't override existing headers, case-insensitive)
-        if (tokenAuth?.passthroughHeaders) {
-          const existingKeys = new Set(
-            Object.keys(localHeaders).map((k) => k.toLowerCase()),
-          );
-          for (const [name, value] of Object.entries(
-            tokenAuth.passthroughHeaders,
-          )) {
-            if (!existingKeys.has(name.toLowerCase())) {
-              localHeaders[name] = value;
-            }
-          }
-        }
+        mergePassthroughHeaders(localHeaders, tokenAuth?.passthroughHeaders);
 
         return new StreamableHTTPClientTransport(new URL(endpointUrl), {
           sessionId,
@@ -1344,19 +1332,7 @@ class McpClient {
           headers.Authorization = `Bearer ${tokenAuth.rawToken}`;
         }
 
-        // Merge passthrough headers (don't override existing headers, case-insensitive)
-        if (tokenAuth?.passthroughHeaders) {
-          const existingKeys = new Set(
-            Object.keys(headers).map((k) => k.toLowerCase()),
-          );
-          for (const [name, value] of Object.entries(
-            tokenAuth.passthroughHeaders,
-          )) {
-            if (!existingKeys.has(name.toLowerCase())) {
-              headers[name] = value;
-            }
-          }
-        }
+        mergePassthroughHeaders(headers, tokenAuth?.passthroughHeaders);
 
         return new StreamableHTTPClientTransport(
           new URL(catalogItem.serverUrl),
@@ -2520,4 +2496,18 @@ function formatActionableAuthError(params: {
     "",
     params.postAction,
   ].join("\n");
+}
+
+/** Merge passthrough headers into target, skipping keys already present (case-insensitive). */
+function mergePassthroughHeaders(
+  target: Record<string, string>,
+  passthrough: Record<string, string> | undefined,
+): void {
+  if (!passthrough) return;
+  const existing = new Set(Object.keys(target).map((k) => k.toLowerCase()));
+  for (const [name, value] of Object.entries(passthrough)) {
+    if (!existing.has(name.toLowerCase())) {
+      target[name] = value;
+    }
+  }
 }

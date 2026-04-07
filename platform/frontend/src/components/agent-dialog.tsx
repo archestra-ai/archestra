@@ -5,12 +5,15 @@ import {
   type AgentType,
   archestraApiSdk,
   type archestraApiTypes,
+  BLOCKED_PASSTHROUGH_HEADERS,
   BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS,
   BUILT_IN_AGENT_IDS,
   DocsPage,
   E2eTestId,
   getDocsUrl,
   getResourceForAgentType,
+  HEADER_NAME_REGEX,
+  MAX_PASSTHROUGH_HEADERS,
   MAX_SUGGESTED_PROMPT_TEXT_LENGTH,
   MAX_SUGGESTED_PROMPT_TITLE_LENGTH,
   MAX_SUGGESTED_PROMPTS,
@@ -150,21 +153,6 @@ const { useIdentityProviders } = config.enterpriseFeatures.core
 
 type Agent = archestraApiTypes.GetAllAgentsResponses["200"][number];
 
-// Hop-by-hop (RFC 7230) and protocol-level headers that cannot be forwarded
-const BLOCKED_PASSTHROUGH_HEADERS = new Set([
-  "connection",
-  "keep-alive",
-  "proxy-authenticate",
-  "proxy-authorization",
-  "te",
-  "trailers",
-  "transfer-encoding",
-  "upgrade",
-  "host",
-  "content-length",
-]);
-const MAX_PASSTHROUGH_HEADERS = 20;
-const HEADER_NAME_REGEX = /^[a-zA-Z\d-]+$/;
 
 // Component to display tools for a specific agent
 function AgentToolsList({ agentId }: { agentId: string }) {

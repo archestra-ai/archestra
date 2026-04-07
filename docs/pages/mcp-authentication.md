@@ -271,7 +271,7 @@ For upstream servers that use OAuth, Archestra handles the token lifecycle autom
 
 ## Custom Header Passthrough
 
-MCP Gateways can forward custom HTTP headers from client requests to downstream MCP servers. This is useful for passing correlation IDs, tenant identifiers, or other application-specific headers through the gateway.
+MCP Gateways can pass through client request headers to downstream MCP servers. This is useful for passing correlation IDs, tenant identifiers, or other application-specific headers through the gateway.
 
 Configure the allowlist in the MCP Gateway's **Advanced** section under **Custom Header Passthrough**. Only headers whose names appear in the allowlist are forwarded; all others are dropped. Header names are case-insensitive and stored in lowercase.
 

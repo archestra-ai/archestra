@@ -153,7 +153,6 @@ const { useIdentityProviders } = config.enterpriseFeatures.core
 
 type Agent = archestraApiTypes.GetAllAgentsResponses["200"][number];
 
-
 // Component to display tools for a specific agent
 function AgentToolsList({ agentId }: { agentId: string }) {
   const { data: tools = [], isLoading } = useChatProfileMcpTools(agentId);
@@ -1824,7 +1823,7 @@ export function AgentDialog({
                         <div className="space-y-2">
                           <Label>Custom Header Passthrough</Label>
                           <p className="text-sm text-muted-foreground">
-                            HTTP headers from client requests to forward to
+                            Client request headers to pass through to
                             downstream MCP servers. Case-insensitive.
                           </p>
                           <div className="flex flex-wrap gap-1.5">

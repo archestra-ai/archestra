@@ -19,20 +19,14 @@ vi.mock("@/logging", () => ({
 
 describe("fetchAzureModels", () => {
   test("returns empty array when baseUrl is empty and no override", async () => {
-    vi.doMock("@/config", () => ({
-      default: {
-        llm: {
-          azure: { baseUrl: "", apiVersion: "2024-02-01" },
-        },
-      },
-    }));
-
-    const result = await fetchAzureModels("test-key", "");
-    expect(result).toEqual([]);
+    const result = await fetchAzureModels("test-key", null);
+    expect(result).toEqual([
+      { id: "gpt-4o", displayName: "gpt-4o", provider: "azure" },
+    ]);
   });
 
-  test("returns empty array when baseUrl override is empty string", async () => {
-    const result = await fetchAzureModels("test-key", "");
+  test("returns empty array when baseUrl override is only whitespace", async () => {
+    const result = await fetchAzureModels("test-key", "   ");
     expect(result).toEqual([]);
   });
 
@@ -99,7 +93,9 @@ describe("fetchAzureModels", () => {
       "bad-key",
       "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
     );
-    expect(result).toEqual([]);
+    expect(result).toEqual([
+      { id: "gpt-4o", displayName: "gpt-4o", provider: "azure" },
+    ]);
 
     vi.unstubAllGlobals();
   });
@@ -112,7 +108,9 @@ describe("fetchAzureModels", () => {
       "test-key",
       "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
     );
-    expect(result).toEqual([]);
+    expect(result).toEqual([
+      { id: "gpt-4o", displayName: "gpt-4o", provider: "azure" },
+    ]);
 
     vi.unstubAllGlobals();
   });
@@ -128,7 +126,9 @@ describe("fetchAzureModels", () => {
       "test-key",
       "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
     );
-    expect(result).toEqual([]);
+    expect(result).toEqual([
+      { id: "gpt-4o", displayName: "gpt-4o", provider: "azure" },
+    ]);
 
     vi.unstubAllGlobals();
   });
@@ -144,7 +144,34 @@ describe("fetchAzureModels", () => {
       "test-key",
       "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
     );
-    expect(result).toEqual([]);
+    expect(result).toEqual([
+      { id: "gpt-4o", displayName: "gpt-4o", provider: "azure" },
+    ]);
+
+    vi.unstubAllGlobals();
+  });
+
+  test("falls back to the configured deployment name when Azure discovery returns 404", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      text: async () =>
+        '{"error":{"code":"404","message":"Resource not found"}}',
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    const result = await fetchAzureModels(
+      "test-key",
+      "https://my-resource.openai.azure.com/openai/deployments/gpt-5.2-chat",
+    );
+
+    expect(result).toEqual([
+      {
+        id: "gpt-5.2-chat",
+        displayName: "gpt-5.2-chat",
+        provider: "azure",
+      },
+    ]);
 
     vi.unstubAllGlobals();
   });

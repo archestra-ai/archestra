@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "@/test";
 import {
   buildAzureDeploymentsUrl,
   createAzureFetchWithApiVersion,
+  extractAzureDeploymentName,
   normalizeAzureApiKey,
 } from "./azure-url";
 
@@ -133,5 +134,27 @@ describe("normalizeAzureApiKey", () => {
 
   it("returns undefined when the key is undefined", () => {
     expect(normalizeAzureApiKey(undefined)).toBeUndefined();
+  });
+});
+
+describe("extractAzureDeploymentName", () => {
+  it("extracts the deployment name from an Azure deployment base URL", () => {
+    expect(
+      extractAzureDeploymentName(
+        "https://my-resource.openai.azure.com/openai/deployments/gpt-5.2-chat",
+      ),
+    ).toBe("gpt-5.2-chat");
+  });
+
+  it("extracts the deployment name from a trailing-slash deployment URL", () => {
+    expect(
+      extractAzureDeploymentName(
+        "https://my-resource.openai.azure.com/openai/deployments/gpt-5.2-chat/",
+      ),
+    ).toBe("gpt-5.2-chat");
+  });
+
+  it("returns null for an invalid URL", () => {
+    expect(extractAzureDeploymentName("not-a-valid-url")).toBeNull();
   });
 });

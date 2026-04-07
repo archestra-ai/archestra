@@ -139,7 +139,7 @@ To configure the connector:
 
 Known limitation:
 
-- SharePoint file sync currently lists only the direct children of the selected drive root or `Folder Path`. Nested subfolders are not traversed recursively. If you need multiple nested folders today, point `Folder Path` at the specific folder you want to sync or create separate connectors.
+- SharePoint file sync currently lists only the direct children of the selected drive root or `Folder Path`. Nested subfolders are not traversed recursively. If you need multiple nested folders today, point `Folder Path` at the specific folder you want to sync or create separate connectors. Recursive traversal is tracked in [issue #3665](https://github.com/archestra-ai/archestra/issues/3665).
 
 Incremental sync uses the `lastModifiedDateTime` field to fetch only items modified since the last run.
 

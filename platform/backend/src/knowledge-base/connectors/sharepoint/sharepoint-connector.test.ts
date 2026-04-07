@@ -209,6 +209,59 @@ describe("SharePointConnector", () => {
     });
   });
 
+  describe("estimateTotalItems", () => {
+    it("estimates eligible drive items and site pages using the same sync filters", async () => {
+      const connector = new SharePointConnector();
+      const { mockGet } = setupMockClient(connector);
+
+      mockGet
+        .mockResolvedValueOnce({ id: "site-123" })
+        .mockResolvedValueOnce({ value: [{ id: "drive-1" }] })
+        .mockResolvedValueOnce({
+          value: [
+            makeDriveItem("item-1", "file1.txt", {
+              lastModified: "2024-01-20T00:00:00.000Z",
+            }),
+            makeDriveItem("item-2", "old.txt", {
+              lastModified: "2024-01-01T00:00:00.000Z",
+            }),
+            {
+              ...makeDriveItem("item-3", "folder", {
+                lastModified: "2024-01-20T00:00:00.000Z",
+              }),
+              file: undefined,
+              folder: { childCount: 1 },
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          value: [
+            makeSitePage("page-1", "Included page", {
+              lastModified: "2024-01-20T00:00:00.000Z",
+            }),
+            makeSitePage("page-2", "Old page", {
+              lastModified: "2024-01-01T00:00:00.000Z",
+            }),
+          ],
+        });
+
+      const result = await connector.estimateTotalItems({
+        config: {
+          tenantId: "test-tenant-id",
+          siteUrl: "https://tenant.sharepoint.com/sites/test",
+          includePages: true,
+        },
+        credentials,
+        checkpoint: {
+          type: "sharepoint",
+          lastSyncedAt: "2024-01-15T12:00:00.000Z",
+        },
+      });
+
+      expect(result).toBe(2);
+    });
+  });
+
   describe("sync — drive items", () => {
     it("syncs text files from drive", async () => {
       const connector = new SharePointConnector();
@@ -328,6 +381,40 @@ describe("SharePointConnector", () => {
       expect(apiCalls.some((u) => u === nextLinkUrl)).toBe(true);
     });
 
+    it("preserves path separators when folderPath contains nested folders", async () => {
+      const connector = new SharePointConnector();
+      const { mockGet, mockApi } = setupMockClient(connector);
+
+      mockGet
+        .mockResolvedValueOnce({ id: "site-123" })
+        .mockResolvedValueOnce({
+          value: [],
+        })
+        .mockResolvedValueOnce({ value: [] });
+
+      for await (const _batch of connector.sync({
+        config: {
+          tenantId: "test-tenant-id",
+          siteUrl: "https://tenant.sharepoint.com/sites/test",
+          driveIds: ["drive-1"],
+          folderPath: "General/Documents & Files/Engineering",
+        },
+        credentials,
+        checkpoint: null,
+      })) {
+        // no-op
+      }
+
+      const apiCalls = mockApi.mock.calls.map((call) => call[0] as string);
+      expect(
+        apiCalls.some((url) =>
+          url.includes(
+            "/drives/drive-1/root:/General/Documents%20%26%20Files/Engineering:/children",
+          ),
+        ),
+      ).toBe(true);
+    });
+
     it("skips items older than checkpoint via client-side filter", async () => {
       const connector = new SharePointConnector();
       const { mockGet } = setupMockClient(connector);
@@ -369,6 +456,42 @@ describe("SharePointConnector", () => {
       // Only new.txt (after checkpoint) should be returned
       expect(batches[0].documents).toHaveLength(1);
       expect(batches[0].documents[0].title).toBe("new.txt");
+    });
+
+    it("compares checkpoint dates by timestamp, not raw string format", async () => {
+      const connector = new SharePointConnector();
+      const { mockGet } = setupMockClient(connector);
+
+      mockGet
+        .mockResolvedValueOnce({ id: "site-123" })
+        .mockResolvedValueOnce({ value: [{ id: "drive-1" }] })
+        .mockResolvedValueOnce({
+          value: [
+            makeDriveItem("item-1", "same-moment.txt", {
+              lastModified: "2024-01-15T12:00:00+00:00",
+            }),
+          ],
+        })
+        .mockResolvedValueOnce(makeFileBuffer("same instant"))
+        .mockResolvedValueOnce({ value: [] });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {
+          tenantId: "test-tenant-id",
+          siteUrl: "https://tenant.sharepoint.com/sites/test",
+        },
+        credentials,
+        checkpoint: {
+          type: "sharepoint",
+          lastSyncedAt: "2024-01-15T12:00:00.000Z",
+        },
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches[0].documents).toHaveLength(1);
+      expect(batches[0].documents[0].title).toBe("same-moment.txt");
     });
 
     it("skips item and records failure when file download fails", async () => {

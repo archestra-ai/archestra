@@ -16,13 +16,11 @@ interface SharePointConfigFieldsProps {
   // biome-ignore lint/suspicious/noExplicitAny: form type is generic across different form schemas
   form: UseFormReturn<any>;
   prefix?: string;
-  hideUrl?: boolean;
 }
 
 export function SharePointConfigFields({
   form,
   prefix = "config",
-  hideUrl: _hideUrl,
 }: SharePointConfigFieldsProps) {
   return (
     <div className="space-y-4">
@@ -62,7 +60,8 @@ export function SharePointConfigFields({
               />
             </FormControl>
             <FormDescription>
-              Restrict sync to a specific folder path within each drive.
+              Restrict sync to a specific folder path within each drive. Nested
+              subfolders under that path are not traversed recursively.
             </FormDescription>
             <FormMessage />
           </FormItem>

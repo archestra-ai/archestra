@@ -108,6 +108,64 @@ export class SharePointConnector extends BaseConnector {
     }
   }
 
+  async estimateTotalItems(params: {
+    config: Record<string, unknown>;
+    credentials: ConnectorCredentials;
+    checkpoint: Record<string, unknown> | null;
+  }): Promise<number | null> {
+    const parsed = parseSharePointConfig(params.config);
+    if (!parsed) return null;
+
+    try {
+      const checkpoint = (params.checkpoint as SharePointCheckpoint | null) ?? {
+        type: "sharepoint" as const,
+      };
+      const syncFrom = checkpoint.lastSyncedAt;
+      const safetyBufferedSyncFrom = syncFrom
+        ? subtractSafetyBuffer(syncFrom)
+        : undefined;
+
+      const client = this.getGraphClient(params.credentials, parsed);
+      const siteResolution = await this.resolveSite(client, parsed.siteUrl);
+
+      if (!siteResolution.siteId) {
+        return null;
+      }
+
+      const driveIds =
+        parsed.driveIds && parsed.driveIds.length > 0
+          ? parsed.driveIds
+          : await this.listDriveIds(client, siteResolution.siteId);
+
+      let total = 0;
+
+      for (const driveId of driveIds) {
+        total += await this.countDriveItems({
+          client,
+          driveId,
+          folderPath: parsed.folderPath,
+          syncFrom: safetyBufferedSyncFrom,
+        });
+      }
+
+      if (parsed.includePages !== false) {
+        total += await this.countSitePages({
+          client,
+          siteId: siteResolution.siteId,
+          syncFrom: safetyBufferedSyncFrom,
+        });
+      }
+
+      return total;
+    } catch (error) {
+      this.log.warn(
+        { error: extractErrorMessage(error) },
+        "Failed to estimate total items",
+      );
+      return null;
+    }
+  }
+
   async *sync(params: {
     config: Record<string, unknown>;
     credentials: ConnectorCredentials;
@@ -342,7 +400,7 @@ export class SharePointConnector extends BaseConnector {
           isSupportedFile(item.name, supportsImages) &&
           // Client-side incremental filter: Graph API does not support
           // $filter on lastModifiedDateTime for drive item children.
-          (!syncFrom || item.lastModifiedDateTime >= syncFrom),
+          isModifiedSince(item.lastModifiedDateTime, syncFrom),
       );
 
       const documents: ConnectorDocument[] = [];
@@ -507,7 +565,9 @@ export class SharePointConnector extends BaseConnector {
       // Client-side incremental filter for pages (same reason as drive items:
       // $filter on lastModifiedDateTime is not reliably supported by the pages API).
       const pages = syncFrom
-        ? result.value.filter((p) => p.lastModifiedDateTime >= syncFrom)
+        ? result.value.filter((p) =>
+            isModifiedSince(p.lastModifiedDateTime, syncFrom),
+          )
         : result.value;
 
       for (const page of pages) {
@@ -602,6 +662,53 @@ export class SharePointConnector extends BaseConnector {
     }
 
     return parts.join("\n\n").slice(0, MAX_CONTENT_LENGTH);
+  }
+
+  private async countDriveItems(params: {
+    client: Client;
+    driveId: string;
+    folderPath: string | undefined;
+    syncFrom: string | undefined;
+  }): Promise<number> {
+    let url = buildDriveItemsUrl(params.driveId, params.folderPath, 500);
+    let count = 0;
+
+    while (url) {
+      const result = (await params.client
+        .api(url)
+        .get()) as GraphListResponse<DriveItem>;
+      count += result.value.filter(
+        (item) =>
+          item.file &&
+          !item.folder &&
+          isSupportedFile(item.name) &&
+          isModifiedSince(item.lastModifiedDateTime, params.syncFrom),
+      ).length;
+      url = result["@odata.nextLink"] ?? "";
+    }
+
+    return count;
+  }
+
+  private async countSitePages(params: {
+    client: Client;
+    siteId: string;
+    syncFrom: string | undefined;
+  }): Promise<number> {
+    let url = buildSitePagesUrl(params.siteId, 500);
+    let count = 0;
+
+    while (url) {
+      const result = (await params.client
+        .api(url)
+        .get()) as GraphListResponse<SitePage>;
+      count += result.value.filter((page) =>
+        isModifiedSince(page.lastModifiedDateTime, params.syncFrom),
+      ).length;
+      url = result["@odata.nextLink"] ?? "";
+    }
+
+    return count;
   }
 }
 
@@ -783,7 +890,7 @@ function buildDriveItemsUrl(
   // This lists only the direct children of the selected root/folder. Nested
   // subfolders are not traversed recursively.
   const basePath = folderPath
-    ? `${GRAPH_API_BASE}/drives/${driveId}/root:/${encodeURIComponent(folderPath)}:/children`
+    ? `${GRAPH_API_BASE}/drives/${driveId}/root:/${encodeGraphPath(folderPath)}:/children`
     : `${GRAPH_API_BASE}/drives/${driveId}/root/children`;
 
   const params = new URLSearchParams({
@@ -820,6 +927,32 @@ function getFileExtension(name: string): string {
   const lastDot = name.lastIndexOf(".");
   if (lastDot < 0) return "";
   return name.slice(lastDot).toLowerCase();
+}
+
+function encodeGraphPath(path: string): string {
+  return path
+    .split("/")
+    .filter((segment) => segment.length > 0)
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+}
+
+function isModifiedSince(
+  itemTimestamp: string | undefined,
+  syncFrom: string | undefined,
+): boolean {
+  if (!syncFrom || !itemTimestamp) {
+    return true;
+  }
+
+  const itemTime = Date.parse(itemTimestamp);
+  const syncTime = Date.parse(syncFrom);
+
+  if (!Number.isNaN(itemTime) && !Number.isNaN(syncTime)) {
+    return itemTime >= syncTime;
+  }
+
+  return itemTimestamp >= syncFrom;
 }
 
 async function extractTextFromBinary(
@@ -863,7 +996,9 @@ async function extractTextFromPptx(buffer: Buffer): Promise<string> {
     // Extract text from <a:t> tags (DrawingML text runs)
     const texts = xml.match(/<a:t[^>]*>([^<]*)<\/a:t>/g);
     if (texts) {
-      const slideText = texts.map((text) => stripHtmlTags(text)).join(" ");
+      const slideText = texts
+        .map((text: string) => stripHtmlTags(text))
+        .join(" ");
       if (slideText.trim()) parts.push(slideText.trim());
     }
   }

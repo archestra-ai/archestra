@@ -41,6 +41,14 @@ describe("stripHtmlTags", () => {
     const html = "<<script>alert(1)</script>";
     expect(stripHtmlTags(html)).toBe("alert(1)");
   });
+
+  test("strips unterminated tag fragments after entity decoding", () => {
+    expect(stripHtmlTags("safe &lt;script attr=")).toBe("safe");
+  });
+
+  test("preserves literal less-than text that is not tag-like", () => {
+    expect(stripHtmlTags("1 &lt; 5")).toBe("1 < 5");
+  });
 });
 
 describe("stripHtmlEmail", () => {

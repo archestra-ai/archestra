@@ -13,6 +13,9 @@ export function stripHtmlTags(html: string): string {
     /&(amp|lt|gt|quot|#39|nbsp);/g,
     (_match, entity: string) => HTML_ENTITY_MAP[entity] ?? _match,
   );
+  // Strip unterminated tag-like fragments that can remain after entity decode,
+  // e.g. "&lt;script attr=" -> "<script attr=".
+  text = text.replace(/<[A-Za-z!/][^>\n]*(?=\n|$)/g, "");
   text = text.replace(/\n{3,}/g, "\n\n");
   return text.trim();
 }

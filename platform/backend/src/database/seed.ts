@@ -274,6 +274,93 @@ async function seedPlaywrightCatalog(): Promise<void> {
  * Seeds test MCP server for development
  * This creates a simple MCP server in the catalog that has one tool: print_archestra_test
  */
+async function seedMcpAppsCatalogEntries(): Promise<void> {
+  const catalogEntries = [
+    {
+      name: "n8n-mcp",
+      description:
+        "MCP server for n8n node documentation, properties, operations, templates, and workflow automation assistance.",
+      repository: "https://github.com/czlonkowski/n8n-mcp",
+      docsUrl: "https://github.com/czlonkowski/n8n-mcp#readme",
+      serverType: "local" as const,
+      requiresAuth: false,
+      instructions:
+        "Use this server when users need rich n8n node knowledge or workflow-building help. For management tools, provide N8N_API_URL and N8N_API_KEY during installation.",
+      localConfig: {
+        command: "npx",
+        arguments: ["-y", "n8n-mcp"],
+        transportType: "stdio" as const,
+        environment: [
+          {
+            key: "MCP_MODE",
+            type: "plain_text" as const,
+            value: "stdio",
+            promptOnInstallation: false,
+            required: true,
+            description: "Required MCP transport mode for stdio clients.",
+          },
+          {
+            key: "LOG_LEVEL",
+            type: "plain_text" as const,
+            value: "error",
+            promptOnInstallation: false,
+            required: false,
+            description: "Reduce noisy console logs in MCP stdio mode.",
+          },
+          {
+            key: "DISABLE_CONSOLE_OUTPUT",
+            type: "plain_text" as const,
+            value: "true",
+            promptOnInstallation: false,
+            required: false,
+            description: "Prevents non-JSON output from breaking MCP stdio transport.",
+          },
+          {
+            key: "N8N_API_URL",
+            type: "plain_text" as const,
+            promptOnInstallation: true,
+            required: false,
+            description: "Optional n8n instance URL for workflow management tools.",
+          },
+          {
+            key: "N8N_API_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+            required: false,
+            description: "Optional n8n API key for workflow management tools.",
+          },
+        ],
+      },
+    },
+    {
+      name: "excalidraw-mcp-app",
+      description:
+        "MCP Apps server for interactive Excalidraw diagram rendering and fullscreen editing in chat.",
+      repository: "https://github.com/excalidraw/excalidraw-mcp",
+      docsUrl: "https://github.com/excalidraw/excalidraw-mcp#readme",
+      serverType: "remote" as const,
+      serverUrl: "https://mcp.excalidraw.com",
+      requiresAuth: false,
+      instructions:
+        "Use this MCP App server for interactive drawing, architecture diagrams, and whiteboard-style visual outputs.",
+    },
+  ];
+
+  for (const entry of catalogEntries) {
+    const existing = await InternalMcpCatalogModel.findByName(entry.name);
+    if (existing) {
+      logger.info(
+        { name: entry.name },
+        "MCP Apps catalog entry already exists, skipping",
+      );
+      continue;
+    }
+
+    await InternalMcpCatalogModel.create(entry);
+    logger.info({ name: entry.name }, "Seeded MCP Apps catalog entry");
+  }
+}
+
 async function seedTestMcpServer(): Promise<void> {
   // Only seed in development, or when ENABLE_TEST_MCP_SERVER is explicitly set (e.g., in CI e2e tests)
   if (config.production && !config.test.enableTestMcpServer) {
@@ -569,6 +656,7 @@ export async function seedRequiredStartingData(): Promise<void> {
   await seedArchestraCatalogAndTools();
   await seedPlaywrightCatalog();
   await migratePlaywrightToolsToDynamicCredential();
+  await seedMcpAppsCatalogEntries();
   await seedTestMcpServer();
   await seedTeamTokens();
   await seedChatApiKeysFromEnv();

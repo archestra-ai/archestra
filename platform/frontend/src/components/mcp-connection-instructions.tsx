@@ -266,7 +266,6 @@ export function McpConnectionInstructions({
     ? null
     : tokens?.find((t) => t.id === effectiveTokenId);
 
-
   // Get display name for selected token
   const getTokenDisplayName = () => {
     if (isPersonalTokenSelected) {

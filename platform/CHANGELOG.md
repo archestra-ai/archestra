@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.2.5](https://github.com/archestra-ai/archestra/compare/platform-v1.2.4...platform-v1.2.5) (2026-04-08)
+
+
+### Features
+
+* add allowlist of headers to mcp-gw ([#3658](https://github.com/archestra-ai/archestra/issues/3658)) ([459c53b](https://github.com/archestra-ai/archestra/commit/459c53b6a2b94744ca1404dbacb0b433783e7efb))
+* add Microsoft SharePoint knowledge connector ([#3656](https://github.com/archestra-ai/archestra/issues/3656)) ([5b2174d](https://github.com/archestra-ai/archestra/commit/5b2174dd30041aab717e13a54ada79d0d7fc2cd8))
+* support Azure Responses API flows ([#3666](https://github.com/archestra-ai/archestra/issues/3666)) ([e9e3982](https://github.com/archestra-ai/archestra/commit/e9e39829fab6a417a40a61f2f1724f6b05385df8))
+
+
+### Bug Fixes
+
+* disable default optimisation rules ([#3637](https://github.com/archestra-ai/archestra/issues/3637)) ([3264c69](https://github.com/archestra-ai/archestra/commit/3264c692a3acae68f254491dab74ff6c3bc9ea6a))
+
+
+### Dependencies
+
+* bump lodash-es from 4.17.23 to 4.18.1 in /platform ([#3638](https://github.com/archestra-ai/archestra/issues/3638)) ([714daec](https://github.com/archestra-ai/archestra/commit/714daec443b9fe8f59a1868b79e7ca427126e988))
+
 ## [1.2.4](https://github.com/archestra-ai/archestra/compare/platform-v1.2.3...platform-v1.2.4) (2026-04-07)
 
 

@@ -17,6 +17,7 @@ interface ToolDefinition {
 
 interface ToolPersistenceTestConfig {
   providerName: string;
+  providerSlug: string;
   endpoint: (agentId: string) => string;
   headers: (wiremockStub: string) => Record<string, string>;
   buildRequest: (content: string, tools: ToolDefinition[]) => object;
@@ -28,6 +29,7 @@ interface ToolPersistenceTestConfig {
 
 const openaiConfig: ToolPersistenceTestConfig = {
   providerName: "OpenAI",
+  providerSlug: "openai",
 
   endpoint: (agentId) => `/v1/openai/${agentId}/chat/completions`,
 
@@ -52,6 +54,7 @@ const openaiConfig: ToolPersistenceTestConfig = {
 
 const azureConfig: ToolPersistenceTestConfig = {
   providerName: "Azure",
+  providerSlug: "azure",
 
   endpoint: (agentId) => `/v1/azure/${agentId}/chat/completions`,
 
@@ -74,8 +77,32 @@ const azureConfig: ToolPersistenceTestConfig = {
   }),
 };
 
+const azureResponsesConfig: ToolPersistenceTestConfig = {
+  providerName: "Azure Responses",
+  providerSlug: "azure-responses",
+
+  endpoint: (agentId) => `/v1/azure/${agentId}/responses`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    model: "gpt-4.1",
+    input: content,
+    tools: tools.map((t) => ({
+      type: "function",
+      name: t.name,
+      description: t.description,
+      parameters: t.parameters,
+    })),
+  }),
+};
+
 const anthropicConfig: ToolPersistenceTestConfig = {
   providerName: "Anthropic",
+  providerSlug: "anthropic",
 
   endpoint: (agentId) => `/v1/anthropic/${agentId}/v1/messages`,
 
@@ -99,6 +126,7 @@ const anthropicConfig: ToolPersistenceTestConfig = {
 
 const geminiConfig: ToolPersistenceTestConfig = {
   providerName: "Gemini",
+  providerSlug: "gemini",
 
   endpoint: (agentId) =>
     `/v1/gemini/${agentId}/v1beta/models/gemini-2.5-pro:generateContent`,
@@ -129,6 +157,7 @@ const geminiConfig: ToolPersistenceTestConfig = {
 
 const cerebrasConfig: ToolPersistenceTestConfig = {
   providerName: "Cerebras",
+  providerSlug: "cerebras",
 
   endpoint: (agentId) => `/v1/cerebras/${agentId}/chat/completions`,
 
@@ -153,6 +182,7 @@ const cerebrasConfig: ToolPersistenceTestConfig = {
 
 const mistralConfig: ToolPersistenceTestConfig = {
   providerName: "Mistral",
+  providerSlug: "mistral",
 
   endpoint: (agentId) => `/v1/mistral/${agentId}/chat/completions`,
 
@@ -177,6 +207,7 @@ const mistralConfig: ToolPersistenceTestConfig = {
 
 const vllmConfig: ToolPersistenceTestConfig = {
   providerName: "vLLM",
+  providerSlug: "vllm",
 
   endpoint: (agentId) => `/v1/vllm/${agentId}/chat/completions`,
 
@@ -201,6 +232,7 @@ const vllmConfig: ToolPersistenceTestConfig = {
 
 const ollamaConfig: ToolPersistenceTestConfig = {
   providerName: "Ollama",
+  providerSlug: "ollama",
 
   endpoint: (agentId) => `/v1/ollama/${agentId}/chat/completions`,
 
@@ -225,6 +257,7 @@ const ollamaConfig: ToolPersistenceTestConfig = {
 
 const zhipuaiConfig: ToolPersistenceTestConfig = {
   providerName: "Zhipuai",
+  providerSlug: "zhipuai",
 
   endpoint: (agentId) => `/v1/zhipuai/${agentId}/chat/completions`,
 
@@ -249,6 +282,7 @@ const zhipuaiConfig: ToolPersistenceTestConfig = {
 
 const cohereConfig: ToolPersistenceTestConfig = {
   providerName: "Cohere",
+  providerSlug: "cohere",
 
   endpoint: (agentId) => `/v1/cohere/${agentId}/chat`,
 
@@ -273,6 +307,7 @@ const cohereConfig: ToolPersistenceTestConfig = {
 
 const groqConfig: ToolPersistenceTestConfig = {
   providerName: "Groq",
+  providerSlug: "groq",
 
   endpoint: (agentId) => `/v1/groq/${agentId}/chat/completions`,
 
@@ -297,6 +332,7 @@ const groqConfig: ToolPersistenceTestConfig = {
 
 const xaiConfig: ToolPersistenceTestConfig = {
   providerName: "xAI",
+  providerSlug: "xai",
 
   endpoint: (agentId) => `/v1/xai/${agentId}/chat/completions`,
 
@@ -321,6 +357,7 @@ const xaiConfig: ToolPersistenceTestConfig = {
 
 const minimaxConfig: ToolPersistenceTestConfig = {
   providerName: "Minimax",
+  providerSlug: "minimax",
 
   endpoint: (agentId) => `/v1/minimax/${agentId}/chat/completions`,
 
@@ -345,6 +382,7 @@ const minimaxConfig: ToolPersistenceTestConfig = {
 
 const deepseekConfig: ToolPersistenceTestConfig = {
   providerName: "DeepSeek",
+  providerSlug: "deepseek",
 
   endpoint: (agentId) => `/v1/deepseek/${agentId}/chat/completions`,
 
@@ -369,6 +407,7 @@ const deepseekConfig: ToolPersistenceTestConfig = {
 
 const bedrockConfig: ToolPersistenceTestConfig = {
   providerName: "Bedrock",
+  providerSlug: "bedrock",
 
   endpoint: (agentId) => `/v1/bedrock/${agentId}/converse`,
 
@@ -394,6 +433,7 @@ const bedrockConfig: ToolPersistenceTestConfig = {
 
 const openrouterConfig: ToolPersistenceTestConfig = {
   providerName: "OpenRouter",
+  providerSlug: "openrouter",
 
   endpoint: (agentId) => `/v1/openrouter/${agentId}/chat/completions`,
 
@@ -441,9 +481,12 @@ const testConfigsMap = {
   azure: azureConfig,
 } satisfies Record<SupportedProvider, ToolPersistenceTestConfig | null>;
 
-const testConfigs = Object.values(testConfigsMap).filter(
-  (c): c is ToolPersistenceTestConfig => c !== null,
-);
+const testConfigs = [
+  ...Object.values(testConfigsMap).filter(
+    (c): c is ToolPersistenceTestConfig => c !== null,
+  ),
+  azureResponsesConfig,
+];
 
 for (const config of testConfigs) {
   test.describe(`LLMProxy-ToolPersistence-${config.providerName}`, () => {
@@ -455,7 +498,7 @@ for (const config of testConfigs) {
       makeApiRequest,
       waitForProxyTool,
     }) => {
-      const provider = config.providerName.toLowerCase();
+      const provider = config.providerSlug;
       const wiremockStub = `${provider}-tool-persistence`;
       const toolOneName = `e2e_persist_tool_1_${provider}`;
       const toolTwoName = `e2e_persist_tool_2_${provider}`;
@@ -516,7 +559,7 @@ for (const config of testConfigs) {
       makeApiRequest,
       waitForProxyTool,
     }) => {
-      const provider = config.providerName.toLowerCase();
+      const provider = config.providerSlug;
       const wiremockStub = `${provider}-tool-persistence-idempotency`;
       const toolName = `e2e_persist_tool_dedup_${provider}`;
       const tool: ToolDefinition = {

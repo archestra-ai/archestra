@@ -24,6 +24,7 @@ interface ToolDefinition {
 
 interface ToolInvocationTestConfig {
   providerName: string;
+  providerSlug: string;
 
   // Request building
   endpoint: (agentId: string) => string;
@@ -91,6 +92,7 @@ function makeOpenAiCompatibleToolConfig(params: {
 }): ToolInvocationTestConfig {
   return {
     providerName: params.providerName,
+    providerSlug: params.providerName.toLowerCase(),
 
     endpoint: params.endpoint,
 
@@ -177,8 +179,99 @@ const openaiConfig = makeOpenAiCompatibleToolConfig({
   model: "gpt-4",
 });
 
+const azureResponsesConfig: ToolInvocationTestConfig = {
+  providerName: "Azure Responses",
+  providerSlug: "azure-responses",
+
+  endpoint: (agentId) => `/v1/azure/${agentId}/responses`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    model: "gpt-4.1",
+    input: [
+      {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: content }],
+      },
+    ],
+    tools: tools.map((t) => ({
+      type: "function",
+      name: t.name,
+      description: t.description,
+      parameters: t.parameters,
+    })),
+  }),
+
+  trustedDataPolicyAttributePath: "$.content[0].text",
+
+  assertToolCallBlocked: (response) => {
+    expect(response.output).toBeDefined();
+
+    const functionCalls = response.output.filter(
+      (item: { type: string }) => item.type === "function_call",
+    );
+    expect(functionCalls.length).toBe(0);
+
+    const assistantMessage = response.output.find(
+      (item: { type: string }) => item.type === "message",
+    );
+    expect(assistantMessage).toBeDefined();
+
+    const combinedText = assistantMessage.content
+      .map(
+        (part: { text?: string; refusal?: string }) =>
+          part.text ?? part.refusal,
+      )
+      .filter(Boolean)
+      .join("\n");
+
+    expect(combinedText).toContain("read_file");
+    expect(combinedText).toContain("denied");
+  },
+
+  assertToolCallsPresent: (response, expectedTools) => {
+    expect(response.output).toBeDefined();
+
+    const functionCalls = response.output.filter(
+      (item: { type: string }) => item.type === "function_call",
+    );
+    expect(functionCalls.length).toBe(expectedTools.length);
+
+    for (const toolName of expectedTools) {
+      const found = functionCalls.find(
+        (item: { name: string }) => item.name === toolName,
+      );
+      expect(found).toBeDefined();
+    }
+  },
+
+  assertToolArgument: (response, toolName, argName, matcher) => {
+    const functionCalls = response.output.filter(
+      (item: { type: string }) => item.type === "function_call",
+    );
+    const toolCall = functionCalls.find(
+      (item: { name: string }) => item.name === toolName,
+    );
+    const args = JSON.parse(toolCall.arguments);
+    matcher(args[argName]);
+  },
+
+  findInteractionByContent: (interactions, content) =>
+    interactions.find((i) =>
+      i.request?.input?.some((item: { content?: Array<{ text?: string }> }) =>
+        item.content?.some((part) => part.text?.includes(content)),
+      ),
+    ),
+};
+
 const groqConfig: ToolInvocationTestConfig = {
   providerName: "Groq",
+  providerSlug: "groq",
 
   endpoint: (agentId) => `/v1/groq/${agentId}/chat/completions`,
 
@@ -263,6 +356,7 @@ const xaiConfig: ToolInvocationTestConfig = {
 
 const anthropicConfig: ToolInvocationTestConfig = {
   providerName: "Anthropic",
+  providerSlug: "anthropic",
 
   endpoint: (agentId) => `/v1/anthropic/${agentId}/v1/messages`,
 
@@ -339,6 +433,7 @@ const anthropicConfig: ToolInvocationTestConfig = {
 
 const geminiConfig: ToolInvocationTestConfig = {
   providerName: "Gemini",
+  providerSlug: "gemini",
 
   endpoint: (agentId) =>
     `/v1/gemini/${agentId}/v1beta/models/gemini-2.5-pro:generateContent`,
@@ -430,6 +525,7 @@ const geminiConfig: ToolInvocationTestConfig = {
 
 const cohereConfig: ToolInvocationTestConfig = {
   providerName: "Cohere",
+  providerSlug: "cohere",
 
   endpoint: (agentId) => `/v1/cohere/${agentId}/chat`,
 
@@ -543,6 +639,7 @@ const deepseekConfig = makeOpenAiCompatibleToolConfig({
 
 const bedrockConfig: ToolInvocationTestConfig = {
   providerName: "Bedrock",
+  providerSlug: "bedrock",
 
   endpoint: (agentId) => `/v1/bedrock/${agentId}/converse`,
 
@@ -663,9 +760,12 @@ const testConfigsMap = {
   azure: azureConfig,
 } satisfies Record<SupportedProvider, ToolInvocationTestConfig | null>;
 
-const testConfigs = Object.values(testConfigsMap).filter(
-  (c): c is ToolInvocationTestConfig => c !== null,
-);
+const testConfigs = [
+  ...Object.values(testConfigsMap).filter(
+    (c): c is ToolInvocationTestConfig => c !== null,
+  ),
+  azureResponsesConfig,
+];
 
 for (const config of testConfigs) {
   test.describe(`LLMProxy-ToolInvocation-${config.providerName}`, () => {
@@ -687,9 +787,9 @@ for (const config of testConfigs) {
       makeApiRequest,
       waitForProxyTool,
     }) => {
-      const wiremockStub = `${config.providerName.toLowerCase()}-blocks-tool-untrusted-data`;
+      const wiremockStub = `${config.providerSlug}-blocks-tool-untrusted-data`;
       const uniqueSuffix = crypto.randomUUID().slice(0, 8);
-      const toolName = `e2e_read_file_${config.providerName.toLowerCase()}`;
+      const toolName = `e2e_read_file_${config.providerSlug}`;
       const readFileTool: ToolDefinition = {
         ...READ_FILE_TOOL,
         name: toolName,
@@ -821,7 +921,7 @@ for (const config of testConfigs) {
       deleteAgent,
       makeApiRequest,
     }) => {
-      const wiremockStub = `${config.providerName.toLowerCase()}-allows-archestra-untrusted-context`;
+      const wiremockStub = `${config.providerSlug}-allows-archestra-untrusted-context`;
 
       // 1. Create a test LLM proxy with unique name to avoid conflicts in parallel runs
       const uniqueSuffix = crypto.randomUUID().slice(0, 8);
@@ -888,7 +988,7 @@ for (const config of testConfigs) {
       deleteAgent,
       makeApiRequest,
     }) => {
-      const wiremockStub = `${config.providerName.toLowerCase()}-allows-regular-after-archestra`;
+      const wiremockStub = `${config.providerSlug}-allows-regular-after-archestra`;
 
       // 1. Create a test LLM proxy with unique name to avoid conflicts in parallel runs
       const uniqueSuffix = crypto.randomUUID().slice(0, 8);

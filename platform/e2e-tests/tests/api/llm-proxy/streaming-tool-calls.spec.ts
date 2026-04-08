@@ -17,6 +17,7 @@ interface ToolDefinition {
 
 interface StreamingToolCallTestConfig {
   providerName: string;
+  providerSlug: string;
   endpoint: (agentId: string) => string;
   headers: (wiremockStub: string) => Record<string, string>;
   buildStreamingRequest: (content: string, tools: ToolDefinition[]) => object;
@@ -72,6 +73,7 @@ function buildOpenAIStreamingRequest(
 
 const openaiConfig: StreamingToolCallTestConfig = {
   providerName: "OpenAI",
+  providerSlug: "openai",
   endpoint: (agentId) => `/v1/openai/${agentId}/chat/completions`,
   headers: (wiremockStub) => ({
     Authorization: `Bearer ${wiremockStub}`,
@@ -84,6 +86,7 @@ const openaiConfig: StreamingToolCallTestConfig = {
 
 const azureConfig: StreamingToolCallTestConfig = {
   providerName: "Azure",
+  providerSlug: "azure",
   endpoint: (agentId) => `/v1/azure/${agentId}/chat/completions`,
   headers: (wiremockStub) => ({
     Authorization: `Bearer ${wiremockStub}`,
@@ -94,8 +97,31 @@ const azureConfig: StreamingToolCallTestConfig = {
   expectedToolName: "read_file",
 };
 
+const azureResponsesConfig: StreamingToolCallTestConfig = {
+  providerName: "Azure Responses",
+  providerSlug: "azure-responses",
+  endpoint: (agentId) => `/v1/azure/${agentId}/responses`,
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+  buildStreamingRequest: (content, tools) => ({
+    model: "gpt-4.1",
+    stream: true,
+    input: content,
+    tools: tools.map((t) => ({
+      type: "function",
+      name: t.name,
+      description: t.description,
+      parameters: t.parameters,
+    })),
+  }),
+  expectedToolName: "read_file",
+};
+
 const anthropicConfig: StreamingToolCallTestConfig = {
   providerName: "Anthropic",
+  providerSlug: "anthropic",
   endpoint: (agentId) => `/v1/anthropic/${agentId}/v1/messages`,
   headers: (wiremockStub) => ({
     "x-api-key": wiremockStub,
@@ -118,6 +144,7 @@ const anthropicConfig: StreamingToolCallTestConfig = {
 
 const geminiConfig: StreamingToolCallTestConfig = {
   providerName: "Gemini",
+  providerSlug: "gemini",
   endpoint: (agentId) =>
     `/v1/gemini/${agentId}/v1beta/models/gemini-2.5-pro:streamGenerateContent`,
   headers: (wiremockStub) => ({
@@ -146,6 +173,7 @@ const geminiConfig: StreamingToolCallTestConfig = {
 
 const cohereConfig: StreamingToolCallTestConfig = {
   providerName: "Cohere",
+  providerSlug: "cohere",
   endpoint: (agentId) => `/v1/cohere/${agentId}/chat`,
   headers: (wiremockStub) => ({
     Authorization: `Bearer ${wiremockStub}`,
@@ -169,6 +197,7 @@ const cohereConfig: StreamingToolCallTestConfig = {
 
 const cerebrasConfig: StreamingToolCallTestConfig = {
   providerName: "Cerebras",
+  providerSlug: "cerebras",
   endpoint: (agentId) => `/v1/cerebras/${agentId}/chat/completions`,
   headers: (wiremockStub) => ({
     Authorization: `Bearer ${wiremockStub}`,
@@ -185,6 +214,7 @@ const cerebrasConfig: StreamingToolCallTestConfig = {
 
 const groqConfig: StreamingToolCallTestConfig = {
   providerName: "Groq",
+  providerSlug: "groq",
   endpoint: (agentId) => `/v1/groq/${agentId}/chat/completions`,
   headers: (wiremockStub) => ({
     Authorization: `Bearer ${wiremockStub}`,
@@ -197,6 +227,7 @@ const groqConfig: StreamingToolCallTestConfig = {
 
 const mistralConfig: StreamingToolCallTestConfig = {
   providerName: "Mistral",
+  providerSlug: "mistral",
   endpoint: (agentId) => `/v1/mistral/${agentId}/chat/completions`,
   headers: (wiremockStub) => ({
     Authorization: `Bearer ${wiremockStub}`,
@@ -209,6 +240,7 @@ const mistralConfig: StreamingToolCallTestConfig = {
 
 const vllmConfig: StreamingToolCallTestConfig = {
   providerName: "vLLM",
+  providerSlug: "vllm",
   endpoint: (agentId) => `/v1/vllm/${agentId}/chat/completions`,
   headers: (wiremockStub) => ({
     Authorization: `Bearer ${wiremockStub}`,
@@ -225,6 +257,7 @@ const vllmConfig: StreamingToolCallTestConfig = {
 
 const ollamaConfig: StreamingToolCallTestConfig = {
   providerName: "Ollama",
+  providerSlug: "ollama",
   endpoint: (agentId) => `/v1/ollama/${agentId}/chat/completions`,
   headers: (wiremockStub) => ({
     Authorization: `Bearer ${wiremockStub}`,
@@ -237,6 +270,7 @@ const ollamaConfig: StreamingToolCallTestConfig = {
 
 const zhipuaiConfig: StreamingToolCallTestConfig = {
   providerName: "Zhipuai",
+  providerSlug: "zhipuai",
   endpoint: (agentId) => `/v1/zhipuai/${agentId}/chat/completions`,
   headers: (wiremockStub) => ({
     Authorization: `Bearer ${wiremockStub}`,
@@ -249,6 +283,7 @@ const zhipuaiConfig: StreamingToolCallTestConfig = {
 
 const minimaxConfig: StreamingToolCallTestConfig = {
   providerName: "Minimax",
+  providerSlug: "minimax",
   endpoint: (agentId) => `/v1/minimax/${agentId}/chat/completions`,
   headers: (wiremockStub) => ({
     Authorization: `Bearer ${wiremockStub}`,
@@ -261,6 +296,7 @@ const minimaxConfig: StreamingToolCallTestConfig = {
 
 const deepseekConfig: StreamingToolCallTestConfig = {
   providerName: "DeepSeek",
+  providerSlug: "deepseek",
   endpoint: (agentId) => `/v1/deepseek/${agentId}/chat/completions`,
   headers: (wiremockStub) => ({
     Authorization: `Bearer ${wiremockStub}`,
@@ -273,6 +309,7 @@ const deepseekConfig: StreamingToolCallTestConfig = {
 
 const openrouterConfig: StreamingToolCallTestConfig = {
   providerName: "OpenRouter",
+  providerSlug: "openrouter",
   endpoint: (agentId) => `/v1/openrouter/${agentId}/chat/completions`,
   headers: (wiremockStub) => ({
     Authorization: `Bearer ${wiremockStub}`,
@@ -289,6 +326,7 @@ const openrouterConfig: StreamingToolCallTestConfig = {
 
 const xaiConfig: StreamingToolCallTestConfig = {
   providerName: "xAI",
+  providerSlug: "xai",
   endpoint: (agentId) => `/v1/xai/${agentId}/chat/completions`,
   headers: (wiremockStub) => ({
     Authorization: `Bearer ${wiremockStub}`,
@@ -324,9 +362,12 @@ const testConfigsMap = {
   azure: azureConfig,
 } satisfies Record<SupportedProvider, StreamingToolCallTestConfig | null>;
 
-const testConfigs = Object.values(testConfigsMap).filter(
-  (c): c is StreamingToolCallTestConfig => c !== null,
-);
+const testConfigs = [
+  ...Object.values(testConfigsMap).filter(
+    (c): c is StreamingToolCallTestConfig => c !== null,
+  ),
+  azureResponsesConfig,
+];
 
 for (const config of testConfigs) {
   test.describe(`LLMProxy-StreamingToolCalls-${config.providerName}`, () => {
@@ -344,7 +385,7 @@ for (const config of testConfigs) {
       createAgent,
       makeApiRequest,
     }) => {
-      const wiremockStub = `${config.providerName.toLowerCase()}-streaming-tool-calls`;
+      const wiremockStub = `${config.providerSlug}-streaming-tool-calls`;
 
       // 1. Create a test agent
       const createResponse = await createAgent(

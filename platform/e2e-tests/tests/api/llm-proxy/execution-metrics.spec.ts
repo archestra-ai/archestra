@@ -8,6 +8,7 @@ import { expect, test } from "../fixtures";
 
 interface ExecutionMetricsTestConfig {
   providerName: string;
+  providerSlug: string;
   endpoint: (agentId: string) => string;
   headers: (wiremockStub: string) => Record<string, string>;
   buildRequest: (content: string) => object;
@@ -19,6 +20,7 @@ interface ExecutionMetricsTestConfig {
 
 const openaiConfig: ExecutionMetricsTestConfig = {
   providerName: "OpenAI",
+  providerSlug: "openai",
 
   endpoint: (agentId) => `/v1/openai/${agentId}/chat/completions`,
 
@@ -35,6 +37,7 @@ const openaiConfig: ExecutionMetricsTestConfig = {
 
 const azureConfig: ExecutionMetricsTestConfig = {
   providerName: "Azure",
+  providerSlug: "azure",
 
   endpoint: (agentId) => `/v1/azure/${agentId}/chat/completions`,
 
@@ -49,8 +52,26 @@ const azureConfig: ExecutionMetricsTestConfig = {
   }),
 };
 
+const azureResponsesConfig: ExecutionMetricsTestConfig = {
+  providerName: "Azure Responses",
+  providerSlug: "azure-responses",
+
+  endpoint: (agentId) => `/v1/azure/${agentId}/responses`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content) => ({
+    model: "gpt-4.1",
+    input: content,
+  }),
+};
+
 const anthropicConfig: ExecutionMetricsTestConfig = {
   providerName: "Anthropic",
+  providerSlug: "anthropic",
 
   endpoint: (agentId) => `/v1/anthropic/${agentId}/v1/messages`,
 
@@ -69,6 +90,7 @@ const anthropicConfig: ExecutionMetricsTestConfig = {
 
 const geminiConfig: ExecutionMetricsTestConfig = {
   providerName: "Gemini",
+  providerSlug: "gemini",
 
   endpoint: (agentId) =>
     `/v1/gemini/${agentId}/v1beta/models/gemini-2.5-pro:generateContent`,
@@ -90,6 +112,7 @@ const geminiConfig: ExecutionMetricsTestConfig = {
 
 const cohereConfig: ExecutionMetricsTestConfig = {
   providerName: "Cohere",
+  providerSlug: "cohere",
 
   endpoint: (agentId) => `/v1/cohere/${agentId}/chat`,
 
@@ -106,6 +129,7 @@ const cohereConfig: ExecutionMetricsTestConfig = {
 
 const cerebrasConfig: ExecutionMetricsTestConfig = {
   providerName: "Cerebras",
+  providerSlug: "cerebras",
 
   endpoint: (agentId) => `/v1/cerebras/${agentId}/chat/completions`,
 
@@ -122,6 +146,7 @@ const cerebrasConfig: ExecutionMetricsTestConfig = {
 
 const groqConfig: ExecutionMetricsTestConfig = {
   providerName: "Groq",
+  providerSlug: "groq",
 
   endpoint: (agentId) => `/v1/groq/${agentId}/chat/completions`,
 
@@ -138,6 +163,7 @@ const groqConfig: ExecutionMetricsTestConfig = {
 
 const mistralConfig: ExecutionMetricsTestConfig = {
   providerName: "Mistral",
+  providerSlug: "mistral",
 
   endpoint: (agentId) => `/v1/mistral/${agentId}/chat/completions`,
 
@@ -154,6 +180,7 @@ const mistralConfig: ExecutionMetricsTestConfig = {
 
 const vllmConfig: ExecutionMetricsTestConfig = {
   providerName: "vLLM",
+  providerSlug: "vllm",
 
   endpoint: (agentId) => `/v1/vllm/${agentId}/chat/completions`,
 
@@ -170,6 +197,7 @@ const vllmConfig: ExecutionMetricsTestConfig = {
 
 const ollamaConfig: ExecutionMetricsTestConfig = {
   providerName: "Ollama",
+  providerSlug: "ollama",
 
   endpoint: (agentId) => `/v1/ollama/${agentId}/chat/completions`,
 
@@ -186,6 +214,7 @@ const ollamaConfig: ExecutionMetricsTestConfig = {
 
 const zhipuaiConfig: ExecutionMetricsTestConfig = {
   providerName: "Zhipuai",
+  providerSlug: "zhipuai",
 
   endpoint: (agentId) => `/v1/zhipuai/${agentId}/chat/completions`,
 
@@ -202,6 +231,7 @@ const zhipuaiConfig: ExecutionMetricsTestConfig = {
 
 const minimaxConfig: ExecutionMetricsTestConfig = {
   providerName: "Minimax",
+  providerSlug: "minimax",
 
   endpoint: (agentId) => `/v1/minimax/${agentId}/chat/completions`,
 
@@ -218,6 +248,7 @@ const minimaxConfig: ExecutionMetricsTestConfig = {
 
 const deepseekConfig: ExecutionMetricsTestConfig = {
   providerName: "DeepSeek",
+  providerSlug: "deepseek",
 
   endpoint: (agentId) => `/v1/deepseek/${agentId}/chat/completions`,
 
@@ -234,6 +265,7 @@ const deepseekConfig: ExecutionMetricsTestConfig = {
 
 const xaiConfig: ExecutionMetricsTestConfig = {
   providerName: "xAI",
+  providerSlug: "xai",
 
   endpoint: (agentId) => `/v1/xai/${agentId}/chat/completions`,
 
@@ -250,6 +282,7 @@ const xaiConfig: ExecutionMetricsTestConfig = {
 
 const bedrockConfig: ExecutionMetricsTestConfig = {
   providerName: "Bedrock",
+  providerSlug: "bedrock",
 
   endpoint: (agentId) => `/v1/bedrock/${agentId}/converse`,
 
@@ -266,6 +299,7 @@ const bedrockConfig: ExecutionMetricsTestConfig = {
 
 const openrouterConfig: ExecutionMetricsTestConfig = {
   providerName: "OpenRouter",
+  providerSlug: "openrouter",
 
   endpoint: (agentId) => `/v1/openrouter/${agentId}/chat/completions`,
 
@@ -305,9 +339,12 @@ const testConfigsMap = {
   azure: azureConfig,
 } satisfies Record<SupportedProvider, ExecutionMetricsTestConfig | null>;
 
-const testConfigs = Object.values(testConfigsMap).filter(
-  (c): c is ExecutionMetricsTestConfig => c !== null,
-);
+const testConfigs = [
+  ...Object.values(testConfigsMap).filter(
+    (c): c is ExecutionMetricsTestConfig => c !== null,
+  ),
+  azureResponsesConfig,
+];
 
 for (const config of testConfigs) {
   test.describe(`LLMProxy-ExecutionMetrics-${config.providerName}`, () => {
@@ -326,7 +363,7 @@ for (const config of testConfigs) {
       makeApiRequest,
       getInteractions,
     }) => {
-      const wiremockStub = `${config.providerName.toLowerCase()}-execution-metrics`;
+      const wiremockStub = `${config.providerSlug}-execution-metrics`;
 
       // 1. Create an LLM Proxy
       const createResponse = await createLlmProxy(
@@ -374,7 +411,7 @@ for (const config of testConfigs) {
       makeApiRequest,
       getInteractions,
     }) => {
-      const wiremockStub = `${config.providerName.toLowerCase()}-execution-metrics`;
+      const wiremockStub = `${config.providerSlug}-execution-metrics`;
 
       // 1. Create an LLM Proxy
       const createResponse = await createLlmProxy(
@@ -429,7 +466,7 @@ for (const config of testConfigs) {
       makeApiRequest,
       getInteractions,
     }) => {
-      const wiremockStub = `${config.providerName.toLowerCase()}-execution-metrics`;
+      const wiremockStub = `${config.providerSlug}-execution-metrics`;
 
       // 1. Create an LLM Proxy
       const createResponse = await createLlmProxy(

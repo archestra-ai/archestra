@@ -7,6 +7,7 @@ import { expect, test } from "../fixtures";
 
 interface TokenCostLimitTestConfig {
   providerName: string;
+  providerSlug: string;
   endpoint: (profileId: string) => string;
   headers: (wiremockStub: string) => Record<string, string>;
   buildRequest: (content: string) => object;
@@ -35,6 +36,7 @@ function makeOpenAiCompatibleCostConfig(params: {
 }): TokenCostLimitTestConfig {
   return {
     providerName: params.providerName,
+    providerSlug: params.provider,
 
     endpoint: (profileId) =>
       `/v1/${params.provider}/${profileId}/chat/completions`,
@@ -74,6 +76,7 @@ const openaiConfig = makeOpenAiCompatibleCostConfig({
 
 const anthropicConfig: TokenCostLimitTestConfig = {
   providerName: "Anthropic",
+  providerSlug: "anthropic",
 
   endpoint: (profileId) => `/v1/anthropic/${profileId}/v1/messages`,
 
@@ -103,6 +106,7 @@ const anthropicConfig: TokenCostLimitTestConfig = {
 
 const geminiConfig: TokenCostLimitTestConfig = {
   providerName: "Gemini",
+  providerSlug: "gemini",
 
   endpoint: (profileId) =>
     `/v1/gemini/${profileId}/v1beta/models/test-gemini-cost-limit:generateContent`,
@@ -171,6 +175,7 @@ const zhipuaiConfig = makeOpenAiCompatibleCostConfig({
 
 const deepseekConfig: TokenCostLimitTestConfig = {
   providerName: "DeepSeek",
+  providerSlug: "deepseek",
 
   endpoint: (profileId) => `/v1/deepseek/${profileId}/chat/completions`,
 
@@ -198,6 +203,7 @@ const deepseekConfig: TokenCostLimitTestConfig = {
 
 const cohereConfig: TokenCostLimitTestConfig = {
   providerName: "Cohere",
+  providerSlug: "cohere",
 
   endpoint: (profileId) => `/v1/cohere/${profileId}/chat`,
 
@@ -225,6 +231,7 @@ const cohereConfig: TokenCostLimitTestConfig = {
 
 const groqConfig: TokenCostLimitTestConfig = {
   providerName: "Groq",
+  providerSlug: "groq",
 
   endpoint: (profileId) => `/v1/groq/${profileId}/chat/completions`,
 
@@ -258,6 +265,7 @@ const xaiConfig = makeOpenAiCompatibleCostConfig({
 
 const openrouterConfig: TokenCostLimitTestConfig = {
   providerName: "OpenRouter",
+  providerSlug: "openrouter",
 
   endpoint: (profileId) => `/v1/openrouter/${profileId}/chat/completions`,
 
@@ -285,6 +293,7 @@ const openrouterConfig: TokenCostLimitTestConfig = {
 
 const minimaxConfig: TokenCostLimitTestConfig = {
   providerName: "Minimax",
+  providerSlug: "minimax",
 
   endpoint: (profileId) => `/v1/minimax/${profileId}/chat/completions`,
 
@@ -312,6 +321,7 @@ const minimaxConfig: TokenCostLimitTestConfig = {
 
 const bedrockConfig: TokenCostLimitTestConfig = {
   providerName: "Bedrock",
+  providerSlug: "bedrock",
 
   endpoint: (profileId) => `/v1/bedrock/${profileId}/converse`,
 
@@ -332,6 +342,32 @@ const bedrockConfig: TokenCostLimitTestConfig = {
   customPricing: {
     provider: "bedrock",
     model: "test-bedrock-cost-limit",
+    pricePerMillionInput: "20000.00",
+    pricePerMillionOutput: "30000.00",
+  },
+};
+
+const azureResponsesConfig: TokenCostLimitTestConfig = {
+  providerName: "Azure Responses",
+  providerSlug: "azure-responses",
+
+  endpoint: (profileId) => `/v1/azure/${profileId}/responses`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content) => ({
+    model: "test-azure-responses-cost-limit",
+    input: content,
+  }),
+
+  modelName: "test-azure-responses-cost-limit",
+
+  customPricing: {
+    provider: "azure",
+    model: "test-azure-responses-cost-limit",
     pricePerMillionInput: "20000.00",
     pricePerMillionOutput: "30000.00",
   },
@@ -366,7 +402,7 @@ const testConfigsMap = {
   }),
 } satisfies Record<SupportedProvider, TokenCostLimitTestConfig>;
 
-const testConfigs = Object.values(testConfigsMap);
+const testConfigs = [...Object.values(testConfigsMap), azureResponsesConfig];
 
 for (const config of testConfigs) {
   test.describe(`LLMProxy-TokenCostLimits-${config.providerName}`, {
@@ -380,7 +416,7 @@ for (const config of testConfigs) {
     let limitId: string;
     let modelUuid: string;
 
-    const wiremockStub = `${config.providerName.toLowerCase()}-token-cost-limit-test`;
+    const wiremockStub = `${config.providerSlug}-token-cost-limit-test`;
 
     test("blocks request when profile token cost limit is exceeded", async ({
       request,

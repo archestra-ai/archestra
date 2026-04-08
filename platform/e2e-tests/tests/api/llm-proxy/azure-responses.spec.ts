@@ -1,5 +1,5 @@
-import { expect, test } from "../fixtures";
 import { API_BASE_URL } from "../../../consts";
+import { expect, test } from "../fixtures";
 
 test.describe.configure({ mode: "serial" });
 

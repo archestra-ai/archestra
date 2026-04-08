@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.7](https://github.com/archestra-ai/archestra/compare/platform-v1.2.6...platform-v1.2.7) (2026-04-08)
+
+
+### Miscellaneous Chores
+
+* reduce noisy Sentry span volume ([#3681](https://github.com/archestra-ai/archestra/issues/3681)) ([650ae07](https://github.com/archestra-ai/archestra/commit/650ae075654c2790f64e854a73dd3574c3860ea9))
+
 ## [1.2.6](https://github.com/archestra-ai/archestra/compare/platform-v1.2.5...platform-v1.2.6) (2026-04-08)
 
 

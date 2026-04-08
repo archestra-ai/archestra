@@ -80,6 +80,12 @@ describe("buildAzureResponsesBaseUrl", () => {
   it("returns null for an invalid URL", () => {
     expect(buildAzureResponsesBaseUrl("not-a-url")).toBeNull();
   });
+
+  it("returns null when the base URL is not deployment-scoped", () => {
+    expect(
+      buildAzureResponsesBaseUrl("https://my-resource.openai.azure.com/openai"),
+    ).toBeNull();
+  });
 });
 
 describe("createAzureFetchWithApiVersion", () => {

@@ -30,7 +30,15 @@ class AzureResponsesInteraction implements InteractionUtils {
   }
 
   getToolNamesUsed(): string[] {
-    return [];
+    const requestedToolNamesByCallId = new Map(
+      this.interaction.response.output
+        .filter(isResponseFunctionCall)
+        .map((item) => [item.call_id, item.name]),
+    );
+
+    return this.getInputItems()
+      .filter(isFunctionCallOutputItem)
+      .flatMap((item) => requestedToolNamesByCallId.get(item.call_id) ?? []);
   }
 
   getToolNamesRefused(): string[] {
@@ -213,6 +221,10 @@ function extractInputMessageText(content: unknown): string {
       }
 
       if (part.type === "input_text" && "text" in part) {
+        return typeof part.text === "string" ? [part.text] : [];
+      }
+
+      if (part.type === "output_text" && "text" in part) {
         return typeof part.text === "string" ? [part.text] : [];
       }
 

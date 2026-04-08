@@ -191,4 +191,46 @@ describe("azureResponsesAdapterFactory", () => {
     });
     expect(adapter.formatEndSSE()).toBe("data: [DONE]\n\n");
   });
+
+  test("accumulates streamed function call arguments across delta events", () => {
+    const adapter = azureResponsesAdapterFactory.createStreamAdapter();
+
+    adapter.processChunk({
+      type: "response.output_item.added",
+      output_index: 0,
+      item: {
+        id: "fc_1",
+        type: "function_call",
+        call_id: "call_1",
+        name: "read_file",
+        arguments: "",
+        status: "in_progress",
+      },
+    } as unknown as Parameters<typeof adapter.processChunk>[0]);
+
+    adapter.processChunk({
+      type: "response.function_call_arguments.delta",
+      item_id: "fc_1",
+      output_index: 0,
+      delta: '{"file',
+      sequence_number: 1,
+    } as unknown as Parameters<typeof adapter.processChunk>[0]);
+
+    adapter.processChunk({
+      type: "response.function_call_arguments.delta",
+      item_id: "fc_1",
+      output_index: 0,
+      delta: '_path":"/tmp/test"}',
+      sequence_number: 2,
+    } as unknown as Parameters<typeof adapter.processChunk>[0]);
+
+    expect(adapter.toProviderResponse().output).toContainEqual(
+      expect.objectContaining({
+        type: "function_call",
+        call_id: "call_1",
+        name: "read_file",
+        arguments: '{"file_path":"/tmp/test"}',
+      }),
+    );
+  });
 });

@@ -16,6 +16,10 @@ export function buildAzureDeploymentsUrl(params: {
 export function buildAzureResponsesBaseUrl(baseUrl: string): string | null {
   try {
     const url = new URL(baseUrl);
+    if (!/\/deployments\/[^/]+\/?$/.test(url.pathname)) {
+      return null;
+    }
+
     const pathname = url.pathname.replace(/\/deployments\/[^/]+\/?$/, "");
     return `${url.origin}${pathname}`;
   } catch {

@@ -257,10 +257,14 @@ class AzureResponsesRequestAdapter
   }
 
   async applyToonCompression(_model: string): Promise<ToolCompressionStats> {
+    // Responses tool outputs are already structured as function_call_output items,
+    // so there is no JSON blob to compress with TOON before forwarding upstream.
     return createEmptyToolCompressionStats();
   }
 
   convertToolResultContent(input: AzureResponseInput): AzureResponseInput {
+    // Azure Responses accepts tool results in their native function_call_output
+    // shape, so the proxy should pass them through unchanged.
     return input;
   }
 
@@ -682,14 +686,14 @@ class AzureResponsesStreamAdapter
     }
 
     if (chunk.type === "response.function_call_arguments.delta") {
-      const toolCall = this.toolCallsByItemId.get(chunk.item_id);
-      if (!toolCall) {
-        this.toolCallsByItemId.set(chunk.item_id, {
-          id: chunk.item_id,
-          name: "",
-          arguments: "",
-        });
-      }
+      const toolCall = this.toolCallsByItemId.get(chunk.item_id) ?? {
+        id: chunk.item_id,
+        name: "",
+        arguments: "",
+      };
+      toolCall.arguments += chunk.delta;
+      this.toolCallsByItemId.set(chunk.item_id, toolCall);
+      this.state.toolCalls = Array.from(this.toolCallsByItemId.values());
 
       return;
     }

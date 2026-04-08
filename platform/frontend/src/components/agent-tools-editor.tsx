@@ -34,12 +34,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
-import {
-  useAllProfileTools,
-  useAssignTool,
-  useProfileToolPatchMutation,
-  useUnassignTool,
-} from "@/lib/agent-tools.query";
+import { useAssignTool, useUnassignTool } from "@/lib/agent-tools.query";
+import { useProfileToolsWithIds } from "@/lib/chat/chat.query";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import {
   fetchCatalogTools,
@@ -59,10 +55,14 @@ import { DYNAMIC_CREDENTIAL_VALUE, TokenSelect } from "./token-select";
 
 type InternalMcpCatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
-type AgentTool =
-  archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number];
 type CatalogTool =
   archestraApiTypes.GetInternalMcpCatalogToolsResponses["200"][number];
+type ResourceTool = archestraApiTypes.GetAgentToolsResponses["200"][number];
+type AssignedTool = {
+  tool: ResourceTool;
+  mcpServerId: string | null;
+  credentialResolutionMode: "static" | "dynamic" | "enterprise_managed";
+};
 
 // Pending changes for a single catalog item
 interface PendingCatalogChanges {
@@ -133,7 +133,6 @@ const AgentToolsEditorContent = forwardRef<
   const invalidateAllQueries = useInvalidateToolAssignmentQueries();
   const assignTool = useAssignTool();
   const unassignTool = useUnassignTool();
-  const patchTool = useProfileToolPatchMutation();
 
   // Fetch catalog items (MCP servers in registry)
   const { data: catalogItems = [], isPending } = useInternalMcpCatalog();
@@ -166,21 +165,23 @@ const AgentToolsEditorContent = forwardRef<
     return map;
   }, [catalogItems, toolCountQueries]);
 
-  // Fetch assigned tools for this agent (only when editing existing agent)
-  const { data: assignedToolsData } = useAllProfileTools({
-    filters: { agentId: agentId ?? "" },
-    skipPagination: true,
-    enabled: !!agentId,
-  });
+  // Fetch assigned tools for this resource (only when editing an existing one).
+  // Use the resource-scoped endpoint so MCP gateway members do not need the
+  // broader tool-policy table permission just to edit their gateway tools.
+  const { data: assignedToolsData = [] } = useProfileToolsWithIds(agentId);
 
   // Group assigned tools by catalogId
   const assignedToolsByCatalog = useMemo(() => {
-    const map = new Map<string, AgentTool[]>();
-    for (const at of assignedToolsData?.data ?? []) {
-      const catalogId = at.tool.catalogId;
+    const map = new Map<string, AssignedTool[]>();
+    for (const tool of assignedToolsData) {
+      const catalogId = tool.catalogId;
       if (!catalogId) continue;
       if (!map.has(catalogId)) map.set(catalogId, []);
-      map.get(catalogId)?.push(at);
+      map.get(catalogId)?.push({
+        tool,
+        mcpServerId: tool.mcpServerId,
+        credentialResolutionMode: tool.credentialResolutionMode,
+      });
     }
     return map;
   }, [assignedToolsData]);
@@ -355,8 +356,9 @@ const AgentToolsEditorContent = forwardRef<
                 : (agentTool.mcpServerId ?? null);
           if (currentCred !== changes.credentialSourceId) {
             hasChanges = true;
-            await patchTool.mutateAsync({
-              id: agentTool.id,
+            await assignTool.mutateAsync({
+              agentId: targetAgentId,
+              toolId: agentTool.tool.id,
               mcpServerId:
                 !useDynamicCredential && !useEnterpriseManagedCredential
                   ? (changes.credentialSourceId ?? undefined)
@@ -641,7 +643,7 @@ function McpServerCard({
 interface McpServerPillProps {
   catalogItem: InternalMcpCatalogItem;
   displayName: string;
-  assignedTools: AgentTool[];
+  assignedTools: AssignedTool[];
   assignmentScope?: AgentScope;
   assignmentTeamIds?: string[];
   initialPendingChanges?: PendingCatalogChanges;

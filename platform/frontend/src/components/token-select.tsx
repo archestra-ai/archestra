@@ -56,6 +56,8 @@ export function TokenSelect({
 
   // Get credentials for this catalogId from the grouped response
   const mcpServers = groupedCredentials?.[catalogId] ?? [];
+  const teamCredentials = mcpServers.filter((server) => server.teamDetails);
+  const userCredentials = mcpServers.filter((server) => !server.teamDetails);
 
   const isLoading = !groupedCredentials;
 
@@ -101,7 +103,7 @@ export function TokenSelect({
     >
       <SelectTrigger
         className={cn(
-          "h-fit! w-fit! bg-transparent! border-none! shadow-none! ring-0! outline-none! focus:ring-0! focus:outline-none! focus:border-none! p-0!",
+          "h-fit! w-fit! bg-transparent! border-none! shadow-none! ring-0! outline-none! focus:ring-0! focus:outline-none! focus:border-none! p-0! text-xs font-normal",
           className,
         )}
         size="sm"
@@ -124,27 +126,48 @@ export function TokenSelect({
         >
           <div className="flex items-center gap-1">
             <Zap className="h-3! w-3! text-amber-500" />
-            <span className="text-xs font-medium">Resolve at call time</span>
+            <span>Resolve at call time</span>
           </div>
         </SelectItem>
         {mcpServers.length > 0 && (
           <>
             <Divider className="my-2" />
-            <div className="px-2 pt-1 pb-1 text-xs text-muted-foreground">
-              Static
-            </div>
-            {mcpServers.map((server) => (
-              <SelectItem
-                key={server.id}
-                value={server.id}
-                className="cursor-pointer"
-                data-testid={E2eTestId.StaticCredentialToUse}
-              >
-                {server.teamDetails
-                  ? server.teamDetails.name
-                  : server.ownerEmail || "Deleted user"}
-              </SelectItem>
-            ))}
+            {teamCredentials.length > 0 && (
+              <>
+                <div className="px-2 pt-1 pb-1 text-xs text-muted-foreground">
+                  Static - Team Credentials
+                </div>
+                {teamCredentials.map((server) => (
+                  <SelectItem
+                    key={server.id}
+                    value={server.id}
+                    className="cursor-pointer"
+                    data-testid={E2eTestId.StaticCredentialToUse}
+                    description={`Shared with team ${server.teamDetails?.name ?? "Unknown team"}`}
+                  >
+                    {server.teamDetails?.name ?? "Unknown team"}
+                  </SelectItem>
+                ))}
+              </>
+            )}
+            {userCredentials.length > 0 && (
+              <>
+                <div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">
+                  Static - User Credentials
+                </div>
+                {userCredentials.map((server) => (
+                  <SelectItem
+                    key={server.id}
+                    value={server.id}
+                    className="cursor-pointer"
+                    data-testid={E2eTestId.StaticCredentialToUse}
+                    description={`Owned by ${server.ownerEmail || "Deleted user"}`}
+                  >
+                    {server.ownerEmail || "Deleted user"}
+                  </SelectItem>
+                ))}
+              </>
+            )}
           </>
         )}
       </SelectContent>

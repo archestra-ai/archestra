@@ -24,7 +24,9 @@ type LlmProviderApiKeysQueryParams = Partial<LlmProviderApiKeysQuery> & {
   enabled?: boolean;
 };
 type AvailableLlmProviderApiKeysParams =
-  Partial<AvailableLlmProviderApiKeysQuery>;
+  Partial<AvailableLlmProviderApiKeysQuery> & {
+    enabled?: boolean;
+  };
 
 const {
   createLlmProviderApiKey,
@@ -83,6 +85,7 @@ export function useAvailableLlmProviderApiKeys(
       }
       return data ?? [];
     },
+    enabled: params?.enabled,
   });
 }
 

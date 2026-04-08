@@ -45498,7 +45498,7 @@
         "tags": [
           "Agent Tools"
         ],
-        "description": "Get all tools for an agent (both proxy-sniffed and MCP tools)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:read`: View tools, tool invocation policies, and trusted data policies",
+        "description": "Get all tools for an agent (both proxy-sniffed and MCP tools)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -45618,6 +45618,20 @@
                       "updatedAt": {
                         "type": "string",
                         "format": "date-time"
+                      },
+                      "mcpServerId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "credentialResolutionMode": {
+                        "type": "string",
+                        "enum": [
+                          "static",
+                          "dynamic",
+                          "enterprise_managed"
+                        ]
                       }
                     },
                     "required": [
@@ -45633,7 +45647,9 @@
                       "policiesAutoConfiguredReasoning",
                       "policiesAutoConfiguredModel",
                       "createdAt",
-                      "updatedAt"
+                      "updatedAt",
+                      "mcpServerId",
+                      "credentialResolutionMode"
                     ],
                     "additionalProperties": false
                   }
@@ -45853,10 +45869,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "toolPolicy:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },

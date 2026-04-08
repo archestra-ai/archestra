@@ -291,7 +291,7 @@ export const autoConfigureAgentToolPolicies = <ThrowOnError extends boolean = fa
  *
  * Authorization:
  *
- * `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
+ * None (no additional RBAC permission required)
  */
 export const getAgentTools = <ThrowOnError extends boolean = false>(options: Options<GetAgentToolsData, ThrowOnError>) => (options.client ?? client).get<GetAgentToolsResponses, GetAgentToolsErrors, ThrowOnError>({ url: '/api/agents/{agentId}/tools', ...options });
 

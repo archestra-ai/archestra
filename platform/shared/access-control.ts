@@ -366,10 +366,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetDefaultLlmProxy]: {
     llmProxy: ["read"],
   },
-  // Agent-tool routes: tool:read checked statically, agent-type read checked dynamically in handler
-  [RouteId.GetAgentTools]: {
-    toolPolicy: ["read"],
-  },
+  // Agent-tool routes: agent-type and scope checks are handled dynamically in the route handlers
+  [RouteId.GetAgentTools]: {},
   [RouteId.GetAllAgentTools]: {
     toolPolicy: ["read"],
   },

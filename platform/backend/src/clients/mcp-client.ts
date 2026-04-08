@@ -1142,23 +1142,20 @@ class McpClient {
       }
     }
 
-    // Org-wide token: use first available server
-    if (tokenAuth.isOrganizationToken && allServers.length > 0) {
-      logger.info(
-        {
-          toolName: toolCall.name,
-          catalogId: tool.catalogId,
-          serverId: allServers[0].id,
-        },
-        `Dynamic resolution: using org-wide server for tool ${toolCall.name}`,
-      );
+    // Org-wide token is incompatible with dynamic credential resolution
+    if (tokenAuth.isOrganizationToken) {
       return {
-        targetMcpServerId: allServers[0].id,
-        mcpServerName: allServers[0].name,
+        error: await this.createErrorResult(
+          toolCall,
+          agentId,
+          "Organization-wide tokens are not supported for tools with dynamic credential resolution. Use a personal or team token instead.",
+          fallbackName,
+        ),
       };
     }
 
     // Fallback for external IdP users if earlier resolution didn't match
+    // TODO: works only we are doing end-to-end JWKS pattern.
     if (tokenAuth.isExternalIdp && allServers.length > 0) {
       logger.info(
         {

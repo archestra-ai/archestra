@@ -294,10 +294,15 @@ export async function selectMCPGatewayToken(
     }
   }
 
-  // 3. Try to find a team token where user is in that team and profile is assigned to it
-  if (commonTeamIds.length > 0) {
+  // 3. Try to find a team token where user is in that team and profile is assigned to it.
+  //    For system users (e.g. internal/public email modes), use the agent's own team
+  //    tokens directly since "system" has no team memberships. This scopes system
+  //    executions to the agent's team-level access rather than granting org-wide admin.
+  const effectiveTeamIds =
+    userId === "system" ? profileTeamIds : commonTeamIds;
+  if (effectiveTeamIds.length > 0) {
     for (const token of tokens) {
-      if (token.teamId && commonTeamIds.includes(token.teamId)) {
+      if (token.teamId && effectiveTeamIds.includes(token.teamId)) {
         const tokenValue = await TeamTokenModel.getTokenValue(token.id);
         if (tokenValue) {
           logger.info(

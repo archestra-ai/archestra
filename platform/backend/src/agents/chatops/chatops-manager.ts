@@ -1221,6 +1221,15 @@ export class ChatOpsManager {
       sendReply,
       userId,
     } = params;
+    const userIsAgentAdmin =
+      userId === "system"
+        ? false
+        : await userHasPermission(
+            userId,
+            binding.organizationId,
+            "agent",
+            "admin",
+          );
 
     // Send typing indicator before execution starts (non-fatal).
     // Slack always has threadId (falls back to event.ts); Teams may not
@@ -1270,6 +1279,7 @@ export class ChatOpsManager {
             organizationId: binding.organizationId,
             message: fullMessage,
             userId,
+            userIsAgentAdmin,
             sessionId,
             source:
               provider.providerId === "slack"

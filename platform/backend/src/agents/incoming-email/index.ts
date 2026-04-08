@@ -570,8 +570,12 @@ export async function processIncomingEmail(
     "[IncomingEmail] Applying security mode validation",
   );
 
-  // Determine userId for the request (used for 'private' mode)
+  // Determine userId for the request (used for 'private' mode).
+  // Non-user (internal/public) email executions use "system" userId with
+  // standard (non-admin) privileges. Tool access is scoped to the agent's
+  // team tokens via the selectMCPGatewayToken system-user fallback path.
   let userId: string = "system";
+  let userIsAgentAdmin = false;
 
   switch (securityMode) {
     case "private": {
@@ -624,6 +628,7 @@ export async function processIncomingEmail(
 
       // Use the verified user ID for execution context
       userId = user.id;
+      userIsAgentAdmin = isAgentAdmin;
 
       logger.info(
         {
@@ -846,6 +851,7 @@ ${formattedHistory}
         message,
         organizationId: organization,
         userId,
+        userIsAgentAdmin,
         sessionId: buildEmailSessionId(email.conversationId),
         source: "email",
         attachments: a2aAttachments.length > 0 ? a2aAttachments : undefined,

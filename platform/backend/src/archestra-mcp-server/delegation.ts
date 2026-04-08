@@ -117,8 +117,9 @@ export async function handleDelegation(
 
   // Check user has access if user token is being used
   const userId = tokenAuth?.userId;
+  let userIsAgentAdmin = false;
   if (userId && organizationId) {
-    const isAgentAdmin = await userHasPermission(
+    userIsAgentAdmin = await userHasPermission(
       userId,
       organizationId,
       "agent",
@@ -126,7 +127,7 @@ export async function handleDelegation(
     );
 
     const userAccessibleAgentIds =
-      await AgentTeamModel.getUserAccessibleAgentIds(userId, isAgentAdmin);
+      await AgentTeamModel.getUserAccessibleAgentIds(userId, userIsAgentAdmin);
     if (!userAccessibleAgentIds.includes(delegation.targetAgent.id)) {
       return errorResult("You don't have access to this agent.");
     }
@@ -153,6 +154,7 @@ export async function handleDelegation(
       message,
       organizationId,
       userId: userId || "system",
+      userIsAgentAdmin,
       sessionId,
       // Pass the current delegation chain so the child can extend it
       parentDelegationChain: context.delegationChain || context.agentId,

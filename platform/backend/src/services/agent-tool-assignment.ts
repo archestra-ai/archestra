@@ -398,13 +398,7 @@ export async function isMcpServerAssignableToTarget(params: {
     return ownerMembership != null;
   }
 
-  for (const teamId of target.teamIds) {
-    if (await TeamModel.isUserInTeam(teamId, mcpServer.ownerId)) {
-      return true;
-    }
-  }
-
-  return false;
+  return TeamModel.isUserInAnyTeam(target.teamIds, mcpServer.ownerId);
 }
 
 function getAssignmentValidationMessage(

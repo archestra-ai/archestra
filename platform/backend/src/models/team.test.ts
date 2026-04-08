@@ -919,6 +919,57 @@ describe("TeamModel", () => {
     });
   });
 
+  describe("isUserInAnyTeam", () => {
+    test("returns false when no team IDs are provided", async ({
+      makeUser,
+    }) => {
+      const user = await makeUser();
+
+      const isMember = await TeamModel.isUserInAnyTeam([], user.id);
+
+      expect(isMember).toBe(false);
+    });
+
+    test("returns true when the user belongs to one of the teams", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team1 = await makeTeam(org.id, user.id, { name: "Team 1" });
+      const team2 = await makeTeam(org.id, user.id, { name: "Team 2" });
+      const team3 = await makeTeam(org.id, user.id, { name: "Team 3" });
+
+      await TeamModel.addMember(team2.id, user.id);
+
+      const isMember = await TeamModel.isUserInAnyTeam(
+        [team1.id, team2.id, team3.id],
+        user.id,
+      );
+
+      expect(isMember).toBe(true);
+    });
+
+    test("returns false when the user belongs to none of the teams", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team1 = await makeTeam(org.id, user.id, { name: "Team 1" });
+      const team2 = await makeTeam(org.id, user.id, { name: "Team 2" });
+
+      const isMember = await TeamModel.isUserInAnyTeam(
+        [team1.id, team2.id],
+        user.id,
+      );
+
+      expect(isMember).toBe(false);
+    });
+  });
+
   describe("syncUserTeams", () => {
     test("should add user to teams based on their SSO groups", async ({
       makeUser,

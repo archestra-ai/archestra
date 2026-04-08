@@ -615,6 +615,9 @@ const config = {
       baseUrl: process.env.ARCHESTRA_AZURE_OPENAI_BASE_URL || "",
       apiVersion:
         process.env.ARCHESTRA_AZURE_OPENAI_API_VERSION || "2024-02-01",
+      responsesApiVersion:
+        process.env.ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION ||
+        "2025-04-01-preview",
     },
   },
   chat: {

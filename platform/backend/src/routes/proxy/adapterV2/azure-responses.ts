@@ -116,7 +116,9 @@ export const azureResponsesAdapterFactory: LLMProvider<
     return new OpenAIProvider({
       apiKey: normalizedApiKey,
       baseURL: resolvedBaseUrl,
-      defaultQuery: { "api-version": config.llm.azure.apiVersion },
+      defaultQuery: {
+        "api-version": config.llm.azure.responsesApiVersion,
+      },
       fetch: customFetch,
       defaultHeaders: {
         ...options.defaultHeaders,

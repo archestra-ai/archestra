@@ -19,6 +19,9 @@ describe("azureResponsesAdapterFactory", () => {
     expect(client._options?.baseURL).toBe(
       "https://my-resource.openai.azure.com/openai",
     );
+    expect(client._options?.defaultQuery).toEqual({
+      "api-version": "2025-04-01-preview",
+    });
     expect(client._options?.defaultHeaders?.["api-key"]).toBe("my-azure-key");
     expect(client._options?.apiKey).toBe("my-azure-key");
   });

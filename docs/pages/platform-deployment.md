@@ -725,6 +725,10 @@ These environment variables set the default base URL for each LLM provider. Per-
 - **`ARCHESTRA_AZURE_OPENAI_API_VERSION`** - Azure OpenAI REST API version.
   - Default: `2024-02-01`
 
+- **`ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION`** - Azure Responses API version.
+  - Default: `2025-04-01-preview`
+  - Used only for Azure `/responses` requests. Keep `ARCHESTRA_AZURE_OPENAI_API_VERSION` for Azure Chat Completions and deployment discovery.
+
 - **`ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS`** - Maximum number of virtual API keys per LLM API key.
   - Default: `10`
   - Virtual keys are `archestra_`-prefixed tokens used by external LLM Proxy clients

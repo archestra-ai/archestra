@@ -471,6 +471,7 @@ function EditModelDialog({
   const form = useForm<EditModelFormValues>({
     defaultValues: getDefaults(model),
   });
+  const selectedEmbeddingDimensions = form.watch("embeddingDimensions");
 
   useEffect(() => {
     if (open) {
@@ -689,7 +690,10 @@ function EditModelDialog({
                 name="outputModalities"
                 rules={{
                   validate: (v) =>
-                    v.length > 0 || "At least one output modality is required",
+                    shouldRequireOutputModalities(selectedEmbeddingDimensions)
+                      ? v.length > 0 ||
+                        "At least one output modality is required"
+                      : true,
                 }}
                 render={({ field }) => (
                   <FormItem>
@@ -723,6 +727,32 @@ function EditModelDialog({
                 you intentionally truncate to.
               </p>
             </div>
+
+            <Alert variant="info">
+              <AlertCircle />
+              <AlertTitle>How embedding input modalities are used</AlertTitle>
+              <AlertDescription>
+                <ul className="list-disc space-y-1 pl-5">
+                  <li>
+                    Input modalities control which source content types can be
+                    sent to this model when {appName} generates embeddings for
+                    knowledge connectors and uploaded files.
+                  </li>
+                  <li>
+                    Text input enables text-based content such as documents,
+                    pages, and extracted file text.
+                  </li>
+                  <li>
+                    Image input enables image files to be considered for
+                    embedding when the connector and model both support it.
+                  </li>
+                  <li>
+                    Output modalities are not required for embedding-only
+                    models.
+                  </li>
+                </ul>
+              </AlertDescription>
+            </Alert>
 
             <FormField
               control={form.control}
@@ -960,4 +990,10 @@ function getEmbeddingDimensionsValue(
   }
 
   return EMBEDDING_DIMENSION_MAP[value];
+}
+
+function shouldRequireOutputModalities(
+  embeddingDimensions: EditModelEmbeddingDimensionsValue,
+): boolean {
+  return !embeddingDimensions;
 }

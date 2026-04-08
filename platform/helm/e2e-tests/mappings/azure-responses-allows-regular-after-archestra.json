@@ -1,0 +1,49 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/azure/openai/responses",
+    "headers": {
+      "Authorization": {
+        "contains": "azure-responses-allows-regular-after-archestra"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "resp_azure_archestra_sequence",
+      "object": "response",
+      "created_at": 1234567890,
+      "status": "completed",
+      "model": "gpt-4.1",
+      "output": [
+        {
+          "id": "fc_archestra",
+          "type": "function_call",
+          "call_id": "call_archestra",
+          "name": "archestra__whoami",
+          "arguments": "{}",
+          "status": "completed"
+        },
+        {
+          "id": "fc_regular",
+          "type": "function_call",
+          "call_id": "call_regular",
+          "name": "read_file",
+          "arguments": "{\"file_path\":\"/tmp/test\"}",
+          "status": "completed"
+        }
+      ],
+      "usage": {
+        "input_tokens": 100,
+        "input_tokens_details": { "cached_tokens": 0 },
+        "output_tokens": 20,
+        "output_tokens_details": { "reasoning_tokens": 0 },
+        "total_tokens": 120
+      }
+    }
+  }
+}

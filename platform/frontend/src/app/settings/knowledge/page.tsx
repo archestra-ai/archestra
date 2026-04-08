@@ -587,7 +587,7 @@ function KnowledgeSettingsContent() {
                   <ApiKeySelector
                     value={embeddingChatApiKeyId}
                     onChange={setEmbeddingChatApiKeyId}
-                    disabled={!hasPermission}
+                    disabled={!hasPermission || isEmbeddingModelLocked}
                     forEmbedding
                     label="embedding API key"
                     pulse={

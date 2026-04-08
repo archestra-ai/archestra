@@ -611,6 +611,14 @@ const config = {
       baseUrl:
         process.env.ARCHESTRA_MINIMAX_BASE_URL || "https://api.minimax.io/v1",
     },
+    azure: {
+      baseUrl: process.env.ARCHESTRA_AZURE_OPENAI_BASE_URL || "",
+      apiVersion:
+        process.env.ARCHESTRA_AZURE_OPENAI_API_VERSION || "2024-02-01",
+      responsesApiVersion:
+        process.env.ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION ||
+        "2025-04-01-preview",
+    },
   },
   chat: {
     openai: {
@@ -660,6 +668,9 @@ const config = {
     },
     minimax: {
       apiKey: process.env.ARCHESTRA_CHAT_MINIMAX_API_KEY || "",
+    },
+    azure: {
+      apiKey: process.env.ARCHESTRA_CHAT_AZURE_OPENAI_API_KEY || "",
     },
     defaultModel:
       process.env.ARCHESTRA_CHAT_DEFAULT_MODEL || "claude-opus-4-1-20250805",

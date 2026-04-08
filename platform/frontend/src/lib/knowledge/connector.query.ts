@@ -270,6 +270,7 @@ export function useConnectorRuns(params: {
   limit?: number;
   offset?: number;
 }) {
+  const queryClient = useQueryClient();
   const { connectorId, limit = 10, offset = 0 } = params;
   return useQuery({
     queryKey: ["connectors", connectorId, "runs", { limit, offset }],
@@ -289,7 +290,11 @@ export function useConnectorRuns(params: {
       const hasRunning = query.state.data?.data?.some(
         (r) => r.status === "running",
       );
-      return hasRunning ? 3000 : false;
+      const connector = queryClient.getQueryData<
+        archestraApiTypes.GetConnectorResponses["200"]
+      >(["connectors", connectorId]);
+      const connectorIsRunning = connector?.lastSyncStatus === "running";
+      return hasRunning || connectorIsRunning ? 3000 : false;
     },
   });
 }

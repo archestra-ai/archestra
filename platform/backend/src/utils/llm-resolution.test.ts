@@ -648,11 +648,15 @@ describe("resolveConversationLlmSelectionForAgent", () => {
         organizationId: org.id,
         userId: "user-1",
       });
+      const smartDefault = await resolveSmartDefaultLlmForChat({
+        organizationId: org.id,
+        userId: "user-1",
+      });
 
       expect(result).toEqual({
         chatApiKeyId: null,
-        selectedModel: config.chat.defaultModel,
-        selectedProvider: config.chat.defaultProvider,
+        selectedModel: smartDefault.model,
+        selectedProvider: smartDefault.provider,
       });
     } finally {
       for (const provider of SupportedProvidersSchema.options) {

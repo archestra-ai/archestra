@@ -1,6 +1,8 @@
 import type { SupportedProvider } from "@shared";
 import type { PartialUIMessage } from "@/components/message-thread";
 import AnthropicMessagesInteraction from "./llmProviders/anthropic";
+import AzureChatCompletionInteraction from "./llmProviders/azure";
+import AzureResponsesInteraction from "./llmProviders/azure-responses";
 import BedrockConverseInteraction from "./llmProviders/bedrock";
 import CerebrasChatCompletionInteraction from "./llmProviders/cerebras";
 import CohereChatInteraction from "./llmProviders/cohere";
@@ -45,6 +47,8 @@ const interactionFactories: Record<Interaction["type"], InteractionFactory> = {
   "groq:chatCompletions": (i) => new GroqChatCompletionInteraction(i),
   "xai:chatCompletions": (i) => new XaiChatCompletionInteraction(i),
   "minimax:chatCompletions": (i) => new MinimaxChatCompletionInteraction(i),
+  "azure:chatCompletions": (i) => new AzureChatCompletionInteraction(i),
+  "azure:responses": (i) => new AzureResponsesInteraction(i),
 };
 
 export interface CostSavingsInput {

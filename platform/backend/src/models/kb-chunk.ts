@@ -1,7 +1,7 @@
 import { getEmbeddingColumnName } from "@shared";
 import { count, eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { InsertKbChunk, KbChunk } from "@/types";
+import type { AclEntry, InsertKbChunk, KbChunk } from "@/types";
 
 export interface VectorSearchResult {
   id: string;
@@ -47,19 +47,58 @@ class KbChunkModel {
     return result?.count ?? 0;
   }
 
+  static async updateAclByConnector(
+    connectorId: string,
+    acl: AclEntry[],
+  ): Promise<number> {
+    // Skip rows that already have the target ACL to avoid unnecessary rewrites,
+    // WAL churn, and vacuum work when connector visibility is re-applied.
+    const result = await db.execute(sql`
+      WITH updated AS (
+        UPDATE ${schema.kbChunksTable} AS chunk
+        SET acl = ${JSON.stringify(acl)}::jsonb
+        FROM ${schema.kbDocumentsTable} AS document
+        WHERE chunk.document_id = document.id
+          AND document.connector_id = ${connectorId}
+          AND chunk.acl IS DISTINCT FROM ${JSON.stringify(acl)}::jsonb
+        RETURNING 1
+      )
+      SELECT COUNT(*)::int AS count FROM updated
+    `);
+
+    const count = result.rows[0]?.count;
+    return typeof count === "number" ? count : Number(count ?? 0);
+  }
+
   static async vectorSearch(params: {
     connectorIds: string[];
     queryEmbedding: number[];
     dimensions: number;
+    userAcl: AclEntry[];
+    bypassAcl?: boolean;
     limit?: number;
   }): Promise<VectorSearchResult[]> {
-    const { connectorIds, queryEmbedding, dimensions, limit = 10 } = params;
+    const {
+      connectorIds,
+      queryEmbedding,
+      dimensions,
+      userAcl,
+      bypassAcl = false,
+      limit = 10,
+    } = params;
     if (connectorIds.length === 0) return [];
+    if (!bypassAcl && userAcl.length === 0) return [];
     const embeddingStr = `[${queryEmbedding.join(",")}]`;
     const ids = sql.join(
       connectorIds.map((id) => sql`${id}`),
       sql`, `,
     );
+    const aclEntries = bypassAcl
+      ? null
+      : sql.join(
+          userAcl.map((entry) => sql`${entry}`),
+          sql`, `,
+        );
 
     const col = sql.raw(getEmbeddingColumnName(dimensions));
     const vectorCast = sql.raw(`::vector(${dimensions})`);
@@ -74,6 +113,7 @@ class KbChunkModel {
       LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
       WHERE d.connector_id IN (${ids})
         AND c.${col} IS NOT NULL
+        ${bypassAcl ? sql`` : sql`AND c.acl ?| ARRAY[${aclEntries}]`}
       ORDER BY c.${col} <=> ${embeddingStr}${vectorCast}
       LIMIT ${limit}
     `);
@@ -84,14 +124,29 @@ class KbChunkModel {
   static async fullTextSearch(params: {
     connectorIds: string[];
     queryText: string;
+    userAcl: AclEntry[];
+    bypassAcl?: boolean;
     limit?: number;
   }): Promise<VectorSearchResult[]> {
-    const { connectorIds, queryText, limit = 10 } = params;
+    const {
+      connectorIds,
+      queryText,
+      userAcl,
+      bypassAcl = false,
+      limit = 10,
+    } = params;
     if (connectorIds.length === 0) return [];
+    if (!bypassAcl && userAcl.length === 0) return [];
     const ids = sql.join(
       connectorIds.map((id) => sql`${id}`),
       sql`, `,
     );
+    const aclEntries = bypassAcl
+      ? null
+      : sql.join(
+          userAcl.map((entry) => sql`${entry}`),
+          sql`, `,
+        );
 
     const orQuery = queryText.split(/\s+/).filter(Boolean).join(" OR ");
 
@@ -106,6 +161,7 @@ class KbChunkModel {
       LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
       WHERE d.connector_id IN (${ids})
         AND c.search_vector @@ websearch_to_tsquery('english', ${orQuery})
+        ${bypassAcl ? sql`` : sql`AND c.acl ?| ARRAY[${aclEntries}]`}
       ORDER BY score DESC
       LIMIT ${limit}
     `);

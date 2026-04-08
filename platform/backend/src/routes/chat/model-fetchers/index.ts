@@ -1,5 +1,6 @@
 import type { SupportedProvider } from "@shared";
 import { fetchAnthropicModels } from "./anthropic";
+import { fetchAzureModels } from "./azure";
 import { fetchBedrockModels } from "./bedrock";
 import { fetchCerebrasModels } from "./cerebras";
 import { fetchCohereModels } from "./cohere";
@@ -19,6 +20,7 @@ import { fetchZhipuaiModels } from "./zhipuai";
 
 export const modelFetchers: Record<SupportedProvider, ModelFetcher> = {
   anthropic: fetchAnthropicModels,
+  azure: fetchAzureModels,
   bedrock: fetchBedrockModels,
   cerebras: fetchCerebrasModels,
   cohere: fetchCohereModels,

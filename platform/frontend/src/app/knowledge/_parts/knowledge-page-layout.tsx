@@ -31,7 +31,7 @@ export function KnowledgePageLayout({
         description={description}
         actionButton={
           <PermissionButton
-            permissions={{ knowledgeBase: ["create"] }}
+            permissions={{ knowledgeSource: ["create"] }}
             onClick={onCreateClick}
             disabled={!isKnowledgeBaseConfigured}
             tooltip={

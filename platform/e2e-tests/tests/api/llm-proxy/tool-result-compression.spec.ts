@@ -79,6 +79,43 @@ const openaiConfig: CompressionTestConfig = {
   }),
 };
 
+const azureConfig: CompressionTestConfig = {
+  providerName: "Azure",
+
+  endpoint: (profileId) => `/v1/azure/${profileId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequestWithToolResult: () => ({
+    model: "gpt-4o",
+    messages: [
+      { role: "user", content: "What files are in the current directory?" },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: "call_123",
+            type: "function",
+            function: {
+              name: "list_files",
+              arguments: '{"directory": "."}',
+            },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        tool_call_id: "call_123",
+        content: JSON.stringify(TOOL_RESULT_DATA),
+      },
+    ],
+  }),
+};
+
 const xaiConfig: CompressionTestConfig = {
   providerName: "xAI",
 
@@ -653,6 +690,7 @@ const testConfigsMap = {
   bedrock: bedrockConfig,
   openrouter: openrouterConfig,
   perplexity: null, // Perplexity does not support tool calling (has built-in web search instead)
+  azure: azureConfig,
 } satisfies Record<SupportedProvider, CompressionTestConfig | null>;
 
 const testConfigs = Object.values(testConfigsMap).filter(

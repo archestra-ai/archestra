@@ -616,3 +616,50 @@ ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS=
 ```
 
 Known region prefixes: `us`, `eu`, `ap`, `global`.
+
+## Azure AI Foundry
+
+[Azure AI Foundry](https://azure.microsoft.com/en-us/products/ai-foundry) (formerly Azure OpenAI) provides enterprise-grade access to OpenAI models through Microsoft Azure, with an OpenAI-compatible API.
+
+### Supported Azure AI Foundry APIs
+
+- Chat Completions (streaming and non-streaming)
+- Responses API (streaming and non-streaming)
+
+### Azure AI Foundry Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/azure/{profile-id}`
+- **Authentication**: Pass your Azure API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Azure AI Foundry Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ARCHESTRA_AZURE_OPENAI_BASE_URL` | Yes | Full deployment URL: `https://<resource>.openai.azure.com/openai/deployments/<deployment>` |
+| `ARCHESTRA_AZURE_OPENAI_API_VERSION` | No | Azure OpenAI API version (default: `2024-02-01`) |
+| `ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION` | No | Azure Responses API version (default: `2025-04-01-preview`) |
+| `ARCHESTRA_CHAT_AZURE_OPENAI_API_KEY` | No | Default API key for Azure AI Foundry chat (can be overridden per conversation/team/org) |
+
+### Getting an Azure API Key
+
+You can generate an API key from the [Azure Portal](https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/OpenAI) under your Azure OpenAI resource.
+
+### Base URL Format
+
+The `ARCHESTRA_AZURE_OPENAI_BASE_URL` must be the full deployment URL including the deployment name:
+
+```
+https://<resource-name>.openai.azure.com/openai/deployments/<deployment-name>
+```
+
+For example: `https://my-company.openai.azure.com/openai/deployments/gpt-4o`
+
+The same format applies when configuring a Base URL in the API key settings UI.
+
+### Notes
+
+- **API Version**: Chat Completions and model discovery use `ARCHESTRA_AZURE_OPENAI_API_VERSION`. Azure `/responses` requests use `ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION`. You do not need to include either query parameter in the base URL.
+- **Multiple Deployments**: To use multiple Azure deployments, create separate API key entries in Settings, each with its own deployment URL as the Base URL.
+- **Deployment URL configuration**: Keep using the deployment-specific base URL format shown above. Archestra derives the correct upstream endpoint automatically for both `/chat/completions` and `/responses` requests.
+- **Responses API model field**: For Azure `/responses` requests, send the deployment name in the `model` field. Archestra will route the request to Azure's `/openai/responses` endpoint while preserving the configured deployment URL for discovery and management.
+- **OpenAI-compatible API**: Azure AI Foundry supports both Chat Completions and Responses-style request flows through Archestra.

@@ -4,6 +4,7 @@ import { KbChunkModel, KbDocumentModel } from "@/models";
 import {
   callEmbedding,
   type EmbeddingApiResponse,
+  type EmbeddingInput,
   getEmbeddingDiscriminator,
   isRetryableEmbeddingError,
 } from "./embedding-clients";
@@ -55,15 +56,17 @@ class EmbeddingService {
 
       for (let i = 0; i < chunks.length; i += EMBEDDING_BATCH_SIZE) {
         const batch = chunks.slice(i, i + EMBEDDING_BATCH_SIZE);
-        const texts = batch.map((c) =>
-          addNomicTaskPrefix(
-            ctx.model,
-            c.content + (c.metadataSuffixSemantic ?? ""),
-            "search_document",
-          ),
+        const inputs = batch.map((c) =>
+          chunkToEmbeddingInput(ctx.model, c.content, c.metadataSuffixSemantic),
         );
 
-        const response = await this.callEmbeddingApiWithRetry(ctx, texts);
+        const response = await this.callEmbeddingApiWithRetry(ctx, inputs);
+
+        if (response.data.length !== batch.length) {
+          throw new Error(
+            `Embedding API returned ${response.data.length} results for ${batch.length} inputs`,
+          );
+        }
 
         for (let j = 0; j < batch.length; j++) {
           allUpdates.push({
@@ -117,7 +120,12 @@ class EmbeddingService {
       chunkIds: string[];
       chunkCount: number;
     }> = [];
-    const allChunks: Array<{ chunkId: string; text: string }> = [];
+    // Store raw chunk data; inputs are built after the embedding config is resolved.
+    const allChunks: Array<{
+      chunkId: string;
+      content: string;
+      metadataSuffix: string | null;
+    }> = [];
 
     for (const documentId of documentIds) {
       const document = documentsById.get(documentId);
@@ -160,7 +168,8 @@ class EmbeddingService {
       for (const chunk of chunks) {
         allChunks.push({
           chunkId: chunk.id,
-          text: chunk.content + (chunk.metadataSuffixSemantic ?? ""),
+          content: chunk.content,
+          metadataSuffix: chunk.metadataSuffixSemantic,
         });
       }
     }
@@ -189,12 +198,15 @@ class EmbeddingService {
     for (let i = 0; i < allChunks.length; i += EMBEDDING_BATCH_SIZE) {
       const batch = allChunks.slice(i, i + EMBEDDING_BATCH_SIZE);
       try {
-        const response = await this.callEmbeddingApiWithRetry(
-          ctx,
-          batch.map((c) =>
-            addNomicTaskPrefix(ctx.model, c.text, "search_document"),
-          ),
+        const inputs = batch.map((c) =>
+          chunkToEmbeddingInput(ctx.model, c.content, c.metadataSuffix),
         );
+        const response = await this.callEmbeddingApiWithRetry(ctx, inputs);
+        if (response.data.length !== batch.length) {
+          throw new Error(
+            `Embedding API returned ${response.data.length} results for ${batch.length} inputs`,
+          );
+        }
         for (let j = 0; j < batch.length; j++) {
           embeddingResults.set(batch[j].chunkId, response.data[j].embedding);
         }
@@ -247,7 +259,7 @@ class EmbeddingService {
 
   private async callEmbeddingApiWithRetry(
     ctx: EmbeddingConfig,
-    texts: string[],
+    inputs: EmbeddingInput[],
   ): Promise<EmbeddingApiResponse> {
     for (let attempt = 1; attempt <= RETRY_MAX_ATTEMPTS; attempt++) {
       try {
@@ -259,7 +271,7 @@ class EmbeddingService {
           type: getEmbeddingDiscriminator(ctx.provider),
           callback: () =>
             callEmbedding({
-              texts,
+              inputs,
               model: ctx.model,
               apiKey: ctx.apiKey,
               baseUrl: ctx.baseUrl,
@@ -269,7 +281,9 @@ class EmbeddingService {
           buildInteraction: (resp) =>
             buildEmbeddingInteraction({
               model: ctx.model,
-              input: texts,
+              input: inputs.map((i) =>
+                typeof i === "string" ? i : `[image:${i.mimeType}]`,
+              ),
               dimensions: ctx.dimensions,
               response: resp,
             }),
@@ -299,3 +313,31 @@ class EmbeddingService {
 }
 
 export const embeddingService = new EmbeddingService();
+
+// ===== Internal helpers =====
+
+/**
+ * Convert a raw chunk content string to an EmbeddingInput.
+ * Image data URLs (`data:image/...;base64,...`) are returned as inline image objects;
+ * all other content is returned as text with the appropriate nomic task prefix.
+ */
+function chunkToEmbeddingInput(
+  model: string,
+  content: string,
+  metadataSuffix: string | null | undefined,
+): EmbeddingInput {
+  if (content.startsWith("data:image/")) {
+    // Parse the data URL: data:<mimeType>;base64,<data>
+    const semicolonIdx = content.indexOf(";base64,");
+    if (semicolonIdx > 5) {
+      const mimeType = content.slice(5, semicolonIdx);
+      const data = content.slice(semicolonIdx + 8); // len(";base64,") === 8
+      return { mimeType, data };
+    }
+  }
+  return addNomicTaskPrefix(
+    model,
+    content + (metadataSuffix ?? ""),
+    "search_document",
+  );
+}

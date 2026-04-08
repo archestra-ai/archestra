@@ -74,6 +74,9 @@ export async function fetchGeminiModelsViaVertexAi(): Promise<ModelInfo[]> {
     existingModelIds: new Set(discoveredModels.map((model) => model.id)),
     shouldRunFallback:
       discoveredModels.length === 0 ||
+      !discoveredModels.some((model) =>
+        model.id.startsWith("gemini-embedding"),
+      ) ||
       !discoveredModels.some((model) => isPrimaryVertexGeminiModel(model.id)),
   });
 
@@ -81,6 +84,8 @@ export async function fetchGeminiModelsViaVertexAi(): Promise<ModelInfo[]> {
 }
 
 const VERTEX_GEMINI_FALLBACK_MODEL_IDS = [
+  "gemini-embedding-001",
+  "gemini-embedding-2-preview",
   "gemini-2.5-pro",
   "gemini-2.5-flash",
   "gemini-2.5-flash-lite",

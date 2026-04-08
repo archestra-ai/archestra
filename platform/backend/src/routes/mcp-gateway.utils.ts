@@ -58,13 +58,12 @@ import {
   findExternalIdentityProviderById,
 } from "@/services/identity-providers/oidc";
 import { jwksValidator } from "@/services/jwks-validator";
-import {
-  type AgentAccessContext,
-  type AgentType,
-  type CommonToolCall,
-  type SelectTeamToken,
-  type SelectUserToken,
-  UuidIdSchema,
+import type {
+  AgentAccessContext,
+  AgentType,
+  CommonToolCall,
+  SelectTeamToken,
+  SelectUserToken,
 } from "@/types";
 import type { McpServerCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { deriveAuthMethod } from "@/utils/auth-method";
@@ -96,6 +95,7 @@ export type AgentInfo = {
   id: string;
   agentType?: AgentType;
   labels?: Array<{ key: string; value: string }>;
+  passthroughHeaders?: string[] | null;
 };
 
 type TokenHashes = {
@@ -129,13 +129,10 @@ const rawArchestraTokenCache =
 
 /**
  * Creates an MCP server for the given agent.
- * Pass `preloadedAgent` (e.g. from the proxy's access cache) to skip the
- * redundant DB lookup that would otherwise happen inside this function.
  */
 export async function createAgentServer(
   agentId: string,
   tokenAuth?: TokenAuthContext,
-  preloadedAgent?: AgentInfo,
 ): Promise<{ server: McpServer; agent: AgentInfo }> {
   const extensionCapabilities = {
     ...MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
@@ -161,14 +158,8 @@ export async function createAgentServer(
   );
   const { server } = mcpServer;
 
-  let agent: AgentInfo;
-  if (preloadedAgent) {
-    agent = preloadedAgent;
-  } else {
-    const fetched = await AgentModel.findById(agentId);
-    if (!fetched) throw new Error(`Agent not found: ${agentId}`);
-    agent = fetched;
-  }
+  const agent = await AgentModel.findById(agentId);
+  if (!agent) throw new Error(`Agent not found: ${agentId}`);
 
   // Create a map of Archestra tool names to their titles
   // This is needed because the database schema doesn't include a title field
@@ -545,29 +536,48 @@ export function extractBearerToken(request: FastifyRequest): string | null {
 }
 
 /**
- * Extract profile ID from URL path and token from Authorization header
- * URL format: /v1/mcp/:profileId
+ * Extract profile ID from URL path and token from Authorization header.
+ * URL format: /v1/mcp/:profileId (accepts both UUID and slug)
  */
-export function extractProfileIdAndTokenFromRequest(
+export async function extractProfileIdAndTokenFromRequest(
   request: FastifyRequest,
-): { profileId: string; token: string } | null {
+): Promise<{ profileId: string; token: string } | null> {
   const token = extractBearerToken(request);
   if (!token) {
     return null;
   }
 
-  // Extract profile ID from URL path (last segment)
-  const profileId = request.url.split("/").at(-1)?.split("?")[0];
-  if (!profileId) {
+  // Extract profile ID or slug from URL path (last segment)
+  const idOrSlug = request.url.split("/").at(-1)?.split("?")[0];
+  if (!idOrSlug) {
     return null;
   }
 
-  try {
-    const parsedProfileId = UuidIdSchema.parse(profileId);
-    return parsedProfileId ? { profileId: parsedProfileId, token } : null;
-  } catch {
-    return null;
+  const profileId = await AgentModel.resolveIdFromIdOrSlug(idOrSlug);
+  return profileId ? { profileId, token } : null;
+}
+
+/**
+ * Extract headers from an incoming request that match the gateway's passthrough allowlist.
+ * Returns a map of header name → value, or undefined if none matched.
+ */
+export function extractPassthroughHeaders(
+  allowlist: string[] | null | undefined,
+  requestHeaders: Record<string, string | string[] | undefined>,
+): Record<string, string> | undefined {
+  if (!allowlist || allowlist.length === 0) {
+    return undefined;
   }
+  const extracted: Record<string, string> = {};
+  for (const headerName of allowlist) {
+    const value = requestHeaders[headerName.toLowerCase()];
+    if (typeof value === "string") {
+      extracted[headerName] = value;
+    } else if (Array.isArray(value)) {
+      extracted[headerName] = value.join(", ");
+    }
+  }
+  return Object.keys(extracted).length > 0 ? extracted : undefined;
 }
 
 /**

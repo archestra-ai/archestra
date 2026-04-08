@@ -30,7 +30,11 @@ vi.mock("@keyv/postgres", () => ({
 }));
 
 // Import after mocks are set up
-import { type AllowedCacheKey, cacheManager } from "./cache-manager";
+import {
+  type AllowedCacheKey,
+  cacheManager,
+  LRUCacheManager,
+} from "./cache-manager";
 
 // Alias for convenience in tests
 const mockKeyv = {
@@ -441,5 +445,51 @@ describe("CacheManager", () => {
       // Should not throw
       expect(() => cacheManager.shutdown()).not.toThrow();
     });
+  });
+});
+
+describe("LRUCacheManager", () => {
+  test("runs eviction callback when an expired entry is read", () => {
+    vi.useFakeTimers();
+
+    try {
+      const onEviction = vi.fn();
+      const cache = new LRUCacheManager<string>({
+        maxSize: 10,
+        defaultTtl: 1_000,
+        onEviction,
+      });
+
+      cache.set("client-1", "value");
+      vi.advanceTimersByTime(1_001);
+
+      expect(cache.get("client-1")).toBeUndefined();
+      expect(onEviction).toHaveBeenCalledWith("client-1", "value");
+      expect(cache.size).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("runs eviction callback when an expired entry is checked with has()", () => {
+    vi.useFakeTimers();
+
+    try {
+      const onEviction = vi.fn();
+      const cache = new LRUCacheManager<string>({
+        maxSize: 10,
+        defaultTtl: 1_000,
+        onEviction,
+      });
+
+      cache.set("client-1", "value");
+      vi.advanceTimersByTime(1_001);
+
+      expect(cache.has("client-1")).toBe(false);
+      expect(onEviction).toHaveBeenCalledWith("client-1", "value");
+      expect(cache.size).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

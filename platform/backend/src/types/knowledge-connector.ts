@@ -1,3 +1,4 @@
+import type { ModelInputModality } from "@shared";
 import { z } from "zod";
 
 // ===== Connector Type =====
@@ -8,6 +9,7 @@ const GITHUB = z.literal("github");
 const GITLAB = z.literal("gitlab");
 const SERVICENOW = z.literal("servicenow");
 const NOTION = z.literal("notion");
+const SHAREPOINT = z.literal("sharepoint");
 
 export const ConnectorTypeSchema = z.union([
   JIRA,
@@ -16,6 +18,7 @@ export const ConnectorTypeSchema = z.union([
   GITLAB,
   SERVICENOW,
   NOTION,
+  SHAREPOINT,
 ]);
 export type ConnectorType = z.infer<typeof ConnectorTypeSchema>;
 
@@ -172,6 +175,25 @@ export const NotionCheckpointSchema = z.object({
 });
 export type NotionCheckpoint = z.infer<typeof NotionCheckpointSchema>;
 
+// ===== SharePoint Config & Checkpoint =====
+
+export const SharePointConfigSchema = z.object({
+  type: SHAREPOINT,
+  tenantId: z.string().min(1),
+  siteUrl: connectorUrlSchema,
+  driveIds: z.array(z.string()).optional(),
+  folderPath: z.string().optional(),
+  includePages: z.boolean().optional(),
+  batchSize: z.number().optional(),
+});
+export type SharePointConfig = z.infer<typeof SharePointConfigSchema>;
+
+export const SharePointCheckpointSchema = z.object({
+  type: SHAREPOINT,
+  lastSyncedAt: z.string().optional(),
+});
+export type SharePointCheckpoint = z.infer<typeof SharePointCheckpointSchema>;
+
 // ===== Discriminated Unions =====
 
 export const ConnectorConfigSchema = z.discriminatedUnion("type", [
@@ -181,6 +203,7 @@ export const ConnectorConfigSchema = z.discriminatedUnion("type", [
   GitlabConfigSchema,
   ServiceNowConfigSchema,
   NotionConfigSchema,
+  SharePointConfigSchema,
 ]);
 export type ConnectorConfig = z.infer<typeof ConnectorConfigSchema>;
 
@@ -191,6 +214,7 @@ export const ConnectorCheckpointSchema = z.discriminatedUnion("type", [
   GitlabCheckpointSchema,
   ServiceNowCheckpointSchema,
   NotionCheckpointSchema,
+  SharePointCheckpointSchema,
 ]);
 export type ConnectorCheckpoint = z.infer<typeof ConnectorCheckpointSchema>;
 
@@ -208,6 +232,17 @@ export interface ConnectorDocument {
     users?: string[];
     groups?: string[];
     isPublic?: boolean;
+  };
+  /**
+   * Optional inline media (image) data. When present, the pipeline will embed
+   * this as a multimodal chunk in addition to the text content.
+   * Only indexed when the configured embedding model supports the given modality.
+   */
+  mediaContent?: {
+    /** IANA MIME type, e.g. "image/jpeg" */
+    mimeType: string;
+    /** Base64-encoded binary data */
+    data: string;
   };
 }
 
@@ -260,5 +295,11 @@ export interface Connector {
     checkpoint: Record<string, unknown> | null;
     startTime?: Date;
     endTime?: Date;
+    /**
+     * Input modalities supported by the configured embedding model.
+     * Connectors can use this to conditionally ingest non-text content
+     * (e.g. images) only when the embedding model can handle it.
+     */
+    embeddingInputModalities?: ModelInputModality[];
   }): AsyncGenerator<ConnectorSyncBatch>;
 }

@@ -17,6 +17,7 @@ import type {
   IncomingEmail,
   SubscriptionInfo,
 } from "@/types";
+import { stripHtmlEmail } from "@/utils/strip-html";
 import {
   DEFAULT_AGENT_EMAIL_NAME,
   MAX_ATTACHMENT_SIZE,
@@ -329,7 +330,7 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
           body = message.body.content || "";
         } else if (message.body?.content) {
           // HTML body - convert to plain text to preserve conversation thread
-          body = this.stripHtml(message.body.content);
+          body = stripHtmlEmail(message.body.content);
         }
 
         // Fetch attachments if the message has any, or if the HTML body
@@ -840,7 +841,7 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
         if (message.body?.contentType === "text") {
           body = message.body.content || "";
         } else if (message.body?.content) {
-          body = this.stripHtml(message.body.content);
+          body = stripHtmlEmail(message.body.content);
         }
 
         history.push({
@@ -1065,70 +1066,5 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
 
     this.graphClient = null;
     this.subscriptionId = null;
-  }
-
-  /**
-   * Convert HTML to plain text while preserving conversation structure
-   * Handles email-specific HTML elements like blockquotes for email threads
-   */
-  private stripHtml(html: string): string {
-    let result = html;
-
-    // Handle horizontal rules FIRST (often used as reply separators)
-    // Must be before tag stripping since <hr> may have attributes
-    result = result.replace(/<hr[^>]*\/?>/gi, "\n---\n");
-
-    // Replace common block elements with newlines
-    result = result.replace(/<br\s*\/?>/gi, "\n");
-    result = result.replace(/<\/p>/gi, "\n\n");
-    result = result.replace(/<\/div>/gi, "\n");
-    result = result.replace(/<\/h[1-6]>/gi, "\n\n");
-    result = result.replace(/<\/li>/gi, "\n");
-
-    // Handle blockquotes (common in email replies) with ">" prefix
-    // Process iteratively to handle nested blockquotes from outside-in
-    let previousResult = "";
-    while (previousResult !== result) {
-      previousResult = result;
-      result = result.replace(
-        /<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi,
-        (_match, content) => {
-          // Strip tags from content but don't process blockquotes yet
-          const strippedContent = content
-            .replace(/<br\s*\/?>/gi, "\n")
-            .replace(/<\/p>/gi, "\n")
-            .replace(/<\/div>/gi, "\n")
-            .replace(/<[^>]*>/g, " ")
-            .replace(/&nbsp;/gi, " ")
-            .replace(/[ \t]+/g, " ")
-            .trim();
-          const lines = strippedContent.split("\n");
-          return `\n${lines
-            .map((line: string) => `> ${line.trim()}`)
-            .join("\n")}\n`;
-        },
-      );
-    }
-
-    // Strip remaining tags
-    result = result.replace(/<[^>]*>/g, " ");
-
-    // Decode common HTML entities
-    // Note: &amp; must be decoded LAST to prevent double-unescaping
-    // (e.g., &amp;lt; should become &lt; not <)
-    result = result.replace(/&nbsp;/gi, " ");
-    result = result.replace(/&lt;/gi, "<");
-    result = result.replace(/&gt;/gi, ">");
-    result = result.replace(/&quot;/gi, '"');
-    result = result.replace(/&#39;/gi, "'");
-    result = result.replace(/&amp;/gi, "&");
-
-    // Clean up whitespace while preserving intentional line breaks
-    result = result.replace(/[ \t]+/g, " ");
-    result = result.replace(/\n +/g, "\n");
-    result = result.replace(/ +\n/g, "\n");
-    result = result.replace(/\n{3,}/g, "\n\n");
-
-    return result.trim();
   }
 }

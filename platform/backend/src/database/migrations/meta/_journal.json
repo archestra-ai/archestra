@@ -1422,6 +1422,27 @@
       "when": 1775092832669,
       "tag": "0202_special_spiral",
       "breakpoints": true
+    },
+    {
+      "idx": 203,
+      "version": "7",
+      "when": 1775240898368,
+      "tag": "0203_last_killmonger",
+      "breakpoints": true
+    },
+    {
+      "idx": 204,
+      "version": "7",
+      "when": 1775470659585,
+      "tag": "0204_open_catseye",
+      "breakpoints": true
+    },
+    {
+      "idx": 205,
+      "version": "7",
+      "when": 1775490639458,
+      "tag": "0205_sturdy_old_lace",
+      "breakpoints": true
     }
   ]
 }

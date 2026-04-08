@@ -6,6 +6,8 @@ import {
 } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
+import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import logger from "@/logging";
 import {
@@ -16,6 +18,7 @@ import {
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { modelSyncService } from "@/services/model-sync";
+import { systemKeyManager } from "@/services/system-key-manager";
 import {
   ApiError,
   constructResponseSchema,
@@ -273,47 +276,72 @@ export async function syncModelsForVisibleApiKeys(params: {
     userTeamIds,
   );
 
+  if (apiKeys.some(shouldHandleWithSystemKeySync)) {
+    await systemKeyManager.syncSystemKeys(organizationId);
+  }
+
   await Promise.all(
-    apiKeys.map(async (apiKey) => {
-      let secretValue: string | null = null;
+    apiKeys
+      .filter((apiKey) => !shouldHandleWithSystemKeySync(apiKey))
+      .map(async (apiKey) => {
+        let secretValue: string | null = null;
 
-      if (apiKey.secretId) {
-        secretValue = (await getSecretValueForLlmProviderApiKey(
-          apiKey.secretId,
-        )) as string | null;
-      }
-
-      if (
-        !secretValue &&
-        !PROVIDERS_WITH_OPTIONAL_API_KEY.has(apiKey.provider)
-      ) {
         if (apiKey.secretId) {
-          logger.warn(
-            { apiKeyId: apiKey.id, provider: apiKey.provider },
-            "No secret value for API key, skipping sync",
-          );
+          secretValue = (await getSecretValueForLlmProviderApiKey(
+            apiKey.secretId,
+          )) as string | null;
         }
-        return;
-      }
 
-      try {
-        await modelSyncService.syncModelsForApiKey({
-          apiKeyId: apiKey.id,
-          provider: apiKey.provider,
-          apiKeyValue: secretValue ?? "",
-          baseUrl: apiKey.baseUrl,
-        });
-      } catch (error) {
-        logger.error(
-          {
+        if (
+          !secretValue &&
+          !PROVIDERS_WITH_OPTIONAL_API_KEY.has(apiKey.provider)
+        ) {
+          if (apiKey.secretId) {
+            logger.warn(
+              { apiKeyId: apiKey.id, provider: apiKey.provider },
+              "No secret value for API key, skipping sync",
+            );
+          }
+          return;
+        }
+
+        try {
+          await modelSyncService.syncModelsForApiKey({
             apiKeyId: apiKey.id,
             provider: apiKey.provider,
-            errorMessage:
-              error instanceof Error ? error.message : String(error),
-          },
-          "Failed to sync models for API key",
-        );
-      }
-    }),
+            apiKeyValue: secretValue ?? "",
+            baseUrl: apiKey.baseUrl,
+          });
+        } catch (error) {
+          logger.error(
+            {
+              apiKeyId: apiKey.id,
+              provider: apiKey.provider,
+              errorMessage:
+                error instanceof Error ? error.message : String(error),
+            },
+            "Failed to sync models for API key",
+          );
+        }
+      }),
   );
+}
+
+function shouldHandleWithSystemKeySync(apiKey: {
+  provider: string;
+  isSystem: boolean;
+}): boolean {
+  if (!apiKey.isSystem) {
+    return false;
+  }
+
+  if (apiKey.provider === "gemini") {
+    return isVertexAiEnabled();
+  }
+
+  if (apiKey.provider === "bedrock") {
+    return isBedrockIamAuthEnabled();
+  }
+
+  return false;
 }

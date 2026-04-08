@@ -1,7 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
-import { Globe, RefreshCw, Users } from "lucide-react";
+import { Globe, Users } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import {
@@ -10,71 +9,55 @@ import {
 } from "@/components/visibility-selector";
 import { useTeams } from "@/lib/teams/team.query";
 
-export type KnowledgeBaseVisibility = NonNullable<
-  archestraApiTypes.CreateKnowledgeBaseData["body"]["visibility"]
->;
+export type KnowledgeSourceVisibility = "org-wide" | "team-scoped";
 
 const VISIBILITY_OPTIONS: Record<
-  KnowledgeBaseVisibility,
-  VisibilityOption<KnowledgeBaseVisibility>
+  KnowledgeSourceVisibility,
+  VisibilityOption<KnowledgeSourceVisibility>
 > = {
   "org-wide": {
     value: "org-wide",
     label: "Organization",
-    description: "Anyone in your org can access this knowledge base",
+    description: "Anyone in your org can access this knowledge source",
     icon: Globe,
   },
   "team-scoped": {
     value: "team-scoped",
     label: "Teams",
-    description: "Share knowledge base with selected teams",
+    description: "Share this knowledge source with selected teams",
     icon: Users,
-  },
-  "auto-sync-permissions": {
-    value: "auto-sync-permissions",
-    label: "Auto Sync Permissions",
-    description:
-      "Automatically sync permissions from the source. Documents are only accessible to users who have permission in the source system.",
-    icon: RefreshCw,
   },
 };
 
 const visibilityEntries = Object.entries(VISIBILITY_OPTIONS) as [
-  KnowledgeBaseVisibility,
-  VisibilityOption<KnowledgeBaseVisibility>,
+  KnowledgeSourceVisibility,
+  VisibilityOption<KnowledgeSourceVisibility>,
 ][];
 
-export function VisibilitySelector({
+export function KnowledgeSourceVisibilitySelector({
   visibility,
   onVisibilityChange,
   teamIds,
   onTeamIdsChange,
   showTeamRequired,
 }: {
-  visibility: KnowledgeBaseVisibility;
-  onVisibilityChange: (visibility: KnowledgeBaseVisibility) => void;
+  visibility: KnowledgeSourceVisibility;
+  onVisibilityChange: (visibility: KnowledgeSourceVisibility) => void;
   teamIds: string[];
   onTeamIdsChange: (ids: string[]) => void;
   showTeamRequired?: boolean;
 }) {
   const { data: teams } = useTeams();
 
-  const options = visibilityEntries.map(([value, option]) => {
-    const noTeamsAvailable =
-      value === "team-scoped" && (teams ?? []).length === 0;
-    const isDisabled = value === "auto-sync-permissions" || noTeamsAvailable;
-
-    return {
-      ...option,
-      value,
-      disabled: isDisabled,
-      disabledLabel: noTeamsAvailable
+  const options = visibilityEntries.map(([value, option]) => ({
+    ...option,
+    value,
+    disabled: value === "team-scoped" && (teams ?? []).length === 0,
+    disabledLabel:
+      value === "team-scoped" && (teams ?? []).length === 0
         ? "No teams available"
-        : value === "auto-sync-permissions"
-          ? "Coming Soon"
-          : undefined,
-    } satisfies VisibilityOption<KnowledgeBaseVisibility>;
-  });
+        : undefined,
+  }));
 
   return (
     <SharedVisibilitySelector

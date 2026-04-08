@@ -45,7 +45,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   mcpServerInstallationRequest: ["read", "create", "update", "delete", "admin"],
 
   // Knowledge
-  knowledgeBase: ["read", "create", "update", "delete", "query"],
+  knowledgeSource: ["read", "create", "update", "delete", "query", "admin"],
 
   // Other
   chat: ["read", "create", "update", "delete"],
@@ -96,7 +96,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   mcpServerInstallationRequest: ["read", "create", "update", "delete"],
 
   // Knowledge
-  knowledgeBase: ["read", "create", "update", "delete", "query"],
+  knowledgeSource: ["read", "create", "update", "delete", "query"],
 
   // Other
   chat: ["read", "create", "update", "delete"],
@@ -147,7 +147,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   mcpServerInstallationRequest: ["read", "create", "update"],
 
   // Knowledge
-  knowledgeBase: ["read", "query"],
+  knowledgeSource: ["read", "query"],
 
   // Other
   chat: ["read", "create", "update", "delete"],
@@ -316,11 +316,13 @@ export const permissionDescriptions: Record<string, string> = {
     "View organization settings (appearance, authentication, etc)",
   "organizationSettings:update":
     "Customize organization appearance, authentication, etc",
-  "knowledgeBase:read": "View knowledge bases and connectors",
-  "knowledgeBase:create": "Create knowledge bases and connectors",
-  "knowledgeBase:update": "Modify knowledge bases and connectors",
-  "knowledgeBase:delete": "Delete knowledge bases and connectors",
-  "knowledgeBase:query": "Query knowledge sources for information retrieval",
+  "knowledgeSource:read": "View knowledge bases and connectors",
+  "knowledgeSource:create": "Create knowledge bases and connectors",
+  "knowledgeSource:update": "Modify knowledge bases and connectors",
+  "knowledgeSource:delete": "Delete knowledge bases and connectors",
+  "knowledgeSource:query": "Query knowledge sources for information retrieval",
+  "knowledgeSource:admin":
+    "View all knowledge bases and connectors, bypassing visibility restrictions",
   "knowledgeSettings:read":
     "View knowledge settings (embedding and reranking models)",
   "knowledgeSettings:update":
@@ -926,31 +928,33 @@ export const requiredEndpointPermissionsMap: Partial<
     agentTrigger: ["read"],
   },
   // Knowledge Base Routes
-  [RouteId.GetKnowledgeBases]: { knowledgeBase: ["read"] },
-  [RouteId.CreateKnowledgeBase]: { knowledgeBase: ["create"] },
-  [RouteId.GetKnowledgeBase]: { knowledgeBase: ["read"] },
-  [RouteId.UpdateKnowledgeBase]: { knowledgeBase: ["update"] },
-  [RouteId.DeleteKnowledgeBase]: { knowledgeBase: ["delete"] },
-  [RouteId.GetKnowledgeBaseHealth]: { knowledgeBase: ["read"] },
+  [RouteId.GetKnowledgeBases]: { knowledgeSource: ["read"] },
+  [RouteId.CreateKnowledgeBase]: { knowledgeSource: ["create"] },
+  [RouteId.GetKnowledgeBase]: { knowledgeSource: ["read"] },
+  [RouteId.UpdateKnowledgeBase]: { knowledgeSource: ["update"] },
+  [RouteId.DeleteKnowledgeBase]: { knowledgeSource: ["delete"] },
+  [RouteId.GetKnowledgeBaseHealth]: { knowledgeSource: ["read"] },
 
   // Knowledge Base Connector Routes
-  [RouteId.GetConnectors]: { knowledgeBase: ["read"] },
-  [RouteId.CreateConnector]: { knowledgeBase: ["create"] },
-  [RouteId.GetConnector]: { knowledgeBase: ["read"] },
-  [RouteId.UpdateConnector]: { knowledgeBase: ["update"] },
-  [RouteId.DeleteConnector]: { knowledgeBase: ["delete"] },
-  [RouteId.SyncConnector]: { knowledgeBase: ["update"] },
-  [RouteId.ForceResyncConnector]: { knowledgeBase: ["update"] },
-  [RouteId.TestConnectorConnection]: { knowledgeBase: ["read"] },
+  [RouteId.GetConnectors]: { knowledgeSource: ["read"] },
+  [RouteId.CreateConnector]: { knowledgeSource: ["create"] },
+  [RouteId.GetConnector]: { knowledgeSource: ["read"] },
+  [RouteId.UpdateConnector]: { knowledgeSource: ["update"] },
+  [RouteId.DeleteConnector]: { knowledgeSource: ["delete"] },
+  [RouteId.SyncConnector]: { knowledgeSource: ["update"] },
+  [RouteId.ForceResyncConnector]: { knowledgeSource: ["update"] },
+  [RouteId.TestConnectorConnection]: { knowledgeSource: ["read"] },
 
   // Connector Knowledge Base Assignment Routes
-  [RouteId.AssignConnectorToKnowledgeBases]: { knowledgeBase: ["update"] },
-  [RouteId.UnassignConnectorFromKnowledgeBase]: { knowledgeBase: ["update"] },
-  [RouteId.GetConnectorKnowledgeBases]: { knowledgeBase: ["read"] },
+  [RouteId.AssignConnectorToKnowledgeBases]: { knowledgeSource: ["update"] },
+  [RouteId.UnassignConnectorFromKnowledgeBase]: {
+    knowledgeSource: ["update"],
+  },
+  [RouteId.GetConnectorKnowledgeBases]: { knowledgeSource: ["read"] },
 
   // Connector Run Routes
-  [RouteId.GetConnectorRuns]: { knowledgeBase: ["read"] },
-  [RouteId.GetConnectorRun]: { knowledgeBase: ["read"] },
+  [RouteId.GetConnectorRuns]: { knowledgeSource: ["read"] },
+  [RouteId.GetConnectorRun]: { knowledgeSource: ["read"] },
 
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},
@@ -1003,8 +1007,8 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/mcp/logs": { log: ["read"] },
 
   // Knowledge
-  "/knowledge/knowledge-bases": { knowledgeBase: ["read"] },
-  "/knowledge/connectors": { knowledgeBase: ["read"] },
+  "/knowledge/knowledge-bases": { knowledgeSource: ["read"] },
+  "/knowledge/connectors": { knowledgeSource: ["read"] },
 
   // Settings
   "/settings/account": {},

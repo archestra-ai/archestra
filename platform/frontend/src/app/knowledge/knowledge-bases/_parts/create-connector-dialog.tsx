@@ -3,11 +3,14 @@
 import {
   type archestraApiTypes,
   CONNECTOR_TYPE_LABELS,
+  DocsPage,
   getConnectorNamePlaceholder,
 } from "@shared";
 import { ArrowLeft, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
+import { KnowledgeSourceVisibilitySelector } from "@/app/knowledge/_parts/knowledge-source-visibility-selector";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -35,6 +38,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useCreateConnector } from "@/lib/knowledge/connector.query";
 import { ConfluenceConfigFields } from "./confluence-config-fields";
 import { ConnectorTypeIcon } from "./connector-icons";
@@ -44,6 +48,7 @@ import { JiraConfigFields } from "./jira-config-fields";
 import { NotionConfigFields } from "./notion-config-fields";
 import { SchedulePicker } from "./schedule-picker";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
+import { SharePointConfigFields } from "./sharepoint-config-fields";
 import { transformConfigArrayFields } from "./transform-config-array-fields";
 
 type ConnectorType =
@@ -84,6 +89,11 @@ const CONNECTOR_OPTIONS: {
     label: CONNECTOR_TYPE_LABELS.notion,
     description: "Sync pages and databases from Notion",
   },
+  {
+    type: "sharepoint",
+    label: CONNECTOR_TYPE_LABELS.sharepoint,
+    description: "Sync documents and pages from SharePoint",
+  },
 ];
 
 interface CreateConnectorFormValues {
@@ -95,6 +105,10 @@ interface CreateConnectorFormValues {
   apiToken: string;
   schedule: string;
 }
+
+type ConnectorVisibility = NonNullable<
+  archestraApiTypes.CreateConnectorData["body"]["visibility"]
+>;
 
 export function CreateConnectorDialog({
   knowledgeBaseId,
@@ -110,6 +124,8 @@ export function CreateConnectorDialog({
   const createConnector = useCreateConnector();
   const [step, setStep] = useState<"select" | "configure">("select");
   const [selectedType, setSelectedType] = useState<ConnectorType | null>(null);
+  const [visibility, setVisibility] = useState<ConnectorVisibility>("org-wide");
+  const [teamIds, setTeamIds] = useState<string[]>([]);
 
   const form = useForm<CreateConnectorFormValues>({
     defaultValues: {
@@ -135,6 +151,7 @@ export function CreateConnectorDialog({
       gitlab: { type, gitlabUrl: "https://gitlab.com" },
       servicenow: { type, syncDataForLastMonths: 6 },
       notion: { type },
+      sharepoint: { type, includePages: true },
     };
     form.setValue("config", defaultConfigs[type]);
     setStep("configure");
@@ -156,6 +173,8 @@ export function CreateConnectorDialog({
     const result = await createConnector.mutateAsync({
       name: values.name,
       description: values.description || null,
+      visibility,
+      teamIds: visibility === "team-scoped" ? teamIds : [],
       connectorType: values.connectorType,
       config: config as archestraApiTypes.CreateConnectorData["body"]["config"],
       credentials: {
@@ -169,6 +188,8 @@ export function CreateConnectorDialog({
       form.reset();
       setStep("select");
       setSelectedType(null);
+      setVisibility("org-wide");
+      setTeamIds([]);
       onOpenChange(false);
     }
   };
@@ -178,6 +199,8 @@ export function CreateConnectorDialog({
       form.reset();
       setStep("select");
       setSelectedType(null);
+      setVisibility("org-wide");
+      setTeamIds([]);
     }
     onOpenChange(isOpen);
   };
@@ -186,6 +209,9 @@ export function CreateConnectorDialog({
   const isCloud = form.watch("config.isCloud") as boolean | undefined;
   const needsEmail = connectorType === "jira" || connectorType === "confluence";
   const emailRequired = needsEmail && isCloud !== false;
+  const connectorDocsUrl = selectedType
+    ? getConnectorDocsUrl(selectedType)
+    : null;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -265,7 +291,14 @@ export function CreateConnectorDialog({
                     CONNECTOR_OPTIONS.find((o) => o.type === selectedType)
                       ?.label
                   }{" "}
-                  instance.
+                  instance.{" "}
+                  <ExternalDocsLink
+                    href={connectorDocsUrl}
+                    className="underline"
+                    showIcon={false}
+                  >
+                    Learn more
+                  </ExternalDocsLink>
                 </DialogDescription>
               </DialogHeader>
 
@@ -312,6 +345,14 @@ export function CreateConnectorDialog({
                       <FormMessage />
                     </FormItem>
                   )}
+                />
+
+                <KnowledgeSourceVisibilitySelector
+                  visibility={visibility}
+                  onVisibilityChange={setVisibility}
+                  teamIds={teamIds}
+                  onTeamIdsChange={setTeamIds}
+                  showTeamRequired
                 />
 
                 {urlConfig && (
@@ -447,6 +488,53 @@ export function CreateConnectorDialog({
                   />
                 )}
 
+                {connectorType === "sharepoint" && (
+                  <FormField
+                    control={form.control}
+                    name="config.tenantId"
+                    rules={{ required: "Tenant ID is required" }}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Tenant ID</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                            {...field}
+                            value={(field.value as string) ?? ""}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Your Azure AD (Entra ID) tenant ID or domain.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+
+                {connectorType === "sharepoint" && (
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    rules={{ required: "Client ID is required" }}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Client ID</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Azure AD app registration Client ID.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+
                 <FormField
                   control={form.control}
                   name="apiToken"
@@ -459,7 +547,9 @@ export function CreateConnectorDialog({
                         ? "Password is required"
                         : connectorType === "notion"
                           ? "Integration token is required"
-                          : "Personal access token is required",
+                          : connectorType === "sharepoint"
+                            ? "Client secret is required"
+                            : "Personal access token is required",
                   }}
                   render={({ field }) => (
                     <FormItem>
@@ -468,11 +558,13 @@ export function CreateConnectorDialog({
                           ? "Password"
                           : connectorType === "notion"
                             ? "Integration Token"
-                            : needsEmail
-                              ? emailRequired
-                                ? "API Token"
-                                : "API Token / Personal Access Token"
-                              : "Personal Access Token"}
+                            : connectorType === "sharepoint"
+                              ? "Client Secret"
+                              : needsEmail
+                                ? emailRequired
+                                  ? "API Token"
+                                  : "API Token / Personal Access Token"
+                                : "Personal Access Token"}
                       </FormLabel>
                       <FormControl>
                         <Input
@@ -482,11 +574,13 @@ export function CreateConnectorDialog({
                               ? "Your ServiceNow password"
                               : connectorType === "notion"
                                 ? "secret_..."
-                                : needsEmail
-                                  ? emailRequired
-                                    ? "Your API token"
-                                    : "Your API token or personal access token"
-                                  : "Your personal access token"
+                                : connectorType === "sharepoint"
+                                  ? "Your Azure AD client secret"
+                                  : needsEmail
+                                    ? emailRequired
+                                      ? "Your API token"
+                                      : "Your API token or personal access token"
+                                    : "Your personal access token"
                           }
                           {...field}
                         />
@@ -496,6 +590,13 @@ export function CreateConnectorDialog({
                           Your Notion integration token (starts with{" "}
                           <code>secret_</code>). Create one at
                           notion.so/my-integrations.
+                        </p>
+                      )}
+                      {connectorType === "sharepoint" && (
+                        <p className="text-[0.8rem] text-muted-foreground">
+                          The Azure AD app registration requires the{" "}
+                          <code>Sites.Read.All</code> permission on Microsoft
+                          Graph.
                         </p>
                       )}
                       <FormMessage />
@@ -527,6 +628,9 @@ export function CreateConnectorDialog({
                     )}
                     {connectorType === "notion" && (
                       <NotionConfigFields form={form} />
+                    )}
+                    {connectorType === "sharepoint" && (
+                      <SharePointConfigFields form={form} />
                     )}
                   </CollapsibleContent>
                 </Collapsible>
@@ -595,5 +699,16 @@ function getUrlConfig(type: ConnectorType): {
       };
     case "notion":
       return null;
+    case "sharepoint":
+      return {
+        fieldName: "config.siteUrl",
+        label: "Site URL",
+        placeholder: "https://your-tenant.sharepoint.com/sites/your-site",
+        description: "Your SharePoint site URL.",
+      };
   }
+}
+
+function getConnectorDocsUrl(type: ConnectorType): string | null {
+  return getFrontendDocsUrl(DocsPage.PlatformKnowledgeConnectors, type);
 }

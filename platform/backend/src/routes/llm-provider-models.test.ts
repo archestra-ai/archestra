@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import { isVertexAiEnabled } from "@/clients/gemini-client";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
@@ -6,9 +7,24 @@ import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { modelSyncService } from "@/services/model-sync";
+import { systemKeyManager } from "@/services/system-key-manager";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import { syncModelsForVisibleApiKeys } from "./llm-provider-models";
+
+vi.mock("@/clients/gemini-client", () => ({
+  isVertexAiEnabled: vi.fn(() => false),
+}));
+
+vi.mock("@/clients/bedrock-credentials", () => ({
+  isBedrockIamAuthEnabled: vi.fn(() => false),
+}));
+
+vi.mock("@/services/system-key-manager", () => ({
+  systemKeyManager: {
+    syncSystemKeys: vi.fn(),
+  },
+}));
 
 vi.mock("@/clients/models-dev-client", async (importOriginal) => {
   const actual =
@@ -33,6 +49,8 @@ vi.mock("@/secrets-manager", async (importOriginal) => {
 const mockGetSecretValueForLlmProviderApiKey = vi.mocked(
   getSecretValueForLlmProviderApiKey,
 );
+const mockIsVertexAiEnabled = vi.mocked(isVertexAiEnabled);
+const mockSyncSystemKeys = vi.mocked(systemKeyManager.syncSystemKeys);
 
 describe("chat model routes", () => {
   let app: FastifyInstanceWithZod;
@@ -41,6 +59,7 @@ describe("chat model routes", () => {
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     vi.clearAllMocks();
+    mockIsVertexAiEnabled.mockReturnValue(false);
 
     const organization = await makeOrganization();
     organizationId = organization.id;
@@ -291,6 +310,28 @@ describe("chat model routes", () => {
     });
 
     expect(availableKeysSpy).toHaveBeenCalled();
+    expect(syncSpy).not.toHaveBeenCalled();
+  });
+
+  test("syncModelsForVisibleApiKeys delegates Vertex AI system keys to system key sync", async () => {
+    mockIsVertexAiEnabled.mockReturnValue(true);
+
+    const syncSpy = vi
+      .spyOn(modelSyncService, "syncModelsForApiKey")
+      .mockResolvedValue(1);
+
+    await LlmProviderApiKeyModel.createSystemKey({
+      organizationId,
+      name: "Vertex AI",
+      provider: "gemini",
+    });
+
+    await syncModelsForVisibleApiKeys({
+      organizationId,
+      userId: user.id,
+    });
+
+    expect(mockSyncSystemKeys).toHaveBeenCalledWith(organizationId);
     expect(syncSpy).not.toHaveBeenCalled();
   });
 });

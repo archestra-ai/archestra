@@ -1,5 +1,46 @@
 # Changelog
 
+## [1.2.5](https://github.com/archestra-ai/archestra/compare/platform-v1.2.4...platform-v1.2.5) (2026-04-08)
+
+
+### Features
+
+* add allowlist of headers to mcp-gw ([#3658](https://github.com/archestra-ai/archestra/issues/3658)) ([459c53b](https://github.com/archestra-ai/archestra/commit/459c53b6a2b94744ca1404dbacb0b433783e7efb))
+* add Microsoft SharePoint knowledge connector ([#3656](https://github.com/archestra-ai/archestra/issues/3656)) ([5b2174d](https://github.com/archestra-ai/archestra/commit/5b2174dd30041aab717e13a54ada79d0d7fc2cd8))
+* support Azure Responses API flows ([#3666](https://github.com/archestra-ai/archestra/issues/3666)) ([e9e3982](https://github.com/archestra-ai/archestra/commit/e9e39829fab6a417a40a61f2f1724f6b05385df8))
+
+
+### Bug Fixes
+
+* disable default optimisation rules ([#3637](https://github.com/archestra-ai/archestra/issues/3637)) ([3264c69](https://github.com/archestra-ai/archestra/commit/3264c692a3acae68f254491dab74ff6c3bc9ea6a))
+
+
+### Dependencies
+
+* bump lodash-es from 4.17.23 to 4.18.1 in /platform ([#3638](https://github.com/archestra-ai/archestra/issues/3638)) ([714daec](https://github.com/archestra-ai/archestra/commit/714daec443b9fe8f59a1868b79e7ca427126e988))
+
+## [1.2.4](https://github.com/archestra-ai/archestra/compare/platform-v1.2.3...platform-v1.2.4) (2026-04-07)
+
+
+### Features
+
+* add Azure AI Foundry (Azure OpenAI) as LLM provider ([#3659](https://github.com/archestra-ai/archestra/issues/3659)) ([6a0b207](https://github.com/archestra-ai/archestra/commit/6a0b207ae62a9e6e65d14111d5a92e77c32ed8ba))
+* add connector-level knowledge source ACLs ([#3416](https://github.com/archestra-ai/archestra/issues/3416)) ([6039794](https://github.com/archestra-ai/archestra/commit/60397949df985816db87d75339d8a596ddeb6527))
+* prefer upstream credentials over JWT propagation for JWKS auth ([#3061](https://github.com/archestra-ai/archestra/issues/3061)) ([68ef87a](https://github.com/archestra-ai/archestra/commit/68ef87a624d057aba4c7a2cb54c6c6691a8d91cb))
+
+
+### Documentation
+
+* add platform overview page ([#3625](https://github.com/archestra-ai/archestra/issues/3625)) ([9b914e3](https://github.com/archestra-ai/archestra/commit/9b914e389bb3567809fccab6fbe881c0d3ea990a))
+
+
+### Miscellaneous Chores
+
+* add MCP session TTL cleanup and fix app metrics pod aggregation ([#3647](https://github.com/archestra-ai/archestra/issues/3647)) ([d1abfd9](https://github.com/archestra-ai/archestra/commit/d1abfd9194d1c6b023ab0e3f326e15aca5c62e63))
+* fix oauth consent and mcp auth guidance ([#3654](https://github.com/archestra-ai/archestra/issues/3654)) ([5f4f210](https://github.com/archestra-ai/archestra/commit/5f4f210a9d310eb927c347909b9cbb45253b2ef5))
+* increase `minimum-release-age` to 7 days ([#3642](https://github.com/archestra-ai/archestra/issues/3642)) ([655dcb2](https://github.com/archestra-ai/archestra/commit/655dcb21f1f7dc8bd85d435cb33071c1e76cf6bf))
+* mcp gateway slug ([#3652](https://github.com/archestra-ai/archestra/issues/3652)) ([53f375f](https://github.com/archestra-ai/archestra/commit/53f375f24da27594337dbf2d5903703ba636a247))
+
 ## [1.2.3](https://github.com/archestra-ai/archestra/compare/platform-v1.2.2...platform-v1.2.3) (2026-04-03)
 
 

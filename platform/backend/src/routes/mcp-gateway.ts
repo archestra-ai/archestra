@@ -9,12 +9,13 @@ import { z } from "zod";
 
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
-import { McpToolCallModel } from "@/models";
-import { UuidIdSchema } from "@/types";
+import { AgentModel, McpToolCallModel } from "@/models";
+import { UuidOrSlugSchema } from "@/types";
 import {
   createAgentServer,
   createStatelessTransport,
   deriveAuthMethod,
+  extractPassthroughHeaders,
   extractProfileIdAndTokenFromRequest,
   validateMCPGatewayToken,
 } from "./mcp-gateway.utils";
@@ -160,7 +161,7 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: "mcpGatewayGet",
         tags: ["MCP Gateway"],
         params: z.object({
-          profileId: UuidIdSchema,
+          profileId: UuidOrSlugSchema,
         }),
         response: {
           200: z.object({
@@ -190,7 +191,7 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { profileId, token } =
-        extractProfileIdAndTokenFromRequest(request) ?? {};
+        (await extractProfileIdAndTokenFromRequest(request)) ?? {};
 
       if (!profileId || !token) {
         setWWWAuthenticateHeader(request, reply);
@@ -235,14 +236,14 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: "mcpGatewayPost",
         tags: ["MCP Gateway"],
         params: z.object({
-          profileId: UuidIdSchema,
+          profileId: UuidOrSlugSchema,
         }),
         body: z.record(z.string(), z.unknown()),
       },
     },
     async (request, reply) => {
       const { profileId, token } =
-        extractProfileIdAndTokenFromRequest(request) ?? {};
+        (await extractProfileIdAndTokenFromRequest(request)) ?? {};
 
       if (!profileId || !token) {
         setWWWAuthenticateHeader(request, reply);
@@ -282,6 +283,22 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...(tokenAuth.isExternalIdp && { isExternalIdp: true }),
         ...(tokenAuth.rawToken && { rawToken: tokenAuth.rawToken }),
       };
+
+      // Extract passthrough headers from the incoming request per the agent's allowlist
+      const agent = await AgentModel.findById(profileId);
+      if (agent) {
+        const passthroughHeaders = extractPassthroughHeaders(
+          agent.passthroughHeaders,
+          request.headers,
+        );
+        if (passthroughHeaders) {
+          tokenAuthContext.passthroughHeaders = passthroughHeaders;
+          fastify.log.info(
+            { profileId, passthroughHeaders: Object.keys(passthroughHeaders) },
+            "Passthrough headers forwarded to MCP servers",
+          );
+        }
+      }
 
       return handleMcpPostRequest(
         fastify,

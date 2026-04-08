@@ -1,7 +1,13 @@
-import { KnowledgeBaseConnectorModel, KnowledgeBaseModel } from "@/models";
+import { knowledgeSourceAccessControlService } from "@/knowledge-base";
+import {
+  KbChunkModel,
+  KbDocumentModel,
+  KnowledgeBaseConnectorModel,
+  KnowledgeBaseModel,
+} from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import type { User } from "@/types";
 
 describe("knowledge base routes", () => {
@@ -397,6 +403,36 @@ describe("knowledge base routes", () => {
     });
   });
 
+  describe("POST /api/connectors", () => {
+    test("rejects team-scoped connectors without teamIds", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/connectors",
+        payload: {
+          name: "Invalid Scoped Connector",
+          connectorType: "jira",
+          visibility: "team-scoped",
+          teamIds: [],
+          config: {
+            type: "jira",
+            jiraBaseUrl: "https://test.atlassian.net",
+            isCloud: true,
+            projectKey: "TEST",
+          },
+          credentials: {
+            email: "user@example.com",
+            apiToken: "token",
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain(
+        "At least one team must be selected for team-scoped connectors",
+      );
+    });
+  });
+
   describe("GET /api/connectors", () => {
     test("lists connectors for the organization", async () => {
       await KnowledgeBaseConnectorModel.create({
@@ -543,6 +579,72 @@ describe("knowledge base routes", () => {
       expect(getResponse.json().name).toBe("Persisted Name");
     });
 
+    test("does not refresh ACLs when visibility inputs are unchanged", async () => {
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "No ACL Refresh Connector",
+        connectorType: "jira",
+        visibility: "org-wide",
+        teamIds: [],
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://test.atlassian.net",
+          isCloud: true,
+          projectKey: "TEST",
+        },
+      });
+
+      const refreshSpy = vi.spyOn(
+        knowledgeSourceAccessControlService,
+        "refreshConnectorDocumentAccessControlLists",
+      );
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: {
+          visibility: "org-wide",
+          teamIds: [],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(refreshSpy).not.toHaveBeenCalled();
+    });
+
+    test("refreshes ACLs when visibility inputs change", async () => {
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Refresh ACL Connector",
+        connectorType: "jira",
+        visibility: "org-wide",
+        teamIds: [],
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://test.atlassian.net",
+          isCloud: true,
+          projectKey: "TEST",
+        },
+      });
+
+      const refreshSpy = vi.spyOn(
+        knowledgeSourceAccessControlService,
+        "refreshConnectorDocumentAccessControlLists",
+      );
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: {
+          visibility: "team-scoped",
+          teamIds: [crypto.randomUUID()],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(refreshSpy).toHaveBeenCalledWith(connector.id);
+    });
+
     test("returns 404 for non-existent connector", async () => {
       const response = await app.inject({
         method: "PUT",
@@ -551,6 +653,36 @@ describe("knowledge base routes", () => {
       });
 
       expect(response.statusCode).toBe(404);
+    });
+
+    test("rejects team-scoped updates without teamIds", async () => {
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Invalid Update Connector",
+        connectorType: "jira",
+        visibility: "org-wide",
+        teamIds: [],
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://test.atlassian.net",
+          isCloud: true,
+          projectKey: "TEST",
+        },
+      });
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: {
+          visibility: "team-scoped",
+          teamIds: [],
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain(
+        "At least one team must be selected for team-scoped connectors",
+      );
     });
   });
 
@@ -953,21 +1085,21 @@ describe("knowledge base routes", () => {
 // This is the declarative layer that the auth middleware enforces at runtime.
 
 describe("knowledge base permission configuration", () => {
-  test("member permissions only allow read and query for knowledgeBase", async () => {
+  test("member permissions only allow read and query for knowledgeSource", async () => {
     const { memberPermissions } = await import("@shared/access-control");
-    expect(memberPermissions.knowledgeBase).toEqual(["read", "query"]);
-    expect(memberPermissions.knowledgeBase).not.toContain("create");
-    expect(memberPermissions.knowledgeBase).not.toContain("update");
-    expect(memberPermissions.knowledgeBase).not.toContain("delete");
+    expect(memberPermissions.knowledgeSource).toEqual(["read", "query"]);
+    expect(memberPermissions.knowledgeSource).not.toContain("create");
+    expect(memberPermissions.knowledgeSource).not.toContain("update");
+    expect(memberPermissions.knowledgeSource).not.toContain("delete");
   });
 
-  test("admin permissions include full CRUD for knowledgeBase", async () => {
+  test("admin permissions include full CRUD for knowledgeSource", async () => {
     const { adminPermissions } = await import("@shared/access-control");
-    expect(adminPermissions.knowledgeBase).toContain("read");
-    expect(adminPermissions.knowledgeBase).toContain("create");
-    expect(adminPermissions.knowledgeBase).toContain("update");
-    expect(adminPermissions.knowledgeBase).toContain("delete");
-    expect(adminPermissions.knowledgeBase).toContain("query");
+    expect(adminPermissions.knowledgeSource).toContain("read");
+    expect(adminPermissions.knowledgeSource).toContain("create");
+    expect(adminPermissions.knowledgeSource).toContain("update");
+    expect(adminPermissions.knowledgeSource).toContain("delete");
+    expect(adminPermissions.knowledgeSource).toContain("query");
   });
 
   test("knowledge base routes require correct permissions", async () => {
@@ -976,55 +1108,55 @@ describe("knowledge base permission configuration", () => {
     );
     const { RouteId } = await import("@shared");
 
-    // Read routes require knowledgeBase:read
+    // Read routes require knowledgeSource:read
     expect(requiredEndpointPermissionsMap[RouteId.GetKnowledgeBases]).toEqual({
-      knowledgeBase: ["read"],
+      knowledgeSource: ["read"],
     });
     expect(requiredEndpointPermissionsMap[RouteId.GetKnowledgeBase]).toEqual({
-      knowledgeBase: ["read"],
+      knowledgeSource: ["read"],
     });
     expect(
       requiredEndpointPermissionsMap[RouteId.GetKnowledgeBaseHealth],
-    ).toEqual({ knowledgeBase: ["read"] });
+    ).toEqual({ knowledgeSource: ["read"] });
 
-    // Create route requires knowledgeBase:create
+    // Create route requires knowledgeSource:create
     expect(requiredEndpointPermissionsMap[RouteId.CreateKnowledgeBase]).toEqual(
-      { knowledgeBase: ["create"] },
+      { knowledgeSource: ["create"] },
     );
 
-    // Update route requires knowledgeBase:update
+    // Update route requires knowledgeSource:update
     expect(requiredEndpointPermissionsMap[RouteId.UpdateKnowledgeBase]).toEqual(
-      { knowledgeBase: ["update"] },
+      { knowledgeSource: ["update"] },
     );
 
-    // Delete route requires knowledgeBase:delete
+    // Delete route requires knowledgeSource:delete
     expect(requiredEndpointPermissionsMap[RouteId.DeleteKnowledgeBase]).toEqual(
-      { knowledgeBase: ["delete"] },
+      { knowledgeSource: ["delete"] },
     );
 
-    // Connector read routes require knowledgeBase:read
+    // Connector read routes require knowledgeSource:read
     expect(requiredEndpointPermissionsMap[RouteId.GetConnectors]).toEqual({
-      knowledgeBase: ["read"],
+      knowledgeSource: ["read"],
     });
     expect(requiredEndpointPermissionsMap[RouteId.GetConnector]).toEqual({
-      knowledgeBase: ["read"],
+      knowledgeSource: ["read"],
     });
     expect(requiredEndpointPermissionsMap[RouteId.GetConnectorRuns]).toEqual({
-      knowledgeBase: ["read"],
+      knowledgeSource: ["read"],
     });
     expect(requiredEndpointPermissionsMap[RouteId.GetConnectorRun]).toEqual({
-      knowledgeBase: ["read"],
+      knowledgeSource: ["read"],
     });
 
-    // Connector write routes require knowledgeBase:create/update/delete
+    // Connector write routes require knowledgeSource:create/update/delete
     expect(requiredEndpointPermissionsMap[RouteId.CreateConnector]).toEqual({
-      knowledgeBase: ["create"],
+      knowledgeSource: ["create"],
     });
     expect(requiredEndpointPermissionsMap[RouteId.UpdateConnector]).toEqual({
-      knowledgeBase: ["update"],
+      knowledgeSource: ["update"],
     });
     expect(requiredEndpointPermissionsMap[RouteId.DeleteConnector]).toEqual({
-      knowledgeBase: ["delete"],
+      knowledgeSource: ["delete"],
     });
   });
 
@@ -1034,7 +1166,7 @@ describe("knowledge base permission configuration", () => {
     );
     const { RouteId } = await import("@shared");
 
-    const memberKbActions = memberPermissions.knowledgeBase;
+    const memberKbActions = memberPermissions.knowledgeSource;
 
     // Verify member lacks permissions for write routes
     const writeRoutes = [
@@ -1048,8 +1180,8 @@ describe("knowledge base permission configuration", () => {
 
     for (const routeId of writeRoutes) {
       const required = requiredEndpointPermissionsMap[routeId];
-      expect(required?.knowledgeBase).toBeDefined();
-      const requiredActions = required?.knowledgeBase ?? [];
+      expect(required?.knowledgeSource).toBeDefined();
+      const requiredActions = required?.knowledgeSource ?? [];
       const hasAll = requiredActions.every((action: string) =>
         memberKbActions.includes(action as never),
       );
@@ -1069,12 +1201,251 @@ describe("knowledge base permission configuration", () => {
 
     for (const routeId of readRoutes) {
       const required = requiredEndpointPermissionsMap[routeId];
-      expect(required?.knowledgeBase).toBeDefined();
-      const requiredActions = required?.knowledgeBase ?? [];
+      expect(required?.knowledgeSource).toBeDefined();
+      const requiredActions = required?.knowledgeSource ?? [];
       const hasAll = requiredActions.every((action: string) =>
         memberKbActions.includes(action as never),
       );
       expect(hasAll).toBe(true);
     }
+  });
+
+  describe("knowledge source visibility", () => {
+    let app: FastifyInstanceWithZod;
+    let user: User;
+    let organizationId: string;
+
+    beforeEach(async ({ makeOrganization, makeUser }) => {
+      user = await makeUser();
+      const organization = await makeOrganization();
+      organizationId = organization.id;
+
+      app = createFastifyInstance();
+      app.addHook("onRequest", async (request) => {
+        (request as typeof request & { user: unknown }).user = user;
+        (
+          request as typeof request & {
+            organizationId: string;
+          }
+        ).organizationId = organizationId;
+      });
+
+      const { default: knowledgeBaseRoutes } = await import("./knowledge-base");
+      await app.register(knowledgeBaseRoutes);
+    });
+
+    afterEach(async () => {
+      await app.close();
+    });
+
+    test("GET /api/knowledge-bases returns all knowledge bases and filters nested connectors by visibility", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeTeam,
+      makeUser,
+    }) => {
+      const hiddenOwner = await makeUser();
+      const hiddenTeam = await makeTeam(organizationId, hiddenOwner.id, {
+        name: "Hidden Team",
+      });
+
+      const orgWideKb = await makeKnowledgeBase(organizationId, {
+        name: "Org Wide KB",
+      });
+      const visibleTeamKb = await makeKnowledgeBase(organizationId, {
+        name: "Visible Team KB",
+      });
+      const hiddenTeamKb = await makeKnowledgeBase(organizationId, {
+        name: "Hidden Team KB",
+      });
+      const kbWithHiddenConnector = await makeKnowledgeBase(organizationId, {
+        name: "KB With Hidden Connector",
+      });
+
+      const visibleConnector = await makeKnowledgeBaseConnector(
+        orgWideKb.id,
+        organizationId,
+        {
+          name: "Visible Connector",
+          connectorType: "jira",
+        },
+      );
+      await makeKnowledgeBaseConnector(visibleTeamKb.id, organizationId, {
+        name: "Visible Team Connector",
+        connectorType: "confluence",
+      });
+      await makeKnowledgeBaseConnector(hiddenTeamKb.id, organizationId, {
+        name: "Hidden Team Connector",
+        connectorType: "github",
+      });
+      await makeKnowledgeBaseConnector(
+        kbWithHiddenConnector.id,
+        organizationId,
+        {
+          name: "Hidden Connector On Visible KB",
+          visibility: "team-scoped",
+          teamIds: [hiddenTeam.id],
+          connectorType: "gitlab",
+        },
+      );
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/knowledge-bases?limit=20&offset=0",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as {
+        data: Array<{
+          name: string;
+          connectors: Array<{
+            id: string;
+            name: string;
+            connectorType: string;
+          }>;
+        }>;
+        pagination: { total: number };
+      };
+
+      expect(body.pagination.total).toBe(4);
+      expect(body.data.map((kb) => kb.name).sort()).toEqual([
+        "Hidden Team KB",
+        "KB With Hidden Connector",
+        "Org Wide KB",
+        "Visible Team KB",
+      ]);
+      expect(
+        body.data.find((kb) => kb.name === "Org Wide KB")?.connectors,
+      ).toEqual([
+        {
+          id: visibleConnector.id,
+          name: "Visible Connector",
+          connectorType: "jira",
+        },
+      ]);
+      expect(
+        body.data.find((kb) => kb.name === "KB With Hidden Connector")
+          ?.connectors,
+      ).toEqual([]);
+    });
+
+    test("GET /api/connectors filters hidden connectors from results", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeTeam,
+      makeUser,
+    }) => {
+      const hiddenOwner = await makeUser();
+      const hiddenTeam = await makeTeam(organizationId, hiddenOwner.id);
+      const kb = await makeKnowledgeBase(organizationId, { name: "Search KB" });
+
+      const visibleConnector = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+        {
+          name: "Visible Connector",
+        },
+      );
+      await makeKnowledgeBaseConnector(kb.id, organizationId, {
+        name: "Hidden Connector",
+        visibility: "team-scoped",
+        teamIds: [hiddenTeam.id],
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/connectors?limit=20&offset=0",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as {
+        data: Array<{ id: string; name: string }>;
+        pagination: { total: number };
+      };
+
+      expect(body.pagination.total).toBe(1);
+      expect(body.data).toEqual([
+        expect.objectContaining({
+          id: visibleConnector.id,
+          name: "Visible Connector",
+        }),
+      ]);
+    });
+
+    test("GET /api/connectors/:id returns 404 for hidden team-scoped connector", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeTeam,
+      makeUser,
+    }) => {
+      const hiddenOwner = await makeUser();
+      const hiddenTeam = await makeTeam(organizationId, hiddenOwner.id);
+      const kb = await makeKnowledgeBase(organizationId);
+      const hiddenConnector = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+        {
+          visibility: "team-scoped",
+          teamIds: [hiddenTeam.id],
+        },
+      );
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${hiddenConnector.id}`,
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toEqual({
+        error: {
+          message: "Connector not found",
+          type: "api_not_found_error",
+        },
+      });
+    });
+
+    test("PUT /api/connectors/:id refreshes document and chunk ACL when visibility changes", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeTeam,
+    }) => {
+      const kb = await makeKnowledgeBase(organizationId);
+      const connector = await makeKnowledgeBaseConnector(kb.id, organizationId);
+      const team = await makeTeam(organizationId, user.id, {
+        name: "Scoped Team",
+      });
+      const document = await KbDocumentModel.create({
+        organizationId,
+        sourceId: "ext-1",
+        connectorId: connector.id,
+        title: "Doc 1",
+        content: "content",
+        contentHash: "hash-1",
+        acl: ["org:*"],
+      });
+      await KbChunkModel.insertMany([
+        {
+          documentId: document.id,
+          content: "chunk 1",
+          chunkIndex: 0,
+          acl: ["org:*"],
+        },
+      ]);
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: {
+          visibility: "team-scoped",
+          teamIds: [team.id],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const refreshedDocument = await KbDocumentModel.findById(document.id);
+      const refreshedChunks = await KbChunkModel.findByDocument(document.id);
+      expect(refreshedDocument?.acl).toEqual([`team:${team.id}`]);
+      expect(refreshedChunks[0]?.acl).toEqual([`team:${team.id}`]);
+    });
   });
 });

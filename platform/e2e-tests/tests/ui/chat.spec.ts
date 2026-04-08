@@ -167,6 +167,13 @@ const minimaxConfig: ChatProviderTestConfig = {
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
 };
 
+const azureConfig: ChatProviderTestConfig = {
+  providerName: "azure",
+  providerDisplayName: "Azure AI Foundry",
+  wiremockStubId: "chat-ui-e2e-test",
+  expectedResponse: "This is a mocked Azure AI Foundry response.",
+};
+
 const testConfigs: ChatProviderTestConfig[] = [
   anthropicConfig,
   openaiConfig,
@@ -183,6 +190,7 @@ const testConfigs: ChatProviderTestConfig[] = [
   zhipuaiConfig,
   deepseekConfig,
   minimaxConfig,
+  azureConfig,
 ];
 
 // =============================================================================

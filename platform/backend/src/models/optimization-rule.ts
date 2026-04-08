@@ -263,7 +263,7 @@ class OptimizationRuleModel {
             conditions: [{ maxLength: 1000 }],
             provider: "openai",
             targetModel: "gpt-5-mini",
-            enabled: true,
+            enabled: false,
           },
         ],
         anthropic: [
@@ -274,7 +274,7 @@ class OptimizationRuleModel {
             conditions: [{ maxLength: 1000 }],
             provider: "anthropic",
             targetModel: "claude-haiku-4-5",
-            enabled: true,
+            enabled: false,
           },
         ],
         gemini: [],
@@ -291,6 +291,7 @@ class OptimizationRuleModel {
         deepseek: [],
         bedrock: [], // Bedrock optimization rules are deployment-specific, no defaults
         minimax: [],
+        azure: [], // Azure optimization rules are deployment-specific, no defaults
       };
 
     // Filter by provider if specified, otherwise get providers from interactions

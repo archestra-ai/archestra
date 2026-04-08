@@ -16,7 +16,7 @@ const UUID_REGEX =
  */
 export function createProxyPreHandler(params: {
   apiPrefix: string;
-  endpointSuffix: string;
+  endpointSuffix: string | string[];
   upstream: string;
   providerName: string;
   rewritePrefix?: string;
@@ -37,7 +37,15 @@ export function createProxyPreHandler(params: {
     next: HookHandlerDoneFunction,
   ) => {
     const urlPath = request.url.split("?")[0];
-    if (request.method === "POST" && urlPath.endsWith(endpointSuffix)) {
+    const endpointSuffixes = Array.isArray(endpointSuffix)
+      ? endpointSuffix
+      : [endpointSuffix];
+
+    const matchedSuffix = endpointSuffixes.find((suffix) =>
+      urlPath.endsWith(suffix),
+    );
+
+    if (request.method === "POST" && matchedSuffix) {
       logger.info(
         {
           method: request.method,
@@ -45,7 +53,7 @@ export function createProxyPreHandler(params: {
           action: "skip-proxy",
           reason: "handled-by-custom-handler",
         },
-        `${providerName} proxy preHandler: skipping ${endpointSuffix} route`,
+        `${providerName} proxy preHandler: skipping ${matchedSuffix} route`,
       );
       reply.code(400).send(skipErrorResponse);
       return;

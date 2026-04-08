@@ -29,7 +29,6 @@ import {
 export interface BrowserUserContext {
   userId: string;
   organizationId: string;
-  userIsAgentAdmin: boolean;
 }
 
 export interface AvailabilityResult {
@@ -146,7 +145,6 @@ export class BrowserStreamService {
       agentId,
       userContext.userId,
       userContext.organizationId,
-      userContext.userIsAgentAdmin,
     );
 
     const tokenAuth = mcpGwToken

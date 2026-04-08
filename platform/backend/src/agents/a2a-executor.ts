@@ -64,8 +64,6 @@ export interface A2AExecuteParams {
   abortSignal?: AbortSignal;
   /** Optional attachments to include in the message (e.g., images from email, Slack, Teams) */
   attachments?: A2AAttachment[];
-  /** Whether execution should resolve tools/browser access with agent-admin privileges. */
-  userIsAgentAdmin: boolean;
   /** Whether the parent execution context was still trusted at delegation time */
   parentContextIsTrusted?: boolean;
 }
@@ -93,7 +91,6 @@ export async function executeA2AMessage(
     message,
     organizationId,
     userId,
-    userIsAgentAdmin,
     sessionId,
     source,
     parentDelegationChain,
@@ -173,7 +170,6 @@ export async function executeA2AMessage(
       agentName: agent.name,
       agentId: agent.id,
       userId,
-      userIsAgentAdmin,
       organizationId,
       sessionId,
       delegationChain,
@@ -307,7 +303,6 @@ export async function executeA2AMessage(
     await cleanupBrowserTab({
       agentId,
       userId,
-      userIsAgentAdmin,
       organizationId,
       isolationKey,
       isDirectExecutionOutsideConversation,
@@ -418,7 +413,6 @@ export function buildUserContent(
 async function cleanupBrowserTab(params: {
   agentId: string;
   userId: string;
-  userIsAgentAdmin: boolean;
   organizationId: string;
   isolationKey: string;
   isDirectExecutionOutsideConversation: boolean;
@@ -426,7 +420,6 @@ async function cleanupBrowserTab(params: {
   const {
     agentId,
     userId,
-    userIsAgentAdmin,
     organizationId,
     isolationKey,
     isDirectExecutionOutsideConversation,
@@ -442,7 +435,6 @@ async function cleanupBrowserTab(params: {
       await browserStreamFeature.closeTab(agentId, isolationKey, {
         userId,
         organizationId,
-        userIsAgentAdmin,
       });
     }
   } catch (error) {

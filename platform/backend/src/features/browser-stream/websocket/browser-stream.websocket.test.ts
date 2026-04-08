@@ -33,7 +33,7 @@ const service = websocketService as unknown as {
   handleMessage: (message: ClientWebSocketMessage, ws: WS) => Promise<void>;
   clientContexts: Map<
     WS,
-    { userId: string; organizationId: string; userIsAgentAdmin: boolean }
+    { userId: string; organizationId: string }
   >;
   browserStreamContext: {
     clearSubscriptions: () => void;
@@ -81,7 +81,6 @@ describe("websocket browser-stream screenshot handling", () => {
     service.clientContexts.set(ws, {
       userId: user.id,
       organizationId: org.id,
-      userIsAgentAdmin: false,
     });
 
     vi.spyOn(browserStreamFeature, "selectOrCreateTab").mockResolvedValue({
@@ -136,7 +135,6 @@ describe("websocket browser-stream screenshot handling", () => {
     service.clientContexts.set(ws, {
       userId: user.id,
       organizationId: org.id,
-      userIsAgentAdmin: false,
     });
 
     vi.spyOn(browserStreamFeature, "selectOrCreateTab").mockResolvedValue({

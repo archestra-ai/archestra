@@ -302,7 +302,7 @@ describe("chat-mcp-client health check", () => {
         agentId: agent.id,
         userId: user.id,
         organizationId: org.id,
-        userIsAgentAdmin: false,
+  
         conversationId: "conv-1",
       });
 
@@ -356,7 +356,7 @@ describe("chat-mcp-client health check", () => {
       agentId: agent.id,
       userId: user.id,
       organizationId: org.id,
-      userIsAgentAdmin: false,
+
     });
 
     // Ping should have been called on the dead client
@@ -409,7 +409,7 @@ describe("chat-mcp-client health check", () => {
         agentId: agent.id,
         userId: user.id,
         organizationId: org.id,
-        userIsAgentAdmin: false,
+  
       });
 
       await vi.advanceTimersByTimeAsync(5_000);
@@ -690,7 +690,7 @@ describe("chat-mcp-client tool caching", () => {
       agentId: agent.id,
       userId: user.id,
       organizationId: org.id,
-      userIsAgentAdmin: false,
+
     });
     expect(Object.keys(first)).toEqual(["lookup_email"]);
 
@@ -699,7 +699,7 @@ describe("chat-mcp-client tool caching", () => {
       agentId: agent.id,
       userId: user.id,
       organizationId: org.id,
-      userIsAgentAdmin: false,
+
     });
 
     // Check that second call returns the same tool names
@@ -1080,7 +1080,6 @@ describe("fetchToolUiResource", () => {
       agentId: AGENT_ID,
       userId: USER_ID,
       organizationId: ORG_ID,
-      userIsAgentAdmin: false,
       toolName: TOOL_NAME,
       uri: URI,
     });
@@ -1104,7 +1103,6 @@ describe("fetchToolUiResource", () => {
       agentId: AGENT_ID,
       userId: USER_ID,
       organizationId: ORG_ID,
-      userIsAgentAdmin: false,
       toolName: TOOL_NAME,
       uri: URI,
     });
@@ -1122,7 +1120,6 @@ describe("fetchToolUiResource", () => {
       agentId: AGENT_ID,
       userId: USER_ID,
       organizationId: ORG_ID,
-      userIsAgentAdmin: false,
       toolName: TOOL_NAME,
       uri: URI,
     });
@@ -1138,7 +1135,6 @@ describe("fetchToolUiResource", () => {
       agentId: AGENT_ID,
       userId: USER_ID,
       organizationId: ORG_ID,
-      userIsAgentAdmin: false,
       toolName: TOOL_NAME,
       uri: URI,
     });
@@ -1168,7 +1164,6 @@ describe("getChatMcpClient", () => {
       agentId,
       userId,
       organizationId,
-      false,
       undefined,
       "internal-fallback-token",
     );

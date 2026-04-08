@@ -3,7 +3,6 @@ import { SESSION_ID_HEADER } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { executeA2AMessage } from "@/agents/a2a-executor";
-import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import config from "@/config";
 import { AgentModel, UserModel } from "@/models";
 import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
@@ -86,22 +85,6 @@ const A2AJsonRpcResponseSchema = z.object({
     })
     .optional(),
 });
-export async function resolveA2AUserIsAgentAdmin(params: {
-  tokenUserId?: string;
-  userId: string;
-  organizationId: string;
-}): Promise<boolean> {
-  if (!params.tokenUserId || params.userId === "system") {
-    // A2A calls authenticated with team/org tokens previously ran with full
-    // MCP/browser access. Preserve that behavior for non-user tokens.
-    return true;
-  }
-
-  return await hasAnyAgentTypeAdminPermission({
-    userId: params.userId,
-    organizationId: params.organizationId,
-  });
-}
 
 const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const { endpoint } = config.a2aGateway;
@@ -317,12 +300,6 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
           (request.headers[SESSION_ID_HEADER] as string | undefined);
         const sessionId =
           headerSessionId || `a2a-${Date.now()}-${randomUUID()}`;
-        const userIsAgentAdmin = await resolveA2AUserIsAgentAdmin({
-          tokenUserId: tokenAuth.userId,
-          userId,
-          organizationId,
-        });
-
         // Resolve user for span attributes (user is already fetched above for user tokens)
         const a2aUser =
           tokenAuth.userId && userId !== "system"
@@ -346,7 +323,6 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
               message: userMessage,
               organizationId,
               userId,
-              userIsAgentAdmin,
               sessionId,
               parentDelegationChain: undefined, // This is the root call, chain starts with agentId
             });

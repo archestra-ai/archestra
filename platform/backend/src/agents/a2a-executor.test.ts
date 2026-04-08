@@ -400,7 +400,6 @@ describe("executeA2AMessage model selection", () => {
       message: "Handle this",
       organizationId: "org-1",
       userId: "user-1",
-      userIsAgentAdmin: true,
       conversationId: "conv-1",
       parentDelegationChain: "agent-parent",
     });

@@ -144,11 +144,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         conversationId,
       });
 
-      const userIsAgentAdmin = await hasAnyAgentTypeAdminPermission({
-        userId: user.id,
-        organizationId,
-      });
-
       // Get conversation
       const conversation = await ConversationModel.findById({
         id: conversationId,
@@ -195,7 +190,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentName: agent.name,
           agentId,
           userId: user.id,
-          userIsAgentAdmin,
           enabledToolIds: hasCustomSelection ? enabledToolIds : undefined,
           conversationId: conversation.id,
           organizationId,
@@ -469,7 +463,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                             agentId: agentIdForUi,
                             userId: user.id,
                             organizationId,
-                            userIsAgentAdmin,
                             conversationId: conversation.id,
                             toolName,
                             uri,
@@ -881,7 +874,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentId,
         userId: user.id,
         organizationId,
-        userIsAgentAdmin: isAgentAdmin,
         // No conversation context here as this is just fetching available tools
       });
 
@@ -1117,7 +1109,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           await browserStreamFeature.closeTab(conversation.agentId, id, {
             userId: user.id,
             organizationId,
-            userIsAgentAdmin: false,
           });
         } catch (error) {
           logger.warn(

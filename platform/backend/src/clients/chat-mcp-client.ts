@@ -217,14 +217,12 @@ export const __test = {
  *
  * @param agentId - The profile (agent) ID
  * @param userId - The user requesting access
- * @param userIsAgentAdmin - Whether the user has agent:admin permission
  * @returns Token value and metadata, or null if no token available
  */
 export async function selectMCPGatewayToken(
   agentId: string,
   userId: string,
   organizationId: string,
-  userIsAgentAdmin: boolean,
 ): Promise<{
   tokenValue: string;
   tokenId: string;
@@ -270,8 +268,9 @@ export async function selectMCPGatewayToken(
   // Get all team tokens for this organization
   const tokens = await TeamTokenModel.findAll(organizationId);
 
-  // 2. If user is agent admin, use organization token (teamId is null)
-  if (userIsAgentAdmin) {
+  // 2. System user has no team memberships so it can never match a team token.
+  //    Fall back to the organization token to preserve tool access.
+  if (userId === "system") {
     const orgToken = tokens.find((t) => t.isOrganizationToken);
     if (orgToken) {
       const tokenValue = await TeamTokenModel.getTokenValue(orgToken.id);
@@ -446,7 +445,6 @@ export function closeChatMcpClient(
  * @param agentId - The agent (profile) ID
  * @param userId - The user ID for token selection
  * @param organizationId - The organization ID for token creation
- * @param userIsAgentAdmin - Whether the user has agent:admin permission
  * @param conversationId - Optional conversation ID for per-conversation browser isolation
  * @returns MCP Client connected to the gateway, or null if connection fails
  */
@@ -454,7 +452,6 @@ export async function getChatMcpClient(
   agentId: string,
   userId: string,
   organizationId: string,
-  userIsAgentAdmin: boolean,
   conversationId?: string,
   /** Pre-resolved token to avoid a redundant selectMCPGatewayToken call */
   preResolvedTokenValue?: string,
@@ -532,7 +529,6 @@ export async function getChatMcpClient(
       agentId,
       userId,
       organizationId,
-      userIsAgentAdmin,
     );
     if (!tokenResult) {
       logger.error(
@@ -697,7 +693,6 @@ function addAdditionalPropertiesFalse(
  * @param agentId - The agent ID to fetch tools for
  * @param userId - The user ID for authentication
  * @param organizationId - The organization ID for token creation
- * @param userIsAgentAdmin - Whether the user has agent:admin permission
  * @param enabledToolIds - Optional array of tool IDs to filter by. Empty array = all tools enabled.
  * @param conversationId - Optional conversation ID for browser tab selection
  * @returns Record of tool name to AI SDK Tool object
@@ -707,7 +702,6 @@ export async function getChatMcpTools({
   agentId,
   userId,
   organizationId,
-  userIsAgentAdmin,
   enabledToolIds,
   conversationId,
   sessionId,
@@ -720,7 +714,6 @@ export async function getChatMcpTools({
   agentId: string;
   userId: string;
   organizationId: string;
-  userIsAgentAdmin: boolean;
   enabledToolIds?: string[];
   conversationId?: string;
   /** Session ID for grouping related LLM requests in logs */
@@ -771,7 +764,6 @@ export async function getChatMcpTools({
     agentId,
     userId,
     organizationId,
-    userIsAgentAdmin,
   );
   if (!mcpGwToken) {
     logger.warn(
@@ -788,7 +780,6 @@ export async function getChatMcpTools({
     agentId,
     userId,
     organizationId,
-    userIsAgentAdmin,
     conversationId,
     mcpGwToken.tokenValue,
   );
@@ -947,7 +938,6 @@ export async function getChatMcpTools({
                     agentName,
                     userId,
                     organizationId,
-                    userIsAgentAdmin,
                     conversationId,
                     mcpGwToken,
                     globalToolPolicy,
@@ -1005,7 +995,7 @@ export async function getChatMcpTools({
           agentId,
           organizationId,
           userId,
-          skipAccessCheck: userIsAgentAdmin,
+          skipAccessCheck: userId === "system",
         });
 
         // Build the context for agent tool execution
@@ -1265,7 +1255,6 @@ export async function fetchToolUiResource({
   agentId,
   userId,
   organizationId,
-  userIsAgentAdmin,
   conversationId,
   toolName,
   uri,
@@ -1273,7 +1262,6 @@ export async function fetchToolUiResource({
   agentId: string;
   userId: string;
   organizationId: string;
-  userIsAgentAdmin: boolean;
   conversationId?: string;
   toolName: string;
   uri: string;
@@ -1289,7 +1277,6 @@ export async function fetchToolUiResource({
     agentId,
     userId,
     organizationId,
-    userIsAgentAdmin,
     conversationId,
   );
   if (!client) return null;
@@ -1348,7 +1335,6 @@ interface ToolExecutionContext {
   agentName: string;
   userId: string;
   organizationId: string;
-  userIsAgentAdmin: boolean;
   conversationId?: string;
   mcpGwToken: {
     tokenId: string;
@@ -1385,7 +1371,6 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     agentName,
     userId,
     organizationId,
-    userIsAgentAdmin,
     conversationId,
     mcpGwToken,
     abortSignal,
@@ -1411,7 +1396,7 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     const tabResult = await browserStreamFeature.selectOrCreateTab(
       agentId,
       conversationId,
-      { userId, organizationId, userIsAgentAdmin },
+      { userId, organizationId },
     );
 
     if (!tabResult.success) {
@@ -1520,7 +1505,7 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
       await browserStreamFeature.syncUrlFromNavigateToolCall({
         agentId,
         conversationId,
-        userContext: { userId, organizationId, userIsAgentAdmin },
+        userContext: { userId, organizationId },
         toolResultContent: mcpContent,
       });
     }

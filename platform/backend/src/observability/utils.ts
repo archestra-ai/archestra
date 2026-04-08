@@ -27,3 +27,19 @@ export function isNoisyMcpGatewayGetRoute(params: {
     params.method === "GET" && params.url.startsWith(`${MCP_GATEWAY_PREFIX}/`)
   );
 }
+
+export function isNoisyTransactionName(transactionName: string): boolean {
+  return (
+    transactionName.startsWith("GET /health") ||
+    transactionName.startsWith("GET /ready") ||
+    transactionName.startsWith("GET /metrics") ||
+    transactionName.startsWith("GET /.well-known/oauth-") ||
+    isNoisyMcpGatewayTransactionName(transactionName)
+  );
+}
+
+export function isNoisyMcpGatewayTransactionName(
+  transactionName: string,
+): boolean {
+  return transactionName.startsWith("GET /v1/mcp/");
+}

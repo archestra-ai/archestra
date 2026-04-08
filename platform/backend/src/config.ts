@@ -767,7 +767,7 @@ const config = {
         process.env.ARCHESTRA_SENTRY_ENVIRONMENT?.toLowerCase() || environment,
       tracesSampleRate: parseSampleRate(
         process.env.ARCHESTRA_SENTRY_TRACES_SAMPLE_RATE,
-        0.2,
+        0.1,
       ),
       mcpGatewayTracesSampleRate: parseSampleRate(
         process.env.ARCHESTRA_SENTRY_MCP_GATEWAY_TRACES_SAMPLE_RATE,

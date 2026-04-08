@@ -8,7 +8,11 @@ import * as Sentry from "@sentry/node";
 import config from "@/config";
 import logger from "@/logging";
 import { ApiError } from "@/types";
-import { isNoiseRoute, isNoisyMcpGatewayGetRoute } from "./utils";
+import {
+  isNoiseRoute,
+  isNoisyMcpGatewayGetRoute,
+  isNoisyTransactionName,
+} from "./utils";
 
 const {
   api: { version },
@@ -134,9 +138,18 @@ const initSentry = async (): Promise<void> => {
     },
 
     // https://docs.sentry.io/platforms/javascript/configuration/options/#tracesSampler
-    tracesSampler: ({ normalizedRequest }: TracesSamplerSamplingContext) => {
+    tracesSampler: ({
+      normalizedRequest,
+      transactionContext,
+    }: TracesSamplerSamplingContext) => {
       const url = normalizedRequest?.url;
       const method = normalizedRequest?.method;
+      const transactionName = transactionContext.name;
+
+      if (transactionName && isNoisyTransactionName(transactionName)) {
+        return 0;
+      }
+
       if (!url) return tracesSampleRate;
 
       if (isNoiseRoute(url)) {
@@ -154,6 +167,14 @@ const initSentry = async (): Promise<void> => {
       }
 
       return tracesSampleRate;
+    },
+
+    beforeSendTransaction(event) {
+      if (event.transaction && isNoisyTransactionName(event.transaction)) {
+        return null;
+      }
+
+      return event;
     },
   });
 

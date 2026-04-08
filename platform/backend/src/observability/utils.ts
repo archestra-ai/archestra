@@ -41,5 +41,5 @@ export function isNoisyTransactionName(transactionName: string): boolean {
 export function isNoisyMcpGatewayTransactionName(
   transactionName: string,
 ): boolean {
-  return transactionName.startsWith("GET /v1/mcp/");
+  return transactionName.startsWith(`GET ${MCP_GATEWAY_PREFIX}/`);
 }

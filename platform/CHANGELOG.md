@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.2.6](https://github.com/archestra-ai/archestra/compare/platform-v1.2.5...platform-v1.2.6) (2026-04-08)
+
+
+### Features
+
+* **helm:** improve initContainers config options ([#3680](https://github.com/archestra-ai/archestra/issues/3680)) ([8acd982](https://github.com/archestra-ai/archestra/commit/8acd982cb4c07de448c314ac52ef00aa32828b2b))
+
+
+### Bug Fixes
+
+* MCP tool assignment scoping ([#3675](https://github.com/archestra-ai/archestra/issues/3675)) ([f2687c3](https://github.com/archestra-ai/archestra/commit/f2687c31724297d3c9a2b0a9040859616576c120))
+* regenerate API client to remove hardcoded localhost baseUrl ([#3679](https://github.com/archestra-ai/archestra/issues/3679)) ([7b01f39](https://github.com/archestra-ai/archestra/commit/7b01f397026d2a1873fec4cc427f1bf759998236))
+
+
+### Dependencies
+
+* bump drizzle-orm from 0.45.1 to 0.45.2 in /platform ([#3668](https://github.com/archestra-ai/archestra/issues/3668)) ([b27a61a](https://github.com/archestra-ai/archestra/commit/b27a61a6994f4f8c957020777b0400bc21327086))
+
+
+### Code Refactoring
+
+* remove hardcoded userIsAgentAdmin from A2A and token selection paths ([#3677](https://github.com/archestra-ai/archestra/issues/3677)) ([c54d5b7](https://github.com/archestra-ai/archestra/commit/c54d5b7f95d4eda9298955b5b4ea1fa0c84542da))
+
+
+### Miscellaneous Chores
+
+* **deps:** bump @hono/node-server from 1.19.10 to 1.19.13 in /platform/mcp_server_docker_image ([#3673](https://github.com/archestra-ai/archestra/issues/3673)) ([58850c1](https://github.com/archestra-ai/archestra/commit/58850c1f634ebf00b3033ad57dd4d5b7aee26706))
+* **deps:** bump @hono/node-server from 1.19.12 to 1.19.13 in /platform/e2e-tests/test-mcp-servers/mcp-server-jwks-keycloak ([#3674](https://github.com/archestra-ai/archestra/issues/3674)) ([5c5ffdb](https://github.com/archestra-ai/archestra/commit/5c5ffdbc5ca8c527d2c7ece0aaa48a1ec7e0c2e1))
+* **deps:** bump hono from 4.12.7 to 4.12.12 in /platform/mcp_server_docker_image ([#3669](https://github.com/archestra-ai/archestra/issues/3669)) ([1447d5f](https://github.com/archestra-ai/archestra/commit/1447d5f0a7eb480060ad5efb22aa7050751d22e6))
+* **deps:** bump hono from 4.12.9 to 4.12.12 in /platform/e2e-tests/test-mcp-servers/mcp-server-jwks-keycloak ([#3672](https://github.com/archestra-ai/archestra/issues/3672)) ([b805ad6](https://github.com/archestra-ai/archestra/commit/b805ad67b00f2513d3b462e2ee9aff0153a60cb0))
+* tighten-up dynamic credential resolution ([#3663](https://github.com/archestra-ai/archestra/issues/3663)) ([daf2c84](https://github.com/archestra-ai/archestra/commit/daf2c84d1ce6c18c183f526bc0ba0f3f45c44ef7))
+
 ## [1.2.5](https://github.com/archestra-ai/archestra/compare/platform-v1.2.4...platform-v1.2.5) (2026-04-08)
 
 

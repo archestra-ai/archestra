@@ -1,6 +1,6 @@
 "use client";
 
-import { E2eTestId } from "@shared";
+import { type AgentScope, E2eTestId } from "@shared";
 import { Zap } from "lucide-react";
 import { useEffect } from "react";
 import {
@@ -25,6 +25,8 @@ interface TokenSelectProps {
   className?: string;
   /** Catalog ID to filter credentials - only shows credentials for the same catalog item */
   catalogId: string;
+  assignmentScope?: AgentScope;
+  assignmentTeamIds?: string[];
   shouldSetDefaultValue: boolean;
   prefersEnterpriseManaged?: boolean;
 }
@@ -41,10 +43,16 @@ export function TokenSelect({
   disabled,
   className,
   catalogId,
+  assignmentScope,
+  assignmentTeamIds,
   shouldSetDefaultValue,
   prefersEnterpriseManaged = false,
 }: TokenSelectProps) {
-  const groupedCredentials = useMcpServersGroupedByCatalog({ catalogId });
+  const groupedCredentials = useMcpServersGroupedByCatalog({
+    catalogId,
+    assignmentScope,
+    assignmentTeamIds,
+  });
 
   // Get credentials for this catalogId from the grouped response
   const mcpServers = groupedCredentials?.[catalogId] ?? [];
@@ -80,7 +88,7 @@ export function TokenSelect({
   if (staticCredentialOutsideOfGroupedCredentials) {
     return (
       <span className="text-xs text-muted-foreground">
-        Owner outside your team
+        Connection unavailable for this scope
       </span>
     );
   }

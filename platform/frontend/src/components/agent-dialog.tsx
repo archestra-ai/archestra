@@ -118,6 +118,7 @@ import {
 } from "@/components/visibility-selector";
 import {
   useCreateProfile,
+  useDeleteProfile,
   useInternalAgents,
   useProfile,
   useUpdateProfile,
@@ -516,6 +517,7 @@ export function AgentDialog({
   const appName = useAppName();
   const { data: allInternalAgents = [] } = useInternalAgents();
   const createAgent = useCreateProfile();
+  const deleteAgent = useDeleteProfile();
   const updateAgent = useUpdateProfile();
   const syncDelegations = useSyncAgentDelegations();
   const { data: currentDelegations = [] } = useAgentDelegations(
@@ -864,7 +866,9 @@ export function AgentDialog({
       // Save tool changes FIRST (before agent update triggers refetch that clears pending changes)
       // Skip for built-in agents as they don't have editable tools
       if (agent && !isBuiltIn) {
-        await agentToolsEditorRef.current?.saveChanges();
+        await agentToolsEditorRef.current?.saveChanges({
+          resourceLabel: agentTypeDisplayName[agentType] || "resource",
+        });
       }
 
       if (agent && isBuiltIn) {
@@ -969,7 +973,20 @@ export function AgentDialog({
 
         // Save tool changes with the new agent ID
         if (savedAgentId) {
-          await agentToolsEditorRef.current?.saveChanges(savedAgentId);
+          try {
+            await agentToolsEditorRef.current?.saveChanges({
+              agentId: savedAgentId,
+              resourceLabel: agentTypeDisplayName[agentType] || "resource",
+            });
+          } catch (error) {
+            await deleteAgent.mutateAsync(savedAgentId);
+            toast.error(
+              error instanceof Error && error.message
+                ? error.message
+                : `Failed to save ${agentTypeDisplayName[agentType] || "resource"}`,
+            );
+            return;
+          }
         }
 
         toast.success(getSuccessMessage(agentType, false));
@@ -1001,7 +1018,7 @@ export function AgentDialog({
       onOpenChange(false);
     } catch (_error) {
       toast.error(
-        isInternalAgent ? "Failed to save agent" : "Failed to save profile",
+        `Failed to save ${agentTypeDisplayName[agentType] || "resource"}`,
       );
     }
   }, [
@@ -1038,6 +1055,7 @@ export function AgentDialog({
     onOpenChange,
     supportsIdentityProvider,
     passthroughHeaders,
+    deleteAgent,
   ]);
 
   const handleClose = useCallback(() => {
@@ -1407,6 +1425,8 @@ export function AgentDialog({
                   <AgentToolsEditor
                     ref={agentToolsEditorRef}
                     agentId={agent?.id}
+                    assignmentScope={scope}
+                    assignmentTeamIds={assignedTeamIds}
                     onSelectedCountChange={setSelectedToolsCount}
                   />
                 </div>

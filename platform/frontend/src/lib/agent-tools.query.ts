@@ -135,10 +135,13 @@ export function useAssignTool() {
             }
           : null;
 
-      const { data } = await assignToolToAgent({
+      const { data, error } = await assignToolToAgent({
         path: { agentId, toolId },
         body,
       });
+      if (error) {
+        throw new Error(getApiErrorMessage(error));
+      }
       return { success: data?.success ?? false, agentId, skipInvalidation };
     },
     onSuccess: (result) => {
@@ -240,9 +243,12 @@ export function useUnassignTool() {
       toolId: string;
       skipInvalidation?: boolean;
     }) => {
-      const { data } = await unassignToolFromAgent({
+      const { data, error } = await unassignToolFromAgent({
         path: { agentId, toolId },
       });
+      if (error) {
+        throw new Error(getApiErrorMessage(error));
+      }
       return { success: data?.success ?? false, agentId, skipInvalidation };
     },
     onSuccess: (result) => {
@@ -285,7 +291,7 @@ export function useProfileToolPatchMutation() {
         path: { id: updatedProfileTool.id },
       });
       if (result.error) {
-        handleApiError(result.error);
+        throw new Error(getApiErrorMessage(result.error));
       }
       return { data: result.data ?? null, skipInvalidation };
     },
@@ -307,6 +313,31 @@ export function useProfileToolPatchMutation() {
       });
     },
   });
+}
+
+function getApiErrorMessage(error: unknown) {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "error" in error &&
+    typeof error.error === "object" &&
+    error.error !== null &&
+    "message" in error.error &&
+    typeof error.error.message === "string"
+  ) {
+    return error.error.message;
+  }
+
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    return error.message;
+  }
+
+  return "Request failed";
 }
 
 export function useAutoConfigurePolicies() {

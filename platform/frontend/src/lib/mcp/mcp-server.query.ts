@@ -35,12 +35,30 @@ type McpServersParams = McpServersQuery & {
 export function useMcpServers(params?: McpServersParams) {
   return useQuery({
     // Include catalogId in queryKey only when provided to maintain cache separation
-    queryKey: params?.catalogId
-      ? ["mcp-servers", { catalogId: params.catalogId }]
-      : ["mcp-servers"],
+    queryKey: [
+      "mcp-servers",
+      {
+        catalogId: params?.catalogId,
+        assignmentScope: params?.assignmentScope,
+        assignmentTeamIds: params?.assignmentTeamIds,
+      },
+    ],
     queryFn: async () => {
       const response = await getMcpServers({
-        query: params?.catalogId ? { catalogId: params.catalogId } : undefined,
+        query:
+          params?.catalogId ||
+          params?.assignmentScope ||
+          params?.assignmentTeamIds
+            ? {
+                ...(params?.catalogId && { catalogId: params.catalogId }),
+                ...(params?.assignmentScope && {
+                  assignmentScope: params.assignmentScope,
+                }),
+                ...(params?.assignmentTeamIds && {
+                  assignmentTeamIds: params.assignmentTeamIds,
+                }),
+              }
+            : undefined,
       });
       return response.data ?? [];
     },
@@ -57,7 +75,11 @@ export function useMcpServers(params?: McpServersParams) {
  * @param catalogId - Optional catalog ID to filter. If provided, only returns servers for that catalog.
  */
 export function useMcpServersGroupedByCatalog(params?: McpServersQuery) {
-  const { data: servers } = useMcpServers({ catalogId: params?.catalogId });
+  const { data: servers } = useMcpServers({
+    catalogId: params?.catalogId,
+    assignmentScope: params?.assignmentScope,
+    assignmentTeamIds: params?.assignmentTeamIds,
+  });
   const { data: session } = authClient.useSession();
   const currentUserId = session?.user?.id;
 

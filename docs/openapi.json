@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.4"
+    "version": "1.2.5"
   },
   "components": {
     "schemas": {
@@ -120486,6 +120486,30 @@
             },
             "in": "query",
             "name": "catalogId",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "personal",
+                "team",
+                "org"
+              ]
+            },
+            "in": "query",
+            "name": "assignmentScope",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "assignmentTeamIds",
             "required": false
           }
         ],

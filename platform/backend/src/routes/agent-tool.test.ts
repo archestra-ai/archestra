@@ -461,3 +461,126 @@ describe("GET /api/agent-tools", () => {
     expect(body.data.length).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe("POST /api/agents/:agentId/tools/:toolId", () => {
+  let app: FastifyInstanceWithZod;
+  let adminUser: User;
+  let organizationId: string;
+
+  beforeEach(async ({ makeUser, makeOrganization, makeMember }) => {
+    adminUser = await makeUser();
+    const org = await makeOrganization();
+    organizationId = org.id;
+
+    await makeMember(adminUser.id, organizationId, { role: ADMIN_ROLE_NAME });
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (request as typeof request & { user: unknown }).user = adminUser;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
+    });
+
+    const { default: agentToolRoutes } = await import("./agent-tool");
+    await app.register(agentToolRoutes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test.each([
+    ["agent" as const, "Agent"],
+    ["mcp_gateway" as const, "MCP Gateway"],
+  ])("allows assigning a team-installed connection to a team-scoped %s in the same team", async (agentType, _resourceLabel, {
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTeam,
+    makeTeamMember,
+    makeTool,
+  }) => {
+    const sharedTeam = await makeTeam(organizationId, adminUser.id, {
+      name: "Shared Team",
+    });
+    await makeTeamMember(sharedTeam.id, adminUser.id);
+
+    const agent = await makeAgent({
+      organizationId,
+      authorId: adminUser.id,
+      agentType,
+      scope: "team",
+      teams: [sharedTeam.id],
+    });
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const tool = await makeTool({
+      catalogId: catalog.id,
+      name: `${agentType}-tool`,
+    });
+    const mcpServer = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: adminUser.id,
+      teamId: sharedTeam.id,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${agent.id}/tools/${tool.id}`,
+      payload: { mcpServerId: mcpServer.id },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ success: true });
+  });
+
+  test.each([
+    ["agent" as const, "Agent"],
+    ["mcp_gateway" as const, "MCP Gateway"],
+  ])("rejects assigning a team-installed connection to a %s in a different team", async (agentType, _resourceLabel, {
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTeam,
+    makeTeamMember,
+    makeTool,
+  }) => {
+    const gatewayTeam = await makeTeam(organizationId, adminUser.id, {
+      name: "Gateway Team",
+    });
+    const otherTeam = await makeTeam(organizationId, adminUser.id, {
+      name: "Other Team",
+    });
+    await makeTeamMember(gatewayTeam.id, adminUser.id);
+
+    const agent = await makeAgent({
+      organizationId,
+      authorId: adminUser.id,
+      agentType,
+      scope: "team",
+      teams: [gatewayTeam.id],
+    });
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const tool = await makeTool({
+      catalogId: catalog.id,
+      name: `${agentType}-tool`,
+    });
+    const mcpServer = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: adminUser.id,
+      teamId: otherTeam.id,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${agent.id}/tools/${tool.id}`,
+      payload: { mcpServerId: mcpServer.id },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: {
+        message: "This team connection is not shared with the selected team",
+      },
+    });
+  });
+});

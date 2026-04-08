@@ -3,7 +3,7 @@ title: "Authentication"
 category: MCP
 order: 4
 description: "How authentication works for MCP clients and upstream MCP servers"
-lastUpdated: 2026-04-06
+lastUpdated: 2026-04-08
 ---
 
 <!--
@@ -227,6 +227,16 @@ When dynamic credentials are enabled, Archestra resolves them in priority order:
 1. The calling user's own personal credential (highest priority)
 2. A credential owned by a team member on the same team
 3. If no credential is found, an error is returned with an install link
+
+### Static Assignment Scope Rules
+
+When you pin a tool to a specific installed MCP server connection instead of using dynamic resolution, Archestra validates the connection against the target Agent or MCP Gateway scope:
+
+- **Team-installed connection**: can only be assigned to a **team-scoped** Agent or MCP Gateway that includes that same team
+- **Personal connection**: can only be assigned to a resource the connection owner could access directly
+- **Dynamic / resolve at call time**: skips static-owner checks because Archestra resolves credentials per caller at execution time
+
+This means a team-shared connection is governed by the team it is shared with, not by the individual who originally installed it. Personal connections still follow the connection owner's access boundary.
 
 ### Enterprise-Managed Credentials
 

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type AgentScope,
   ARCHESTRA_MCP_CATALOG_ID,
   type archestraApiTypes,
   E2eTestId,
@@ -75,11 +76,16 @@ interface PendingCatalogChanges {
 }
 
 export interface AgentToolsEditorRef {
-  saveChanges: (agentId?: string) => Promise<void>;
+  saveChanges: (params?: {
+    agentId?: string;
+    resourceLabel?: string;
+  }) => Promise<void>;
 }
 
 interface AgentToolsEditorProps {
   agentId?: string;
+  assignmentScope?: AgentScope;
+  assignmentTeamIds?: string[];
   onSelectedCountChange?: (count: number) => void;
   /** "pills" (default): compact pills + dropdown combobox. "cards": inline grid of MCP server cards. */
   layout?: "pills" | "cards";
@@ -89,12 +95,20 @@ export const AgentToolsEditor = forwardRef<
   AgentToolsEditorRef,
   AgentToolsEditorProps
 >(function AgentToolsEditor(
-  { agentId, onSelectedCountChange, layout = "pills" },
+  {
+    agentId,
+    assignmentScope,
+    assignmentTeamIds,
+    onSelectedCountChange,
+    layout = "pills",
+  },
   ref,
 ) {
   return (
     <AgentToolsEditorContent
       agentId={agentId}
+      assignmentScope={assignmentScope}
+      assignmentTeamIds={assignmentTeamIds}
       onSelectedCountChange={onSelectedCountChange}
       layout={layout}
       ref={ref}
@@ -106,7 +120,13 @@ const AgentToolsEditorContent = forwardRef<
   AgentToolsEditorRef,
   AgentToolsEditorProps
 >(function AgentToolsEditorContent(
-  { agentId, onSelectedCountChange, layout = "pills" },
+  {
+    agentId,
+    assignmentScope,
+    assignmentTeamIds,
+    onSelectedCountChange,
+    layout = "pills",
+  },
   ref,
 ) {
   const { catalogName } = useArchestraMcpIdentity();
@@ -119,7 +139,10 @@ const AgentToolsEditorContent = forwardRef<
   const { data: catalogItems = [], isPending } = useInternalMcpCatalog();
 
   // Fetch all credentials grouped by catalog (for default credential on toggle)
-  const allCredentials = useMcpServersGroupedByCatalog();
+  const allCredentials = useMcpServersGroupedByCatalog({
+    assignmentScope,
+    assignmentTeamIds,
+  });
 
   // Fetch tool counts for all catalog items to enable sorting
   const toolCountQueries = useQueries({
@@ -246,8 +269,9 @@ const AgentToolsEditorContent = forwardRef<
 
   // Expose saveChanges method to parent
   useImperativeHandle(ref, () => ({
-    saveChanges: async (overrideAgentId?: string) => {
-      const targetAgentId = overrideAgentId ?? agentId;
+    saveChanges: async (params) => {
+      const targetAgentId = params?.agentId ?? agentId;
+      const resourceLabel = params?.resourceLabel ?? "resource";
       if (!targetAgentId) return;
 
       const allChanges = Array.from(pendingChangesRef.current.entries());
@@ -310,7 +334,12 @@ const AgentToolsEditorContent = forwardRef<
 
         const failures = results.filter((r) => r.status === "rejected");
         if (failures.length > 0) {
-          throw (failures[0] as PromiseRejectedResult).reason;
+          throw new Error(
+            formatToolAssignmentErrorMessage(
+              resourceLabel,
+              (failures[0] as PromiseRejectedResult).reason,
+            ),
+          );
         }
 
         // Update credential on tools that remain assigned but whose credential changed
@@ -540,6 +569,8 @@ const AgentToolsEditorContent = forwardRef<
             catalog.id === ARCHESTRA_MCP_CATALOG_ID ? catalogName : catalog.name
           }
           assignedTools={assignedToolsByCatalog.get(catalog.id) ?? []}
+          assignmentScope={assignmentScope}
+          assignmentTeamIds={assignmentTeamIds}
           initialPendingChanges={pendingChangesRef.current.get(catalog.id)}
           onPendingChanges={registerPendingChanges}
           onClearPendingChanges={clearPendingChanges}
@@ -611,6 +642,8 @@ interface McpServerPillProps {
   catalogItem: InternalMcpCatalogItem;
   displayName: string;
   assignedTools: AgentTool[];
+  assignmentScope?: AgentScope;
+  assignmentTeamIds?: string[];
   initialPendingChanges?: PendingCatalogChanges;
   onPendingChanges: (catalogId: string, changes: PendingCatalogChanges) => void;
   onClearPendingChanges: (catalogId: string) => void;
@@ -626,6 +659,8 @@ function McpServerPill({
   catalogItem,
   displayName,
   assignedTools,
+  assignmentScope,
+  assignmentTeamIds,
   initialPendingChanges,
   onPendingChanges,
   onClearPendingChanges,
@@ -652,6 +687,8 @@ function McpServerPill({
   // Fetch available credentials for this catalog
   const credentials = useMcpServersGroupedByCatalog({
     catalogId: catalogItem.id,
+    assignmentScope,
+    assignmentTeamIds,
   });
   const mcpServers = credentials?.[catalogItem.id] ?? [];
   const prefersEnterpriseManaged = catalogItem.enterpriseManagedConfig != null;
@@ -847,6 +884,8 @@ function McpServerPill({
             </p>
             <TokenSelect
               catalogId={catalogItem.id}
+              assignmentScope={assignmentScope}
+              assignmentTeamIds={assignmentTeamIds}
               value={selectedCredential}
               onValueChange={setSelectedCredential}
               shouldSetDefaultValue={false}
@@ -898,6 +937,29 @@ export interface ToolChecklistProps {
 
 function formatToolName(toolName: string) {
   return parseFullToolName(toolName).toolName || toolName;
+}
+
+function formatToolAssignmentErrorMessage(
+  resourceLabel: string,
+  error: unknown,
+) {
+  const message =
+    error instanceof Error && error.message ? error.message : "Request failed";
+  const normalizedResourceLabel = resourceLabel.trim() || "resource";
+  const lowerResourceLabel = normalizedResourceLabel.toLowerCase();
+
+  if (message === "This team connection is not shared with the selected team") {
+    return `This ${lowerResourceLabel} cannot use that connection because it is not shared with one of the selected teams`;
+  }
+
+  if (
+    message ===
+    "The credential owner must be a member of a team that this resource is assigned to"
+  ) {
+    return `This ${lowerResourceLabel} cannot use that connection because the credential owner does not have access to the selected team`;
+  }
+
+  return `Failed to update tools for this ${lowerResourceLabel}: ${message}`;
 }
 
 function ExpandableDescription({ description }: { description: string }) {

@@ -31539,6 +31539,8 @@ export type GetMcpServersData = {
     path?: never;
     query?: {
         catalogId?: string;
+        assignmentScope?: 'personal' | 'team' | 'org';
+        assignmentTeamIds?: Array<string>;
     };
     url: '/api/mcp_server';
 };

@@ -9,7 +9,7 @@ import {
 } from "./agent-tool-assignment";
 
 describe("validateCredentialSource", () => {
-  test("returns a validation error when the credential owner cannot access the target agent", async ({
+  test("returns a validation error when a personal credential owner cannot access the target resource", async ({
     makeAgent,
     makeInternalMcpCatalog,
     makeMcpServer,
@@ -47,7 +47,108 @@ describe("validateCredentialSource", () => {
       code: "validation_error",
       error: {
         message:
-          "The credential owner must be a member of a team that this agent is assigned to",
+          "The credential owner must be a member of a team that this resource is assigned to",
+        type: "validation_error",
+      },
+    });
+  });
+
+  test("allows a team-installed MCP server when the target resource shares that team", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeTool,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const owner = await makeUser();
+    const author = await makeUser();
+
+    await makeMember(owner.id, organization.id, { role: "member" });
+    await makeMember(author.id, organization.id, { role: "member" });
+
+    const sharedTeam = await makeTeam(organization.id, author.id, {
+      name: "Shared Team",
+    });
+    await makeTeamMember(sharedTeam.id, author.id);
+
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: author.id,
+      scope: "team",
+      teams: [sharedTeam.id],
+    });
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const tool = await makeTool({ catalogId: catalog.id, name: "remote_tool" });
+    const mcpServer = await makeMcpServer({
+      teamId: sharedTeam.id,
+      ownerId: owner.id,
+      catalogId: catalog.id,
+    });
+
+    const result = await validateCredentialSource({
+      agentId: agent.id,
+      mcpServerId: mcpServer.id,
+      toolId: tool.id,
+    });
+
+    expect(result).toBeNull();
+  });
+
+  test("rejects a team-installed MCP server when the target resource is assigned to a different team", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeTool,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const owner = await makeUser();
+    const author = await makeUser();
+
+    await makeMember(owner.id, organization.id, { role: "member" });
+    await makeMember(author.id, organization.id, { role: "member" });
+
+    const gatewayTeam = await makeTeam(organization.id, author.id, {
+      name: "Gateway Team",
+    });
+    const otherTeam = await makeTeam(organization.id, author.id, {
+      name: "Other Team",
+    });
+    await makeTeamMember(gatewayTeam.id, author.id);
+
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: author.id,
+      scope: "team",
+      teams: [gatewayTeam.id],
+    });
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const tool = await makeTool({ catalogId: catalog.id, name: "remote_tool" });
+    const mcpServer = await makeMcpServer({
+      teamId: otherTeam.id,
+      ownerId: owner.id,
+      catalogId: catalog.id,
+    });
+
+    const result = await validateCredentialSource({
+      agentId: agent.id,
+      mcpServerId: mcpServer.id,
+      toolId: tool.id,
+    });
+
+    expect(result).toEqual({
+      code: "validation_error",
+      error: {
+        message: "This team connection is not shared with the selected team",
         type: "validation_error",
       },
     });

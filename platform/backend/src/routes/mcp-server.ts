@@ -18,6 +18,7 @@ import {
   ToolModel,
 } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
+import { isMcpServerAssignableToTarget } from "@/services/agent-tool-assignment";
 import { refreshLinkedIdentityProviderAccessToken } from "@/services/identity-providers/access-token-refresh";
 import { exchangeEnterpriseManagedCredential } from "@/services/identity-providers/enterprise-managed/exchange";
 import {
@@ -26,6 +27,7 @@ import {
 } from "@/services/identity-providers/oidc";
 import { autoReinstallServer } from "@/services/mcp-reinstall";
 import {
+  AgentScopeSchema,
   ApiError,
   constructResponseSchema,
   DeleteObjectResponseSchema,
@@ -46,12 +48,19 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["MCP Server"],
         querystring: z.object({
           catalogId: z.string().optional(),
+          assignmentScope: AgentScopeSchema.optional(),
+          assignmentTeamIds: z
+            .preprocess(
+              (val) => (typeof val === "string" ? val.split(",") : val),
+              z.array(z.string()),
+            )
+            .optional(),
         }),
         response: constructResponseSchema(z.array(SelectMcpServerSchema)),
       },
     },
     async ({ user, headers, query }, reply) => {
-      const { catalogId } = query;
+      const { assignmentScope, assignmentTeamIds, catalogId } = query;
       const { success: isMcpServerAdmin } = await hasPermission(
         { mcpServerInstallation: ["admin"] },
         headers,
@@ -61,6 +70,32 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Filter by catalogId if provided
       if (catalogId) {
         allServers = allServers.filter((s) => s.catalogId === catalogId);
+      }
+
+      if (assignmentScope) {
+        const target = {
+          scope: assignmentScope,
+          authorId: user.id,
+          teamIds: assignmentTeamIds ?? [],
+        };
+
+        allServers = (
+          await Promise.all(
+            allServers.map(async (server) =>
+              (await isMcpServerAssignableToTarget({
+                mcpServer: {
+                  ownerId: server.ownerId,
+                  teamId: server.teamId,
+                },
+                target,
+              }))
+                ? server
+                : null,
+            ),
+          )
+        ).filter(
+          (server): server is (typeof allServers)[number] => server != null,
+        );
       }
 
       return reply.send(allServers);

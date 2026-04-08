@@ -1,13 +1,14 @@
 import {
   AgentModel,
-  AgentTeamModel,
   AgentToolModel,
   InternalMcpCatalogModel,
   McpServerModel,
+  TeamModel,
   ToolModel,
   UserModel,
 } from "@/models";
 import type {
+  AgentScope,
   CredentialResolutionMode,
   InternalMcpCatalog,
   Tool,
@@ -22,6 +23,7 @@ export type PrefetchedMcpServer = {
   id: string;
   ownerId: string | null;
   catalogId: string | null;
+  teamId?: string | null;
 };
 
 export type AgentToolAssignmentPrefetchedData = {
@@ -249,13 +251,13 @@ export async function validateCredentialSource(params: {
   if (
     result?.code === "validation_error" &&
     result.error.message ===
-      "The MCP server owner must be a member of a team that this agent is assigned to"
+      "The credential owner must be a member of a team that this resource is assigned to"
   ) {
     return {
       code: "validation_error" as const,
       error: {
         message:
-          "The credential owner must be a member of a team that this agent is assigned to",
+          "The credential owner must be a member of a team that this resource is assigned to",
         type: "validation_error",
       },
     };
@@ -314,7 +316,7 @@ export async function validateAssignedMcpServer(params: {
   tool: Tool;
   preFetchedServer?: Pick<
     PrefetchedMcpServer,
-    "id" | "ownerId" | "catalogId"
+    "id" | "ownerId" | "catalogId" | "teamId"
   > | null;
 }): Promise<AgentToolAssignmentError | null> {
   const { agentId, mcpServerId, tool, preFetchedServer } = params;
@@ -345,29 +347,85 @@ export async function validateAssignedMcpServer(params: {
     };
   }
 
-  const owner = mcpServer.ownerId
-    ? await UserModel.getById(mcpServer.ownerId)
-    : null;
-  if (!owner) {
-    return null;
-  }
+  const targetContext = await getAssignmentTargetContext(agentId);
+  const isAllowed = await isMcpServerAssignableToTarget({
+    mcpServer,
+    target: targetContext,
+  });
 
-  const hasAccess = await AgentTeamModel.userHasAgentAccess(
-    owner.id,
-    agentId,
-    false,
-  );
-
-  if (!hasAccess) {
+  if (!isAllowed) {
     return {
       code: "validation_error",
       error: {
-        message:
-          "The credential owner must be a member of a team that this agent is assigned to",
+        message: getAssignmentValidationMessage(mcpServer),
         type: "validation_error",
       },
     };
   }
 
   return null;
+}
+
+async function getAssignmentTargetContext(agentId: string): Promise<{
+  scope: AgentScope;
+  authorId: string | null;
+  teamIds: string[];
+}> {
+  const agent = await AgentModel.findById(agentId, undefined, true);
+
+  if (!agent) {
+    throw new Error(`Agent with ID ${agentId} not found`);
+  }
+
+  return {
+    scope: agent.scope,
+    authorId: agent.authorId,
+    teamIds: agent.teams.map((team) => team.id),
+  };
+}
+
+export async function isMcpServerAssignableToTarget(params: {
+  mcpServer: Pick<PrefetchedMcpServer, "ownerId" | "teamId">;
+  target: {
+    scope: AgentScope;
+    authorId: string | null;
+    teamIds: string[];
+  };
+}): Promise<boolean> {
+  const { mcpServer, target } = params;
+
+  if (mcpServer.teamId) {
+    return target.scope === "team" && target.teamIds.includes(mcpServer.teamId);
+  }
+
+  if (!mcpServer.ownerId) {
+    return true;
+  }
+
+  if (target.scope === "personal") {
+    return target.authorId === mcpServer.ownerId;
+  }
+
+  if (target.scope === "org") {
+    const owner = await UserModel.getById(mcpServer.ownerId);
+    return owner != null;
+  }
+
+  for (const teamId of target.teamIds) {
+    if (await TeamModel.isUserInTeam(teamId, mcpServer.ownerId)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function getAssignmentValidationMessage(
+  mcpServer: Pick<PrefetchedMcpServer, "teamId">,
+) {
+  if (mcpServer.teamId) {
+    return "This team connection is not shared with the selected team";
+  }
+
+  return "The credential owner must be a member of a team that this resource is assigned to";
 }

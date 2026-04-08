@@ -35,13 +35,12 @@ import {
   AgentToolFilterSchema,
   AgentToolSortBy,
   ApiError,
+  AssignedToolSchema,
   BulkAgentToolAssignmentSchema,
   constructResponseSchema,
   createSortingQuerySchema,
   DeleteObjectResponseSchema,
   SelectAgentToolSchema,
-  AssignedToolSchema,
-  SelectToolSchema,
   UpdateAgentToolSchema,
   UuidIdSchema,
 } from "@/types";
@@ -513,7 +512,11 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       if (!checker.isAdmin(agent.agentType)) {
-        const filteredAgent = await AgentModel.findById(agentId, user.id, false);
+        const filteredAgent = await AgentModel.findById(
+          agentId,
+          user.id,
+          false,
+        );
         if (!filteredAgent) {
           throw new ApiError(404, "Agent not found");
         }

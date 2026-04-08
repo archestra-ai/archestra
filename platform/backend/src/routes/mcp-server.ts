@@ -59,7 +59,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(SelectMcpServerSchema)),
       },
     },
-    async ({ user, headers, query }, reply) => {
+    async ({ user, headers, query, organizationId }, reply) => {
       const { assignmentScope, assignmentTeamIds, catalogId } = query;
       const { success: isMcpServerAdmin } = await hasPermission(
         { mcpServerInstallation: ["admin"] },
@@ -74,6 +74,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (assignmentScope) {
         const target = {
+          organizationId,
           scope: assignmentScope,
           authorId: user.id,
           teamIds: assignmentTeamIds ?? [],

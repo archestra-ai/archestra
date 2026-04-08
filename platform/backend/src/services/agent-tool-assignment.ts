@@ -3,9 +3,9 @@ import {
   AgentToolModel,
   InternalMcpCatalogModel,
   McpServerModel,
+  MemberModel,
   TeamModel,
   ToolModel,
-  UserModel,
 } from "@/models";
 import type {
   AgentScope,
@@ -198,10 +198,6 @@ async function validateCatalogRequirements(params: {
   return null;
 }
 
-function _normalizeResolveAtCallTime(params: { resolveAtCallTime?: boolean }) {
-  return params.resolveAtCallTime ?? false;
-}
-
 function normalizeCredentialResolutionMode(params: {
   resolveAtCallTime?: boolean;
   credentialResolutionMode?: CredentialResolutionMode;
@@ -247,21 +243,6 @@ export async function validateCredentialSource(params: {
         }
       : params.preFetchedServer,
   });
-
-  if (
-    result?.code === "validation_error" &&
-    result.error.message ===
-      "The credential owner must be a member of a team that this resource is assigned to"
-  ) {
-    return {
-      code: "validation_error" as const,
-      error: {
-        message:
-          "The credential owner must be a member of a team that this resource is assigned to",
-        type: "validation_error",
-      },
-    };
-  }
 
   return result;
 }
@@ -367,6 +348,7 @@ export async function validateAssignedMcpServer(params: {
 }
 
 async function getAssignmentTargetContext(agentId: string): Promise<{
+  organizationId: string;
   scope: AgentScope;
   authorId: string | null;
   teamIds: string[];
@@ -378,6 +360,7 @@ async function getAssignmentTargetContext(agentId: string): Promise<{
   }
 
   return {
+    organizationId: agent.organizationId,
     scope: agent.scope,
     authorId: agent.authorId,
     teamIds: agent.teams.map((team) => team.id),
@@ -387,6 +370,7 @@ async function getAssignmentTargetContext(agentId: string): Promise<{
 export async function isMcpServerAssignableToTarget(params: {
   mcpServer: Pick<PrefetchedMcpServer, "ownerId" | "teamId">;
   target: {
+    organizationId: string;
     scope: AgentScope;
     authorId: string | null;
     teamIds: string[];
@@ -407,8 +391,11 @@ export async function isMcpServerAssignableToTarget(params: {
   }
 
   if (target.scope === "org") {
-    const owner = await UserModel.getById(mcpServer.ownerId);
-    return owner != null;
+    const ownerMembership = await MemberModel.getByUserId(
+      mcpServer.ownerId,
+      target.organizationId,
+    );
+    return ownerMembership != null;
   }
 
   for (const teamId of target.teamIds) {

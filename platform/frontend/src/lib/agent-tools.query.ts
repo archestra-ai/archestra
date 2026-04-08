@@ -5,7 +5,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { handleApiError } from "./utils";
+import { getApiErrorMessage, handleApiError } from "./utils";
 
 const {
   assignToolToAgent,
@@ -313,31 +313,6 @@ export function useProfileToolPatchMutation() {
       });
     },
   });
-}
-
-function getApiErrorMessage(error: unknown) {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "error" in error &&
-    typeof error.error === "object" &&
-    error.error !== null &&
-    "message" in error.error &&
-    typeof error.error.message === "string"
-  ) {
-    return error.error.message;
-  }
-
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "message" in error &&
-    typeof error.message === "string"
-  ) {
-    return error.message;
-  }
-
-  return "Request failed";
 }
 
 export function useAutoConfigurePolicies() {

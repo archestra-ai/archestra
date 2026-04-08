@@ -701,7 +701,6 @@ function McpServerPill({
       : assignedTools[0]?.credentialResolutionMode === "enterprise_managed"
         ? DYNAMIC_CREDENTIAL_VALUE
         : (assignedTools[0]?.mcpServerId ?? mcpServers[0]?.id ?? null);
-  const _currentEnterpriseManagedConfig = null;
 
   // Currently assigned tool IDs - use sorted string for stable comparison
   const currentAssignedToolIds = useMemo(
@@ -737,6 +736,28 @@ function McpServerPill({
     setSelectedToolIds(new Set(ids));
     onClearPendingChanges(catalogItem.id);
   }, [currentAssignedToolIdsKey]);
+
+  useEffect(() => {
+    if (selectedCredential === DYNAMIC_CREDENTIAL_VALUE) {
+      return;
+    }
+
+    if (
+      selectedCredential &&
+      mcpServers.some((server) => server.id === selectedCredential)
+    ) {
+      return;
+    }
+
+    if (prefersEnterpriseManaged) {
+      setSelectedCredential(DYNAMIC_CREDENTIAL_VALUE);
+      return;
+    }
+
+    if (mcpServers.length > 0) {
+      setSelectedCredential(mcpServers[0].id);
+    }
+  }, [mcpServers, prefersEnterpriseManaged, selectedCredential]);
 
   // Auto-select all tools when selectAll flag is set and tools finish loading.
   // Use a ref so auto-select only fires once (at mount) and doesn't fight user deselections.

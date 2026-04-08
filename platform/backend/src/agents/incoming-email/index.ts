@@ -571,7 +571,6 @@ export async function processIncomingEmail(
   );
 
   // Determine userId for the request (used for 'private' mode).
-  // Determine userId for the request (used for 'private' mode).
   let userId: string = "system";
 
   switch (securityMode) {

@@ -31,10 +31,7 @@ const httpServer = createServer();
 
 const service = websocketService as unknown as {
   handleMessage: (message: ClientWebSocketMessage, ws: WS) => Promise<void>;
-  clientContexts: Map<
-    WS,
-    { userId: string; organizationId: string }
-  >;
+  clientContexts: Map<WS, { userId: string; organizationId: string }>;
   browserStreamContext: {
     clearSubscriptions: () => void;
     unsubscribeBrowserStream: (ws: WS) => void;

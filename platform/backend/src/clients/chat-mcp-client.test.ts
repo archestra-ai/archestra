@@ -302,7 +302,6 @@ describe("chat-mcp-client health check", () => {
         agentId: agent.id,
         userId: user.id,
         organizationId: org.id,
-  
         conversationId: "conv-1",
       });
 
@@ -356,7 +355,6 @@ describe("chat-mcp-client health check", () => {
       agentId: agent.id,
       userId: user.id,
       organizationId: org.id,
-
     });
 
     // Ping should have been called on the dead client
@@ -409,7 +407,6 @@ describe("chat-mcp-client health check", () => {
         agentId: agent.id,
         userId: user.id,
         organizationId: org.id,
-  
       });
 
       await vi.advanceTimersByTimeAsync(5_000);
@@ -690,7 +687,6 @@ describe("chat-mcp-client tool caching", () => {
       agentId: agent.id,
       userId: user.id,
       organizationId: org.id,
-
     });
     expect(Object.keys(first)).toEqual(["lookup_email"]);
 
@@ -699,7 +695,6 @@ describe("chat-mcp-client tool caching", () => {
       agentId: agent.id,
       userId: user.id,
       organizationId: org.id,
-
     });
 
     // Check that second call returns the same tool names

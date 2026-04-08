@@ -300,6 +300,7 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
           (request.headers[SESSION_ID_HEADER] as string | undefined);
         const sessionId =
           headerSessionId || `a2a-${Date.now()}-${randomUUID()}`;
+
         // Resolve user for span attributes (user is already fetched above for user tokens)
         const a2aUser =
           tokenAuth.userId && userId !== "system"

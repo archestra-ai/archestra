@@ -117,7 +117,9 @@ export async function handleDelegation(
 
   // Check user has access if user token is being used
   const userId = tokenAuth?.userId;
-  let userIsAgentAdmin = false;
+  // Default to true for system context (no user token) — "system" has no team
+  // memberships, so team-scoped resolution and delegation filtering would fail.
+  let userIsAgentAdmin = true;
   if (userId && organizationId) {
     userIsAgentAdmin = await userHasPermission(
       userId,

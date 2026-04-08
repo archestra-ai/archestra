@@ -1223,7 +1223,7 @@ export class ChatOpsManager {
     } = params;
     const userIsAgentAdmin =
       userId === "system"
-        ? false
+        ? true
         : await userHasPermission(
             userId,
             binding.organizationId,

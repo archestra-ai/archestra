@@ -572,10 +572,10 @@ export async function processIncomingEmail(
 
   // Determine userId for the request (used for 'private' mode).
   // Non-user (internal/public) email executions use "system" userId with
-  // standard (non-admin) privileges. Tool access is scoped to the agent's
-  // team tokens via the selectMCPGatewayToken system-user fallback path.
+  // full privileges — "system" has no team memberships, so team-scoped
+  // token resolution and delegation tool filtering would fail without admin.
   let userId: string = "system";
-  let userIsAgentAdmin = false;
+  let userIsAgentAdmin = true;
 
   switch (securityMode) {
     case "private": {

@@ -1,11 +1,8 @@
 import { archestraApiSdk } from "@shared";
 import {
   DEFAULT_TEAM_NAME,
-  E2eTestId,
-  EDITOR_EMAIL,
   ENGINEERING_TEAM_NAME,
   MARKETING_TEAM_NAME,
-  MEMBER_EMAIL,
 } from "../../consts";
 import { test } from "../../fixtures";
 import {
@@ -14,7 +11,6 @@ import {
   assignEngineeringTeamToDefaultProfileViaApi,
   goToMcpRegistry,
   installLocalCatalogItem,
-  openManageCredentialsDialog,
   settleRegistryAfterInstall,
   verifyToolCallResultViaApi,
   waitForMcpServerToolsDiscovered,
@@ -136,7 +132,7 @@ test("Verify tool calling using dynamic credentials", async ({
    */
 
   // Verify tool call results using dynamic credential
-  // Personal credential takes priority over team credential
+  // Team tokens resolve to team-owned servers only (not personal credentials of team members)
   const MATRIX_B = [
     {
       // All three users are in Default team with personal credentials;
@@ -146,8 +142,9 @@ test("Verify tool calling using dynamic credentials", async ({
       expectedResult: "AnySuccessText",
     },
     {
+      // Engineering team token resolves to the Engineering team-owned server
       tokenToUse: "engineering-team",
-      expectedResult: "Editor-personal-credential",
+      expectedResult: `${ENGINEERING_TEAM_NAME}-team-credential`,
     },
     {
       tokenToUse: "marketing-team",
@@ -155,42 +152,6 @@ test("Verify tool calling using dynamic credentials", async ({
     },
   ] as const;
   for (const { expectedResult, tokenToUse } of MATRIX_B) {
-    await verifyToolCallResultViaApi({
-      request,
-      expectedResult,
-      tokenToUse,
-      toolName: `${CATALOG_ITEM_NAME}__print_archestra_test`,
-      cookieHeaders,
-    });
-  }
-
-  // Then we remove ALL personal credentials and verify it uses team credentials as second priority
-  await goToMcpRegistry(adminPage);
-  await openManageCredentialsDialog(adminPage, CATALOG_ITEM_NAME);
-  await adminPage
-    .getByTestId(`${E2eTestId.RevokeCredentialButton}-personal`)
-    .click();
-  await adminPage
-    .getByTestId(`${E2eTestId.RevokeCredentialButton}-${EDITOR_EMAIL}`)
-    .click();
-  await adminPage
-    .getByTestId(`${E2eTestId.RevokeCredentialButton}-${MEMBER_EMAIL}`)
-    .click();
-  await adminPage.waitForLoadState("domcontentloaded");
-  const MATRIX_C = [
-    {
-      // All three users are in Default team; after revoking personal credentials,
-      // the resolution picks any team credential owned by a Default team member (non-deterministic)
-      tokenToUse: "default-team",
-      expectedResult: "AnySuccessText",
-    },
-    {
-      // Only Editor is in Engineering team, so this deterministically uses the Engineering team credential
-      tokenToUse: "engineering-team",
-      expectedResult: `${ENGINEERING_TEAM_NAME}-team-credential`,
-    },
-  ] as const;
-  for (const { expectedResult, tokenToUse } of MATRIX_C) {
     await verifyToolCallResultViaApi({
       request,
       expectedResult,

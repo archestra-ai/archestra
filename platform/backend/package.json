@@ -105,7 +105,7 @@
     "croner": "^10.0.1",
     "dotenv": "^17.3.1",
     "drizzle-kit": "^0.31.9",
-    "drizzle-orm": "^0.45.0",
+    "drizzle-orm": "^0.45.2",
     "drizzle-zod": "^0.8.3",
     "fastify": "^5.8.3",
     "fastify-metrics": "^12.1.0",

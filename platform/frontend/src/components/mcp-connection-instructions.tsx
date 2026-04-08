@@ -222,6 +222,13 @@ export function McpConnectionInstructions({
     return { mcpServerToolGroups: groups, archestraTools: archestraToolsList };
   }, [mcpServers, assignedToolsData]);
 
+  const hasDynamicCredentialTools = useMemo(() => {
+    if (!assignedToolsData?.data) return false;
+    return assignedToolsData.data.some(
+      (t) => t.credentialResolutionMode === "dynamic",
+    );
+  }, [assignedToolsData]);
+
   type ProfileType = archestraApiTypes.GetAllAgentsResponses["200"][number];
   const getToolsCountForProfile = useCallback(
     (profile: ProfileType) => {
@@ -242,11 +249,13 @@ export function McpConnectionInstructions({
 
   const mcpUrl = `${connectionUrl}/mcp/${selectedProfile?.slug ?? selectedProfileId}`;
 
-  // Default to personal token if available, otherwise org token, then first token
+  // Default to personal token if available, otherwise org token (unless dynamic tools), then first token
   const orgToken = tokens?.find((t) => t.isOrganizationToken);
   const defaultTokenId = userToken
     ? PERSONAL_TOKEN_ID
-    : (orgToken?.id ?? tokens?.[0]?.id ?? "");
+    : hasDynamicCredentialTools
+      ? (tokens?.find((t) => !t.isOrganizationToken)?.id ?? "")
+      : (orgToken?.id ?? tokens?.[0]?.id ?? "");
 
   // Check if personal token is selected (either explicitly or by default)
   const effectiveTokenId = selectedTokenId ?? defaultTokenId;
@@ -594,11 +603,17 @@ export function McpConnectionInstructions({
                   {tokens
                     ?.filter((token) => token.isOrganizationToken)
                     .map((token) => (
-                      <SelectItem key={token.id} value={token.id}>
+                      <SelectItem
+                        key={token.id}
+                        value={token.id}
+                        disabled={hasDynamicCredentialTools}
+                      >
                         <div className="flex flex-col gap-0.5 items-start">
                           <div>Organization Token</div>
                           <div className="text-xs text-muted-foreground">
-                            To share org-wide
+                            {hasDynamicCredentialTools
+                              ? 'This gateway has tools assigned with "Resolve at call time" credential. It\'s incompatible with org-wide token. Use Personal token instead.'
+                              : "To share org-wide"}
                           </div>
                         </div>
                       </SelectItem>

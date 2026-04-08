@@ -175,18 +175,6 @@ openssl rand -base64 32
 
 Use the `archestra.initContainers` block to override the helper containers that prepare the platform pod before the main container starts.
 
-```yaml
-archestra:
-  initContainers:
-    busyboxImage: my-registry.example.com/busybox:1.36
-    resources:
-      requests:
-        cpu: 100m
-        memory: 64Mi
-      limits:
-        memory: 128Mi
-```
-
 Available values:
 
 - `archestra.initContainers.busyboxImage` - Overrides the `wait-for-postgres` image. Use this when your cluster cannot pull from Docker Hub and you need to point at a private mirror.

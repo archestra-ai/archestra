@@ -171,6 +171,27 @@ openssl rand -base64 32
 --set archestra.env.ARCHESTRA_AUTH_SECRET=<your-generated-secret>
 ```
 
+#### Init Container Configuration
+
+Use the `archestra.initContainers` block to override the helper containers that prepare the platform pod before the main container starts.
+
+```yaml
+archestra:
+  initContainers:
+    busyboxImage: my-registry.example.com/busybox:1.36
+    resources:
+      requests:
+        cpu: 100m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+```
+
+Available values:
+
+- `archestra.initContainers.busyboxImage` - Overrides the `wait-for-postgres` image. Use this when your cluster cannot pull from Docker Hub and you need to point at a private mirror.
+- `archestra.initContainers.resources` - Applies Kubernetes resource requests and limits to the chart-managed init containers. This is useful on clusters that enforce `ResourceQuota` for init containers, such as OpenShift with restricted SCCs.
+
 #### Diagnostics Storage
 
 To persist Node fatal error reports from the backend, enable chart-managed diagnostics storage. This mounts a persistent volume at `/var/diagnostics` in both the platform and worker pods and configures the backend to write diagnostic reports there automatically.

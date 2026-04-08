@@ -1,5 +1,6 @@
 export { anthropicAdapterFactory } from "./anthropic";
 export { azureAdapterFactory } from "./azure";
+export { azureResponsesAdapterFactory } from "./azure-responses";
 export { bedrockAdapterFactory } from "./bedrock";
 export { cerebrasAdapterFactory } from "./cerebras";
 export { cohereAdapterFactory } from "./cohere";

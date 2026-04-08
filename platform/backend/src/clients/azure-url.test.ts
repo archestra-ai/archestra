@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "@/test";
 import {
   buildAzureDeploymentsUrl,
+  buildAzureResponsesBaseUrl,
   createAzureFetchWithApiVersion,
   extractAzureDeploymentName,
   normalizeAzureApiKey,
@@ -56,6 +57,28 @@ describe("buildAzureDeploymentsUrl", () => {
     ).toBe(
       "https://my-resource.openai.azure.com/openai/deployments?api-version=2024-02-01",
     );
+  });
+});
+
+describe("buildAzureResponsesBaseUrl", () => {
+  it("strips the deployment segment from the configured base URL", () => {
+    expect(
+      buildAzureResponsesBaseUrl(
+        "https://my-resource.openai.azure.com/openai/deployments/gpt-5.2-chat",
+      ),
+    ).toBe("https://my-resource.openai.azure.com/openai");
+  });
+
+  it("strips a trailing slash after the deployment segment", () => {
+    expect(
+      buildAzureResponsesBaseUrl(
+        "https://my-resource.openai.azure.com/openai/deployments/gpt-5.2-chat/",
+      ),
+    ).toBe("https://my-resource.openai.azure.com/openai");
+  });
+
+  it("returns null for an invalid URL", () => {
+    expect(buildAzureResponsesBaseUrl("not-a-url")).toBeNull();
   });
 });
 

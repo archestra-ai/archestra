@@ -221,6 +221,8 @@ export const RouteId = {
   // Proxy Routes - Azure AI Foundry
   AzureChatCompletionsWithDefaultAgent: "azureChatCompletionsWithDefaultAgent",
   AzureChatCompletionsWithAgent: "azureChatCompletionsWithAgent",
+  AzureResponsesWithDefaultAgent: "azureResponsesWithDefaultAgent",
+  AzureResponsesWithAgent: "azureResponsesWithAgent",
 
   // Chat Routes
   StreamChat: "streamChat",

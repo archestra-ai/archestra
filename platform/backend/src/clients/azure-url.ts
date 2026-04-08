@@ -13,6 +13,16 @@ export function buildAzureDeploymentsUrl(params: {
   }
 }
 
+export function buildAzureResponsesBaseUrl(baseUrl: string): string | null {
+  try {
+    const url = new URL(baseUrl);
+    const pathname = url.pathname.replace(/\/deployments\/[^/]+\/?$/, "");
+    return `${url.origin}${pathname}`;
+  } catch {
+    return null;
+  }
+}
+
 export function extractAzureDeploymentName(baseUrl: string): string | null {
   try {
     const url = new URL(baseUrl);

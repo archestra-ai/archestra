@@ -7,6 +7,11 @@
  * @see https://learn.microsoft.com/en-us/azure/ai-foundry/openai/api-reference
  */
 import type OpenAIProvider from "openai";
+import type {
+  Response,
+  ResponseCreateParams,
+  ResponseStreamEvent,
+} from "openai/resources/responses/responses";
 import type { z } from "zod";
 import * as AzureAPI from "./api";
 import * as AzureMessages from "./messages";
@@ -27,7 +32,10 @@ namespace Azure {
     export type ChatCompletionsResponse = z.infer<
       typeof AzureAPI.ChatCompletionResponseSchema
     >;
+    export type ResponsesRequest = ResponseCreateParams & { model: string };
+    export type ResponsesResponse = Response;
     export type Usage = z.infer<typeof AzureAPI.ChatCompletionUsageSchema>;
+    export type ResponsesUsage = z.infer<typeof AzureAPI.ResponsesUsageSchema>;
 
     export type FinishReason = z.infer<typeof AzureAPI.FinishReasonSchema>;
     export type Message = z.infer<typeof AzureMessages.MessageParamSchema>;
@@ -35,6 +43,8 @@ namespace Azure {
 
     export type ChatCompletionChunk =
       OpenAIProvider.Chat.Completions.ChatCompletionChunk;
+    export type ResponseObject = Response;
+    export type ResponseChunk = ResponseStreamEvent;
   }
 }
 

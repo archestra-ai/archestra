@@ -263,4 +263,29 @@ describe("azureResponsesAdapterFactory", () => {
       }),
     );
   });
+
+  test("omits empty assistant message from synthesized fallback response when only tool calls are present", () => {
+    const adapter = azureResponsesAdapterFactory.createStreamAdapter();
+
+    adapter.processChunk({
+      type: "response.output_item.added",
+      output_index: 0,
+      item: {
+        id: "fc_only",
+        type: "function_call",
+        call_id: "call_only",
+        name: "read_file",
+        arguments: '{"file_path":"/tmp/test"}',
+        status: "in_progress",
+      },
+    } as unknown as Parameters<typeof adapter.processChunk>[0]);
+
+    expect(adapter.toProviderResponse().output).toEqual([
+      expect.objectContaining({
+        type: "function_call",
+        call_id: "call_only",
+        name: "read_file",
+      }),
+    ]);
+  });
 });

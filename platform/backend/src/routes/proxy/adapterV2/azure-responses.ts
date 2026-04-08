@@ -629,35 +629,42 @@ class AzureResponsesStreamAdapter
       return this.completedResponse;
     }
 
+    const outputItems: AzureResponsesResponse["output"] = [];
+
+    if (this.state.text) {
+      outputItems.push({
+        id: `msg_${Date.now()}`,
+        type: "message",
+        role: "assistant",
+        status: "completed",
+        content: [
+          {
+            type: "output_text",
+            text: this.state.text,
+            annotations: [],
+          },
+        ],
+      } as AzureResponsesResponse["output"][number]);
+    }
+
+    outputItems.push(
+      ...this.state.toolCalls.map((toolCall) => ({
+        id: toolCall.id,
+        call_id: toolCall.id,
+        type: "function_call" as const,
+        name: toolCall.name,
+        arguments: toolCall.arguments,
+        status: "completed" as const,
+      })),
+    );
+
     return {
       id: this.state.responseId || `resp_${Date.now()}`,
       object: "response",
       created_at: Math.floor(Date.now() / 1000),
       model: this.state.model,
       status: "completed",
-      output: [
-        {
-          id: `msg_${Date.now()}`,
-          type: "message",
-          role: "assistant",
-          status: "completed",
-          content: [
-            {
-              type: "output_text",
-              text: this.state.text,
-              annotations: [],
-            },
-          ],
-        },
-        ...this.state.toolCalls.map((toolCall) => ({
-          id: toolCall.id,
-          call_id: toolCall.id,
-          type: "function_call" as const,
-          name: toolCall.name,
-          arguments: toolCall.arguments,
-          status: "completed" as const,
-        })),
-      ],
+      output: outputItems,
       usage: this.state.usage
         ? {
             input_tokens: this.state.usage.inputTokens,

@@ -196,6 +196,8 @@ class AzureResponsesRequestAdapter
       return [];
     }
 
+    const toolNamesByCallId = getToolNamesByCallId(this.request.input);
+
     return this.request.input.flatMap((item) => {
       if (!isFunctionCallOutputItem(item)) {
         return [];
@@ -204,7 +206,7 @@ class AzureResponsesRequestAdapter
       return [
         {
           id: item.call_id,
-          name: "unknown",
+          name: toolNamesByCallId.get(item.call_id) ?? "unknown",
           content: item.output,
           isError: false,
         },
@@ -821,6 +823,12 @@ function isResponseFunctionCall(
   return item.type === "function_call";
 }
 
+function isResponseInputFunctionCall(
+  item: ResponseInputItem,
+): item is Extract<ResponseInputItem, { type: "function_call" }> {
+  return item.type === "function_call";
+}
+
 function normalizeResponseMessageRole(
   role: "user" | "system" | "assistant" | "developer",
 ): CommonMessage["role"] {
@@ -846,6 +854,18 @@ function isResponsesToolCallChunk(
 
 function toSse(event: unknown): string {
   return `data: ${JSON.stringify(event)}\n\n`;
+}
+
+function getToolNamesByCallId(input: ResponseInputItem[]): Map<string, string> {
+  return new Map(
+    input.flatMap((item) => {
+      if (!isResponseInputFunctionCall(item)) {
+        return [];
+      }
+
+      return [[item.call_id, item.name] as const];
+    }),
+  );
 }
 
 function tryParseJsonObject(value: string): Record<string, unknown> {

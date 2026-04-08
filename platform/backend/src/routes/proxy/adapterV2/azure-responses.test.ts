@@ -36,6 +36,14 @@ describe("azureResponsesAdapterFactory", () => {
           content: [{ type: "input_text", text: "hello from responses" }],
         },
         {
+          type: "function_call",
+          id: "fc_123",
+          call_id: "call_123",
+          name: "read_file",
+          arguments: '{"file_path":"/tmp/test"}',
+          status: "completed",
+        },
+        {
           type: "function_call_output",
           call_id: "call_123",
           output: '{"value":1}',
@@ -64,7 +72,7 @@ describe("azureResponsesAdapterFactory", () => {
     expect(adapter.getToolResults()).toEqual([
       {
         id: "call_123",
-        name: "unknown",
+        name: "read_file",
         content: '{"value":1}',
         isError: false,
       },
@@ -79,6 +87,28 @@ describe("azureResponsesAdapterFactory", () => {
             file_path: { type: "string" },
           },
         },
+      },
+    ]);
+  });
+
+  test("falls back to unknown when a function_call_output has no matching function_call", () => {
+    const adapter = azureResponsesAdapterFactory.createRequestAdapter({
+      model: "gpt-4.1",
+      input: [
+        {
+          type: "function_call_output",
+          call_id: "call_missing",
+          output: '{"value":1}',
+        },
+      ],
+    });
+
+    expect(adapter.getToolResults()).toEqual([
+      {
+        id: "call_missing",
+        name: "unknown",
+        content: '{"value":1}',
+        isError: false,
       },
     ]);
   });

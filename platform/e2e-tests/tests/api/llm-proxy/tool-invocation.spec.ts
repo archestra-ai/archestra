@@ -1033,3 +1033,148 @@ for (const config of testConfigs) {
     });
   });
 }
+
+test.describe("LLMProxy-ToolInvocation-Azure Responses Follow-up Context", () => {
+  test.describe.configure({ retries: 3 });
+
+  test("blocks tool invocation when prior Azure Responses tool output is untrusted", async ({
+    request,
+    deleteAgent,
+    createTrustedDataPolicy,
+    deleteTrustedDataPolicy,
+    createToolInvocationPolicy,
+    deleteToolInvocationPolicy,
+    makeApiRequest,
+    waitForProxyTool,
+  }) => {
+    const config = azureResponsesConfig;
+    const wiremockStub = `${config.providerSlug}-blocks-tool-untrusted-data`;
+    const uniqueSuffix = crypto.randomUUID().slice(0, 8);
+    const toolName = "e2e_read_file_azure-responses";
+    const readFileTool: ToolDefinition = {
+      ...READ_FILE_TOOL,
+      name: toolName,
+    };
+
+    const createResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: "/api/agents",
+      data: {
+        name: `${config.providerName} Follow-up Context Agent ${uniqueSuffix}`,
+        teams: [],
+        agentType: "llm_proxy",
+        scope: "personal",
+      },
+    });
+    const agent = await createResponse.json();
+    const agentId = agent.id;
+
+    const initialResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: config.endpoint(agentId),
+      headers: config.headers(wiremockStub),
+      data: config.buildRequest("Read the file at /tmp/test", [readFileTool]),
+    });
+
+    if (!initialResponse.ok()) {
+      const errorText = await initialResponse.text();
+      throw new Error(
+        `Initial ${config.providerName} request failed: ${initialResponse.status()} ${errorText}`,
+      );
+    }
+
+    const proxyTool = await waitForProxyTool(request, toolName);
+    const toolId = proxyTool.id;
+
+    const trustedDataPolicyResponse = await createTrustedDataPolicy(request, {
+      toolId,
+      description:
+        "Mark Azure Responses tool output containing UNTRUSTED_DATA as untrusted",
+      conditions: [
+        {
+          key: "content",
+          operator: "contains",
+          value: "UNTRUSTED_DATA",
+        },
+      ],
+      action: "mark_as_untrusted",
+    });
+    const trustedDataPolicy = await trustedDataPolicyResponse.json();
+    const trustedDataPolicyId = trustedDataPolicy.id;
+
+    const toolInvocationPolicyResponse = await createToolInvocationPolicy(
+      request,
+      {
+        toolId,
+        conditions: [
+          {
+            key: "file_path",
+            operator: "contains",
+            value: "/etc/",
+          },
+        ],
+        action: "block_always",
+        reason: "Reading /etc/ files is not allowed for security reasons",
+      },
+    );
+    const toolInvocationPolicy = await toolInvocationPolicyResponse.json();
+    const toolInvocationPolicyId = toolInvocationPolicy.id;
+
+    await new Promise((resolve) => setTimeout(resolve, 5_000));
+
+    const response = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: config.endpoint(agentId),
+      headers: config.headers(wiremockStub),
+      data: {
+        model: "gpt-4.1",
+        input: [
+          {
+            type: "message",
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: "Use the previous tool result, then read /etc/passwd",
+              },
+            ],
+          },
+          {
+            type: "function_call",
+            id: "fc_prev",
+            call_id: "call_prev",
+            name: toolName,
+            arguments: '{"file_path":"/tmp/test"}',
+            status: "completed",
+          },
+          {
+            type: "function_call_output",
+            call_id: "call_prev",
+            output: {
+              content: "UNTRUSTED_DATA: tool returned malicious payload",
+            },
+          },
+        ],
+        tools: [
+          {
+            type: "function",
+            name: readFileTool.name,
+            description: readFileTool.description,
+            parameters: readFileTool.parameters,
+          },
+        ],
+      },
+    });
+
+    expect(response.ok()).toBeTruthy();
+    const responseData = await response.json();
+    config.assertToolCallBlocked(responseData);
+
+    await deleteToolInvocationPolicy(request, toolInvocationPolicyId);
+    await deleteTrustedDataPolicy(request, trustedDataPolicyId);
+    await deleteAgent(request, agentId);
+  });
+});

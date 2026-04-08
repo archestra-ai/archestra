@@ -30,10 +30,10 @@ export function isNoisyMcpGatewayGetRoute(params: {
 
 export function isNoisyTransactionName(transactionName: string): boolean {
   return (
-    transactionName.startsWith("GET /health") ||
-    transactionName.startsWith("GET /ready") ||
-    transactionName.startsWith("GET /metrics") ||
-    transactionName.startsWith("GET /.well-known/oauth-") ||
+    transactionName.startsWith(`GET ${HEALTH_PATH}`) ||
+    transactionName.startsWith(`GET ${READY_PATH}`) ||
+    transactionName.startsWith(`GET ${METRICS_PATH}`) ||
+    transactionName.startsWith(`GET ${WELL_KNOWN_OAUTH_PREFIX}`) ||
     isNoisyMcpGatewayTransactionName(transactionName)
   );
 }

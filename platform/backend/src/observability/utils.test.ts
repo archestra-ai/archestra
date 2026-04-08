@@ -87,7 +87,14 @@ describe("isNoisyTransactionName", () => {
 
   test("matches health and metrics transaction names", () => {
     expect(isNoisyTransactionName("GET /health")).toBe(true);
+    expect(isNoisyTransactionName("GET /ready")).toBe(true);
     expect(isNoisyTransactionName("GET /metrics")).toBe(true);
+  });
+
+  test("matches OAuth well-known transaction names", () => {
+    expect(
+      isNoisyTransactionName("GET /.well-known/oauth-authorization-server"),
+    ).toBe(true);
   });
 
   test("does not match normal application transactions", () => {

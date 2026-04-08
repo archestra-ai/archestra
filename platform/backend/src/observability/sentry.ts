@@ -140,11 +140,10 @@ const initSentry = async (): Promise<void> => {
     // https://docs.sentry.io/platforms/javascript/configuration/options/#tracesSampler
     tracesSampler: ({
       normalizedRequest,
-      transactionContext,
+      name: transactionName,
     }: TracesSamplerSamplingContext) => {
       const url = normalizedRequest?.url;
       const method = normalizedRequest?.method;
-      const transactionName = transactionContext.name;
 
       if (transactionName && isNoisyTransactionName(transactionName)) {
         return 0;

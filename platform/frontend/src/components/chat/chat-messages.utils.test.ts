@@ -340,4 +340,37 @@ describe("stripDanglingToolCalls", () => {
 
     expect(sanitized).toEqual(messages);
   });
+
+  it("preserves tool calls when the matching result is in a later message", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-google__search",
+            toolCallId: "call_1",
+            state: "input-available",
+            input: { q: "weather" },
+          },
+        ],
+      },
+      {
+        id: "assistant-2",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-google__search",
+            toolCallId: "call_1",
+            state: "output-available",
+            output: "sunny",
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    const sanitized = stripDanglingToolCalls(messages);
+
+    expect(sanitized).toEqual(messages);
+  });
 });

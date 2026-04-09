@@ -126,4 +126,37 @@ describe("normalizeChatMessages", () => {
 
     expect(result[0].parts).toHaveLength(2);
   });
+
+  test("keeps tool invocations when the matching result is in a later message", () => {
+    const messages = [
+      {
+        id: "msg1",
+        role: "assistant" as const,
+        parts: [
+          {
+            type: "tool-github__list_issues",
+            toolCallId: "call_list_1",
+            state: "input-available",
+            input: { owner: "archestra-ai", repo: "archestra" },
+          },
+        ],
+      },
+      {
+        id: "msg2",
+        role: "assistant" as const,
+        parts: [
+          {
+            type: "tool-github__list_issues",
+            toolCallId: "call_list_1",
+            state: "output-available",
+            output: { issues: [] },
+          },
+        ],
+      },
+    ];
+
+    const result = normalizeChatMessages(messages);
+
+    expect(result).toEqual(messages);
+  });
 });

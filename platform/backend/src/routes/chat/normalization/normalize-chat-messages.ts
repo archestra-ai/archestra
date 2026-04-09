@@ -37,16 +37,11 @@ function dedupeToolPartsFromMessages(messages: ChatMessage[]): ChatMessage[] {
 }
 
 function stripDanglingToolCalls(messages: ChatMessage[]): ChatMessage[] {
+  const completedToolCallIds = collectCompletedToolCallIds(messages);
+
   return messages.map((message) => {
     if (!message.parts || !Array.isArray(message.parts)) {
       return message;
-    }
-
-    const completedToolCallIds = new Set<string>();
-    for (const part of message.parts) {
-      if (typeof part.toolCallId === "string" && isCompletedToolPart(part)) {
-        completedToolCallIds.add(part.toolCallId);
-      }
     }
 
     const sanitizedParts = message.parts.filter((part) => {
@@ -59,10 +54,9 @@ function stripDanglingToolCalls(messages: ChatMessage[]): ChatMessage[] {
 
       // If the user stops a stream mid-tool-execution, the client can send the
       // stale input-available tool part back on the next turn without a matching
-      // result. Gemini rejects that replay with MissingToolResultsError, so we
-      // strip only the interrupted invocation here and keep completed tool parts.
-      // This intentionally works per-message because UIMessage tool calls and
-      // results are expected to live in the same message part array.
+      // result anywhere in the replayed transcript. Bedrock and Anthropic both
+      // reject that malformed history, so only keep tool invocations that have
+      // a completed result somewhere in the normalized message list.
       return completedToolCallIds.has(part.toolCallId);
     });
 
@@ -107,6 +101,20 @@ function dedupeToolParts(
   }
 
   return dedupedParts;
+}
+
+function collectCompletedToolCallIds(messages: ChatMessage[]) {
+  const completedToolCallIds = new Set<string>();
+
+  for (const message of messages) {
+    for (const part of message.parts ?? []) {
+      if (typeof part.toolCallId === "string" && isCompletedToolPart(part)) {
+        completedToolCallIds.add(part.toolCallId);
+      }
+    }
+  }
+
+  return completedToolCallIds;
 }
 
 function getToolPartSignature(part: NonNullable<ChatMessage["parts"]>[number]) {

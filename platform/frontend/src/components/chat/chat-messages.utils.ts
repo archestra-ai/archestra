@@ -80,20 +80,11 @@ export function filterOptimisticToolCalls(
 }
 
 export function stripDanglingToolCalls(messages: UIMessage[]): UIMessage[] {
+  const completedToolCallIds = collectCompletedToolCallIds(messages);
+
   return messages.map((message) => {
     if (!message.parts?.length) {
       return message;
-    }
-
-    const completedToolCallIds = new Set<string>();
-    for (const part of message.parts) {
-      if (
-        isToolPart(part) &&
-        typeof part.toolCallId === "string" &&
-        isCompletedToolPart(part)
-      ) {
-        completedToolCallIds.add(part.toolCallId);
-      }
     }
 
     const sanitizedParts = message.parts.filter((part) => {
@@ -106,9 +97,10 @@ export function stripDanglingToolCalls(messages: UIMessage[]): UIMessage[] {
       }
 
       // If a stream is stopped mid-tool-execution, AI SDK can leave behind a
-      // lone input-available tool part with no matching result. Sending that
-      // stale part back on the next turn triggers MissingToolResultsError at
-      // the provider layer, so we strip only the dangling invocation here.
+      // lone input-available tool part with no matching result anywhere in the
+      // thread. Replaying that stale invocation breaks providers that require
+      // tool results to immediately follow tool uses, so only keep tool calls
+      // that have a completed result somewhere in the message list.
       return completedToolCallIds.has(part.toolCallId);
     });
 
@@ -121,6 +113,24 @@ export function stripDanglingToolCalls(messages: UIMessage[]): UIMessage[] {
       parts: sanitizedParts,
     };
   });
+}
+
+function collectCompletedToolCallIds(messages: UIMessage[]) {
+  const completedToolCallIds = new Set<string>();
+
+  for (const message of messages) {
+    for (const part of message.parts ?? []) {
+      if (
+        isToolPart(part) &&
+        typeof part.toolCallId === "string" &&
+        isCompletedToolPart(part)
+      ) {
+        completedToolCallIds.add(part.toolCallId);
+      }
+    }
+  }
+
+  return completedToolCallIds;
 }
 
 export function identifyCompactToolGroups(

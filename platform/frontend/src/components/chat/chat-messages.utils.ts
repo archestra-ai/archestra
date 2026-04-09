@@ -1,8 +1,5 @@
 import type { UIMessage } from "@ai-sdk/react";
-import {
-  stripDanglingToolCalls,
-  type ArchestraToolShortName,
-} from "@shared";
+import type { ArchestraToolShortName } from "@shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import {
   getToolErrorText,

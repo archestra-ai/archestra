@@ -42,6 +42,6 @@ jobs:
         with:
           prompt: "/review-pr REPO: ${{ github.repository }} PR_NUMBER: ${{ inputs.pr_number }}"
           allowed_tools: "Read,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }} # zizmor: ignore[secrets-outside-env] dedicated OAuth secret for this reusable workflow.
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           use_sticky_comment: "true"
           track_progress: "true"

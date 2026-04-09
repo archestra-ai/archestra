@@ -37,8 +37,8 @@ jobs:
         id: generate-token
         uses: ./.github/actions/generate-release-token
         with:
-          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }} # zizmor: ignore[secrets-outside-env] dedicated GitHub App credentials for release automation.
-          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }} # zizmor: ignore[secrets-outside-env] dedicated GitHub App credentials for release automation.
+          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
 
       - uses: googleapis/release-please-action@16a9c90856f42705d54a6fda1823352bdc62cf38 # v4.4.0
         id: release-please
@@ -81,8 +81,8 @@ jobs:
       push_to_gcr: true
       version: ${{ needs.release-please.outputs.platform_version }}
     secrets:
-      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }} # zizmor: ignore[secrets-outside-env] forwarded to the reusable workflow only.
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }} # zizmor: ignore[secrets-outside-env] forwarded to the reusable workflow only.
+      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   build-and-push-platform-docker-image-to-dockerhub:
     name: Build and push platform Docker image to Docker Hub
@@ -104,11 +104,11 @@ jobs:
       version: ${{ needs.release-please.outputs.platform_version }}
       push_image: true
     secrets:
-      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }} # zizmor: ignore[secrets-outside-env] forwarded to the reusable workflow only.
-      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }} # zizmor: ignore[secrets-outside-env] forwarded to the reusable workflow only.
-      PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN: ${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }} # zizmor: ignore[secrets-outside-env] forwarded to the reusable workflow only.
-      TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }} # zizmor: ignore[secrets-outside-env] forwarded to the reusable workflow only.
-      TURBOREPO_REMOTE_CACHING_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }} # zizmor: ignore[secrets-outside-env] forwarded to the reusable workflow only.
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+      PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN: ${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
+      TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+      TURBOREPO_REMOTE_CACHING_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
 
   publish-platform-helm-chart:
     name: Publish platform Helm chart
@@ -126,8 +126,8 @@ jobs:
       version: ${{ needs.release-please.outputs.platform_version }}
       push_chart: true
     secrets:
-      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }} # zizmor: ignore[secrets-outside-env] forwarded to the reusable workflow only.
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }} # zizmor: ignore[secrets-outside-env] forwarded to the reusable workflow only.
+      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   publish-github-release:
     name: Publish GitHub Release
@@ -153,8 +153,8 @@ jobs:
         id: generate-token
         uses: ./.github/actions/github-app-token
         with:
-          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }} # zizmor: ignore[secrets-outside-env] dedicated GitHub App credentials for release automation.
-          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }} # zizmor: ignore[secrets-outside-env] dedicated GitHub App credentials for release automation.
+          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
 
       - name: Publish release
         env:
@@ -165,5 +165,5 @@ jobs:
 
       - name: Trigger website deploy
         env:
-          VERCEL_DEPLOY_HOOK_URL: ${{ secrets.WEBSITE_VERCEL_DEPLOY_HOOK_URL }} # zizmor: ignore[secrets-outside-env] dedicated deploy hook secret.
+          VERCEL_DEPLOY_HOOK_URL: ${{ secrets.WEBSITE_VERCEL_DEPLOY_HOOK_URL }}
         run: curl -X POST "$VERCEL_DEPLOY_HOOK_URL"

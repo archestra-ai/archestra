@@ -61,8 +61,8 @@ jobs:
       run:
         working-directory: ./platform
     env:
-      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }} # zizmor: ignore[secrets-outside-env] reusable workflow callers explicitly scope this remote-cache token.
-      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }} # zizmor: ignore[secrets-outside-env] reusable workflow callers explicitly scope this remote-cache team value.
+      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
     steps:
       - name: Checkout project
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -80,8 +80,8 @@ jobs:
         id: generate-token
         uses: ./.github/actions/github-app-token
         with:
-          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }} # zizmor: ignore[secrets-outside-env] dedicated GitHub App credential for release-please automation.
-          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }} # zizmor: ignore[secrets-outside-env] dedicated GitHub App credential for release-please automation.
+          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
 
       - name: Update checkout credentials for release-please PR
         if: ${{ inputs.should-skip-running-and-always-succeed != true && inputs.is-release-please-pr == true }}
@@ -231,15 +231,15 @@ jobs:
           context: ${{ matrix.context }}
           load: "true"
           tags: ${{ matrix.local-tag-prefix }}:${{ github.sha }}
-          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }} # zizmor: ignore[secrets-outside-env] reusable workflow callers explicitly scope this remote-cache team value.
-          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }} # zizmor: ignore[secrets-outside-env] reusable workflow callers explicitly scope this remote-cache token.
+          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ matrix.use-build-action && !inputs.is-fork-pr }}
         uses: ./.github/actions/auth-to-gar
         with:
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }} # zizmor: ignore[secrets-outside-env] reusable workflow callers explicitly scope this GAR service account.
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }} # zizmor: ignore[secrets-outside-env] reusable workflow callers explicitly scope this Workload Identity provider.
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
       - name: Build Platform image and push to Artifact Registry
         if: ${{ matrix.use-build-action && !inputs.is-fork-pr }}
@@ -248,8 +248,8 @@ jobs:
           context: ${{ matrix.context }}
           push: "true"
           tags: ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:${{ github.sha }}
-          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }} # zizmor: ignore[secrets-outside-env] reusable workflow callers explicitly scope this remote-cache team value.
-          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }} # zizmor: ignore[secrets-outside-env] reusable workflow callers explicitly scope this remote-cache token.
+          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 
       - name: Setup Blacksmith Builder
         if: ${{ !matrix.use-build-action }}
@@ -259,8 +259,8 @@ jobs:
         if: ${{ !matrix.use-build-action && !inputs.is-fork-pr }}
         uses: ./.github/actions/auth-to-gar
         with:
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }} # zizmor: ignore[secrets-outside-env] reusable workflow callers explicitly scope this GAR service account.
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }} # zizmor: ignore[secrets-outside-env] reusable workflow callers explicitly scope this Workload Identity provider.
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
       - name: Build MCP server base image
         if: ${{ !matrix.use-build-action }}
@@ -911,8 +911,8 @@ jobs:
         uses: ./.github/actions/scan-docker-image
         with:
           image: ${{ steps.image-tag.outputs.tag }}
-          dockerhub-user: ${{ secrets.DOCKER_USERNAME }} # zizmor: ignore[secrets-outside-env] dedicated Docker Hub credential for image scanning.
-          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }} # zizmor: ignore[secrets-outside-env] dedicated Docker Hub credential for image scanning.
+          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
+          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
 
   helm-chart-linting-and-tests:
     name: Helm Chart Linting and Tests

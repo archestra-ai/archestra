@@ -32,8 +32,8 @@ jobs:
       - name: Authenticate to Google Artifact Registry
         uses: ./.github/actions/auth-to-gar
         with:
-          service_account: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }} # zizmor: ignore[secrets-outside-env] dedicated staging deploy credentials.
-          workload_identity_provider: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }} # zizmor: ignore[secrets-outside-env] dedicated staging deploy credentials.
+          service_account: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
       - name: Install gke-gcloud-auth-plugin
         run: gcloud components install gke-gcloud-auth-plugin
@@ -96,8 +96,8 @@ jobs:
       push_to_gcr: true
       version: ${{ github.sha }}
     secrets:
-      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }} # zizmor: ignore[secrets-outside-env] forwarded to the reusable workflow only.
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }} # zizmor: ignore[secrets-outside-env] forwarded to the reusable workflow only.
+      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   deploy-to-staging:
     name: Deploy to staging
@@ -116,8 +116,8 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: ./.github/actions/google-auth
         with:
-          service_account: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }} # zizmor: ignore[secrets-outside-env] dedicated staging deploy credentials.
-          workload_identity_provider: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }} # zizmor: ignore[secrets-outside-env] dedicated staging deploy credentials.
+          service_account: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
@@ -135,18 +135,18 @@ jobs:
       - name: Deploy to staging
         env:
           PLATFORM_IMAGE_TAG: ${{ github.sha }}
-          ARCHESTRA_STAGING_DATABASE_URL: ${{ secrets.ARCHESTRA_STAGING_DATABASE_URL }} # zizmor: ignore[secrets-outside-env] staging deploy secret consumed via environment variables.
-          ARCHESTRA_STAGING_METRICS_SECRET: ${{ secrets.ARCHESTRA_STAGING_METRICS_SECRET }} # zizmor: ignore[secrets-outside-env] staging deploy secret consumed via environment variables.
-          ARCHESTRA_STAGING_OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.ARCHESTRA_STAGING_OTEL_EXPORTER_OTLP_ENDPOINT }} # zizmor: ignore[secrets-outside-env] staging deploy secret consumed via environment variables.
-          ARCHESTRA_STAGING_AUTH_SECRET: ${{ secrets.ARCHESTRA_STAGING_AUTH_SECRET }} # zizmor: ignore[secrets-outside-env] staging deploy secret consumed via environment variables.
-          ARCHESTRA_STAGING_AUTH_ADMIN_EMAIL: ${{ secrets.ARCHESTRA_STAGING_AUTH_ADMIN_EMAIL }} # zizmor: ignore[secrets-outside-env] staging deploy secret consumed via environment variables.
-          ARCHESTRA_STAGING_AUTH_ADMIN_PASSWORD: ${{ secrets.ARCHESTRA_STAGING_AUTH_ADMIN_PASSWORD }} # zizmor: ignore[secrets-outside-env] staging deploy secret consumed via environment variables.
-          ARCHESTRA_STAGING_SENTRY_BACKEND_DSN: ${{ secrets.ARCHESTRA_STAGING_SENTRY_BACKEND_DSN }} # zizmor: ignore[secrets-outside-env] staging deploy secret consumed via environment variables.
-          ARCHESTRA_STAGING_SENTRY_FRONTEND_DSN: ${{ secrets.ARCHESTRA_STAGING_SENTRY_FRONTEND_DSN }} # zizmor: ignore[secrets-outside-env] staging deploy secret consumed via environment variables.
-          ARCHESTRA_STAGING_OUTLOOK_TENANT_ID: ${{ secrets.ARCHESTRA_STAGING_OUTLOOK_TENANT_ID }} # zizmor: ignore[secrets-outside-env] staging deploy secret consumed via environment variables.
-          ARCHESTRA_STAGING_OUTLOOK_CLIENT_ID: ${{ secrets.ARCHESTRA_STAGING_OUTLOOK_CLIENT_ID }} # zizmor: ignore[secrets-outside-env] staging deploy secret consumed via environment variables.
-          ARCHESTRA_STAGING_OUTLOOK_CLIENT_SECRET: ${{ secrets.ARCHESTRA_STAGING_OUTLOOK_CLIENT_SECRET }} # zizmor: ignore[secrets-outside-env] staging deploy secret consumed via environment variables.
-          ARCHESTRA_STAGING_CHAT_ANTHROPIC_API_KEY: ${{ secrets.ARCHESTRA_STAGING_CHAT_ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env] staging deploy secret consumed via environment variables.
+          ARCHESTRA_STAGING_DATABASE_URL: ${{ secrets.ARCHESTRA_STAGING_DATABASE_URL }}
+          ARCHESTRA_STAGING_METRICS_SECRET: ${{ secrets.ARCHESTRA_STAGING_METRICS_SECRET }}
+          ARCHESTRA_STAGING_OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.ARCHESTRA_STAGING_OTEL_EXPORTER_OTLP_ENDPOINT }}
+          ARCHESTRA_STAGING_AUTH_SECRET: ${{ secrets.ARCHESTRA_STAGING_AUTH_SECRET }}
+          ARCHESTRA_STAGING_AUTH_ADMIN_EMAIL: ${{ secrets.ARCHESTRA_STAGING_AUTH_ADMIN_EMAIL }}
+          ARCHESTRA_STAGING_AUTH_ADMIN_PASSWORD: ${{ secrets.ARCHESTRA_STAGING_AUTH_ADMIN_PASSWORD }}
+          ARCHESTRA_STAGING_SENTRY_BACKEND_DSN: ${{ secrets.ARCHESTRA_STAGING_SENTRY_BACKEND_DSN }}
+          ARCHESTRA_STAGING_SENTRY_FRONTEND_DSN: ${{ secrets.ARCHESTRA_STAGING_SENTRY_FRONTEND_DSN }}
+          ARCHESTRA_STAGING_OUTLOOK_TENANT_ID: ${{ secrets.ARCHESTRA_STAGING_OUTLOOK_TENANT_ID }}
+          ARCHESTRA_STAGING_OUTLOOK_CLIENT_ID: ${{ secrets.ARCHESTRA_STAGING_OUTLOOK_CLIENT_ID }}
+          ARCHESTRA_STAGING_OUTLOOK_CLIENT_SECRET: ${{ secrets.ARCHESTRA_STAGING_OUTLOOK_CLIENT_SECRET }}
+          ARCHESTRA_STAGING_CHAT_ANTHROPIC_API_KEY: ${{ secrets.ARCHESTRA_STAGING_CHAT_ANTHROPIC_API_KEY }}
         run: |
           helm upgrade archestra-platform \
             ./platform/helm/archestra \

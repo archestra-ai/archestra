@@ -232,12 +232,12 @@ jobs:
       should-skip-running-and-always-succeed: ${{ github.event_name == 'pull_request' }}
       is-fork-pr: ${{ github.event.pull_request.head.repo.fork == true }}
     secrets:
-      TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }} # zizmor: ignore[secrets-outside-env] forwarded to the reusable workflow only.
-      TURBOREPO_REMOTE_CACHING_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }} # zizmor: ignore[secrets-outside-env] forwarded to the reusable workflow only.
-      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }} # zizmor: ignore[secrets-outside-env] forwarded to the reusable workflow only.
-      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }} # zizmor: ignore[secrets-outside-env] forwarded to the reusable workflow only.
-      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }} # zizmor: ignore[secrets-outside-env] forwarded to the reusable workflow only.
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }} # zizmor: ignore[secrets-outside-env] forwarded to the reusable workflow only.
+      TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+      TURBOREPO_REMOTE_CACHING_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   # On-demand E2E: add the "run-e2e" label to a PR to trigger the full E2E suite.
   # Runs natively on the PR branch with full secrets. Remove and re-add label to re-trigger.
@@ -254,9 +254,9 @@ jobs:
       should-skip-running-and-always-succeed: false
       is-fork-pr: ${{ github.event.pull_request.head.repo.fork == true }}
     secrets:
-      TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }} # zizmor: ignore[secrets-outside-env] forwarded to the reusable workflow only.
-      TURBOREPO_REMOTE_CACHING_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }} # zizmor: ignore[secrets-outside-env] forwarded to the reusable workflow only.
-      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }} # zizmor: ignore[secrets-outside-env] forwarded to the reusable workflow only.
-      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }} # zizmor: ignore[secrets-outside-env] forwarded to the reusable workflow only.
-      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }} # zizmor: ignore[secrets-outside-env] forwarded to the reusable workflow only.
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }} # zizmor: ignore[secrets-outside-env] forwarded to the reusable workflow only.
+      TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+      TURBOREPO_REMOTE_CACHING_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}

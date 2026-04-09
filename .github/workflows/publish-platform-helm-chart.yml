@@ -46,8 +46,8 @@ jobs:
         if: inputs.push_chart
         uses: ./.github/actions/auth-to-gar
         with:
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }} # zizmor: ignore[secrets-outside-env] reusable workflow callers explicitly scope these secrets.
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }} # zizmor: ignore[secrets-outside-env] reusable workflow callers explicitly scope these secrets.
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
       - name: helm package
         env:

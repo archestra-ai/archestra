@@ -357,6 +357,90 @@ describe("organization routes", () => {
     });
   });
 
+  describe("PATCH /api/organization/security-settings", () => {
+    test("updates global tool policy and chat file upload settings", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/security-settings",
+        payload: {
+          globalToolPolicy: "restrictive",
+          allowChatFileUploads: false,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        globalToolPolicy: "restrictive",
+        allowChatFileUploads: false,
+      });
+    });
+
+    test("persists security settings across reads", async () => {
+      await app.inject({
+        method: "PATCH",
+        url: "/api/organization/security-settings",
+        payload: {
+          globalToolPolicy: "permissive",
+          allowChatFileUploads: true,
+        },
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/organization",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        globalToolPolicy: "permissive",
+        allowChatFileUploads: true,
+      });
+    });
+  });
+
+  describe("PATCH /api/organization/llm-settings", () => {
+    test("updates compression scope and TOON conversion", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/llm-settings",
+        payload: {
+          compressionScope: "team",
+          convertToolResultsToToon: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        compressionScope: "team",
+        convertToolResultsToToon: true,
+      });
+    });
+
+    test("persists limit cleanup interval across reads", async () => {
+      await app.inject({
+        method: "PATCH",
+        url: "/api/organization/llm-settings",
+        payload: {
+          compressionScope: "organization",
+          convertToolResultsToToon: false,
+          limitCleanupInterval: "12h",
+        },
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/organization",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        compressionScope: "organization",
+        convertToolResultsToToon: false,
+        limitCleanupInterval: "12h",
+      });
+    });
+  });
+
   describe("PATCH /api/organization/knowledge-settings", () => {
     test("allows clearing embedding model with null", async ({
       makeSecret,

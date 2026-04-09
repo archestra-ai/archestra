@@ -1,5 +1,8 @@
 import type { UIMessage } from "@ai-sdk/react";
-import type { ArchestraToolShortName } from "@shared";
+import {
+  stripDanglingToolCalls,
+  type ArchestraToolShortName,
+} from "@shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import {
   getToolErrorText,
@@ -77,60 +80,6 @@ export function filterOptimisticToolCalls(
   return optimisticToolCalls.filter(
     (toolCall) => !renderedToolCallIds.has(toolCall.toolCallId),
   );
-}
-
-export function stripDanglingToolCalls(messages: UIMessage[]): UIMessage[] {
-  const completedToolCallIds = collectCompletedToolCallIds(messages);
-
-  return messages.map((message) => {
-    if (!message.parts?.length) {
-      return message;
-    }
-
-    const sanitizedParts = message.parts.filter((part) => {
-      if (
-        !isToolPart(part) ||
-        typeof part.toolCallId !== "string" ||
-        part.state !== "input-available"
-      ) {
-        return true;
-      }
-
-      // If a stream is stopped mid-tool-execution, AI SDK can leave behind a
-      // lone input-available tool part with no matching result anywhere in the
-      // thread. Replaying that stale invocation breaks providers that require
-      // tool results to immediately follow tool uses, so only keep tool calls
-      // that have a completed result somewhere in the message list.
-      return completedToolCallIds.has(part.toolCallId);
-    });
-
-    if (sanitizedParts.length === message.parts.length) {
-      return message;
-    }
-
-    return {
-      ...message,
-      parts: sanitizedParts,
-    };
-  });
-}
-
-function collectCompletedToolCallIds(messages: UIMessage[]) {
-  const completedToolCallIds = new Set<string>();
-
-  for (const message of messages) {
-    for (const part of message.parts ?? []) {
-      if (
-        isToolPart(part) &&
-        typeof part.toolCallId === "string" &&
-        isCompletedToolPart(part)
-      ) {
-        completedToolCallIds.add(part.toolCallId);
-      }
-    }
-  }
-
-  return completedToolCallIds;
 }
 
 export function identifyCompactToolGroups(
@@ -254,14 +203,6 @@ function isToolPart(part: unknown): part is DynamicToolUIPart | ToolUIPart {
     "type" in part &&
     typeof part.type === "string" &&
     (part.type.startsWith("tool-") || part.type === "dynamic-tool")
-  );
-}
-
-function isCompletedToolPart(part: DynamicToolUIPart | ToolUIPart) {
-  return (
-    part.state === "output-available" ||
-    part.state === "output-error" ||
-    part.state === "output-denied"
   );
 }
 

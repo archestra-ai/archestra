@@ -1,0 +1,142 @@
+import { describe, expect, test } from "vitest";
+import {
+  collectCompletedToolCallIds,
+  stripDanglingToolCalls,
+} from "./tool-call-normalization";
+
+describe("collectCompletedToolCallIds", () => {
+  test("collects completed tool calls across multiple messages", () => {
+    const completedToolCallIds = collectCompletedToolCallIds([
+      {
+        parts: [
+          {
+            type: "dynamic-tool",
+            toolCallId: "call_1",
+            state: "output-available",
+          },
+        ],
+      },
+      {
+        parts: [
+          {
+            type: "tool-result",
+            toolCallId: "call_2",
+          },
+        ],
+      },
+    ]);
+
+    expect(completedToolCallIds).toEqual(new Set(["call_1", "call_2"]));
+  });
+});
+
+describe("stripDanglingToolCalls", () => {
+  test("removes interrupted input-available tool calls with no result", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          { type: "text", text: "Working on it..." },
+          {
+            type: "tool-google__search",
+            toolCallId: "call_1",
+            state: "input-available",
+            input: { q: "weather" },
+          },
+        ],
+      },
+    ];
+
+    expect(stripDanglingToolCalls(messages)).toEqual([
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "Working on it..." }],
+      },
+    ]);
+  });
+
+  test("preserves tool calls that have a matching completed result in the same message", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-google__search",
+            toolCallId: "call_1",
+            state: "input-available",
+            input: { q: "weather" },
+          },
+          {
+            type: "tool-google__search",
+            toolCallId: "call_1",
+            state: "output-available",
+            output: "sunny",
+          },
+        ],
+      },
+    ];
+
+    expect(stripDanglingToolCalls(messages)).toEqual(messages);
+  });
+
+  test("preserves tool calls when the matching result is in a later message", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-google__search",
+            toolCallId: "call_1",
+            state: "input-available",
+            input: { q: "weather" },
+          },
+        ],
+      },
+      {
+        id: "assistant-2",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-google__search",
+            toolCallId: "call_1",
+            state: "output-available",
+            output: "sunny",
+          },
+        ],
+      },
+    ];
+
+    expect(stripDanglingToolCalls(messages)).toEqual(messages);
+  });
+
+  test("preserves backend tool-call parts when a later tool-result completes them", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-call",
+            toolCallId: "call_1",
+          },
+        ],
+      },
+      {
+        id: "assistant-2",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-result",
+            toolCallId: "call_1",
+          },
+        ],
+      },
+    ];
+
+    expect(stripDanglingToolCalls(messages)).toEqual(messages);
+  });
+});

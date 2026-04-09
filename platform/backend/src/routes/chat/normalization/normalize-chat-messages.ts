@@ -1,10 +1,11 @@
+import { stripDanglingToolCalls } from "@shared";
 import logger from "@/logging";
 import type { ChatMessage, ChatMessagePart } from "@/types";
 import { stripImagesFromMessages } from "./strip-images-from-messages";
 
 export function normalizeChatMessages(messages: ChatMessage[]): ChatMessage[] {
   return stripImagesFromMessages(
-    stripDanglingToolCalls(dedupeToolPartsFromMessages(messages)),
+    stripDanglingToolCallsFromMessages(dedupeToolPartsFromMessages(messages)),
   );
 }
 
@@ -36,51 +37,6 @@ function dedupeToolPartsFromMessages(messages: ChatMessage[]): ChatMessage[] {
   });
 }
 
-function stripDanglingToolCalls(messages: ChatMessage[]): ChatMessage[] {
-  const completedToolCallIds = collectCompletedToolCallIds(messages);
-
-  return messages.map((message) => {
-    if (!message.parts || !Array.isArray(message.parts)) {
-      return message;
-    }
-
-    const sanitizedParts = message.parts.filter((part) => {
-      if (
-        typeof part.toolCallId !== "string" ||
-        !isInputAvailableToolPart(part)
-      ) {
-        return true;
-      }
-
-      // If the user stops a stream mid-tool-execution, the client can send the
-      // stale input-available tool part back on the next turn without a matching
-      // result anywhere in the replayed transcript. Bedrock and Anthropic both
-      // reject that malformed history, so only keep tool invocations that have
-      // a completed result somewhere in the normalized message list.
-      return completedToolCallIds.has(part.toolCallId);
-    });
-
-    if (sanitizedParts.length === message.parts.length) {
-      return message;
-    }
-
-    logger.warn(
-      {
-        messageId: message.id,
-        role: message.role,
-        originalCount: message.parts.length,
-        sanitizedCount: sanitizedParts.length,
-      },
-      "[normalizeChatMessages] Removed dangling tool calls from message",
-    );
-
-    return {
-      ...message,
-      parts: sanitizedParts,
-    };
-  });
-}
-
 function dedupeToolParts(
   parts: NonNullable<ChatMessage["parts"]>,
 ): NonNullable<ChatMessage["parts"]> {
@@ -103,18 +59,30 @@ function dedupeToolParts(
   return dedupedParts;
 }
 
-function collectCompletedToolCallIds(messages: ChatMessage[]) {
-  const completedToolCallIds = new Set<string>();
+function stripDanglingToolCallsFromMessages(messages: ChatMessage[]) {
+  const sanitizedMessages = stripDanglingToolCalls(messages);
 
-  for (const message of messages) {
-    for (const part of message.parts ?? []) {
-      if (typeof part.toolCallId === "string" && isCompletedToolPart(part)) {
-        completedToolCallIds.add(part.toolCallId);
-      }
+  return sanitizedMessages.map((message, index) => {
+    const originalMessage = messages[index];
+    const originalCount = originalMessage?.parts?.length ?? 0;
+    const sanitizedCount = message.parts?.length ?? 0;
+
+    if (sanitizedCount === originalCount) {
+      return message;
     }
-  }
 
-  return completedToolCallIds;
+    logger.warn(
+      {
+        messageId: message.id,
+        role: message.role,
+        originalCount,
+        sanitizedCount,
+      },
+      "[normalizeChatMessages] Removed dangling tool calls from message",
+    );
+
+    return message;
+  });
 }
 
 function getToolPartSignature(part: NonNullable<ChatMessage["parts"]>[number]) {
@@ -136,20 +104,6 @@ function getToolPartSignature(part: NonNullable<ChatMessage["parts"]>[number]) {
 
   return null;
 }
-
-function isCompletedToolPart(part: ChatMessagePart) {
-  return (
-    part.state === "output-available" ||
-    part.state === "output-error" ||
-    part.state === "output-denied" ||
-    part.type === "tool-result"
-  );
-}
-
-function isInputAvailableToolPart(part: ChatMessagePart) {
-  return part.state === "input-available" || part.type === "tool-call";
-}
-
 function getToolPartState(part: ChatMessagePart) {
   return typeof part.state === "string" ? part.state : "unknown";
 }

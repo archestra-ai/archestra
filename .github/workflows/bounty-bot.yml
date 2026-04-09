@@ -4,15 +4,21 @@ on:
   issue_comment:
     types: [created]
 
-permissions:
-  issues: write
-  contents: read
+permissions: {}
+
+concurrency:
+  group: bounty-bot-${{ github.event.issue.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   bounty-assignment:
+    name: Assign Bounty
     runs-on: blacksmith-2vcpu-ubuntu-2404
     # Only run on issue comments, not PR comments
     if: ${{ !github.event.issue.pull_request }}
+    permissions:
+      contents: read # Required to checkout the repository for local workflow context.
+      issues: write # Required to comment on issues and apply labels.
 
     steps:
       - name: Checkout repository

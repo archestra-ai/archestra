@@ -12,6 +12,8 @@ on:
   # https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue#triggering-merge-group-checks-with-github-actions
   merge_group:
 
+permissions: {}
+
 concurrency:
   # Cancel any running workflow for the same branch when new commits are pushed.
   # We group both by ref_name (available when CI is triggered by a push to a branch/tag)
@@ -26,8 +28,8 @@ jobs:
     # Always run so it can be a required status check - passes immediately for non-release-please PRs and merge_group
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
-      contents: read
-      pull-requests: write
+      contents: read # Required to inspect the repository context for release-please PRs.
+      pull-requests: write # Required to request changes on frozen release PRs.
     steps:
       - name: Check if this requires freeze validation
         id: check-context
@@ -103,7 +105,7 @@ jobs:
       - name: Lint PR title
         uses: grafana/shared-workflows/actions/lint-pr-title@5f4c48c03125ef179c36a821d5b801fc876e672c # v1.2.1
         with:
-          config-path: "${{ github.workspace }}/.github/commitlint.config.js"
+          config-path: "${{ github.workspace }}/.github/commitlint.config.js" # zizmor: ignore[template-injection] workspace path is provided by GitHub and not user input.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -170,8 +172,8 @@ jobs:
     if: github.event_name == 'pull_request' && github.event.action != 'edited' && github.event.action != 'labeled'
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
-      contents: read
-      pull-requests: write
+      contents: read # Required to checkout the repository and diff dependency manifests.
+      pull-requests: write # Required for dependency-review-action PR comments.
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -218,10 +220,10 @@ jobs:
   platform-linting-and-tests-merge-queue:
     name: Platform Linting and Tests (Required)
     permissions:
-      contents: write
-      security-events: write
-      id-token: write # Required for Workload Identity Federation
-      pull-requests: write # Required for Docker Scout to write a comment to a PR
+      contents: write # Required for release-please codegen commits and checked-in report artifacts.
+      security-events: write # Required for Docker Scout SARIF uploads.
+      id-token: write # Required for Workload Identity Federation.
+      pull-requests: write # Required for Docker Scout to write a comment to a PR.
     uses: ./.github/workflows/platform-linting-and-tests.yml
     with:
       # On pull requests those Required Checks must still run because they are required in GH settings
@@ -243,10 +245,10 @@ jobs:
     name: Platform Linting and Tests (On Demand)
     if: github.event.action == 'labeled' && github.event.label.name == 'run-e2e'
     permissions:
-      contents: write
-      security-events: write
-      id-token: write
-      pull-requests: write
+      contents: write # Required for release-please codegen commits and checked-in report artifacts.
+      security-events: write # Required for Docker Scout SARIF uploads.
+      id-token: write # Required for Workload Identity Federation.
+      pull-requests: write # Required for Docker Scout to write a comment to a PR.
     uses: ./.github/workflows/platform-linting-and-tests.yml
     with:
       should-skip-running-and-always-succeed: false

@@ -32,6 +32,12 @@ on:
       TURBOREPO_REMOTE_CACHING_TEAM:
         required: false
 
+permissions: {}
+
+concurrency:
+  group: build-dockerhub-image-${{ inputs.image_name }}-${{ inputs.version }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # This workflow was inspired by https://medium.com/neudesic-innovation/building-multi-platform-container-images-with-github-actions-e495f9441ad3
   # Basically we build the image for each Linux architecture on separate GitHub runners
@@ -49,8 +55,8 @@ jobs:
           - platform: blacksmith-16vcpu-ubuntu-2404-arm
             os_and_arch: linux/arm64
     permissions:
-      contents: read
-      id-token: write
+      contents: read # Required to checkout the repository and build the image.
+      id-token: write # Required for Workload Identity Federation.
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -122,8 +128,8 @@ jobs:
     needs:
       - build-dockerhub-image
     permissions:
-      contents: read
-      id-token: write
+      contents: read # Required to download digests and publish the manifest.
+      id-token: write # Required for Workload Identity Federation.
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

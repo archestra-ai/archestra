@@ -17,6 +17,12 @@ on:
       GCP_SERVICE_ACCOUNT_NAME:
         required: false
 
+permissions: {}
+
+concurrency:
+  group: build-base-mcp-server-docker-image-${{ inputs.version }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   IMAGE_REGISTRY: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
   IMAGE_NAME: mcp-server-base
@@ -29,7 +35,7 @@ jobs:
       run:
         working-directory: ./platform
     permissions:
-      contents: read
+      contents: read # Required to checkout the repository and verify the lockfile.
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -67,8 +73,8 @@ jobs:
           - platform: blacksmith-16vcpu-ubuntu-2404-arm
             os_and_arch: linux/arm64
     permissions:
-      contents: read
-      id-token: write # Required for Workload Identity Federation
+      contents: read # Required to checkout the repository and build the image.
+      id-token: write # Required for Workload Identity Federation.
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -121,8 +127,8 @@ jobs:
     needs:
       - build-mcp-server-base-image
     permissions:
-      contents: read
-      id-token: write # Required for Workload Identity Federation
+      contents: read # Required to download digests and create the manifest.
+      id-token: write # Required for Workload Identity Federation.
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

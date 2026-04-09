@@ -6,8 +6,15 @@ on:
       CLAUDE_CODE_OAUTH_TOKEN:
         required: true
 
+permissions: {}
+
+concurrency:
+  group: claude-coreteam-mentions-shared-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   claude-code:
+    name: Claude Code
     if: |
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
@@ -16,11 +23,11 @@ jobs:
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 60
     permissions:
-      contents: write
-      pull-requests: write
-      issues: write
-      id-token: write
-      actions: read # Required for Claude to read CI results on PRs
+      contents: write # Required for Claude to push follow-up commits when explicitly instructed.
+      pull-requests: write # Required for Claude to leave and update PR comments.
+      issues: write # Required for Claude to reply on issue threads.
+      id-token: write # Required by the Claude action's GitHub-backed auth flow.
+      actions: read # Required for Claude to read CI results on PRs.
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

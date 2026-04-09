@@ -1,22 +1,38 @@
 import { describe, expect, test } from "vitest";
-import {
-  collectCompletedToolCallIds,
-  stripDanglingToolCalls,
-} from "./tool-call-normalization";
+import { stripDanglingToolCalls } from "./tool-call-normalization";
 
-describe("collectCompletedToolCallIds", () => {
-  test("collects completed tool calls across multiple messages", () => {
-    const completedToolCallIds = collectCompletedToolCallIds([
+describe("stripDanglingToolCalls", () => {
+  test("preserves multiple completed tool calls across multiple messages", () => {
+    const messages = [
       {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "dynamic-tool",
+            toolCallId: "call_1",
+            state: "input-available",
+          },
+        ],
+      },
+      {
+        id: "assistant-2",
+        role: "assistant",
         parts: [
           {
             type: "dynamic-tool",
             toolCallId: "call_1",
             state: "output-available",
           },
+          {
+            type: "tool-call",
+            toolCallId: "call_2",
+          },
         ],
       },
       {
+        id: "assistant-3",
+        role: "assistant",
         parts: [
           {
             type: "tool-result",
@@ -24,13 +40,11 @@ describe("collectCompletedToolCallIds", () => {
           },
         ],
       },
-    ]);
+    ];
 
-    expect(completedToolCallIds).toEqual(new Set(["call_1", "call_2"]));
+    expect(stripDanglingToolCalls(messages)).toEqual(messages);
   });
-});
 
-describe("stripDanglingToolCalls", () => {
   test("removes interrupted input-available tool calls with no result", () => {
     const messages = [
       {

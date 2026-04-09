@@ -41,7 +41,7 @@ export function stripDanglingToolCalls<
   });
 }
 
-export function collectCompletedToolCallIds<
+function collectCompletedToolCallIds<
   TPart extends ToolPartLike,
   TMessage extends MessageWithParts<TPart>,
 >(messages: TMessage[]) {
@@ -58,7 +58,7 @@ export function collectCompletedToolCallIds<
   return completedToolCallIds;
 }
 
-export function isCompletedToolPart(part: ToolPartLike) {
+function isCompletedToolPart(part: ToolPartLike) {
   return (
     part.state === "output-available" ||
     part.state === "output-error" ||
@@ -67,6 +67,6 @@ export function isCompletedToolPart(part: ToolPartLike) {
   );
 }
 
-export function isInputAvailableToolPart(part: ToolPartLike) {
+function isInputAvailableToolPart(part: ToolPartLike) {
   return part.state === "input-available" || part.type === "tool-call";
 }

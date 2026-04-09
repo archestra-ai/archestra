@@ -39,6 +39,12 @@ on:
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
         required: false
 
+permissions: {}
+
+concurrency:
+  group: platform-linting-and-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 env:
   PLATFORM_IMAGE_REGISTRY: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
   PLATFORM_IMAGE_NAME: platform
@@ -50,7 +56,7 @@ jobs:
     name: Platform Linting and Tests
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
-      contents: write # Required for release-please auto-commit of codegen changes
+      contents: write # Required for release-please auto-commit of generated files.
     defaults:
       run:
         working-directory: ./platform
@@ -183,8 +189,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     if: ${{ inputs.should-skip-running-and-always-succeed != true }}
     permissions:
-      contents: read
-      id-token: write
+      contents: read # Required to checkout the repository and build images for E2E jobs.
+      id-token: write # Required for Workload Identity Federation when pushing trusted images.
     strategy:
       fail-fast: false
       matrix:
@@ -296,8 +302,8 @@ jobs:
     if: ${{ !cancelled() }}
     runs-on: ${{ matrix.runner }}
     permissions:
-      contents: read
-      id-token: write
+      contents: read # Required to checkout the repository and read test assets.
+      id-token: write # Required for Workload Identity Federation in setup actions.
     strategy:
       fail-fast: false
       matrix:
@@ -454,8 +460,8 @@ jobs:
     if: ${{ !cancelled() }}
     runs-on: blacksmith-8vcpu-ubuntu-2404
     permissions:
-      contents: read
-      id-token: write
+      contents: read # Required to checkout the repository and read test assets.
+      id-token: write # Required for Workload Identity Federation in setup actions.
     steps:
       - name: Checkout repository
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -486,6 +492,8 @@ jobs:
 
       - name: Start WireMock for LLM provider mocking
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        env:
+          E2E_MAPPINGS_DIR: ${{ github.workspace }}/platform/helm/e2e-tests/mappings
         run: |
           # Create a shared Docker network so the quickstart container can reach WireMock by name
           docker network create archestra-quickstart-net || true
@@ -495,7 +503,7 @@ jobs:
             --name archestra-wiremock \
             --network archestra-quickstart-net \
             -p 9092:8080 \
-            -v "${{ github.workspace }}/platform/helm/e2e-tests/mappings:/home/wiremock/mappings:ro" \
+            -v "${E2E_MAPPINGS_DIR}:/home/wiremock/mappings:ro" \
             wiremock/wiremock:3.13.1 \
             --global-response-templating --disable-gzip --verbose
 
@@ -648,8 +656,8 @@ jobs:
     if: ${{ !cancelled() }}
     runs-on: blacksmith-8vcpu-ubuntu-2404
     permissions:
-      contents: read
-      id-token: write
+      contents: read # Required to checkout the repository and read Helm assets.
+      id-token: write # Required for Workload Identity Federation in setup actions.
     steps:
       - name: Checkout repository
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -774,8 +782,8 @@ jobs:
     if: ${{ always() && !cancelled() && inputs.should-skip-running-and-always-succeed != true }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
-      contents: read
-      pull-requests: write # Required for playwright-report-summary to comment on PRs
+      contents: read # Required to checkout the repository and merge Playwright reports.
+      pull-requests: write # Required for playwright-report-summary to comment on PRs.
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -848,7 +856,7 @@ jobs:
             context: ./platform/mcp_server_docker_image
             dockerfile: ./platform/mcp_server_docker_image/Dockerfile
     permissions:
-      contents: read
+      contents: read # Required to checkout the repository and read Docker build inputs.
     steps:
       - name: Checkout repository
         if: ${{ github.event_name == 'merge_group' }}
@@ -910,7 +918,7 @@ jobs:
     name: Helm Chart Linting and Tests
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
-      contents: read
+      contents: read # Required to checkout the repository and lint/package the Helm chart.
     defaults:
       run:
         working-directory: ./platform/helm/archestra

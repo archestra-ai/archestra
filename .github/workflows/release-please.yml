@@ -7,18 +7,21 @@ on:
       - "release/*"
   workflow_dispatch:
 
-permissions:
-  contents: read
+permissions: {}
+
+concurrency:
+  group: release-please-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   release-please:
     name: Release Please
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
-      contents: write
-      pull-requests: write
-      issues: write
-      id-token: write
+      contents: write # Required to update manifests and release metadata in the repository.
+      pull-requests: write # Required for release-please PR creation and updates.
+      issues: write # Required for release-please issue comments and labels.
+      id-token: write # Required for Workload Identity Federation in downstream release jobs.
     outputs:
       platform_release_created: ${{ steps.release-please.outputs['platform--release_created'] }}
       platform_version: ${{ steps.release-please.outputs['platform--version'] }}
@@ -72,8 +75,8 @@ jobs:
     needs:
       - release-please
     permissions:
-      contents: read
-      id-token: write # Required for Workload Identity Federation
+      contents: read # Required to invoke the reusable image build workflow.
+      id-token: write # Required for Workload Identity Federation.
     with:
       push_to_gcr: true
       version: ${{ needs.release-please.outputs.platform_version }}
@@ -93,8 +96,8 @@ jobs:
     needs:
       - release-please
     permissions:
-      contents: read
-      id-token: write
+      contents: read # Required to invoke the reusable Docker build workflow.
+      id-token: write # Required for Workload Identity Federation.
     with:
       image_directory: ./platform
       image_name: platform
@@ -117,8 +120,8 @@ jobs:
     needs:
       - release-please
     permissions:
-      contents: write
-      id-token: write # Required for Workload Identity Federation
+      contents: write # Required to publish Helm chart metadata from the repository.
+      id-token: write # Required for Workload Identity Federation.
     with:
       version: ${{ needs.release-please.outputs.platform_version }}
       push_chart: true
@@ -138,7 +141,7 @@ jobs:
       - build-and-push-platform-docker-image-to-dockerhub
       - publish-platform-helm-chart
     permissions:
-      contents: write
+      contents: write # Required to publish the GitHub release draft.
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

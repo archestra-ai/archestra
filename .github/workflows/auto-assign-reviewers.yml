@@ -4,15 +4,22 @@ on:
   pull_request:
     types: [opened, ready_for_review]
 
+permissions: {}
+
+concurrency:
+  group: auto-assign-reviewers-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   assign-reviewers:
+    name: Assign Reviewers
     if: |
       github.event.pull_request.draft == false &&
       !contains(fromJson('["iskhakov", "Konstantinov-Innokentii", "joeyorlando", "brojd"]'), github.event.pull_request.user.login)
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
-      contents: read
-      pull-requests: write
+      contents: read # Required to checkout the repository for workflow context.
+      pull-requests: write # Required to request reviewers and assign the PR.
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

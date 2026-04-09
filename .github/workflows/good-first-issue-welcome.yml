@@ -4,14 +4,20 @@ on:
   issues:
     types: [labeled]
 
-permissions:
-  contents: read
-  issues: write
+permissions: {}
+
+concurrency:
+  group: good-first-issue-welcome-${{ github.event.issue.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   welcome-new-contributor:
+    name: Welcome New Contributor
     runs-on: blacksmith-2vcpu-ubuntu-2404
     if: github.event.label.name == 'good first issue'
+    permissions:
+      contents: read # Required to checkout the repository for local workflow context.
+      issues: write # Required to post the welcome comment on the labeled issue.
     
     steps:
       - name: Checkout repository

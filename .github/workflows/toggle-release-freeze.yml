@@ -12,8 +12,11 @@ on:
           - "true"
         default: "false"
 
-permissions:
-  contents: read
+permissions: {}
+
+concurrency:
+  group: toggle-release-freeze
+  cancel-in-progress: false
 
 jobs:
   toggle-release-freeze:

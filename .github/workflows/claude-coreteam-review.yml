@@ -12,9 +12,14 @@ on:
 # Restrict default permissions - each job declares what it needs
 permissions: {}
 
+concurrency:
+  group: claude-coreteam-review-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # Determine which user opened the PR and set the appropriate token
   determine-token:
+    name: Determine Token
     if: |
       !contains(github.event.pull_request.title, '[WIP]') &&
       !github.event.pull_request.draft
@@ -41,9 +46,9 @@ jobs:
     needs: determine-token
     if: needs.determine-token.outputs.should_run == 'true' && needs.determine-token.outputs.pr_author == 'iskhakov'
     permissions:
-      contents: read
-      pull-requests: write
-      id-token: write
+      contents: read # Required to pass repository context into the reusable review workflow.
+      pull-requests: write # Required for the reusable review workflow to publish comments.
+      id-token: write # Required by the Claude action's GitHub-backed auth flow.
     uses: ./.github/workflows/claude-coreteam-review-shared.yml
     with:
       pr_number: ${{ github.event.pull_request.number }}
@@ -54,9 +59,9 @@ jobs:
     needs: determine-token
     if: needs.determine-token.outputs.should_run == 'true' && needs.determine-token.outputs.pr_author == 'joeyorlando'
     permissions:
-      contents: read
-      pull-requests: write
-      id-token: write
+      contents: read # Required to pass repository context into the reusable review workflow.
+      pull-requests: write # Required for the reusable review workflow to publish comments.
+      id-token: write # Required by the Claude action's GitHub-backed auth flow.
     uses: ./.github/workflows/claude-coreteam-review-shared.yml
     with:
       pr_number: ${{ github.event.pull_request.number }}
@@ -67,9 +72,9 @@ jobs:
     needs: determine-token
     if: needs.determine-token.outputs.should_run == 'true' && needs.determine-token.outputs.pr_author == 'brojd'
     permissions:
-      contents: read
-      pull-requests: write
-      id-token: write
+      contents: read # Required to pass repository context into the reusable review workflow.
+      pull-requests: write # Required for the reusable review workflow to publish comments.
+      id-token: write # Required by the Claude action's GitHub-backed auth flow.
     uses: ./.github/workflows/claude-coreteam-review-shared.yml
     with:
       pr_number: ${{ github.event.pull_request.number }}

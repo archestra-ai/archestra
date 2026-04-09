@@ -10,6 +10,10 @@ on:
 
 permissions: {}
 
+concurrency:
+  group: trigger-website-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   trigger-website-deploy:
     name: Trigger Website Vercel Deploy

@@ -4,15 +4,16 @@ on:
   issue_comment:
     types: [created]
 
-permissions:
-  issues: write
-  contents: read
-
 jobs:
   bounty-assignment:
     runs-on: blacksmith-2vcpu-ubuntu-2404
     # Only run on issue comments, not PR comments
     if: ${{ !github.event.issue.pull_request }}
+    permissions:
+      # Required to checkout the repository for local workflow context.
+      contents: read
+      # Required to comment on issues and apply labels.
+      issues: write
 
     steps:
       - name: Checkout repository

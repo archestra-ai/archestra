@@ -3,13 +3,14 @@ name: Clear cache
 on:
   workflow_dispatch:
 
-permissions:
-  actions: write
-  contents: read
-
 jobs:
   clear-cache:
     runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      # Required to list and delete Actions caches.
+      actions: write
+      # Required to checkout the repository for local workflow context.
+      contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

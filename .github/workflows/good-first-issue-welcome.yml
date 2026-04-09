@@ -4,14 +4,15 @@ on:
   issues:
     types: [labeled]
 
-permissions:
-  contents: read
-  issues: write
-
 jobs:
   welcome-new-contributor:
     runs-on: blacksmith-2vcpu-ubuntu-2404
     if: github.event.label.name == 'good first issue'
+    permissions:
+      # Required to checkout the repository for local workflow context.
+      contents: read
+      # Required to post the welcome comment on the labeled issue.
+      issues: write
     
     steps:
       - name: Checkout repository

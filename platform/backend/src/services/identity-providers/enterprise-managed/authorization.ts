@@ -6,6 +6,7 @@ import {
   AgentModel,
   OAuthAccessTokenModel,
   OAuthClientModel,
+  OrganizationModel,
   UserModel,
 } from "@/models";
 import {
@@ -18,6 +19,7 @@ export const JWT_BEARER_GRANT_TYPE =
   "urn:ietf:params:oauth:grant-type:jwt-bearer";
 export const OAUTH_ID_JAG_TYP = "oauth-id-jag+jwt";
 export const MCP_RESOURCE_REFERENCE_PREFIX = "mcp-resource:";
+const DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS = 31_536_000;
 
 export interface EnterpriseManagedTokenResponse {
   access_token: string;
@@ -151,7 +153,10 @@ export async function exchangeIdentityAssertionForAccessToken(params: {
   const accessTokenHash = createHash("sha256")
     .update(accessToken)
     .digest("base64url");
-  const expiresInSeconds = 3600;
+  const organization = await OrganizationModel.getById(agent.organizationId);
+  const expiresInSeconds =
+    organization?.mcpOauthAccessTokenLifetimeSeconds ??
+    DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS;
 
   await OAuthAccessTokenModel.create({
     tokenHash: accessTokenHash,

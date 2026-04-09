@@ -665,6 +665,45 @@ describe("organization routes", () => {
     });
   });
 
+  describe("PATCH /api/organization/mcp-settings", () => {
+    test("updates the MCP OAuth access token lifetime", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/mcp-settings",
+        payload: {
+          mcpOauthAccessTokenLifetimeSeconds: 604_800,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().mcpOauthAccessTokenLifetimeSeconds).toBe(604_800);
+    });
+
+    test("rejects values below the minimum lifetime", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/mcp-settings",
+        payload: {
+          mcpOauthAccessTokenLifetimeSeconds: 299,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    test("rejects values above the maximum lifetime", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/mcp-settings",
+        payload: {
+          mcpOauthAccessTokenLifetimeSeconds: 31_536_001,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+  });
+
   describe("POST /api/organization/knowledge-settings/test-embedding", () => {
     test("passes configured embedding dimensions to callEmbedding", async ({
       makeSecret,

@@ -34779,6 +34779,7 @@ export type GetOrganizationResponses = {
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
         showTwoFactor: boolean;
+        mcpOauthAccessTokenLifetimeSeconds: number;
     };
 };
 
@@ -35001,6 +35002,7 @@ export type UpdateAppearanceSettingsResponses = {
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
         showTwoFactor: boolean;
+        mcpOauthAccessTokenLifetimeSeconds: number;
     };
 };
 
@@ -35117,6 +35119,7 @@ export type UpdateSecuritySettingsResponses = {
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
         showTwoFactor: boolean;
+        mcpOauthAccessTokenLifetimeSeconds: number;
     };
 };
 
@@ -35234,6 +35237,7 @@ export type UpdateLlmSettingsResponses = {
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
         showTwoFactor: boolean;
+        mcpOauthAccessTokenLifetimeSeconds: number;
     };
 };
 
@@ -35352,10 +35356,127 @@ export type UpdateAgentSettingsResponses = {
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
         showTwoFactor: boolean;
+        mcpOauthAccessTokenLifetimeSeconds: number;
     };
 };
 
 export type UpdateAgentSettingsResponse = UpdateAgentSettingsResponses[keyof UpdateAgentSettingsResponses];
+
+export type UpdateMcpSettingsData = {
+    body: {
+        mcpOauthAccessTokenLifetimeSeconds?: number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/mcp-settings';
+};
+
+export type UpdateMcpSettingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateMcpSettingsError = UpdateMcpSettingsErrors[keyof UpdateMcpSettingsErrors];
+
+export type UpdateMcpSettingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        slug: string;
+        logo: string | null;
+        logoDark: string | null;
+        createdAt: string;
+        metadata: string | null;
+        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        onboardingComplete: boolean;
+        theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
+        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
+        convertToolResultsToToon: boolean;
+        compressionScope: 'organization' | 'team';
+        globalToolPolicy: 'permissive' | 'restrictive';
+        allowChatFileUploads: boolean;
+        embeddingModel: string | null;
+        embeddingDimensions: number | null;
+        embeddingChatApiKeyId: string | null;
+        rerankerChatApiKeyId: string | null;
+        rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+        defaultLlmApiKeyId: string | null;
+        defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatLinks: Array<{
+            label: string;
+            url: string;
+        }> | null;
+        chatPlaceholders: Array<string> | null;
+        animateChatPlaceholders: boolean;
+        iconLogo: string | null;
+        chatErrorSupportMessage: string | null;
+        showTwoFactor: boolean;
+        mcpOauthAccessTokenLifetimeSeconds: number;
+    };
+};
+
+export type UpdateMcpSettingsResponse = UpdateMcpSettingsResponses[keyof UpdateMcpSettingsResponses];
 
 export type UpdateKnowledgeSettingsData = {
     body: {
@@ -35470,6 +35591,7 @@ export type UpdateKnowledgeSettingsResponses = {
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
         showTwoFactor: boolean;
+        mcpOauthAccessTokenLifetimeSeconds: number;
     };
 };
 
@@ -35583,6 +35705,7 @@ export type DropEmbeddingConfigResponses = {
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
         showTwoFactor: boolean;
+        mcpOauthAccessTokenLifetimeSeconds: number;
     };
 };
 
@@ -35779,6 +35902,7 @@ export type CompleteOnboardingResponses = {
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
         showTwoFactor: boolean;
+        mcpOauthAccessTokenLifetimeSeconds: number;
     };
 };
 

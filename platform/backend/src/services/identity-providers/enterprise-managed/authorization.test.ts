@@ -204,6 +204,77 @@ describe("exchangeIdentityAssertionForAccessToken", () => {
     );
   });
 
+  test("uses the organization MCP OAuth token lifetime for issued access tokens", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeAgent,
+    makeIdentityProvider,
+    makeOAuthClient,
+  }) => {
+    const user = await makeUser({ email: "employee@example.com" });
+    const org = await makeOrganization();
+    await db
+      .update(schema.organizationsTable)
+      .set({
+        mcpOauthAccessTokenLifetimeSeconds: 604_800,
+      })
+      .where(eq(schema.organizationsTable.id, org.id));
+    await makeMember(user.id, org.id, { role: "admin" });
+    const identityProvider = await makeIdentityProvider(org.id);
+    await db
+      .update(schema.identityProvidersTable)
+      .set({
+        issuer: "https://idp.example.com",
+        oidcConfig: JSON.stringify({
+          issuer: "https://idp.example.com",
+          pkce: true,
+          clientId: "idp-client",
+          clientSecret: "idp-secret",
+          discoveryEndpoint:
+            "https://idp.example.com/.well-known/openid-configuration",
+          jwksEndpoint: "https://idp.example.com/jwks",
+        }) as never,
+      })
+      .where(eq(schema.identityProvidersTable.id, identityProvider.id));
+    const agent = await makeAgent({
+      organizationId: org.id,
+      identityProviderId: identityProvider.id,
+    });
+    const client = await makeOAuthClient({ userId: user.id });
+
+    mockFindExternalIdentityProviderById.mockResolvedValue({
+      id: identityProvider.id,
+      issuer: "https://idp.example.com",
+      oidcConfig: {
+        clientId: "idp-client",
+        jwksEndpoint: "https://idp.example.com/jwks",
+      },
+    });
+    mockValidateJwt.mockResolvedValue({
+      sub: "subject-1",
+      email: user.email,
+      name: user.name,
+      rawClaims: {},
+    });
+
+    const result = await exchangeIdentityAssertionForAccessToken({
+      assertion: makeAssertionJwt({
+        resource: `http://localhost:3000/v1/mcp/${agent.id}`,
+        clientId: client.clientId,
+        scope: "mcp email",
+      }),
+      clientId: client.clientId,
+      clientSecret: undefined,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error("Expected successful token exchange");
+    }
+    expect(result.body.expires_in).toBe(604_800);
+  });
+
   test("rejects assertions whose resource URL points at a different host", async ({
     makeUser,
     makeOrganization,

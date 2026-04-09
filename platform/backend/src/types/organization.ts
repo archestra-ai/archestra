@@ -11,6 +11,8 @@ const DATA_URI_PREFIX = "data:image/png;base64,";
 const MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB decoded
 const PNG_MAGIC_BYTES = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 const MAX_CHAT_LINK_URL_LENGTH = 2000;
+const MCP_OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS = 300;
+const MCP_OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS = 31_536_000;
 
 /**
  * Validates a Base64-encoded PNG data URI.
@@ -109,6 +111,11 @@ export const OrganizationCompressionScopeSchema = z.enum([
 ]);
 
 export const GlobalToolPolicySchema = z.enum(["permissive", "restrictive"]);
+export const McpOauthAccessTokenLifetimeSecondsSchema = z
+  .number()
+  .int()
+  .min(MCP_OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS)
+  .max(MCP_OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS);
 
 const extendedFields = {
   theme: OrganizationThemeSchema,
@@ -131,6 +138,7 @@ const extendedFields = {
   chatPlaceholders: z.array(z.string()).nullable(),
   animateChatPlaceholders: z.boolean(),
   showTwoFactor: z.boolean(),
+  mcpOauthAccessTokenLifetimeSeconds: McpOauthAccessTokenLifetimeSecondsSchema,
 };
 
 export const SelectOrganizationSchema = createSelectSchema(
@@ -183,6 +191,11 @@ export const UpdateKnowledgeSettingsSchema = z.object({
   rerankerModel: z.string().nullable().optional(),
 });
 
+export const UpdateMcpSettingsSchema = z.object({
+  mcpOauthAccessTokenLifetimeSeconds:
+    McpOauthAccessTokenLifetimeSecondsSchema.optional(),
+});
+
 export const CompleteOnboardingSchema = z.object({
   onboardingComplete: z.literal(true),
 });
@@ -198,6 +211,9 @@ export type Organization = z.infer<typeof SelectOrganizationSchema>;
 export type InsertOrganization = z.infer<typeof InsertOrganizationSchema>;
 export type AppearanceSettings = z.infer<typeof AppearanceSettingsSchema>;
 export type OrganizationChatLink = z.infer<typeof OrganizationChatLinkSchema>;
+export type McpOauthAccessTokenLifetimeSeconds = z.infer<
+  typeof McpOauthAccessTokenLifetimeSecondsSchema
+>;
 
 function isValidHttpUrl(value: string): boolean {
   try {

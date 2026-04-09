@@ -136,6 +136,16 @@ const organizationsTable = pgTable("organization", {
 
   /** Organization-level 2FA visibility toggle */
   showTwoFactor: boolean("show_two_factor").notNull().default(false),
+
+  /**
+   * OAuth access token lifetime for MCP-native auth flows.
+   * Returned to clients via `expires_in` and used to persist token expiration.
+   */
+  mcpOauthAccessTokenLifetimeSeconds: integer(
+    "mcp_oauth_access_token_lifetime_seconds",
+  )
+    .notNull()
+    .default(31_536_000),
 });
 
 export default organizationsTable;

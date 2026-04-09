@@ -193,6 +193,16 @@ describe("OrganizationModel", () => {
   });
 
   describe("patch", () => {
+    test("should persist the default MCP OAuth token lifetime", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      const found = await OrganizationModel.getById(org.id);
+
+      expect(found?.mcpOauthAccessTokenLifetimeSeconds).toBe(31_536_000);
+    });
+
     test("should update organization theme", async ({ makeOrganization }) => {
       const org = await makeOrganization();
 
@@ -211,6 +221,18 @@ describe("OrganizationModel", () => {
       });
 
       expect(updated?.customFont).toBe("inter");
+    });
+
+    test("should update MCP OAuth token lifetime", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      const updated = await OrganizationModel.patch(org.id, {
+        mcpOauthAccessTokenLifetimeSeconds: 604_800,
+      });
+
+      expect(updated?.mcpOauthAccessTokenLifetimeSeconds).toBe(604_800);
     });
 
     test("should accept valid PNG logo", async ({ makeOrganization }) => {

@@ -293,77 +293,21 @@ jobs:
           retention-days: 1
           compression-level: 0 # Already gzipped
 
-  # E2E tests - runs all e2e test suites in parallel
-  # Uses matrix strategy to run API, UI (sharded), and Vault tests concurrently
+  # E2E tests - runs all non-quickstart suites in a single job to reduce CI costs.
+  # The job executes multiple environment variants sequentially:
+  # 1. Standard Kind cluster for API and browser coverage
+  # 2. READONLY_VAULT cluster for BYOS Vault coverage
+  # 3. Vault K8s auth cluster for startup coverage
   platform-e2e-tests:
-    name: Platform E2E Tests (${{ matrix.name }})
+    name: Platform E2E Tests
     needs: [platform-e2e-build]
     # Run even when platform-e2e-build is skipped (on PRs) so job succeeds rather than being skipped
     if: ${{ !cancelled() }}
-    runs-on: ${{ matrix.runner }}
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    timeout-minutes: 180
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # API tests — requires NetworkPolicy enforcement for SSRF protection
-          # (provided by kindnet's built-in kube-network-policies since Kind v0.24.0)
-          - name: API
-            runner: blacksmith-16vcpu-ubuntu-2404
-            projects: api
-            shard: ""
-            extra_args: ""
-            artifact: blob-report-api
-          # UI tests - sharded across 2 parallel jobs
-          # Tests tagged @firefox/@webkit/@quickstart are excluded here:
-          # - @firefox/@webkit run in dedicated sequential jobs
-          # - @quickstart runs in the dedicated Quickstart job (needs a fresh env with no API keys)
-          - name: UI 1/2
-            runner: blacksmith-16vcpu-ubuntu-2404
-            projects: chromium
-            shard: "--shard=1/2"
-            extra_args: "--grep-invert '@firefox|@webkit|@quickstart'"
-            artifact: blob-report-ui-1
-          - name: UI 2/2
-            runner: blacksmith-16vcpu-ubuntu-2404
-            projects: chromium
-            shard: "--shard=2/2"
-            extra_args: "--grep-invert '@firefox|@webkit|@quickstart'"
-            artifact: blob-report-ui-2
-          # Identity provider tests manipulate shared SSO backend state and are
-          # more reliable when isolated from the generic Chromium shards.
-          - name: UI Identity Providers
-            runner: blacksmith-8vcpu-ubuntu-2404
-            projects: identity-providers
-            shard: ""
-            extra_args: "--workers=1"
-            artifact: blob-report-ui-identity-providers
-          # Firefox tests - run sequentially to avoid race conditions on shared backend state
-          - name: UI Firefox
-            runner: blacksmith-8vcpu-ubuntu-2404
-            projects: firefox
-            shard: ""
-            extra_args: "--grep '@firefox' --workers=1"
-            artifact: blob-report-ui-firefox
-          # Webkit tests - run sequentially to avoid race conditions on shared backend state
-          - name: UI Webkit
-            runner: blacksmith-8vcpu-ubuntu-2404
-            projects: webkit
-            shard: ""
-            extra_args: "--grep '@webkit' --workers=1"
-            artifact: blob-report-ui-webkit
-          # Vault tests - isolated to avoid race conditions with secrets manager switching
-          # Uses READONLY_VAULT so all replicas start in BYOS mode (in-memory initializeSecretsManager
-          # only affects one replica, which fails with replicaCount > 1)
-          - name: Vault
-            runner: blacksmith-8vcpu-ubuntu-2404
-            projects: credentials-with-vault
-            shard: ""
-            extra_args: ""
-            artifact: blob-report-vault
-            extra_helm_set: "archestra.env.ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT"
     steps:
       - name: Checkout repository
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -394,7 +338,14 @@ jobs:
           source: ${{ inputs.is-fork-pr && 'artifact' || 'registry' }}
           image-tag: ${{ inputs.is-fork-pr && format('mcp-server-base:{0}', github.sha) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
 
-      - name: Setup Archestra Platform
+      - name: Prepare blob report workspace
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        run: |
+          rm -rf platform/e2e-tests/blob-report platform/e2e-tests/blob-reports
+          mkdir -p platform/e2e-tests/blob-reports
+
+      - name: Setup standard Archestra Platform
+        id: setup-standard
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: ./.github/actions/setup-archestra-platform
         with:
@@ -406,39 +357,310 @@ jobs:
           platform-image-tag: ${{ steps.load-platform-image.outputs.image-tag }}
           platform-context: ./platform
           mcp-server-base-image-tag: ${{ steps.load-mcp-server-base-image.outputs.image-tag }}
-          extra-helm-set: ${{ matrix.extra_helm_set }}
+      - name: Reset blob report directory
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && steps.setup-standard.outcome == 'success' }}
+        run: rm -rf platform/e2e-tests/blob-report
 
-      - name: Run E2E tests
-        id: e2e
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+      - name: Run API E2E tests
+        id: e2e-api
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && steps.setup-standard.outcome == 'success' }}
+        continue-on-error: true
         uses: ./.github/actions/run-e2e-tests
         with:
-          projects: ${{ matrix.projects }}
-          shard: ${{ matrix.shard }}
-          extra_args: ${{ matrix.extra_args }}
+          projects: api
 
-      - name: Upload blob report
-        if: ${{ inputs.should-skip-running-and-always-succeed != true && !cancelled() }}
+      - name: Save API blob report
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && !cancelled() && steps.e2e-api.outcome != 'skipped' }}
+        run: |
+          if [ ! -d platform/e2e-tests/blob-report ]; then
+            exit 0
+          fi
+          mkdir -p platform/e2e-tests/blob-reports/api
+          cp -R platform/e2e-tests/blob-report/. platform/e2e-tests/blob-reports/api/
+
+      - name: Reset blob report directory
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && steps.setup-standard.outcome == 'success' }}
+        run: rm -rf platform/e2e-tests/blob-report
+
+      - name: Run Chromium E2E tests
+        id: e2e-ui-chromium
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && steps.setup-standard.outcome == 'success' }}
+        continue-on-error: true
+        uses: ./.github/actions/run-e2e-tests
+        with:
+          projects: chromium
+          extra_args: "--grep-invert '@firefox|@webkit|@quickstart'"
+
+      - name: Save Chromium blob report
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && !cancelled() && steps.e2e-ui-chromium.outcome != 'skipped' }}
+        run: |
+          if [ ! -d platform/e2e-tests/blob-report ]; then
+            exit 0
+          fi
+          mkdir -p platform/e2e-tests/blob-reports/ui-chromium
+          cp -R platform/e2e-tests/blob-report/. platform/e2e-tests/blob-reports/ui-chromium/
+
+      - name: Reset blob report directory
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && steps.setup-standard.outcome == 'success' }}
+        run: rm -rf platform/e2e-tests/blob-report
+
+      - name: Run Identity Provider E2E tests
+        id: e2e-ui-identity-providers
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && steps.setup-standard.outcome == 'success' }}
+        continue-on-error: true
+        uses: ./.github/actions/run-e2e-tests
+        with:
+          projects: identity-providers
+          extra_args: "--workers=1"
+
+      - name: Save Identity Provider blob report
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && !cancelled() && steps.e2e-ui-identity-providers.outcome != 'skipped' }}
+        run: |
+          if [ ! -d platform/e2e-tests/blob-report ]; then
+            exit 0
+          fi
+          mkdir -p platform/e2e-tests/blob-reports/ui-identity-providers
+          cp -R platform/e2e-tests/blob-report/. platform/e2e-tests/blob-reports/ui-identity-providers/
+
+      - name: Reset blob report directory
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && steps.setup-standard.outcome == 'success' }}
+        run: rm -rf platform/e2e-tests/blob-report
+
+      - name: Run Firefox E2E tests
+        id: e2e-ui-firefox
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && steps.setup-standard.outcome == 'success' }}
+        continue-on-error: true
+        uses: ./.github/actions/run-e2e-tests
+        with:
+          projects: firefox
+          extra_args: "--grep '@firefox' --workers=1"
+
+      - name: Save Firefox blob report
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && !cancelled() && steps.e2e-ui-firefox.outcome != 'skipped' }}
+        run: |
+          if [ ! -d platform/e2e-tests/blob-report ]; then
+            exit 0
+          fi
+          mkdir -p platform/e2e-tests/blob-reports/ui-firefox
+          cp -R platform/e2e-tests/blob-report/. platform/e2e-tests/blob-reports/ui-firefox/
+
+      - name: Reset blob report directory
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && steps.setup-standard.outcome == 'success' }}
+        run: rm -rf platform/e2e-tests/blob-report
+
+      - name: Run WebKit E2E tests
+        id: e2e-ui-webkit
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && steps.setup-standard.outcome == 'success' }}
+        continue-on-error: true
+        uses: ./.github/actions/run-e2e-tests
+        with:
+          projects: webkit
+          extra_args: "--grep '@webkit' --workers=1"
+
+      - name: Save WebKit blob report
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && !cancelled() && steps.e2e-ui-webkit.outcome != 'skipped' }}
+        run: |
+          if [ ! -d platform/e2e-tests/blob-report ]; then
+            exit 0
+          fi
+          mkdir -p platform/e2e-tests/blob-reports/ui-webkit
+          cp -R platform/e2e-tests/blob-report/. platform/e2e-tests/blob-reports/ui-webkit/
+
+      - name: Delete standard Kind cluster
+        if: ${{ always() && inputs.should-skip-running-and-always-succeed != true }}
+        run: kind delete cluster --name archestra-ci-cluster || true
+
+      - name: Setup Vault Archestra Platform
+        id: setup-vault
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        uses: ./.github/actions/setup-archestra-platform
+        with:
+          kind-config-path: .github/kind.yaml
+          kind-cluster-name: archestra-ci-cluster
+          helm-values-path: .github/values-ci.yaml
+          deploy-e2e-dependencies: "true"
+          build-platform-image: "false"
+          platform-image-tag: ${{ steps.load-platform-image.outputs.image-tag }}
+          platform-context: ./platform
+          mcp-server-base-image-tag: ${{ steps.load-mcp-server-base-image.outputs.image-tag }}
+          extra-helm-set: "archestra.env.ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT"
+
+      - name: Reset blob report directory
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && steps.setup-vault.outcome == 'success' }}
+        run: rm -rf platform/e2e-tests/blob-report
+
+      - name: Run Vault E2E tests
+        id: e2e-vault
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && steps.setup-vault.outcome == 'success' }}
+        continue-on-error: true
+        uses: ./.github/actions/run-e2e-tests
+        with:
+          projects: credentials-with-vault
+
+      - name: Save Vault blob report
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && !cancelled() && steps.e2e-vault.outcome != 'skipped' }}
+        run: |
+          if [ ! -d platform/e2e-tests/blob-report ]; then
+            exit 0
+          fi
+          mkdir -p platform/e2e-tests/blob-reports/vault
+          cp -R platform/e2e-tests/blob-report/. platform/e2e-tests/blob-reports/vault/
+
+      - name: Delete Vault Kind cluster
+        if: ${{ always() && inputs.should-skip-running-and-always-succeed != true }}
+        run: kind delete cluster --name archestra-ci-cluster || true
+
+      - name: Install Kind cluster for Vault K8s tests
+        id: setup-vault-k8s-kind
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        uses: ./.github/actions/install-kind-cluster
+        with:
+          config: .github/kind.yaml
+
+      - name: Load Docker image into Kind
+        id: setup-vault-k8s-image
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && steps.setup-vault-k8s-kind.outcome == 'success' }}
+        env:
+          PLATFORM_IMAGE_TAG: ${{ steps.load-platform-image.outputs.image-tag }}
+        run: kind load docker-image "${PLATFORM_IMAGE_TAG}" --name archestra-ci-cluster
+
+      - name: Deploy e2e-tests Helm chart (Vault only, K8s auth enabled)
+        id: setup-vault-k8s-deps
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && steps.setup-vault-k8s-image.outcome == 'success' }}
+        run: |
+          helm install e2e-tests platform/helm/e2e-tests \
+            --set vault.enabled=true \
+            --set vault.k8sAuth.enabled=true \
+            --set vault.k8sAuth.boundServiceAccountName=archestra-platform \
+            --set vault.k8sAuth.boundServiceAccountNamespace=default \
+            --set 'vault.secrets[0].path=kv/archestra/config' \
+            --set 'vault.secrets[0].data.dburl=postgresql://archestra:vault_e2e_custom_pw@archestra-platform-postgresql:5432/archestra_dev' \
+            --set 'vault.secrets[0].data.dummy_var=hello-from-vault' \
+            --set wiremock.enabled=false \
+            --set keycloak.enabled=false
+
+      - name: Wait for Vault to be ready
+        id: setup-vault-k8s-vault
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && steps.setup-vault-k8s-deps.outcome == 'success' }}
+        run: |
+          echo "Waiting for Vault pod to be ready..."
+          kubectl wait --for=condition=Ready pod/vault --timeout=120s
+          echo "Vault pod is ready"
+
+      - name: Deploy platform with Vault K8s values
+        id: setup-vault-k8s-platform
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && steps.setup-vault-k8s-vault.outcome == 'success' }}
+        env:
+          PLATFORM_IMAGE_TAG: ${{ steps.load-platform-image.outputs.image-tag }}
+        run: |
+          helm install archestra-platform platform/helm/archestra \
+            --values .github/values-ci-vault-k8s.yaml \
+            --set "archestra.image=${PLATFORM_IMAGE_TAG}" \
+            --atomic --timeout=4m
+
+      - name: Wait for platform to be healthy
+        id: setup-vault-k8s-health
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && steps.setup-vault-k8s-platform.outcome == 'success' }}
+        run: |
+          echo "Waiting for platform pods to be ready..."
+          kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=archestra-platform --timeout=90s
+          echo "Platform pods are ready"
+
+          echo "Verifying backend is accessible..."
+          curl --retry 10 --retry-delay 2 --retry-connrefused http://localhost:9000/health || (echo "Backend not accessible" && exit 1)
+          echo "Backend is healthy"
+
+      - name: Reset blob report directory
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && steps.setup-vault-k8s-health.outcome == 'success' }}
+        run: rm -rf platform/e2e-tests/blob-report
+
+      - name: Run Vault K8s E2E tests
+        id: e2e-vault-k8s
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && steps.setup-vault-k8s-health.outcome == 'success' }}
+        continue-on-error: true
+        uses: ./.github/actions/run-e2e-tests
+        with:
+          projects: vault-k8s
+
+      - name: Save Vault K8s blob report
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && !cancelled() && steps.e2e-vault-k8s.outcome != 'skipped' }}
+        run: |
+          if [ ! -d platform/e2e-tests/blob-report ]; then
+            exit 0
+          fi
+          mkdir -p platform/e2e-tests/blob-reports/vault-k8s
+          cp -R platform/e2e-tests/blob-report/. platform/e2e-tests/blob-reports/vault-k8s/
+
+      - name: Upload API blob report
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && !cancelled() && hashFiles('platform/e2e-tests/blob-reports/api/**') != '' }}
         uses: ./.github/actions/github-upload-artifact
         with:
-          name: ${{ matrix.artifact }}
-          path: platform/e2e-tests/blob-report/
+          name: blob-report-api
+          path: platform/e2e-tests/blob-reports/api/
+          retention-days: 1
+
+      - name: Upload Chromium blob report
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && !cancelled() && hashFiles('platform/e2e-tests/blob-reports/ui-chromium/**') != '' }}
+        uses: ./.github/actions/github-upload-artifact
+        with:
+          name: blob-report-ui-chromium
+          path: platform/e2e-tests/blob-reports/ui-chromium/
+          retention-days: 1
+
+      - name: Upload Identity Provider blob report
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && !cancelled() && hashFiles('platform/e2e-tests/blob-reports/ui-identity-providers/**') != '' }}
+        uses: ./.github/actions/github-upload-artifact
+        with:
+          name: blob-report-ui-identity-providers
+          path: platform/e2e-tests/blob-reports/ui-identity-providers/
+          retention-days: 1
+
+      - name: Upload Firefox blob report
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && !cancelled() && hashFiles('platform/e2e-tests/blob-reports/ui-firefox/**') != '' }}
+        uses: ./.github/actions/github-upload-artifact
+        with:
+          name: blob-report-ui-firefox
+          path: platform/e2e-tests/blob-reports/ui-firefox/
+          retention-days: 1
+
+      - name: Upload WebKit blob report
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && !cancelled() && hashFiles('platform/e2e-tests/blob-reports/ui-webkit/**') != '' }}
+        uses: ./.github/actions/github-upload-artifact
+        with:
+          name: blob-report-ui-webkit
+          path: platform/e2e-tests/blob-reports/ui-webkit/
+          retention-days: 1
+
+      - name: Upload Vault blob report
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && !cancelled() && hashFiles('platform/e2e-tests/blob-reports/vault/**') != '' }}
+        uses: ./.github/actions/github-upload-artifact
+        with:
+          name: blob-report-vault
+          path: platform/e2e-tests/blob-reports/vault/
+          retention-days: 1
+
+      - name: Upload Vault K8s blob report
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && !cancelled() && hashFiles('platform/e2e-tests/blob-reports/vault-k8s/**') != '' }}
+        uses: ./.github/actions/github-upload-artifact
+        with:
+          name: blob-report-vault-k8s
+          path: platform/e2e-tests/blob-reports/vault-k8s/
           retention-days: 1
 
       - name: Show logs on failure or flaky tests
-        if: failure() || steps.e2e.outputs.has_flaky_tests == 'true'
+        if: steps.setup-standard.outcome == 'failure' || steps.setup-vault.outcome == 'failure' || steps.setup-vault-k8s-kind.outcome == 'failure' || steps.setup-vault-k8s-image.outcome == 'failure' || steps.setup-vault-k8s-deps.outcome == 'failure' || steps.setup-vault-k8s-vault.outcome == 'failure' || steps.setup-vault-k8s-platform.outcome == 'failure' || steps.setup-vault-k8s-health.outcome == 'failure' || steps.e2e-api.outcome == 'failure' || steps.e2e-ui-chromium.outcome == 'failure' || steps.e2e-ui-identity-providers.outcome == 'failure' || steps.e2e-ui-firefox.outcome == 'failure' || steps.e2e-ui-webkit.outcome == 'failure' || steps.e2e-vault.outcome == 'failure' || steps.e2e-vault-k8s.outcome == 'failure' || steps.e2e-api.outputs.has_flaky_tests == 'true' || steps.e2e-ui-chromium.outputs.has_flaky_tests == 'true' || steps.e2e-ui-identity-providers.outputs.has_flaky_tests == 'true' || steps.e2e-ui-firefox.outputs.has_flaky_tests == 'true' || steps.e2e-ui-webkit.outputs.has_flaky_tests == 'true' || steps.e2e-vault.outputs.has_flaky_tests == 'true' || steps.e2e-vault-k8s.outputs.has_flaky_tests == 'true'
         run: |
           echo "=== Kubernetes Pods ==="
-          kubectl get pods -o wide
+          kubectl get pods -o wide || true
 
           echo "=== Kubernetes Services ==="
-          kubectl get services
+          kubectl get services || true
 
           echo "=== Archestra Platform Logs ==="
-          kubectl logs -l app.kubernetes.io/name=archestra-platform --tail=200
+          kubectl logs -l app.kubernetes.io/name=archestra-platform --tail=200 || true
 
           echo "=== PostgreSQL Logs ==="
-          kubectl logs -l app.kubernetes.io/name=postgresql --tail=200
+          kubectl logs -l app.kubernetes.io/name=postgresql --tail=200 || true
 
           echo "=== WireMock Logs ==="
           kubectl logs -l app=e2e-tests-wiremock --tail=200 2>/dev/null || true
@@ -451,6 +673,31 @@ jobs:
 
           echo "=== MCP Example OAuth Server Logs ==="
           kubectl logs -l app.kubernetes.io/name=mcp-example-oauth --tail=200 2>/dev/null || true
+
+          echo "=== Describe Platform Pod ==="
+          kubectl describe pod -l app.kubernetes.io/name=archestra-platform || true
+
+      - name: Cleanup Kind cluster
+        if: always()
+        run: kind delete cluster --name archestra-ci-cluster || true
+
+      - name: Fail if any non-quickstart E2E phase failed
+        if: ${{ always() && inputs.should-skip-running-and-always-succeed != true }}
+        run: |
+          FAILED_STEPS=()
+
+          [ "${{ steps.e2e-api.outcome }}" = "failure" ] && FAILED_STEPS+=("api")
+          [ "${{ steps.e2e-ui-chromium.outcome }}" = "failure" ] && FAILED_STEPS+=("ui-chromium")
+          [ "${{ steps.e2e-ui-identity-providers.outcome }}" = "failure" ] && FAILED_STEPS+=("ui-identity-providers")
+          [ "${{ steps.e2e-ui-firefox.outcome }}" = "failure" ] && FAILED_STEPS+=("ui-firefox")
+          [ "${{ steps.e2e-ui-webkit.outcome }}" = "failure" ] && FAILED_STEPS+=("ui-webkit")
+          [ "${{ steps.e2e-vault.outcome }}" = "failure" ] && FAILED_STEPS+=("vault")
+          [ "${{ steps.e2e-vault-k8s.outcome }}" = "failure" ] && FAILED_STEPS+=("vault-k8s")
+
+          if [ "${#FAILED_STEPS[@]}" -gt 0 ]; then
+            echo "The following non-quickstart E2E phases failed: ${FAILED_STEPS[*]}"
+            exit 1
+          fi
 
   # Quickstart E2E tests - validates docker run quickstart instructions work correctly
   # Runs the mcp-install.spec.ts test against the platform started via docker run
@@ -649,136 +896,10 @@ jobs:
           docker volume rm archestra-ci-postgres-data 2>/dev/null || true
           docker volume rm archestra-ci-app-data 2>/dev/null || true
 
-  # Vault K8s E2E tests - validates platform starts when DB URL is sourced from Vault via K8s auth
-  platform-vault-k8s-e2e-tests:
-    name: Platform E2E Tests (Vault K8s)
-    needs: [platform-e2e-build]
-    if: ${{ !cancelled() }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
-    permissions:
-      contents: read # Required to checkout the repository and read Helm assets.
-      id-token: write # Required for Workload Identity Federation in setup actions.
-    steps:
-      - name: Checkout repository
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-
-      - name: Setup environment
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: ./.github/actions/setup-env
-        with:
-          working-directory: ./platform
-
-      - name: Load platform image
-        id: load-platform-image
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: ./.github/actions/load-platform-image
-        with:
-          source: ${{ inputs.is-fork-pr && 'artifact' || 'registry' }}
-          image-tag: ${{ inputs.is-fork-pr && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
-
-      - name: Install Kind cluster
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: ./.github/actions/install-kind-cluster
-        with:
-          config: .github/kind.yaml
-
-      - name: Load Docker image into Kind
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        env:
-          PLATFORM_IMAGE_TAG: ${{ steps.load-platform-image.outputs.image-tag }}
-        run: kind load docker-image "${PLATFORM_IMAGE_TAG}" --name archestra-ci-cluster
-
-      - name: Deploy e2e-tests Helm chart (Vault only, K8s auth enabled)
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        run: |
-          helm install e2e-tests platform/helm/e2e-tests \
-            --set vault.enabled=true \
-            --set vault.k8sAuth.enabled=true \
-            --set vault.k8sAuth.boundServiceAccountName=archestra-platform \
-            --set vault.k8sAuth.boundServiceAccountNamespace=default \
-            --set 'vault.secrets[0].path=kv/archestra/config' \
-            --set 'vault.secrets[0].data.dburl=postgresql://archestra:vault_e2e_custom_pw@archestra-platform-postgresql:5432/archestra_dev' \
-            --set 'vault.secrets[0].data.dummy_var=hello-from-vault' \
-            --set wiremock.enabled=false \
-            --set keycloak.enabled=false
-
-      - name: Wait for Vault to be ready
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        run: |
-          echo "Waiting for Vault pod to be ready..."
-          kubectl wait --for=condition=Ready pod/vault --timeout=120s
-          echo "Vault pod is ready"
-
-      - name: Deploy platform with Vault K8s values
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        env:
-          PLATFORM_IMAGE_TAG: ${{ steps.load-platform-image.outputs.image-tag }}
-        run: |
-          helm install archestra-platform platform/helm/archestra \
-            --values .github/values-ci-vault-k8s.yaml \
-            --set "archestra.image=${PLATFORM_IMAGE_TAG}" \
-            --atomic --timeout=4m
-
-      - name: Wait for platform to be healthy
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        run: |
-          echo "Waiting for platform pods to be ready..."
-          kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=archestra-platform --timeout=90s
-          echo "Platform pods are ready"
-
-          echo "Verifying backend is accessible..."
-          curl --retry 10 --retry-delay 2 --retry-connrefused http://localhost:9000/health || (echo "Backend not accessible" && exit 1)
-          echo "Backend is healthy"
-
-      - name: Run Vault K8s E2E tests
-        id: e2e
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: ./.github/actions/run-e2e-tests
-        with:
-          projects: vault-k8s
-
-      - name: Upload blob report
-        if: ${{ inputs.should-skip-running-and-always-succeed != true && !cancelled() }}
-        uses: ./.github/actions/github-upload-artifact
-        with:
-          name: blob-report-vault-k8s
-          path: platform/e2e-tests/blob-report/
-          retention-days: 1
-
-      - name: Show logs on failure
-        if: failure()
-        run: |
-          echo "=== Kubernetes Pods ==="
-          kubectl get pods -o wide
-
-          echo "=== Kubernetes Services ==="
-          kubectl get services
-
-          echo "=== Archestra Platform Logs ==="
-          kubectl logs -l app.kubernetes.io/name=archestra-platform --tail=200
-
-          echo "=== Vault Logs ==="
-          kubectl logs vault --tail=200 2>/dev/null || true
-
-          echo "=== PostgreSQL Logs ==="
-          kubectl logs -l app.kubernetes.io/name=postgresql --tail=200 2>/dev/null || true
-
-          echo "=== Describe Platform Pod ==="
-          kubectl describe pod -l app.kubernetes.io/name=archestra-platform
-
   # Merge all Playwright reports into a single HTML report
   platform-e2e-merge-reports:
     name: Merge E2E Test Reports
-    needs:
-      [
-        platform-e2e-tests,
-        platform-quickstart-e2e-tests,
-        platform-vault-k8s-e2e-tests,
-      ]
+    needs: [platform-e2e-tests, platform-quickstart-e2e-tests]
     if: ${{ always() && !cancelled() && inputs.should-skip-running-and-always-succeed != true }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:

@@ -75,5 +75,4 @@ describe("normalizeChatMessages", () => {
 
     expect(result[0].parts).toHaveLength(2);
   });
-
 });

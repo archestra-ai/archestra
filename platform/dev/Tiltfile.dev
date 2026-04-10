@@ -24,10 +24,7 @@ dev_resource_name = 'pnpm-prod' if is_prod else 'pnpm-dev'
 # Build env dict to sync ARCHESTRA_* to NEXT_PUBLIC_ARCHESTRA_* for frontend
 # This is rebuilt on each Tiltfile evaluation (triggered by .env changes)
 def get_frontend_env():
-  env = {
-    # Always disable analytics in local development
-    'NEXT_PUBLIC_ARCHESTRA_ANALYTICS': 'disabled',
-  }
+  env = {}
 
   # Sync ARCHESTRA_* to NEXT_PUBLIC_ARCHESTRA_* if not already set
   sync_vars = [

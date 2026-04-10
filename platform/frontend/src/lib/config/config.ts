@@ -186,9 +186,6 @@ export const getMcpSandboxBaseUrl = (
  * Configuration object for the frontend application.
  * Use process.env.NEXT_PUBLIC_xxxx to access build-time variables in build-time,
  * and env('NEXT_PUBLIC_xxxx') to access the runtime variables in runtime.
- *
- * For example, doing `enabled: env("NEXT_PUBLIC_ARCHESTRA_ANALYTICS")` results in `enabled: undefined`,
- * because the runtime variable isn't yet available in build-time.
  */
 export default {
   api: {

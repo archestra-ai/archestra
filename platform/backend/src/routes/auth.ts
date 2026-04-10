@@ -634,9 +634,7 @@ async function applyMcpOauthTokenLifetimeToResponse(params: {
     return responseText;
   }
 
-  const tokenHash = createHash("sha256")
-    .update(accessToken)
-    .digest("base64url");
+  const tokenHash = hashOAuthAccessTokenForLookup(accessToken);
   const storedToken = await OAuthAccessTokenModel.getByTokenHash(tokenHash);
   const lifetimeSeconds = await getMcpOauthAccessTokenLifetimeSeconds({
     resource: params.resource,
@@ -737,4 +735,9 @@ function getProfileIdFromReferenceId(
   }
 
   return referenceId.slice(MCP_RESOURCE_REFERENCE_PREFIX.length) || null;
+}
+
+function hashOAuthAccessTokenForLookup(oauthAccessToken: string): string {
+  // codeql[js/insufficient-password-hash] This hashes a high-entropy OAuth bearer token for lookup, not a user password.
+  return createHash("sha256").update(oauthAccessToken).digest("base64url");
 }

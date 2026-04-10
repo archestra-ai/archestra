@@ -1,19 +1,18 @@
 import crypto from "node:crypto";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import express, { type Express, type Request } from "express";
 import {
   exportJWK,
   generateKeyPair,
   importJWK,
-  jwtVerify,
   type JWK,
+  jwtVerify,
   SignJWT,
 } from "jose";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 
-const JWT_BEARER_GRANT_TYPE =
-  "urn:ietf:params:oauth:grant-type:jwt-bearer";
+const JWT_BEARER_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:jwt-bearer";
 const ID_JAG_JWT_TYPE = "oauth-id-jag+jwt";
 const ID_JAG_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:id-jag";
 const ACCESS_TOKEN_TTL_SECONDS = 60 * 10;
@@ -219,7 +218,9 @@ export async function createApp(
           "WWW-Authenticate",
           `Bearer resource_metadata="${resolvedConfig.baseUrl}/.well-known/oauth-protected-resource/mcp"`,
         )
-        .json(oauthError("invalid_token", "A minted MCP access token is required"));
+        .json(
+          oauthError("invalid_token", "A minted MCP access token is required"),
+        );
       return;
     }
 
@@ -258,11 +259,7 @@ export async function startServer(
 ): Promise<void> {
   const resolvedConfig = getServerConfig(config);
   const app = await createApp(resolvedConfig);
-  app.listen(resolvedConfig.port, () => {
-    console.log(`MCP ID-JAG server listening on ${resolvedConfig.baseUrl}`);
-    console.log(`Gateway audience: ${resolvedConfig.gatewayAudience}`);
-    console.log(`Resource client ID: ${resolvedConfig.clientId}`);
-  });
+  app.listen(resolvedConfig.port, () => {});
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -394,7 +391,8 @@ class AccessTokenStore {
     const accessToken: MintedAccessToken = {
       ...params,
       bearerToken: `mcp-server-at-${crypto.randomBytes(24).toString("base64url")}`,
-      expiresAtEpochSeconds: Math.floor(Date.now() / 1000) + ACCESS_TOKEN_TTL_SECONDS,
+      expiresAtEpochSeconds:
+        Math.floor(Date.now() / 1000) + ACCESS_TOKEN_TTL_SECONDS,
     };
 
     this.tokens.set(accessToken.bearerToken, accessToken);

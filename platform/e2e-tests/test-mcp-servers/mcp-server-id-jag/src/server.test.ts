@@ -133,7 +133,7 @@ async function callWhoami(baseUrl: string, accessToken: string) {
   const body = (await response.json()) as {
     result: { content: Array<{ text: string }> };
   };
-  return JSON.parse(body.result.content[0]!.text) as {
+  return JSON.parse(body.result.content[0]?.text) as {
     user: { email: string };
     authorizationHeader: string;
     bearerToken: string;

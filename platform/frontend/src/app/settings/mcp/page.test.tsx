@@ -19,11 +19,12 @@ Element.prototype.releasePointerCapture = vi.fn();
 const mutateAsync = vi.fn();
 
 let mockOrganization: Record<string, unknown> | null = null;
+let mockOrganizationPending = false;
 
 vi.mock("@/lib/organization.query", () => ({
   useOrganization: () => ({
     data: mockOrganization,
-    isPending: false,
+    isPending: mockOrganizationPending,
   }),
   useAppearanceSettings: () => ({
     data: { appName: null },
@@ -59,6 +60,7 @@ describe("McpSettingsPage", () => {
     mockOrganization = {
       mcpOauthAccessTokenLifetimeSeconds: 31_536_000,
     };
+    mockOrganizationPending = false;
     mutateAsync.mockResolvedValue({
       mcpOauthAccessTokenLifetimeSeconds: 604_800,
     });
@@ -111,6 +113,20 @@ describe("McpSettingsPage", () => {
     expect(
       screen.getByRole("combobox", { name: /token lifetime/i }),
     ).toHaveTextContent("1 year");
+    expect(
+      screen.queryByRole("button", { name: "Save" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not show the one year fallback while the organization is loading", () => {
+    mockOrganization = null;
+    mockOrganizationPending = true;
+
+    renderPage();
+
+    expect(
+      screen.getByRole("combobox", { name: /token lifetime/i }),
+    ).not.toHaveTextContent("1 year");
     expect(
       screen.queryByRole("button", { name: "Save" }),
     ).not.toBeInTheDocument();

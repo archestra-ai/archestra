@@ -56,10 +56,18 @@ export default function McpSettingsPage() {
     "MCP settings updated",
     "Failed to update MCP settings",
   );
+  const initialLifetimeSeconds = organization
+    ? getServerLifetimeSeconds(organization)
+    : null;
   const form = useForm<McpSettingsFormValues>({
     defaultValues: {
-      lifetimePreset: String(DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS),
-      customLifetimeSeconds: DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS,
+      lifetimePreset:
+        initialLifetimeSeconds === null
+          ? ""
+          : getPresetSelectValue(initialLifetimeSeconds),
+      customLifetimeSeconds:
+        initialLifetimeSeconds ??
+        DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS,
     },
     mode: "onChange",
   });
@@ -78,7 +86,9 @@ export default function McpSettingsPage() {
 
   const serverValue = getServerLifetimeSeconds(organization);
   const selectedPreset = form.watch("lifetimePreset") ?? "";
-  const lifetimePreset = selectedPreset || getPresetSelectValue(serverValue);
+  const lifetimePreset =
+    selectedPreset ||
+    (isOrganizationPending ? "" : getPresetSelectValue(serverValue));
   const customLifetimeSeconds = form.watch("customLifetimeSeconds");
   const currentValue = getSelectedLifetimeSeconds({
     lifetimePreset,
@@ -134,7 +144,12 @@ export default function McpSettingsPage() {
                   render={({ field }) => (
                     <FormItem>
                       <Select
-                        value={field.value || getPresetSelectValue(serverValue)}
+                        value={
+                          field.value ||
+                          (isOrganizationPending
+                            ? ""
+                            : getPresetSelectValue(serverValue))
+                        }
                         onValueChange={(value) => {
                           field.onChange(value);
 

@@ -21,6 +21,7 @@ const DEFAULT_BATCH_SIZE = 50;
 const MAX_CONTENT_LENGTH = 500_000; // 500 KB text limit per document
 const MAX_IMAGE_SIZE_BYTES = 4 * 1024 * 1024; // 4 MB image size limit
 const INCREMENTAL_SAFETY_BUFFER_MS = 5 * 60 * 1000;
+const DEFAULT_MAX_DEPTH = 50; // Safety limit for recursive folder traversal
 
 // File extensions whose text content we can extract via direct download
 const SUPPORTED_TEXT_EXTENSIONS = new Set([
@@ -223,7 +224,7 @@ export class GoogleDriveConnector extends BaseConnector {
     );
 
     if (parsed.folderId) {
-      // Folder-scoped mode
+      // Folder-scoped mode — recursive defaults to true
       yield* this.syncFolder({
         drive,
         folderId: parsed.folderId,
@@ -232,7 +233,8 @@ export class GoogleDriveConnector extends BaseConnector {
         syncFrom: safetyBufferedSyncFrom,
         batchSize,
         supportsImages,
-        recursive: parsed.recursive ?? false,
+        recursive: parsed.recursive ?? true,
+        maxDepth: parsed.maxDepth ?? DEFAULT_MAX_DEPTH,
       });
     } else {
       // Drive listing mode
@@ -376,6 +378,14 @@ export class GoogleDriveConnector extends BaseConnector {
     }
   }
 
+  /**
+   * Folder-scoped sync using lazy breadth-first traversal.
+   *
+   * Instead of eagerly collecting all subfolder IDs up front (which can OOM
+   * or stall on deeply nested drives), we use a BFS queue: discover direct
+   * children of the current folder, enqueue them, and yield file batches
+   * from each folder as we go.
+   */
   private async *syncFolder(params: {
     drive: drive_v3.Drive;
     folderId: string;
@@ -385,6 +395,7 @@ export class GoogleDriveConnector extends BaseConnector {
     batchSize: number;
     supportsImages: boolean;
     recursive: boolean;
+    maxDepth: number;
   }): AsyncGenerator<ConnectorSyncBatch> {
     const {
       drive,
@@ -395,123 +406,185 @@ export class GoogleDriveConnector extends BaseConnector {
       batchSize,
       supportsImages,
       recursive,
+      maxDepth,
     } = params;
 
-    // Collect folder IDs to process
-    const folderIds = [folderId];
+    // BFS queue: each entry is [folderId, depth]
+    const queue: Array<[string, number]> = [[folderId, 0]];
 
-    if (recursive) {
-      const subfolders = await this.listSubfolders(drive, folderId, config);
-      folderIds.push(...subfolders);
-    }
+    while (queue.length > 0) {
+      const [currentFolderId, depth] = queue.shift()!;
 
-    for (let fi = 0; fi < folderIds.length; fi++) {
-      const currentFolderId = folderIds[fi];
-      const isLastFolder = fi === folderIds.length - 1;
-
-      let pageToken: string | undefined;
-      let hasMore = true;
-      let batchIndex = 0;
-
-      while (hasMore) {
-        await this.rateLimit();
-
-        let query = `'${currentFolderId}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`;
-        if (syncFrom) {
-          query += ` and modifiedTime >= '${syncFrom}'`;
-        }
-        if (config.fileTypes && config.fileTypes.length > 0) {
-          const mimeFilters = config.fileTypes
-            .map((ext) => `name contains '${ext}'`)
-            .join(" or ");
-          query += ` and (${mimeFilters})`;
-        }
-
-        let res: FileListResponse;
+      // If recursive, discover direct subfolders and enqueue them
+      if (recursive && depth < maxDepth) {
         try {
-          res = (await drive.files.list({
-            q: query,
-            pageSize: batchSize,
-            pageToken,
-            fields:
-              "nextPageToken,files(id,name,mimeType,modifiedTime,createdTime,owners,webViewLink,parents,size)",
-            orderBy: "modifiedTime asc",
-            includeItemsFromAllDrives: config.includeSharedDrives ?? false,
-            supportsAllDrives: config.includeSharedDrives ?? false,
-          })) as FileListResponse;
+          const childFolders = await this.listDirectSubfolders(
+            drive,
+            currentFolderId,
+            config,
+          );
+          for (const childId of childFolders) {
+            queue.push([childId, depth + 1]);
+          }
         } catch (error) {
-          throw new Error(
-            `Google Drive folder query failed: ${extractErrorMessage(error)}`,
+          // Log and skip this branch — don't abort the entire sync
+          this.log.warn(
+            {
+              folderId: currentFolderId,
+              depth,
+              error: extractErrorMessage(error),
+            },
+            "Failed to list subfolders, skipping branch",
           );
         }
-
-        const files = (res.data.files ?? []).filter(
-          (file: DriveFile) => isSupportedFile(file, supportsImages),
-        );
-
-        const documents: ConnectorDocument[] = [];
-
-        for (const file of files) {
-          const doc = await this.safeItemFetch({
-            fetch: async () => {
-              const result = await this.downloadFileContent(drive, file);
-              if (!result.text.trim() && !result.mediaContent) return null;
-              return fileToDocument(file, result.text, result.mediaContent);
-            },
-            fallback: null,
-            itemId: file.id ?? "unknown",
-            resource: "driveFile",
-          });
-          if (doc) documents.push(doc);
-        }
-
-        const allFiles = res.data.files ?? [];
-        const lastFile = allFiles[allFiles.length - 1];
-        const lastModified = lastFile?.modifiedTime;
-
-        if (
-          lastModified &&
-          (!progress.maxLastModified ||
-            lastModified > progress.maxLastModified)
-        ) {
-          progress.maxLastModified = lastModified;
-        }
-
-        pageToken = res.data.nextPageToken ?? undefined;
-        hasMore = !!pageToken;
-
-        batchIndex++;
+      } else if (recursive && depth >= maxDepth) {
         this.log.debug(
-          {
-            folderId: currentFolderId,
-            batchIndex,
-            fileCount: files.length,
-            documentCount: documents.length,
-            hasMore: hasMore || !isLastFolder,
-          },
-          "Google Drive folder batch done",
+          { folderId: currentFolderId, depth, maxDepth },
+          "Max depth reached, not descending further",
         );
-
-        yield {
-          documents,
-          failures: this.flushFailures(),
-          checkpoint: buildCheckpoint({
-            type: "gdrive",
-            itemUpdatedAt: progress.maxLastModified
-              ? new Date(progress.maxLastModified)
-              : undefined,
-            previousLastSyncedAt: progress.maxLastModified,
-          }),
-          hasMore: hasMore || !isLastFolder,
-        };
       }
+
+      // Yield file batches from this folder
+      yield* this.syncFilesInFolder({
+        drive,
+        folderId: currentFolderId,
+        config,
+        progress,
+        syncFrom,
+        batchSize,
+        supportsImages,
+        hasMoreFolders: queue.length > 0,
+      });
     }
   }
 
   /**
-   * Recursively list all subfolder IDs under a given parent folder.
+   * Sync files within a single folder, yielding paginated batches.
    */
-  private async listSubfolders(
+  private async *syncFilesInFolder(params: {
+    drive: drive_v3.Drive;
+    folderId: string;
+    config: GoogleDriveConfig;
+    progress: { maxLastModified: string | undefined };
+    syncFrom: string | undefined;
+    batchSize: number;
+    supportsImages: boolean;
+    hasMoreFolders: boolean;
+  }): AsyncGenerator<ConnectorSyncBatch> {
+    const {
+      drive,
+      folderId,
+      config,
+      progress,
+      syncFrom,
+      batchSize,
+      supportsImages,
+      hasMoreFolders,
+    } = params;
+
+    let pageToken: string | undefined;
+    let hasMore = true;
+    let batchIndex = 0;
+
+    while (hasMore) {
+      await this.rateLimit();
+
+      let query = `'${folderId}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`;
+      if (syncFrom) {
+        query += ` and modifiedTime >= '${syncFrom}'`;
+      }
+      if (config.fileTypes && config.fileTypes.length > 0) {
+        const mimeFilters = config.fileTypes
+          .map((ext) => `name contains '${ext}'`)
+          .join(" or ");
+        query += ` and (${mimeFilters})`;
+      }
+
+      let res: FileListResponse;
+      try {
+        res = (await drive.files.list({
+          q: query,
+          pageSize: batchSize,
+          pageToken,
+          fields:
+            "nextPageToken,files(id,name,mimeType,modifiedTime,createdTime,owners,webViewLink,parents,size)",
+          orderBy: "modifiedTime asc",
+          includeItemsFromAllDrives: config.includeSharedDrives ?? false,
+          supportsAllDrives: config.includeSharedDrives ?? false,
+        })) as FileListResponse;
+      } catch (error) {
+        throw new Error(
+          `Google Drive folder query failed: ${extractErrorMessage(error)}`,
+        );
+      }
+
+      const files = (res.data.files ?? []).filter(
+        (file: DriveFile) => isSupportedFile(file, supportsImages),
+      );
+
+      const documents: ConnectorDocument[] = [];
+
+      for (const file of files) {
+        const doc = await this.safeItemFetch({
+          fetch: async () => {
+            const result = await this.downloadFileContent(drive, file);
+            if (!result.text.trim() && !result.mediaContent) return null;
+            return fileToDocument(file, result.text, result.mediaContent);
+          },
+          fallback: null,
+          itemId: file.id ?? "unknown",
+          resource: "driveFile",
+        });
+        if (doc) documents.push(doc);
+      }
+
+      const allFiles = res.data.files ?? [];
+      const lastFile = allFiles[allFiles.length - 1];
+      const lastModified = lastFile?.modifiedTime;
+
+      if (
+        lastModified &&
+        (!progress.maxLastModified ||
+          lastModified > progress.maxLastModified)
+      ) {
+        progress.maxLastModified = lastModified;
+      }
+
+      pageToken = res.data.nextPageToken ?? undefined;
+      hasMore = !!pageToken;
+
+      batchIndex++;
+      this.log.debug(
+        {
+          folderId,
+          batchIndex,
+          fileCount: files.length,
+          documentCount: documents.length,
+          hasMore: hasMore || hasMoreFolders,
+        },
+        "Google Drive folder batch done",
+      );
+
+      yield {
+        documents,
+        failures: this.flushFailures(),
+        checkpoint: buildCheckpoint({
+          type: "gdrive",
+          itemUpdatedAt: progress.maxLastModified
+            ? new Date(progress.maxLastModified)
+            : undefined,
+          previousLastSyncedAt: progress.maxLastModified,
+        }),
+        hasMore: hasMore || hasMoreFolders,
+      };
+    }
+  }
+
+  /**
+   * List only the direct child folders of a parent folder (single level).
+   * The BFS loop in syncFolder handles the recursion.
+   */
+  private async listDirectSubfolders(
     drive: drive_v3.Drive,
     parentId: string,
     config: GoogleDriveConfig,
@@ -525,7 +598,7 @@ export class GoogleDriveConnector extends BaseConnector {
         q: `'${parentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
         pageSize: 1000,
         pageToken,
-        fields: "nextPageToken,files(id)",
+        fields: "nextPageToken,files(id,name)",
         includeItemsFromAllDrives: config.includeSharedDrives ?? false,
         supportsAllDrives: config.includeSharedDrives ?? false,
       })) as FileListResponse;
@@ -533,9 +606,6 @@ export class GoogleDriveConnector extends BaseConnector {
       for (const folder of res.data.files ?? []) {
         if (folder.id) {
           subfolders.push(folder.id);
-          // Recurse into this subfolder
-          const nested = await this.listSubfolders(drive, folder.id, config);
-          subfolders.push(...nested);
         }
       }
 

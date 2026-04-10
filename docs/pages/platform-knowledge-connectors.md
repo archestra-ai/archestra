@@ -153,7 +153,7 @@ Ingests files from Google Drive (My Drive and Shared Drives) via the Google Driv
 | Folder ID             | Restrict sync to a specific folder (optional -- find the ID in the folder's Google Drive URL)      |
 | File Types            | Comma-separated file extensions to include, e.g. `.pdf, .docx` (optional -- leave blank for all)  |
 | Include Shared Drives | Toggle to also search files in shared (team) drives (default: off)                                 |
-| Recursive Traversal   | When a Folder ID is set, also sync files from nested subfolders (default: off)                     |
+| Recursive Traversal   | Sync files from all nested subfolders when a Folder ID is set (default: on)                        |
 
 Authentication supports two modes via the **Service Account Key / OAuth Token** field:
 
@@ -171,8 +171,8 @@ To configure the connector:
 Known limitations:
 
 - Google Workspace files (Docs, Sheets, Slides) are exported as plain text, which may lose formatting.
-- Recursive traversal enumerates all subfolders up front, which may be slow for deeply nested folder structures.
 - File size limit for text extraction is 10 MB.
+- Recursive traversal is bounded to a depth of 50 levels by default (configurable via the `maxDepth` API field, range 1--100).
 
 Incremental sync uses the `modifiedTime` field with a 5-minute safety buffer to fetch only files modified since the last run.
 

@@ -119,7 +119,8 @@ export function GoogleDriveConfigFields({
             <div className="space-y-0.5">
               <FormLabel>Recursive Traversal</FormLabel>
               <FormDescription>
-                When a folder ID is set, also sync files from nested subfolders.
+                Sync files from all nested subfolders (enabled by default).
+                Without a Folder ID, all drive files are synced regardless.
               </FormDescription>
             </div>
             <FormControl>

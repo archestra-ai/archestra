@@ -552,6 +552,12 @@ describe("GoogleDriveConnector", () => {
       resetMocks();
       const connector = new GoogleDriveConnector();
 
+      // BFS: listDirectSubfolders for folder-123 (no subfolders)
+      mockFilesList.mockResolvedValueOnce({
+        data: { files: [], nextPageToken: undefined },
+      });
+
+      // Files in folder-123
       mockFilesList.mockResolvedValueOnce({
         data: {
           files: [
@@ -579,18 +585,24 @@ describe("GoogleDriveConnector", () => {
       expect(batches[0].documents).toHaveLength(1);
       expect(batches[0].documents[0].title).toBe("readme.md");
 
-      // Verify query scopes to folder
-      const listArgs = mockFilesList.mock.calls[0][0] as Record<
+      // Verify file query scopes to folder
+      const fileListCall = mockFilesList.mock.calls[1][0] as Record<
         string,
         unknown
       >;
-      expect(listArgs.q).toContain("'folder-123' in parents");
+      expect(fileListCall.q).toContain("'folder-123' in parents");
     });
 
     it("throws when folder query fails", async () => {
       resetMocks();
       const connector = new GoogleDriveConnector();
 
+      // BFS: listDirectSubfolders succeeds (no subfolders)
+      mockFilesList.mockResolvedValueOnce({
+        data: { files: [], nextPageToken: undefined },
+      });
+
+      // File listing fails
       mockFilesList.mockRejectedValueOnce(new Error("Folder not found"));
 
       const generator = connector.sync({
@@ -606,11 +618,11 @@ describe("GoogleDriveConnector", () => {
   });
 
   describe("sync — folder mode with recursive traversal", () => {
-    it("syncs files from nested subfolders when recursive is true", async () => {
+    it("syncs files from nested subfolders (BFS traversal)", async () => {
       resetMocks();
       const connector = new GoogleDriveConnector();
 
-      // Call 1: listSubfolders for root folder → returns one subfolder
+      // BFS step 1: listDirectSubfolders for root-folder → returns subfolder-1
       mockFilesList
         .mockResolvedValueOnce({
           data: {
@@ -618,18 +630,18 @@ describe("GoogleDriveConnector", () => {
             nextPageToken: undefined,
           },
         })
-        // Call 2: listSubfolders for subfolder-1 (no nested subfolders)
-        .mockResolvedValueOnce({
-          data: { files: [], nextPageToken: undefined },
-        })
-        // Call 3: Files in root folder
+        // BFS step 2: Files in root folder
         .mockResolvedValueOnce({
           data: {
             files: [makeDriveFile("root-file", "root.txt")],
             nextPageToken: undefined,
           },
         })
-        // Call 4: Files in subfolder
+        // BFS step 3: listDirectSubfolders for subfolder-1 (no children)
+        .mockResolvedValueOnce({
+          data: { files: [], nextPageToken: undefined },
+        })
+        // BFS step 4: Files in subfolder-1
         .mockResolvedValueOnce({
           data: {
             files: [makeDriveFile("sub-file", "nested.txt")],
@@ -662,6 +674,356 @@ describe("GoogleDriveConnector", () => {
         "nested.txt",
         "root.txt",
       ]);
+    });
+
+    it("traverses 3 levels deep (root → L1 → L2)", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+
+      mockFilesList
+        // BFS: listDirectSubfolders for root → L1
+        .mockResolvedValueOnce({
+          data: { files: [{ id: "L1" }], nextPageToken: undefined },
+        })
+        // Files in root
+        .mockResolvedValueOnce({
+          data: {
+            files: [makeDriveFile("f-root", "root.txt")],
+            nextPageToken: undefined,
+          },
+        })
+        // BFS: listDirectSubfolders for L1 → L2
+        .mockResolvedValueOnce({
+          data: { files: [{ id: "L2" }], nextPageToken: undefined },
+        })
+        // Files in L1
+        .mockResolvedValueOnce({
+          data: {
+            files: [makeDriveFile("f-L1", "level1.txt")],
+            nextPageToken: undefined,
+          },
+        })
+        // BFS: listDirectSubfolders for L2 → no children
+        .mockResolvedValueOnce({
+          data: { files: [], nextPageToken: undefined },
+        })
+        // Files in L2
+        .mockResolvedValueOnce({
+          data: {
+            files: [makeDriveFile("f-L2", "level2.txt")],
+            nextPageToken: undefined,
+          },
+        });
+
+      mockFilesGet
+        .mockResolvedValueOnce({ data: Buffer.from("root").buffer })
+        .mockResolvedValueOnce({ data: Buffer.from("L1").buffer })
+        .mockResolvedValueOnce({ data: Buffer.from("L2").buffer });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: { folderId: "root", recursive: true },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      const allDocs = batches.flatMap((b) => b.documents);
+      expect(allDocs).toHaveLength(3);
+      expect(allDocs.map((d) => d.title).sort()).toEqual([
+        "level1.txt",
+        "level2.txt",
+        "root.txt",
+      ]);
+    });
+
+    it("skips empty intermediate folders", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+
+      mockFilesList
+        // BFS: listDirectSubfolders for root → EmptyFolder
+        .mockResolvedValueOnce({
+          data: { files: [{ id: "empty-folder" }], nextPageToken: undefined },
+        })
+        // Files in root (has one file)
+        .mockResolvedValueOnce({
+          data: {
+            files: [makeDriveFile("f1", "root.txt")],
+            nextPageToken: undefined,
+          },
+        })
+        // BFS: listDirectSubfolders for EmptyFolder → no children
+        .mockResolvedValueOnce({
+          data: { files: [], nextPageToken: undefined },
+        })
+        // Files in EmptyFolder (no files)
+        .mockResolvedValueOnce({
+          data: { files: [], nextPageToken: undefined },
+        });
+
+      mockFilesGet.mockResolvedValueOnce({
+        data: Buffer.from("root content").buffer,
+      });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: { folderId: "root", recursive: true },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      const allDocs = batches.flatMap((b) => b.documents);
+      expect(allDocs).toHaveLength(1);
+      expect(allDocs[0].title).toBe("root.txt");
+    });
+
+    it("stops descending at maxDepth", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+
+      mockFilesList
+        // BFS: listDirectSubfolders for root (depth 0 < maxDepth 1) → L1
+        .mockResolvedValueOnce({
+          data: { files: [{ id: "L1" }], nextPageToken: undefined },
+        })
+        // Files in root
+        .mockResolvedValueOnce({
+          data: {
+            files: [makeDriveFile("f-root", "root.txt")],
+            nextPageToken: undefined,
+          },
+        })
+        // depth 1 === maxDepth 1, so no listDirectSubfolders for L1
+        // Files in L1
+        .mockResolvedValueOnce({
+          data: {
+            files: [makeDriveFile("f-L1", "level1.txt")],
+            nextPageToken: undefined,
+          },
+        });
+
+      mockFilesGet
+        .mockResolvedValueOnce({ data: Buffer.from("root").buffer })
+        .mockResolvedValueOnce({ data: Buffer.from("L1").buffer });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: { folderId: "root", recursive: true, maxDepth: 1 },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      const allDocs = batches.flatMap((b) => b.documents);
+      // Root (depth 0) files + L1 (depth 1) files, but NOT L1's children
+      expect(allDocs).toHaveLength(2);
+      // listDirectSubfolders was called once (for root, depth 0) but NOT for L1 (depth 1 >= maxDepth)
+      // Total files.list calls: 1 (subfolders of root) + 1 (files in root) + 1 (files in L1) = 3
+      expect(mockFilesList).toHaveBeenCalledTimes(3);
+    });
+
+    it("handles multiple branches (BranchA, BranchB)", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+
+      mockFilesList
+        // BFS: listDirectSubfolders for root → BranchA + BranchB
+        .mockResolvedValueOnce({
+          data: {
+            files: [{ id: "branchA" }, { id: "branchB" }],
+            nextPageToken: undefined,
+          },
+        })
+        // Files in root (empty)
+        .mockResolvedValueOnce({
+          data: { files: [], nextPageToken: undefined },
+        })
+        // BFS: listDirectSubfolders for BranchA → no children
+        .mockResolvedValueOnce({
+          data: { files: [], nextPageToken: undefined },
+        })
+        // Files in BranchA
+        .mockResolvedValueOnce({
+          data: {
+            files: [makeDriveFile("fA", "branchA.txt")],
+            nextPageToken: undefined,
+          },
+        })
+        // BFS: listDirectSubfolders for BranchB → no children
+        .mockResolvedValueOnce({
+          data: { files: [], nextPageToken: undefined },
+        })
+        // Files in BranchB
+        .mockResolvedValueOnce({
+          data: {
+            files: [makeDriveFile("fB", "branchB.txt")],
+            nextPageToken: undefined,
+          },
+        });
+
+      mockFilesGet
+        .mockResolvedValueOnce({ data: Buffer.from("A").buffer })
+        .mockResolvedValueOnce({ data: Buffer.from("B").buffer });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: { folderId: "root", recursive: true },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      const allDocs = batches.flatMap((b) => b.documents);
+      expect(allDocs).toHaveLength(2);
+      expect(allDocs.map((d) => d.title).sort()).toEqual([
+        "branchA.txt",
+        "branchB.txt",
+      ]);
+    });
+
+    it("skips branch when subfolder discovery fails", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+
+      mockFilesList
+        // BFS: listDirectSubfolders for root → returns badFolder
+        .mockResolvedValueOnce({
+          data: { files: [{ id: "bad-folder" }], nextPageToken: undefined },
+        })
+        // Files in root
+        .mockResolvedValueOnce({
+          data: {
+            files: [makeDriveFile("f1", "root.txt")],
+            nextPageToken: undefined,
+          },
+        })
+        // BFS: listDirectSubfolders for bad-folder → throws
+        .mockRejectedValueOnce(new Error("Permission denied"))
+        // Files in bad-folder still returned (even though subfolders failed)
+        .mockResolvedValueOnce({
+          data: {
+            files: [makeDriveFile("f2", "accessible.txt")],
+            nextPageToken: undefined,
+          },
+        });
+
+      mockFilesGet
+        .mockResolvedValueOnce({ data: Buffer.from("root").buffer })
+        .mockResolvedValueOnce({ data: Buffer.from("accessible").buffer });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: { folderId: "root", recursive: true },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      // Should get files from both root and bad-folder (files work, subfolders don't)
+      const allDocs = batches.flatMap((b) => b.documents);
+      expect(allDocs).toHaveLength(2);
+      expect(allDocs.map((d) => d.title).sort()).toEqual([
+        "accessible.txt",
+        "root.txt",
+      ]);
+    });
+
+    it("does not recurse when recursive is explicitly false", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+
+      // No listDirectSubfolders call — only file listing
+      mockFilesList.mockResolvedValueOnce({
+        data: {
+          files: [makeDriveFile("f1", "root-only.txt")],
+          nextPageToken: undefined,
+        },
+      });
+
+      mockFilesGet.mockResolvedValueOnce({
+        data: Buffer.from("root only").buffer,
+      });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: { folderId: "root", recursive: false },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      const allDocs = batches.flatMap((b) => b.documents);
+      expect(allDocs).toHaveLength(1);
+      expect(allDocs[0].title).toBe("root-only.txt");
+      // Only 1 files.list call (for files in root), no subfolder discovery
+      expect(mockFilesList).toHaveBeenCalledTimes(1);
+    });
+
+    it("applies incremental sync filter across recursive folders", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+
+      const checkpoint = {
+        type: "gdrive" as const,
+        lastSyncedAt: "2024-06-01T00:00:00.000Z",
+      };
+
+      mockFilesList
+        // BFS: listDirectSubfolders for root → sub
+        .mockResolvedValueOnce({
+          data: { files: [{ id: "sub" }], nextPageToken: undefined },
+        })
+        // Files in root (filtered by modifiedTime)
+        .mockResolvedValueOnce({
+          data: { files: [], nextPageToken: undefined },
+        })
+        // BFS: listDirectSubfolders for sub → no children
+        .mockResolvedValueOnce({
+          data: { files: [], nextPageToken: undefined },
+        })
+        // Files in sub (one modified after checkpoint)
+        .mockResolvedValueOnce({
+          data: {
+            files: [
+              makeDriveFile("f1", "updated.txt", {
+                modifiedTime: "2024-06-15T10:00:00.000Z",
+              }),
+            ],
+            nextPageToken: undefined,
+          },
+        });
+
+      mockFilesGet.mockResolvedValueOnce({
+        data: Buffer.from("updated content").buffer,
+      });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: { folderId: "root", recursive: true },
+        credentials,
+        checkpoint,
+      })) {
+        batches.push(batch);
+      }
+
+      // Verify the modifiedTime filter is applied to subfolder queries
+      const subFolderFileQuery = mockFilesList.mock.calls[3][0] as Record<
+        string,
+        unknown
+      >;
+      expect(subFolderFileQuery.q).toContain("modifiedTime >=");
+
+      const allDocs = batches.flatMap((b) => b.documents);
+      expect(allDocs).toHaveLength(1);
+      expect(allDocs[0].title).toBe("updated.txt");
     });
   });
 

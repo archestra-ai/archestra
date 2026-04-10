@@ -442,6 +442,23 @@ test.describe("MCP Gateway - External MCP Server Tests", () => {
         throw new Error("Default Team not found");
       }
 
+      const existingTeamIds = (defaultGateway.teams ?? [])
+        .map((team: string | { id?: string; teamId?: string }) =>
+          typeof team === "string" ? team : (team.id ?? team.teamId),
+        )
+        .filter((teamId: string | undefined): teamId is string =>
+          Boolean(teamId),
+        );
+
+      await makeApiRequest({
+        request,
+        method: "put",
+        urlSuffix: `/api/agents/${profileId}`,
+        data: {
+          teams: Array.from(new Set([...existingTeamIds, defaultTeam.id])),
+        },
+      });
+
       // Find the catalog item for internal-dev-test-server
       const catalogItem = await findCatalogItem(
         request,

@@ -1030,7 +1030,30 @@ const getWiremockRequests = async (
  * Useful for test isolation - call in beforeEach to ensure clean state
  */
 const clearWiremockRequests = async (request: APIRequestContext) => {
-  await request.delete(`${WIREMOCK_BASE_URL}/__admin/requests`);
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < 8; attempt++) {
+    try {
+      const response = await request.delete(
+        `${WIREMOCK_BASE_URL}/__admin/requests`,
+        { timeout: 5000 },
+      );
+
+      if (response.ok()) return;
+
+      lastError = new Error(`${response.status()} ${await response.text()}`);
+    } catch (error) {
+      lastError = error;
+    }
+
+    await new Promise((resolve) =>
+      setTimeout(resolve, Math.min(500 * 2 ** attempt, 5000)),
+    );
+  }
+
+  throw new Error(
+    `Failed to clear WireMock requests at ${WIREMOCK_BASE_URL}: ${String(lastError)}`,
+  );
 };
 
 /**

@@ -94,7 +94,6 @@ test.describe("SSRF Protection - NetworkPolicy for MCP Servers", () => {
   test.beforeAll(
     async ({
       adminRequest: request,
-      createAgent,
       createMcpCatalogItem,
       installMcpServer,
       getTeamByName,
@@ -135,12 +134,17 @@ test.describe("SSRF Protection - NetworkPolicy for MCP Servers", () => {
       // Wait for MCP server to be ready
       await waitForServerInstallation(request, serverId);
 
-      // Create a profile (agent) for MCP gateway access
-      const profileResponse = await createAgent(
+      // Create a team-scoped profile so it can use the team-scoped MCP server.
+      const profileResponse = await makeApiRequest({
         request,
-        `SSRF Test Profile ${uniqueSuffix}`,
-        "personal",
-      );
+        method: "post",
+        urlSuffix: "/api/agents",
+        data: {
+          name: `SSRF Test Profile ${uniqueSuffix}`,
+          teams: [defaultTeam.id],
+          scope: "team",
+        },
+      });
       const profile = await profileResponse.json();
       profileId = profile.id;
 

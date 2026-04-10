@@ -424,40 +424,28 @@ test.describe("MCP Gateway - External MCP Server Tests", () => {
       uninstallMcpServer,
       getTeamByName,
     }) => {
-      // Use the Default MCP Gateway
-      const defaultGatewayResponse = await makeApiRequest({
-        request,
-        method: "get",
-        urlSuffix: "/api/mcp-gateways/default",
-      });
-      const defaultGateway = await defaultGatewayResponse.json();
-      profileId = defaultGateway.id;
-
-      // Get org token using shared utility
-      archestraToken = await getOrgTokenForProfile(request);
-
       // Get the Default Team (required for MCP server installation when Vault is enabled)
       const defaultTeam = await getTeamByName(request, "Default Team");
       if (!defaultTeam) {
         throw new Error("Default Team not found");
       }
 
-      const existingTeamIds = (defaultGateway.teams ?? [])
-        .map((team: string | { id?: string; teamId?: string }) =>
-          typeof team === "string" ? team : (team.id ?? team.teamId),
-        )
-        .filter((teamId: string | undefined): teamId is string =>
-          Boolean(teamId),
-        );
-
-      await makeApiRequest({
+      const gatewayResponse = await makeApiRequest({
         request,
-        method: "put",
-        urlSuffix: `/api/agents/${profileId}`,
+        method: "post",
+        urlSuffix: "/api/agents",
         data: {
-          teams: Array.from(new Set([...existingTeamIds, defaultTeam.id])),
+          name: `External MCP Gateway ${crypto.randomUUID().slice(0, 8)}`,
+          agentType: "mcp_gateway",
+          scope: "team",
+          teams: [defaultTeam.id],
         },
       });
+      const gateway = await gatewayResponse.json();
+      profileId = gateway.id;
+
+      // Get org token using shared utility
+      archestraToken = await getOrgTokenForProfile(request);
 
       // Find the catalog item for internal-dev-test-server
       const catalogItem = await findCatalogItem(
@@ -569,6 +557,10 @@ test.describe("MCP Gateway - External MCP Server Tests", () => {
       }
     },
   );
+
+  test.afterAll(async ({ request, deleteAgent }) => {
+    if (profileId) await deleteAgent(request, profileId);
+  });
 
   const makeMcpGatewayRequestHeaders = () => ({
     Authorization: `Bearer ${archestraToken}`,

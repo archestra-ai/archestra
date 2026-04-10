@@ -36,7 +36,7 @@ export const API_BASE_URL =
   process.env.E2E_API_BASE_URL || "http://localhost:9000";
 export const WIREMOCK_BASE_URL =
   process.env.E2E_WIREMOCK_BASE_URL ||
-  (IS_CI ? "http://127.0.0.1:30080" : "http://127.0.0.1:9092");
+  (IS_CI ? "http://127.0.0.1:8080" : "http://127.0.0.1:9092");
 
 // Internal WireMock URL for backend-to-wiremock connections (used when storing URLs in database)
 // In CI, the backend pod needs to use the Kubernetes service DNS name

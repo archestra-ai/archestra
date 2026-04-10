@@ -1,5 +1,5 @@
-import type { archestraApiTypes } from "@shared";
-import type { PartialUIMessage } from "@/components/message-thread";
+import type { archestraApiTypes } from "../../index";
+import type { PartialUIMessage } from "../types";
 
 export type Interaction =
   archestraApiTypes.GetInteractionsResponses["200"]["data"][number];

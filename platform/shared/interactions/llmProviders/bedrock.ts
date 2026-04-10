@@ -1,32 +1,88 @@
-import type { archestraApiTypes } from "@shared";
-import type { PartialUIMessage } from "@/components/message-thread";
+import type { PartialUIMessage } from "../types";
 import type { DualLlmAnalysis, Interaction, InteractionUtils } from "./common";
 
-class AnthropicMessagesInteraction implements InteractionUtils {
-  private request: archestraApiTypes.AnthropicMessagesRequest;
-  private response: archestraApiTypes.AnthropicMessagesResponse;
+/**
+ * Bedrock Converse API request/response types
+ * Based on backend/src/types/llm-providers/bedrock/api.ts
+ */
+interface BedrockContentBlock {
+  text?: string;
+  toolUse?: {
+    toolUseId: string;
+    name: string;
+    input: unknown;
+  };
+  toolResult?: {
+    toolUseId: string;
+    content: unknown;
+    status?: string;
+  };
+  guardContent?: unknown;
+  document?: unknown;
+  image?: unknown;
+  video?: unknown;
+}
+
+interface BedrockMessage {
+  role: "user" | "assistant";
+  content: BedrockContentBlock[];
+}
+
+interface BedrockResponseContentBlock {
+  text?: string;
+  toolUse?: {
+    toolUseId: string;
+    name: string;
+    input: unknown;
+  };
+  reasoningContent?: unknown;
+}
+
+interface BedrockConverseRequest {
+  modelId: string;
+  messages?: BedrockMessage[];
+  system?: unknown;
+  inferenceConfig?: unknown;
+  toolConfig?: unknown;
+}
+
+interface BedrockConverseResponse {
+  output?: {
+    message?: {
+      role: "assistant";
+      content: BedrockResponseContentBlock[];
+    };
+  };
+  stopReason?: string;
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+  };
+}
+
+class BedrockConverseInteraction implements InteractionUtils {
+  private request: BedrockConverseRequest;
+  private response: BedrockConverseResponse;
   modelName: string;
 
   constructor(interaction: Interaction) {
-    this.request =
-      interaction.request as archestraApiTypes.AnthropicMessagesRequest;
-    this.response =
-      interaction.response as archestraApiTypes.AnthropicMessagesResponse;
-    this.modelName = interaction.model ?? this.request.model;
+    this.request = interaction.request as BedrockConverseRequest;
+    this.response = interaction.response as BedrockConverseResponse;
+    this.modelName = interaction.model ?? this.request.modelId;
   }
 
   isLastMessageToolCall(): boolean {
     const messages = this.request.messages;
 
-    if (messages.length === 0) {
+    if (!messages || messages.length === 0) {
       return false;
     }
 
     const lastMessage = messages[messages.length - 1];
 
-    // Check if last user message contains tool_result blocks
+    // Check if last user message contains toolResult blocks
     if (lastMessage.role === "user" && Array.isArray(lastMessage.content)) {
-      return lastMessage.content.some((block) => block.type === "tool_result");
+      return lastMessage.content.some((block) => block.toolResult != null);
     }
 
     return false;
@@ -34,17 +90,17 @@ class AnthropicMessagesInteraction implements InteractionUtils {
 
   getLastToolCallId(): string | null {
     const messages = this.request.messages;
-    if (messages.length === 0) {
+    if (!messages || messages.length === 0) {
       return null;
     }
 
-    // Look for the last tool_result block in user messages
+    // Look for the last toolResult block in user messages
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i];
       if (message.role === "user" && Array.isArray(message.content)) {
         for (const block of message.content) {
-          if (block.type === "tool_result" && "tool_use_id" in block) {
-            return block.tool_use_id;
+          if (block.toolResult?.toolUseId) {
+            return block.toolResult.toolUseId;
           }
         }
       }
@@ -55,13 +111,16 @@ class AnthropicMessagesInteraction implements InteractionUtils {
 
   getToolNamesUsed(): string[] {
     const toolsUsed = new Set<string>();
+    const messages = this.request.messages;
 
-    // Tools are invoked by the assistant in tool_use blocks
-    for (const message of this.request.messages) {
+    if (!messages) return [];
+
+    // Tools are invoked by the assistant in toolUse blocks
+    for (const message of messages) {
       if (message.role === "assistant" && Array.isArray(message.content)) {
         for (const block of message.content) {
-          if (block.type === "tool_use" && "name" in block) {
-            toolsUsed.add(block.name);
+          if (block.toolUse?.name) {
+            toolsUsed.add(block.toolUse.name);
           }
         }
       }
@@ -71,18 +130,18 @@ class AnthropicMessagesInteraction implements InteractionUtils {
   }
 
   getToolNamesRefused(): string[] {
-    // TODO: Implement tool refusal detection for Anthropic if needed
     return [];
   }
 
   getToolNamesRequested(): string[] {
     const toolsRequested = new Set<string>();
+    const responseContent = this.response.output?.message?.content;
 
-    // Check the response for tool_use blocks (tools that LLM wants to execute)
-    if (Array.isArray(this.response.content)) {
-      for (const block of this.response.content) {
-        if (block.type === "tool_use" && "name" in block) {
-          toolsRequested.add(block.name);
+    // Check the response for toolUse blocks (tools that LLM wants to execute)
+    if (Array.isArray(responseContent)) {
+      for (const block of responseContent) {
+        if (block.toolUse?.name) {
+          toolsRequested.add(block.toolUse.name);
         }
       }
     }
@@ -95,20 +154,19 @@ class AnthropicMessagesInteraction implements InteractionUtils {
   }
 
   getLastUserMessage(): string {
-    const reversedMessages = [...this.request.messages].reverse();
+    const messages = this.request.messages;
+    if (!messages) return "";
+
+    const reversedMessages = [...messages].reverse();
     for (const message of reversedMessages) {
       if (message.role !== "user") {
         continue;
       }
 
-      if (typeof message.content === "string") {
-        return message.content;
-      }
-
       if (Array.isArray(message.content)) {
-        // Find the first text block that's not a tool_result
+        // Find the first text block that's not a tool result
         for (const block of message.content) {
-          if (block.type === "text" && "text" in block) {
+          if (block.text && !block.toolResult) {
             return block.text;
           }
         }
@@ -118,7 +176,7 @@ class AnthropicMessagesInteraction implements InteractionUtils {
   }
 
   getLastAssistantResponse(): string {
-    const responseContent = this.response.content;
+    const responseContent = this.response.output?.message?.content;
 
     if (!Array.isArray(responseContent)) {
       return "";
@@ -126,7 +184,7 @@ class AnthropicMessagesInteraction implements InteractionUtils {
 
     // Find the first text block in the response
     for (const block of responseContent) {
-      if (block.type === "text" && "text" in block) {
+      if (block.text) {
         return block.text;
       }
     }
@@ -136,44 +194,32 @@ class AnthropicMessagesInteraction implements InteractionUtils {
 
   private mapToUiMessage(
     message:
-      | archestraApiTypes.AnthropicMessagesRequest["messages"][number]
-      | {
-          role: "assistant";
-          content: archestraApiTypes.AnthropicMessagesResponse["content"];
-        },
+      | BedrockMessage
+      | { role: "assistant"; content: BedrockResponseContentBlock[] },
     _dualLlmAnalyses?: DualLlmAnalysis[],
   ): PartialUIMessage {
     const parts: PartialUIMessage["parts"] = [];
     const { content, role } = message;
 
     if (!Array.isArray(content)) {
-      // String content (for user messages)
-      if (typeof content === "string") {
-        parts.push({ type: "text", text: content });
-      }
       return { role: role as PartialUIMessage["role"], parts };
     }
 
     // Process content blocks
     for (const block of content) {
-      if (block.type === "text" && "text" in block) {
+      if (block.text) {
         parts.push({ type: "text", text: block.text });
-      } else if (
-        block.type === "tool_use" &&
-        "name" in block &&
-        "id" in block
-      ) {
+      } else if (block.toolUse) {
         // Tool invocation by assistant
         parts.push({
           type: "dynamic-tool",
-          toolName: block.name,
-          toolCallId: block.id,
+          toolName: block.toolUse.name,
+          toolCallId: block.toolUse.toolUseId,
           state: "input-available",
-          input: block.input,
+          input: block.toolUse.input,
         });
       }
-      // Note: tool_result blocks are handled in mapToUiMessages() where they're merged
-      // with their corresponding tool_use blocks, so we skip them here
+      // Note: toolResult blocks are handled in mapToUiMessages() where they're merged
     }
 
     return {
@@ -186,15 +232,17 @@ class AnthropicMessagesInteraction implements InteractionUtils {
     const uiMessages: PartialUIMessage[] = [];
     const messages = this.request.messages;
 
-    // Track which user messages contain tool_result blocks (to skip them later)
+    if (!messages) return uiMessages;
+
+    // Track which user messages contain only toolResult blocks (to skip them later)
     const userMessagesWithToolResults = new Set<number>();
 
-    // First pass: identify user messages that only contain tool_result blocks
+    // First pass: identify user messages that only contain toolResult blocks
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i];
       if (msg.role === "user" && Array.isArray(msg.content)) {
         const hasOnlyToolResults = msg.content.every(
-          (block) => block.type === "tool_result",
+          (block) => block.toolResult != null,
         );
         if (hasOnlyToolResults && msg.content.length > 0) {
           userMessagesWithToolResults.add(i);
@@ -213,18 +261,16 @@ class AnthropicMessagesInteraction implements InteractionUtils {
 
       const uiMessage = this.mapToUiMessage(msg, dualLlmAnalyses);
 
-      // If this is an assistant message with tool_use blocks, look ahead for tool results
+      // If this is an assistant message with toolUse blocks, look ahead for tool results
       if (msg.role === "assistant" && Array.isArray(msg.content)) {
-        const hasToolUse = msg.content.some(
-          (block) => block.type === "tool_use",
-        );
+        const hasToolUse = msg.content.some((block) => block.toolUse != null);
 
         if (hasToolUse) {
           const toolCallParts: PartialUIMessage["parts"] = [...uiMessage.parts];
 
-          // For each tool_use block, find its corresponding tool_result
+          // For each toolUse block, find its corresponding toolResult
           for (const block of msg.content) {
-            if (block.type === "tool_use" && "id" in block) {
+            if (block.toolUse) {
               // Look for the tool result in the next user message
               const toolResultMsg = messages
                 .slice(i + 1)
@@ -234,39 +280,33 @@ class AnthropicMessagesInteraction implements InteractionUtils {
                     Array.isArray(m.content) &&
                     m.content.some(
                       (b) =>
-                        b.type === "tool_result" &&
-                        "tool_use_id" in b &&
-                        b.tool_use_id === block.id,
+                        b.toolResult?.toolUseId === block.toolUse?.toolUseId,
                     ),
                 );
 
               if (toolResultMsg && Array.isArray(toolResultMsg.content)) {
-                // Find the specific tool_result block
+                // Find the specific toolResult block
                 const toolResultBlock = toolResultMsg.content.find(
-                  (b) =>
-                    b.type === "tool_result" &&
-                    "tool_use_id" in b &&
-                    b.tool_use_id === block.id,
+                  (b) => b.toolResult?.toolUseId === block.toolUse?.toolUseId,
                 );
 
-                if (toolResultBlock && toolResultBlock.type === "tool_result") {
+                if (toolResultBlock?.toolResult) {
                   // Parse the tool result
                   let output: unknown;
                   try {
                     output =
-                      typeof toolResultBlock.content === "string"
-                        ? JSON.parse(toolResultBlock.content)
-                        : toolResultBlock.content;
+                      typeof toolResultBlock.toolResult.content === "string"
+                        ? JSON.parse(toolResultBlock.toolResult.content)
+                        : toolResultBlock.toolResult.content;
                   } catch {
-                    output = toolResultBlock.content;
+                    output = toolResultBlock.toolResult.content;
                   }
 
-                  // Add tool result part (preserve actual tool name for citation extraction)
+                  // Add tool result part
                   toolCallParts.push({
                     type: "dynamic-tool",
-                    toolName:
-                      "name" in block ? (block.name as string) : "tool-result",
-                    toolCallId: block.id,
+                    toolName: block.toolUse.name,
+                    toolCallId: block.toolUse.toolUseId,
                     state: "output-available",
                     input: {},
                     output,
@@ -274,7 +314,7 @@ class AnthropicMessagesInteraction implements InteractionUtils {
 
                   // Check for dual LLM result
                   const dualLlmResultForTool = dualLlmAnalyses?.find(
-                    (result) => result.toolCallId === block.id,
+                    (result) => result.toolCallId === block.toolUse?.toolUseId,
                   );
 
                   if (dualLlmResultForTool) {
@@ -310,15 +350,18 @@ class AnthropicMessagesInteraction implements InteractionUtils {
     }
 
     // Map response
-    uiMessages.push(
-      this.mapToUiMessage(
-        { role: "assistant", content: this.response.content },
-        dualLlmAnalyses,
-      ),
-    );
+    const responseContent = this.response.output?.message?.content;
+    if (responseContent) {
+      uiMessages.push(
+        this.mapToUiMessage(
+          { role: "assistant", content: responseContent },
+          dualLlmAnalyses,
+        ),
+      );
+    }
 
     return uiMessages;
   }
 }
 
-export default AnthropicMessagesInteraction;
+export default BedrockConverseInteraction;

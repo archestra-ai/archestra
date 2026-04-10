@@ -101,6 +101,12 @@ const contentNavGroups: NavGroup[] = [
           !pathname.startsWith("/agents/triggers"),
         subItems: [
           {
+            title: "Scheduled",
+            url: "/scheduled-tasks",
+            customIsActive: (pathname: string) =>
+              pathname.startsWith("/scheduled-tasks"),
+          },
+          {
             title: "Triggers",
             url: "/agents/triggers",
             customIsActive: (pathname: string) =>

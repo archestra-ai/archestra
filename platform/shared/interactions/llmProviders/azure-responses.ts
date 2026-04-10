@@ -1,5 +1,5 @@
-import { parseArchestraToolRefusal } from "@shared";
-import type { PartialUIMessage } from "@/components/message-thread";
+import { parseArchestraToolRefusal } from "../../index";
+import type { PartialUIMessage } from "../types";
 import type { Interaction, InteractionUtils } from "./common";
 
 type AzureResponsesInteractionRecord = Extract<
@@ -20,12 +20,14 @@ class AzureResponsesInteraction implements InteractionUtils {
   }
 
   isLastMessageToolCall(): boolean {
-    const lastItem = this.getInputItems().at(-1);
+    const items = this.getInputItems();
+    const lastItem = items[items.length - 1];
     return isFunctionCallOutputItem(lastItem);
   }
 
   getLastToolCallId(): string | null {
-    const lastItem = this.getInputItems().at(-1);
+    const items = this.getInputItems();
+    const lastItem = items[items.length - 1];
     return isFunctionCallOutputItem(lastItem) ? lastItem.call_id : null;
   }
 

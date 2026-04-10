@@ -25,6 +25,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "ai": "^6.0.116",
     "better-auth": "1.5.5",
     "zod": "^4.3.4"
   },

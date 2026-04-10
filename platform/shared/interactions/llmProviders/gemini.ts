@@ -2,8 +2,8 @@ import {
   ARCHESTRA_TOOL_NAME_TAG,
   type archestraApiTypes,
   parseArchestraToolRefusal,
-} from "@shared";
-import type { PartialUIMessage } from "@/components/message-thread";
+} from "../../index";
+import type { PartialUIMessage } from "../types";
 import type { DualLlmAnalysis, Interaction, InteractionUtils } from "./common";
 
 // Define more precise types for Gemini parts since the generated types use union discrimination

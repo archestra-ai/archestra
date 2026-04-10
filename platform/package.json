@@ -71,5 +71,8 @@
       "ai@6.0.90": "patches/ai@6.0.90.patch"
     }
   },
-  "packageManager": "pnpm@10.33.0"
+  "packageManager": "pnpm@10.33.0",
+  "dependencies": {
+    "croner": "^10.0.1"
+  }
 }

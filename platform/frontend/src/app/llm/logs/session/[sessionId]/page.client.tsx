@@ -31,10 +31,7 @@ import {
   useInteractionSessions,
   useInteractions,
 } from "@/lib/interactions/interaction.query";
-import {
-  calculateCostSavings,
-  DynamicInteraction,
-} from "@/lib/interactions/interaction.utils";
+import { calculateCostSavings, DynamicInteraction } from "@shared";
 import { formatDate } from "@/lib/utils";
 
 export default function SessionDetailPage({

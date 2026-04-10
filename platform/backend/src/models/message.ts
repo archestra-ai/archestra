@@ -1,5 +1,5 @@
 import { and, eq, gt, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 import type { InsertMessage, Message } from "@/types";
 
 class MessageModel {
@@ -28,12 +28,16 @@ class MessageModel {
     return message;
   }
 
-  static async bulkCreate(messages: InsertMessage[]): Promise<void> {
+  static async bulkCreate(
+    messages: InsertMessage[],
+    txOrDb?: Transaction | typeof db,
+  ): Promise<void> {
     if (messages.length === 0) {
       return;
     }
 
-    await db.insert(schema.messagesTable).values(messages);
+    const executor = txOrDb ?? db;
+    await executor.insert(schema.messagesTable).values(messages);
 
     // Update conversation's updatedAt for all affected conversations
     const uniqueConversationIds = [
@@ -44,8 +48,12 @@ class MessageModel {
     );
   }
 
-  static async findByConversation(conversationId: string): Promise<Message[]> {
-    const messages = await db
+  static async findByConversation(
+    conversationId: string,
+    txOrDb?: Transaction | typeof db,
+  ): Promise<Message[]> {
+    const executor = txOrDb ?? db;
+    const messages = await executor
       .select()
       .from(schema.messagesTable)
       .where(eq(schema.messagesTable.conversationId, conversationId))
@@ -109,6 +117,7 @@ class MessageModel {
     messageId: string,
     partIndex: number,
     newText: string,
+    txOrDb?: Transaction | typeof db,
   ): Promise<Message> {
     // Fetch the current message
     const message = await MessageModel.findById(messageId);
@@ -137,7 +146,8 @@ class MessageModel {
     content.parts[partIndex].text = newText;
 
     // Update the message in the database
-    const [updatedMessage] = await db
+    const executor = txOrDb ?? db;
+    const [updatedMessage] = await executor
       .update(schema.messagesTable)
       .set({
         content,

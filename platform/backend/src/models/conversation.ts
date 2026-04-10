@@ -8,7 +8,7 @@ import {
   or,
   sql,
 } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 import type {
   Conversation,
   InsertConversation,
@@ -17,8 +17,12 @@ import type {
 import ConversationShareModel from "./conversation-share";
 
 class ConversationModel {
-  static async create(data: InsertConversation): Promise<Conversation> {
-    const [conversation] = await db
+  static async create(
+    data: InsertConversation,
+    txOrDb?: Transaction | typeof db,
+  ): Promise<Conversation> {
+    const executor = txOrDb ?? db;
+    const [conversation] = await executor
       .insert(schema.conversationsTable)
       .values(data)
       .returning();
@@ -30,6 +34,7 @@ class ConversationModel {
       id: conversation.id,
       userId: data.userId,
       organizationId: data.organizationId,
+      txOrDb,
     })) as Conversation;
 
     return conversationWithAgent;
@@ -256,12 +261,15 @@ class ConversationModel {
     id,
     userId,
     organizationId,
+    txOrDb,
   }: {
     id: string;
     userId: string;
     organizationId: string;
+    txOrDb?: Transaction | typeof db;
   }): Promise<Conversation | null> {
-    const rows = await db
+    const executor = txOrDb ?? db;
+    const rows = await executor
       .select({
         conversation: getTableColumns(schema.conversationsTable),
         message: getTableColumns(schema.messagesTable),

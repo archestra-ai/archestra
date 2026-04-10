@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  DynamicInteraction,
   type archestraApiTypes,
   INTERACTION_SOURCE_DISPLAY,
   type InteractionSource,
@@ -36,7 +37,6 @@ import {
   useInteractionSessions,
   useUniqueUserIds,
 } from "@/lib/interactions/interaction.query";
-import { DynamicInteraction } from "@/lib/interactions/interaction.utils";
 import { formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../../_parts/error-boundary";
 

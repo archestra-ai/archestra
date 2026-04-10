@@ -4,8 +4,8 @@
  * Implements InteractionUtils for displaying Cohere chat interactions in the UI.
  */
 
-import type { archestraApiTypes } from "@shared";
-import type { PartialUIMessage } from "@/components/message-thread";
+import type { archestraApiTypes } from "../../index";
+import type { PartialUIMessage } from "../types";
 import type { DualLlmAnalysis, Interaction, InteractionUtils } from "./common";
 
 class CohereChatInteraction implements InteractionUtils {

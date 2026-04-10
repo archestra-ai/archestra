@@ -1,5 +1,5 @@
-import type { SupportedProvider } from "@shared";
-import type { PartialUIMessage } from "@/components/message-thread";
+import type { SupportedProvider } from "../index";
+import type { PartialUIMessage } from "./types";
 import AnthropicMessagesInteraction from "./llmProviders/anthropic";
 import AzureChatCompletionInteraction from "./llmProviders/azure";
 import AzureResponsesInteraction from "./llmProviders/azure-responses";

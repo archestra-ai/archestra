@@ -1,4 +1,4 @@
-import type { PartialUIMessage } from "@/components/message-thread";
+import type { PartialUIMessage } from "../types";
 import type { Interaction, InteractionUtils } from "./common";
 
 /**

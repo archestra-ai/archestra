@@ -1,5 +1,5 @@
-import { type archestraApiTypes, parseArchestraToolRefusal } from "@shared";
-import type { PartialUIMessage } from "@/components/message-thread";
+import { type archestraApiTypes, parseArchestraToolRefusal } from "../../index";
+import type { PartialUIMessage } from "../types";
 import type { DualLlmAnalysis, Interaction, InteractionUtils } from "./common";
 
 class OpenAiChatCompletionInteraction implements InteractionUtils {

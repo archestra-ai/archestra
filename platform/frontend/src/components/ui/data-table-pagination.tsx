@@ -6,12 +6,14 @@ interface DataTablePaginationProps<TData> {
   table: Table<TData>;
   totalRows?: number;
   hideSelectedCount?: boolean;
+  compactPagination?: boolean;
 }
 
 export function DataTablePagination<TData>({
   table,
   totalRows,
   hideSelectedCount = false,
+  compactPagination = false,
 }: DataTablePaginationProps<TData>) {
   const paginationState = table.getState().pagination;
   const pageIndex = paginationState?.pageIndex ?? 0;
@@ -23,6 +25,7 @@ export function DataTablePagination<TData>({
       pageIndex={pageIndex}
       pageSize={pageSize}
       total={total}
+      compact={compactPagination}
       onPaginationChange={(newPagination) => {
         if (newPagination.pageSize !== pageSize) {
           table.setPageSize(newPagination.pageSize);

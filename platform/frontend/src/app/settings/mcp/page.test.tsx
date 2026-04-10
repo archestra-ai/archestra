@@ -102,4 +102,17 @@ describe("McpSettingsPage", () => {
       });
     });
   });
+
+  it("shows the default preset when the organization response is missing the lifetime", () => {
+    mockOrganization = {};
+
+    renderPage();
+
+    expect(
+      screen.getByRole("combobox", { name: /token lifetime/i }),
+    ).toHaveTextContent("1 year");
+    expect(
+      screen.queryByRole("button", { name: "Save" }),
+    ).not.toBeInTheDocument();
+  });
 });

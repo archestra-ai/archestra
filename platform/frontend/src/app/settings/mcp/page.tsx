@@ -69,24 +69,26 @@ export default function McpSettingsPage() {
       return;
     }
 
-    const lifetimeSeconds = organization.mcpOauthAccessTokenLifetimeSeconds;
+    const lifetimeSeconds = getServerLifetimeSeconds(organization);
     form.reset({
       lifetimePreset: getPresetSelectValue(lifetimeSeconds),
       customLifetimeSeconds: lifetimeSeconds,
     });
   }, [form, organization]);
 
-  const serverValue =
-    organization?.mcpOauthAccessTokenLifetimeSeconds ??
-    DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS;
-  const selectedPreset = form.watch("lifetimePreset");
+  const serverValue = getServerLifetimeSeconds(organization);
+  const selectedPreset = form.watch("lifetimePreset") ?? "";
+  const lifetimePreset = selectedPreset || getPresetSelectValue(serverValue);
   const customLifetimeSeconds = form.watch("customLifetimeSeconds");
   const currentValue = getSelectedLifetimeSeconds({
-    lifetimePreset: selectedPreset,
+    lifetimePreset,
     customLifetimeSeconds,
   });
-  const isCustomLifetime = selectedPreset === CUSTOM_LIFETIME_VALUE;
-  const hasChanges = !isOrganizationPending && currentValue !== serverValue;
+  const isCustomLifetime = lifetimePreset === CUSTOM_LIFETIME_VALUE;
+  const hasChanges =
+    !isOrganizationPending &&
+    Number.isFinite(currentValue) &&
+    currentValue !== serverValue;
 
   async function handleSave(values: McpSettingsFormValues) {
     const lifetimeSeconds = getSelectedLifetimeSeconds(values);
@@ -131,7 +133,7 @@ export default function McpSettingsPage() {
                 render={({ field }) => (
                   <FormItem>
                     <Select
-                      value={field.value}
+                      value={field.value || getPresetSelectValue(serverValue)}
                       onValueChange={(value) => {
                         field.onChange(value);
 
@@ -236,6 +238,18 @@ export default function McpSettingsPage() {
   );
 }
 
+function getServerLifetimeSeconds(
+  organization:
+    | { mcpOauthAccessTokenLifetimeSeconds?: number | null }
+    | null
+    | undefined,
+): number {
+  return (
+    organization?.mcpOauthAccessTokenLifetimeSeconds ??
+    DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS
+  );
+}
+
 function getPresetSelectValue(lifetimeSeconds: number): string {
   const preset = MCP_LIFETIME_PRESETS.find(
     (option) => option.value === lifetimeSeconds,
@@ -245,7 +259,10 @@ function getPresetSelectValue(lifetimeSeconds: number): string {
 
 function getSelectedLifetimeSeconds(values: McpSettingsFormValues): number {
   if (values.lifetimePreset === CUSTOM_LIFETIME_VALUE) {
-    return values.customLifetimeSeconds;
+    return (
+      values.customLifetimeSeconds ??
+      DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS
+    );
   }
 
   return Number(values.lifetimePreset);

@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.2.8](https://github.com/archestra-ai/archestra/compare/platform-v1.2.7...platform-v1.2.8) (2026-04-10)
+
+
+### Features
+
+* add configurable MCP OAuth token lifetime settings ([#3685](https://github.com/archestra-ai/archestra/issues/3685)) ([e68db34](https://github.com/archestra-ai/archestra/commit/e68db34053208ce672f4e3f01ae1f60f8c2f7122))
+
+
+### Bug Fixes
+
+* normalize dangling tool calls across messages ([#3684](https://github.com/archestra-ai/archestra/issues/3684)) ([36a731c](https://github.com/archestra-ai/archestra/commit/36a731c24df4893d09d5e65e3eb049647a239600))
+* remove unused vitest CI flag ([#3694](https://github.com/archestra-ai/archestra/issues/3694)) ([9b606f5](https://github.com/archestra-ai/archestra/commit/9b606f5b33ce3be5bb4f322d03441acf4405a055))
+* stabilize e2e CI setup ([#3693](https://github.com/archestra-ai/archestra/issues/3693)) ([14bbeb5](https://github.com/archestra-ai/archestra/commit/14bbeb5b2deb2032b6baea55985ae108b09322d8))
+
+
+### Miscellaneous Chores
+
+* move API e2e coverage into route tests and stabilize CI ([#3683](https://github.com/archestra-ai/archestra/issues/3683)) ([e4f70e3](https://github.com/archestra-ai/archestra/commit/e4f70e37b943085f97b7c9f4beb21a7b91e8d2b5))
+
 ## [1.2.7](https://github.com/archestra-ai/archestra/compare/platform-v1.2.6...platform-v1.2.7) (2026-04-08)
 
 

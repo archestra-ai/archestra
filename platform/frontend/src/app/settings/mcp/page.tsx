@@ -127,102 +127,101 @@ export default function McpSettingsPage() {
             title="OAuth token lifetime"
             description={`Set how long ${appName}-issued MCP OAuth 2.1 access tokens remain valid.`}
             control={
-              <FormField
-                control={form.control}
-                name="lifetimePreset"
-                render={({ field }) => (
-                  <FormItem>
-                    <Select
-                      value={field.value || getPresetSelectValue(serverValue)}
-                      onValueChange={(value) => {
-                        field.onChange(value);
+              <div className="flex w-80 flex-col gap-3">
+                <FormField
+                  control={form.control}
+                  name="lifetimePreset"
+                  render={({ field }) => (
+                    <FormItem>
+                      <Select
+                        value={field.value || getPresetSelectValue(serverValue)}
+                        onValueChange={(value) => {
+                          field.onChange(value);
 
-                        if (value !== CUSTOM_LIFETIME_VALUE) {
-                          form.setValue(
-                            "customLifetimeSeconds",
-                            Number(value),
-                            {
-                              shouldDirty: true,
-                              shouldValidate: true,
-                            },
-                          );
-                        }
-                      }}
-                    >
-                      <FormControl>
-                        <SelectTrigger
-                          aria-label="Token lifetime"
-                          className="w-64"
-                        >
-                          <SelectValue placeholder="Select token lifetime" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {MCP_LIFETIME_PRESETS.map((preset) => (
-                          <SelectItem
-                            key={preset.value}
-                            value={String(preset.value)}
+                          if (value !== CUSTOM_LIFETIME_VALUE) {
+                            form.setValue(
+                              "customLifetimeSeconds",
+                              Number(value),
+                              {
+                                shouldDirty: true,
+                                shouldValidate: true,
+                              },
+                            );
+                          }
+                        }}
+                      >
+                        <FormControl>
+                          <SelectTrigger
+                            aria-label="Token lifetime"
+                            className="w-full"
                           >
-                            {preset.label}
+                            <SelectValue placeholder="Select token lifetime" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {MCP_LIFETIME_PRESETS.map((preset) => (
+                            <SelectItem
+                              key={preset.value}
+                              value={String(preset.value)}
+                            >
+                              {preset.label}
+                            </SelectItem>
+                          ))}
+                          <SelectItem value={CUSTOM_LIFETIME_VALUE}>
+                            Custom lifetime
                           </SelectItem>
-                        ))}
-                        <SelectItem value={CUSTOM_LIFETIME_VALUE}>
-                          Custom lifetime
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FormItem>
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )}
+                />
+
+                {isCustomLifetime && (
+                  <FormField
+                    control={form.control}
+                    name="customLifetimeSeconds"
+                    rules={{
+                      required: "Token lifetime is required",
+                      min: {
+                        value: MCP_OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS,
+                        message: `Token lifetime must be at least ${MCP_OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS} seconds`,
+                      },
+                      max: {
+                        value: MCP_OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS,
+                        message: `Token lifetime must be at most ${MCP_OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS} seconds`,
+                      },
+                      validate: (value) =>
+                        Number.isInteger(value) ||
+                        "Token lifetime must be a whole number of seconds",
+                    }}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Custom lifetime in seconds</FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            type="number"
+                            min={MCP_OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS}
+                            max={MCP_OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS}
+                            step={1}
+                            value={field.value}
+                            onChange={(event) =>
+                              field.onChange(Number(event.target.value))
+                            }
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          This value is returned to MCP clients as{" "}
+                          <code>expires_in</code>.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 )}
-              />
+              </div>
             }
-          >
-            {isCustomLifetime && (
-              <FormField
-                control={form.control}
-                name="customLifetimeSeconds"
-                rules={{
-                  required: "Token lifetime is required",
-                  min: {
-                    value: MCP_OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS,
-                    message: `Token lifetime must be at least ${MCP_OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS} seconds`,
-                  },
-                  max: {
-                    value: MCP_OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS,
-                    message: `Token lifetime must be at most ${MCP_OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS} seconds`,
-                  },
-                  validate: (value) =>
-                    Number.isInteger(value) ||
-                    "Token lifetime must be a whole number of seconds",
-                }}
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Custom lifetime in seconds</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        type="number"
-                        min={MCP_OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS}
-                        max={MCP_OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS}
-                        step={1}
-                        value={field.value}
-                        onChange={(event) =>
-                          field.onChange(Number(event.target.value))
-                        }
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Use a value between{" "}
-                      {MCP_OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS} seconds and{" "}
-                      {MCP_OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS} seconds (1
-                      year). This value is returned to MCP clients as{" "}
-                      <code>expires_in</code>.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
-          </SettingsBlock>
+          />
 
           <SettingsSaveBar
             hasChanges={hasChanges}

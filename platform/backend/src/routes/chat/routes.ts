@@ -371,6 +371,30 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
           }
 
+          // Set a preliminary title from the first user message so the sidebar
+          // displays something meaningful instead of "New Chat Session" while
+          // waiting for the LLM-generated title (fixes #3246).
+          if (!conversation.title) {
+            const { firstUserMessage: prelimTitle } = extractFirstMessages(
+              messages as unknown[],
+            );
+            if (prelimTitle) {
+              try {
+                await ConversationModel.update(
+                  conversationId,
+                  user.id,
+                  organizationId,
+                  { title: prelimTitle.slice(0, 200) },
+                );
+              } catch (error) {
+                logger.warn(
+                  { error, conversationId },
+                  "Failed to set preliminary title",
+                );
+              }
+            }
+          }
+
           // Create stream with token usage data support
           const response = createUIMessageStreamResponse({
             headers: {
@@ -1403,19 +1427,23 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      // Skip if title is already set (unless regenerating)
-      if (conversation.title && !regenerate) {
+      // Extract first user and assistant messages
+      const { firstUserMessage, firstAssistantMessage } = extractFirstMessages(
+        conversation.messages || [],
+      );
+
+      // Skip if title is already an LLM-generated title (unless regenerating).
+      // A preliminary title set from the first user message should still be
+      // overwritten by the LLM-generated one (#3246).
+      const isPreliminaryTitle =
+        conversation.title === firstUserMessage;
+      if (conversation.title && !regenerate && !isPreliminaryTitle) {
         logger.info(
           { conversationId: id, existingTitle: conversation.title },
           "Skipping title generation - title already set",
         );
         return reply.send(conversation);
       }
-
-      // Extract first user and assistant messages
-      const { firstUserMessage, firstAssistantMessage } = extractFirstMessages(
-        conversation.messages || [],
-      );
 
       // Need at least user message to generate title
       if (!firstUserMessage) {

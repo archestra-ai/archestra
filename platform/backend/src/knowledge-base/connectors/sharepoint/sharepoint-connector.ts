@@ -377,102 +377,154 @@ export class SharePointConnector extends BaseConnector {
       supportsImages,
     } = params;
 
-    let url = buildDriveItemsUrl(driveId, folderPath, batchSize);
-    let hasMore = true;
+    // BFS queue of subfolder item IDs to traverse. We start with the root
+    // (represented by null = use the root/folderPath URL), then enqueue any
+    // folder items we encounter so every nested subfolder is processed.
+    const folderQueue: Array<string | null> = [null];
+
     let batchIndex = 0;
+    let documents: ConnectorDocument[] = [];
 
-    while (hasMore) {
-      await this.rateLimit();
+    while (folderQueue.length > 0) {
+      const currentFolderId = folderQueue.shift()!;
 
-      let result: GraphListResponse<DriveItem>;
-      try {
-        result = await client.api(url).get();
-      } catch (error) {
-        throw new Error(
-          `Drive items query failed: ${extractErrorMessage(error)}`,
+      // Build the listing URL for this folder (root or subfolder by item ID)
+      let url =
+        currentFolderId === null
+          ? buildDriveItemsUrl(driveId, folderPath, batchSize)
+          : buildSubFolderChildrenUrl(driveId, currentFolderId, batchSize);
+
+      let pageHasMore = true;
+
+      while (pageHasMore) {
+        await this.rateLimit();
+
+        let result: GraphListResponse<DriveItem>;
+        try {
+          result = await client.api(url).get();
+        } catch (error) {
+          throw new Error(
+            `Drive items query failed: ${extractErrorMessage(error)}`,
+          );
+        }
+
+        // Enqueue any subfolders discovered in this page for BFS traversal.
+        for (const item of result.value) {
+          if (item.folder) {
+            folderQueue.push(item.id);
+          }
+
+          // Advance the monotonic high-water mark for checkpoint using ALL
+          // items (including skipped ones) so the checkpoint progresses even
+          // when nothing in a page meets the incremental filter.
+          if (
+            item.lastModifiedDateTime &&
+            (!progress.maxLastModified ||
+              item.lastModifiedDateTime > progress.maxLastModified)
+          ) {
+            progress.maxLastModified = item.lastModifiedDateTime;
+          }
+        }
+
+        const fileItems = result.value.filter(
+          (item) =>
+            item.file &&
+            !item.folder &&
+            isSupportedFile(item.name, supportsImages) &&
+            // Client-side incremental filter: Graph API does not support
+            // $filter on lastModifiedDateTime for drive item children.
+            isModifiedSince(item.lastModifiedDateTime, syncFrom),
         );
-      }
 
-      const items = result.value.filter(
-        (item) =>
-          item.file &&
-          !item.folder &&
-          isSupportedFile(item.name, supportsImages) &&
-          // Client-side incremental filter: Graph API does not support
-          // $filter on lastModifiedDateTime for drive item children.
-          isModifiedSince(item.lastModifiedDateTime, syncFrom),
-      );
+        for (const item of fileItems) {
+          const doc = await this.safeItemFetch({
+            fetch: async () => {
+              const result = await this.downloadFileData(
+                client,
+                driveId,
+                item.id,
+                item.name,
+              );
+              // Skip files with no extractable content or media to avoid
+              // indexing title-only documents that provide no search value.
+              if (!result.text.trim() && !result.mediaContent) return null;
+              return driveItemToDocument(
+                item,
+                driveId,
+                result.text,
+                result.mediaContent,
+              );
+            },
+            fallback: null,
+            itemId: item.id,
+            resource: "driveItem",
+          });
+          if (doc) documents.push(doc);
+        }
 
-      const documents: ConnectorDocument[] = [];
+        const nextLink = result["@odata.nextLink"];
+        pageHasMore = !!nextLink;
+        if (nextLink) url = nextLink;
 
-      for (const item of items) {
-        const doc = await this.safeItemFetch({
-          fetch: async () => {
-            const result = await this.downloadFileData(
-              client,
+        // Yield a batch whenever we've accumulated enough documents so that
+        // callers receive progress during large recursive traversals.
+        if (documents.length >= batchSize) {
+          const moreToGo = pageHasMore || folderQueue.length > 0;
+
+          batchIndex++;
+          this.log.debug(
+            {
               driveId,
-              item.id,
-              item.name,
-            );
-            // Skip files with no extractable content or media to avoid indexing
-            // title-only documents that provide no search value.
-            if (!result.text.trim() && !result.mediaContent) return null;
-            return driveItemToDocument(
-              item,
-              driveId,
-              result.text,
-              result.mediaContent,
-            );
-          },
-          fallback: null,
-          itemId: item.id,
-          resource: "driveItem",
-        });
-        if (doc) documents.push(doc);
+              batchIndex,
+              documentCount: documents.length,
+              hasMore: moreToGo || hasMoreDrives,
+              pendingFolders: folderQueue.length,
+            },
+            "SharePoint drive batch done",
+          );
+
+          yield {
+            documents,
+            failures: this.flushFailures(),
+            checkpoint: buildCheckpoint({
+              type: "sharepoint",
+              itemUpdatedAt: progress.maxLastModified
+                ? new Date(progress.maxLastModified)
+                : undefined,
+              previousLastSyncedAt: progress.maxLastModified,
+            }),
+            hasMore: moreToGo || hasMoreDrives,
+          };
+
+          documents = [];
+        }
       }
-
-      const nextLink = result["@odata.nextLink"];
-      hasMore = !!nextLink;
-      if (nextLink) url = nextLink;
-
-      // Use unfiltered results for checkpoint so it advances past non-text
-      // files that were skipped by the client-side filter.
-      const lastResult = result.value[result.value.length - 1];
-      const lastModified = lastResult?.lastModifiedDateTime;
-
-      // Advance the monotonic high-water mark
-      if (
-        lastModified &&
-        (!progress.maxLastModified || lastModified > progress.maxLastModified)
-      ) {
-        progress.maxLastModified = lastModified;
-      }
-
-      batchIndex++;
-      this.log.debug(
-        {
-          driveId,
-          batchIndex,
-          itemCount: items.length,
-          documentCount: documents.length,
-          hasMore: hasMore || hasMoreDrives,
-        },
-        "SharePoint drive batch done",
-      );
-
-      yield {
-        documents,
-        failures: this.flushFailures(),
-        checkpoint: buildCheckpoint({
-          type: "sharepoint",
-          itemUpdatedAt: progress.maxLastModified
-            ? new Date(progress.maxLastModified)
-            : undefined,
-          previousLastSyncedAt: progress.maxLastModified,
-        }),
-        hasMore: hasMore || hasMoreDrives,
-      };
     }
+
+    // Yield any remaining documents after all folders are processed.
+    batchIndex++;
+    this.log.debug(
+      {
+        driveId,
+        batchIndex,
+        documentCount: documents.length,
+        hasMore: hasMoreDrives,
+      },
+      "SharePoint drive final batch done",
+    );
+
+    yield {
+      documents,
+      failures: this.flushFailures(),
+      checkpoint: buildCheckpoint({
+        type: "sharepoint",
+        itemUpdatedAt: progress.maxLastModified
+          ? new Date(progress.maxLastModified)
+          : undefined,
+        previousLastSyncedAt: progress.maxLastModified,
+      }),
+      hasMore: hasMoreDrives,
+    };
   }
 
   private async downloadFileData(
@@ -670,21 +722,35 @@ export class SharePointConnector extends BaseConnector {
     folderPath: string | undefined;
     syncFrom: string | undefined;
   }): Promise<number> {
-    let url = buildDriveItemsUrl(params.driveId, params.folderPath, 500);
+    const folderQueue: Array<string | null> = [null];
     let count = 0;
 
-    while (url) {
-      const result = (await params.client
-        .api(url)
-        .get()) as GraphListResponse<DriveItem>;
-      count += result.value.filter(
-        (item) =>
-          item.file &&
-          !item.folder &&
-          isSupportedFile(item.name) &&
-          isModifiedSince(item.lastModifiedDateTime, params.syncFrom),
-      ).length;
-      url = result["@odata.nextLink"] ?? "";
+    while (folderQueue.length > 0) {
+      const currentFolderId = folderQueue.shift()!;
+      let url =
+        currentFolderId === null
+          ? buildDriveItemsUrl(params.driveId, params.folderPath, 500)
+          : buildSubFolderChildrenUrl(params.driveId, currentFolderId, 500);
+
+      while (url) {
+        const result = (await params.client
+          .api(url)
+          .get()) as GraphListResponse<DriveItem>;
+
+        for (const item of result.value) {
+          if (item.folder) {
+            folderQueue.push(item.id);
+          } else if (
+            item.file &&
+            isSupportedFile(item.name) &&
+            isModifiedSince(item.lastModifiedDateTime, params.syncFrom)
+          ) {
+            count++;
+          }
+        }
+
+        url = result["@odata.nextLink"] ?? "";
+      }
     }
 
     return count;
@@ -901,6 +967,21 @@ function buildDriveItemsUrl(
   });
 
   return `${basePath}?${params.toString()}`;
+}
+
+function buildSubFolderChildrenUrl(
+  driveId: string,
+  folderId: string,
+  batchSize: number,
+): string {
+  const params = new URLSearchParams({
+    $select:
+      "id,name,webUrl,lastModifiedDateTime,createdDateTime,size,file,folder,parentReference",
+    $orderby: "lastModifiedDateTime asc",
+    $top: String(batchSize),
+  });
+
+  return `${GRAPH_API_BASE}/drives/${driveId}/items/${folderId}/children?${params.toString()}`;
 }
 
 function buildSitePagesUrl(siteId: string, batchSize: number): string {

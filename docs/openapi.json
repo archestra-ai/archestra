@@ -103018,6 +103018,11 @@
                                   "recursive": {
                                     "type": "boolean"
                                   },
+                                  "maxDepth": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 100
+                                  },
                                   "fileTypes": {
                                     "type": "array",
                                     "items": {
@@ -103829,6 +103834,11 @@
                           "recursive": {
                             "type": "boolean"
                           },
+                          "maxDepth": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                          },
                           "fileTypes": {
                             "type": "array",
                             "items": {
@@ -104284,6 +104294,11 @@
                             },
                             "recursive": {
                               "type": "boolean"
+                            },
+                            "maxDepth": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 100
                             },
                             "fileTypes": {
                               "type": "array",
@@ -105039,6 +105054,11 @@
                             "recursive": {
                               "type": "boolean"
                             },
+                            "maxDepth": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 100
+                            },
                             "fileTypes": {
                               "type": "array",
                               "items": {
@@ -105730,6 +105750,11 @@
                           "recursive": {
                             "type": "boolean"
                           },
+                          "maxDepth": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                          },
                           "fileTypes": {
                             "type": "array",
                             "items": {
@@ -106183,6 +106208,11 @@
                             },
                             "recursive": {
                               "type": "boolean"
+                            },
+                            "maxDepth": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 100
                             },
                             "fileTypes": {
                               "type": "array",

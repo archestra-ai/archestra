@@ -18,6 +18,7 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 import { CustomDateTimeRangeDialog } from "@/components/ui/custom-date-time-range-dialog";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -100,18 +101,17 @@ export default function StatisticsPage() {
   const [isCustomDialogOpen, setIsCustomDialogOpen] = useState(false);
 
   // Statistics data fetching hooks
-  const currentTimeframe = timeframe.startsWith("custom:") ? "all" : timeframe;
   const { data: teamStatistics = [] } = useTeamStatistics({
-    timeframe: currentTimeframe,
+    timeframe,
   });
   const { data: agentStatistics = [] } = useProfileStatistics({
-    timeframe: currentTimeframe,
+    timeframe,
   });
   const { data: modelStatistics = [] } = useModelStatistics({
-    timeframe: currentTimeframe,
+    timeframe,
   });
   const { data: costSavingsData } = useCostSavingsStatistics({
-    timeframe: currentTimeframe,
+    timeframe,
   });
 
   /**
@@ -127,8 +127,13 @@ export default function StatisticsPage() {
     );
     if (success) {
       setTimeframe(data);
+      const customRange = parseCustomTimeframe(data);
+      setCustomFrom(customRange?.from);
+      setCustomTo(customRange?.to);
     } else {
       setTimeframe("1h");
+      setCustomFrom(undefined);
+      setCustomTo(undefined);
     }
   }, [searchParams]);
 
@@ -629,8 +634,8 @@ export default function StatisticsPage() {
           <CardTitle>Teams</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div className="order-2 lg:order-1">
+          <div className="space-y-4">
+            <div className="space-y-3">
               <ChartContainerWrapper
                 config={teamChartConfig}
                 data={teamChartData}
@@ -680,16 +685,28 @@ export default function StatisticsPage() {
               )}
             </div>
 
-            <div className="order-1 lg:order-2">
+            <StatisticsTablePanel>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Team Name</TableHead>
-                    <TableHead>Members</TableHead>
-                    <TableHead>Profiles</TableHead>
-                    <TableHead>Requests</TableHead>
-                    <TableHead>Tokens</TableHead>
-                    <TableHead className="text-right">Cost</TableHead>
+                    <TableHead className="bg-card sticky top-0 z-10">
+                      Team Name
+                    </TableHead>
+                    <TableHead className="bg-card sticky top-0 z-10">
+                      Members
+                    </TableHead>
+                    <TableHead className="bg-card sticky top-0 z-10">
+                      Profiles
+                    </TableHead>
+                    <TableHead className="bg-card sticky top-0 z-10">
+                      Requests
+                    </TableHead>
+                    <TableHead className="bg-card sticky top-0 z-10">
+                      Tokens
+                    </TableHead>
+                    <TableHead className="bg-card sticky top-0 z-10 text-right">
+                      Cost
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -724,7 +741,7 @@ export default function StatisticsPage() {
                   )}
                 </TableBody>
               </Table>
-            </div>
+            </StatisticsTablePanel>
           </div>
         </CardContent>
       </Card>
@@ -734,8 +751,8 @@ export default function StatisticsPage() {
           <CardTitle>Agents</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div className="order-2 lg:order-1">
+          <div className="space-y-4">
+            <div className="space-y-3">
               <ChartContainerWrapper
                 config={agentChartConfig}
                 data={agentChartData}
@@ -785,15 +802,25 @@ export default function StatisticsPage() {
               )}
             </div>
 
-            <div className="order-1 lg:order-2">
+            <StatisticsTablePanel>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Team</TableHead>
-                    <TableHead>Requests</TableHead>
-                    <TableHead>Tokens</TableHead>
-                    <TableHead className="text-right">Cost</TableHead>
+                    <TableHead className="bg-card sticky top-0 z-10">
+                      Name
+                    </TableHead>
+                    <TableHead className="bg-card sticky top-0 z-10">
+                      Team
+                    </TableHead>
+                    <TableHead className="bg-card sticky top-0 z-10">
+                      Requests
+                    </TableHead>
+                    <TableHead className="bg-card sticky top-0 z-10">
+                      Tokens
+                    </TableHead>
+                    <TableHead className="bg-card sticky top-0 z-10 text-right">
+                      Cost
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -827,7 +854,7 @@ export default function StatisticsPage() {
                   )}
                 </TableBody>
               </Table>
-            </div>
+            </StatisticsTablePanel>
           </div>
         </CardContent>
       </Card>
@@ -837,8 +864,8 @@ export default function StatisticsPage() {
           <CardTitle>LLM Proxies</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div className="order-2 lg:order-1">
+          <div className="space-y-4">
+            <div className="space-y-3">
               <ChartContainerWrapper
                 config={llmProxyChartConfig}
                 data={llmProxyChartData}
@@ -888,15 +915,25 @@ export default function StatisticsPage() {
               )}
             </div>
 
-            <div className="order-1 lg:order-2">
+            <StatisticsTablePanel>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Team</TableHead>
-                    <TableHead>Requests</TableHead>
-                    <TableHead>Tokens</TableHead>
-                    <TableHead className="text-right">Cost</TableHead>
+                    <TableHead className="bg-card sticky top-0 z-10">
+                      Name
+                    </TableHead>
+                    <TableHead className="bg-card sticky top-0 z-10">
+                      Team
+                    </TableHead>
+                    <TableHead className="bg-card sticky top-0 z-10">
+                      Requests
+                    </TableHead>
+                    <TableHead className="bg-card sticky top-0 z-10">
+                      Tokens
+                    </TableHead>
+                    <TableHead className="bg-card sticky top-0 z-10 text-right">
+                      Cost
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -930,7 +967,7 @@ export default function StatisticsPage() {
                   )}
                 </TableBody>
               </Table>
-            </div>
+            </StatisticsTablePanel>
           </div>
         </CardContent>
       </Card>
@@ -940,8 +977,8 @@ export default function StatisticsPage() {
           <CardTitle>Models</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div className="order-2 lg:order-1">
+          <div className="space-y-4">
+            <div className="space-y-3">
               <ChartContainerWrapper
                 config={modelChartConfig}
                 data={modelChartData}
@@ -991,15 +1028,25 @@ export default function StatisticsPage() {
               )}
             </div>
 
-            <div className="order-1 lg:order-2">
+            <StatisticsTablePanel>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Model</TableHead>
-                    <TableHead>Requests</TableHead>
-                    <TableHead>Tokens Used</TableHead>
-                    <TableHead>Cost</TableHead>
-                    <TableHead className="text-right">% of Total</TableHead>
+                    <TableHead className="bg-card sticky top-0 z-10">
+                      Model
+                    </TableHead>
+                    <TableHead className="bg-card sticky top-0 z-10">
+                      Requests
+                    </TableHead>
+                    <TableHead className="bg-card sticky top-0 z-10">
+                      Tokens Used
+                    </TableHead>
+                    <TableHead className="bg-card sticky top-0 z-10">
+                      Cost
+                    </TableHead>
+                    <TableHead className="bg-card sticky top-0 z-10 text-right">
+                      % of Total
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1033,10 +1080,43 @@ export default function StatisticsPage() {
                   )}
                 </TableBody>
               </Table>
-            </div>
+            </StatisticsTablePanel>
           </div>
         </CardContent>
       </Card>
     </div>
   );
+}
+
+function StatisticsTablePanel({ children }: { children: React.ReactNode }) {
+  return (
+    <ScrollArea className="max-h-[360px] rounded-md border">
+      {children}
+      <ScrollBar orientation="horizontal" />
+    </ScrollArea>
+  );
+}
+
+function parseCustomTimeframe(timeframe: StatisticsTimeFrame):
+  | {
+      from: Date;
+      to: Date;
+    }
+  | undefined {
+  if (!timeframe.startsWith("custom:")) {
+    return undefined;
+  }
+
+  const [from, to] = timeframe.replace("custom:", "").split("_");
+  if (!from || !to) {
+    return undefined;
+  }
+
+  const fromDate = new Date(from);
+  const toDate = new Date(to);
+  if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+    return undefined;
+  }
+
+  return { from: fromDate, to: toDate };
 }

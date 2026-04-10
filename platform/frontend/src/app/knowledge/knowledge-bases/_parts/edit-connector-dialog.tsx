@@ -35,6 +35,7 @@ import { ConnectorTypeIcon } from "./connector-icons";
 import { GithubConfigFields } from "./github-config-fields";
 import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
+import { GoogleDriveConfigFields } from "./google-drive-config-fields";
 import { NotionConfigFields } from "./notion-config-fields";
 import { SchedulePicker } from "./schedule-picker";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
@@ -404,11 +405,13 @@ export function EditConnectorDialog({
                       ? "Integration Token"
                       : connectorType === "sharepoint"
                         ? "Client Secret"
-                        : needsEmail
-                          ? emailRequired
-                            ? "API Token"
-                            : "API Token / Personal Access Token"
-                          : "Personal Access Token"}
+                        : connectorType === "googledrive"
+                          ? "Service Account Key / Access Token"
+                          : needsEmail
+                            ? emailRequired
+                              ? "API Token"
+                              : "API Token / Personal Access Token"
+                            : "Personal Access Token"}
                 </FormLabel>
                 <FormControl>
                   <Input
@@ -460,6 +463,9 @@ export function EditConnectorDialog({
               {connectorType === "notion" && <NotionConfigFields form={form} />}
               {connectorType === "sharepoint" && (
                 <SharePointConfigFields form={form} />
+              )}
+              {connectorType === "googledrive" && (
+                <GoogleDriveConfigFields form={form} />
               )}
             </CollapsibleContent>
           </Collapsible>
@@ -535,6 +541,8 @@ function getEditUrlConfig(type: ConnectorType): {
       };
     case "notion":
       return { typeLabel: "Notion", urlFields: null };
+    case "googledrive":
+      return { typeLabel: "Google Drive", urlFields: null };
     case "sharepoint":
       return {
         typeLabel: "SharePoint",

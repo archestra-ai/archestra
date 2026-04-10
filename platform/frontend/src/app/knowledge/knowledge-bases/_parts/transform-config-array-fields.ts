@@ -15,6 +15,7 @@ export function transformConfigArrayFields(
     "states",
     "assignmentGroups",
     "driveIds",
+    "mimeTypes",
   ];
   for (const key of stringArrayFields) {
     if (typeof result[key] === "string") {

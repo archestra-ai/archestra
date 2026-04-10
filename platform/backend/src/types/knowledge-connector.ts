@@ -10,6 +10,7 @@ const GITLAB = z.literal("gitlab");
 const SERVICENOW = z.literal("servicenow");
 const NOTION = z.literal("notion");
 const SHAREPOINT = z.literal("sharepoint");
+const GOOGLEDRIVE = z.literal("googledrive");
 
 export const ConnectorTypeSchema = z.union([
   JIRA,
@@ -19,6 +20,7 @@ export const ConnectorTypeSchema = z.union([
   SERVICENOW,
   NOTION,
   SHAREPOINT,
+  GOOGLEDRIVE,
 ]);
 export type ConnectorType = z.infer<typeof ConnectorTypeSchema>;
 
@@ -194,6 +196,26 @@ export const SharePointCheckpointSchema = z.object({
 });
 export type SharePointCheckpoint = z.infer<typeof SharePointCheckpointSchema>;
 
+// ===== Google Drive Config & Checkpoint =====
+
+export const GoogleDriveConfigSchema = z.object({
+  type: GOOGLEDRIVE,
+  /** Shared Drive ID (for Google Shared Drives). Leave blank for My Drive. */
+  driveId: z.string().optional(),
+  /** Filter sync to files inside this folder (folder ID). */
+  folderId: z.string().optional(),
+  /** Restrict synced MIME types. Defaults to Google Docs + common text types. */
+  mimeTypes: z.array(z.string()).optional(),
+  batchSize: z.number().optional(),
+});
+export type GoogleDriveConfig = z.infer<typeof GoogleDriveConfigSchema>;
+
+export const GoogleDriveCheckpointSchema = z.object({
+  type: GOOGLEDRIVE,
+  lastSyncedAt: z.string().optional(),
+});
+export type GoogleDriveCheckpoint = z.infer<typeof GoogleDriveCheckpointSchema>;
+
 // ===== Discriminated Unions =====
 
 export const ConnectorConfigSchema = z.discriminatedUnion("type", [
@@ -204,6 +226,7 @@ export const ConnectorConfigSchema = z.discriminatedUnion("type", [
   ServiceNowConfigSchema,
   NotionConfigSchema,
   SharePointConfigSchema,
+  GoogleDriveConfigSchema,
 ]);
 export type ConnectorConfig = z.infer<typeof ConnectorConfigSchema>;
 
@@ -215,6 +238,7 @@ export const ConnectorCheckpointSchema = z.discriminatedUnion("type", [
   ServiceNowCheckpointSchema,
   NotionCheckpointSchema,
   SharePointCheckpointSchema,
+  GoogleDriveCheckpointSchema,
 ]);
 export type ConnectorCheckpoint = z.infer<typeof ConnectorCheckpointSchema>;
 

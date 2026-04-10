@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { IncomingHttpHeaders } from "node:http";
 import { DEFAULT_ADMIN_EMAIL, RouteId } from "@shared";
 import { verifyPassword } from "better-auth/crypto";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -321,7 +322,11 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         delete body.resource;
       }
 
-      const url = new URL(request.url, `http://${request.headers.host}`);
+      const tokenEndpointOrigin = getRequestOrigin({
+        protocol: request.protocol,
+        headers: request.headers,
+      });
+      const url = new URL(request.url, tokenEndpointOrigin);
       const headers = new Headers();
       Object.entries(request.headers).forEach(([key, value]) => {
         if (value) headers.append(key, value.toString());
@@ -344,7 +349,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const responseBody = await applyMcpOauthTokenLifetimeToResponse({
         response,
         resource,
-        tokenEndpointOrigin: url.origin,
+        tokenEndpointOrigin,
       });
 
       reply.status(response.status);
@@ -761,6 +766,31 @@ function getProfileIdFromReferenceId(
   }
 
   return referenceId.slice(MCP_RESOURCE_REFERENCE_PREFIX.length) || null;
+}
+
+function getRequestOrigin(params: {
+  protocol: string;
+  headers: IncomingHttpHeaders;
+}): string {
+  const host = Array.isArray(params.headers.host)
+    ? params.headers.host[0]
+    : params.headers.host;
+  const forwardedProto = getFirstHeaderValue(
+    params.headers["x-forwarded-proto"],
+  );
+  const protocol = (forwardedProto || params.protocol || "http").replace(
+    /:$/,
+    "",
+  );
+
+  return `${protocol}://${host}`;
+}
+
+function getFirstHeaderValue(
+  header: string | string[] | undefined,
+): string | undefined {
+  const value = Array.isArray(header) ? header[0] : header;
+  return value?.split(",")[0]?.trim() || undefined;
 }
 
 function hashOAuthAccessTokenForLookup(oauthAccessToken: string): string {

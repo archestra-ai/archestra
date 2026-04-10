@@ -221,7 +221,13 @@ export async function getVisibleStaticCredentials(
 }
 
 function stripStaticCredentialDescription(text: string): string {
-  return text.replace(/(?:Owned by|Shared with team).*$/s, "").trim();
+  const [labelBeforeTeamDescription, teamDescription] =
+    text.split("Shared with team");
+  if (teamDescription !== undefined) {
+    return labelBeforeTeamDescription.trim() || teamDescription.trim();
+  }
+
+  return text.split("Owned by")[0].trim();
 }
 
 export async function assignEngineeringTeamToDefaultProfileViaApi({

@@ -1,7 +1,8 @@
 import { type AllowedCacheKey, cacheManager } from "@/cache-manager";
 
 /**
- * Rate limit entry stored in cache
+ * Rate limit entry stored in cache.
+ * @deprecated Internal shape — do not use outside of tests/mocks.
  */
 export interface RateLimitEntry {
   count: number;
@@ -20,7 +21,11 @@ export interface RateLimitConfig {
 
 /**
  * Check if an identifier (e.g., IP address) is rate limited using the shared CacheManager.
- * Uses a sliding window algorithm with configurable window size and max requests.
+ * Uses a fixed window algorithm with configurable window size and max requests.
+ *
+ * The check-and-increment is performed atomically via a database transaction
+ * (SELECT FOR UPDATE) so concurrent requests cannot bypass the limit through
+ * a non-atomic read-modify-write race.
  *
  * @param cacheKey - The cache key to use for storing rate limit state
  * @param config - Rate limit configuration (windowMs, maxRequests)
@@ -38,30 +43,5 @@ export async function isRateLimited(
   cacheKey: AllowedCacheKey,
   config: RateLimitConfig,
 ): Promise<boolean> {
-  const { windowMs, maxRequests } = config;
-  const now = Date.now();
-  const entry = await cacheManager.get<RateLimitEntry>(cacheKey);
-
-  if (!entry || now - entry.windowStart > windowMs) {
-    // Start new window
-    await cacheManager.set(
-      cacheKey,
-      { count: 1, windowStart: now },
-      // TTL is 2x window to ensure cleanup even if requests stop
-      windowMs * 2,
-    );
-    return false;
-  }
-
-  if (entry.count >= maxRequests) {
-    return true;
-  }
-
-  // Increment count
-  await cacheManager.set(
-    cacheKey,
-    { count: entry.count + 1, windowStart: entry.windowStart },
-    windowMs * 2,
-  );
-  return false;
+  return cacheManager.atomicRateLimit(cacheKey, config);
 }

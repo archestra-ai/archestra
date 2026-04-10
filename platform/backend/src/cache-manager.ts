@@ -187,6 +187,85 @@ class CacheManager {
   }
 
   /**
+   * Atomically check and update a rate limit counter in a single database transaction.
+   *
+   * Uses SELECT FOR UPDATE inside a transaction so concurrent requests serialize
+   * on the row lock instead of racing on separate get/set calls. Returns true if
+   * the caller is rate-limited (counter already at or above maxRequests), false
+   * if the request is allowed (counter incremented or new window started).
+   *
+   * Fails open: if the database is unavailable, the function returns false so
+   * callers are not blocked by a cache outage.
+   */
+  async atomicRateLimit(
+    key: AllowedCacheKey,
+    config: { windowMs: number; maxRequests: number },
+  ): Promise<boolean> {
+    if (!this.keyv) {
+      logger.warn("CacheManager: Not started, skipping rate limit check");
+      return false;
+    }
+
+    const keyvKey = `keyv:${key}`;
+    const now = Date.now();
+    const ttlMs = config.windowMs * 2;
+
+    try {
+      return await db.transaction(async (tx) => {
+        // Lock the row so concurrent requests queue behind us
+        const rows = await tx.execute<{ value: string }>(
+          sql`SELECT value FROM keyv_cache WHERE key = ${keyvKey} FOR UPDATE`,
+        );
+
+        const buildEntry = (count: number, windowStart: number) =>
+          JSON.stringify({
+            value: { count, windowStart },
+            expires: now + ttlMs,
+          });
+
+        if (rows.rows.length === 0) {
+          // No entry yet — start a new window with count=1
+          await tx.execute(
+            sql`INSERT INTO keyv_cache (key, value) VALUES (${keyvKey}, ${buildEntry(1, now)})`,
+          );
+          return false;
+        }
+
+        const raw = rows.rows[0].value;
+        const parsed: {
+          value: { count: number; windowStart: number };
+          expires?: number;
+        } = typeof raw === "string" ? JSON.parse(raw) : raw;
+
+        const entry = parsed.value;
+        const windowExpired = now - entry.windowStart > config.windowMs;
+        const cacheExpired = parsed.expires != null && now > parsed.expires;
+
+        if (windowExpired || cacheExpired) {
+          // Window elapsed or entry stale — reset to a fresh window
+          await tx.execute(
+            sql`UPDATE keyv_cache SET value = ${buildEntry(1, now)} WHERE key = ${keyvKey}`,
+          );
+          return false;
+        }
+
+        if (entry.count >= config.maxRequests) {
+          return true;
+        }
+
+        // Within window and under limit — increment
+        await tx.execute(
+          sql`UPDATE keyv_cache SET value = ${buildEntry(entry.count + 1, entry.windowStart)} WHERE key = ${keyvKey}`,
+        );
+        return false;
+      });
+    } catch (error) {
+      logger.error({ error, key }, "CacheManager: Error in atomicRateLimit");
+      return false; // Fail open so a DB outage doesn't block all requests
+    }
+  }
+
+  /**
    * Atomically get and delete a value from the cache.
    * Returns the value if it existed and hadn't expired, undefined otherwise.
    *

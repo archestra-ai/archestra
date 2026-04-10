@@ -15,6 +15,7 @@ const connectorRegistry: Record<ConnectorType, () => Connector> = {
   servicenow: () => new ServiceNowConnector(),
   notion: () => new NotionConnector(),
   sharepoint: () => new SharePointConnector(),
+  [KnowledgeConnectorType.Notion]: new NotionConnector(), // Registered NotionConnector
 };
 
 export function getConnector(type: string): Connector {

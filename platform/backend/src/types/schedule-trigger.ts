@@ -10,7 +10,6 @@ import {
   isValidTimezone,
   normalizeCronExpression,
   normalizeTimezone,
-  validateCronMinimumInterval,
 } from "@/schedule-triggers/utils";
 
 export const ScheduleTriggerRunKindSchema = z.enum(["due", "manual"]);

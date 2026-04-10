@@ -186,7 +186,7 @@ export function useScheduleTrigger(
     queryKey: scheduleTriggerKeys.detail(triggerId ?? ""),
     queryFn: async () => {
       const response = await getScheduleTrigger({
-        path: { id: triggerId! },
+        path: { id: triggerId as string },
       });
       if (response.error) {
         handleApiError(response.error);
@@ -221,7 +221,7 @@ export function useScheduleTriggerRuns(
     queryKey: scheduleTriggerKeys.runs(triggerId ?? "", queryParams),
     queryFn: async () => {
       const response = await getScheduleTriggerRuns({
-        path: { id: triggerId! },
+        path: { id: triggerId as string },
         query: {
           limit: queryParams.limit ?? 10,
           offset: queryParams.offset ?? 0,
@@ -275,7 +275,7 @@ export function useScheduleTriggerRun(
     queryKey: scheduleTriggerKeys.run(triggerId ?? "", runId ?? ""),
     queryFn: async () => {
       const response = await getScheduleTriggerRun({
-        path: { id: triggerId!, runId: runId! },
+        path: { id: triggerId as string, runId: runId as string },
       });
       if (response.error) {
         handleApiError(response.error);

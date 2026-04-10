@@ -32,7 +32,6 @@ const scheduleTriggersTable = pgTable(
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [
-    index("schedule_triggers_organization_id_idx").on(table.organizationId),
     index("schedule_triggers_agent_id_idx").on(table.agentId),
     index("schedule_triggers_actor_user_id_idx").on(table.actorUserId),
     index("schedule_triggers_enabled_last_executed_at_idx").on(

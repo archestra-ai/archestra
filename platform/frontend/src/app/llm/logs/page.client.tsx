@@ -1,8 +1,8 @@
 "use client";
 
 import {
-  DynamicInteraction,
   type archestraApiTypes,
+  DynamicInteraction,
   INTERACTION_SOURCE_DISPLAY,
   type InteractionSource,
 } from "@shared";

@@ -1,4 +1,4 @@
-import { and, count, desc, eq, getTableColumns } from "drizzle-orm";
+import { and, count, desc, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   ScheduleTrigger,
@@ -106,87 +106,10 @@ class ScheduleTriggerRunModel {
     return await query;
   }
 
-  static async listByTriggerForUser(params: {
-    organizationId: string;
-    triggerId: string;
-    userId: string;
-    limit?: number;
-    offset?: number;
-    status?: ScheduleTriggerRunStatus;
-  }): Promise<ScheduleTriggerRun[]> {
-    const conditions = [
-      eq(schema.scheduleTriggerRunsTable.organizationId, params.organizationId),
-      eq(schema.scheduleTriggerRunsTable.triggerId, params.triggerId),
-    ];
-
-    if (params.status) {
-      conditions.push(
-        eq(schema.scheduleTriggerRunsTable.status, params.status),
-      );
-    }
-
-    let query = db
-      .select({
-        ...getTableColumns(schema.scheduleTriggerRunsTable),
-        chatConversationId:
-          schema.scheduleTriggerRunConversationsTable.conversationId,
-      })
-      .from(schema.scheduleTriggerRunsTable)
-      .leftJoin(
-        schema.scheduleTriggerRunConversationsTable,
-        and(
-          eq(
-            schema.scheduleTriggerRunConversationsTable.runId,
-            schema.scheduleTriggerRunsTable.id,
-          ),
-          eq(schema.scheduleTriggerRunConversationsTable.userId, params.userId),
-        ),
-      )
-      .where(and(...conditions))
-      .orderBy(desc(schema.scheduleTriggerRunsTable.createdAt))
-      .$dynamic();
-
-    if (params.limit !== undefined) {
-      query = query.limit(params.limit);
-    }
-
-    if (params.offset !== undefined) {
-      query = query.offset(params.offset);
-    }
-
-    return await query;
-  }
-
   static async findById(id: string): Promise<ScheduleTriggerRun | null> {
     const [run] = await db
       .select()
       .from(schema.scheduleTriggerRunsTable)
-      .where(eq(schema.scheduleTriggerRunsTable.id, id));
-
-    return run ?? null;
-  }
-
-  static async findByIdForUser(
-    id: string,
-    userId: string,
-  ): Promise<ScheduleTriggerRun | null> {
-    const [run] = await db
-      .select({
-        ...getTableColumns(schema.scheduleTriggerRunsTable),
-        chatConversationId:
-          schema.scheduleTriggerRunConversationsTable.conversationId,
-      })
-      .from(schema.scheduleTriggerRunsTable)
-      .leftJoin(
-        schema.scheduleTriggerRunConversationsTable,
-        and(
-          eq(
-            schema.scheduleTriggerRunConversationsTable.runId,
-            schema.scheduleTriggerRunsTable.id,
-          ),
-          eq(schema.scheduleTriggerRunConversationsTable.userId, userId),
-        ),
-      )
       .where(eq(schema.scheduleTriggerRunsTable.id, id));
 
     return run ?? null;
@@ -208,6 +131,16 @@ class ScheduleTriggerRunModel {
       .returning();
 
     return run ?? null;
+  }
+
+  static async setChatConversationId(
+    runId: string,
+    conversationId: string,
+  ): Promise<void> {
+    await db
+      .update(schema.scheduleTriggerRunsTable)
+      .set({ chatConversationId: conversationId })
+      .where(eq(schema.scheduleTriggerRunsTable.id, runId));
   }
 }
 

@@ -49,9 +49,6 @@ export function useTriggerStatuses() {
     email: emailActive,
     firstActiveHref,
     isLoading:
-      chatOpsLoading ||
-      featuresLoading ||
-      emailLoading ||
-      apiKeysLoading,
+      chatOpsLoading || featuresLoading || emailLoading || apiKeysLoading,
   };
 }

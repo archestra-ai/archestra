@@ -28,7 +28,13 @@ class ScheduleTriggerModel {
   static async countByOrganization(
     params: Pick<
       ScheduleTriggerListFilters,
-      "organizationId" | "enabled" | "agentIds" | "actorUserId" | "actorUserIds" | "excludeActorUserId" | "name"
+      | "organizationId"
+      | "enabled"
+      | "agentIds"
+      | "actorUserId"
+      | "actorUserIds"
+      | "excludeActorUserId"
+      | "name"
     >,
   ): Promise<number> {
     const filters = [
@@ -273,7 +279,6 @@ class ScheduleTriggerModel {
       .set({ lastExecutedAt: now })
       .where(eq(schema.scheduleTriggersTable.id, id));
   }
-
 }
 
 export default ScheduleTriggerModel;

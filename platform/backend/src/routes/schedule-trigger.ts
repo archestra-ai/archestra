@@ -1,18 +1,16 @@
+import type { IncomingHttpHeaders } from "node:http";
 import {
   calculatePaginationMeta,
   createPaginatedResponseSchema,
   DynamicInteraction,
-  type PartialUIMessage,
   PaginationQuerySchema,
+  type PartialUIMessage,
   RouteId,
 } from "@shared";
-import type { IncomingHttpHeaders } from "node:http";
-import logger from "@/logging";
-import { sql } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasAnyAgentTypeAdminPermission, hasPermission } from "@/auth";
-import db from "@/database";
+import logger from "@/logging";
 import {
   AgentModel,
   AgentTeamModel,
@@ -20,7 +18,6 @@ import {
   InteractionModel,
   MessageModel,
   ScheduleTriggerModel,
-  ScheduleTriggerRunConversationModel,
   ScheduleTriggerRunModel,
 } from "@/models";
 import { taskQueueService } from "@/task-queue";
@@ -122,7 +119,19 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { query: { limit, offset, enabled, name, actorUserIds: actorUserIdsParam, showAll }, user, organizationId, headers },
+      {
+        query: {
+          limit,
+          offset,
+          enabled,
+          name,
+          actorUserIds: actorUserIdsParam,
+          showAll,
+        },
+        user,
+        organizationId,
+        headers,
+      },
       reply,
     ) => {
       // By default, filter to the current user's tasks
@@ -492,10 +501,9 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       const [data, total] = await Promise.all([
-        ScheduleTriggerRunModel.listByTriggerForUser({
+        ScheduleTriggerRunModel.listByTrigger({
           organizationId,
           triggerId: trigger.id,
-          userId: user.id,
           limit,
           offset,
           status,
@@ -620,10 +628,7 @@ async function findAccessibleRunOrThrow(params: {
     headers: params.headers,
   });
 
-  const run = await ScheduleTriggerRunModel.findByIdForUser(
-    params.runId,
-    params.userId,
-  );
+  const run = await ScheduleTriggerRunModel.findById(params.runId);
   if (
     !run ||
     run.organizationId !== params.organizationId ||
@@ -667,6 +672,17 @@ async function ensureRunConversation(params: {
     userId,
   });
 
+  if (run.chatConversationId) {
+    const existing = await ConversationModel.findById({
+      id: run.chatConversationId,
+      userId,
+      organizationId,
+    });
+    if (existing) {
+      return existing;
+    }
+  }
+
   const interactionResult = await InteractionModel.findAllPaginated(
     { limit: 50, offset: 0 },
     { sortBy: "createdAt", sortDirection: "desc" },
@@ -677,104 +693,53 @@ async function ensureRunConversation(params: {
       sessionId: `scheduled-${run.id}`,
     },
   );
-  const uiMessages = buildMessagesFromInteractions(
-    interactionResult.data,
-    run,
-  );
+  const uiMessages = buildMessagesFromInteractions(interactionResult.data, run);
   const conversationTitle = buildRunConversationSeedTitle(
     run.messageTemplateSnapshot ?? "",
   );
 
-  // Acquire a transaction-scoped advisory lock keyed on (runId, userId) to
-  // prevent two concurrent requests from each creating a separate conversation.
-  return await db.transaction(async (tx) => {
-    await tx.execute(
-      sql`SELECT pg_advisory_xact_lock(hashtext(${run.id} || ':' || ${userId}))`,
-    );
-
-    const existingConversationId =
-      await ScheduleTriggerRunConversationModel.findConversationIdForUser({
-        runId: run.id,
-        userId,
-        txOrDb: tx,
-      });
-
-    const conversation = existingConversationId
-      ? ((await ConversationModel.findById({
-          id: existingConversationId,
-          userId,
-          organizationId,
-          txOrDb: tx,
-        })) ??
-        (await ConversationModel.create(
-          {
-            userId,
-            organizationId,
-            agentId,
-            title: conversationTitle,
-            selectedModel: llmSelection.selectedModel,
-            selectedProvider: llmSelection.selectedProvider,
-            chatApiKeyId: llmSelection.chatApiKeyId,
-          },
-          tx,
-        )))
-      : await ConversationModel.create(
-          {
-            userId,
-            organizationId,
-            agentId,
-            title: conversationTitle,
-            selectedModel: llmSelection.selectedModel,
-            selectedProvider: llmSelection.selectedProvider,
-            chatApiKeyId: llmSelection.chatApiKeyId,
-          },
-          tx,
-        );
-
-    const conversationMessages = await MessageModel.findByConversation(
-      conversation.id,
-      tx,
-    );
-
-    if (conversationMessages.length === 0) {
-      const createdAt = Date.now();
-
-      await MessageModel.bulkCreate(
-        uiMessages.map((message, index) => ({
-          conversationId: conversation.id,
-          role: message.role,
-          content: message,
-          createdAt: new Date(createdAt + index),
-        })),
-        tx,
-      );
-    }
-
-    if (existingConversationId !== conversation.id) {
-      await ScheduleTriggerRunConversationModel.upsert({
-        runId: run.id,
-        userId,
-        chatConversationId: conversation.id,
-        txOrDb: tx,
-      });
-    }
-
-    const refreshedConversation = await ConversationModel.findById({
-      id: conversation.id,
-      userId,
-      organizationId,
-      txOrDb: tx,
-    });
-    if (!refreshedConversation) {
-      throw new ApiError(500, "Failed to load the run conversation");
-    }
-
-    return refreshedConversation;
+  const conversation = await ConversationModel.create({
+    userId,
+    organizationId,
+    agentId,
+    title: conversationTitle,
+    selectedModel: llmSelection.selectedModel,
+    selectedProvider: llmSelection.selectedProvider,
+    chatApiKeyId: llmSelection.chatApiKeyId,
   });
+
+  const createdAt = Date.now();
+  await MessageModel.bulkCreate(
+    uiMessages.map((message, index) => ({
+      conversationId: conversation.id,
+      role: message.role,
+      content: message,
+      createdAt: new Date(createdAt + index),
+    })),
+  );
+
+  await ScheduleTriggerRunModel.setChatConversationId(run.id, conversation.id);
+
+  const refreshedConversation = await ConversationModel.findById({
+    id: conversation.id,
+    userId,
+    organizationId,
+  });
+  if (!refreshedConversation) {
+    throw new ApiError(500, "Failed to load the run conversation");
+  }
+
+  return refreshedConversation;
 }
 
 function buildMessagesFromInteractions(
-  interactions: Array<{ type: string; request: unknown; response: unknown; model?: string | null; dualLlmAnalyses?: unknown }>,
+  interactions: Array<{
+    type: string;
+    request: unknown;
+    response: unknown;
+    model?: string | null;
+    dualLlmAnalyses?: unknown;
+  }>,
   run: z.infer<typeof SelectScheduleTriggerRunSchema>,
 ): PartialUIMessage[] {
   // Interactions are fetched desc — the first one is the most recent (last in
@@ -806,7 +771,10 @@ function buildMessagesFromInteractions(
       : "No output was captured for this scheduled run.";
 
   return [
-    { role: "user", parts: [{ type: "text", text: run.messageTemplateSnapshot ?? "" }] },
+    {
+      role: "user",
+      parts: [{ type: "text", text: run.messageTemplateSnapshot ?? "" }],
+    },
     { role: "assistant", parts: [{ type: "text", text: fallbackOutput }] },
   ];
 }
@@ -821,8 +789,4 @@ function buildRunConversationSeedTitle(prompt: string): string {
   return normalizedPrompt.length > 72
     ? `${normalizedPrompt.slice(0, 69).trimEnd()}...`
     : normalizedPrompt;
-}
-
-function getScheduleTriggerRunSessionId(runId: string): string {
-  return `scheduled-${runId}`;
 }

@@ -1,11 +1,11 @@
 "use client";
 
 import {
+  type archestraApiTypes,
   type BlockedToolPart,
   type DualLlmPart,
   type PartialUIMessage,
   type PolicyDeniedPart,
-  type archestraApiTypes,
   TOOL_SWAP_AGENT_SHORT_NAME,
   TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME,
 } from "@shared";
@@ -737,7 +737,12 @@ const MessageThread = ({
   );
 };
 
-export type { BlockedToolPart, DualLlmPart, PolicyDeniedPart, PartialUIMessage };
+export type {
+  BlockedToolPart,
+  DualLlmPart,
+  PolicyDeniedPart,
+  PartialUIMessage,
+};
 
 // Type guard for tool-* prefixed parts (persisted tool calls from DB)
 function _isToolPrefixedPart(part: unknown): part is {

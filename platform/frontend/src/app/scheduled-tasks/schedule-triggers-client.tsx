@@ -5,17 +5,13 @@ import { Cron } from "croner";
 import {
   AlertCircle,
   ArrowLeft,
-  Bot,
   CheckCircle2,
-  Clock3,
-  FileText,
   Loader2,
   PauseCircle,
   Pencil,
   Play,
   Plus,
   Trash2,
-  X,
   XCircle,
 } from "lucide-react";
 import Link from "next/link";
@@ -25,14 +21,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { SearchInput } from "@/components/search-input";
-import { MultiSelect } from "@/components/ui/multi-select";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-  CronExpressionPicker,
-  type CronPresetOption,
-} from "@/components/ui/cron-expression-picker";
 import { DataTable } from "@/components/ui/data-table";
 import {
   Dialog,
@@ -45,6 +36,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
@@ -86,61 +78,10 @@ import {
   type AgentOption,
   buildScheduleTriggerPayload,
   DEFAULT_FORM_STATE,
-  deriveScheduleTriggerName,
   getActiveMutationVariable,
   getRunNowTrackingState,
   type ScheduleTriggerFormState,
 } from "./schedule-trigger.utils";
-
-const SCHEDULE_PRESET_OPTIONS: CronPresetOption[] = [
-  { label: "Weekdays at 09:00", value: "0 9 * * 1-5" },
-  { label: "Every day at 09:00", value: "0 9 * * *" },
-  { label: "Every hour", value: "0 * * * *" },
-  { label: "Every 6 hours", value: "0 */6 * * *" },
-  { label: "Every Monday at 09:00", value: "0 9 * * 1" },
-];
-
-const SCHEDULE_COMPOSER_PRESETS: Array<{
-  id: string;
-  title: string;
-  description: string;
-  icon: React.ComponentType<{ className?: string }>;
-  values: Pick<ScheduleTriggerFormState, "cronExpression" | "messageTemplate">;
-}> = [
-  {
-    id: "daily-summary",
-    title: "Generate a morning summary",
-    description: "Weekdays at 09:00",
-    icon: FileText,
-    values: {
-      cronExpression: "0 9 * * 1-5",
-      messageTemplate:
-        "Review the last 24 hours of activity, highlight anything blocked or unusual, and send a concise morning summary with recommended next steps.",
-    },
-  },
-  {
-    id: "daily-check",
-    title: "Check key systems daily",
-    description: "Every day at 09:00",
-    icon: Bot,
-    values: {
-      cronExpression: "0 9 * * *",
-      messageTemplate:
-        "Inspect the latest runs, errors, and pending work across the configured systems. Summarize anything that needs follow-up and call out urgent failures first.",
-    },
-  },
-  {
-    id: "weekly-plan",
-    title: "Prepare a weekly plan",
-    description: "Every Monday at 09:00",
-    icon: Clock3,
-    values: {
-      cronExpression: "0 9 * * 1",
-      messageTemplate:
-        "Create a plan for the week based on the latest activity, unresolved issues, and recent outputs. Keep it structured, short, and action-oriented.",
-    },
-  },
-];
 
 export function ScheduleTriggersIndexPage() {
   const router = useRouter();
@@ -172,9 +113,10 @@ export function ScheduleTriggersIndexPage() {
     offset: pageIndex * pageSize,
     name: searchName || undefined,
     showAll: showOtherUsers,
-    actorUserIds: showOtherUsers && selectedAuthorIds.length > 0
-      ? selectedAuthorIds
-      : undefined,
+    actorUserIds:
+      showOtherUsers && selectedAuthorIds.length > 0
+        ? selectedAuthorIds
+        : undefined,
     refetchInterval: 5_000,
   });
   const { data: agents = [], isLoading: agentsLoading } = useProfiles({
@@ -183,8 +125,6 @@ export function ScheduleTriggersIndexPage() {
   const createMutation = useCreateScheduleTrigger();
   const updateMutation = useUpdateScheduleTrigger();
   const deleteMutation = useDeleteScheduleTrigger();
-  const runNowMutation = useRunScheduleTriggerNow();
-
   const [createFormOpen, setCreateFormOpen] = useState(false);
   const [editingTrigger, setEditingTrigger] = useState<ScheduleTrigger | null>(
     null,
@@ -278,13 +218,6 @@ export function ScheduleTriggersIndexPage() {
 
     closeComposer();
   };
-
-  const openRunFollowUp = useCallback(
-    async (triggerId: string) => {
-      await runNowMutation.mutateAsync(triggerId);
-    },
-    [runNowMutation],
-  );
 
   const confirmDelete = async () => {
     if (!deletingTrigger) {
@@ -424,13 +357,14 @@ export function ScheduleTriggersIndexPage() {
             placeholder="All users"
             className="w-[220px]"
             showSelectedBadges={false}
-            selectedSuffix={(n) =>
-              `${n === 1 ? "user" : "users"} selected`
-            }
+            selectedSuffix={(n) => `${n === 1 ? "user" : "users"} selected`}
           />
         )}
         <div className="ml-auto">
-          <ScheduleTriggerCreateButton hasAgents={hasAgents} onClick={openCreateComposer}>
+          <ScheduleTriggerCreateButton
+            hasAgents={hasAgents}
+            onClick={openCreateComposer}
+          >
             New task
           </ScheduleTriggerCreateButton>
         </div>
@@ -492,9 +426,7 @@ export function ScheduleTriggersIndexPage() {
           setPageIndex(p.pageIndex);
           setPageSize(p.pageSize);
         }}
-        onRowClick={(trigger) =>
-          router.push(`/scheduled-tasks/${trigger.id}`)
-        }
+        onRowClick={(trigger) => router.push(`/scheduled-tasks/${trigger.id}`)}
         hideSelectedCount
       />
 
@@ -853,65 +785,6 @@ export function ScheduleTriggerDetailPage({
   );
 }
 
-
-
-function ScheduleComposerPresetRail({
-  presets,
-  onDismiss,
-  onSelectPreset,
-}: {
-  presets: typeof SCHEDULE_COMPOSER_PRESETS;
-  onDismiss: () => void;
-  onSelectPreset: (preset: (typeof SCHEDULE_COMPOSER_PRESETS)[number]) => void;
-}) {
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          Start from a template, or write your own below.
-        </p>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="rounded-full text-muted-foreground/70"
-          onClick={onDismiss}
-        >
-          <X className="h-3.5 w-3.5" />
-          <span className="sr-only">Hide presets</span>
-        </Button>
-      </div>
-
-      <div className="grid gap-2 sm:grid-cols-3">
-        {presets.map((preset) => {
-          const Icon = preset.icon;
-
-          return (
-            <button
-              type="button"
-              key={preset.id}
-              onClick={() => onSelectPreset(preset)}
-              className="group flex items-start gap-3 rounded-xl border border-border/60 bg-card px-4 py-3.5 text-left transition-colors hover:bg-accent/10"
-            >
-              <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted/50 text-muted-foreground transition-colors group-hover:text-foreground">
-                <Icon className="h-4 w-4" />
-              </span>
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-foreground">
-                  {preset.title}
-                </p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {preset.description}
-                </p>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 function formatRunTimestamp(dateString: string): string {
   const date = new Date(dateString);
   const now = new Date();
@@ -977,32 +850,6 @@ function DetailCard({
   );
 }
 
-function SettingsPanelRow({
-  label,
-  description,
-  control,
-}: {
-  label: string;
-  description?: string;
-  control: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-6 px-5 py-4">
-      <div className="min-w-0 space-y-0.5">
-        <p className="text-sm font-medium text-foreground">{label}</p>
-        {description && (
-          <p className="text-[13px] text-muted-foreground">{description}</p>
-        )}
-      </div>
-      <div className="shrink-0">{control}</div>
-    </div>
-  );
-}
-
-function ReadonlySettingValue({ value }: { value: string }) {
-  return <span className="text-sm text-foreground">{value}</span>;
-}
-
 function NextRunCell({
   cronExpression,
   timezone,
@@ -1026,7 +873,9 @@ function NextRunCell({
     const next = cron.nextRun();
     if (!next) {
       return (
-        <span className="text-sm text-muted-foreground/70">No upcoming run</span>
+        <span className="text-sm text-muted-foreground/70">
+          No upcoming run
+        </span>
       );
     }
     return (
@@ -1039,94 +888,6 @@ function NextRunCell({
       <span className="text-sm text-muted-foreground/70">Invalid schedule</span>
     );
   }
-}
-
-function TimestampCell({
-  value,
-  emptyLabel = "Not yet",
-}: {
-  value: string | null;
-  emptyLabel?: string;
-}) {
-  if (!value) {
-    return (
-      <span className="text-sm text-muted-foreground/70">{emptyLabel}</span>
-    );
-  }
-
-  return (
-    <div className="space-y-1">
-      <p className="text-sm text-foreground">{formatTimestamp(value)}</p>
-      <p className="text-xs text-muted-foreground/60">
-        {formatRelativeTimeFromNow(value, { neverLabel: emptyLabel })}
-      </p>
-    </div>
-  );
-}
-
-function StatusBadge({
-  label,
-  tone,
-}: {
-  label: string;
-  tone: "success" | "danger" | "warning" | "muted" | "running";
-}) {
-  const toneClassName =
-    tone === "success"
-      ? "bg-emerald-500/10 text-emerald-300"
-      : tone === "danger"
-        ? "bg-destructive/10 text-destructive"
-        : tone === "warning"
-          ? "bg-amber-500/10 text-amber-300"
-          : tone === "running"
-            ? "bg-sky-500/10 text-sky-300"
-            : "bg-muted text-muted-foreground";
-
-  return (
-    <span
-      className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.14em] ${toneClassName}`}
-    >
-      {label}
-    </span>
-  );
-}
-
-const statusToneMap: Record<
-  ScheduleTriggerRunStatus,
-  "success" | "danger" | "warning" | "running"
-> = {
-  running: "running",
-  success: "success",
-  failed: "danger",
-};
-
-function formatTimestamp(value: string | null): string {
-  if (!value) {
-    return "Not yet";
-  }
-
-  return new Date(value).toLocaleString();
-}
-
-function formatTimestampWithRelative(
-  value: string | null,
-  emptyLabel = "Not yet",
-): string {
-  if (!value) {
-    return emptyLabel;
-  }
-
-  return `${formatTimestamp(value)} (${formatRelativeTimeFromNow(value, {
-    neverLabel: emptyLabel,
-  })})`;
-}
-
-function truncateText(value: string, maxLength: number): string {
-  if (value.length <= maxLength) {
-    return value;
-  }
-
-  return `${value.slice(0, maxLength - 1)}…`;
 }
 
 function ScheduleTriggerCreateButton({
@@ -1234,9 +995,7 @@ function buildCronFromSchedule(
     case "daily": {
       const sorted = [...days].sort((a, b) => a - b);
       const dowPart =
-        sorted.length === 7 || sorted.length === 0
-          ? "*"
-          : sorted.join(",");
+        sorted.length === 7 || sorted.length === 0 ? "*" : sorted.join(",");
       return `${minute} ${hour} * * ${dowPart}`;
     }
   }
@@ -1249,7 +1008,10 @@ function ScheduleSection({
   cronExpression: string;
   onCronExpressionChange: (value: string) => void;
 }) {
-  const parsed = useMemo(() => parseCronToMode(cronExpression), [cronExpression]);
+  const parsed = useMemo(
+    () => parseCronToMode(cronExpression),
+    [cronExpression],
+  );
   const [mode, setMode] = useState<ScheduleMode>(parsed.mode);
   const [hour, setHour] = useState(parsed.hour);
   const [minute] = useState(parsed.minute);
@@ -1344,7 +1106,6 @@ function ScheduleSection({
           </Select>
         </div>
       )}
-
     </div>
   );
 }
@@ -1420,7 +1181,9 @@ function ScheduleTriggerFormDialog({
               <Textarea
                 id="dialog-prompt"
                 value={formState.messageTemplate}
-                onChange={(event) => onMessageTemplateChange(event.target.value)}
+                onChange={(event) =>
+                  onMessageTemplateChange(event.target.value)
+                }
                 placeholder="Ask the agent to do something on every run."
                 className="min-h-[80px] resize-y"
               />
@@ -1456,144 +1219,6 @@ function ScheduleTriggerFormDialog({
         </DialogForm>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function ScheduleTriggerFormFields({
-  formState,
-  effectiveName,
-  agentOptions,
-  agentsLoading,
-  hasAgents,
-  isSaving,
-  isFormValid,
-  isEditing,
-  onCancel,
-  onSubmit,
-  onNameChange,
-  onAgentChange,
-  onCronExpressionChange,
-  onMessageTemplateChange,
-}: {
-  formState: ScheduleTriggerFormState;
-  effectiveName: string;
-  agentOptions: AgentOption[];
-  agentsLoading: boolean;
-  hasAgents: boolean;
-  isSaving: boolean;
-  isFormValid: boolean;
-  isEditing: boolean;
-  onCancel?: () => void;
-  onSubmit: () => void;
-  onNameChange: (value: string) => void;
-  onAgentChange: (value: string) => void;
-  onCronExpressionChange: (value: string) => void;
-  onMessageTemplateChange: (value: string) => void;
-}) {
-  return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault();
-        onSubmit();
-      }}
-      className="rounded-xl border border-border/60 bg-card shadow-sm focus-within:ring-1 focus-within:ring-ring"
-    >
-      <div className="relative">
-        <Textarea
-          id="schedule-trigger-message"
-          value={formState.messageTemplate}
-          onChange={(event) => onMessageTemplateChange(event.target.value)}
-          placeholder="Ask the scheduled agent to do something on every run..."
-          className="min-h-[80px] resize-y border-0 bg-transparent dark:bg-transparent px-4 py-3 text-sm shadow-none focus-visible:ring-0"
-        />
-      </div>
-
-      <div className="flex flex-col gap-3 px-3 py-2">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex flex-1 flex-wrap items-start gap-2">
-            <div className="w-[180px]">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div>
-                    <SearchableSelect
-                      value={formState.agentId}
-                      onValueChange={onAgentChange}
-                      items={agentOptions}
-                      placeholder="Select agent"
-                      searchPlaceholder="Search agents..."
-                      disabled={agentsLoading || !hasAgents}
-                      className="h-9 w-full"
-                    />
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent side="top">Target Agent</TooltipContent>
-              </Tooltip>
-            </div>
-
-            <div className="w-[200px]">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div>
-                    <CronExpressionPicker
-                      value={formState.cronExpression}
-                      onChange={onCronExpressionChange}
-                      presets={SCHEDULE_PRESET_OPTIONS}
-                      customPlaceholder="0 9 * * 1-5"
-                      className="h-9 w-full"
-                    />
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent side="top">Schedule (Cron)</TooltipContent>
-              </Tooltip>
-            </div>
-
-            {isEditing && (
-              <div className="w-[160px]">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Input
-                      id="schedule-trigger-name"
-                      value={formState.name}
-                      onChange={(event) => onNameChange(event.target.value)}
-                      placeholder={effectiveName}
-                      className="h-9 w-full"
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent side="top">Trigger Name</TooltipContent>
-                </Tooltip>
-              </div>
-            )}
-
-          </div>
-
-          <div className="flex shrink-0 items-start gap-2 pt-0.5">
-            {onCancel && (
-              <Button
-                variant="ghost"
-                size="sm"
-                type="button"
-                onClick={onCancel}
-              >
-                Cancel
-              </Button>
-            )}
-            <PermissionButton
-              permissions={{
-                scheduledTask: [isEditing ? "update" : "create"],
-              }}
-              type="submit"
-              size="sm"
-              disabled={isSaving || !isFormValid}
-            >
-              {isSaving && (
-                <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-              )}
-              {isEditing ? "Save changes" : "Create schedule"}
-            </PermissionButton>
-          </div>
-        </div>
-      </div>
-    </form>
   );
 }
 

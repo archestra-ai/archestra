@@ -1,9 +1,9 @@
 "use client";
 
 import {
+  type archestraApiTypes,
   calculateCostSavings,
   DynamicInteraction,
-  type archestraApiTypes,
 } from "@shared";
 import { ArrowLeft, Database, Layers } from "lucide-react";
 import Link from "next/link";

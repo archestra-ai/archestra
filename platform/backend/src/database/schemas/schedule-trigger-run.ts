@@ -21,6 +21,7 @@ const scheduleTriggerRunsTable = pgTable(
     initiatedByUserId: text("initiated_by_user_id"),
     agentIdSnapshot: uuid("agent_id_snapshot"),
     messageTemplateSnapshot: text("message_template_snapshot"),
+    chatConversationId: uuid("chat_conversation_id"),
     startedAt: timestamp("started_at", { withTimezone: true, mode: "date" }),
     completedAt: timestamp("completed_at", {
       withTimezone: true,
@@ -30,9 +31,7 @@ const scheduleTriggerRunsTable = pgTable(
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [
-    index("schedule_trigger_runs_organization_id_idx").on(table.organizationId),
     index("schedule_trigger_runs_trigger_id_idx").on(table.triggerId),
-    index("schedule_trigger_runs_status_idx").on(table.status),
   ],
 );
 

@@ -20,10 +20,7 @@ export async function handleScheduleTriggerRunExecution(
   const triggerId =
     typeof payload.triggerId === "string" ? payload.triggerId : null;
 
-  logger.info(
-    { runId, triggerId },
-    "Schedule trigger run picked up",
-  );
+  logger.info({ runId, triggerId }, "Schedule trigger run picked up");
 
   const run = await ScheduleTriggerRunModel.findById(runId);
   if (!run || run.status !== "running") {

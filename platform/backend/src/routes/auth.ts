@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { DEFAULT_ADMIN_EMAIL, RouteId } from "@shared";
 import { verifyPassword } from "better-auth/crypto";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -8,14 +9,19 @@ import config from "@/config";
 import logger from "@/logging";
 import {
   AccountModel,
+  AgentModel,
   MemberModel,
+  OAuthAccessTokenModel,
   OAuthClientModel,
+  OrganizationModel,
   UserModel,
   UserTokenModel,
 } from "@/models";
 import {
   exchangeIdentityAssertionForAccessToken,
+  extractProfileIdFromMcpResource,
   JWT_BEARER_GRANT_TYPE,
+  MCP_RESOURCE_REFERENCE_PREFIX,
 } from "@/services/identity-providers/enterprise-managed/authorization";
 import { ApiError, constructResponseSchema } from "@/types";
 
@@ -271,6 +277,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async handler(request, reply) {
       const body = request.body as Record<string, unknown> | undefined;
+      const resource = body?.resource;
 
       // CIMD: auto-register client if client_id is a URL
       const clientId = body?.client_id as string | undefined;
@@ -334,12 +341,19 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       const response = await betterAuth.handler(req);
+      const responseBody = await applyMcpOauthTokenLifetimeToResponse({
+        response,
+        resource,
+      });
 
       reply.status(response.status);
       response.headers.forEach((value: string, key: string) => {
+        if (key.toLowerCase() === "content-length") {
+          return;
+        }
         reply.header(key, value);
       });
-      reply.send(response.body ? await response.text() : null);
+      reply.send(responseBody);
     },
   });
 
@@ -591,4 +605,136 @@ function shouldSkipForwardedAuthHeader(headerName: string): boolean {
     normalizedHeaderName === "connection" ||
     normalizedHeaderName === "transfer-encoding"
   );
+}
+
+async function applyMcpOauthTokenLifetimeToResponse(params: {
+  response: Response;
+  resource: unknown;
+}): Promise<string | null> {
+  if (!params.response.body) {
+    return null;
+  }
+
+  const responseText = await params.response.text();
+  if (!params.response.ok) {
+    return responseText;
+  }
+
+  const tokenBody = parseOAuthTokenResponseBody(responseText);
+  if (!tokenBody) {
+    return responseText;
+  }
+
+  const accessToken =
+    typeof tokenBody.access_token === "string" ? tokenBody.access_token : null;
+  if (
+    !accessToken ||
+    !isMcpTokenResponse({ tokenBody, resource: params.resource })
+  ) {
+    return responseText;
+  }
+
+  const tokenHash = createHash("sha256")
+    .update(accessToken)
+    .digest("base64url");
+  const storedToken = await OAuthAccessTokenModel.getByTokenHash(tokenHash);
+  const lifetimeSeconds = await getMcpOauthAccessTokenLifetimeSeconds({
+    resource: params.resource,
+    referenceId: storedToken?.referenceId,
+  });
+  if (!storedToken || !lifetimeSeconds) {
+    return responseText;
+  }
+
+  const issuedAtSeconds = getIssuedAtSeconds(tokenBody);
+  const expiresAtSeconds = issuedAtSeconds + lifetimeSeconds;
+  const updatedToken = await OAuthAccessTokenModel.updateExpiresAtByTokenHash({
+    tokenHash,
+    expiresAt: new Date(expiresAtSeconds * 1000),
+  });
+  if (!updatedToken) {
+    return responseText;
+  }
+
+  return JSON.stringify({
+    ...tokenBody,
+    expires_in: lifetimeSeconds,
+    expires_at: expiresAtSeconds,
+  });
+}
+
+async function getMcpOauthAccessTokenLifetimeSeconds(params: {
+  resource: unknown;
+  referenceId: string | null | undefined;
+}): Promise<number | null> {
+  const profileId =
+    getProfileIdFromResource(params.resource) ??
+    getProfileIdFromReferenceId(params.referenceId);
+  if (!profileId) {
+    return null;
+  }
+
+  const agent = await AgentModel.findById(profileId);
+  if (!agent) {
+    return null;
+  }
+
+  const organization = await OrganizationModel.getById(agent.organizationId);
+  return organization?.mcpOauthAccessTokenLifetimeSeconds ?? null;
+}
+
+function parseOAuthTokenResponseBody(
+  responseText: string,
+): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(responseText);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return null;
+    }
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function isMcpTokenResponse(params: {
+  tokenBody: Record<string, unknown>;
+  resource: unknown;
+}): boolean {
+  if (typeof params.resource === "string") {
+    return true;
+  }
+
+  const scope =
+    typeof params.tokenBody.scope === "string" ? params.tokenBody.scope : "";
+  return scope.split(/\s+/).includes("mcp");
+}
+
+function getIssuedAtSeconds(tokenBody: Record<string, unknown>): number {
+  if (
+    typeof tokenBody.expires_at === "number" &&
+    typeof tokenBody.expires_in === "number"
+  ) {
+    return tokenBody.expires_at - tokenBody.expires_in;
+  }
+
+  return Math.floor(Date.now() / 1000);
+}
+
+function getProfileIdFromResource(resource: unknown): string | null {
+  if (typeof resource !== "string") {
+    return null;
+  }
+
+  return extractProfileIdFromMcpResource(resource);
+}
+
+function getProfileIdFromReferenceId(
+  referenceId: string | null | undefined,
+): string | null {
+  if (!referenceId?.startsWith(MCP_RESOURCE_REFERENCE_PREFIX)) {
+    return null;
+  }
+
+  return referenceId.slice(MCP_RESOURCE_REFERENCE_PREFIX.length) || null;
 }

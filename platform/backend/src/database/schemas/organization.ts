@@ -3,6 +3,7 @@ import type {
   OrganizationTheme,
   SupportedProvider,
 } from "@shared";
+import { DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS } from "@shared";
 import {
   boolean,
   integer,
@@ -145,7 +146,7 @@ const organizationsTable = pgTable("organization", {
     "mcp_oauth_access_token_lifetime_seconds",
   )
     .notNull()
-    .default(31_536_000),
+    .default(DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS),
 });
 
 export default organizationsTable;

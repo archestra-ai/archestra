@@ -5,6 +5,17 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// Radix Select uses Popper and pointer capture APIs that jsdom does not provide.
+global.ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
+Element.prototype.scrollIntoView = vi.fn();
+Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+Element.prototype.setPointerCapture = vi.fn();
+Element.prototype.releasePointerCapture = vi.fn();
+
 const mutateAsync = vi.fn();
 
 let mockOrganization: Record<string, unknown> | null = null;
@@ -13,6 +24,9 @@ vi.mock("@/lib/organization.query", () => ({
   useOrganization: () => ({
     data: mockOrganization,
     isPending: false,
+  }),
+  useAppearanceSettings: () => ({
+    data: { appName: null },
   }),
   useUpdateMcpSettings: () => ({
     mutateAsync,
@@ -50,19 +64,41 @@ describe("McpSettingsPage", () => {
     });
   });
 
-  it("submits the MCP token lifetime form", async () => {
+  it("submits a preset MCP token lifetime", async () => {
     const user = userEvent.setup();
 
     renderPage();
 
-    const input = screen.getByLabelText(/token lifetime in seconds/i);
-    await user.clear(input);
-    await user.type(input, "604800");
+    const select = screen.getByRole("combobox", { name: /token lifetime/i });
+    expect(select).toHaveTextContent("1 year");
+
+    await user.click(select);
+    await user.click(screen.getByRole("option", { name: "7 days" }));
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {
       expect(mutateAsync).toHaveBeenCalledWith({
         mcpOauthAccessTokenLifetimeSeconds: 604_800,
+      });
+    });
+  });
+
+  it("submits a custom MCP token lifetime", async () => {
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await user.click(screen.getByRole("combobox", { name: /token lifetime/i }));
+    await user.click(screen.getByRole("option", { name: "Custom lifetime" }));
+
+    const input = screen.getByLabelText(/custom lifetime in seconds/i);
+    await user.clear(input);
+    await user.type(input, "123456");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalledWith({
+        mcpOauthAccessTokenLifetimeSeconds: 123_456,
       });
     });
   });

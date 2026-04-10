@@ -1,5 +1,8 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { OAUTH_SCOPES } from "@shared";
+import {
+  DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS,
+  OAUTH_SCOPES,
+} from "@shared";
 import { decodeProtectedHeader } from "jose";
 import config from "@/config";
 import {
@@ -19,7 +22,6 @@ export const JWT_BEARER_GRANT_TYPE =
   "urn:ietf:params:oauth:grant-type:jwt-bearer";
 export const OAUTH_ID_JAG_TYP = "oauth-id-jag+jwt";
 export const MCP_RESOURCE_REFERENCE_PREFIX = "mcp-resource:";
-const DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS = 31_536_000;
 
 export interface EnterpriseManagedTokenResponse {
   access_token: string;
@@ -91,7 +93,7 @@ export async function exchangeIdentityAssertionForAccessToken(params: {
     );
   }
 
-  const profileId = extractProfileIdFromResource(assertionMetadata.resource);
+  const profileId = extractProfileIdFromMcpResource(assertionMetadata.resource);
   if (!profileId) {
     return invalidGrant(
       "Assertion JWT resource must reference a valid MCP Gateway URL.",
@@ -184,6 +186,24 @@ export function buildOAuthIssuer(): string {
     : `${config.frontendBaseUrl}/`;
 }
 
+export function extractProfileIdFromMcpResource(
+  resource: string,
+): string | null {
+  try {
+    const resourceUrl = new URL(resource);
+    const issuerUrl = new URL(buildOAuthIssuer());
+    if (resourceUrl.origin !== issuerUrl.origin) {
+      return null;
+    }
+
+    const { pathname } = resourceUrl;
+    const match = pathname.match(/^\/v1\/mcp\/([0-9a-f-]{36})$/i);
+    return match?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // =============================================================================
 // Internal helpers
 // =============================================================================
@@ -239,22 +259,6 @@ function readAssertionMetadata(assertion: string): {
       resource: extractString(decodedPayload, "resource"),
       scope: extractString(decodedPayload, "scope"),
     };
-  } catch {
-    return null;
-  }
-}
-
-function extractProfileIdFromResource(resource: string): string | null {
-  try {
-    const resourceUrl = new URL(resource);
-    const issuerUrl = new URL(buildOAuthIssuer());
-    if (resourceUrl.origin !== issuerUrl.origin) {
-      return null;
-    }
-
-    const { pathname } = resourceUrl;
-    const match = pathname.match(/^\/v1\/mcp\/([0-9a-f-]{36})$/i);
-    return match?.[1] ?? null;
   } catch {
     return null;
   }

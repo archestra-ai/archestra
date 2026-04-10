@@ -1,4 +1,6 @@
 import {
+  MCP_OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS,
+  MCP_OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS,
   OrganizationCustomFontSchema,
   OrganizationThemeSchema,
   SupportedProvidersSchema,
@@ -11,8 +13,6 @@ const DATA_URI_PREFIX = "data:image/png;base64,";
 const MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB decoded
 const PNG_MAGIC_BYTES = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 const MAX_CHAT_LINK_URL_LENGTH = 2000;
-const MCP_OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS = 300;
-const MCP_OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS = 31_536_000;
 
 /**
  * Validates a Base64-encoded PNG data URI.

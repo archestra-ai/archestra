@@ -66,6 +66,22 @@ class OAuthAccessTokenModel {
       .limit(1);
     return result;
   }
+
+  /**
+   * Update the persisted expiry for a hashed access token.
+   */
+  static async updateExpiresAtByTokenHash(params: {
+    tokenHash: string;
+    expiresAt: Date;
+  }) {
+    const [accessToken] = await db
+      .update(schema.oauthAccessTokensTable)
+      .set({ expiresAt: params.expiresAt })
+      .where(eq(schema.oauthAccessTokensTable.token, params.tokenHash))
+      .returning();
+
+    return accessToken ?? null;
+  }
 }
 
 export default OAuthAccessTokenModel;

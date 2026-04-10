@@ -37,9 +37,9 @@ Endpoint discovery is automatic. The gateway exposes standard well-known endpoin
 
 #### Token lifetime
 
-Archestra returns the lifetime of its MCP OAuth access tokens through the standard `expires_in` field. New organizations default to a long-lived value of 1 year to reduce unnecessary reconnects for MCP-native clients like desktop apps.
+Archestra returns the lifetime of its MCP OAuth access tokens through the standard `expires_in` field. The default lifetime is 1 year, which reduces unnecessary reconnects for MCP-native clients like desktop apps.
 
-Admins can change this in **Settings > MCP**. The setting is organization-wide and applies to newly issued Archestra access tokens used for OAuth 2.1 and ID-JAG authentication flows.
+Admins can change this in **Settings > MCP**. The setting is organization-wide and applies to newly issued Archestra MCP access tokens used for OAuth 2.1 and ID-JAG authentication flows.
 
 ### Bearer Token
 

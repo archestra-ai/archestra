@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS,
+  MCP_OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS,
+  MCP_OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS,
+} from "@shared";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import {
@@ -7,7 +12,6 @@ import {
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
-import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
@@ -19,14 +23,19 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useAppName } from "@/lib/hooks/use-app-name";
+import {
   useOrganization,
   useUpdateMcpSettings,
 } from "@/lib/organization.query";
 
-const MCP_OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS = 300;
-const MCP_OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS = 31_536_000;
-const DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS = 31_536_000;
-
+const CUSTOM_LIFETIME_VALUE = "custom";
 const MCP_LIFETIME_PRESETS = [
   { label: "1 hour", value: 3_600 },
   { label: "7 days", value: 604_800 },
@@ -35,10 +44,12 @@ const MCP_LIFETIME_PRESETS = [
 ] as const;
 
 type McpSettingsFormValues = {
-  mcpOauthAccessTokenLifetimeSeconds: number;
+  lifetimePreset: string;
+  customLifetimeSeconds: number;
 };
 
 export default function McpSettingsPage() {
+  const appName = useAppName();
   const { data: organization, isPending: isOrganizationPending } =
     useOrganization();
   const updateMcpSettingsMutation = useUpdateMcpSettings(
@@ -47,8 +58,8 @@ export default function McpSettingsPage() {
   );
   const form = useForm<McpSettingsFormValues>({
     defaultValues: {
-      mcpOauthAccessTokenLifetimeSeconds:
-        DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS,
+      lifetimePreset: String(DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS),
+      customLifetimeSeconds: DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS,
     },
     mode: "onChange",
   });
@@ -58,38 +69,47 @@ export default function McpSettingsPage() {
       return;
     }
 
+    const lifetimeSeconds = organization.mcpOauthAccessTokenLifetimeSeconds;
     form.reset({
-      mcpOauthAccessTokenLifetimeSeconds:
-        organization.mcpOauthAccessTokenLifetimeSeconds,
+      lifetimePreset: getPresetSelectValue(lifetimeSeconds),
+      customLifetimeSeconds: lifetimeSeconds,
     });
   }, [form, organization]);
 
   const serverValue =
     organization?.mcpOauthAccessTokenLifetimeSeconds ??
     DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS;
-  const currentValue =
-    form.watch("mcpOauthAccessTokenLifetimeSeconds") ?? serverValue;
+  const selectedPreset = form.watch("lifetimePreset");
+  const customLifetimeSeconds = form.watch("customLifetimeSeconds");
+  const currentValue = getSelectedLifetimeSeconds({
+    lifetimePreset: selectedPreset,
+    customLifetimeSeconds,
+  });
+  const isCustomLifetime = selectedPreset === CUSTOM_LIFETIME_VALUE;
   const hasChanges = !isOrganizationPending && currentValue !== serverValue;
 
   async function handleSave(values: McpSettingsFormValues) {
+    const lifetimeSeconds = getSelectedLifetimeSeconds(values);
     const updatedOrganization = await updateMcpSettingsMutation.mutateAsync({
-      mcpOauthAccessTokenLifetimeSeconds:
-        values.mcpOauthAccessTokenLifetimeSeconds,
+      mcpOauthAccessTokenLifetimeSeconds: lifetimeSeconds,
     });
 
     if (!updatedOrganization) {
       return;
     }
 
+    const updatedLifetimeSeconds =
+      updatedOrganization.mcpOauthAccessTokenLifetimeSeconds;
     form.reset({
-      mcpOauthAccessTokenLifetimeSeconds:
-        updatedOrganization.mcpOauthAccessTokenLifetimeSeconds,
+      lifetimePreset: getPresetSelectValue(updatedLifetimeSeconds),
+      customLifetimeSeconds: updatedLifetimeSeconds,
     });
   }
 
   function handleCancel() {
     form.reset({
-      mcpOauthAccessTokenLifetimeSeconds: serverValue,
+      lifetimePreset: getPresetSelectValue(serverValue),
+      customLifetimeSeconds: serverValue,
     });
   }
 
@@ -103,17 +123,61 @@ export default function McpSettingsPage() {
         >
           <SettingsBlock
             title="OAuth token lifetime"
-            description="Set how long Archestra-issued MCP OAuth access tokens remain valid for OAuth 2.1 and ID-JAG flows."
+            description={`Set how long ${appName}-issued MCP OAuth access tokens remain valid for OAuth 2.1 and ID-JAG flows.`}
             control={
-              <div className="text-sm text-muted-foreground">
-                Current default: {formatLifetime(serverValue)}
-              </div>
-            }
-          >
-            <div className="space-y-4">
               <FormField
                 control={form.control}
-                name="mcpOauthAccessTokenLifetimeSeconds"
+                name="lifetimePreset"
+                render={({ field }) => (
+                  <FormItem>
+                    <Select
+                      value={field.value}
+                      onValueChange={(value) => {
+                        field.onChange(value);
+
+                        if (value !== CUSTOM_LIFETIME_VALUE) {
+                          form.setValue(
+                            "customLifetimeSeconds",
+                            Number(value),
+                            {
+                              shouldDirty: true,
+                              shouldValidate: true,
+                            },
+                          );
+                        }
+                      }}
+                    >
+                      <FormControl>
+                        <SelectTrigger
+                          aria-label="Token lifetime"
+                          className="w-64"
+                        >
+                          <SelectValue placeholder="Select token lifetime" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {MCP_LIFETIME_PRESETS.map((preset) => (
+                          <SelectItem
+                            key={preset.value}
+                            value={String(preset.value)}
+                          >
+                            {preset.label}
+                          </SelectItem>
+                        ))}
+                        <SelectItem value={CUSTOM_LIFETIME_VALUE}>
+                          Custom lifetime
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )}
+              />
+            }
+          >
+            {isCustomLifetime && (
+              <FormField
+                control={form.control}
+                name="customLifetimeSeconds"
                 rules={{
                   required: "Token lifetime is required",
                   min: {
@@ -130,7 +194,7 @@ export default function McpSettingsPage() {
                 }}
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Token lifetime in seconds</FormLabel>
+                    <FormLabel>Custom lifetime in seconds</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
@@ -155,33 +219,7 @@ export default function McpSettingsPage() {
                   </FormItem>
                 )}
               />
-
-              <div className="flex flex-wrap gap-2">
-                {MCP_LIFETIME_PRESETS.map((preset) => (
-                  <Button
-                    key={preset.value}
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      form.setValue(
-                        "mcpOauthAccessTokenLifetimeSeconds",
-                        preset.value,
-                        {
-                          shouldDirty: true,
-                          shouldValidate: true,
-                        },
-                      );
-                    }}
-                  >
-                    {preset.label}
-                  </Button>
-                ))}
-              </div>
-
-              <div className="text-sm text-muted-foreground">
-                Selected lifetime: {formatLifetime(currentValue)}
-              </div>
-            </div>
+            )}
           </SettingsBlock>
 
           <SettingsSaveBar
@@ -190,7 +228,7 @@ export default function McpSettingsPage() {
             permissions={{ organizationSettings: ["update"] }}
             onSave={form.handleSubmit(handleSave)}
             onCancel={handleCancel}
-            disabledSave={!form.formState.isValid}
+            disabledSave={!form.formState.isValid || !currentValue}
           />
         </form>
       </Form>
@@ -198,24 +236,17 @@ export default function McpSettingsPage() {
   );
 }
 
-function formatLifetime(value: number): string {
-  if (value >= 86_400 && value % 86_400 === 0) {
-    const days = value / 86_400;
-    if (days === 365) {
-      return "1 year";
-    }
-    return `${days} day${days === 1 ? "" : "s"}`;
+function getPresetSelectValue(lifetimeSeconds: number): string {
+  const preset = MCP_LIFETIME_PRESETS.find(
+    (option) => option.value === lifetimeSeconds,
+  );
+  return preset ? String(preset.value) : CUSTOM_LIFETIME_VALUE;
+}
+
+function getSelectedLifetimeSeconds(values: McpSettingsFormValues): number {
+  if (values.lifetimePreset === CUSTOM_LIFETIME_VALUE) {
+    return values.customLifetimeSeconds;
   }
 
-  if (value >= 3_600 && value % 3_600 === 0) {
-    const hours = value / 3_600;
-    return `${hours} hour${hours === 1 ? "" : "s"}`;
-  }
-
-  if (value >= 60 && value % 60 === 0) {
-    const minutes = value / 60;
-    return `${minutes} minute${minutes === 1 ? "" : "s"}`;
-  }
-
-  return `${value} seconds`;
+  return Number(values.lifetimePreset);
 }

@@ -22,6 +22,11 @@ export const DEFAULT_LLM_PROXY_NAME = "Default LLM Proxy";
 /** @deprecated Default Team is no longer auto-created/auto-assigned. Kept for backward compat with E2E tests. */
 export const DEFAULT_TEAM_NAME = "Default Team";
 
+export const MCP_OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS = 300;
+export const MCP_OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS = 31_536_000;
+export const DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS =
+  MCP_OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS;
+
 /**
  * Separator used to construct fully-qualified MCP tool names
  * Format: {mcpServerName}__{toolName}

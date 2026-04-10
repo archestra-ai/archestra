@@ -125,7 +125,7 @@ export default function McpSettingsPage() {
         >
           <SettingsBlock
             title="OAuth token lifetime"
-            description={`Set how long ${appName}-issued MCP OAuth access tokens remain valid for OAuth 2.1 and ID-JAG flows.`}
+            description={`Set how long ${appName}-issued MCP OAuth 2.1 access tokens remain valid.`}
             control={
               <FormField
                 control={form.control}

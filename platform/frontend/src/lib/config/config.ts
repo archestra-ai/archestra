@@ -221,13 +221,7 @@ export default {
   debug: process.env.NODE_ENV !== "production",
   environment,
   posthog: {
-    // Analytics is enabled by default, disabled only when explicitly set to "disabled"
-    get enabled() {
-      return env("NEXT_PUBLIC_ARCHESTRA_ANALYTICS") !== "disabled";
-    },
-    token: "phc_FFZO7LacnsvX2exKFWehLDAVaXLBfoBaJypdOuYoTk7",
     config: {
-      api_host: "https://eu.i.posthog.com",
       person_profiles: "identified_only",
       session_recording: {
         recordHeaders: true,

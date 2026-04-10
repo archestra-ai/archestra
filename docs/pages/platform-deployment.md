@@ -620,6 +620,14 @@ The following environment variables can be used to configure Archestra Platform.
   - Default: `enabled`
   - Set to `disabled` to opt-out of analytics
 
+- **`ARCHESTRA_ANALYTICS_POSTHOG_KEY`** - PostHog project key used when analytics is enabled.
+  - Default: Archestra's hosted PostHog project key
+  - Set this with `ARCHESTRA_ANALYTICS_POSTHOG_HOST` to send analytics to your own PostHog instance
+
+- **`ARCHESTRA_ANALYTICS_POSTHOG_HOST`** - PostHog API host used when analytics is enabled.
+  - Default: `https://eu.i.posthog.com`
+  - Example: `https://posthog.example.com`
+
 - **`ARCHESTRA_LOGGING_LEVEL`** - Log level for Archestra
   - Default: `info`
   - Supported values: `trace`, `debug`, `info`, `warn`, `error`, `fatal`

@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.7"
+    "version": "1.2.8"
   },
   "components": {
     "schemas": {
@@ -100777,6 +100777,12 @@
                                       "enum": [
                                         "sharepoint"
                                       ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "gdrive"
+                                      ]
                                     }
                                   ]
                                 }
@@ -102590,6 +102596,12 @@
                   "enum": [
                     "sharepoint"
                   ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "gdrive"
+                  ]
                 }
               ]
             },
@@ -102681,6 +102693,12 @@
                                 "type": "string",
                                 "enum": [
                                   "sharepoint"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "gdrive"
                                 ]
                               }
                             ]
@@ -102970,6 +102988,48 @@
                                   "type",
                                   "tenantId",
                                   "siteUrl"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "gdrive"
+                                    ]
+                                  },
+                                  "driveId": {
+                                    "type": "string"
+                                  },
+                                  "driveIds": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "folderId": {
+                                    "type": "string"
+                                  },
+                                  "includeSharedDrives": {
+                                    "type": "boolean"
+                                  },
+                                  "recursive": {
+                                    "type": "boolean"
+                                  },
+                                  "fileTypes": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "batchSize": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "type"
                                 ],
                                 "additionalProperties": false
                               }
@@ -103440,6 +103500,12 @@
                         "enum": [
                           "sharepoint"
                         ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "gdrive"
+                        ]
                       }
                     ]
                   },
@@ -103735,6 +103801,47 @@
                           "tenantId",
                           "siteUrl"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "gdrive"
+                            ]
+                          },
+                          "driveId": {
+                            "type": "string"
+                          },
+                          "driveIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "folderId": {
+                            "type": "string"
+                          },
+                          "includeSharedDrives": {
+                            "type": "boolean"
+                          },
+                          "recursive": {
+                            "type": "boolean"
+                          },
+                          "fileTypes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "batchSize": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ]
                       }
                     ]
                   },
@@ -103853,6 +103960,12 @@
                           "type": "string",
                           "enum": [
                             "sharepoint"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "gdrive"
                           ]
                         }
                       ]
@@ -104142,6 +104255,48 @@
                             "type",
                             "tenantId",
                             "siteUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "gdrive"
+                              ]
+                            },
+                            "driveId": {
+                              "type": "string"
+                            },
+                            "driveIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "folderId": {
+                              "type": "string"
+                            },
+                            "includeSharedDrives": {
+                              "type": "boolean"
+                            },
+                            "recursive": {
+                              "type": "boolean"
+                            },
+                            "fileTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type"
                           ],
                           "additionalProperties": false
                         }
@@ -104560,6 +104715,12 @@
                           "enum": [
                             "sharepoint"
                           ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "gdrive"
+                          ]
                         }
                       ]
                     },
@@ -104848,6 +105009,48 @@
                             "type",
                             "tenantId",
                             "siteUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "gdrive"
+                              ]
+                            },
+                            "driveId": {
+                              "type": "string"
+                            },
+                            "driveIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "folderId": {
+                              "type": "string"
+                            },
+                            "includeSharedDrives": {
+                              "type": "boolean"
+                            },
+                            "recursive": {
+                              "type": "boolean"
+                            },
+                            "fileTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type"
                           ],
                           "additionalProperties": false
                         }
@@ -105499,6 +105702,47 @@
                           "tenantId",
                           "siteUrl"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "gdrive"
+                            ]
+                          },
+                          "driveId": {
+                            "type": "string"
+                          },
+                          "driveIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "folderId": {
+                            "type": "string"
+                          },
+                          "includeSharedDrives": {
+                            "type": "boolean"
+                          },
+                          "recursive": {
+                            "type": "boolean"
+                          },
+                          "fileTypes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "batchSize": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ]
                       }
                     ]
                   },
@@ -105615,6 +105859,12 @@
                           "type": "string",
                           "enum": [
                             "sharepoint"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "gdrive"
                           ]
                         }
                       ]
@@ -105904,6 +106154,48 @@
                             "type",
                             "tenantId",
                             "siteUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "gdrive"
+                              ]
+                            },
+                            "driveId": {
+                              "type": "string"
+                            },
+                            "driveIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "folderId": {
+                              "type": "string"
+                            },
+                            "includeSharedDrives": {
+                              "type": "boolean"
+                            },
+                            "recursive": {
+                              "type": "boolean"
+                            },
+                            "fileTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type"
                           ],
                           "additionalProperties": false
                         }

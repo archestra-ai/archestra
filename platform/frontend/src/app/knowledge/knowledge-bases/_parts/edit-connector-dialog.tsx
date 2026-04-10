@@ -32,6 +32,7 @@ import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useUpdateConnector } from "@/lib/knowledge/connector.query";
 import { ConfluenceConfigFields } from "./confluence-config-fields";
 import { ConnectorTypeIcon } from "./connector-icons";
+import { GoogleDriveConfigFields } from "./gdrive-config-fields";
 import { GithubConfigFields } from "./github-config-fields";
 import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
@@ -404,11 +405,13 @@ export function EditConnectorDialog({
                       ? "Integration Token"
                       : connectorType === "sharepoint"
                         ? "Client Secret"
-                        : needsEmail
-                          ? emailRequired
-                            ? "API Token"
-                            : "API Token / Personal Access Token"
-                          : "Personal Access Token"}
+                        : connectorType === "gdrive"
+                          ? "Service Account Key / OAuth Token"
+                          : needsEmail
+                            ? emailRequired
+                              ? "API Token"
+                              : "API Token / Personal Access Token"
+                            : "Personal Access Token"}
                 </FormLabel>
                 <FormControl>
                   <Input
@@ -428,6 +431,12 @@ export function EditConnectorDialog({
                   <p className="text-[0.8rem] text-muted-foreground">
                     The Azure AD app registration requires the{" "}
                     <code>Sites.Read.All</code> permission on Microsoft Graph.
+                  </p>
+                )}
+                {connectorType === "gdrive" && (
+                  <p className="text-[0.8rem] text-muted-foreground">
+                    Paste a service account JSON key (entire file content) or an
+                    OAuth2 access token with <code>drive.readonly</code> scope.
                   </p>
                 )}
                 <FormMessage />
@@ -460,6 +469,9 @@ export function EditConnectorDialog({
               {connectorType === "notion" && <NotionConfigFields form={form} />}
               {connectorType === "sharepoint" && (
                 <SharePointConfigFields form={form} />
+              )}
+              {connectorType === "gdrive" && (
+                <GoogleDriveConfigFields form={form} />
               )}
             </CollapsibleContent>
           </Collapsible>
@@ -535,6 +547,8 @@ function getEditUrlConfig(type: ConnectorType): {
       };
     case "notion":
       return { typeLabel: "Notion", urlFields: null };
+    case "gdrive":
+      return { typeLabel: "Google Drive", urlFields: null };
     case "sharepoint":
       return {
         typeLabel: "SharePoint",

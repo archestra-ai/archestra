@@ -37,9 +37,11 @@ export type LlmModelSelectOption = {
 export function LlmModelOptionLabel({
   option,
   showPricing = false,
+  truncateModelName = true,
 }: {
   option: LlmModelSelectOption;
   showPricing?: boolean;
+  truncateModelName?: boolean;
 }) {
   return (
     <div className="flex min-w-0 items-center gap-2">
@@ -51,7 +53,13 @@ export function LlmModelOptionLabel({
         className="shrink-0 rounded dark:invert"
       />
       <div className="min-w-0">
-        <div className="truncate">{option.model}</div>
+        <div
+          className={cn(
+            truncateModelName ? "truncate" : "whitespace-normal break-words",
+          )}
+        >
+          {option.model}
+        </div>
         {showPricing && (
           <div className="truncate text-xs text-muted-foreground">
             {formatPricing(option)}
@@ -123,6 +131,8 @@ export function LlmModelSearchableSelect({
   searchPlaceholder = "Search models...",
   allowCustom = false,
   emptyMessage,
+  popoverContentClassName,
+  truncateOptionLabels = true,
 }: {
   value: string;
   onValueChange: (value: string) => void;
@@ -136,6 +146,8 @@ export function LlmModelSearchableSelect({
   searchPlaceholder?: string;
   allowCustom?: boolean;
   emptyMessage?: string;
+  popoverContentClassName?: string;
+  truncateOptionLabels?: boolean;
 }) {
   return (
     <SearchableSelect
@@ -148,6 +160,7 @@ export function LlmModelSearchableSelect({
       multiline={showPricing}
       allowCustom={allowCustom}
       emptyMessage={emptyMessage}
+      contentClassName={popoverContentClassName}
       items={[
         ...(includeAllOption
           ? [{ value: "all", label: allLabel, searchText: allLabel }]
@@ -158,7 +171,11 @@ export function LlmModelSearchableSelect({
           searchText: `${providerDisplayNames[option.provider]} ${option.model}`,
           description: option.description,
           content: (
-            <LlmModelOptionLabel option={option} showPricing={showPricing} />
+            <LlmModelOptionLabel
+              option={option}
+              showPricing={showPricing}
+              truncateModelName={truncateOptionLabels}
+            />
           ),
           selectedContent: (
             <LlmModelSelectedValue option={option} showPricing={showPricing} />

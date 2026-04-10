@@ -360,6 +360,8 @@ function RerankerModelSelector({
       options={rerankerItems}
       placeholder="Select reranking model..."
       className={cn("w-full", pulse && "animate-pulse ring-2 ring-primary/40")}
+      popoverContentClassName="w-[min(520px,calc(100vw-2rem))]"
+      truncateOptionLabels={false}
       disabled={disabled}
     />
   );

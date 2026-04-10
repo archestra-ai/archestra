@@ -33,6 +33,7 @@ interface SearchableSelectProps {
   onSearchQueryChange?: (value: string) => void;
   emptyMessage?: string;
   multiline?: boolean;
+  contentClassName?: string;
 }
 
 export function SearchableSelect({
@@ -49,6 +50,7 @@ export function SearchableSelect({
   onSearchQueryChange,
   emptyMessage = "No results found.",
   multiline = false,
+  contentClassName,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -102,7 +104,10 @@ export function SearchableSelect({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[var(--radix-popover-trigger-width)] p-0"
+        className={cn(
+          "w-[var(--radix-popover-trigger-width)] p-0",
+          contentClassName,
+        )}
         align="start"
       >
         <div className="flex items-center border-b px-3 py-2">

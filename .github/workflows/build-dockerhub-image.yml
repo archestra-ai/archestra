@@ -79,6 +79,7 @@ jobs:
           push: ${{ inputs.push_image }}
           platforms: ${{ matrix.os_and_arch }}
           version: ${{ inputs.version }}
+          # supply-chain-policy: allow-latest internal release channel
           previous-image: docker.io/archestra/${{ inputs.image_name }}:latest
           outputs: type=image,name=docker.io/archestra/${{ inputs.image_name }},push-by-digest=true,name-canonical=true,push=${{ inputs.push_image }}
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}

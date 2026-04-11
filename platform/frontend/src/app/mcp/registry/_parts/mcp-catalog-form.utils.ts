@@ -438,7 +438,11 @@ export function transformExternalCatalogToFormValues(
       supports_resource_metadata:
         server.oauth_config.supports_resource_metadata ?? true,
       authServerUrl: server.oauth_config.auth_server_url || "",
-      authorizationEndpoint: server.oauth_config.authorization_endpoint || "",
+      authorizationEndpoint:
+        getOptionalStringProperty(
+          server.oauth_config,
+          "authorization_endpoint",
+        ) || "",
       wellKnownUrl: server.oauth_config.well_known_url || "",
       resourceMetadataUrl: server.oauth_config.resource_metadata_url || "",
       tokenEndpoint: server.oauth_config.token_endpoint || "",
@@ -602,6 +606,18 @@ export function transformExternalCatalogToFormValues(
     scope: "personal",
     teams: [],
   } as McpCatalogFormValues;
+}
+
+function getOptionalStringProperty(
+  value: unknown,
+  key: string,
+): string | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const propertyValue = (value as Record<string, unknown>)[key];
+  return typeof propertyValue === "string" ? propertyValue : undefined;
 }
 
 /**

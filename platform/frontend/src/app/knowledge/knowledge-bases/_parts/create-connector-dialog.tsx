@@ -44,6 +44,7 @@ import { ConfluenceConfigFields } from "./confluence-config-fields";
 import { ConnectorTypeIcon } from "./connector-icons";
 import { GithubConfigFields } from "./github-config-fields";
 import { GitlabConfigFields } from "./gitlab-config-fields";
+import { GoogleDriveConfigFields } from "./googledrive-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
 import { NotionConfigFields } from "./notion-config-fields";
 import { SchedulePicker } from "./schedule-picker";
@@ -93,6 +94,11 @@ const CONNECTOR_OPTIONS: {
     type: "sharepoint",
     label: CONNECTOR_TYPE_LABELS.sharepoint,
     description: "Sync documents and pages from SharePoint",
+  },
+  {
+    type: "googledrive",
+    label: "Google Drive",
+    description: "Sync documents from Google Drive",
   },
 ];
 
@@ -152,6 +158,7 @@ export function CreateConnectorDialog({
       servicenow: { type, syncDataForLastMonths: 6 },
       notion: { type },
       sharepoint: { type, includePages: true },
+      googledrive: { type },
     };
     form.setValue("config", defaultConfigs[type]);
     setStep("configure");
@@ -632,6 +639,9 @@ export function CreateConnectorDialog({
                     {connectorType === "sharepoint" && (
                       <SharePointConfigFields form={form} />
                     )}
+                    {connectorType === "googledrive" && (
+                      <GoogleDriveConfigFields form={form} />
+                    )}
                   </CollapsibleContent>
                 </Collapsible>
               </DialogBody>
@@ -706,6 +716,8 @@ function getUrlConfig(type: ConnectorType): {
         placeholder: "https://your-tenant.sharepoint.com/sites/your-site",
         description: "Your SharePoint site URL.",
       };
+    case "googledrive":
+      return null;
   }
 }
 

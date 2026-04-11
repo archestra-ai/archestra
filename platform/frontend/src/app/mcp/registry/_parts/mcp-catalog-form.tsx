@@ -1063,8 +1063,8 @@ export function McpCatalogForm({
                         </FormControl>
                         <FormDescription>
                           Optional direct authorization endpoint override for
-                          providers that do not publish well-known metadata.
-                          Set together with Token Endpoint.
+                          providers that do not publish well-known metadata. Set
+                          together with Token Endpoint.
                         </FormDescription>
                         <FormMessage />
                       </FormItem>

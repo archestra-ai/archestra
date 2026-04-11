@@ -80,8 +80,7 @@ export const oauthConfigSchema = z
   })
   .superRefine((value, ctx) => {
     if (Boolean(value.authorizationEndpoint) !== Boolean(value.tokenEndpoint)) {
-      const message =
-        "Authorization and token endpoints must be set together";
+      const message = "Authorization and token endpoints must be set together";
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message,

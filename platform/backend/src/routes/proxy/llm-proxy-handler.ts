@@ -200,7 +200,7 @@ export async function handleLLMProxy<
   );
 
   const requestAdapter = provider.createRequestAdapter(body);
-  const streamAdapter = provider.createStreamAdapter();
+  const streamAdapter = provider.createStreamAdapter(body);
   const providerMessages = requestAdapter.getProviderMessages();
   const messagesCount = getProviderMessagesCount(providerMessages);
 

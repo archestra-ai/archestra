@@ -1,0 +1,44 @@
+name: PR Title Linter
+
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - reopened
+  # This check can be required with merge queue enabled. The actual title lint
+  # only needs PR metadata, but required checks must also post on merge_group.
+  merge_group:
+
+permissions: {}
+
+concurrency:
+  group: "pr-title-linter-${{ github.event.pull_request.number || github.event.merge_group.head_sha || github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  lint-pr-title:
+    name: PR Title Linter
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      contents: read # Required to checkout the repository and read commitlint config.
+      pull-requests: read # Required by lint-pr-title to read PR metadata.
+    steps:
+      - name: Pass for merge queue
+        if: ${{ github.event_name == 'merge_group' }}
+        run: echo "PR title was already linted before entering merge queue."
+
+      - name: Checkout project
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Lint PR title
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: grafana/shared-workflows/actions/lint-pr-title@5f4c48c03125ef179c36a821d5b801fc876e672c # v1.2.1
+        with:
+          config-path: "${{ github.workspace }}/.github/commitlint.config.js" # zizmor: ignore[template-injection] workspace path is provided by GitHub and not user input.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

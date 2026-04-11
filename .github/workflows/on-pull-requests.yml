@@ -204,6 +204,13 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
+      - name: Checkout project for release-please PR
+        if: ${{ steps.check-release-please.outputs.is-release-please == 'true' }}
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
       # Generate a GitHub App token for release-please PRs so pushed generated
       # updates re-trigger workflows. Pushes made with GITHUB_TOKEN do not.
       - name: Generate token for release-please PR

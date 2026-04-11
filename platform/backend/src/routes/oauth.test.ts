@@ -191,5 +191,66 @@ describe("OAuth helper functions", () => {
 
       globalThis.fetch = originalFetch;
     });
+
+    test("uses explicit authorization server metadata URL override", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          authorization_endpoint: "https://auth.example.com/authorize",
+          token_endpoint: "https://auth.example.com/token",
+          scopes_supported: ["jira:read"],
+        }),
+      }) as Mock;
+
+      globalThis.fetch = fetchMock;
+
+      const scopes = await discoverScopes(
+        "https://tenant.example.com/rest/oauth2/latest/token",
+        false,
+        ["read", "write"],
+        {
+          authServerUrl: "https://auth.example.com",
+          wellKnownUrl:
+            "https://auth.example.com/.well-known/openid-configuration",
+        },
+      );
+
+      expect(scopes).toEqual(["jira:read"]);
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://auth.example.com/.well-known/openid-configuration",
+        expect.anything(),
+      );
+
+      globalThis.fetch = originalFetch;
+    });
+
+    test("uses explicit resource metadata URL override", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          scopes_supported: ["mcp:read"],
+        }),
+      }) as Mock;
+
+      globalThis.fetch = fetchMock;
+
+      const scopes = await discoverScopes(
+        "https://example.com/mcp",
+        true,
+        ["read", "write"],
+        {
+          resourceMetadataUrl:
+            "https://metadata.example.com/.well-known/oauth-protected-resource/mcp",
+        },
+      );
+
+      expect(scopes).toEqual(["mcp:read"]);
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://metadata.example.com/.well-known/oauth-protected-resource/mcp",
+        expect.anything(),
+      );
+
+      globalThis.fetch = originalFetch;
+    });
   });
 });

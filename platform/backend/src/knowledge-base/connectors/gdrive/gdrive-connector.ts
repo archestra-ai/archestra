@@ -1,8 +1,8 @@
-import { google } from "googleapis";
+import type { ModelInputModality } from "@shared";
 import type { drive_v3 } from "googleapis";
+import { google } from "googleapis";
 import JSZip from "jszip";
 import mammoth from "mammoth";
-import type { ModelInputModality } from "@shared";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
@@ -189,10 +189,9 @@ export class GoogleDriveConnector extends BaseConnector {
       throw new Error("Invalid Google Drive configuration");
     }
 
-    const checkpoint =
-      (params.checkpoint as GoogleDriveCheckpoint | null) ?? {
-        type: "gdrive" as const,
-      };
+    const checkpoint = (params.checkpoint as GoogleDriveCheckpoint | null) ?? {
+      type: "gdrive" as const,
+    };
 
     const batchSize = parsed.batchSize ?? DEFAULT_BATCH_SIZE;
     const syncFrom = checkpoint.lastSyncedAt ?? params.startTime?.toISOString();
@@ -314,8 +313,8 @@ export class GoogleDriveConnector extends BaseConnector {
         );
       }
 
-      const files = (res.data.files ?? []).filter(
-        (file: DriveFile) => isSupportedFile(file, supportsImages),
+      const files = (res.data.files ?? []).filter((file: DriveFile) =>
+        isSupportedFile(file, supportsImages),
       );
 
       const documents: ConnectorDocument[] = [];
@@ -413,7 +412,9 @@ export class GoogleDriveConnector extends BaseConnector {
     const queue: Array<[string, number]> = [[folderId, 0]];
 
     while (queue.length > 0) {
-      const [currentFolderId, depth] = queue.shift()!;
+      const entry = queue.shift();
+      if (!entry) break;
+      const [currentFolderId, depth] = entry;
 
       // If recursive, discover direct subfolders and enqueue them
       if (recursive && depth < maxDepth) {
@@ -518,8 +519,8 @@ export class GoogleDriveConnector extends BaseConnector {
         );
       }
 
-      const files = (res.data.files ?? []).filter(
-        (file: DriveFile) => isSupportedFile(file, supportsImages),
+      const files = (res.data.files ?? []).filter((file: DriveFile) =>
+        isSupportedFile(file, supportsImages),
       );
 
       const documents: ConnectorDocument[] = [];
@@ -544,8 +545,7 @@ export class GoogleDriveConnector extends BaseConnector {
 
       if (
         lastModified &&
-        (!progress.maxLastModified ||
-          lastModified > progress.maxLastModified)
+        (!progress.maxLastModified || lastModified > progress.maxLastModified)
       ) {
         progress.maxLastModified = lastModified;
       }
@@ -751,10 +751,7 @@ function buildFileQuery(
   return parts.join(" and ");
 }
 
-function isSupportedFile(
-  file: DriveFile,
-  supportsImages: boolean,
-): boolean {
+function isSupportedFile(file: DriveFile, supportsImages: boolean): boolean {
   const mimeType = file.mimeType ?? "";
 
   // Google Workspace documents are always supported (we export them)

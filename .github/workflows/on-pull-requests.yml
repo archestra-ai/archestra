@@ -4,28 +4,24 @@ on:
   pull_request:
     types:
       - opened
-      - edited
       - synchronize
-      - labeled
-  # You can use the merge_group event to trigger your GitHub Actions workflow when
-  # a pull request is added to a merge queue
-  # https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue#triggering-merge-group-checks-with-github-actions
+      - reopened
+  # Required checks must also run on merge_group when merge queue is enabled,
+  # otherwise the queue waits for PR-only statuses that never appear on the
+  # temporary merge-group SHA.
   merge_group:
 
 permissions: {}
 
 concurrency:
-  # Cancel any running workflow for the same branch when new commits are pushed.
-  # We group both by ref_name (available when CI is triggered by a push to a branch/tag)
-  # and head_ref (available when CI is triggered by a PR).
-  # For merge queue, we use merge_group to ensure each merge queue run gets its own group.
-  group: "on-pull-requests-${{ github.ref_name }}-${{ github.head_ref }}-${{ github.event.merge_group.head_sha || '' }}"
+  group: "on-pull-requests-${{ github.event.pull_request.number || github.event.merge_group.head_sha || github.ref }}"
   cancel-in-progress: true
 
 jobs:
   release-freeze-check:
     name: Release Freeze Check
-    # Always run so it can be a required status check - passes immediately for non-release-please PRs and merge_group
+    # Always run so it can be a required status check - passes immediately for
+    # non-release-please PRs and merge queue runs.
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: read # Required to inspect the repository context for release-please PRs.
@@ -34,14 +30,12 @@ jobs:
       - name: Check if this requires freeze validation
         id: check-context
         run: |
-          # For merge_group events, always pass
           if [ "$EVENT_NAME" = "merge_group" ]; then
             echo "should_check=false" >> "$GITHUB_OUTPUT"
-            echo "✅ Merge queue - passing automatically"
+            echo "Merge queue run - passing release freeze check."
             exit 0
           fi
 
-          # For PRs, only check release-please branches
           if [[ "$HEAD_REF" == release-please--* ]]; then
             echo "should_check=true" >> "$GITHUB_OUTPUT"
             echo "🔖 This is a release-please PR - checking freeze status"
@@ -89,29 +83,8 @@ jobs:
           echo "::error::❄️ Release freeze is active. Merging release-please PRs is blocked."
           exit 1
 
-  lint-pr-title:
-    name: PR Title Linter
-    if: github.event_name == 'pull_request'
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout project
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-
-      - name: Lint PR title
-        uses: grafana/shared-workflows/actions/lint-pr-title@5f4c48c03125ef179c36a821d5b801fc876e672c # v1.2.1
-        with:
-          config-path: "${{ github.workspace }}/.github/commitlint.config.js" # zizmor: ignore[template-injection] workspace path is provided by GitHub and not user input.
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   license-compliance-check:
     name: License Compliance Check
-    if: github.event.action != 'edited' && github.event.action != 'labeled'
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: read
@@ -153,7 +126,6 @@ jobs:
 
   supply-chain-policy:
     name: Supply Chain Policy
-    if: github.event_name == 'pull_request' && github.event.action != 'edited' && github.event.action != 'labeled'
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: read
@@ -169,7 +141,7 @@ jobs:
 
   dependency-review:
     name: Dependency Review
-    if: github.event_name == 'pull_request' && github.event.action != 'edited' && github.event.action != 'labeled'
+    if: ${{ github.event_name == 'pull_request' }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: read # Required to checkout the repository and diff dependency manifests.
@@ -190,22 +162,65 @@ jobs:
           license-check: false
           comment-summary-in-pr: on-failure
 
+  dependency-review-merge-group:
+    name: Dependency Review
+    if: ${{ github.event_name == 'merge_group' }}
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions: {}
+    steps:
+      - name: Skip dependency review for merge queue
+        run: echo "Dependency Review only has PR diff context; PR run already validated dependencies before merge queue."
+
   # Fast feedback on every PR push: lint + typecheck + unit tests.
-  # Full E2E suite runs only in merge queue (or on-demand via "run-e2e" PR label).
+  # Full E2E runs in the separate "Platform E2E Tests" workflow on merge queue
+  # or on-demand via the "run-e2e" PR label.
   platform-lint-and-unit-tests:
     name: Platform Lint and Unit Tests
-    if: github.event_name == 'pull_request' && github.event.action != 'edited' && github.event.action != 'labeled'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
-      contents: read
+      contents: write # Required to push generated code updates back to release-please PRs.
     defaults:
       run:
         working-directory: ./platform
     steps:
+      - name: Check if this is a release-please PR
+        id: check-release-please
+        working-directory: .
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ] && [[ "$HEAD_REF" == release-please--* ]]; then
+            echo "is-release-please=true" >> "$GITHUB_OUTPUT"
+            echo "Release-please PR detected; generated files will be auto-committed if needed."
+          else
+            echo "is-release-please=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_REF: ${{ github.head_ref }}
+
       - name: Checkout project
+        if: ${{ steps.check-release-please.outputs.is-release-please != 'true' }}
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+          fetch-depth: 1
+
+      # Generate a GitHub App token for release-please PRs so pushed generated
+      # updates re-trigger workflows. Pushes made with GITHUB_TOKEN do not.
+      - name: Generate token for release-please PR
+        if: ${{ steps.check-release-please.outputs.is-release-please == 'true' }}
+        id: generate-token
+        uses: ./.github/actions/github-app-token
+        with:
+          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+
+      - name: Update checkout credentials for release-please PR
+        if: ${{ steps.check-release-please.outputs.is-release-please == 'true' }}
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: true # zizmor: ignore[artipacked] release-please PRs need push credentials for generated updates.
+          ref: ${{ github.head_ref }}
+          token: ${{ steps.generate-token.outputs.token }}
           fetch-depth: 1
 
       - name: Setup environment
@@ -216,47 +231,179 @@ jobs:
       - name: Type checking, linting, formatting, unit tests
         run: pnpm check:ci
 
-  # Required checks: auto-passes on PRs so they aren't blocked, actually runs on merge queue.
-  platform-linting-and-tests-merge-queue:
-    name: Platform Linting and Tests (Required)
-    permissions:
-      contents: write # Required for release-please codegen commits and checked-in report artifacts.
-      security-events: write # Required for Docker Scout SARIF uploads.
-      id-token: write # Required for Workload Identity Federation.
-      pull-requests: write # Required for Docker Scout to write a comment to a PR.
-    uses: ./.github/workflows/platform-linting-and-tests.yml
-    with:
-      # On pull requests those Required Checks must still run because they are required in GH settings
-      # They should always succeed quickly in pull requests
-      # while on merge queues they should run normally and fail if needed
-      should-skip-running-and-always-succeed: ${{ github.event_name == 'pull_request' }}
-      is-fork-pr: ${{ github.event.pull_request.head.repo.fork == true }}
-    secrets:
-      TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-      TURBOREPO_REMOTE_CACHING_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+      - name: Run validation checks (drizzle-kit, codegen, db migrations)
+        env:
+          IS_RELEASE_PLEASE_PR: ${{ steps.check-release-please.outputs.is-release-please }}
+        run: |
+          set -e
 
-  # On-demand E2E: add the "run-e2e" label to a PR to trigger the full E2E suite.
-  # Runs natively on the PR branch with full secrets. Remove and re-add label to re-trigger.
-  platform-linting-and-tests-on-demand:
-    name: Platform Linting and Tests (On Demand)
-    if: github.event.action == 'labeled' && github.event.label.name == 'run-e2e'
+          # Start drizzle-kit check in background
+          echo "Starting drizzle-kit check in background..."
+          (cd backend && pnpm drizzle-kit check) &
+          DRIZZLE_PID=$!
+
+          # Run codegen and lint
+          echo "Running codegen..."
+          pnpm codegen
+          pnpm lint:fix
+
+          # Check for codegen changes
+          if ! git -C "$GITHUB_WORKSPACE" diff --exit-code -- docs/ platform/ || ! git -C "$GITHUB_WORKSPACE" diff --cached --exit-code -- docs/ platform/; then
+            if [ "$IS_RELEASE_PLEASE_PR" = "true" ]; then
+              echo "Waiting for drizzle-kit check before auto-committing generated changes..."
+              wait $DRIZZLE_PID
+
+              echo "Release-please PR with generated changes detected. Auto-committing..."
+              git config user.name "github-actions[bot]"
+              git config user.email "github-actions[bot]@users.noreply.github.com"
+              git -C "$GITHUB_WORKSPACE" add docs/ platform/
+              git commit -m "chore: update docs/openapi.json version for release"
+              git push
+              echo "Changes committed. Workflow will be re-triggered."
+              exit 0
+            else
+              echo "::error::Codegen produced changes. Please run 'pnpm codegen && pnpm lint:fix' locally and commit the results."
+              git -C "$GITHUB_WORKSPACE" diff --stat -- docs/ platform/
+              exit 1
+            fi
+          fi
+
+          # Wait for drizzle-kit check
+          echo "Waiting for drizzle-kit check..."
+          wait $DRIZZLE_PID
+
+          # Generate migrations and ensure no new migrations are created
+          echo "Checking for missing database migrations..."
+          set +e
+          if timeout 15s pnpm db:generate > /tmp/db_generate_output.txt 2>&1; then
+            output=$(cat /tmp/db_generate_output.txt)
+            echo "$output"
+            if echo "$output" | grep -q "❯\|Is.*table created or renamed"; then
+              echo "::error::Interactive prompt detected. Pending database migrations need to be committed."
+              exit 1
+            fi
+          else
+            exit_code=$?
+            cat /tmp/db_generate_output.txt 2>/dev/null || true
+            if [ $exit_code -eq 124 ]; then
+              echo "::error::pnpm db:generate timed out, likely waiting for interactive migration input."
+            else
+              echo "::error::pnpm db:generate failed with exit code $exit_code."
+            fi
+            exit 1
+          fi
+          set -e
+
+          if ! git diff --exit-code -- backend/src/database/migrations/ || ! git diff --cached --exit-code -- backend/src/database/migrations/; then
+            echo "::error::Database schema changes require a migration. Please run 'pnpm db:generate' locally and commit the generated migration."
+            git diff --stat backend/src/database/migrations/
+            exit 1
+          fi
+
+          echo "✅ All validation checks passed"
+
+  docker-image-builds:
+    name: Docker Image Builds (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
     permissions:
-      contents: write # Required for release-please codegen commits and checked-in report artifacts.
-      security-events: write # Required for Docker Scout SARIF uploads.
-      id-token: write # Required for Workload Identity Federation.
-      pull-requests: write # Required for Docker Scout to write a comment to a PR.
-    uses: ./.github/workflows/platform-linting-and-tests.yml
-    with:
-      should-skip-running-and-always-succeed: false
-      is-fork-pr: ${{ github.event.pull_request.head.repo.fork == true }}
-    secrets:
-      TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-      TURBOREPO_REMOTE_CACHING_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+      contents: read # Required to checkout the repository and read Docker build inputs.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Platform
+            runner: blacksmith-16vcpu-ubuntu-2404
+            context: ./platform
+            dockerfile: ./platform/Dockerfile
+            local-tag-prefix: archestra-platform
+            use-build-action: true
+          - name: MCP Server Base
+            runner: blacksmith-4vcpu-ubuntu-2404
+            context: ./platform/mcp_server_docker_image
+            dockerfile: ./platform/mcp_server_docker_image/Dockerfile
+            local-tag-prefix: mcp-server-base
+            use-build-action: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup environment
+        if: ${{ matrix.use-build-action }}
+        uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./platform
+
+      - name: Build Platform image
+        if: ${{ matrix.use-build-action }}
+        uses: ./.github/actions/build-platform-docker-image
+        with:
+          context: ${{ matrix.context }}
+          dockerfile: ${{ matrix.dockerfile }}
+          load: "true"
+          tags: ${{ format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
+          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+
+      - name: Setup Blacksmith Builder
+        if: ${{ !matrix.use-build-action }}
+        uses: ./.github/actions/setup-blacksmith-builder
+
+      - name: Build MCP server base image
+        if: ${{ !matrix.use-build-action }}
+        uses: ./.github/actions/blacksmith-build-push
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: ${{ format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
+
+  helm-chart-linting-and-tests:
+    name: Helm Chart Linting and Tests
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      contents: read # Required to checkout the repository and lint/package the Helm chart.
+    defaults:
+      run:
+        working-directory: ./platform/helm/archestra
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Linting
+        run: helm lint .
+
+      - name: Tests
+        run: |
+          HELM_UNITTEST_VERSION="1.0.3"
+          HELM_UNITTEST_ARCHIVE="helm-unittest-linux-amd64-${HELM_UNITTEST_VERSION}.tgz"
+          HELM_UNITTEST_BASE_URL="https://github.com/helm-unittest/helm-unittest/releases/download/v${HELM_UNITTEST_VERSION}"
+          curl -fsSL -o /tmp/helm-unittest-checksum.sha "${HELM_UNITTEST_BASE_URL}/helm-unittest-checksum.sha"
+          curl -fsSL -o "/tmp/${HELM_UNITTEST_ARCHIVE}" "${HELM_UNITTEST_BASE_URL}/${HELM_UNITTEST_ARCHIVE}"
+          (
+            cd /tmp
+            awk -v archive="${HELM_UNITTEST_ARCHIVE}" '
+              $2 ~ ("/" archive "$") {
+                print $1 " *" archive
+              }
+            ' helm-unittest-checksum.sha | sha256sum -c -
+          )
+          HELM_UNITTEST_EXTRACT_DIR="$(mktemp -d)"
+          HELM_PLUGINS_DIR="$(helm env HELM_PLUGINS)"
+          mkdir -p "${HELM_PLUGINS_DIR}/unittest"
+          tar -xzf "/tmp/${HELM_UNITTEST_ARCHIVE}" -C "${HELM_UNITTEST_EXTRACT_DIR}"
+          cp -R "${HELM_UNITTEST_EXTRACT_DIR}/." "${HELM_PLUGINS_DIR}/unittest"
+          helm unittest .
+
+      - name: helm package
+        # NOTE: can't use ${{ github.sha }} for version here because it's not a valid version number
+        # and helm package explicitly checks this.
+        run: |
+          helm package . --version v0.0.1 --app-version v0.0.1

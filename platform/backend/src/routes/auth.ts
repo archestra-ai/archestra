@@ -19,8 +19,8 @@ import {
   UserTokenModel,
 } from "@/models";
 import {
+  buildOAuthIssuer,
   exchangeIdentityAssertionForAccessToken,
-  extractProfileIdFromMcpResource,
   JWT_BEARER_GRANT_TYPE,
   MCP_RESOURCE_REFERENCE_PREFIX,
 } from "@/services/identity-providers/enterprise-managed/authorization";
@@ -675,10 +675,10 @@ async function getMcpOauthAccessTokenLifetimeSeconds(params: {
   tokenEndpointOrigin: string;
 }): Promise<number | null> {
   const profileId =
-    getProfileIdFromResource({
+    (await getProfileIdFromResource({
       resource: params.resource,
       tokenEndpointOrigin: params.tokenEndpointOrigin,
-    }) ?? getProfileIdFromReferenceId(params.referenceId);
+    })) ?? getProfileIdFromReferenceId(params.referenceId);
   if (!profileId) {
     return null;
   }
@@ -730,29 +730,25 @@ function getIssuedAtSeconds(tokenBody: Record<string, unknown>): number {
   return Math.floor(Date.now() / 1000);
 }
 
-function getProfileIdFromResource(params: {
+async function getProfileIdFromResource(params: {
   resource: unknown;
   tokenEndpointOrigin: string;
-}): string | null {
+}): Promise<string | null> {
   if (typeof params.resource !== "string") {
     return null;
   }
 
-  const profileIdFromIssuerResource = extractProfileIdFromMcpResource(
-    params.resource,
-  );
-  if (profileIdFromIssuerResource) {
-    return profileIdFromIssuerResource;
-  }
-
   try {
     const resourceUrl = new URL(params.resource);
-    if (resourceUrl.origin !== params.tokenEndpointOrigin) {
+    const issuerOrigin = new URL(buildOAuthIssuer()).origin;
+    const allowedOrigins = new Set([issuerOrigin, params.tokenEndpointOrigin]);
+    if (!allowedOrigins.has(resourceUrl.origin)) {
       return null;
     }
 
-    const match = resourceUrl.pathname.match(/^\/v1\/mcp\/([0-9a-f-]{36})$/i);
-    return match?.[1] ?? null;
+    const match = resourceUrl.pathname.match(/^\/v1\/mcp\/([^/]+)$/);
+    const idOrSlug = match?.[1] ? decodeURIComponent(match[1]) : null;
+    return idOrSlug ? AgentModel.resolveIdFromIdOrSlug(idOrSlug) : null;
   } catch {
     return null;
   }

@@ -245,6 +245,22 @@ const createIdentityProvider = async (
   providerId: string,
   options?: {
     domain?: string;
+    oidcConfig?: {
+      issuer?: string;
+      skipDiscovery?: boolean;
+      pkce?: boolean;
+      clientId?: string;
+      clientSecret?: string;
+      authorizationEndpoint?: string;
+      discoveryEndpoint?: string;
+      userInfoEndpoint?: string;
+      tokenEndpoint?: string;
+      tokenEndpointAuthentication?:
+        | "client_secret_post"
+        | "client_secret_basic"
+        | "private_key_jwt";
+      jwksEndpoint?: string;
+    };
     enterpriseManagedCredentials?: {
       clientId?: string;
       clientSecret?: string;
@@ -260,21 +276,34 @@ const createIdentityProvider = async (
     };
   },
 ): Promise<string> => {
+  const oidcConfig = {
+    issuer: options?.oidcConfig?.issuer ?? KEYCLOAK_OIDC.issuer,
+    skipDiscovery: options?.oidcConfig?.skipDiscovery,
+    pkce: options?.oidcConfig?.pkce ?? true,
+    clientId: options?.oidcConfig?.clientId ?? KEYCLOAK_OIDC.clientId,
+    clientSecret:
+      options?.oidcConfig?.clientSecret ?? KEYCLOAK_OIDC.clientSecret,
+    authorizationEndpoint: options?.oidcConfig?.authorizationEndpoint,
+    discoveryEndpoint:
+      options?.oidcConfig?.discoveryEndpoint ?? KEYCLOAK_OIDC.discoveryEndpoint,
+    userInfoEndpoint: options?.oidcConfig?.userInfoEndpoint,
+    tokenEndpoint: options?.oidcConfig?.tokenEndpoint,
+    tokenEndpointAuthentication:
+      options?.oidcConfig?.tokenEndpointAuthentication,
+    jwksEndpoint:
+      options?.oidcConfig?.jwksEndpoint ?? KEYCLOAK_OIDC.jwksEndpoint,
+  };
+
   const response = await makeApiRequest({
     request,
     method: "post",
     urlSuffix: "/api/identity-providers",
     data: {
       providerId,
-      issuer: KEYCLOAK_OIDC.issuer,
+      issuer: oidcConfig.issuer,
       domain: options?.domain ?? "jwks-test.example.com",
       oidcConfig: {
-        issuer: KEYCLOAK_OIDC.issuer,
-        pkce: true,
-        clientId: KEYCLOAK_OIDC.clientId,
-        clientSecret: KEYCLOAK_OIDC.clientSecret,
-        discoveryEndpoint: KEYCLOAK_OIDC.discoveryEndpoint,
-        jwksEndpoint: KEYCLOAK_OIDC.jwksEndpoint,
+        ...oidcConfig,
         ...(options?.enterpriseManagedCredentials
           ? {
               enterpriseManagedCredentials:

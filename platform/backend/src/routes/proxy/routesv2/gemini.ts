@@ -1,5 +1,5 @@
 import fastifyHttpProxy from "@fastify/http-proxy";
-import { ARCHESTRA_TOKEN_PREFIX } from "@shared";
+import { hasArchestraTokenPrefix } from "@shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -263,7 +263,7 @@ function createGeminiProxyPreHandler() {
 /**
  * Resolves virtual API keys in Gemini's ?key= query parameter.
  * Gemini uses ?key= for auth (unlike OpenAI which uses Authorization header).
- * If the key is a virtual key (starts with ARCHESTRA_TOKEN_PREFIX), resolve it
+ * If the key is a platform virtual key, resolve it
  * to the real provider API key and rewrite the URL. Real Gemini keys pass through unchanged.
  */
 async function resolveGeminiVirtualQueryKey(request: FastifyRequest) {
@@ -274,7 +274,7 @@ async function resolveGeminiVirtualQueryKey(request: FastifyRequest) {
   if (!keyMatch) return;
 
   const keyValue = keyMatch[1];
-  if (!keyValue.startsWith(ARCHESTRA_TOKEN_PREFIX)) return;
+  if (!hasArchestraTokenPrefix(keyValue)) return;
 
   try {
     const resolved = await validateVirtualApiKey(keyValue, "gemini");

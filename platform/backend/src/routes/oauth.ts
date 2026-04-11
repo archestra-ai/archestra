@@ -23,11 +23,20 @@ export function generateCodeChallenge(verifier: string): string {
   return createHash("sha256").update(verifier).digest("base64url");
 }
 
+interface OAuthDiscoveryOverrides {
+  authServerUrl?: string;
+  resourceMetadataUrl?: string;
+  wellKnownUrl?: string;
+}
+
 /**
  * Discover OAuth resource metadata (for MCP servers)
  * Sends MCP-Protocol-Version header for MCP-aware servers
  */
-async function discoverOAuthResourceMetadata(serverUrl: string) {
+async function discoverOAuthResourceMetadata(
+  serverUrl: string,
+  overrides?: OAuthDiscoveryOverrides,
+) {
   try {
     // MCP SDK uses "path-aware discovery": /.well-known/{type}{pathname}
     // For https://huggingface.co/mcp -> https://huggingface.co/.well-known/oauth-protected-resource/mcp
@@ -35,7 +44,9 @@ async function discoverOAuthResourceMetadata(serverUrl: string) {
     const pathname = url.pathname.endsWith("/")
       ? url.pathname.slice(0, -1)
       : url.pathname;
-    const wellKnownUrl = `${url.origin}/.well-known/oauth-protected-resource${pathname}`;
+    const wellKnownUrl =
+      overrides?.resourceMetadataUrl ||
+      `${url.origin}/.well-known/oauth-protected-resource${pathname}`;
 
     const response = await fetch(wellKnownUrl, {
       headers: {
@@ -64,11 +75,19 @@ export async function discoverScopes(
   serverUrl: string,
   supportsResourceMetadata: boolean,
   defaultScopes: string[],
+  overrides?: OAuthDiscoveryOverrides,
 ): Promise<string[]> {
   // Try resource metadata discovery first if supported
-  if (supportsResourceMetadata) {
+  const shouldDiscoverResourceMetadata =
+    supportsResourceMetadata &&
+    (!overrides?.authServerUrl || !!overrides.resourceMetadataUrl);
+
+  if (shouldDiscoverResourceMetadata) {
     try {
-      const resourceMetadata = await discoverOAuthResourceMetadata(serverUrl);
+      const resourceMetadata = await discoverOAuthResourceMetadata(
+        serverUrl,
+        overrides,
+      );
       if (
         resourceMetadata?.scopes_supported &&
         Array.isArray(resourceMetadata.scopes_supported) &&
@@ -83,7 +102,10 @@ export async function discoverScopes(
 
   // Try authorization server metadata discovery
   try {
-    const metadata = await discoverAuthorizationServerMetadata(serverUrl);
+    const metadata = await discoverAuthorizationServerMetadataWithOverrides(
+      serverUrl,
+      overrides,
+    );
     if (
       metadata.scopes_supported &&
       Array.isArray(metadata.scopes_supported) &&
@@ -103,7 +125,14 @@ export async function discoverScopes(
  * Build discovery URLs to try for authorization server metadata
  * Implements the same fallback strategy as MCP SDK
  */
-export function buildDiscoveryUrls(serverUrl: string): string[] {
+export function buildDiscoveryUrls(
+  serverUrl: string,
+  wellKnownUrl?: string,
+): string[] {
+  if (wellKnownUrl) {
+    return [wellKnownUrl];
+  }
+
   const url = new URL(serverUrl);
   const hasPath = url.pathname !== "/" && url.pathname !== "";
   const urls: string[] = [];
@@ -134,13 +163,17 @@ export function buildDiscoveryUrls(serverUrl: string): string[] {
  * Discover OAuth authorization server metadata with fallback support
  * Tries multiple discovery URLs like the MCP SDK does
  */
-async function discoverAuthorizationServerMetadata(serverUrl: string): Promise<{
+async function discoverAuthorizationServerMetadataWithOverrides(
+  serverUrl: string,
+  overrides?: OAuthDiscoveryOverrides,
+): Promise<{
   authorization_endpoint: string;
   token_endpoint: string;
   registration_endpoint?: string;
   scopes_supported?: string[];
 }> {
-  const urls = buildDiscoveryUrls(serverUrl);
+  const discoveryUrl = overrides?.authServerUrl || serverUrl;
+  const urls = buildDiscoveryUrls(discoveryUrl, overrides?.wellKnownUrl);
 
   for (const url of urls) {
     try {
@@ -193,15 +226,25 @@ interface DiscoveredEndpoints {
  * Shared by the initiate, callback, and refresh flows to avoid duplicated discovery logic.
  */
 export async function discoverOAuthEndpoints(
-  oauthConfig: { server_url: string; supports_resource_metadata: boolean },
+  oauthConfig: {
+    server_url: string;
+    supports_resource_metadata: boolean;
+    auth_server_url?: string;
+    resource_metadata_url?: string;
+    well_known_url?: string;
+  },
   log?: {
     info: (...args: unknown[]) => void;
     warn: (...args: unknown[]) => void;
   },
 ): Promise<DiscoveredEndpoints> {
-  let discoveryServerUrl = oauthConfig.server_url;
+  let discoveryServerUrl =
+    oauthConfig.auth_server_url || oauthConfig.server_url;
+  const shouldDiscoverResourceMetadata =
+    oauthConfig.supports_resource_metadata &&
+    (!oauthConfig.auth_server_url || !!oauthConfig.resource_metadata_url);
 
-  if (oauthConfig.supports_resource_metadata) {
+  if (shouldDiscoverResourceMetadata) {
     try {
       log?.info(
         { serverUrl: oauthConfig.server_url },
@@ -209,8 +252,12 @@ export async function discoverOAuthEndpoints(
       );
       const resourceMetadata = await discoverOAuthResourceMetadata(
         oauthConfig.server_url,
+        {
+          resourceMetadataUrl: oauthConfig.resource_metadata_url,
+        },
       );
       if (
+        !oauthConfig.auth_server_url &&
         resourceMetadata.authorization_servers &&
         Array.isArray(resourceMetadata.authorization_servers) &&
         resourceMetadata.authorization_servers.length > 0
@@ -229,8 +276,14 @@ export async function discoverOAuthEndpoints(
     }
   }
 
-  const metadata =
-    await discoverAuthorizationServerMetadata(discoveryServerUrl);
+  const metadata = await discoverAuthorizationServerMetadataWithOverrides(
+    discoveryServerUrl,
+    {
+      authServerUrl: oauthConfig.auth_server_url,
+      resourceMetadataUrl: oauthConfig.resource_metadata_url,
+      wellKnownUrl: oauthConfig.well_known_url,
+    },
+  );
   log?.info(
     {
       authorizationEndpoint: metadata.authorization_endpoint,
@@ -574,6 +627,11 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         oauthConfig.server_url,
         oauthConfig.supports_resource_metadata || false,
         oauthConfig.default_scopes || oauthConfig.scopes,
+        {
+          authServerUrl: oauthConfig.auth_server_url,
+          resourceMetadataUrl: oauthConfig.resource_metadata_url,
+          wellKnownUrl: oauthConfig.well_known_url,
+        },
       );
 
       // Use discovered scopes if different from configured

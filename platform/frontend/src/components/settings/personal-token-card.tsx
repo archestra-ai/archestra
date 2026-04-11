@@ -1,6 +1,6 @@
 "use client";
 
-import { archestraApiSdk } from "@shared";
+import { ARCHESTRA_TOKEN_PREFIX, archestraApiSdk } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, RefreshCw } from "lucide-react";
 import { useState } from "react";
@@ -111,7 +111,7 @@ export function PersonalTokenCard() {
           <div className="flex gap-2">
             <Input
               readOnly
-              value={`${token?.tokenStart || "archestra_"}***`}
+              value={`${token?.tokenStart || ARCHESTRA_TOKEN_PREFIX}***`}
               className="font-mono"
             />
             <Button

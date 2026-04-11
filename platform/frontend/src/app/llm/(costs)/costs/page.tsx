@@ -18,7 +18,6 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 import { CustomDateTimeRangeDialog } from "@/components/ui/custom-date-time-range-dialog";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -89,6 +88,7 @@ const ChartContainerWrapper = ({
 );
 
 const TIMEFRAME_STORAGE_KEY = "cost-statistics-timeframe";
+const STATISTICS_TABLE_MAX_HEIGHT_CLASS = "max-h-[280px]";
 
 export default function StatisticsPage() {
   const router = useRouter();
@@ -1090,10 +1090,11 @@ export default function StatisticsPage() {
 
 function StatisticsTablePanel({ children }: { children: React.ReactNode }) {
   return (
-    <ScrollArea className="max-h-[360px] rounded-md border">
+    <div
+      className={`${STATISTICS_TABLE_MAX_HEIGHT_CLASS} overflow-auto rounded-md border`}
+    >
       {children}
-      <ScrollBar orientation="horizontal" />
-    </ScrollArea>
+    </div>
   );
 }
 

@@ -114,6 +114,14 @@ runs:
         path: /tmp/mcp-jwks-server.tar
         key: mcp-jwks-server-0.0.3-${{ runner.arch }}
 
+    - name: Cache MCP ID-JAG server image
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
+      id: cache-id-jag-image
+      uses: ./.github/actions/github-cache
+      with:
+        path: /tmp/mcp-id-jag-server.tar
+        key: mcp-id-jag-server-0.0.4-${{ runner.arch }}
+
     - name: Pull MCP example OAuth server image
       if: ${{ inputs.deploy-e2e-dependencies == 'true' && steps.cache-oauth-image.outputs.cache-hit != 'true' }}
       shell: bash
@@ -130,6 +138,14 @@ runs:
         docker pull "${MCP_JWKS_IMAGE}"
         docker save "${MCP_JWKS_IMAGE}" > /tmp/mcp-jwks-server.tar
 
+    - name: Pull MCP ID-JAG server image
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' && steps.cache-id-jag-image.outputs.cache-hit != 'true' }}
+      shell: bash
+      run: |
+        MCP_ID_JAG_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag:0.0.4"
+        docker pull "${MCP_ID_JAG_IMAGE}"
+        docker save "${MCP_ID_JAG_IMAGE}" > /tmp/mcp-id-jag-server.tar
+
     - name: Load cached MCP example OAuth server image
       if: ${{ inputs.deploy-e2e-dependencies == 'true' && steps.cache-oauth-image.outputs.cache-hit == 'true' }}
       shell: bash
@@ -139,6 +155,11 @@ runs:
       if: ${{ inputs.deploy-e2e-dependencies == 'true' && steps.cache-jwks-image.outputs.cache-hit == 'true' }}
       shell: bash
       run: docker load < /tmp/mcp-jwks-server.tar
+
+    - name: Load cached MCP ID-JAG server image
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' && steps.cache-id-jag-image.outputs.cache-hit == 'true' }}
+      shell: bash
+      run: docker load < /tmp/mcp-id-jag-server.tar
 
     - name: Load all images into Kind in parallel
       shell: bash
@@ -163,12 +184,18 @@ runs:
         if [ "${DEPLOY_E2E_DEPS}" == "true" ]; then
           MCP_OAUTH_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server:0.0.1"
           MCP_JWKS_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.3"
+          MCP_ID_JAG_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag:0.0.4"
+
           echo "Loading MCP example OAuth server image into Kind..."
           kind load docker-image "${MCP_OAUTH_IMAGE}" --name "${KIND_CLUSTER_NAME}" &
           PIDS+=($!)
 
           echo "Loading MCP JWKS server image into Kind..."
           kind load docker-image "${MCP_JWKS_IMAGE}" --name "${KIND_CLUSTER_NAME}" &
+          PIDS+=($!)
+
+          echo "Loading MCP ID-JAG server image into Kind..."
+          kind load docker-image "${MCP_ID_JAG_IMAGE}" --name "${KIND_CLUSTER_NAME}" &
           PIDS+=($!)
         fi
 
@@ -271,6 +298,15 @@ runs:
           echo "Waiting for e2e dependency pods to be ready..."
           kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=keycloak --timeout=180s
           kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=wiremock --timeout=60s
+          if ! kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=mcp-server-id-jag --timeout=60s; then
+            echo "=== MCP Server ID-JAG Pod Describe ==="
+            kubectl describe pod -l app.kubernetes.io/name=mcp-server-id-jag || true
+            echo "=== MCP Server ID-JAG Logs ==="
+            kubectl logs -l app.kubernetes.io/name=mcp-server-id-jag --tail=200 || true
+            echo "=== MCP Server ID-JAG Previous Logs ==="
+            kubectl logs -l app.kubernetes.io/name=mcp-server-id-jag --previous --tail=200 || true
+            exit 1
+          fi
 
           echo "Verifying WireMock is accessible and stubs are loaded..."
           for i in $(seq 1 10); do
@@ -338,6 +374,33 @@ runs:
 
         echo "=== PostgreSQL Logs ==="
         kubectl logs -l app.kubernetes.io/name=postgresql --tail=200 || echo "No PostgreSQL logs"
+
+        echo "=== MCP Example OAuth Server Logs ==="
+        kubectl logs -l app.kubernetes.io/name=mcp-example-oauth --tail=200 || echo "No MCP Example OAuth logs"
+
+        echo "=== MCP Example OAuth Server Previous Logs ==="
+        kubectl logs -l app.kubernetes.io/name=mcp-example-oauth --previous --tail=200 || echo "No previous MCP Example OAuth logs"
+
+        echo "=== Describe MCP Example OAuth Server Pod ==="
+        kubectl describe pod -l app.kubernetes.io/name=mcp-example-oauth || echo "No MCP Example OAuth pod"
+
+        echo "=== MCP Server JWKS Logs ==="
+        kubectl logs -l app.kubernetes.io/name=mcp-server-jwks --tail=200 || echo "No MCP Server JWKS logs"
+
+        echo "=== MCP Server JWKS Previous Logs ==="
+        kubectl logs -l app.kubernetes.io/name=mcp-server-jwks --previous --tail=200 || echo "No previous MCP Server JWKS logs"
+
+        echo "=== Describe MCP Server JWKS Pod ==="
+        kubectl describe pod -l app.kubernetes.io/name=mcp-server-jwks || echo "No MCP Server JWKS pod"
+
+        echo "=== MCP Server ID-JAG Logs ==="
+        kubectl logs -l app.kubernetes.io/name=mcp-server-id-jag --tail=200 || echo "No ID-JAG logs"
+
+        echo "=== MCP Server ID-JAG Previous Logs ==="
+        kubectl logs -l app.kubernetes.io/name=mcp-server-id-jag --previous --tail=200 || echo "No previous ID-JAG logs"
+
+        echo "=== Describe MCP Server ID-JAG Pod ==="
+        kubectl describe pod -l app.kubernetes.io/name=mcp-server-id-jag || echo "No ID-JAG pod"
 
         echo "=== Describe Archestra Platform Pod ==="
         kubectl describe pod -l app.kubernetes.io/name=archestra-platform

@@ -46,6 +46,7 @@ import { GithubConfigFields } from "./github-config-fields";
 import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
 import { NotionConfigFields } from "./notion-config-fields";
+import { GoogleDriveConfigFields } from "./googledrive-config-fields";
 import { SchedulePicker } from "./schedule-picker";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
 import { SharePointConfigFields } from "./sharepoint-config-fields";
@@ -93,6 +94,11 @@ const CONNECTOR_OPTIONS: {
     type: "sharepoint",
     label: CONNECTOR_TYPE_LABELS.sharepoint,
     description: "Sync documents and pages from SharePoint",
+  },
+  {
+    type: "googledrive",
+    label: CONNECTOR_TYPE_LABELS.googledrive,
+    description: "Sync files and documents from Google Drive",
   },
 ];
 
@@ -152,6 +158,7 @@ export function CreateConnectorDialog({
       servicenow: { type, syncDataForLastMonths: 6 },
       notion: { type },
       sharepoint: { type, includePages: true },
+      googledrive: { type },
     };
     form.setValue("config", defaultConfigs[type]);
     setStep("configure");
@@ -535,6 +542,31 @@ export function CreateConnectorDialog({
                   />
                 )}
 
+                {connectorType === "googledrive" && (
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    rules={{ required: "Service account email is required" }}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Service Account Email</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="email"
+                            placeholder="my-sa@my-project.iam.gserviceaccount.com"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          The email address of the Google service account with
+                          Drive read access.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+
                 <FormField
                   control={form.control}
                   name="apiToken"
@@ -549,7 +581,9 @@ export function CreateConnectorDialog({
                           ? "Integration token is required"
                           : connectorType === "sharepoint"
                             ? "Client secret is required"
-                            : "Personal access token is required",
+                            : connectorType === "googledrive"
+                              ? "Private key is required"
+                              : "Personal access token is required",
                   }}
                   render={({ field }) => (
                     <FormItem>
@@ -560,11 +594,13 @@ export function CreateConnectorDialog({
                             ? "Integration Token"
                             : connectorType === "sharepoint"
                               ? "Client Secret"
-                              : needsEmail
-                                ? emailRequired
-                                  ? "API Token"
-                                  : "API Token / Personal Access Token"
-                                : "Personal Access Token"}
+                              : connectorType === "googledrive"
+                                ? "Private Key"
+                                : needsEmail
+                                  ? emailRequired
+                                    ? "API Token"
+                                    : "API Token / Personal Access Token"
+                                  : "Personal Access Token"}
                       </FormLabel>
                       <FormControl>
                         <Input
@@ -576,11 +612,13 @@ export function CreateConnectorDialog({
                                 ? "secret_..."
                                 : connectorType === "sharepoint"
                                   ? "Your Azure AD client secret"
-                                  : needsEmail
-                                    ? emailRequired
-                                      ? "Your API token"
-                                      : "Your API token or personal access token"
-                                    : "Your personal access token"
+                                  : connectorType === "googledrive"
+                                    ? "-----BEGIN RSA PRIVATE KEY-----..."
+                                    : needsEmail
+                                      ? emailRequired
+                                        ? "Your API token"
+                                        : "Your API token or personal access token"
+                                      : "Your personal access token"
                           }
                           {...field}
                         />
@@ -597,6 +635,14 @@ export function CreateConnectorDialog({
                           The Azure AD app registration requires the{" "}
                           <code>Sites.Read.All</code> permission on Microsoft
                           Graph.
+                        </p>
+                      )}
+                      {connectorType === "googledrive" && (
+                        <p className="text-[0.8rem] text-muted-foreground">
+                          The service account requires the{" "}
+                          <code>drive.readonly</code> OAuth scope. Paste the PEM
+                          private key from your service account JSON credentials
+                          file.
                         </p>
                       )}
                       <FormMessage />
@@ -631,6 +677,9 @@ export function CreateConnectorDialog({
                     )}
                     {connectorType === "sharepoint" && (
                       <SharePointConfigFields form={form} />
+                    )}
+                    {connectorType === "googledrive" && (
+                      <GoogleDriveConfigFields form={form} />
                     )}
                   </CollapsibleContent>
                 </Collapsible>
@@ -706,6 +755,8 @@ function getUrlConfig(type: ConnectorType): {
         placeholder: "https://your-tenant.sharepoint.com/sites/your-site",
         description: "Your SharePoint site URL.",
       };
+    case "googledrive":
+      return null;
   }
 }
 

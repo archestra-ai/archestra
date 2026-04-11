@@ -1,5 +1,6 @@
 "use client";
 
+import type { PopoverContentProps } from "@radix-ui/react-popover";
 import { providerDisplayNames, type SupportedProvider } from "@shared";
 import Image from "next/image";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -133,6 +134,7 @@ export function LlmModelSearchableSelect({
   emptyMessage,
   popoverContentClassName,
   truncateOptionLabels = true,
+  popoverSide,
 }: {
   value: string;
   onValueChange: (value: string) => void;
@@ -148,6 +150,7 @@ export function LlmModelSearchableSelect({
   emptyMessage?: string;
   popoverContentClassName?: string;
   truncateOptionLabels?: boolean;
+  popoverSide?: PopoverContentProps["side"];
 }) {
   return (
     <SearchableSelect
@@ -161,6 +164,7 @@ export function LlmModelSearchableSelect({
       allowCustom={allowCustom}
       emptyMessage={emptyMessage}
       contentClassName={popoverContentClassName}
+      contentSide={popoverSide}
       items={[
         ...(includeAllOption
           ? [{ value: "all", label: allLabel, searchText: allLabel }]

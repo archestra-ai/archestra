@@ -43,4 +43,31 @@ describe("SearchableSelect", () => {
     await user.click(screen.getByRole("button", { name: /Available User/i }));
     expect(onValueChange).toHaveBeenCalledWith("available");
   });
+
+  it("respects a custom popover side", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <SearchableSelect
+        value=""
+        onValueChange={vi.fn()}
+        placeholder="Select a model"
+        contentSide="top"
+        items={[
+          {
+            value: "model-a",
+            label: "Model A",
+          },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox"));
+
+    expect(
+      screen
+        .getByPlaceholderText("Search...")
+        .closest("[data-slot='popover-content']"),
+    ).toHaveAttribute("data-side", "top");
+  });
 });

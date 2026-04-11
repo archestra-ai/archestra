@@ -363,6 +363,7 @@ function RerankerModelSelector({
       placeholder="Select reranking model..."
       className={cn("w-full", pulse && "animate-pulse ring-2 ring-primary/40")}
       popoverContentClassName={KNOWLEDGE_MODEL_POPOVER_CLASS}
+      popoverSide="bottom"
       truncateOptionLabels={false}
       disabled={disabled}
     />
@@ -616,6 +617,7 @@ function KnowledgeSettingsContent() {
                         "animate-pulse ring-2 ring-primary/40",
                     )}
                     popoverContentClassName={KNOWLEDGE_MODEL_POPOVER_CLASS}
+                    popoverSide="bottom"
                     truncateOptionLabels={false}
                     disabled={
                       !hasPermission ||

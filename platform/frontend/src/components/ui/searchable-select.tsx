@@ -1,5 +1,6 @@
 "use client";
 
+import type { PopoverContentProps } from "@radix-ui/react-popover";
 import { Check, ChevronDown, Search } from "lucide-react";
 import * as React from "react";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ interface SearchableSelectProps {
   emptyMessage?: string;
   multiline?: boolean;
   contentClassName?: string;
+  contentSide?: PopoverContentProps["side"];
 }
 
 export function SearchableSelect({
@@ -51,6 +53,7 @@ export function SearchableSelect({
   emptyMessage = "No results found.",
   multiline = false,
   contentClassName,
+  contentSide,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -105,10 +108,11 @@ export function SearchableSelect({
       </PopoverTrigger>
       <PopoverContent
         className={cn(
-          "w-[var(--radix-popover-trigger-width)] p-0",
+          "max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] overflow-hidden p-0",
           contentClassName,
         )}
         align="start"
+        side={contentSide}
       >
         <div className="flex items-center border-b px-3 py-2">
           {showSearchIcon && (
@@ -131,7 +135,7 @@ export function SearchableSelect({
           </div>
         )}
         <div
-          className="max-h-[300px] overflow-y-auto p-1"
+          className="max-h-[min(300px,calc(var(--radix-popover-content-available-height)-3rem))] overflow-y-auto p-1"
           onWheelCapture={(event) => event.stopPropagation()}
         >
           {filteredItems.length === 0 ? (

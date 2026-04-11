@@ -120,7 +120,7 @@ runs:
       uses: ./.github/actions/github-cache
       with:
         path: /tmp/mcp-id-jag-server.tar
-        key: mcp-id-jag-server-0.0.3-${{ runner.arch }}
+        key: mcp-id-jag-server-0.0.4-${{ runner.arch }}
 
     - name: Pull MCP example OAuth server image
       if: ${{ inputs.deploy-e2e-dependencies == 'true' && steps.cache-oauth-image.outputs.cache-hit != 'true' }}
@@ -142,7 +142,7 @@ runs:
       if: ${{ inputs.deploy-e2e-dependencies == 'true' && steps.cache-id-jag-image.outputs.cache-hit != 'true' }}
       shell: bash
       run: |
-        MCP_ID_JAG_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag:0.0.3"
+        MCP_ID_JAG_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag:0.0.4"
         docker pull "${MCP_ID_JAG_IMAGE}"
         docker save "${MCP_ID_JAG_IMAGE}" > /tmp/mcp-id-jag-server.tar
 
@@ -184,7 +184,7 @@ runs:
         if [ "${DEPLOY_E2E_DEPS}" == "true" ]; then
           MCP_OAUTH_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server:0.0.1"
           MCP_JWKS_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.3"
-          MCP_ID_JAG_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag:0.0.3"
+          MCP_ID_JAG_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag:0.0.4"
 
           echo "Loading MCP example OAuth server image into Kind..."
           kind load docker-image "${MCP_OAUTH_IMAGE}" --name "${KIND_CLUSTER_NAME}" &

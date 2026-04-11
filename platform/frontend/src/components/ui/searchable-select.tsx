@@ -36,6 +36,7 @@ interface SearchableSelectProps {
   multiline?: boolean;
   contentClassName?: string;
   contentSide?: PopoverContentProps["side"];
+  contentAlign?: PopoverContentProps["align"];
   contentAvoidCollisions?: PopoverContentProps["avoidCollisions"];
 }
 
@@ -55,6 +56,7 @@ export function SearchableSelect({
   multiline = false,
   contentClassName,
   contentSide,
+  contentAlign,
   contentAvoidCollisions,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
@@ -113,7 +115,7 @@ export function SearchableSelect({
           "max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] overflow-hidden p-0",
           contentClassName,
         )}
-        align="start"
+        align={contentAlign ?? "start"}
         side={contentSide}
         avoidCollisions={contentAvoidCollisions}
       >

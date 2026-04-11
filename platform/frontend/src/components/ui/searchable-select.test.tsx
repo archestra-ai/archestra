@@ -70,4 +70,31 @@ describe("SearchableSelect", () => {
         .closest("[data-slot='popover-content']"),
     ).toHaveAttribute("data-side", "top");
   });
+
+  it("respects a custom popover alignment", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <SearchableSelect
+        value=""
+        onValueChange={vi.fn()}
+        placeholder="Select a model"
+        contentAlign="end"
+        items={[
+          {
+            value: "model-a",
+            label: "Model A",
+          },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox"));
+
+    expect(
+      screen
+        .getByPlaceholderText("Search...")
+        .closest("[data-slot='popover-content']"),
+    ).toHaveAttribute("data-align", "end");
+  });
 });

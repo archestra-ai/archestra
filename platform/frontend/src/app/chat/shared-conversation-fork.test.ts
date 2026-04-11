@@ -11,7 +11,7 @@ describe("resolveSharedConversationForkState", () => {
       }),
     ).toEqual({
       accessibleSharedAgentId: "agent-b",
-      shouldPromptForAgentSelection: false,
+      shouldPromptForForkAgentSelection: false,
       effectiveAgentId: "agent-b",
     });
   });
@@ -25,7 +25,7 @@ describe("resolveSharedConversationForkState", () => {
       }),
     ).toEqual({
       accessibleSharedAgentId: null,
-      shouldPromptForAgentSelection: true,
+      shouldPromptForForkAgentSelection: true,
       effectiveAgentId: "agent-a",
     });
   });
@@ -39,7 +39,7 @@ describe("resolveSharedConversationForkState", () => {
       }),
     ).toEqual({
       accessibleSharedAgentId: "agent-b",
-      shouldPromptForAgentSelection: false,
+      shouldPromptForForkAgentSelection: false,
       effectiveAgentId: "agent-a",
     });
   });

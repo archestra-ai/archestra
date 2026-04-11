@@ -133,6 +133,7 @@ export function LlmModelSearchableSelect({
   allowCustom = false,
   emptyMessage,
   popoverContentClassName,
+  popoverListClassName,
   truncateOptionLabels = true,
   popoverSide,
   popoverAlign,
@@ -151,6 +152,7 @@ export function LlmModelSearchableSelect({
   allowCustom?: boolean;
   emptyMessage?: string;
   popoverContentClassName?: string;
+  popoverListClassName?: string;
   truncateOptionLabels?: boolean;
   popoverSide?: PopoverContentProps["side"];
   popoverAlign?: PopoverContentProps["align"];
@@ -168,6 +170,7 @@ export function LlmModelSearchableSelect({
       allowCustom={allowCustom}
       emptyMessage={emptyMessage}
       contentClassName={popoverContentClassName}
+      listClassName={popoverListClassName}
       contentSide={popoverSide}
       contentAlign={popoverAlign}
       contentAvoidCollisions={popoverAvoidCollisions}

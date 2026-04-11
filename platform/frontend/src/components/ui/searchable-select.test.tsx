@@ -97,4 +97,29 @@ describe("SearchableSelect", () => {
         .closest("[data-slot='popover-content']"),
     ).toHaveAttribute("data-align", "end");
   });
+
+  it("applies a custom list class", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <SearchableSelect
+        value=""
+        onValueChange={vi.fn()}
+        placeholder="Select a model"
+        listClassName="max-h-[220px]"
+        items={[
+          {
+            value: "model-a",
+            label: "Model A",
+          },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox"));
+
+    expect(
+      screen.getByRole("button", { name: /Model A/i }).parentElement,
+    ).toHaveClass("max-h-[220px]");
+  });
 });

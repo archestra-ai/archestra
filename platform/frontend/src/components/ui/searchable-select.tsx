@@ -38,6 +38,7 @@ interface SearchableSelectProps {
   contentSide?: PopoverContentProps["side"];
   contentAlign?: PopoverContentProps["align"];
   contentAvoidCollisions?: PopoverContentProps["avoidCollisions"];
+  listClassName?: string;
 }
 
 export function SearchableSelect({
@@ -58,6 +59,7 @@ export function SearchableSelect({
   contentSide,
   contentAlign,
   contentAvoidCollisions,
+  listClassName,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -140,7 +142,10 @@ export function SearchableSelect({
           </div>
         )}
         <div
-          className="max-h-[min(300px,calc(var(--radix-popover-content-available-height)-3rem))] overflow-y-auto p-1"
+          className={cn(
+            "max-h-[min(300px,calc(var(--radix-popover-content-available-height)-3rem))] overflow-y-auto p-1",
+            listClassName,
+          )}
           onWheelCapture={(event) => event.stopPropagation()}
         >
           {filteredItems.length === 0 ? (

@@ -6,6 +6,9 @@ name: Docker Image Scanning
 on:
   pull_request:
     types:
+      - opened
+      - synchronize
+      - reopened
       - labeled
   merge_group:
 
@@ -16,6 +19,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Required-check placeholders for ordinary PR updates. The real scans remain
+  # merge-queue-only unless a trusted PR is explicitly labeled.
+  docker-image-scanning-placeholder:
+    name: Docker Image Scanning (${{ matrix.name }})
+    if: ${{ github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name != 'run-docker-scan') }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [Platform, MCP Server Base]
+    steps:
+      - name: Skip full image scan on ordinary PR updates
+        run: echo "Docker image scanning runs on merge queue or when the run-docker-scan label is added."
+
   docker-image-scanning:
     name: Docker Image Scanning (${{ matrix.name }})
     if: ${{ github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.label.name == 'run-docker-scan' && github.event.pull_request.head.repo.fork != true) }}

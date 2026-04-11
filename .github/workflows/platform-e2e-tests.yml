@@ -7,6 +7,9 @@ on:
   workflow_dispatch:
   pull_request:
     types:
+      - opened
+      - synchronize
+      - reopened
       - labeled
   merge_group:
 
@@ -23,6 +26,21 @@ env:
   MCP_SERVER_BASE_IMAGE_NAME: mcp-server-base
 
 jobs:
+  # Required-check placeholders for ordinary PR updates. These let a single
+  # ruleset require merge-queue-only checks without forcing the full E2E suite
+  # to run on every PR push.
+  platform-e2e-build-placeholder:
+    name: Build ${{ matrix.name }} Image
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name != 'run-e2e') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [Platform, MCP Server Base]
+    steps:
+      - name: Skip full image build on ordinary PR updates
+        run: echo "Full E2E image builds run on merge queue or when the run-e2e label is added."
+
   # Build Docker images for e2e tests (platform and MCP server base).
   # Trusted PRs and merge queue runs push the platform image to Artifact Registry so
   # each E2E shard can pull layers directly instead of downloading a tarball artifact.
@@ -81,8 +99,8 @@ jobs:
         if: ${{ matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
         uses: ./.github/actions/auth-to-gar
         with:
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          service_account: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
       - name: Build Platform image and push to Artifact Registry
         if: ${{ matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
@@ -102,8 +120,8 @@ jobs:
         if: ${{ !matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
         uses: ./.github/actions/auth-to-gar
         with:
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          service_account: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
       - name: Build MCP server base image
         if: ${{ !matrix.use-build-action }}
@@ -138,6 +156,27 @@ jobs:
 
   # E2E tests - runs all e2e test suites in parallel
   # Uses matrix strategy to run API, UI (sharded), and Vault tests concurrently
+  platform-e2e-tests-placeholder:
+    name: Platform E2E Tests (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name != 'run-e2e') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        name:
+          [
+            API,
+            UI 1/2,
+            UI 2/2,
+            UI Identity Providers,
+            UI Firefox,
+            UI Webkit,
+            Vault,
+          ]
+    steps:
+      - name: Skip full E2E shard on ordinary PR updates
+        run: echo "Full E2E shards run on merge queue or when the run-e2e label is added."
+
   platform-e2e-tests:
     name: Platform E2E Tests (${{ matrix.name }})
     needs: [platform-e2e-build]
@@ -290,6 +329,14 @@ jobs:
 
   # Quickstart E2E tests - validates docker run quickstart instructions work correctly
   # Runs the mcp-install.spec.ts test against the platform started via docker run
+  platform-quickstart-e2e-tests-placeholder:
+    name: Platform E2E Tests (Quickstart)
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name != 'run-e2e') }}
+    steps:
+      - name: Skip quickstart E2E on ordinary PR updates
+        run: echo "Quickstart E2E runs on merge queue or when the run-e2e label is added."
+
   platform-quickstart-e2e-tests:
     name: Platform E2E Tests (Quickstart)
     needs: [platform-e2e-build]
@@ -478,6 +525,14 @@ jobs:
           docker volume rm archestra-ci-app-data 2>/dev/null || true
 
   # Vault K8s E2E tests - validates platform starts when DB URL is sourced from Vault via K8s auth
+  platform-vault-k8s-e2e-tests-placeholder:
+    name: Platform E2E Tests (Vault K8s)
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name != 'run-e2e') }}
+    steps:
+      - name: Skip Vault K8s E2E on ordinary PR updates
+        run: echo "Vault K8s E2E runs on merge queue or when the run-e2e label is added."
+
   platform-vault-k8s-e2e-tests:
     name: Platform E2E Tests (Vault K8s)
     needs: [platform-e2e-build]
@@ -589,6 +644,14 @@ jobs:
           kubectl describe pod -l app.kubernetes.io/name=archestra-platform
 
   # Merge all Playwright reports into a single HTML report
+  platform-e2e-merge-reports-placeholder:
+    name: Merge E2E Test Reports
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name != 'run-e2e') }}
+    steps:
+      - name: Skip report merge on ordinary PR updates
+        run: echo "Merged E2E reports are generated on merge queue or when the run-e2e label is added."
+
   platform-e2e-merge-reports:
     name: Merge E2E Test Reports
     needs:

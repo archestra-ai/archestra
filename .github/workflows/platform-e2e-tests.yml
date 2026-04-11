@@ -282,7 +282,7 @@ jobs:
           MCP_SERVER_BASE_IMAGE_TAG: ${{ steps.load-mcp-server-base-image.outputs.image-tag }}
         run: |
           helm install archestra-platform platform/helm/archestra \
-            --values .github/values-ci-all-e2e.yaml \
+            --values .github/values-ci.yaml \
             --set "archestra.image=${PLATFORM_IMAGE_TAG}" \
             --set "archestra.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=${MCP_SERVER_BASE_IMAGE_TAG}" \
             --atomic --timeout=4m

@@ -41,7 +41,7 @@ export function PostHogProviderWrapper({
   }, [isPublicConfigLoading, publicConfig]);
 
   useEffect(() => {
-    const analyticsEnabled = publicConfig?.analytics.enabled;
+    const analyticsEnabled = publicConfig?.analytics?.enabled;
     if (
       !analyticsEnabled ||
       !isPostHogInitializedRef.current ||

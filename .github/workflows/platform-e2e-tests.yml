@@ -199,104 +199,26 @@ jobs:
           source: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'artifact' || 'registry' }}
           image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('mcp-server-base:{0}', github.sha) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
 
-      - name: Install Kind cluster
-        uses: ./.github/actions/install-kind-cluster
-        with:
-          config: .github/kind.yaml
-
-      - name: Load platform image into Kind
-        env:
-          PLATFORM_IMAGE_TAG: ${{ steps.load-platform-image.outputs.image-tag }}
-        run: |
-          kind load docker-image "${PLATFORM_IMAGE_TAG}" --name archestra-ci-cluster
-
-      - name: Load MCP server base image into Kind
-        env:
-          MCP_SERVER_BASE_IMAGE_TAG: ${{ steps.load-mcp-server-base-image.outputs.image-tag }}
-        run: |
-          kind load docker-image "${MCP_SERVER_BASE_IMAGE_TAG}" --name archestra-ci-cluster
-
       - name: Prepare blob report workspace
         run: |
           rm -rf platform/e2e-tests/blob-report platform/e2e-tests/blob-reports
           mkdir -p platform/e2e-tests/blob-reports
 
-      - name: Deploy e2e dependency chart
-        id: setup-deps
-        run: |
-          helm install e2e-tests platform/helm/e2e-tests \
-            --set vault.k8sAuth.enabled=true \
-            --set vault.k8sAuth.boundServiceAccountName=archestra-platform \
-            --set vault.k8sAuth.boundServiceAccountNamespace=default
-
-      - name: Wait for e2e dependencies to be ready
-        id: deps-ready
-        run: |
-          echo "Waiting for Vault pod to be ready..."
-          kubectl wait --for=condition=Ready pod/vault --timeout=120s
-          echo "Vault pod is ready"
-
-          echo "Waiting for Keycloak pod to be ready..."
-          kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=keycloak --timeout=180s
-
-          echo "Waiting for WireMock pod to be ready..."
-          kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=wiremock --timeout=60s
-
-          echo "Waiting for MCP Server ID-JAG pod to be ready..."
-          kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=mcp-server-id-jag --timeout=60s
-
-          echo "Verifying WireMock is accessible..."
-          for i in $(seq 1 10); do
-            HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:30080/__admin/health 2>/dev/null || echo "000")
-            if [ "$HTTP_CODE" = "200" ]; then
-              echo "WireMock is accessible (HTTP $HTTP_CODE)"
-              break
-            fi
-            echo "WireMock returned HTTP $HTTP_CODE, retrying... ($i/10)"
-            sleep 2
-          done
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "ERROR: WireMock not accessible after 10 attempts"
-            exit 1
-          fi
-
-          echo "Verifying Keycloak is accessible..."
-          for i in $(seq 1 10); do
-            HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:30081/realms/archestra/.well-known/openid-configuration 2>/dev/null || echo "000")
-            if [ "$HTTP_CODE" = "200" ]; then
-              echo "Keycloak is accessible (HTTP $HTTP_CODE)"
-              break
-            fi
-            echo "Keycloak returned HTTP $HTTP_CODE, retrying... ($i/10)"
-            sleep 2
-          done
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "ERROR: Keycloak not accessible after 10 attempts (last HTTP $HTTP_CODE)"
-            exit 1
-          fi
-
-      - name: Deploy platform
+      - name: Setup Archestra Platform
         id: setup-platform
-        env:
-          PLATFORM_IMAGE_TAG: ${{ steps.load-platform-image.outputs.image-tag }}
-          MCP_SERVER_BASE_IMAGE_TAG: ${{ steps.load-mcp-server-base-image.outputs.image-tag }}
-        run: |
-          helm install archestra-platform platform/helm/archestra \
-            --values .github/values-ci.yaml \
-            --set "archestra.image=${PLATFORM_IMAGE_TAG}" \
-            --set "archestra.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=${MCP_SERVER_BASE_IMAGE_TAG}" \
-            --atomic --timeout=4m
-
-      - name: Wait for platform to be healthy
-        id: platform-ready
-        run: |
-          echo "Waiting for platform pods to be ready..."
-          kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=archestra-platform --timeout=90s
-          echo "Platform pods are ready"
-
-          echo "Verifying backend is accessible..."
-          curl --retry 10 --retry-delay 2 --retry-connrefused http://localhost:9000/health || (echo "Backend not accessible" && exit 1)
-          echo "Backend is healthy"
+        uses: ./.github/actions/setup-archestra-platform
+        with:
+          kind-config-path: .github/kind.yaml
+          kind-cluster-name: archestra-ci-cluster
+          helm-values-path: .github/values-ci.yaml
+          deploy-e2e-dependencies: "true"
+          e2e-dependencies-install-mode: "foreground"
+          e2e-dependencies-extra-helm-set: "vault.k8sAuth.enabled=true,vault.k8sAuth.boundServiceAccountName=archestra-platform,vault.k8sAuth.boundServiceAccountNamespace=default"
+          e2e-dependencies-wait-for-vault: "true"
+          build-platform-image: "false"
+          platform-image-tag: ${{ steps.load-platform-image.outputs.image-tag }}
+          platform-context: ./platform
+          mcp-server-base-image-tag: ${{ steps.load-mcp-server-base-image.outputs.image-tag }}
 
       - name: Run all non-quickstart E2E tests
         id: e2e
@@ -316,7 +238,7 @@ jobs:
           retention-days: 1
 
       - name: Show logs on failure or flaky tests
-        if: steps.setup-deps.outcome == 'failure' || steps.deps-ready.outcome == 'failure' || steps.setup-platform.outcome == 'failure' || steps.platform-ready.outcome == 'failure' || steps.e2e.outcome == 'failure' || steps.e2e.outputs.has_flaky_tests == 'true'
+        if: steps.setup-platform.outcome == 'failure' || steps.e2e.outcome == 'failure' || steps.e2e.outputs.has_flaky_tests == 'true'
         run: |
           echo "=== Kubernetes Pods ==="
           kubectl get pods -o wide || true

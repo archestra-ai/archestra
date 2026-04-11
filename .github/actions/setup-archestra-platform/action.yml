@@ -20,6 +20,18 @@ inputs:
     description: "Whether to deploy e2e test dependencies (WireMock, Keycloak)"
     required: false
     default: "false"
+  e2e-dependencies-install-mode:
+    description: "Whether to install the e2e dependency chart in the background or before the platform deploy"
+    required: false
+    default: "background"
+  e2e-dependencies-extra-helm-set:
+    description: "Additional Helm --set flags for the e2e dependency chart (comma-separated key=value pairs)"
+    required: false
+    default: ""
+  e2e-dependencies-wait-for-vault:
+    description: "Whether to wait for the Vault pod in the e2e dependency chart"
+    required: false
+    default: "false"
   helm-chart-ref:
     description: "Helm chart reference - either a local path or OCI registry URL (e.g., oci://europe-west1-docker.pkg.dev/.../archestra-platform)"
     required: false
@@ -224,13 +236,46 @@ runs:
         MCP_SERVER_BASE_IMAGE_TAG: ${{ inputs.mcp-server-base-image-tag }}
         EXTRA_HELM_SET: ${{ inputs.extra-helm-set }}
         DEPLOY_E2E_DEPS: ${{ inputs.deploy-e2e-dependencies }}
+        E2E_DEPS_INSTALL_MODE: ${{ inputs.e2e-dependencies-install-mode }}
+        E2E_DEPS_EXTRA_HELM_SET: ${{ inputs.e2e-dependencies-extra-helm-set }}
+        E2E_DEPS_WAIT_FOR_VAULT: ${{ inputs.e2e-dependencies-wait-for-vault }}
       run: |
-        # Start e2e-tests Helm install in background (if needed)
+        # Build extra --set flags if provided (comma-separated key=value pairs)
+        EXTRA_SET_FLAGS=""
+        if [ -n "${EXTRA_HELM_SET}" ]; then
+          IFS=',' read -ra PAIRS <<< "${EXTRA_HELM_SET}"
+          for pair in "${PAIRS[@]}"; do
+            EXTRA_SET_FLAGS="${EXTRA_SET_FLAGS} --set ${pair}"
+          done
+        fi
+
+        E2E_DEPS_SET_FLAGS=""
+        if [ -n "${E2E_DEPS_EXTRA_HELM_SET}" ]; then
+          IFS=',' read -ra PAIRS <<< "${E2E_DEPS_EXTRA_HELM_SET}"
+          for pair in "${PAIRS[@]}"; do
+            E2E_DEPS_SET_FLAGS="${E2E_DEPS_SET_FLAGS} --set ${pair}"
+          done
+        fi
+
+        install_e2e_dependencies() {
+          helm install e2e-tests "${PLATFORM_CONTEXT}/helm/e2e-tests" ${E2E_DEPS_SET_FLAGS}
+        }
+
+        # Start e2e-tests Helm install if needed
         E2E_PID=""
         if [ "${DEPLOY_E2E_DEPS}" == "true" ]; then
-          echo "Starting e2e-tests Helm install in background..."
-          helm install e2e-tests "${PLATFORM_CONTEXT}/helm/e2e-tests" &
-          E2E_PID=$!
+          if [ "${E2E_DEPS_INSTALL_MODE}" = "foreground" ]; then
+            echo "Installing e2e-tests chart before platform deploy..."
+            install_e2e_dependencies
+            if [ "${E2E_DEPS_WAIT_FOR_VAULT}" = "true" ]; then
+              echo "Waiting for Vault pod before platform deploy..."
+              kubectl wait --for=condition=Ready pod/vault --timeout=120s
+            fi
+          else
+            echo "Starting e2e-tests Helm install in background..."
+            install_e2e_dependencies &
+            E2E_PID=$!
+          fi
         fi
 
         # Determine chart reference
@@ -249,15 +294,6 @@ runs:
         MCP_SET_FLAG=""
         if [ -n "${MCP_SERVER_BASE_IMAGE_TAG}" ]; then
           MCP_SET_FLAG="--set archestra.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=${MCP_SERVER_BASE_IMAGE_TAG}"
-        fi
-
-        # Build extra --set flags if provided (comma-separated key=value pairs)
-        EXTRA_SET_FLAGS=""
-        if [ -n "${EXTRA_HELM_SET}" ]; then
-          IFS=',' read -ra PAIRS <<< "${EXTRA_HELM_SET}"
-          for pair in "${PAIRS[@]}"; do
-            EXTRA_SET_FLAGS="${EXTRA_SET_FLAGS} --set ${pair}"
-          done
         fi
 
         echo "Deploying Archestra Platform..."
@@ -284,6 +320,7 @@ runs:
       shell: bash
       env:
         DEPLOY_E2E_DEPS: ${{ inputs.deploy-e2e-dependencies }}
+        E2E_DEPS_WAIT_FOR_VAULT: ${{ inputs.e2e-dependencies-wait-for-vault }}
       run: |
         echo "Waiting for platform pods to be ready..."
         kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=archestra-platform --timeout=90s
@@ -296,6 +333,9 @@ runs:
 
         if [ "$DEPLOY_E2E_DEPS" = "true" ]; then
           echo "Waiting for e2e dependency pods to be ready..."
+          if [ "${E2E_DEPS_WAIT_FOR_VAULT}" = "true" ]; then
+            kubectl wait --for=condition=Ready pod/vault --timeout=120s
+          fi
           kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=keycloak --timeout=180s
           kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=wiremock --timeout=60s
           if ! kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=mcp-server-id-jag --timeout=60s; then
@@ -310,7 +350,7 @@ runs:
 
           echo "Verifying WireMock is accessible and stubs are loaded..."
           for i in $(seq 1 10); do
-            HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:8080/__admin/health 2>/dev/null || echo "000")
+            HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:30080/__admin/health 2>/dev/null || echo "000")
             if [ "$HTTP_CODE" = "200" ]; then
               echo "WireMock is accessible (HTTP $HTTP_CODE)"
               break

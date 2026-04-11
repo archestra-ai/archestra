@@ -1,0 +1,102 @@
+name: Docker Image Scanning
+
+# Runs automatically in merge queue and on demand when the "run-docker-scan"
+# label is added to a PR.
+# Remove and re-add the label to re-trigger after new commits.
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - labeled
+  merge_group:
+
+permissions: {}
+
+concurrency:
+  group: "docker-image-scanning-${{ github.event.pull_request.number || github.event.merge_group.head_sha || github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  # Required-check placeholders for ordinary PR updates. The real scans remain
+  # merge-queue-only unless a trusted PR is explicitly labeled.
+  docker-image-scanning-placeholder:
+    name: Docker Image Scanning (${{ matrix.name }})
+    if: ${{ github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name != 'run-docker-scan') }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [Platform, MCP Server Base]
+    steps:
+      - name: Skip full image scan on ordinary PR updates
+        run: echo "Docker image scanning runs on merge queue or when the run-docker-scan label is added."
+
+  docker-image-scanning:
+    name: Docker Image Scanning (${{ matrix.name }})
+    if: ${{ github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.label.name == 'run-docker-scan' && github.event.pull_request.head.repo.fork != true) }}
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read # Required to checkout the repository and read Docker build inputs.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Platform
+            runner: blacksmith-16vcpu-ubuntu-2404
+            context: ./platform
+            dockerfile: ./platform/Dockerfile
+            local-tag-prefix: archestra-platform
+            use-build-action: true
+          - name: MCP Server Base
+            runner: blacksmith-4vcpu-ubuntu-2404
+            context: ./platform/mcp_server_docker_image
+            dockerfile: ./platform/mcp_server_docker_image/Dockerfile
+            local-tag-prefix: mcp-server-base
+            use-build-action: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup environment
+        if: ${{ matrix.use-build-action }}
+        uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./platform
+
+      - name: Build Platform image
+        if: ${{ matrix.use-build-action }}
+        uses: ./.github/actions/build-platform-docker-image
+        with:
+          context: ${{ matrix.context }}
+          dockerfile: ${{ matrix.dockerfile }}
+          load: "true"
+          tags: ${{ format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
+          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+
+      - name: Setup Blacksmith Builder
+        if: ${{ !matrix.use-build-action }}
+        uses: ./.github/actions/setup-blacksmith-builder
+
+      - name: Build MCP server base image
+        if: ${{ !matrix.use-build-action }}
+        uses: ./.github/actions/blacksmith-build-push
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: ${{ format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
+
+      - name: Scan image for CVEs
+        uses: ./.github/actions/scan-docker-image
+        with:
+          image: ${{ format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
+          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
+          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}

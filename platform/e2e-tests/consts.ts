@@ -149,6 +149,15 @@ export const MCP_SERVER_JWKS_BACKEND_URL = IS_CI
   ? "http://e2e-tests-mcp-server-jwks:3456"
   : "http://localhost:30082";
 
+export const MCP_SERVER_ID_JAG_EXTERNAL_URL = "http://localhost:30084";
+export const MCP_SERVER_ID_JAG_BACKEND_URL = IS_CI
+  ? "http://e2e-tests-mcp-server-id-jag:3458"
+  : "http://localhost:30084";
+export const MCP_SERVER_ID_JAG_GATEWAY_AUDIENCE = "id-jag-gateway-client";
+export const MCP_SERVER_ID_JAG_RESOURCE_CLIENT_ID = "id-jag-resource-client";
+export const MCP_SERVER_ID_JAG_RESOURCE_CLIENT_SECRET =
+  "id-jag-resource-secret";
+
 /** Docker image for the JWKS MCP server (used for local K8s deployment tests) */
 export const MCP_SERVER_JWKS_DOCKER_IMAGE =
   "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.3";

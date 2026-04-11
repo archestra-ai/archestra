@@ -36,6 +36,7 @@ interface SearchableSelectProps {
   multiline?: boolean;
   contentClassName?: string;
   contentSide?: PopoverContentProps["side"];
+  contentAvoidCollisions?: PopoverContentProps["avoidCollisions"];
 }
 
 export function SearchableSelect({
@@ -54,6 +55,7 @@ export function SearchableSelect({
   multiline = false,
   contentClassName,
   contentSide,
+  contentAvoidCollisions,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -113,6 +115,7 @@ export function SearchableSelect({
         )}
         align="start"
         side={contentSide}
+        avoidCollisions={contentAvoidCollisions}
       >
         <div className="flex items-center border-b px-3 py-2">
           {showSearchIcon && (

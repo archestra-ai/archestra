@@ -218,4 +218,76 @@ describe("auth routes", () => {
       expires_in: 31_536_000,
     });
   });
+
+  test("applies MCP token lifetime when resource uses the gateway slug", async ({
+    makeAgent,
+    makeOAuthAccessToken,
+    makeOAuthClient,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const user = await makeUser();
+    const organization = await makeOrganization();
+    await OrganizationModel.patch(organization.id, {
+      mcpOauthAccessTokenLifetimeSeconds: 300,
+    });
+    const agent = await makeAgent({
+      agentType: "mcp_gateway",
+      name: "Default MCP Gateway",
+      organizationId: organization.id,
+    });
+    const client = await makeOAuthClient({ userId: user.id });
+    const rawAccessToken = "cursor-oauth-access-token";
+    const tokenHash = createHash("sha256")
+      .update(rawAccessToken)
+      .digest("base64url");
+    await makeOAuthAccessToken(client.clientId, user.id, {
+      token: tokenHash,
+      expiresAt: new Date("2026-01-01T01:00:00.000Z"),
+    });
+    const issuedAtSeconds = 1_767_225_600;
+    vi.mocked(betterAuth.handler).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          access_token: rawAccessToken,
+          token_type: "Bearer",
+          expires_in: 3_600,
+          expires_at: issuedAtSeconds + 3_600,
+          scope: "mcp",
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+          },
+        },
+      ),
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/oauth2/token",
+      headers: {
+        host: "localhost:9000",
+      },
+      payload: {
+        grant_type: "authorization_code",
+        client_id: client.clientId,
+        code: "auth-code",
+        resource: `http://localhost:9000/v1/mcp/${agent.slug}`,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      access_token: rawAccessToken,
+      expires_in: 300,
+      expires_at: issuedAtSeconds + 300,
+    });
+
+    const storedToken = await OAuthAccessTokenModel.getByTokenHash(tokenHash);
+    expect(storedToken?.expiresAt).toEqual(
+      new Date((issuedAtSeconds + 300) * 1000),
+    );
+  });
 });

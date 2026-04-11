@@ -97,4 +97,73 @@ describe("StatisticsPage", () => {
       ),
     ).toBe(false);
   });
+
+  it("renders statistics tables inside capped scroll containers", () => {
+    mockUseTeamStatistics.mockReturnValue({
+      data: [
+        {
+          teamId: "team-1",
+          teamName: "Platform",
+          members: 3,
+          agents: 2,
+          requests: 12,
+          inputTokens: 100,
+          outputTokens: 50,
+          cost: 42,
+          timeSeries: [],
+        },
+      ],
+    });
+    mockUseProfileStatistics.mockReturnValue({
+      data: [
+        {
+          agentId: "agent-1",
+          agentName: "My Assistant",
+          teamName: "Platform",
+          agentType: "agent",
+          requests: 9,
+          inputTokens: 80,
+          outputTokens: 20,
+          cost: 15,
+          timeSeries: [],
+        },
+        {
+          agentId: "proxy-1",
+          agentName: "Default Proxy",
+          teamName: "Platform",
+          agentType: "llm_proxy",
+          requests: 4,
+          inputTokens: 20,
+          outputTokens: 10,
+          cost: 5,
+          timeSeries: [],
+        },
+      ],
+    });
+    mockUseModelStatistics.mockReturnValue({
+      data: [
+        {
+          model: "gpt-5",
+          requests: 7,
+          inputTokens: 70,
+          outputTokens: 30,
+          cost: 9,
+          percentage: 100,
+          timeSeries: [],
+        },
+      ],
+    });
+
+    const { container } = render(<StatisticsPage />);
+
+    const tablePanels = Array.from(
+      container.querySelectorAll(".max-h-\\[280px\\]"),
+    );
+
+    expect(tablePanels).toHaveLength(4);
+    for (const tablePanel of tablePanels) {
+      expect(tablePanel.className).toContain("max-h-[280px]");
+      expect(tablePanel.className).toContain("overflow-auto");
+    }
+  });
 });

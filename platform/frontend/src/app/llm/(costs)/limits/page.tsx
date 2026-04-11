@@ -2,7 +2,8 @@
 
 import type { archestraApiTypes } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Edit, Plus, Trash2, X } from "lucide-react";
+import { CircleHelp, Edit, Plus, Trash2, X } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSetCostsAction } from "@/app/llm/(costs)/layout";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -10,6 +11,7 @@ import { FormDialog } from "@/components/form-dialog";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { TableRowActions } from "@/components/table-row-actions";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -43,6 +45,11 @@ import { useTeams } from "@/lib/teams/team.query";
 type LimitData = archestraApiTypes.GetLimitsResponses["200"][number];
 type LimitEntityType = archestraApiTypes.CreateLimitData["body"]["entityType"];
 type UsageStatus = "safe" | "warning" | "danger";
+type LimitCleanupInterval = NonNullable<
+  NonNullable<
+    archestraApiTypes.UpdateLlmSettingsData["body"]
+  >["limitCleanupInterval"]
+>;
 
 type LimitFormState = {
   entityType: LimitEntityType;
@@ -56,6 +63,14 @@ const DEFAULT_FORM_STATE: LimitFormState = {
   entityId: "",
   limitValue: "",
   model: [],
+};
+
+const CLEANUP_INTERVAL_LABELS: Record<LimitCleanupInterval, string> = {
+  "1h": "Every hour",
+  "12h": "Every 12 hours",
+  "24h": "Every 24 hours",
+  "1w": "Every week",
+  "1m": "Every month",
 };
 
 function formatCurrencyWhole(value: number) {
@@ -290,6 +305,10 @@ export default function LimitsPage() {
     statusFilter !== "all" ||
     appliedToFilter !== "all" ||
     modelFilter !== "all";
+  const cleanupIntervalLabel =
+    CLEANUP_INTERVAL_LABELS[
+      (organization?.limitCleanupInterval as LimitCleanupInterval) ?? "1h"
+    ];
 
   async function handleSubmit() {
     const body = {
@@ -334,6 +353,24 @@ export default function LimitsPage() {
 
   return (
     <div className="space-y-4">
+      <Alert variant="info">
+        <CircleHelp />
+        <AlertDescription className="sm:flex sm:flex-wrap sm:items-center sm:gap-1">
+          <span>
+            Expired or exceeded limits reset on the current cleanup schedule:
+          </span>
+          <span className="font-medium text-foreground">
+            {cleanupIntervalLabel}
+          </span>
+          <Link
+            href="/settings/llm"
+            className="font-medium underline underline-offset-4"
+          >
+            Change it in LLM settings
+          </Link>
+        </AlertDescription>
+      </Alert>
+
       <div className="flex flex-wrap gap-3">
         <Select
           value={statusFilter}

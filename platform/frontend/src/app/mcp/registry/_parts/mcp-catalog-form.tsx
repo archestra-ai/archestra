@@ -150,6 +150,9 @@ export function McpCatalogForm({
                 : "",
             scopes: "read, write",
             supports_resource_metadata: true,
+            authServerUrl: "",
+            wellKnownUrl: "",
+            resourceMetadataUrl: "",
           },
           localConfig: {
             command: "",
@@ -1011,15 +1014,81 @@ export function McpCatalogForm({
                             />
                           </FormControl>
                           <FormDescription>
-                            The OAuth server endpoint used for authorization and
-                            token exchange. This is separate from the
-                            K8s-deployed server.
+                            Base URL used for OAuth discovery. Use the issuer or
+                            auth server base URL here, not the token endpoint.
+                            This is separate from the K8s-deployed server.
                           </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
                   )}
+
+                  <FormField
+                    control={form.control}
+                    name="oauthConfig.authServerUrl"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Authorization Server URL</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="https://auth.example.com"
+                            className="font-mono"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Optional override for discovery when the MCP server
+                          URL is not the OAuth issuer.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="oauthConfig.wellKnownUrl"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Well-Known Metadata URL</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="https://auth.example.com/.well-known/openid-configuration"
+                            className="font-mono"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Optional direct metadata endpoint override when
+                          provider discovery is non-standard.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="oauthConfig.resourceMetadataUrl"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Resource Metadata URL</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="https://mcp.example.com/.well-known/oauth-protected-resource"
+                            className="font-mono"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Optional override for OAuth protected resource
+                          metadata discovery.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
                   <FormField
                     control={form.control}

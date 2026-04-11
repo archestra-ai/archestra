@@ -134,6 +134,7 @@ import {
   shouldResetInitialChatState,
 } from "./chat-initial-state";
 import ArchestraPromptInput from "./prompt-input";
+import { resolveSharedConversationForkState } from "./shared-conversation-fork";
 
 const BROWSER_OPEN_KEY = "archestra-chat-browser-open";
 
@@ -540,7 +541,29 @@ export function ChatPageContent({
     () => (conversation?.messages ?? []) as PartialUIMessage[],
     [conversation?.messages],
   );
-  const effectiveForkAgentId = forkAgentId ?? internalAgents[0]?.id ?? null;
+  const sharedConversationAgentId =
+    conversation?.agentId ?? conversation?.agent?.id ?? null;
+  const {
+    accessibleSharedAgentId,
+    shouldPromptForForkAgentSelection,
+    effectiveAgentId: effectiveForkAgentId,
+  } = useMemo(
+    () =>
+      resolveSharedConversationForkState({
+        availableAgentIds: internalAgents.map((agent) => agent.id),
+        selectedAgentId: forkAgentId,
+        sharedConversationAgentId,
+      }),
+    [forkAgentId, internalAgents, sharedConversationAgentId],
+  );
+
+  useEffect(() => {
+    if (isForkDialogOpen) {
+      return;
+    }
+
+    setForkAgentId(accessibleSharedAgentId);
+  }, [accessibleSharedAgentId, isForkDialogOpen]);
 
   // Track title generation for typing animation in the header
   const conversationForTitleTracking = useMemo(
@@ -1764,7 +1787,16 @@ export function ChatPageContent({
                         </div>
                       </div>
                       <div className="absolute inset-0 flex items-center justify-center pointer-events-auto">
-                        <Button onClick={() => setIsForkDialogOpen(true)}>
+                        <Button
+                          onClick={() => {
+                            if (shouldPromptForForkAgentSelection) {
+                              setIsForkDialogOpen(true);
+                              return;
+                            }
+
+                            void handleForkSharedConversation();
+                          }}
+                        >
                           <Plus className="h-4 w-4 mr-2" />
                           Start New Chat from here
                         </Button>
@@ -2004,7 +2036,11 @@ export function ChatPageContent({
         open={isForkDialogOpen}
         onOpenChange={setIsForkDialogOpen}
         title="Start New Chat"
-        description="Select an agent to start a new chat with the preloaded messages from this conversation."
+        description={
+          shouldPromptForForkAgentSelection
+            ? "The original agent is not available to you. Select another agent to start a new chat with the preloaded messages from this conversation."
+            : "Select an agent to start a new chat with the preloaded messages from this conversation."
+        }
         size="small"
         bodyClassName="py-1"
         footer={

@@ -24,6 +24,7 @@ export const IDENTITY_TRUSTED_PROVIDER_IDS =
 export const IdentityProviderOidcConfigSchema = z
   .object({
     issuer: z.string(),
+    skipDiscovery: z.boolean().optional(),
     pkce: z.boolean(),
     enableRpInitiatedLogout: z.boolean().optional(),
     clientId: z.string(),

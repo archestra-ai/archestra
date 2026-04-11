@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.9](https://github.com/archestra-ai/archestra/compare/platform-v1.2.8...platform-v1.2.9) (2026-04-10)
+
+
+### Bug Fixes
+
+* apply MCP OAuth lifetime for inspector resources ([#3701](https://github.com/archestra-ai/archestra/issues/3701)) ([e4a4592](https://github.com/archestra-ai/archestra/commit/e4a45927dcbeb220b58f758c4ebea28175b00a59))
+
 ## [1.2.8](https://github.com/archestra-ai/archestra/compare/platform-v1.2.7...platform-v1.2.8) (2026-04-10)
 
 

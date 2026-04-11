@@ -145,4 +145,105 @@ describe("chat share routes", () => {
     expect(response.statusCode).toBe(404);
     expect(response.json().error.message).toBe("Shared conversation not found");
   });
+
+  test("forks a shared conversation with the original accessible agent", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    const owner = currentUser;
+    const viewer = await makeUser();
+
+    await makeMember(owner.id, organizationId);
+    await makeMember(viewer.id, organizationId);
+
+    const sharedAgent = await makeAgent({
+      organizationId,
+      teams: [],
+    });
+    const conversation = await ConversationModel.create({
+      userId: owner.id,
+      organizationId,
+      agentId: sharedAgent.id,
+      selectedModel: "gpt-4o",
+    });
+    const share = await ConversationShareModel.upsert({
+      conversationId: conversation.id,
+      organizationId,
+      createdByUserId: owner.id,
+      visibility: "organization",
+      teamIds: [],
+      userIds: [],
+    });
+
+    currentUser = viewer;
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/chat/shared/${share.id}/fork`,
+      payload: {
+        agentId: sharedAgent.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      agentId: sharedAgent.id,
+      selectedModel: "gpt-4o",
+      userId: viewer.id,
+    });
+  });
+
+  test("does not fork a shared conversation with an inaccessible agent", async ({
+    makeAgent,
+    makeMember,
+    makeTeam,
+    makeUser,
+  }) => {
+    const owner = currentUser;
+    const viewer = await makeUser();
+
+    await makeMember(owner.id, organizationId);
+    await makeMember(viewer.id, organizationId);
+
+    const ownerOnlyTeam = await makeTeam(organizationId, owner.id, {
+      name: "Owner Only",
+    });
+    const sharedAgent = await makeAgent({
+      organizationId,
+      teams: [],
+    });
+    const restrictedAgent = await makeAgent({
+      organizationId,
+      scope: "team",
+      teams: [ownerOnlyTeam.id],
+    });
+    const conversation = await ConversationModel.create({
+      userId: owner.id,
+      organizationId,
+      agentId: sharedAgent.id,
+      selectedModel: "gpt-4o",
+    });
+    const share = await ConversationShareModel.upsert({
+      conversationId: conversation.id,
+      organizationId,
+      createdByUserId: owner.id,
+      visibility: "organization",
+      teamIds: [],
+      userIds: [],
+    });
+
+    currentUser = viewer;
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/chat/shared/${share.id}/fork`,
+      payload: {
+        agentId: restrictedAgent.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.message).toBe("Agent not found");
+  });
 });

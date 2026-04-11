@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto";
-import { OAUTH_TOKEN_ID_PREFIX } from "@shared";
+import {
+  ARCHESTRA_TOKEN_PREFIX,
+  LEGACY_ARCHESTRA_TOKEN_PREFIXES,
+  OAUTH_TOKEN_ID_PREFIX,
+} from "@shared";
 import { vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import type * as originalConfigModule from "@/config";
@@ -44,7 +48,7 @@ describe("validateMCPGatewayToken", () => {
     test("returns null for invalid token", async () => {
       const result = await validateMCPGatewayToken(
         crypto.randomUUID(),
-        "archestra_invalidtoken1234567890ab",
+        `${LEGACY_ARCHESTRA_TOKEN_PREFIXES[0]}invalidtoken1234567890ab`,
       );
       expect(result).toBeNull();
     });
@@ -397,19 +401,26 @@ describe("validateMCPGatewayToken", () => {
       expect(result).toBeNull();
     });
 
-    test("validateMCPGatewayToken skips OAuth validation for archestra_ prefixed tokens", async () => {
-      // archestra_ prefixed tokens should never reach validateOAuthToken
+    test("validateMCPGatewayToken skips OAuth validation for legacy prefixed tokens", async () => {
       const result = await validateMCPGatewayToken(
         crypto.randomUUID(),
-        "archestra_fake_token_that_does_not_exist",
+        `${LEGACY_ARCHESTRA_TOKEN_PREFIXES[0]}fake_token_that_does_not_exist`,
       );
-      // Returns null because the archestra_ token is invalid, but importantly
+      // Returns null because the legacy token is invalid, but importantly
       // it should NOT have tried OAuth token validation
       expect(result).toBeNull();
     });
 
-    test("validateMCPGatewayToken tries OAuth validation for non-archestra tokens", async () => {
-      // A non-archestra token should try OAuth validation path and return null
+    test("validateMCPGatewayToken skips OAuth validation for current prefixed tokens", async () => {
+      const result = await validateMCPGatewayToken(
+        crypto.randomUUID(),
+        `${ARCHESTRA_TOKEN_PREFIX}fake_token_that_does_not_exist`,
+      );
+      expect(result).toBeNull();
+    });
+
+    test("validateMCPGatewayToken tries OAuth validation for non-platform tokens", async () => {
+      // A non-platform token should try OAuth validation path and return null
       const result = await validateMCPGatewayToken(
         crypto.randomUUID(),
         "some-random-bearer-token",

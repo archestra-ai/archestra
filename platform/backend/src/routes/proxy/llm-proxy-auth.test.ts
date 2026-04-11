@@ -1,3 +1,7 @@
+import {
+  ARCHESTRA_TOKEN_PREFIX,
+  LEGACY_ARCHESTRA_TOKEN_PREFIXES,
+} from "@shared";
 import type { FastifyRequest } from "fastify";
 import { vi } from "vitest";
 import { VirtualApiKeyModel } from "@/models";
@@ -61,7 +65,10 @@ describe("resolveAgent", () => {
 describe("validateVirtualApiKey", () => {
   test("throws 401 for invalid/non-existent token", async () => {
     await expect(
-      validateVirtualApiKey("archestra_nonexistent", "openai"),
+      validateVirtualApiKey(
+        `${LEGACY_ARCHESTRA_TOKEN_PREFIXES[0]}nonexistent`,
+        "openai",
+      ),
     ).rejects.toThrow("Invalid virtual API key");
   });
 
@@ -172,7 +179,7 @@ describe("validateVirtualApiKey", () => {
           id: "vk-1",
           chatApiKeyId: "ck-1",
           name: "test",
-          tokenStart: "archestra_",
+          tokenStart: ARCHESTRA_TOKEN_PREFIX,
           secretId: "secret-1",
           expiresAt: null,
           lastUsedAt: null,
@@ -187,7 +194,7 @@ describe("validateVirtualApiKey", () => {
       } as never);
 
     const result = await validateVirtualApiKey(
-      "archestra_test_token",
+      `${LEGACY_ARCHESTRA_TOKEN_PREFIXES[0]}test_token`,
       "openai",
     );
     expect(result.apiKey).toBeUndefined();
@@ -270,7 +277,7 @@ describe("attemptJwksAuth", () => {
     expect(result).toBeNull();
   });
 
-  test("returns null when bearer token is a virtual key", async ({
+  test("returns null when bearer token uses a legacy virtual-key prefix", async ({
     makeOrganization,
     makeAgent,
     makeIdentityProvider,
@@ -283,7 +290,29 @@ describe("attemptJwksAuth", () => {
     });
 
     const result = await attemptJwksAuth(
-      makeFakeRequest("Bearer archestra_abc123def456"),
+      makeFakeRequest(
+        `Bearer ${LEGACY_ARCHESTRA_TOKEN_PREFIXES[0]}abc123def456`,
+      ),
+      agent,
+      "openai",
+    );
+    expect(result).toBeNull();
+  });
+
+  test("returns null when bearer token uses the current virtual-key prefix", async ({
+    makeOrganization,
+    makeAgent,
+    makeIdentityProvider,
+  }) => {
+    const org = await makeOrganization();
+    const idp = await makeIdentityProvider(org.id);
+    const agent = await makeAgent({
+      organizationId: org.id,
+      identityProviderId: idp.id,
+    });
+
+    const result = await attemptJwksAuth(
+      makeFakeRequest(`Bearer ${ARCHESTRA_TOKEN_PREFIX}abc123def456`),
       agent,
       "openai",
     );

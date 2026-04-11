@@ -11,7 +11,7 @@ import {
   propagation,
 } from "@opentelemetry/api";
 import {
-  ARCHESTRA_TOKEN_PREFIX,
+  hasArchestraTokenPrefix,
   type InteractionSource,
   InteractionSourceSchema,
   SOURCE_HEADER,
@@ -270,12 +270,16 @@ export async function handleLLMProxy<
     apiKey = provider.extractApiKey(headers);
   }
 
-  // 3. Resolve virtual API key (archestra_ prefixed)
+  // 3. Resolve platform-managed virtual API keys
   // Strip "Bearer " prefix if present — OpenAI's extractApiKey returns the full
-  // Authorization header value (e.g. "Bearer archestra_xxx"), while other providers
+  // Authorization header value (e.g. "Bearer arch_xxx"), while other providers
   // return the raw key.
   const rawApiKey = apiKey?.replace(/^Bearer\s+/i, "") ?? undefined;
-  if (!wasJwksAuthenticated && rawApiKey?.startsWith(ARCHESTRA_TOKEN_PREFIX)) {
+  if (
+    !wasJwksAuthenticated &&
+    rawApiKey &&
+    hasArchestraTokenPrefix(rawApiKey)
+  ) {
     await virtualKeyRateLimiter.check(request.ip);
     try {
       const virtualResult = await validateVirtualApiKey(

@@ -18,7 +18,7 @@ The MCP Gateway supports four client authentication paths. They do not all prese
 
 - **OAuth 2.1** and **ID-JAG** both end with an Archestra-issued OAuth access token being sent to the gateway
 - **JWKS** sends an external IdP JWT directly to the gateway
-- **Bearer token** sends a static `archestra_<token>` directly to the gateway
+- **Bearer token** sends a static platform-managed token directly to the gateway. Newly generated tokens use `arch_<token>`. Legacy `archestra_<token>` values remain valid.
 
 ### OAuth 2.1
 
@@ -43,7 +43,7 @@ Admins can change this in **Settings > MCP**. The setting is organization-wide a
 
 ### Bearer Token
 
-For direct API integrations, clients can authenticate using a static Bearer token with the header `Authorization: Bearer archestra_<token>`. Tokens can be scoped to a specific user, team, or organization. You can create and manage tokens in **Settings > Tokens**.
+For direct API integrations, clients can authenticate using a static Bearer token with the header `Authorization: Bearer arch_<token>`. Legacy `archestra_<token>` values still authenticate correctly. Tokens can be scoped to a specific user, team, or organization. You can create and manage tokens in **Settings > Tokens**.
 
 Bearer tokens authenticate the client to Archestra. They are not enterprise assertions by themselves. If a gateway also needs enterprise-managed upstream credentials, Archestra must still have a usable IdP token for the matched user.
 
@@ -102,7 +102,7 @@ Cursor can reach the gateway through four supported auth paths:
 - **OAuth 2.1**: Cursor completes the standard MCP Authorization flow, receives an Archestra-issued access token, then calls the gateway with that token
 - **ID-JAG**: Cursor sends an ID-JAG to Archestra's token endpoint, receives an Archestra-issued access token, then calls the gateway with that token
 - **JWKS**: Cursor calls the gateway directly with an external IdP JWT, and Archestra validates it against the linked IdP JWKS
-- **Bearer token**: Cursor calls the gateway directly with a static `archestra_<token>` value issued by Archestra
+- **Bearer token**: Cursor calls the gateway directly with a static platform-managed token issued by Archestra
 
 For downstream enterprise-managed credentials, these modes are not equivalent:
 
@@ -154,7 +154,7 @@ This credential resolution enables a powerful workflow: an admin installs upstre
 
 MCP servers that connect to external services like GitHub, Atlassian, or ServiceNow need their own credentials. Archestra manages this with a two-token model:
 
-- **Token A** authenticates the client to the gateway using an Archestra OAuth access token, an external IdP JWT via JWKS, or an `archestra_<token>` bearer token (described above).
+- **Token A** authenticates the client to the gateway using an Archestra OAuth access token, an external IdP JWT via JWKS, or a platform-managed bearer token such as `arch_<token>` (legacy `archestra_<token>` values also work).
 - **Token B** authenticates the gateway to the upstream MCP server. This token is resolved and injected by Archestra at runtime.
 
 The client only ever sends Token A. Archestra resolves Token B behind the scenes.

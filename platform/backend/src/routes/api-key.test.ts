@@ -1,3 +1,4 @@
+import { ARCHESTRA_TOKEN_PREFIX } from "@shared";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/server";
@@ -168,12 +169,15 @@ describe("api key routes", () => {
   });
 
   test("normalizes a successful create response", async () => {
+    const tokenStart = `${ARCHESTRA_TOKEN_PREFIX}abcd`;
+    const tokenValue = `${ARCHESTRA_TOKEN_PREFIX}abcd1234`;
+
     createApiKeyMock.mockResolvedValue({
       id: "key-1",
       configId: "default",
       name: "CLI Key",
-      start: "archestra_abcd",
-      prefix: "archestra_",
+      start: tokenStart,
+      prefix: ARCHESTRA_TOKEN_PREFIX,
       referenceId: userId,
       enabled: true,
       refillInterval: null,
@@ -190,7 +194,7 @@ describe("api key routes", () => {
       updatedAt: "2026-03-15T00:00:00.000Z",
       metadata: { scope: "cli" },
       permissions: { apiKey: ["read"] },
-      key: "archestra_abcd1234",
+      key: tokenValue,
     });
 
     const response = await app.inject({
@@ -206,21 +210,24 @@ describe("api key routes", () => {
     expect(response.json()).toMatchObject({
       id: "key-1",
       name: "CLI Key",
-      start: "archestra_abcd",
-      prefix: "archestra_",
-      key: "archestra_abcd1234",
+      start: tokenStart,
+      prefix: ARCHESTRA_TOKEN_PREFIX,
+      key: tokenValue,
       metadata: { scope: "cli" },
       permissions: { apiKey: ["read"] },
     });
   });
 
   test("omits a null name before calling better-auth createApiKey", async () => {
+    const tokenStart = `${ARCHESTRA_TOKEN_PREFIX}abcd`;
+    const tokenValue = `${ARCHESTRA_TOKEN_PREFIX}abcd1234`;
+
     createApiKeyMock.mockResolvedValue({
       id: "key-1",
       configId: "default",
       name: null,
-      start: "archestra_abcd",
-      prefix: "archestra_",
+      start: tokenStart,
+      prefix: ARCHESTRA_TOKEN_PREFIX,
       referenceId: userId,
       enabled: true,
       refillInterval: null,
@@ -237,7 +244,7 @@ describe("api key routes", () => {
       updatedAt: "2026-03-15T00:00:00.000Z",
       metadata: null,
       permissions: null,
-      key: "archestra_abcd1234",
+      key: tokenValue,
     });
 
     const response = await app.inject({

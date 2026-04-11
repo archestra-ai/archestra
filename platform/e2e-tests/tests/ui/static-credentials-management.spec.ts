@@ -178,16 +178,24 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
           catalogItemName,
           gatewayName: teamGateway?.name,
         });
+        const expectedAssignableCredentials =
+          user === "Admin"
+            ? expectedCredentials.filter(
+                (credential) => credential !== DEFAULT_TEAM_NAME,
+              )
+            : expectedCredentials;
         const visibleStaticCredentials =
           await getVisibleStaticCredentials(page);
-        for (const credential of expectedCredentials) {
+        for (const credential of expectedAssignableCredentials) {
           await expect(visibleStaticCredentials).toContain(credential);
         }
         await expect(visibleStaticCredentials).toHaveLength(
-          expectedCredentials.length,
+          expectedAssignableCredentials.length,
         );
         await page
-          .getByRole("option", { name: expectedCredentials[0] ?? "" })
+          .getByRole("option", {
+            name: expectedAssignableCredentials[0] ?? "",
+          })
           .click();
         await page.keyboard.press("Escape");
         await page.waitForTimeout(200);

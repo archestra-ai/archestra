@@ -4,8 +4,24 @@ export const DEFAULT_APP_FULL_NAME = "Archestra.AI";
 export const DEFAULT_APP_DESCRIPTION =
   "Enterprise MCP-native Secure AI Platform";
 
-/** Prefix for all Archestra-generated tokens (team tokens, user tokens, virtual API keys, API keys) */
-export const ARCHESTRA_TOKEN_PREFIX = "archestra_";
+/**
+ * Prefix used for newly generated platform-managed tokens (team tokens, user
+ * tokens, virtual API keys, API keys). Keep this branding-neutral.
+ */
+export const ARCHESTRA_TOKEN_PREFIX = "arch_";
+
+/**
+ * Legacy token prefixes that must remain valid for backwards compatibility.
+ */
+export const LEGACY_ARCHESTRA_TOKEN_PREFIXES = ["archestra_"] as const;
+
+/**
+ * All accepted platform-managed token prefixes, ordered from current to legacy.
+ */
+export const ALL_ARCHESTRA_TOKEN_PREFIXES = [
+  ARCHESTRA_TOKEN_PREFIX,
+  ...LEGACY_ARCHESTRA_TOKEN_PREFIXES,
+] as const;
 
 export const DEFAULT_ADMIN_EMAIL = "admin@example.com";
 export const DEFAULT_ADMIN_PASSWORD = "password";
@@ -21,6 +37,10 @@ export const DEFAULT_MCP_GATEWAY_NAME = "Default MCP Gateway";
 export const DEFAULT_LLM_PROXY_NAME = "Default LLM Proxy";
 /** @deprecated Default Team is no longer auto-created/auto-assigned. Kept for backward compat with E2E tests. */
 export const DEFAULT_TEAM_NAME = "Default Team";
+
+export const MCP_OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS = 300;
+export const MCP_OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS = 31_536_000;
+export const DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS = 31_536_000;
 
 /**
  * Separator used to construct fully-qualified MCP tool names
@@ -102,3 +122,14 @@ export const TimeInMs = {
 } as const;
 
 export const AUTO_PROVISIONED_INVITATION_STATUS = "auto-provisioned";
+
+export function getArchestraTokenPrefix(value: string): string | null {
+  return (
+    ALL_ARCHESTRA_TOKEN_PREFIXES.find((prefix) => value.startsWith(prefix)) ??
+    null
+  );
+}
+
+export function hasArchestraTokenPrefix(value: string): boolean {
+  return getArchestraTokenPrefix(value) !== null;
+}

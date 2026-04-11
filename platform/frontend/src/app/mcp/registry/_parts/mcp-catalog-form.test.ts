@@ -287,6 +287,11 @@ describe("formSchema", () => {
           redirect_uris: "https://localhost:3000/oauth-callback",
           scopes: "read,write",
           supports_resource_metadata: true,
+          authServerUrl: "https://auth.example.com",
+          wellKnownUrl:
+            "https://auth.example.com/.well-known/openid-configuration",
+          resourceMetadataUrl:
+            "https://api.example.com/.well-known/oauth-protected-resource",
         },
         localConfig: undefined,
       };

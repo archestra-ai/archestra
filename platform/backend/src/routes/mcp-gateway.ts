@@ -148,7 +148,7 @@ async function handleMcpPostRequest(
 // =============================================================================
 // MCP Gateway endpoints with token authentication (stateless)
 // /v1/mcp/<profile_id>
-// Authorization header: Bearer <archestra_token>
+// Authorization header: Bearer <platform_token>
 // =============================================================================
 export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const { endpoint } = config.mcpGateway;
@@ -199,7 +199,7 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return {
           error: "Unauthorized",
           message:
-            "Missing or invalid Authorization header. Expected: Bearer <archestra_token> or Bearer <agent-id>",
+            "Missing or invalid Authorization header. Expected: Bearer <platform_token> or Bearer <agent-id>",
         };
       }
 
@@ -228,7 +228,7 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   // POST endpoint for JSON-RPC requests with profile ID in URL
-  // New auth: Validates archestra token for the profile
+  // New auth: Validates a platform-managed token for the profile
   fastify.post(
     `${endpoint}/:profileId`,
     {
@@ -253,7 +253,7 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           error: {
             code: -32000,
             message:
-              "Unauthorized: Missing or invalid Authorization header. Expected: Bearer <archestra_token> or Bearer <agent-id>",
+              "Unauthorized: Missing or invalid Authorization header. Expected: Bearer <platform_token> or Bearer <agent-id>",
           },
           id: null,
         };

@@ -3,7 +3,7 @@ title: "Authentication"
 category: MCP
 order: 4
 description: "How authentication works for MCP clients and upstream MCP servers"
-lastUpdated: 2026-04-08
+lastUpdated: 2026-04-11
 ---
 
 <!--
@@ -18,7 +18,7 @@ The MCP Gateway supports four client authentication paths. They do not all prese
 
 - **OAuth 2.1** and **ID-JAG** both end with an Archestra-issued OAuth access token being sent to the gateway
 - **JWKS** sends an external IdP JWT directly to the gateway
-- **Bearer token** sends a static `archestra_<token>` directly to the gateway
+- **Bearer token** sends a static platform-managed token directly to the gateway. Newly generated tokens use `arch_<token>`. Legacy `archestra_<token>` values remain valid.
 
 ### OAuth 2.1
 
@@ -35,9 +35,15 @@ Endpoint discovery is automatic. The gateway exposes standard well-known endpoin
 - `/.well-known/oauth-protected-resource` (RFC 9728)
 - `/.well-known/oauth-authorization-server` (RFC 8414)
 
+#### Token lifetime
+
+Archestra returns the lifetime of its MCP OAuth access tokens through the standard `expires_in` field. The default lifetime is 1 year, which reduces unnecessary reconnects for MCP-native clients like desktop apps.
+
+Admins can change this in **Settings > MCP**. The setting is organization-wide and applies to newly issued Archestra MCP OAuth 2.1 access tokens.
+
 ### Bearer Token
 
-For direct API integrations, clients can authenticate using a static Bearer token with the header `Authorization: Bearer archestra_<token>`. Tokens can be scoped to a specific user, team, or organization. You can create and manage tokens in **Settings > Tokens**.
+For direct API integrations, clients can authenticate using a static Bearer token with the header `Authorization: Bearer arch_<token>`. Legacy `archestra_<token>` values still authenticate correctly. Tokens can be scoped to a specific user, team, or organization. You can create and manage tokens in **Settings > Tokens**.
 
 Bearer tokens authenticate the client to Archestra. They are not enterprise assertions by themselves. If a gateway also needs enterprise-managed upstream credentials, Archestra must still have a usable IdP token for the matched user.
 
@@ -96,7 +102,7 @@ Cursor can reach the gateway through four supported auth paths:
 - **OAuth 2.1**: Cursor completes the standard MCP Authorization flow, receives an Archestra-issued access token, then calls the gateway with that token
 - **ID-JAG**: Cursor sends an ID-JAG to Archestra's token endpoint, receives an Archestra-issued access token, then calls the gateway with that token
 - **JWKS**: Cursor calls the gateway directly with an external IdP JWT, and Archestra validates it against the linked IdP JWKS
-- **Bearer token**: Cursor calls the gateway directly with a static `archestra_<token>` value issued by Archestra
+- **Bearer token**: Cursor calls the gateway directly with a static platform-managed token issued by Archestra
 
 For downstream enterprise-managed credentials, these modes are not equivalent:
 
@@ -148,7 +154,7 @@ This credential resolution enables a powerful workflow: an admin installs upstre
 
 MCP servers that connect to external services like GitHub, Atlassian, or ServiceNow need their own credentials. Archestra manages this with a two-token model:
 
-- **Token A** authenticates the client to the gateway using an Archestra OAuth access token, an external IdP JWT via JWKS, or an `archestra_<token>` bearer token (described above).
+- **Token A** authenticates the client to the gateway using an Archestra OAuth access token, an external IdP JWT via JWKS, or a platform-managed bearer token such as `arch_<token>` (legacy `archestra_<token>` values also work).
 - **Token B** authenticates the gateway to the upstream MCP server. This token is resolved and injected by Archestra at runtime.
 
 The client only ever sends Token A. Archestra resolves Token B behind the scenes.
@@ -325,6 +331,8 @@ Your server (or its OAuth provider) needs to expose two things:
 - A 401 response with a `WWW-Authenticate` header when tokens are missing or expired
 
 Archestra handles everything else: endpoint discovery, client registration, the authorization code flow with PKCE, token storage, and automatic refresh when tokens expire.
+
+If the MCP server URL is different from the OAuth issuer or metadata host, configure explicit OAuth discovery overrides in the MCP catalog item. Archestra can use a separate authorization server URL, a direct well-known metadata URL, and a direct resource metadata URL instead of deriving discovery from the MCP server URL.
 
 Your server receives an `Authorization: Bearer <access_token>` header with each request from the gateway.
 

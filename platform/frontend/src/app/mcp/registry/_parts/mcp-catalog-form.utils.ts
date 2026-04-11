@@ -93,6 +93,10 @@ export function transformFormToApiData(
     data.oauthConfig = {
       name: values.name, // Use name as OAuth provider name
       server_url: oauthServerUrl, // OAuth server URL for discovery/authorization
+      auth_server_url: values.oauthConfig.authServerUrl || undefined,
+      well_known_url: values.oauthConfig.wellKnownUrl || undefined,
+      resource_metadata_url:
+        values.oauthConfig.resourceMetadataUrl || undefined,
       client_id: values.oauthConfig.client_id || "",
       // Only include client_secret if no BYOS vault path is set
       client_secret: values.oauthClientSecretVaultPath
@@ -220,6 +224,9 @@ export function transformCatalogItemToFormValues(
         redirect_uris: string;
         scopes: string;
         supports_resource_metadata: boolean;
+        authServerUrl?: string;
+        wellKnownUrl?: string;
+        resourceMetadataUrl?: string;
         oauthServerUrl?: string;
       }
     | undefined;
@@ -234,6 +241,9 @@ export function transformCatalogItemToFormValues(
       scopes: item.oauthConfig.scopes?.join(", ") || "",
       supports_resource_metadata:
         item.oauthConfig.supports_resource_metadata ?? true,
+      authServerUrl: item.oauthConfig.auth_server_url || "",
+      wellKnownUrl: item.oauthConfig.well_known_url || "",
+      resourceMetadataUrl: item.oauthConfig.resource_metadata_url || "",
       // For local servers, populate oauthServerUrl from server_url
       oauthServerUrl:
         item.serverType === "local"
@@ -420,6 +430,9 @@ export function transformExternalCatalogToFormValues(
       scopes: server.oauth_config.scopes?.join(", ") || "read, write",
       supports_resource_metadata:
         server.oauth_config.supports_resource_metadata ?? true,
+      authServerUrl: server.oauth_config.auth_server_url || "",
+      wellKnownUrl: server.oauth_config.well_known_url || "",
+      resourceMetadataUrl: server.oauth_config.resource_metadata_url || "",
       oauthServerUrl:
         server.server.type === "local"
           ? server.oauth_config.server_url || ""
@@ -559,6 +572,9 @@ export function transformExternalCatalogToFormValues(
           : "",
       scopes: "read, write",
       supports_resource_metadata: true,
+      authServerUrl: "",
+      wellKnownUrl: "",
+      resourceMetadataUrl: "",
     },
     localConfig: localConfig ?? {
       command: "",

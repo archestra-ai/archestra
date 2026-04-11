@@ -36,7 +36,7 @@ export const API_BASE_URL =
   process.env.E2E_API_BASE_URL || "http://localhost:9000";
 export const WIREMOCK_BASE_URL =
   process.env.E2E_WIREMOCK_BASE_URL ||
-  (IS_CI ? "http://127.0.0.1:30080" : "http://127.0.0.1:9092");
+  (IS_CI ? "http://127.0.0.1:8080" : "http://127.0.0.1:9092");
 
 // Internal WireMock URL for backend-to-wiremock connections (used when storing URLs in database)
 // In CI, the backend pod needs to use the Kubernetes service DNS name
@@ -148,6 +148,15 @@ export const MCP_SERVER_JWKS_EXTERNAL_URL = "http://localhost:30082";
 export const MCP_SERVER_JWKS_BACKEND_URL = IS_CI
   ? "http://e2e-tests-mcp-server-jwks:3456"
   : "http://localhost:30082";
+
+export const MCP_SERVER_ID_JAG_EXTERNAL_URL = "http://localhost:30084";
+export const MCP_SERVER_ID_JAG_BACKEND_URL = IS_CI
+  ? "http://e2e-tests-mcp-server-id-jag:3458"
+  : "http://localhost:30084";
+export const MCP_SERVER_ID_JAG_GATEWAY_AUDIENCE = "id-jag-gateway-client";
+export const MCP_SERVER_ID_JAG_RESOURCE_CLIENT_ID = "id-jag-resource-client";
+export const MCP_SERVER_ID_JAG_RESOURCE_CLIENT_SECRET =
+  "id-jag-resource-secret";
 
 /** Docker image for the JWKS MCP server (used for local K8s deployment tests) */
 export const MCP_SERVER_JWKS_DOCKER_IMAGE =

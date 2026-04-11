@@ -41,6 +41,13 @@ describe("config routes", () => {
     expect(response.json()).toEqual({
       disableBasicAuth: expect.any(Boolean),
       disableInvitations: expect.any(Boolean),
+      analytics: {
+        enabled: expect.any(Boolean),
+        posthog: {
+          key: expect.any(String),
+          host: expect.any(String),
+        },
+      },
     });
   });
 

@@ -36,6 +36,7 @@ import {
   UpdateAppearanceSettingsSchema,
   UpdateKnowledgeSettingsSchema,
   UpdateLlmSettingsSchema,
+  UpdateMcpSettingsSchema,
   UpdateSecuritySettingsSchema,
 } from "@/types";
 
@@ -181,6 +182,28 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      const organization = await OrganizationModel.patch(organizationId, body);
+
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
+      }
+
+      return reply.send(organization);
+    },
+  );
+
+  fastify.patch(
+    "/api/organization/mcp-settings",
+    {
+      schema: {
+        operationId: RouteId.UpdateMcpSettings,
+        description: "Update MCP settings (OAuth access token lifetime)",
+        tags: ["Organization"],
+        body: UpdateMcpSettingsSchema,
+        response: constructResponseSchema(SelectOrganizationSchema),
+      },
+    },
+    async ({ organizationId, body }, reply) => {
       const organization = await OrganizationModel.patch(organizationId, body);
 
       if (!organization) {

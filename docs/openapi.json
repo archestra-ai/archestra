@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.5"
+    "version": "1.2.9"
   },
   "components": {
     "schemas": {
@@ -72732,11 +72732,41 @@
                     },
                     "disableInvitations": {
                       "type": "boolean"
+                    },
+                    "analytics": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "posthog": {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string"
+                            },
+                            "host": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "key",
+                            "host"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "posthog"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
                     "disableBasicAuth",
-                    "disableInvitations"
+                    "disableInvitations",
+                    "analytics"
                   ],
                   "additionalProperties": false
                 }
@@ -131700,6 +131730,11 @@
                     },
                     "showTwoFactor": {
                       "type": "boolean"
+                    },
+                    "mcpOauthAccessTokenLifetimeSeconds": {
+                      "type": "integer",
+                      "minimum": 300,
+                      "maximum": 31536000
                     }
                   },
                   "required": [
@@ -131736,7 +131771,8 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
-                    "showTwoFactor"
+                    "showTwoFactor",
+                    "mcpOauthAccessTokenLifetimeSeconds"
                   ],
                   "additionalProperties": false
                 }
@@ -132323,6 +132359,11 @@
                     },
                     "showTwoFactor": {
                       "type": "boolean"
+                    },
+                    "mcpOauthAccessTokenLifetimeSeconds": {
+                      "type": "integer",
+                      "minimum": 300,
+                      "maximum": 31536000
                     }
                   },
                   "required": [
@@ -132359,7 +132400,8 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
-                    "showTwoFactor"
+                    "showTwoFactor",
+                    "mcpOauthAccessTokenLifetimeSeconds"
                   ],
                   "additionalProperties": false
                 }
@@ -133192,6 +133234,11 @@
                     },
                     "showTwoFactor": {
                       "type": "boolean"
+                    },
+                    "mcpOauthAccessTokenLifetimeSeconds": {
+                      "type": "integer",
+                      "minimum": 300,
+                      "maximum": 31536000
                     }
                   },
                   "required": [
@@ -133228,7 +133275,8 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
-                    "showTwoFactor"
+                    "showTwoFactor",
+                    "mcpOauthAccessTokenLifetimeSeconds"
                   ],
                   "additionalProperties": false
                 }
@@ -133723,6 +133771,11 @@
                     },
                     "showTwoFactor": {
                       "type": "boolean"
+                    },
+                    "mcpOauthAccessTokenLifetimeSeconds": {
+                      "type": "integer",
+                      "minimum": 300,
+                      "maximum": 31536000
                     }
                   },
                   "required": [
@@ -133759,7 +133812,8 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
-                    "showTwoFactor"
+                    "showTwoFactor",
+                    "mcpOauthAccessTokenLifetimeSeconds"
                   ],
                   "additionalProperties": false
                 }
@@ -134272,6 +134326,11 @@
                     },
                     "showTwoFactor": {
                       "type": "boolean"
+                    },
+                    "mcpOauthAccessTokenLifetimeSeconds": {
+                      "type": "integer",
+                      "minimum": 300,
+                      "maximum": 31536000
                     }
                   },
                   "required": [
@@ -134308,7 +134367,8 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
-                    "showTwoFactor"
+                    "showTwoFactor",
+                    "mcpOauthAccessTokenLifetimeSeconds"
                   ],
                   "additionalProperties": false
                 }
@@ -134530,6 +134590,527 @@
           "kind": "static",
           "permissions": [
             "agentSettings:update"
+          ]
+        }
+      }
+    },
+    "/api/organization/mcp-settings": {
+      "patch": {
+        "operationId": "updateMcpSettings",
+        "tags": [
+          "Organization"
+        ],
+        "description": "Update MCP settings (OAuth access token lifetime)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Customize organization appearance, authentication, etc",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "mcpOauthAccessTokenLifetimeSeconds": {
+                    "type": "integer",
+                    "minimum": 300,
+                    "maximum": 31536000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "logo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "logoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "metadata": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "limitCleanupInterval": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
+                    },
+                    "onboardingComplete": {
+                      "type": "boolean"
+                    },
+                    "theme": {
+                      "type": "string",
+                      "enum": [
+                        "modern-minimal",
+                        "clean-slate",
+                        "mono",
+                        "twitter",
+                        "tangerine",
+                        "bubblegum",
+                        "caffeine",
+                        "amber-minimal",
+                        "cosmic-night",
+                        "doom-64",
+                        "mocha-mousse",
+                        "nature",
+                        "sunset-horizon",
+                        "neo-brutalism",
+                        "vercel",
+                        "claude",
+                        "vintage-paper",
+                        "boxy-minimalistic",
+                        "catppuccin",
+                        "solarized-dark",
+                        "gruvbox-dark",
+                        "dracula-dark",
+                        "monokai-dark",
+                        "moonlight-dark"
+                      ]
+                    },
+                    "customFont": {
+                      "type": "string",
+                      "enum": [
+                        "lato",
+                        "inter",
+                        "open-sans",
+                        "roboto",
+                        "source-sans-pro",
+                        "jetbrains-mono"
+                      ]
+                    },
+                    "convertToolResultsToToon": {
+                      "type": "boolean"
+                    },
+                    "compressionScope": {
+                      "type": "string",
+                      "enum": [
+                        "organization",
+                        "team"
+                      ]
+                    },
+                    "globalToolPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "permissive",
+                        "restrictive"
+                      ]
+                    },
+                    "allowChatFileUploads": {
+                      "type": "boolean"
+                    },
+                    "embeddingModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "embeddingDimensions": {
+                      "nullable": true,
+                      "type": "number"
+                    },
+                    "embeddingChatApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "rerankerChatApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "rerankerModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "defaultLlmModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "defaultLlmProvider": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "openai",
+                        "gemini",
+                        "anthropic",
+                        "bedrock",
+                        "cohere",
+                        "cerebras",
+                        "mistral",
+                        "perplexity",
+                        "groq",
+                        "xai",
+                        "openrouter",
+                        "vllm",
+                        "ollama",
+                        "zhipuai",
+                        "deepseek",
+                        "minimax",
+                        "azure"
+                      ]
+                    },
+                    "defaultLlmApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultAgentId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "favicon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "appName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "ogDescription": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "footerText": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatLinks": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "label": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 25
+                          },
+                          "url": {
+                            "type": "string",
+                            "maxLength": 2000
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "url"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "chatPlaceholders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "animateChatPlaceholders": {
+                      "type": "boolean"
+                    },
+                    "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatErrorSupportMessage": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "showTwoFactor": {
+                      "type": "boolean"
+                    },
+                    "mcpOauthAccessTokenLifetimeSeconds": {
+                      "type": "integer",
+                      "minimum": 300,
+                      "maximum": 31536000
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "slug",
+                    "logo",
+                    "logoDark",
+                    "createdAt",
+                    "metadata",
+                    "limitCleanupInterval",
+                    "onboardingComplete",
+                    "theme",
+                    "customFont",
+                    "convertToolResultsToToon",
+                    "compressionScope",
+                    "globalToolPolicy",
+                    "allowChatFileUploads",
+                    "embeddingModel",
+                    "embeddingDimensions",
+                    "embeddingChatApiKeyId",
+                    "rerankerChatApiKeyId",
+                    "rerankerModel",
+                    "defaultLlmModel",
+                    "defaultLlmProvider",
+                    "defaultLlmApiKeyId",
+                    "defaultAgentId",
+                    "favicon",
+                    "appName",
+                    "ogDescription",
+                    "footerText",
+                    "chatLinks",
+                    "chatPlaceholders",
+                    "animateChatPlaceholders",
+                    "iconLogo",
+                    "chatErrorSupportMessage",
+                    "showTwoFactor",
+                    "mcpOauthAccessTokenLifetimeSeconds"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "organizationSettings:update"
           ]
         }
       }
@@ -134803,6 +135384,11 @@
                     },
                     "showTwoFactor": {
                       "type": "boolean"
+                    },
+                    "mcpOauthAccessTokenLifetimeSeconds": {
+                      "type": "integer",
+                      "minimum": 300,
+                      "maximum": 31536000
                     }
                   },
                   "required": [
@@ -134839,7 +135425,8 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
-                    "showTwoFactor"
+                    "showTwoFactor",
+                    "mcpOauthAccessTokenLifetimeSeconds"
                   ],
                   "additionalProperties": false
                 }
@@ -135301,6 +135888,11 @@
                     },
                     "showTwoFactor": {
                       "type": "boolean"
+                    },
+                    "mcpOauthAccessTokenLifetimeSeconds": {
+                      "type": "integer",
+                      "minimum": 300,
+                      "maximum": 31536000
                     }
                   },
                   "required": [
@@ -135337,7 +135929,8 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
-                    "showTwoFactor"
+                    "showTwoFactor",
+                    "mcpOauthAccessTokenLifetimeSeconds"
                   ],
                   "additionalProperties": false
                 }
@@ -136094,6 +136687,11 @@
                     },
                     "showTwoFactor": {
                       "type": "boolean"
+                    },
+                    "mcpOauthAccessTokenLifetimeSeconds": {
+                      "type": "integer",
+                      "minimum": 300,
+                      "maximum": 31536000
                     }
                   },
                   "required": [
@@ -136130,7 +136728,8 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
-                    "showTwoFactor"
+                    "showTwoFactor",
+                    "mcpOauthAccessTokenLifetimeSeconds"
                   ],
                   "additionalProperties": false
                 }
@@ -150660,6 +151259,9 @@
                           "issuer": {
                             "type": "string"
                           },
+                          "skipDiscovery": {
+                            "type": "boolean"
+                          },
                           "pkce": {
                             "type": "boolean"
                           },
@@ -151280,6 +151882,9 @@
                       "issuer": {
                         "type": "string"
                       },
+                      "skipDiscovery": {
+                        "type": "boolean"
+                      },
                       "pkce": {
                         "type": "boolean"
                       },
@@ -151658,6 +152263,9 @@
                       "properties": {
                         "issuer": {
                           "type": "string"
+                        },
+                        "skipDiscovery": {
+                          "type": "boolean"
                         },
                         "pkce": {
                           "type": "boolean"
@@ -152540,6 +153148,9 @@
                         "issuer": {
                           "type": "string"
                         },
+                        "skipDiscovery": {
+                          "type": "boolean"
+                        },
                         "pkce": {
                           "type": "boolean"
                         },
@@ -153159,6 +153770,9 @@
                       "issuer": {
                         "type": "string"
                       },
+                      "skipDiscovery": {
+                        "type": "boolean"
+                      },
                       "pkce": {
                         "type": "boolean"
                       },
@@ -153538,6 +154152,9 @@
                       "properties": {
                         "issuer": {
                           "type": "string"
+                        },
+                        "skipDiscovery": {
+                          "type": "boolean"
                         },
                         "pkce": {
                           "type": "boolean"

@@ -1,7 +1,7 @@
 import { render, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import config from "@/lib/config/config";
+import { usePublicConfig } from "@/lib/config/config.query";
 import { PostHogProviderWrapper } from "./posthog-provider";
 
 const { mockIdentify, mockInit, mockReset } = vi.hoisted(() => ({
@@ -33,9 +33,20 @@ vi.mock("@/lib/clients/auth/auth-client", () => ({
   },
 }));
 
+vi.mock("@/lib/config/config.query", () => ({
+  usePublicConfig: vi.fn(),
+}));
+
 describe("PostHogProviderWrapper", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(usePublicConfig).mockReturnValue(
+      makePublicConfigResult({
+        enabled: true,
+        key: "ph_test_key",
+        host: "https://posthog.example.com",
+      }),
+    );
   });
 
   const makeSessionResult = ({
@@ -52,6 +63,34 @@ describe("PostHogProviderWrapper", () => {
       error: null,
       refetch: vi.fn(),
     }) as unknown as ReturnType<typeof authClient.useSession>;
+
+  const makePublicConfigResult = ({
+    enabled,
+    key,
+    host,
+    isLoading = false,
+  }: {
+    enabled: boolean;
+    key: string;
+    host: string;
+    isLoading?: boolean;
+  }) =>
+    ({
+      data: isLoading
+        ? undefined
+        : {
+            disableBasicAuth: false,
+            disableInvitations: false,
+            analytics: {
+              enabled,
+              posthog: {
+                key,
+                host,
+              },
+            },
+          },
+      isLoading,
+    }) as unknown as ReturnType<typeof usePublicConfig>;
 
   it("initializes PostHog and identifies the authenticated user", async () => {
     vi.mocked(authClient.useSession).mockReturnValue(
@@ -75,6 +114,12 @@ describe("PostHogProviderWrapper", () => {
 
     await waitFor(() => {
       expect(mockInit).toHaveBeenCalledTimes(1);
+      expect(mockInit).toHaveBeenCalledWith(
+        "ph_test_key",
+        expect.objectContaining({
+          api_host: "https://posthog.example.com",
+        }),
+      );
       expect(mockIdentify).toHaveBeenCalledWith("user-123", {
         email: "user@example.com",
         name: "Example User",
@@ -244,46 +289,73 @@ describe("PostHogProviderWrapper", () => {
   });
 
   it("does nothing when analytics is disabled", async () => {
-    const enabledDescriptor = Object.getOwnPropertyDescriptor(
-      config.posthog,
-      "enabled",
+    vi.mocked(usePublicConfig).mockReturnValue(
+      makePublicConfigResult({
+        enabled: false,
+        key: "ph_disabled_key",
+        host: "https://posthog.example.com",
+      }),
     );
 
-    try {
-      Object.defineProperty(config.posthog, "enabled", {
-        configurable: true,
-        value: false,
-      });
-
-      vi.mocked(authClient.useSession).mockReturnValue(
-        makeSessionResult({
-          data: {
-            user: {
-              id: "user-123",
-              email: "user@example.com",
-              name: "Example User",
-            },
-            session: { id: "session-123" },
+    vi.mocked(authClient.useSession).mockReturnValue(
+      makeSessionResult({
+        data: {
+          user: {
+            id: "user-123",
+            email: "user@example.com",
+            name: "Example User",
           },
-        }),
-      );
+          session: { id: "session-123" },
+        },
+      }),
+    );
 
-      render(
-        <PostHogProviderWrapper>
-          <div>child</div>
-        </PostHogProviderWrapper>,
-      );
+    render(
+      <PostHogProviderWrapper>
+        <div>child</div>
+      </PostHogProviderWrapper>,
+    );
 
-      await waitFor(() => {
-        expect(mockInit).not.toHaveBeenCalled();
-      });
-      expect(mockIdentify).not.toHaveBeenCalled();
-      expect(mockReset).not.toHaveBeenCalled();
-    } finally {
-      if (enabledDescriptor) {
-        Object.defineProperty(config.posthog, "enabled", enabledDescriptor);
-      }
-    }
+    await waitFor(() => {
+      expect(mockInit).not.toHaveBeenCalled();
+    });
+    expect(mockIdentify).not.toHaveBeenCalled();
+    expect(mockReset).not.toHaveBeenCalled();
+  });
+
+  it("does not initialize when analytics is enabled but key is empty", async () => {
+    vi.mocked(usePublicConfig).mockReturnValue(
+      makePublicConfigResult({
+        enabled: true,
+        key: "",
+        host: "https://posthog.example.com",
+      }),
+    );
+
+    vi.mocked(authClient.useSession).mockReturnValue(
+      makeSessionResult({
+        data: {
+          user: {
+            id: "user-123",
+            email: "user@example.com",
+            name: "Example User",
+          },
+          session: { id: "session-123" },
+        },
+      }),
+    );
+
+    render(
+      <PostHogProviderWrapper>
+        <div>child</div>
+      </PostHogProviderWrapper>,
+    );
+
+    await waitFor(() => {
+      expect(mockInit).not.toHaveBeenCalled();
+    });
+    expect(mockIdentify).not.toHaveBeenCalled();
+    expect(mockReset).not.toHaveBeenCalled();
   });
 
   it("does not reset PostHog while the auth session is still loading", async () => {

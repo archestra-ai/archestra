@@ -1,11 +1,15 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { OAUTH_SCOPES } from "@shared";
+import {
+  DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS,
+  OAUTH_SCOPES,
+} from "@shared";
 import { decodeProtectedHeader } from "jose";
 import config from "@/config";
 import {
   AgentModel,
   OAuthAccessTokenModel,
   OAuthClientModel,
+  OrganizationModel,
   UserModel,
 } from "@/models";
 import {
@@ -89,7 +93,7 @@ export async function exchangeIdentityAssertionForAccessToken(params: {
     );
   }
 
-  const profileId = extractProfileIdFromResource(assertionMetadata.resource);
+  const profileId = extractProfileIdFromMcpResource(assertionMetadata.resource);
   if (!profileId) {
     return invalidGrant(
       "Assertion JWT resource must reference a valid MCP Gateway URL.",
@@ -151,7 +155,10 @@ export async function exchangeIdentityAssertionForAccessToken(params: {
   const accessTokenHash = createHash("sha256")
     .update(accessToken)
     .digest("base64url");
-  const expiresInSeconds = 3600;
+  const organization = await OrganizationModel.getById(agent.organizationId);
+  const expiresInSeconds =
+    organization?.mcpOauthAccessTokenLifetimeSeconds ??
+    DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS;
 
   await OAuthAccessTokenModel.create({
     tokenHash: accessTokenHash,
@@ -177,6 +184,24 @@ export function buildOAuthIssuer(): string {
   return config.frontendBaseUrl.endsWith("/")
     ? config.frontendBaseUrl
     : `${config.frontendBaseUrl}/`;
+}
+
+export function extractProfileIdFromMcpResource(
+  resource: string,
+): string | null {
+  try {
+    const resourceUrl = new URL(resource);
+    const issuerUrl = new URL(buildOAuthIssuer());
+    if (resourceUrl.origin !== issuerUrl.origin) {
+      return null;
+    }
+
+    const { pathname } = resourceUrl;
+    const match = pathname.match(/^\/v1\/mcp\/([0-9a-f-]{36})$/i);
+    return match?.[1] ?? null;
+  } catch {
+    return null;
+  }
 }
 
 // =============================================================================
@@ -234,22 +259,6 @@ function readAssertionMetadata(assertion: string): {
       resource: extractString(decodedPayload, "resource"),
       scope: extractString(decodedPayload, "scope"),
     };
-  } catch {
-    return null;
-  }
-}
-
-function extractProfileIdFromResource(resource: string): string | null {
-  try {
-    const resourceUrl = new URL(resource);
-    const issuerUrl = new URL(buildOAuthIssuer());
-    if (resourceUrl.origin !== issuerUrl.origin) {
-      return null;
-    }
-
-    const { pathname } = resourceUrl;
-    const match = pathname.match(/^\/v1\/mcp\/([0-9a-f-]{36})$/i);
-    return match?.[1] ?? null;
   } catch {
     return null;
   }

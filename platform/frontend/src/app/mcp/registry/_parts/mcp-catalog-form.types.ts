@@ -8,6 +8,30 @@ export const oauthConfigSchema = z.object({
   redirect_uris: z.string().min(1, "At least one redirect URI is required"),
   scopes: z.string().optional().or(z.literal("")),
   supports_resource_metadata: z.boolean(),
+  authServerUrl: z
+    .string()
+    .url({ error: "Must be a valid URL" })
+    .refine((val) => val.startsWith("http://") || val.startsWith("https://"), {
+      message: "Must be an HTTP or HTTPS URL",
+    })
+    .optional()
+    .or(z.literal("")),
+  wellKnownUrl: z
+    .string()
+    .url({ error: "Must be a valid URL" })
+    .refine((val) => val.startsWith("http://") || val.startsWith("https://"), {
+      message: "Must be an HTTP or HTTPS URL",
+    })
+    .optional()
+    .or(z.literal("")),
+  resourceMetadataUrl: z
+    .string()
+    .url({ error: "Must be a valid URL" })
+    .refine((val) => val.startsWith("http://") || val.startsWith("https://"), {
+      message: "Must be an HTTP or HTTPS URL",
+    })
+    .optional()
+    .or(z.literal("")),
   // OAuth Server URL for local servers (since they don't have a serverUrl field)
   // Used for OAuth discovery/authorization, NOT for tool execution
   oauthServerUrl: z

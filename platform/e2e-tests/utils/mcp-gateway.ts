@@ -213,9 +213,21 @@ export async function getVisibleCredentials(page: Page): Promise<string[]> {
 export async function getVisibleStaticCredentials(
   page: Page,
 ): Promise<string[]> {
-  return await page
+  const credentialLabels = await page
     .getByTestId(E2eTestId.StaticCredentialToUse)
     .allTextContents();
+
+  return credentialLabels.map(stripStaticCredentialDescription);
+}
+
+function stripStaticCredentialDescription(text: string): string {
+  const [labelBeforeTeamDescription, teamDescription] =
+    text.split("Shared with team");
+  if (teamDescription !== undefined) {
+    return labelBeforeTeamDescription.trim() || teamDescription.trim();
+  }
+
+  return text.split("Owned by")[0].trim();
 }
 
 export async function assignEngineeringTeamToDefaultProfileViaApi({

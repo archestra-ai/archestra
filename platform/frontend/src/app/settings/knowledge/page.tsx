@@ -364,7 +364,6 @@ function RerankerModelSelector({
       className={cn("w-full", pulse && "animate-pulse ring-2 ring-primary/40")}
       popoverContentClassName={KNOWLEDGE_MODEL_POPOVER_CLASS}
       popoverSide="bottom"
-      popoverAvoidCollisions={false}
       truncateOptionLabels={false}
       disabled={disabled}
     />
@@ -619,7 +618,6 @@ function KnowledgeSettingsContent() {
                     )}
                     popoverContentClassName={KNOWLEDGE_MODEL_POPOVER_CLASS}
                     popoverSide="bottom"
-                    popoverAvoidCollisions={false}
                     truncateOptionLabels={false}
                     disabled={
                       !hasPermission ||

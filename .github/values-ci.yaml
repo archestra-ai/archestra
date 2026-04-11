@@ -5,10 +5,11 @@ archestra:
   # Image will be set via --set during deployment
   # image: archestra/platform:ci-test
 
-  # Deploy multiple replicas for the e2e environment to test issues we may face
-  # which could be caused by storing state in pod memory, which may only be discovered
-  # when replicas is > 1
-  replicaCount: 3
+  # The shared non-quickstart CI environment now includes the Vault K8s startup
+  # scenario, which injects the database URL via an init container. Keep a single
+  # backend replica here to avoid concurrent first-boot migrations racing each
+  # other against a fresh CI database.
+  replicaCount: 1
 
   worker:
     replicaCount: 2

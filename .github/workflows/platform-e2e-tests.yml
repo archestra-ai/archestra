@@ -272,12 +272,10 @@ jobs:
         run: kind delete cluster --name archestra-ci-cluster || true
 
       - name: Fail if non-quickstart E2E tests failed
-        if: ${{ always() }}
+        if: ${{ always() && steps.e2e.outcome == 'failure' }}
         run: |
-          if [ "${{ steps.e2e.outcome }}" = "failure" ]; then
-            echo "The non-quickstart E2E run failed."
-            exit 1
-          fi
+          echo "The non-quickstart E2E run failed."
+          exit 1
 
   # Quickstart E2E tests - validates docker run quickstart instructions work correctly
   # Runs the mcp-install.spec.ts test against the platform started via docker run

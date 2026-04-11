@@ -299,6 +299,28 @@ describe("formSchema", () => {
       expect(formSchema.parse(data)).toEqual(data);
     });
 
+    it("should reject OAuth config when only one explicit endpoint is set", () => {
+      const data = {
+        ...baseValidData,
+        authMethod: "oauth" as const,
+        serverType: "remote" as const,
+        serverUrl: "https://api.example.com/mcp",
+        oauthConfig: {
+          client_id: "test-client-id",
+          client_secret: "test-secret",
+          redirect_uris: "https://localhost:3000/oauth-callback",
+          scopes: "read,write",
+          supports_resource_metadata: true,
+          authorizationEndpoint: "https://auth.example.com/oauth/authorize",
+        },
+        localConfig: undefined,
+      };
+
+      expect(() => formSchema.parse(data)).toThrow(
+        "Authorization and token endpoints must be set together",
+      );
+    });
+
     it("should reject OAuth config with empty redirect_uris", () => {
       const data = {
         ...baseValidData,

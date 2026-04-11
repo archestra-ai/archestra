@@ -348,6 +348,21 @@ describe("OAuth helper functions", () => {
       globalThis.fetch = originalFetch;
     });
 
+    test("throws when discovery fails and only one explicit endpoint is configured", async () => {
+      globalThis.fetch = vi.fn().mockRejectedValue(new Error("404")) as Mock;
+
+      await expect(
+        discoverOAuthEndpoints({
+          server_url: "https://legacy-idp.example.com/mcp",
+          supports_resource_metadata: false,
+          authorization_endpoint:
+            "https://legacy-idp.example.com/oauth/authorize",
+        }),
+      ).rejects.toThrow("404");
+
+      globalThis.fetch = originalFetch;
+    });
+
     test("prefers explicit endpoints over discovered metadata", async () => {
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,

@@ -24,10 +24,7 @@ dev_resource_name = 'pnpm-prod' if is_prod else 'pnpm-dev'
 # Build env dict to sync ARCHESTRA_* to NEXT_PUBLIC_ARCHESTRA_* for frontend
 # This is rebuilt on each Tiltfile evaluation (triggered by .env changes)
 def get_frontend_env():
-  env = {
-    # Always disable analytics in local development
-    'NEXT_PUBLIC_ARCHESTRA_ANALYTICS': 'disabled',
-  }
+  env = {}
 
   # Sync ARCHESTRA_* to NEXT_PUBLIC_ARCHESTRA_* if not already set
   sync_vars = [
@@ -82,9 +79,9 @@ else:
     dev_resource_name + '-backend',
     # Trap ensures all child processes are killed when Tilt stops, preventing orphaned processes from blocking port 3000
     # Uses pkill -P to kill by parent PID since child processes may have their own process groups on macOS
-    serve_cmd='trap "pkill -TERM -P $$" EXIT INT TERM; ARCHESTRA_LOGGING_LEVEL=debug pnpm dev --filter @backend & wait $!',
+    serve_cmd='trap "pkill -TERM -P $$" EXIT INT TERM; ARCHESTRA_LOGGING_LEVEL=debug ARCHESTRA_ANALYTICS=disabled pnpm dev --filter @backend & wait $!',
     # On Windows, pnpm dev runs directly; cmd.exe handles process termination when Tilt stops
-    serve_cmd_bat='set ARCHESTRA_LOGGING_LEVEL=debug && pnpm dev --filter @backend',
+    serve_cmd_bat='set ARCHESTRA_LOGGING_LEVEL=debug && set ARCHESTRA_ANALYTICS=disabled && pnpm dev --filter @backend',
     labels=['dev'],
     resource_deps=['db-migrate'],
     deps=['../.env'],

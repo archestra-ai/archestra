@@ -20166,6 +20166,13 @@ export type GetPublicConfigResponses = {
     200: {
         disableBasicAuth: boolean;
         disableInvitations: boolean;
+        analytics: {
+            enabled: boolean;
+            posthog: {
+                key: string;
+                host: string;
+            };
+        };
     };
 };
 

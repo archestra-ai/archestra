@@ -72732,11 +72732,41 @@
                     },
                     "disableInvitations": {
                       "type": "boolean"
+                    },
+                    "analytics": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "posthog": {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string"
+                            },
+                            "host": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "key",
+                            "host"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "posthog"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
                     "disableBasicAuth",
-                    "disableInvitations"
+                    "disableInvitations",
+                    "analytics"
                   ],
                   "additionalProperties": false
                 }

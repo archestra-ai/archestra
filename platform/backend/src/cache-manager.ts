@@ -243,6 +243,117 @@ class CacheManager {
   }
 
   /**
+   * Atomically check and increment a rate limit counter.
+   *
+   * Uses a single SQL upsert (INSERT ... ON CONFLICT UPDATE) to atomically
+   * read, check, and increment the counter in one database operation.
+   * This prevents the race condition where concurrent requests could read the
+   * same counter value before any of them increments it.
+   *
+   * @param key - Cache key for the rate limit entry
+   * @param windowMs - Rate limit window in milliseconds
+   * @param maxRequests - Maximum requests allowed per window
+   * @returns true if rate limited (counter already at or above max), false if request is allowed
+   */
+  async atomicRateLimitCheck(
+    key: AllowedCacheKey,
+    windowMs: number,
+    maxRequests: number,
+  ): Promise<boolean> {
+    if (!this.keyv) {
+      logger.warn(
+        "CacheManager: Not started, allowing request for atomicRateLimitCheck",
+      );
+      return false;
+    }
+
+    try {
+      const keyvKey = `keyv:${key}`;
+      const now = Date.now();
+      const expiresAt = now + windowMs * 2;
+      // Keyv stores values as JSON: {"value": <actual>, "expires": <timestamp>}
+      // Our actual value is: {"count": N, "windowStart": T}
+      const newEntry = JSON.stringify({
+        value: { count: 1, windowStart: now },
+        expires: expiresAt,
+      });
+
+      const result = await db.execute<{
+        prev_value: string | null;
+        was_inserted: boolean;
+      }>(
+        sql`INSERT INTO keyv_cache (key, value)
+            VALUES (${keyvKey}, ${newEntry})
+            ON CONFLICT (key)
+            DO UPDATE SET value = (
+              CASE
+                -- If expired or window elapsed, start a new window
+                WHEN (keyv_cache.value::jsonb->'expires')::bigint <= ${now}
+                  OR ${now} - (keyv_cache.value::jsonb->'value'->>'windowStart')::bigint > ${windowMs}
+                THEN ${newEntry}::text
+                -- Otherwise increment the count
+                ELSE jsonb_set(
+                  jsonb_set(
+                    keyv_cache.value::jsonb,
+                    '{value,count}',
+                    to_jsonb(((keyv_cache.value::jsonb->'value'->>'count')::int + 1))
+                  ),
+                  '{expires}',
+                  to_jsonb(${expiresAt})
+                )::text
+              END
+            )
+            RETURNING
+              (xmax = 0) AS was_inserted,
+              CASE WHEN xmax != 0
+                THEN (
+                  SELECT old.value FROM keyv_cache old WHERE old.key = ${keyvKey}
+                )
+              END AS prev_value`,
+      );
+
+      if (result.rows.length === 0) {
+        return false;
+      }
+
+      const row = result.rows[0];
+
+      // If freshly inserted, this is the first request in a new window
+      if (row.was_inserted) {
+        return false;
+      }
+
+      // Parse the previous value to check if the limit was already reached
+      // The UPDATE already happened, so we check the pre-update count
+      if (row.prev_value) {
+        const parsed =
+          typeof row.prev_value === "string"
+            ? JSON.parse(row.prev_value)
+            : row.prev_value;
+        const prevCount: number = parsed?.value?.count ?? 0;
+        const prevWindowStart: number = parsed?.value?.windowStart ?? 0;
+        const prevExpires: number = parsed?.expires ?? 0;
+
+        // If the previous entry was expired or window elapsed, we reset (count=1)
+        if (prevExpires <= now || now - prevWindowStart > windowMs) {
+          return false;
+        }
+
+        // Rate limited if previous count was already at or above max
+        return prevCount >= maxRequests;
+      }
+
+      return false;
+    } catch (error) {
+      logger.error(
+        { error, key },
+        "CacheManager: Error in atomicRateLimitCheck, allowing request",
+      );
+      return false;
+    }
+  }
+
+  /**
    * Delete all entries with keys matching a prefix.
    * Useful for invalidating related cache entries (e.g., all chat models cache).
    *

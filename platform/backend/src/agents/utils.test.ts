@@ -3,17 +3,34 @@ import { type AllowedCacheKey, CacheKey } from "@/cache-manager";
 import { beforeEach, describe, expect, test } from "@/test";
 import { isRateLimited, type RateLimitEntry } from "./utils";
 
-// Mock cacheManager while preserving other exports (like LRUCacheManager, CacheKey)
+// Simulate atomic rate limiting with an in-memory store
 const mockCache = new Map<string, RateLimitEntry>();
 vi.mock("@/cache-manager", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/cache-manager")>();
   return {
     ...actual,
     cacheManager: {
-      get: vi.fn(async (key: string) => mockCache.get(key)),
-      set: vi.fn(async (key: string, value: RateLimitEntry) => {
-        mockCache.set(key, value);
-      }),
+      atomicRateLimitCheck: vi.fn(
+        async (key: string, windowMs: number, maxRequests: number) => {
+          const now = Date.now();
+          const entry = mockCache.get(key);
+
+          if (!entry || now - entry.windowStart > windowMs) {
+            // Start new window
+            mockCache.set(key, { count: 1, windowStart: now });
+            return false;
+          }
+
+          if (entry.count >= maxRequests) {
+            return true;
+          }
+
+          // Increment count
+          entry.count += 1;
+          mockCache.set(key, entry);
+          return false;
+        },
+      ),
     },
   };
 });

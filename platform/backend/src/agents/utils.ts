@@ -39,29 +39,5 @@ export async function isRateLimited(
   config: RateLimitConfig,
 ): Promise<boolean> {
   const { windowMs, maxRequests } = config;
-  const now = Date.now();
-  const entry = await cacheManager.get<RateLimitEntry>(cacheKey);
-
-  if (!entry || now - entry.windowStart > windowMs) {
-    // Start new window
-    await cacheManager.set(
-      cacheKey,
-      { count: 1, windowStart: now },
-      // TTL is 2x window to ensure cleanup even if requests stop
-      windowMs * 2,
-    );
-    return false;
-  }
-
-  if (entry.count >= maxRequests) {
-    return true;
-  }
-
-  // Increment count
-  await cacheManager.set(
-    cacheKey,
-    { count: entry.count + 1, windowStart: entry.windowStart },
-    windowMs * 2,
-  );
-  return false;
+  return cacheManager.atomicRateLimitCheck(cacheKey, windowMs, maxRequests);
 }

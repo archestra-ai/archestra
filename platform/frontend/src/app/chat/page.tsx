@@ -558,8 +558,12 @@ export function ChatPageContent({
   );
 
   useEffect(() => {
+    if (isForkDialogOpen) {
+      return;
+    }
+
     setForkAgentId(accessibleSharedAgentId);
-  }, [accessibleSharedAgentId]);
+  }, [accessibleSharedAgentId, isForkDialogOpen]);
 
   // Track title generation for typing animation in the header
   const conversationForTitleTracking = useMemo(

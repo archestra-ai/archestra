@@ -16,7 +16,7 @@ describe("resolveSharedConversationForkState", () => {
     });
   });
 
-  it("falls back to the first available agent when the shared agent is unavailable", () => {
+  it("requires an explicit selection when the shared agent is unavailable", () => {
     expect(
       resolveSharedConversationForkState({
         availableAgentIds: ["agent-a", "agent-b"],
@@ -26,7 +26,7 @@ describe("resolveSharedConversationForkState", () => {
     ).toEqual({
       accessibleSharedAgentId: null,
       shouldPromptForForkAgentSelection: true,
-      effectiveAgentId: "agent-a",
+      effectiveAgentId: null,
     });
   });
 

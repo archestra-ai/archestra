@@ -12,10 +12,6 @@ export function resolveSharedConversationForkState(params: {
   return {
     accessibleSharedAgentId,
     shouldPromptForForkAgentSelection: accessibleSharedAgentId === null,
-    effectiveAgentId:
-      params.selectedAgentId ??
-      accessibleSharedAgentId ??
-      params.availableAgentIds[0] ??
-      null,
+    effectiveAgentId: params.selectedAgentId ?? accessibleSharedAgentId ?? null,
   };
 }

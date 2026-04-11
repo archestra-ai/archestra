@@ -262,10 +262,6 @@ export async function startServer(
   app.listen(resolvedConfig.port, () => {});
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-  await startServer();
-}
-
 const TokenRequestSchema = z.object({
   grant_type: z.string(),
   assertion: z.string().min(1),
@@ -541,4 +537,8 @@ function oauthError(error: string, errorDescription: string) {
     error,
     error_description: errorDescription,
   };
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  await startServer();
 }

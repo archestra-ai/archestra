@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import http from "node:http";
+import net from "node:net";
 import test from "node:test";
 import { createApp } from "./server.js";
 
@@ -44,6 +47,32 @@ test("does not allow the original ID-JAG as an MCP bearer token", async () => {
     assert.equal(response.status, 401);
   } finally {
     await close();
+  }
+});
+
+test("compiled server entrypoint starts cleanly", async () => {
+  await runCommand("npx", ["tsc", "-p", "tsconfig.json"]);
+
+  const child = spawn("node", ["dist/server.js"], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      PORT: "3461",
+      BASE_URL: "http://127.0.0.1:3461",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  const exitPromise = once(child, "exit");
+
+  try {
+    assert.equal(await waitForPort(3461, 5_000), true);
+  } finally {
+    child.kill("SIGTERM");
+    await Promise.race([
+      exitPromise,
+      new Promise((resolve) => setTimeout(resolve, 1_000)),
+    ]);
   }
 });
 
@@ -163,4 +192,64 @@ async function getAvailablePort(): Promise<number> {
       });
     });
   });
+}
+
+async function waitForPort(port: number, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const connected = await new Promise<boolean>((resolve) => {
+      const socket = net.connect({ host: "127.0.0.1", port });
+      socket.once("connect", () => {
+        socket.end();
+        resolve(true);
+      });
+      socket.once("error", () => {
+        socket.destroy();
+        resolve(false);
+      });
+    });
+
+    if (connected) {
+      return true;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+
+  return false;
+}
+
+async function runCommand(command: string, args: string[]): Promise<void> {
+  const child = spawn(command, args, {
+    cwd: process.cwd(),
+    env: process.env,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  const [exitCode, stdout, stderr] = (await Promise.all([
+    once(child, "exit"),
+    readStream(child.stdout),
+    readStream(child.stderr),
+  ])) as [[number | null], string, string];
+
+  assert.equal(
+    exitCode[0],
+    0,
+    `Command failed: ${command} ${args.join(" ")}\n${stdout}\n${stderr}`,
+  );
+}
+
+async function readStream(
+  stream: NodeJS.ReadableStream | null,
+): Promise<string> {
+  if (!stream) {
+    return "";
+  }
+
+  const chunks: string[] = [];
+  for await (const chunk of stream) {
+    chunks.push(chunk.toString());
+  }
+  return chunks.join("");
 }

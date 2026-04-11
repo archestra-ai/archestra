@@ -25,6 +25,24 @@ function makeDriveItem(
   };
 }
 
+function makeFolderItem(
+  id: string,
+  name: string,
+  opts?: { lastModified?: string; childCount?: number },
+) {
+  return {
+    id,
+    name,
+    webUrl: `https://tenant.sharepoint.com/sites/test/${name}`,
+    lastModifiedDateTime: opts?.lastModified ?? "2024-01-15T10:00:00.000Z",
+    createdDateTime: "2024-01-01T00:00:00.000Z",
+    size: 0,
+    file: undefined as undefined,
+    folder: { childCount: opts?.childCount ?? 0 },
+    parentReference: { path: "/drives/drive-1/root:" },
+  };
+}
+
 function makeSitePage(
   id: string,
   title: string,
@@ -768,6 +786,244 @@ describe("SharePointConnector", () => {
 
       const apiCalls = mockApi.mock.calls.map((c) => c[0] as string);
       expect(apiCalls.some((u) => u.includes("/pages"))).toBe(false);
+    });
+  });
+
+  describe("sync — subfolder traversal", () => {
+    it("discovers and syncs files inside a direct subfolder", async () => {
+      const connector = new SharePointConnector();
+      const { mockGet, mockApi } = setupMockClient(connector);
+
+      // Root listing: one file + one subfolder
+      // Subfolder listing: one more file
+      mockGet
+        .mockResolvedValueOnce({ id: "site-123" }) // resolveSiteId
+        .mockResolvedValueOnce({ value: [{ id: "drive-1" }] }) // listDriveIds
+        .mockResolvedValueOnce({
+          value: [
+            makeDriveItem("root-file", "root.md"),
+            makeFolderItem("subfolder-1", "Engineering", { childCount: 1 }),
+          ],
+        }) // root children
+        .mockResolvedValueOnce(makeFileBuffer("# Root content")) // root.md download
+        .mockResolvedValueOnce({
+          value: [makeDriveItem("nested-file", "design.md")],
+        }) // subfolder children
+        .mockResolvedValueOnce(makeFileBuffer("# Design doc")) // design.md download
+        .mockResolvedValueOnce({ value: [] }); // sitePages
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {
+          tenantId: "test-tenant-id",
+          siteUrl: "https://tenant.sharepoint.com/sites/test",
+          driveIds: ["drive-1"],
+        },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      const allDocs = batches.flatMap((b) => b.documents);
+      const titles = allDocs.map((d) => d.title);
+
+      // Both root-level and nested files must be present
+      expect(titles).toContain("root.md");
+      expect(titles).toContain("design.md");
+
+      // The subfolder listing URL must use /items/{id}/children, not /root/children
+      const apiCalls = mockApi.mock.calls.map((c) => c[0] as string);
+      expect(apiCalls.some((u) => u.includes("/items/subfolder-1/children"))).toBe(true);
+    });
+
+    it("traverses multiple levels of nesting (depth ≥ 2)", async () => {
+      const connector = new SharePointConnector();
+      const { mockGet } = setupMockClient(connector);
+
+      // root → [subfolder-A] → [file1.txt, subfolder-B] → [file2.txt]
+      mockGet
+        .mockResolvedValueOnce({ id: "site-123" })
+        .mockResolvedValueOnce({ value: [{ id: "drive-1" }] })
+        .mockResolvedValueOnce({
+          value: [makeFolderItem("folder-a", "Level1", { childCount: 2 })],
+        }) // root: only a folder
+        .mockResolvedValueOnce({
+          value: [
+            makeDriveItem("file-1", "level1.txt"),
+            makeFolderItem("folder-b", "Level2", { childCount: 1 }),
+          ],
+        }) // folder-a children
+        .mockResolvedValueOnce(makeFileBuffer("Level 1 content")) // level1.txt
+        .mockResolvedValueOnce({
+          value: [makeDriveItem("file-2", "level2.txt")],
+        }) // folder-b children
+        .mockResolvedValueOnce(makeFileBuffer("Level 2 content")) // level2.txt
+        .mockResolvedValueOnce({ value: [] }); // sitePages
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {
+          tenantId: "test-tenant-id",
+          siteUrl: "https://tenant.sharepoint.com/sites/test",
+          driveIds: ["drive-1"],
+        },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      const titles = batches.flatMap((b) => b.documents).map((d) => d.title);
+      expect(titles).toContain("level1.txt");
+      expect(titles).toContain("level2.txt");
+    });
+
+    it("paginates within a subfolder using @odata.nextLink", async () => {
+      const connector = new SharePointConnector();
+      const { mockGet, mockApi } = setupMockClient(connector);
+
+      const subfolderNextLink =
+        "https://graph.microsoft.com/v1.0/drives/drive-1/items/folder-1/children?$skiptoken=xyz";
+
+      mockGet
+        .mockResolvedValueOnce({ id: "site-123" })
+        .mockResolvedValueOnce({ value: [{ id: "drive-1" }] })
+        .mockResolvedValueOnce({
+          value: [makeFolderItem("folder-1", "BigFolder", { childCount: 2 })],
+        }) // root: one folder
+        .mockResolvedValueOnce({
+          value: [makeDriveItem("nested-1", "page1.txt")],
+          "@odata.nextLink": subfolderNextLink,
+        }) // folder-1 page 1
+        .mockResolvedValueOnce(makeFileBuffer("Page 1 content")) // page1.txt
+        .mockResolvedValueOnce({
+          value: [makeDriveItem("nested-2", "page2.txt")],
+        }) // folder-1 page 2 (via nextLink)
+        .mockResolvedValueOnce(makeFileBuffer("Page 2 content")) // page2.txt
+        .mockResolvedValueOnce({ value: [] }); // sitePages
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {
+          tenantId: "test-tenant-id",
+          siteUrl: "https://tenant.sharepoint.com/sites/test",
+          driveIds: ["drive-1"],
+        },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      const titles = batches.flatMap((b) => b.documents).map((d) => d.title);
+      expect(titles).toContain("page1.txt");
+      expect(titles).toContain("page2.txt");
+
+      // Verify the nextLink URL was used for the second subfolder page
+      const apiCalls = mockApi.mock.calls.map((c) => c[0] as string);
+      expect(apiCalls.some((u) => u === subfolderNextLink)).toBe(true);
+    });
+
+    it("does not emit subfolder items as documents", async () => {
+      const connector = new SharePointConnector();
+      const { mockGet } = setupMockClient(connector);
+
+      mockGet
+        .mockResolvedValueOnce({ id: "site-123" })
+        .mockResolvedValueOnce({ value: [{ id: "drive-1" }] })
+        .mockResolvedValueOnce({
+          value: [
+            makeDriveItem("file-1", "doc.txt"),
+            makeFolderItem("folder-1", "SubFolder"),
+          ],
+        }) // root
+        .mockResolvedValueOnce(makeFileBuffer("Doc content")) // doc.txt
+        .mockResolvedValueOnce({ value: [] }) // empty subfolder
+        .mockResolvedValueOnce({ value: [] }); // sitePages
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {
+          tenantId: "test-tenant-id",
+          siteUrl: "https://tenant.sharepoint.com/sites/test",
+          driveIds: ["drive-1"],
+        },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      const allDocs = batches.flatMap((b) => b.documents);
+      // Only file, not folder
+      expect(allDocs).toHaveLength(1);
+      expect(allDocs[0].title).toBe("doc.txt");
+    });
+  });
+
+  describe("estimateTotalItems — subfolder traversal", () => {
+    it("counts files inside subfolders", async () => {
+      const connector = new SharePointConnector();
+      const { mockGet } = setupMockClient(connector);
+
+      // root → [root-file.txt, subfolder] → subfolder → [nested-file.txt]
+      mockGet
+        .mockResolvedValueOnce({ id: "site-123" }) // resolveSiteId
+        .mockResolvedValueOnce({ value: [{ id: "drive-1" }] }) // listDriveIds
+        .mockResolvedValueOnce({
+          value: [
+            makeDriveItem("root-file", "root.md"),
+            makeFolderItem("folder-1", "Docs", { childCount: 1 }),
+          ],
+        }) // countDriveItems: root children (batch=500)
+        .mockResolvedValueOnce({
+          value: [makeDriveItem("nested-file", "nested.md")],
+        }) // countDriveItems: folder-1 children
+        .mockResolvedValueOnce({ value: [] }); // countSitePages
+
+      const count = await connector.estimateTotalItems({
+        config: {
+          tenantId: "test-tenant-id",
+          siteUrl: "https://tenant.sharepoint.com/sites/test",
+        },
+        credentials,
+        checkpoint: null,
+      });
+
+      // 2 files: root.md + nested.md (the folder itself is not counted)
+      expect(count).toBe(2);
+    });
+
+    it("counts files in deeply nested subfolders", async () => {
+      const connector = new SharePointConnector();
+      const { mockGet } = setupMockClient(connector);
+
+      // root → [folder-a] → [folder-b] → [deep-file.txt]
+      mockGet
+        .mockResolvedValueOnce({ id: "site-123" })
+        .mockResolvedValueOnce({ value: [{ id: "drive-1" }] })
+        .mockResolvedValueOnce({
+          value: [makeFolderItem("folder-a", "Level1", { childCount: 1 })],
+        })
+        .mockResolvedValueOnce({
+          value: [makeFolderItem("folder-b", "Level2", { childCount: 1 })],
+        })
+        .mockResolvedValueOnce({
+          value: [makeDriveItem("deep-file", "deep.txt")],
+        })
+        .mockResolvedValueOnce({ value: [] }); // sitePages
+
+      const count = await connector.estimateTotalItems({
+        config: {
+          tenantId: "test-tenant-id",
+          siteUrl: "https://tenant.sharepoint.com/sites/test",
+        },
+        credentials,
+        checkpoint: null,
+      });
+
+      expect(count).toBe(1);
     });
   });
 

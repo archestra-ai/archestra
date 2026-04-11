@@ -1,4 +1,4 @@
-IMAGE ?= europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag:0.0.2
+IMAGE ?= europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag:0.0.3
 
 .PHONY: build test publish
 

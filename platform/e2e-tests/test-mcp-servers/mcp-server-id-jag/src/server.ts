@@ -259,7 +259,14 @@ export async function startServer(
 ): Promise<void> {
   const resolvedConfig = getServerConfig(config);
   const app = await createApp(resolvedConfig);
-  app.listen(resolvedConfig.port, () => {});
+
+  await new Promise<void>((resolve, reject) => {
+    const server = app.listen(resolvedConfig.port, "0.0.0.0", () => {
+      console.log(`mcp-server-id-jag listening on ${resolvedConfig.baseUrl}`);
+      resolve();
+    });
+    server.once("error", reject);
+  });
 }
 
 const TokenRequestSchema = z.object({

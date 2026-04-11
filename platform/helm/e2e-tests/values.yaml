@@ -149,7 +149,7 @@ mcpServerIdJag:
   enabled: true
   image:
     repository: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag
-    tag: "0.0.2"
+    tag: "0.0.3"
     pullPolicy: IfNotPresent
   gatewayAudience: "id-jag-gateway-client"
   resourceClientId: "id-jag-resource-client"

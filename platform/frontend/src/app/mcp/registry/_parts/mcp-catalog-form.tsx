@@ -151,8 +151,10 @@ export function McpCatalogForm({
             scopes: "read, write",
             supports_resource_metadata: true,
             authServerUrl: "",
+            authorizationEndpoint: "",
             wellKnownUrl: "",
             resourceMetadataUrl: "",
+            tokenEndpoint: "",
           },
           localConfig: {
             command: "",
@@ -1048,6 +1050,28 @@ export function McpCatalogForm({
 
                   <FormField
                     control={form.control}
+                    name="oauthConfig.authorizationEndpoint"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Authorization Endpoint</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="https://auth.example.com/oauth/authorize"
+                            className="font-mono"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Optional direct authorization endpoint override for
+                          providers that do not publish well-known metadata.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
                     name="oauthConfig.wellKnownUrl"
                     render={({ field }) => (
                       <FormItem>
@@ -1084,6 +1108,28 @@ export function McpCatalogForm({
                         <FormDescription>
                           Optional override for OAuth protected resource
                           metadata discovery.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="oauthConfig.tokenEndpoint"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Token Endpoint</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="https://auth.example.com/oauth/token"
+                            className="font-mono"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Optional direct token endpoint override for providers
+                          that use fixed OAuth endpoints instead of discovery.
                         </FormDescription>
                         <FormMessage />
                       </FormItem>

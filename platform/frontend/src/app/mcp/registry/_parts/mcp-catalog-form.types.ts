@@ -16,6 +16,14 @@ export const oauthConfigSchema = z.object({
     })
     .optional()
     .or(z.literal("")),
+  authorizationEndpoint: z
+    .string()
+    .url({ error: "Must be a valid URL" })
+    .refine((val) => val.startsWith("http://") || val.startsWith("https://"), {
+      message: "Must be an HTTP or HTTPS URL",
+    })
+    .optional()
+    .or(z.literal("")),
   wellKnownUrl: z
     .string()
     .url({ error: "Must be a valid URL" })
@@ -25,6 +33,14 @@ export const oauthConfigSchema = z.object({
     .optional()
     .or(z.literal("")),
   resourceMetadataUrl: z
+    .string()
+    .url({ error: "Must be a valid URL" })
+    .refine((val) => val.startsWith("http://") || val.startsWith("https://"), {
+      message: "Must be an HTTP or HTTPS URL",
+    })
+    .optional()
+    .or(z.literal("")),
+  tokenEndpoint: z
     .string()
     .url({ error: "Must be a valid URL" })
     .refine((val) => val.startsWith("http://") || val.startsWith("https://"), {

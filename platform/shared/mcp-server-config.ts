@@ -4,6 +4,7 @@ export const OAuthConfigSchema = z.object({
   name: z.string(),
   server_url: z.string(),
   auth_server_url: z.string().optional(),
+  authorization_endpoint: z.string().optional(),
   resource_metadata_url: z.string().optional(),
   client_id: z.string(),
   client_secret: z.string().optional(),

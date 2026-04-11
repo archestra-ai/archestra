@@ -326,6 +326,7 @@ test.describe("Enterprise-managed MCP credentials", () => {
 
   test("exchanges an ID-JAG at a remote MCP server before gateway tool execution", async ({
     request,
+    createIdentityProvider,
     deleteIdentityProvider,
     deleteMcpCatalogItem,
     uninstallMcpServer,
@@ -336,10 +337,30 @@ test.describe("Enterprise-managed MCP credentials", () => {
     await expectIdJagDemoServerHealthy(request);
 
     const providerName = `IdJagGateway${Date.now()}`;
-    const identityProviderId = await createIdJagIdentityProvider({
+    const identityProviderId = await createIdentityProvider(
       request,
-      providerId: providerName,
-    });
+      providerName,
+      {
+        domain: "id-jag.example.com",
+        oidcConfig: {
+          issuer: `${MCP_SERVER_ID_JAG_BACKEND_URL}/demo-idp`,
+          skipDiscovery: true,
+          pkce: true,
+          clientId: MCP_SERVER_ID_JAG_GATEWAY_AUDIENCE,
+          clientSecret: "unused-gateway-client-secret",
+          authorizationEndpoint: `${MCP_SERVER_ID_JAG_BACKEND_URL}/demo-idp/authorize`,
+          discoveryEndpoint: `${MCP_SERVER_ID_JAG_BACKEND_URL}/demo-idp/.well-known/openid-configuration`,
+          tokenEndpoint: `${MCP_SERVER_ID_JAG_BACKEND_URL}/token`,
+          jwksEndpoint: `${MCP_SERVER_ID_JAG_BACKEND_URL}/demo-idp/jwks`,
+        },
+        enterpriseManagedCredentials: {
+          clientId: MCP_SERVER_ID_JAG_RESOURCE_CLIENT_ID,
+          clientSecret: MCP_SERVER_ID_JAG_RESOURCE_CLIENT_SECRET,
+          tokenEndpoint: `${MCP_SERVER_ID_JAG_BACKEND_URL}/token`,
+          tokenEndpointAuthentication: "client_secret_basic",
+        },
+      },
+    );
     const gatewayToken = await mintIdJag({
       email: "admin@example.com",
       name: "Admin User",
@@ -533,38 +554,6 @@ async function createIdJagCatalogItem(params: {
 
   const catalog = (await response.json()) as { id: string };
   return catalog.id;
-}
-
-async function createIdJagIdentityProvider(params: {
-  request: APIRequestContext;
-  providerId: string;
-}): Promise<string> {
-  const response = await makeApiRequest({
-    request: params.request,
-    method: "post",
-    urlSuffix: "/api/identity-providers",
-    data: {
-      providerId: params.providerId,
-      issuer: `${MCP_SERVER_ID_JAG_BACKEND_URL}/demo-idp`,
-      domain: "id-jag.example.com",
-      oidcConfig: {
-        issuer: `${MCP_SERVER_ID_JAG_BACKEND_URL}/demo-idp`,
-        pkce: true,
-        clientId: MCP_SERVER_ID_JAG_GATEWAY_AUDIENCE,
-        clientSecret: "unused-gateway-client-secret",
-        discoveryEndpoint: `${MCP_SERVER_ID_JAG_BACKEND_URL}/demo-idp/.well-known/openid-configuration`,
-        jwksEndpoint: `${MCP_SERVER_ID_JAG_BACKEND_URL}/demo-idp/jwks`,
-        enterpriseManagedCredentials: {
-          clientId: MCP_SERVER_ID_JAG_RESOURCE_CLIENT_ID,
-          clientSecret: MCP_SERVER_ID_JAG_RESOURCE_CLIENT_SECRET,
-          tokenEndpointAuthentication: "client_secret_basic",
-        },
-      },
-    },
-  });
-
-  const provider = (await response.json()) as { id: string };
-  return provider.id;
 }
 
 async function installProtectedCatalogServer(params: {

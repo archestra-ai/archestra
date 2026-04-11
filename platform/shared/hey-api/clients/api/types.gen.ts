@@ -40203,6 +40203,7 @@ export type GetIdentityProvidersResponses = {
          */
         oidcConfig?: {
             issuer: string;
+            skipDiscovery?: boolean;
             pkce: boolean;
             enableRpInitiatedLogout?: boolean;
             clientId: string;
@@ -40330,6 +40331,7 @@ export type CreateIdentityProviderData = {
          */
         oidcConfig?: {
             issuer: string;
+            skipDiscovery?: boolean;
             pkce: boolean;
             enableRpInitiatedLogout?: boolean;
             clientId: string;
@@ -40520,6 +40522,7 @@ export type CreateIdentityProviderResponses = {
          */
         oidcConfig?: {
             issuer: string;
+            skipDiscovery?: boolean;
             pkce: boolean;
             enableRpInitiatedLogout?: boolean;
             clientId: string;
@@ -40875,6 +40878,7 @@ export type GetIdentityProviderResponses = {
          */
         oidcConfig?: {
             issuer: string;
+            skipDiscovery?: boolean;
             pkce: boolean;
             enableRpInitiatedLogout?: boolean;
             clientId: string;
@@ -41002,6 +41006,7 @@ export type UpdateIdentityProviderData = {
          */
         oidcConfig?: {
             issuer: string;
+            skipDiscovery?: boolean;
             pkce: boolean;
             enableRpInitiatedLogout?: boolean;
             clientId: string;
@@ -41193,6 +41198,7 @@ export type UpdateIdentityProviderResponses = {
          */
         oidcConfig?: {
             issuer: string;
+            skipDiscovery?: boolean;
             pkce: boolean;
             enableRpInitiatedLogout?: boolean;
             clientId: string;

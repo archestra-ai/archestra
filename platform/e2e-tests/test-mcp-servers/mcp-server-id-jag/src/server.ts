@@ -1,3 +1,4 @@
+// biome-ignore-all lint/suspicious/noConsole: test mcp server uses console for logging
 import crypto from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";

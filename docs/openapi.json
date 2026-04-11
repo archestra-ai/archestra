@@ -151229,6 +151229,9 @@
                           "issuer": {
                             "type": "string"
                           },
+                          "skipDiscovery": {
+                            "type": "boolean"
+                          },
                           "pkce": {
                             "type": "boolean"
                           },
@@ -151849,6 +151852,9 @@
                       "issuer": {
                         "type": "string"
                       },
+                      "skipDiscovery": {
+                        "type": "boolean"
+                      },
                       "pkce": {
                         "type": "boolean"
                       },
@@ -152227,6 +152233,9 @@
                       "properties": {
                         "issuer": {
                           "type": "string"
+                        },
+                        "skipDiscovery": {
+                          "type": "boolean"
                         },
                         "pkce": {
                           "type": "boolean"
@@ -153109,6 +153118,9 @@
                         "issuer": {
                           "type": "string"
                         },
+                        "skipDiscovery": {
+                          "type": "boolean"
+                        },
                         "pkce": {
                           "type": "boolean"
                         },
@@ -153728,6 +153740,9 @@
                       "issuer": {
                         "type": "string"
                       },
+                      "skipDiscovery": {
+                        "type": "boolean"
+                      },
                       "pkce": {
                         "type": "boolean"
                       },
@@ -154107,6 +154122,9 @@
                       "properties": {
                         "issuer": {
                           "type": "string"
+                        },
+                        "skipDiscovery": {
+                          "type": "boolean"
                         },
                         "pkce": {
                           "type": "boolean"

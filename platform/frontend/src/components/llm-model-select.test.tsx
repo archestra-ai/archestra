@@ -10,7 +10,7 @@ vi.mock("next/image", () => ({
 }));
 
 describe("LlmModelSearchableSelect", () => {
-  it("can render wider dropdown content with full option labels", async () => {
+  it("can render fit-content dropdown content with full option labels", async () => {
     const user = userEvent.setup();
     const modelName =
       "gemini-2.5-pro-preview-05-06-very-long-model-name-for-reranking";
@@ -26,7 +26,7 @@ describe("LlmModelSearchableSelect", () => {
             provider: "gemini",
           },
         ]}
-        popoverContentClassName="w-[min(520px,calc(100vw-2rem))]"
+        popoverContentClassName="w-max min-w-[var(--radix-popover-trigger-width)] max-w-[min(32rem,calc(100vw-2rem))]"
         truncateOptionLabels={false}
       />,
     );
@@ -37,7 +37,11 @@ describe("LlmModelSearchableSelect", () => {
       screen
         .getByPlaceholderText("Search models...")
         .closest("[data-slot='popover-content']"),
-    ).toHaveClass("w-[min(520px,calc(100vw-2rem))]");
+    ).toHaveClass(
+      "w-max",
+      "min-w-[var(--radix-popover-trigger-width)]",
+      "max-w-[min(32rem,calc(100vw-2rem))]",
+    );
     expect(screen.getByText(modelName)).toHaveClass(
       "whitespace-normal",
       "break-words",

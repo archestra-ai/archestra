@@ -36,6 +36,7 @@ import { GithubConfigFields } from "./github-config-fields";
 import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
 import { NotionConfigFields } from "./notion-config-fields";
+import { GoogleDriveConfigFields } from "./googledrive-config-fields";
 import { SchedulePicker } from "./schedule-picker";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
 import { SharePointConfigFields } from "./sharepoint-config-fields";
@@ -392,6 +393,30 @@ export function EditConnectorDialog({
             />
           )}
 
+          {connectorType === "googledrive" && (
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Service Account Email</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="email"
+                      placeholder="Leave empty to keep existing credentials"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    The email address of the Google service account with Drive
+                    read access.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+
           <FormField
             control={form.control}
             name="apiToken"
@@ -404,11 +429,13 @@ export function EditConnectorDialog({
                       ? "Integration Token"
                       : connectorType === "sharepoint"
                         ? "Client Secret"
-                        : needsEmail
-                          ? emailRequired
-                            ? "API Token"
-                            : "API Token / Personal Access Token"
-                          : "Personal Access Token"}
+                        : connectorType === "googledrive"
+                          ? "Private Key"
+                          : needsEmail
+                            ? emailRequired
+                              ? "API Token"
+                              : "API Token / Personal Access Token"
+                            : "Personal Access Token"}
                 </FormLabel>
                 <FormControl>
                   <Input
@@ -428,6 +455,13 @@ export function EditConnectorDialog({
                   <p className="text-[0.8rem] text-muted-foreground">
                     The Azure AD app registration requires the{" "}
                     <code>Sites.Read.All</code> permission on Microsoft Graph.
+                  </p>
+                )}
+                {connectorType === "googledrive" && (
+                  <p className="text-[0.8rem] text-muted-foreground">
+                    The service account requires the{" "}
+                    <code>drive.readonly</code> OAuth scope. Paste the PEM
+                    private key from your service account JSON credentials file.
                   </p>
                 )}
                 <FormMessage />
@@ -460,6 +494,9 @@ export function EditConnectorDialog({
               {connectorType === "notion" && <NotionConfigFields form={form} />}
               {connectorType === "sharepoint" && (
                 <SharePointConfigFields form={form} />
+              )}
+              {connectorType === "googledrive" && (
+                <GoogleDriveConfigFields form={form} />
               )}
             </CollapsibleContent>
           </Collapsible>
@@ -545,6 +582,8 @@ function getEditUrlConfig(type: ConnectorType): {
           description: "Your SharePoint site URL.",
         },
       };
+    case "googledrive":
+      return { typeLabel: "Google Drive", urlFields: null };
     default:
       return {
         typeLabel: type,

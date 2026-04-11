@@ -41,9 +41,34 @@ type BedrockRequest = Bedrock.Types.ConverseRequest;
 type BedrockResponse = Bedrock.Types.ConverseResponse;
 type BedrockMessages = Bedrock.Types.Message[];
 type BedrockHeaders = Bedrock.Types.ConverseHeaders;
-type BedrockCommandInput = ReturnType<
-  typeof buildBedrockCommandContext
->["commandInput"];
+type BedrockCommandContext = {
+  commandInput: {
+    modelId: string;
+    messages: BedrockMessages | undefined;
+    system:
+      | Array<{ text?: string; guardContent?: unknown; cachePoint?: unknown }>
+      | undefined;
+    inferenceConfig: BedrockRequest["inferenceConfig"];
+    toolConfig:
+      | {
+          tools:
+            | Array<{
+                toolSpec:
+                  | {
+                      name?: string;
+                      description?: string;
+                      inputSchema?: { json: Record<string, unknown> };
+                    }
+                  | undefined;
+              }>
+            | undefined;
+          toolChoice: Bedrock.Types.ToolChoice | undefined;
+        }
+      | undefined;
+  };
+  toolNameMapping: ToolNameMapping;
+};
+type BedrockCommandInput = BedrockCommandContext["commandInput"];
 
 // Stream event types from the SDK
 type BedrockStreamEvent = ConverseStreamOutput;
@@ -62,6 +87,10 @@ const PADDING_ALPHABET =
 const BEDROCK_MAX_TOOL_NAME_LENGTH = 64;
 const TOOL_NAME_HASH_LENGTH = 8;
 const TOOL_NAME_HASH_SEPARATOR = "_";
+const bedrockCommandContextCache = new WeakMap<
+  BedrockRequest,
+  BedrockCommandContext
+>();
 
 /**
  * Generate padding string to match Bedrock's format.
@@ -814,8 +843,8 @@ class BedrockStreamAdapter
   /**
    * Set the tool name mapping from the request for decoding tool names in responses.
    */
-  setToolNameMapping(request: BedrockRequest): void {
-    this.toolNameMapping = buildToolNameMapping(request);
+  setToolNameMapping(toolNameMapping: ToolNameMapping): void {
+    this.toolNameMapping = toolNameMapping;
   }
 
   processChunk(chunk: BedrockStreamEventWithRaw): ChunkProcessingResult {
@@ -1344,37 +1373,18 @@ export async function convertToolResultsToToon(
 // HELPER: Build Command Input
 // =============================================================================
 
-function buildBedrockCommandContext(request: BedrockRequest): {
-  commandInput: {
-    modelId: string;
-    messages: BedrockMessages | undefined;
-    system:
-      | Array<{ text?: string; guardContent?: unknown; cachePoint?: unknown }>
-      | undefined;
-    inferenceConfig: BedrockRequest["inferenceConfig"];
-    toolConfig:
-      | {
-          tools:
-            | Array<{
-                toolSpec:
-                  | {
-                      name?: string;
-                      description?: string;
-                      inputSchema?: { json: Record<string, unknown> };
-                    }
-                  | undefined;
-              }>
-            | undefined;
-          toolChoice: Bedrock.Types.ToolChoice | undefined;
-        }
-      | undefined;
-  };
-  toolNameMapping: ToolNameMapping;
-} {
+function buildBedrockCommandContext(
+  request: BedrockRequest,
+): BedrockCommandContext {
+  const cachedContext = bedrockCommandContextCache.get(request);
+  if (cachedContext) {
+    return cachedContext;
+  }
+
   const shouldEncodeHyphens = isNovaModel(request.modelId);
   const toolNameMapping = buildToolNameMapping(request);
 
-  return {
+  const context = {
     commandInput: {
       modelId: request.modelId,
       messages: encodeProviderMessageToolNames({
@@ -1416,6 +1426,9 @@ function buildBedrockCommandContext(request: BedrockRequest): {
     },
     toolNameMapping,
   };
+
+  bedrockCommandContextCache.set(request, context);
+  return context;
 }
 
 /**
@@ -1458,7 +1471,8 @@ export const bedrockAdapterFactory: LLMProvider<
   ): LLMStreamAdapter<BedrockStreamEvent, BedrockResponse> {
     const adapter = new BedrockStreamAdapter();
     if (request) {
-      adapter.setToolNameMapping(request);
+      const { toolNameMapping } = buildBedrockCommandContext(request);
+      adapter.setToolNameMapping(toolNameMapping);
     }
     return adapter;
   },

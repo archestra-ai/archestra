@@ -340,6 +340,7 @@ export const RouteId = {
   GetModelStatistics: "getModelStatistics",
   GetOverviewStatistics: "getOverviewStatistics",
   GetCostSavingsStatistics: "getCostSavingsStatistics",
+  GetCostHealth: "getCostHealth",
 
   // Optimization Rule Routes
   GetOptimizationRules: "getOptimizationRules",

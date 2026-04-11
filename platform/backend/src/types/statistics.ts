@@ -107,6 +107,25 @@ export type ModelStatistics = z.infer<typeof ModelStatisticsSchema>;
 export type OverviewStatistics = z.infer<typeof OverviewStatisticsSchema>;
 export type CostSavingsStatistics = z.infer<typeof CostSavingsStatisticsSchema>;
 
+const CostHealthDimensionSchema = z.object({
+  score: z.number(),
+  severity: z.enum(["low", "moderate", "high"]),
+  message: z.string(),
+  link: z.string(),
+});
+
+export const CostHealthSchema = z.object({
+  score: z.number(),
+  dimensions: z.object({
+    limits: CostHealthDimensionSchema,
+    optimizationRules: CostHealthDimensionSchema,
+    compression: CostHealthDimensionSchema,
+    toolHygiene: CostHealthDimensionSchema,
+  }),
+});
+
+export type CostHealth = z.infer<typeof CostHealthSchema>;
+
 export type StatisticsTeamTimeSeriesData = z.infer<
   typeof StatisticsTeamTimeSeriesDataSchema
 >;

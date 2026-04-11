@@ -1,8 +1,10 @@
 "use client";
 
 import mermaid from "mermaid";
+import { AlertTriangle } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 interface MermaidDiagramProps {
   chart: string;
@@ -16,9 +18,11 @@ export function MermaidDiagram({
   const ref = useRef<HTMLDivElement>(null);
   const { theme } = useTheme();
   const [isLoaded, setIsLoaded] = useState(false);
+  const [renderError, setRenderError] = useState<string | null>(null);
 
   useEffect(() => {
     setIsLoaded(false);
+    setRenderError(null);
     const isDark = theme === "dark";
 
     mermaid.initialize({
@@ -58,6 +62,9 @@ export function MermaidDiagram({
           // Generate a unique ID to avoid conflicts
           const uniqueId = `${id}-${Date.now()}`;
           const { svg } = await mermaid.render(uniqueId, chart);
+          // Clean up any orphaned mermaid temp element that may have been
+          // attached to the document body during rendering
+          document.querySelector(`#d${uniqueId}`)?.remove();
           if (ref.current) {
             // Parse SVG string via DOMParser to avoid innerHTML
             const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
@@ -67,18 +74,33 @@ export function MermaidDiagram({
           }
         } catch (error) {
           console.error("Error rendering mermaid diagram:", error);
-          if (ref.current) {
-            const pre = document.createElement("pre");
-            pre.textContent = chart;
-            ref.current.replaceChildren(pre);
-            setIsLoaded(true);
-          }
+          const message =
+            error instanceof Error ? error.message : "Unknown render error";
+          setRenderError(message);
+          setIsLoaded(true);
         }
       }
     };
 
     renderDiagram();
   }, [chart, id, theme]);
+
+  if (renderError !== null) {
+    return (
+      <Alert variant="warning" className="my-2">
+        <AlertTriangle className="h-4 w-4" />
+        <AlertTitle>Diagram could not be rendered</AlertTitle>
+        <AlertDescription>
+          <p className="mb-2">
+            The diagram syntax is invalid. Check the source and try again.
+          </p>
+          <pre className="overflow-auto max-h-24 text-xs whitespace-pre-wrap break-all bg-amber-100/50 dark:bg-amber-950/30 rounded p-2">
+            {chart}
+          </pre>
+        </AlertDescription>
+      </Alert>
+    );
+  }
 
   return (
     <div

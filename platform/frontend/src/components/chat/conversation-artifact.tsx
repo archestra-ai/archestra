@@ -1,13 +1,15 @@
 "use client";
 
 import DOMPurify from "dompurify";
-import { Copy, Download, FileText, GripVertical, X } from "lucide-react";
+import { AlertTriangle, Copy, Download, FileText, GripVertical, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { ErrorBoundary } from "react-error-boundary";
 import { toast } from "sonner";
 import { MermaidDiagram } from "@/components/mermaid-diagram";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -88,7 +90,27 @@ export function ConversationArtifactPanel({
         const code = String(children).replace(/\n$/, "");
         return (
           <div className="my-4 max-h-[600px] [&_svg]:!max-h-[600px] [&_svg]:!w-auto">
-            <MermaidDiagram chart={code} id={`mermaid-${Date.now()}`} />
+            <ErrorBoundary
+              resetKeys={[code]}
+              fallbackRender={({ error }) => (
+                <Alert variant="warning" className="my-2">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>Diagram could not be rendered</AlertTitle>
+                  <AlertDescription>
+                    <p className="mb-2">
+                      {error instanceof Error
+                        ? error.message
+                        : "The diagram could not be displayed."}
+                    </p>
+                    <pre className="overflow-auto max-h-24 text-xs whitespace-pre-wrap break-all bg-amber-100/50 dark:bg-amber-950/30 rounded p-2">
+                      {code}
+                    </pre>
+                  </AlertDescription>
+                </Alert>
+              )}
+            >
+              <MermaidDiagram chart={code} id={`mermaid-${Date.now()}`} />
+            </ErrorBoundary>
           </div>
         );
       }

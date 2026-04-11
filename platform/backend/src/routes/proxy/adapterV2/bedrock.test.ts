@@ -1,6 +1,10 @@
+import { EventStreamCodec } from "@smithy/eventstream-codec";
+import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
 import { describe, expect, test } from "@/test";
 import type { Bedrock } from "@/types";
 import { bedrockAdapterFactory, getCommandInput } from "./bedrock";
+
+const eventStreamCodec = new EventStreamCodec(toUtf8, fromUtf8);
 
 function createConverseRequest(
   options?: Partial<Bedrock.Types.ConverseRequest>,
@@ -10,6 +14,24 @@ function createConverseRequest(
     messages: [{ role: "user", content: [{ text: "Hello" }] }],
     ...options,
   };
+}
+
+function decodeEventStreamJson(bytes: Uint8Array): {
+  headers: Record<string, { value?: unknown }>;
+  body: Record<string, unknown>;
+} {
+  const decoded = eventStreamCodec.decode(bytes);
+  const bodyText =
+    typeof decoded.body === "string" ? decoded.body : toUtf8(decoded.body);
+
+  return {
+    headers: decoded.headers as Record<string, { value?: unknown }>,
+    body: JSON.parse(bodyText) as Record<string, unknown>,
+  };
+}
+
+function asStreamChunk<T>(chunk: unknown): T {
+  return chunk as T;
 }
 
 describe("Bedrock tool name encoding", () => {
@@ -170,5 +192,96 @@ describe("Bedrock tool name encoding", () => {
     expect(new Set(providerToolNames).size).toBe(2);
     expect(providerToolNames[0]).toBe("server__read_file");
     expect(providerToolNames[1]).toMatch(/^server__read_file_[a-f0-9]{8}$/);
+  });
+
+  test("re-encodes streamed tool call events with the original tool name", () => {
+    const toolName =
+      "splunk_olly_preprod_mcp__olly_get_apm_service_errors_and_requests";
+    const request = createConverseRequest({
+      toolConfig: {
+        tools: [
+          {
+            toolSpec: {
+              name: toolName,
+              description: "Get APM service errors and requests",
+              inputSchema: { json: { type: "object" } },
+            },
+          },
+        ],
+      },
+    });
+    const commandInput = getCommandInput(request);
+    const providerToolName =
+      commandInput.toolConfig?.tools?.[0]?.toolSpec?.name ?? "";
+    const adapter = bedrockAdapterFactory.createStreamAdapter(request);
+
+    adapter.processChunk(
+      asStreamChunk<Parameters<typeof adapter.processChunk>[0]>({
+        contentBlockStart: {
+          contentBlockIndex: 0,
+          start: {
+            toolUse: {
+              toolUseId: "tooluse_123",
+              name: providerToolName,
+            },
+          },
+        },
+      }),
+    );
+    adapter.processChunk(
+      asStreamChunk<Parameters<typeof adapter.processChunk>[0]>({
+        contentBlockDelta: {
+          contentBlockIndex: 0,
+          delta: {
+            toolUse: {
+              input: '{"service":"checkout"}',
+            },
+          },
+        },
+      }),
+    );
+    adapter.processChunk(
+      asStreamChunk<Parameters<typeof adapter.processChunk>[0]>({
+        contentBlockStop: {
+          contentBlockIndex: 0,
+        },
+      }),
+    );
+    adapter.processChunk(
+      asStreamChunk<Parameters<typeof adapter.processChunk>[0]>({
+        messageStop: {
+          stopReason: "tool_use",
+        },
+      }),
+    );
+    adapter.processChunk(
+      asStreamChunk<Parameters<typeof adapter.processChunk>[0]>({
+        metadata: {
+          usage: { inputTokens: 10, outputTokens: 5 },
+        },
+      }),
+    );
+
+    expect(adapter.state.toolCalls[0]).toEqual({
+      id: "tooluse_123",
+      name: toolName,
+      arguments: '{"service":"checkout"}',
+    });
+
+    const rawEvents = adapter.getRawToolCallEvents();
+    const decodedStartEvent = decodeEventStreamJson(rawEvents[0] as Uint8Array);
+
+    expect(decodedStartEvent.headers[":event-type"]?.value).toBe(
+      "contentBlockStart",
+    );
+    expect(decodedStartEvent.body).toMatchObject({
+      contentBlockIndex: 0,
+      start: {
+        toolUse: {
+          toolUseId: "tooluse_123",
+          name: toolName,
+        },
+      },
+    });
   });
 });

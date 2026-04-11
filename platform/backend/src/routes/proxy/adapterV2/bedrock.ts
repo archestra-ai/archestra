@@ -41,6 +41,9 @@ type BedrockRequest = Bedrock.Types.ConverseRequest;
 type BedrockResponse = Bedrock.Types.ConverseResponse;
 type BedrockMessages = Bedrock.Types.Message[];
 type BedrockHeaders = Bedrock.Types.ConverseHeaders;
+type BedrockCommandInput = ReturnType<
+  typeof buildBedrockCommandContext
+>["commandInput"];
 
 // Stream event types from the SDK
 type BedrockStreamEvent = ConverseStreamOutput;
@@ -1341,54 +1344,87 @@ export async function convertToolResultsToToon(
 // HELPER: Build Command Input
 // =============================================================================
 
+function buildBedrockCommandContext(request: BedrockRequest): {
+  commandInput: {
+    modelId: string;
+    messages: BedrockMessages | undefined;
+    system:
+      | Array<{ text?: string; guardContent?: unknown; cachePoint?: unknown }>
+      | undefined;
+    inferenceConfig: BedrockRequest["inferenceConfig"];
+    toolConfig:
+      | {
+          tools:
+            | Array<{
+                toolSpec:
+                  | {
+                      name?: string;
+                      description?: string;
+                      inputSchema?: { json: Record<string, unknown> };
+                    }
+                  | undefined;
+              }>
+            | undefined;
+          toolChoice: Bedrock.Types.ToolChoice | undefined;
+        }
+      | undefined;
+  };
+  toolNameMapping: ToolNameMapping;
+} {
+  const shouldEncodeHyphens = isNovaModel(request.modelId);
+  const toolNameMapping = buildToolNameMapping(request);
+
+  return {
+    commandInput: {
+      modelId: request.modelId,
+      messages: encodeProviderMessageToolNames({
+        messages: request.messages,
+        mapping: toolNameMapping,
+        isNova: shouldEncodeHyphens,
+      }),
+      system: request.system?.map((s) => {
+        if ("text" in s) return { text: s.text };
+        return s;
+      }),
+      inferenceConfig: request.inferenceConfig,
+      toolConfig: request.toolConfig
+        ? {
+            tools: request.toolConfig.tools?.map((t) => ({
+              toolSpec: t.toolSpec
+                ? {
+                    name: t.toolSpec.name
+                      ? getProviderToolName(t.toolSpec.name, toolNameMapping, {
+                          isNova: shouldEncodeHyphens,
+                        })
+                      : t.toolSpec.name,
+                    description: t.toolSpec.description,
+                    inputSchema: t.toolSpec.inputSchema
+                      ? {
+                          json: t.toolSpec.inputSchema.json,
+                        }
+                      : undefined,
+                  }
+                : undefined,
+            })),
+            toolChoice: encodeProviderToolChoiceName({
+              toolChoice: request.toolConfig.toolChoice,
+              mapping: toolNameMapping,
+              isNova: shouldEncodeHyphens,
+            }),
+          }
+        : undefined,
+    },
+    toolNameMapping,
+  };
+}
+
 /**
  * Convert BedrockRequest to AWS SDK command input format.
  * Used by both ConverseCommand and ConverseStreamCommand.
  * Maps tool names to provider-safe names and decodes them after Bedrock returns.
  */
-export function getCommandInput(request: BedrockRequest) {
-  const shouldEncodeHyphens = isNovaModel(request.modelId);
-  const toolNameMapping = buildToolNameMapping(request);
-
-  return {
-    modelId: request.modelId,
-    messages: encodeProviderMessageToolNames({
-      messages: request.messages,
-      mapping: toolNameMapping,
-      isNova: shouldEncodeHyphens,
-    }),
-    system: request.system?.map((s) => {
-      if ("text" in s) return { text: s.text };
-      return s;
-    }),
-    inferenceConfig: request.inferenceConfig,
-    toolConfig: request.toolConfig
-      ? {
-          tools: request.toolConfig.tools?.map((t) => ({
-            toolSpec: t.toolSpec
-              ? {
-                  name: t.toolSpec.name
-                    ? getProviderToolName(t.toolSpec.name, toolNameMapping, {
-                        isNova: shouldEncodeHyphens,
-                      })
-                    : t.toolSpec.name,
-                  description: t.toolSpec.description,
-                  inputSchema: t.toolSpec.inputSchema
-                    ? {
-                        json: t.toolSpec.inputSchema.json,
-                      }
-                    : undefined,
-                }
-              : undefined,
-          })),
-          toolChoice: encodeProviderToolChoiceName({
-            toolChoice: request.toolConfig.toolChoice,
-            mapping: toolNameMapping,
-            isNova: shouldEncodeHyphens,
-          }),
-        }
-      : undefined,
-  };
+export function getCommandInput(request: BedrockRequest): BedrockCommandInput {
+  return buildBedrockCommandContext(request).commandInput;
 }
 
 // =============================================================================
@@ -1479,8 +1515,8 @@ export const bedrockAdapterFactory: LLMProvider<
     request: BedrockRequest,
   ): Promise<BedrockResponse> {
     const bedrockClient = client as BedrockClient;
-    const commandInput = getCommandInput(request);
-    const toolNameMapping = buildToolNameMapping(request);
+    const { commandInput, toolNameMapping } =
+      buildBedrockCommandContext(request);
 
     // Use fetch-based client.converse()
     const response = await bedrockClient.converse(
@@ -1545,7 +1581,7 @@ export const bedrockAdapterFactory: LLMProvider<
     request: BedrockRequest,
   ): Promise<AsyncIterable<BedrockStreamEventWithRaw>> {
     const bedrockClient = client as BedrockClient;
-    const commandInput = getCommandInput(request);
+    const { commandInput } = buildBedrockCommandContext(request);
 
     // Use fetch-based client.converseStream() - returns events with __rawBytes already set
     return bedrockClient.converseStream(request.modelId, commandInput);

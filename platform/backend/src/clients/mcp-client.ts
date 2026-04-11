@@ -1294,6 +1294,19 @@ class McpClient {
           localHeaders.Authorization = `Bearer ${tokenAuth.rawToken}`;
         }
 
+        // Inject custom headers from userConfig fields that specify a headerName.
+        // This enables static auth via non-Authorization headers like x-api-key.
+        if (catalogItem.userConfig) {
+          for (const [fieldKey, fieldDef] of Object.entries(
+            catalogItem.userConfig,
+          )) {
+            const def = fieldDef as { headerName?: string };
+            if (def.headerName && secrets[fieldKey]) {
+              localHeaders[def.headerName] = String(secrets[fieldKey]);
+            }
+          }
+        }
+
         mergePassthroughHeaders(localHeaders, tokenAuth?.passthroughHeaders);
 
         return new StreamableHTTPClientTransport(new URL(endpointUrl), {
@@ -1322,6 +1335,19 @@ class McpClient {
           // Fallback: propagate external IdP JWT for end-to-end JWKS pattern
           // (upstream server validates the same JWT against the IdP's JWKS)
           headers.Authorization = `Bearer ${tokenAuth.rawToken}`;
+        }
+
+        // Inject custom headers from userConfig fields that specify a headerName.
+        // This enables static auth via non-Authorization headers like x-api-key.
+        if (catalogItem.userConfig) {
+          for (const [fieldKey, fieldDef] of Object.entries(
+            catalogItem.userConfig,
+          )) {
+            const def = fieldDef as { headerName?: string };
+            if (def.headerName && secrets[fieldKey]) {
+              headers[def.headerName] = String(secrets[fieldKey]);
+            }
+          }
         }
 
         mergePassthroughHeaders(headers, tokenAuth?.passthroughHeaders);

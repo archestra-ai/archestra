@@ -40,6 +40,9 @@ const UserConfigFieldSchema = z.object({
   sensitive: z.boolean().optional(),
   min: z.number().optional(),
   max: z.number().optional(),
+  // When set, the secret value for this field is injected as a custom HTTP
+  // header with the given name instead of the default Authorization header.
+  headerName: z.string().optional(),
 });
 
 // Define a version of LocalConfigSchema for SELECT operations

@@ -953,6 +953,18 @@ export function McpCatalogForm({
                                 "Authorization: &lt;your token&gt;" header
                               </FormLabel>
                             </div>
+                            <div className="flex items-center space-x-2">
+                              <RadioGroupItem
+                                value="custom_header"
+                                id="auth-custom-header"
+                              />
+                              <FormLabel
+                                htmlFor="auth-custom-header"
+                                className="font-normal cursor-pointer"
+                              >
+                                Custom header (e.g. x-api-key)
+                              </FormLabel>
+                            </div>
                           </>
                         )}
                         <div className="flex items-center space-x-2">
@@ -991,6 +1003,33 @@ export function McpCatalogForm({
                     Users will be prompted to provide their access token when
                     installing this server.
                   </p>
+                </div>
+              )}
+
+              {authMethod === "custom_header" && (
+                <div className="space-y-4 pl-6 border-l-2">
+                  <FormField
+                    control={form.control}
+                    name="customHeaderName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Header Name</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="x-api-key"
+                            {...field}
+                            value={field.value ?? ""}
+                          />
+                        </FormControl>
+                        <p className="text-sm text-muted-foreground">
+                          The HTTP header name to send the secret value in.
+                          Users will be prompted to provide the value when
+                          installing this server.
+                        </p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
               )}
 

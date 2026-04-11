@@ -84,9 +84,12 @@ export const formSchema = z
       "none",
       "bearer",
       "raw_token",
+      "custom_header",
       "oauth",
       "enterprise_managed",
     ]),
+    // Header name for custom_header auth method (e.g. "x-api-key")
+    customHeaderName: z.string().optional(),
     oauthConfig: oauthConfigSchema.optional(),
     enterpriseManagedConfig: enterpriseManagedConfigSchema
       .nullable()

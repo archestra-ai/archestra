@@ -149,6 +149,21 @@ export function transformFormToApiData(
     // Clear oauthConfig when using Token
     data.oauthConfig = undefined;
     data.enterpriseManagedConfig = undefined;
+  } else if (values.authMethod === "custom_header") {
+    // Handle Custom Header auth (e.g. x-api-key)
+    const headerName = values.customHeaderName?.trim() || "x-api-key";
+    data.userConfig = {
+      api_key: {
+        type: "string" as const,
+        title: `${headerName} value`,
+        description: `Value sent as the ${headerName} header`,
+        required: true,
+        sensitive: true,
+        headerName,
+      },
+    };
+    data.oauthConfig = undefined;
+    data.enterpriseManagedConfig = undefined;
   } else {
     // No authentication - clear both configs
     data.userConfig = {};
@@ -188,8 +203,10 @@ export function transformCatalogItemToFormValues(
     | "none"
     | "bearer"
     | "raw_token"
+    | "custom_header"
     | "oauth"
     | "enterprise_managed" = "none";
+  let customHeaderName: string | undefined;
   if (item.enterpriseManagedConfig) {
     authMethod = "enterprise_managed";
   } else if (item.oauthConfig) {
@@ -198,6 +215,17 @@ export function transformCatalogItemToFormValues(
     authMethod = "raw_token";
   } else if (item.userConfig?.access_token) {
     authMethod = "bearer";
+  } else if (
+    item.userConfig &&
+    Object.values(item.userConfig).some(
+      (field) => (field as { headerName?: string }).headerName,
+    )
+  ) {
+    authMethod = "custom_header";
+    const entry = Object.values(item.userConfig).find(
+      (field) => (field as { headerName?: string }).headerName,
+    ) as { headerName?: string } | undefined;
+    customHeaderName = entry?.headerName;
   } else if (
     // Special case: GitHub server uses Bearer Token but external catalog doesn't define userConfig
     item.name.includes("githubcopilot") ||
@@ -347,6 +375,7 @@ export function transformCatalogItemToFormValues(
     serverType: item.serverType as "remote" | "local",
     serverUrl: item.serverUrl || "",
     authMethod,
+    customHeaderName,
     enterpriseManagedConfig: item.enterpriseManagedConfig ?? null,
     oauthConfig,
     localConfig,

@@ -353,6 +353,24 @@ export default function LimitsPage() {
 
   return (
     <div className="space-y-4">
+      <Alert variant="info">
+        <CircleHelp />
+        <AlertDescription className="sm:flex sm:flex-wrap sm:items-center sm:gap-1">
+          <span>
+            Expired or exceeded limits reset on the current cleanup schedule:
+          </span>
+          <span className="font-medium text-foreground">
+            {cleanupIntervalLabel}
+          </span>
+          <Link
+            href="/settings/llm"
+            className="font-medium underline underline-offset-4"
+          >
+            Change it in LLM settings
+          </Link>
+        </AlertDescription>
+      </Alert>
+
       <div className="flex flex-wrap gap-3">
         <Select
           value={statusFilter}
@@ -400,24 +418,6 @@ export default function LimitsPage() {
           allLabel="All models"
         />
       </div>
-
-      <Alert variant="info">
-        <CircleHelp />
-        <AlertDescription>
-          Expired or exceeded limits reset on the current cleanup schedule:{" "}
-          <span className="font-medium text-foreground">
-            {cleanupIntervalLabel}
-          </span>
-          .{" "}
-          <Link
-            href="/settings/llm"
-            className="font-medium underline underline-offset-4"
-          >
-            Change it in LLM settings
-          </Link>
-          .
-        </AlertDescription>
-      </Alert>
 
       <LoadingWrapper
         isPending={isPending}

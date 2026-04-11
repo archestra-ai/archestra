@@ -3,7 +3,7 @@ title: "Authentication"
 category: MCP
 order: 4
 description: "How authentication works for MCP clients and upstream MCP servers"
-lastUpdated: 2026-04-08
+lastUpdated: 2026-04-11
 ---
 
 <!--
@@ -331,6 +331,8 @@ Your server (or its OAuth provider) needs to expose two things:
 - A 401 response with a `WWW-Authenticate` header when tokens are missing or expired
 
 Archestra handles everything else: endpoint discovery, client registration, the authorization code flow with PKCE, token storage, and automatic refresh when tokens expire.
+
+If the MCP server URL is different from the OAuth issuer or metadata host, configure explicit OAuth discovery overrides in the MCP catalog item. Archestra can use a separate authorization server URL, a direct well-known metadata URL, and a direct resource metadata URL instead of deriving discovery from the MCP server URL.
 
 Your server receives an `Authorization: Bearer <access_token>` header with each request from the gateway.
 

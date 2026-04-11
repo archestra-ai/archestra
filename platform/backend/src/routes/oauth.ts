@@ -98,7 +98,7 @@ export async function discoverScopes(
 
   // Try authorization server metadata discovery
   try {
-    const metadata = await discoverAuthorizationServerMetadata(
+    const metadata = await discoverAuthorizationServerMetadataWithOverrides(
       serverUrl,
       overrides,
     );
@@ -121,11 +121,7 @@ export async function discoverScopes(
  * Build discovery URLs to try for authorization server metadata
  * Implements the same fallback strategy as MCP SDK
  */
-export function buildDiscoveryUrls(serverUrl: string): string[] {
-  return buildDiscoveryUrlsWithOverride(serverUrl);
-}
-
-function buildDiscoveryUrlsWithOverride(
+export function buildDiscoveryUrls(
   serverUrl: string,
   wellKnownUrl?: string,
 ): string[] {
@@ -163,18 +159,6 @@ function buildDiscoveryUrlsWithOverride(
  * Discover OAuth authorization server metadata with fallback support
  * Tries multiple discovery URLs like the MCP SDK does
  */
-async function discoverAuthorizationServerMetadata(
-  serverUrl: string,
-  overrides?: OAuthDiscoveryOverrides,
-): Promise<{
-  authorization_endpoint: string;
-  token_endpoint: string;
-  registration_endpoint?: string;
-  scopes_supported?: string[];
-}> {
-  return discoverAuthorizationServerMetadataWithOverrides(serverUrl, overrides);
-}
-
 async function discoverAuthorizationServerMetadataWithOverrides(
   serverUrl: string,
   overrides?: OAuthDiscoveryOverrides,
@@ -185,10 +169,7 @@ async function discoverAuthorizationServerMetadataWithOverrides(
   scopes_supported?: string[];
 }> {
   const discoveryUrl = overrides?.authServerUrl || serverUrl;
-  const urls = buildDiscoveryUrlsWithOverride(
-    discoveryUrl,
-    overrides?.wellKnownUrl,
-  );
+  const urls = buildDiscoveryUrls(discoveryUrl, overrides?.wellKnownUrl);
 
   for (const url of urls) {
     try {
@@ -265,9 +246,7 @@ export async function discoverOAuthEndpoints(
       const resourceMetadata = await discoverOAuthResourceMetadata(
         oauthConfig.server_url,
         {
-          authServerUrl: oauthConfig.auth_server_url,
           resourceMetadataUrl: oauthConfig.resource_metadata_url,
-          wellKnownUrl: oauthConfig.well_known_url,
         },
       );
       if (

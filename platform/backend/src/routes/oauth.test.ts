@@ -3,6 +3,7 @@ import { type Mock, vi } from "vitest";
 import { beforeEach, describe, expect, test } from "@/test";
 import {
   buildDiscoveryUrls,
+  discoverOAuthEndpoints,
   discoverScopes,
   generateCodeChallenge,
   generateCodeVerifier,
@@ -247,6 +248,80 @@ describe("OAuth helper functions", () => {
       expect(scopes).toEqual(["mcp:read"]);
       expect(fetchMock).toHaveBeenCalledWith(
         "https://metadata.example.com/.well-known/oauth-protected-resource/mcp",
+        expect.anything(),
+      );
+
+      globalThis.fetch = originalFetch;
+    });
+
+    test("skips default resource metadata discovery when auth server override is set", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          authorization_endpoint: "https://auth.example.com/authorize",
+          token_endpoint: "https://auth.example.com/token",
+          scopes_supported: ["jira:read"],
+        }),
+      }) as Mock;
+
+      globalThis.fetch = fetchMock;
+
+      const scopes = await discoverScopes(
+        "https://tenant.example.com/rest/oauth2/latest/token",
+        true,
+        ["read", "write"],
+        {
+          authServerUrl: "https://auth.example.com",
+          wellKnownUrl:
+            "https://auth.example.com/.well-known/openid-configuration",
+        },
+      );
+
+      expect(scopes).toEqual(["jira:read"]);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://auth.example.com/.well-known/openid-configuration",
+        expect.anything(),
+      );
+
+      globalThis.fetch = originalFetch;
+    });
+  });
+
+  describe("discoverOAuthEndpoints", () => {
+    const originalFetch = globalThis.fetch;
+
+    beforeEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    test("skips default resource metadata discovery when auth server override is set", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          authorization_endpoint: "https://auth.example.com/authorize",
+          token_endpoint: "https://auth.example.com/token",
+        }),
+      }) as Mock;
+
+      globalThis.fetch = fetchMock;
+
+      const endpoints = await discoverOAuthEndpoints({
+        server_url: "https://tenant.example.com/rest/oauth2/latest/token",
+        supports_resource_metadata: true,
+        auth_server_url: "https://auth.example.com",
+        well_known_url:
+          "https://auth.example.com/.well-known/openid-configuration",
+      });
+
+      expect(endpoints).toEqual({
+        authorizationEndpoint: "https://auth.example.com/authorize",
+        tokenEndpoint: "https://auth.example.com/token",
+        registrationEndpoint: undefined,
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://auth.example.com/.well-known/openid-configuration",
         expect.anything(),
       );
 

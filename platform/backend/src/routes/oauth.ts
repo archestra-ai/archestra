@@ -78,7 +78,11 @@ export async function discoverScopes(
   overrides?: OAuthDiscoveryOverrides,
 ): Promise<string[]> {
   // Try resource metadata discovery first if supported
-  if (supportsResourceMetadata) {
+  const shouldDiscoverResourceMetadata =
+    supportsResourceMetadata &&
+    (!overrides?.authServerUrl || !!overrides.resourceMetadataUrl);
+
+  if (shouldDiscoverResourceMetadata) {
     try {
       const resourceMetadata = await discoverOAuthResourceMetadata(
         serverUrl,
@@ -236,8 +240,11 @@ export async function discoverOAuthEndpoints(
 ): Promise<DiscoveredEndpoints> {
   let discoveryServerUrl =
     oauthConfig.auth_server_url || oauthConfig.server_url;
+  const shouldDiscoverResourceMetadata =
+    oauthConfig.supports_resource_metadata &&
+    (!oauthConfig.auth_server_url || !!oauthConfig.resource_metadata_url);
 
-  if (oauthConfig.supports_resource_metadata) {
+  if (shouldDiscoverResourceMetadata) {
     try {
       log?.info(
         { serverUrl: oauthConfig.server_url },

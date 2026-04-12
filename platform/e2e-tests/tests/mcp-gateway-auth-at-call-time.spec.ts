@@ -4,12 +4,12 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   WIREMOCK_INTERNAL_URL,
 } from "../consts";
-import { expect, test } from "./api-fixtures";
 import {
   getTeamTokenForProfile,
   makeApiRequest,
   makeMcpGatewayRequestHeaders,
 } from "../utils/mcp-gateway";
+import { expect, test } from "./api-fixtures";
 
 /**
  * MCP Gateway - Auth at Call Time Tests

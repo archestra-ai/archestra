@@ -21,12 +21,12 @@ import {
   WIREMOCK_INTERNAL_URL,
 } from "../consts";
 import { getKeycloakJwt } from "../utils";
-import { expect, test } from "./api-fixtures";
 import {
   callMcpTool,
   initializeMcpSession,
   makeApiRequest,
 } from "../utils/mcp-gateway";
+import { expect, test } from "./api-fixtures";
 
 const WIREMOCK_MCP_URL = `${WIREMOCK_INTERNAL_URL}/mcp/jwks-cred-priority-e2e`;
 const STATIC_TOKEN = "static-test-token-for-cred-priority-e2e";

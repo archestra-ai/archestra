@@ -10,7 +10,6 @@
  */
 import { API_BASE_URL, MCP_GATEWAY_URL_SUFFIX } from "../consts";
 import { getKeycloakJwt } from "../utils";
-import { expect, test } from "./api-fixtures";
 import {
   assignArchestraToolsToProfile,
   callMcpTool,
@@ -19,6 +18,7 @@ import {
   makeApiRequest,
   makeMcpGatewayRequestHeaders,
 } from "../utils/mcp-gateway";
+import { expect, test } from "./api-fixtures";
 
 // =============================================================================
 // Tests
@@ -263,5 +263,8 @@ async function waitForExternalJwtGatewayReady(params: {
     }
   }
 
-  throw lastError ?? new Error("MCP Gateway did not become ready for external JWT auth");
+  throw (
+    lastError ??
+    new Error("MCP Gateway did not become ready for external JWT auth")
+  );
 }

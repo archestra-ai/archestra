@@ -16,13 +16,13 @@ import {
   waitForApiEndpointHealthy,
   waitForServerInstallation,
 } from "../utils";
-import { expect, test } from "./api-fixtures";
 import {
   callMcpTool,
   initializeMcpSession,
   listMcpTools,
   makeApiRequest,
 } from "../utils/mcp-gateway";
+import { expect, test } from "./api-fixtures";
 
 const DEBUG_TOOL_SHORT_NAME = "debug-auth-token";
 const WHOAMI_TOOL_SHORT_NAME = "whoami";

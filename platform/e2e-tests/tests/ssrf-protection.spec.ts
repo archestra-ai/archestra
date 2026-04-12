@@ -1,12 +1,12 @@
 import crypto from "node:crypto";
 import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import { waitForServerInstallation } from "../utils";
-import { expect, test } from "./api-fixtures";
 import {
   callMcpTool,
   getOrgTokenForProfile,
   makeApiRequest,
 } from "../utils/mcp-gateway";
+import { expect, test } from "./api-fixtures";
 
 /**
  * Inline MCP server script that has a tool to attempt outbound HTTP requests.

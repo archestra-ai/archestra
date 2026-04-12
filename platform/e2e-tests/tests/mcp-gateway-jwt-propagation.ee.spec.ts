@@ -29,13 +29,13 @@ import {
   waitForApiEndpointHealthy,
   waitForServerInstallation,
 } from "../utils";
-import { expect, test } from "./api-fixtures";
 import {
   callMcpTool,
   initializeMcpSession,
   listMcpTools,
   makeApiRequest,
 } from "../utils/mcp-gateway";
+import { expect, test } from "./api-fixtures";
 
 // =============================================================================
 // Tests

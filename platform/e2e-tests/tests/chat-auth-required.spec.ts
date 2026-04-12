@@ -1,11 +1,11 @@
 import { E2eTestId, MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import { MARKETING_TEAM_NAME, WIREMOCK_INTERNAL_URL } from "../consts";
 import { expect, test } from "../fixtures";
+import { makeApiRequest } from "../utils/mcp-gateway";
 import {
   getTeamByName,
   LLM_PROVIDER_API_KEYS_AVAILABLE_ROUTE,
 } from "./api-fixtures";
-import { makeApiRequest } from "../utils/mcp-gateway";
 
 /**
  * Chat - Auth Required Tool UI Tests

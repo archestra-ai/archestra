@@ -623,22 +623,31 @@ async function waitForGatewayTool(params: {
   token: string;
   toolName: string;
 }): Promise<void> {
+  let lastError: unknown;
+
   for (let attempt = 0; attempt < 20; attempt += 1) {
-    await initializeMcpSession(params.request, {
-      profileId: params.profileId,
-      token: params.token,
-    });
-    const tools = await listMcpTools(params.request, {
-      profileId: params.profileId,
-      token: params.token,
-    });
-    if (tools.some((tool) => tool.name === params.toolName)) {
-      return;
+    try {
+      await initializeMcpSession(params.request, {
+        profileId: params.profileId,
+        token: params.token,
+      });
+      const tools = await listMcpTools(params.request, {
+        profileId: params.profileId,
+        token: params.token,
+      });
+      if (tools.some((tool) => tool.name === params.toolName)) {
+        return;
+      }
+    } catch (error) {
+      lastError = error;
     }
     await new Promise((resolve) => setTimeout(resolve, 1500));
   }
 
-  throw new Error(`Tool ${params.toolName} was not exposed by the MCP gateway`);
+  throw (
+    lastError ??
+    new Error(`Tool ${params.toolName} was not exposed by the MCP gateway`)
+  );
 }
 
 async function callDebugAuthTool(params: {

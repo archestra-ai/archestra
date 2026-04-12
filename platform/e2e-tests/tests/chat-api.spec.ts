@@ -80,6 +80,7 @@ test.describe("Chat message persistence on provider error", () => {
           "Content-Type": "application/json",
           Origin: UI_BASE_URL,
         },
+        timeout: 60_000,
         data: {
           id: conversation.id,
           messages: [

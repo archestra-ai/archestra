@@ -1,4 +1,6 @@
+import type { APIRequestContext } from "@playwright/test";
 import { E2eTestId } from "@shared";
+import { API_BASE_URL, UI_BASE_URL } from "../consts";
 import { expect, test } from "../fixtures";
 import {
   clickButton,
@@ -8,6 +10,8 @@ import {
 } from "../utils";
 
 const TEST_API_KEY = "sk-ant-test-key-12345";
+const TEST_PROVIDER = "zhipuai";
+const TEST_PROVIDER_OPTION_NAME = "Zhipu AI Zhipu AI";
 
 test.describe.configure({ mode: "serial" });
 
@@ -88,16 +92,18 @@ test.describe("LLM Provider API Keys", () => {
   test("First key for a provider defaults to primary, subsequent does not", async ({
     page,
     makeRandomString,
+    request,
   }) => {
     const keyName1 = makeRandomString(8, "Primary Key");
     const keyName2 = makeRandomString(8, "Secondary Key");
 
+    await deleteVisibleProviderKeys(request, TEST_PROVIDER);
     await goToLlmProviderApiKeysPage(page);
 
     // Create first key — isPrimary should be ON by default
     await page.getByTestId(E2eTestId.AddChatApiKeyButton).click();
     await page.getByRole("combobox", { name: "Provider" }).click();
-    await page.getByRole("option", { name: "Zhipu AI Zhipu AI" }).click();
+    await page.getByRole("option", { name: TEST_PROVIDER_OPTION_NAME }).click();
     await page.getByLabel(/Name/i).fill(keyName1);
     await page.getByRole("textbox", { name: /API Key/i }).fill(TEST_API_KEY);
 
@@ -113,7 +119,7 @@ test.describe("LLM Provider API Keys", () => {
     // Create second key for same provider — isPrimary should be OFF
     await page.getByTestId(E2eTestId.AddChatApiKeyButton).click();
     await page.getByRole("combobox", { name: "Provider" }).click();
-    await page.getByRole("option", { name: "Zhipu AI Zhipu AI" }).click();
+    await page.getByRole("option", { name: TEST_PROVIDER_OPTION_NAME }).click();
     await page.getByLabel(/Name/i).fill(keyName2);
     await page.getByRole("textbox", { name: /API Key/i }).fill(TEST_API_KEY);
 
@@ -134,3 +140,43 @@ test.describe("LLM Provider API Keys", () => {
     await deleteLlmProviderApiKey(page, keyName1);
   });
 });
+
+async function deleteVisibleProviderKeys(
+  request: APIRequestContext,
+  provider: string,
+): Promise<void> {
+  const listResponse = await request.get(
+    `${API_BASE_URL}/api/llm-provider-api-keys?provider=${encodeURIComponent(provider)}`,
+    {
+      headers: {
+        "Content-Type": "application/json",
+        Origin: UI_BASE_URL,
+      },
+    },
+  );
+
+  if (!listResponse.ok()) {
+    throw new Error(
+      `Failed to list LLM provider API keys for ${provider}: ${listResponse.status()} ${await listResponse.text()}`,
+    );
+  }
+
+  const keys = (await listResponse.json()) as Array<{ id: string }>;
+  for (const key of keys) {
+    const deleteResponse = await request.delete(
+      `${API_BASE_URL}/api/llm-provider-api-keys/${key.id}`,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Origin: UI_BASE_URL,
+        },
+      },
+    );
+
+    if (!deleteResponse.ok()) {
+      throw new Error(
+        `Failed to delete LLM provider API key ${key.id}: ${deleteResponse.status()} ${await deleteResponse.text()}`,
+      );
+    }
+  }
+}

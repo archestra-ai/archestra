@@ -1,4 +1,5 @@
 import type { APIRequestContext } from "@playwright/test";
+import { hasArchestraTokenPrefix } from "@shared";
 import { API_BASE_URL, WIREMOCK_INTERNAL_URL } from "../../consts";
 import { expect, LLM_PROVIDER_API_KEYS_ROUTE, test } from "../api-fixtures";
 
@@ -143,7 +144,7 @@ test.describe("Virtual API Keys - CRUD API", () => {
       );
 
       // Token value is returned once at creation
-      expect(vk.value).toMatch(/^archestra_/);
+      expect(hasArchestraTokenPrefix(vk.value)).toBe(true);
       expect(vk.value.length).toBeGreaterThan(20);
 
       // Fields are present and correct
@@ -323,7 +324,7 @@ test.describe("Virtual API Keys - CRUD API", () => {
         { name: "vk-for-keyless" },
       );
 
-      expect(vk.value).toMatch(/^archestra_/);
+      expect(hasArchestraTokenPrefix(vk.value)).toBe(true);
       expect(vk.id).toBeTruthy();
       expect(vk.name).toBe("vk-for-keyless");
     } finally {
@@ -380,7 +381,7 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
     const vk = await createVirtualKey(makeApiRequest, request, chatApiKey.id, {
       name: "test-vk",
     });
-    expect(vk.value).toMatch(/^archestra_/);
+    expect(hasArchestraTokenPrefix(vk.value)).toBe(true);
 
     try {
       // Call LLM proxy with the virtual key

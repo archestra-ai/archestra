@@ -99,26 +99,6 @@ export async function verifyToolCallResultViaApi({
   }
 }
 
-export async function parseResponse(response: {
-  headers: () => Record<string, string>;
-  text: () => Promise<string>;
-  json: () => Promise<unknown>;
-}): Promise<unknown> {
-  const contentType = response.headers()["content-type"] || "";
-
-  if (contentType.includes("text/event-stream")) {
-    const text = await response.text();
-    for (const line of text.split("\n")) {
-      if (line.startsWith("data: ")) {
-        return JSON.parse(line.slice(6));
-      }
-    }
-    throw new Error(`No data found in SSE response: ${text}`);
-  }
-
-  return response.json();
-}
-
 export function makeMcpGatewayRequestHeaders(
   token: string,
 ): Record<string, string> {
@@ -183,23 +163,6 @@ export async function getOrgTokenForProfile(
     request,
     method: "get",
     urlSuffix: `/api/tokens/${orgToken.id}/value`,
-  });
-  return (await valueResponse.json()).value;
-}
-
-export async function getUserTokenForCurrentUser(
-  request: APIRequestContext,
-): Promise<string> {
-  await makeApiRequest({
-    request,
-    method: "get",
-    urlSuffix: "/api/user-tokens/me",
-  });
-
-  const valueResponse = await makeApiRequest({
-    request,
-    method: "get",
-    urlSuffix: "/api/user-tokens/me/value",
   });
   return (await valueResponse.json()).value;
 }

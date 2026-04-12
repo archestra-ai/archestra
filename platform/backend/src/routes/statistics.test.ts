@@ -32,7 +32,7 @@ describe("statistics routes", () => {
   });
 
   describe("GET /api/statistics/cost-health", () => {
-    test("returns 200 with valid health score shape", async () => {
+    test("returns valid cost health response", async () => {
       const response = await app.inject({
         method: "GET",
         url: "/api/statistics/cost-health",
@@ -41,21 +41,10 @@ describe("statistics routes", () => {
       expect(response.statusCode).toBe(200);
 
       const body = response.json();
+
       expect(body).toHaveProperty("score");
-      expect(body).toHaveProperty("dimensions");
-      expect(body.dimensions).toHaveProperty("limits");
-      expect(body.dimensions).toHaveProperty("optimizationRules");
-      expect(body.dimensions).toHaveProperty("compression");
-      expect(body.dimensions).toHaveProperty("toolHygiene");
-    });
-
-    test("each dimension has score, severity, message, and link", async () => {
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/statistics/cost-health",
-      });
-
-      const body = response.json();
+      expect(body.score).toBeGreaterThanOrEqual(0);
+      expect(body.score).toBeLessThanOrEqual(100);
 
       for (const key of [
         "limits",
@@ -64,24 +53,11 @@ describe("statistics routes", () => {
         "toolHygiene",
       ]) {
         const dimension = body.dimensions[key];
-        expect(dimension).toHaveProperty("score");
-        expect(dimension).toHaveProperty("severity");
-        expect(dimension).toHaveProperty("message");
-        expect(dimension).toHaveProperty("link");
         expect(typeof dimension.score).toBe("number");
         expect(["low", "moderate", "high"]).toContain(dimension.severity);
+        expect(typeof dimension.message).toBe("string");
+        expect(typeof dimension.link).toBe("string");
       }
-    });
-
-    test("overall score is between 0 and 100", async () => {
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/statistics/cost-health",
-      });
-
-      const body = response.json();
-      expect(body.score).toBeGreaterThanOrEqual(0);
-      expect(body.score).toBeLessThanOrEqual(100);
     });
   });
 });

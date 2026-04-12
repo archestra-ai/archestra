@@ -128,29 +128,19 @@ export function ScheduleTriggerRunPage({
   const tokenUsage = chatSession?.tokenUsage;
   const tokensUsed = tokenUsage?.totalTokens;
 
-  const currentProvider = useMemo((): SupportedProvider | undefined => {
-    if (!conversation?.selectedModel) return undefined;
-    const model = chatModels.find(
-      (item) => item.id === conversation.selectedModel,
-    );
-    return model?.provider;
-  }, [conversation?.selectedModel, chatModels]);
+  const selectedModel = useMemo(
+    () =>
+      conversation?.selectedModel
+        ? chatModels.find((item) => item.id === conversation.selectedModel)
+        : undefined,
+    [conversation?.selectedModel, chatModels],
+  );
 
-  const selectedModelContextLength = useMemo((): number | null => {
-    if (!conversation?.selectedModel) return null;
-    const model = chatModels.find(
-      (item) => item.id === conversation.selectedModel,
-    );
-    return model?.capabilities?.contextLength ?? null;
-  }, [conversation?.selectedModel, chatModels]);
-
-  const selectedModelInputModalities = useMemo(() => {
-    if (!conversation?.selectedModel) return null;
-    const model = chatModels.find(
-      (item) => item.id === conversation.selectedModel,
-    );
-    return model?.capabilities?.inputModalities ?? null;
-  }, [conversation?.selectedModel, chatModels]);
+  const currentProvider = selectedModel?.provider;
+  const selectedModelContextLength =
+    selectedModel?.capabilities?.contextLength ?? null;
+  const selectedModelInputModalities =
+    selectedModel?.capabilities?.inputModalities ?? null;
 
   useEffect(() => {
     if (!run?.chatConversationId) {
@@ -161,12 +151,17 @@ export function ScheduleTriggerRunPage({
     setConversationBootstrapError(null);
   }, [run?.chatConversationId]);
 
+  const ensureConversationMutateRef = useRef(
+    ensureConversationMutation.mutateAsync,
+  );
+  ensureConversationMutateRef.current = ensureConversationMutation.mutateAsync;
+
   const ensureConversation = useCallback(async () => {
     bootstrapRequestedRef.current = true;
     setConversationBootstrapError(null);
 
     try {
-      const createdConversation = await ensureConversationMutation.mutateAsync({
+      const createdConversation = await ensureConversationMutateRef.current({
         triggerId,
         runId,
       });
@@ -176,7 +171,7 @@ export function ScheduleTriggerRunPage({
         "Unable to prepare a chat conversation for this run.",
       );
     }
-  }, [ensureConversationMutation, runId, triggerId]);
+  }, [runId, triggerId]);
 
   useEffect(() => {
     if (
@@ -388,7 +383,7 @@ export function ScheduleTriggerRunPage({
 
   const isLoadingPage = triggerLoading || runLoading;
   const activeAgentId =
-    conversation?.agentId ?? run?.agentIdSnapshot ?? undefined;
+    conversation?.agentId ?? trigger?.agentId ?? undefined;
   const activeAgentName =
     conversation?.agent?.name ??
     internalAgents.find((agent) => agent.id === activeAgentId)?.name ??
@@ -506,7 +501,7 @@ export function ScheduleTriggerRunPage({
                 Prompt
               </p>
               <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                {run.messageTemplateSnapshot ?? trigger.messageTemplate}
+                {trigger.messageTemplate}
               </p>
             </div>
 
@@ -541,7 +536,7 @@ export function ScheduleTriggerRunPage({
       {/* Chat thread — the hero */}
       <div className="overflow-hidden rounded-xl border border-border/60 bg-background">
         {isRunActive && (
-          <div className="flex items-center gap-2 border-b border-border/60 px-4 py-2.5 text-xs text-amber-700">
+          <div className="flex items-center gap-2 border-b border-border/60 px-4 py-2.5 text-xs text-amber-700 dark:text-amber-400">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
             Run in progress — conversation unlocks when complete
           </div>
@@ -680,7 +675,7 @@ function StatusBadge({ label }: { label: string }) {
         label === "failed" &&
           "border-destructive/30 bg-destructive/10 text-destructive",
         label === "running" &&
-          "border-amber-500/30 bg-amber-500/10 text-amber-700",
+          "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400",
       )}
     >
       {label}

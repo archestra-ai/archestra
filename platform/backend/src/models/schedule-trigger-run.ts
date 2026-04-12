@@ -12,8 +12,6 @@ class ScheduleTriggerRunModel {
     triggerId: string;
     runKind: "due" | "manual";
     initiatedByUserId?: string;
-    agentIdSnapshot: string;
-    messageTemplateSnapshot: string;
   }): Promise<ScheduleTriggerRun> {
     const [run] = await db
       .insert(schema.scheduleTriggerRunsTable)
@@ -23,8 +21,6 @@ class ScheduleTriggerRunModel {
         runKind: params.runKind,
         status: "running",
         initiatedByUserId: params.initiatedByUserId,
-        agentIdSnapshot: params.agentIdSnapshot,
-        messageTemplateSnapshot: params.messageTemplateSnapshot,
         startedAt: new Date(),
       })
       .returning();
@@ -41,8 +37,6 @@ class ScheduleTriggerRunModel {
       triggerId: params.trigger.id,
       runKind: "manual",
       initiatedByUserId: params.initiatedByUserId,
-      agentIdSnapshot: params.trigger.agentId,
-      messageTemplateSnapshot: params.trigger.messageTemplate,
     });
   }
 
@@ -127,7 +121,12 @@ class ScheduleTriggerRunModel {
         completedAt: new Date(),
         error: params.error ?? null,
       })
-      .where(eq(schema.scheduleTriggerRunsTable.id, params.runId))
+      .where(
+        and(
+          eq(schema.scheduleTriggerRunsTable.id, params.runId),
+          eq(schema.scheduleTriggerRunsTable.status, "running"),
+        ),
+      )
       .returning();
 
     return run ?? null;

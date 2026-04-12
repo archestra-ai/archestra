@@ -173,8 +173,6 @@ function validateScheduleTriggerFields(
       timezone: normalizeTimezone(timezone),
     };
     createCron(params);
-    // TODO: re-enable once we settle on a minimum interval for production
-    // validateCronMinimumInterval(params);
   } catch (error) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,

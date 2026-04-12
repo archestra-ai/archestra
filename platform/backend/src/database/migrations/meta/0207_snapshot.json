@@ -6360,18 +6360,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "agent_id_snapshot": {
-          "name": "agent_id_snapshot",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "message_template_snapshot": {
-          "name": "message_template_snapshot",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "chat_conversation_id": {
           "name": "chat_conversation_id",
           "type": "uuid",
@@ -6398,7 +6386,7 @@
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -6510,7 +6498,7 @@
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"

@@ -3,6 +3,7 @@
 import { Check, ChevronDown } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Popover,
   PopoverContent,
@@ -138,7 +139,7 @@ export function CronExpressionPicker({
             Custom cron
           </p>
           <div className="flex items-center gap-1.5">
-            <input
+            <Input
               placeholder={customPlaceholder}
               value={customDraft}
               onChange={(event) => setCustomDraft(event.target.value)}
@@ -148,7 +149,7 @@ export function CronExpressionPicker({
                   commitCustomValue();
                 }
               }}
-              className="flex h-8 w-full min-w-0 rounded-md border border-input bg-transparent px-2 text-sm shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+              className="h-8 min-w-0 px-2 text-sm"
             />
             <Button
               variant="ghost"

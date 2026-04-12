@@ -52,8 +52,6 @@ export type ScheduleTriggerRun = {
   runKind: ScheduleTriggerRunKind;
   status: ScheduleTriggerRunStatus;
   initiatedByUserId: string | null;
-  agentIdSnapshot: string | null;
-  messageTemplateSnapshot: string | null;
   chatConversationId: string | null;
   startedAt: string | null;
   completedAt: string | null;

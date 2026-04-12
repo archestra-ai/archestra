@@ -37287,8 +37287,6 @@ export type RunScheduleTriggerNowResponses = {
         runKind: 'due' | 'manual';
         status: 'running' | 'success' | 'failed';
         initiatedByUserId: string | null;
-        agentIdSnapshot: string | null;
-        messageTemplateSnapshot: string | null;
         startedAt: string | null;
         completedAt: string | null;
         error: string | null;
@@ -37382,8 +37380,6 @@ export type GetScheduleTriggerRunsResponses = {
             runKind: 'due' | 'manual';
             status: 'running' | 'success' | 'failed';
             initiatedByUserId: string | null;
-            agentIdSnapshot: string | null;
-            messageTemplateSnapshot: string | null;
             startedAt: string | null;
             completedAt: string | null;
             error: string | null;
@@ -37482,8 +37478,6 @@ export type GetScheduleTriggerRunResponses = {
         runKind: 'due' | 'manual';
         status: 'running' | 'success' | 'failed';
         initiatedByUserId: string | null;
-        agentIdSnapshot: string | null;
-        messageTemplateSnapshot: string | null;
         startedAt: string | null;
         completedAt: string | null;
         error: string | null;

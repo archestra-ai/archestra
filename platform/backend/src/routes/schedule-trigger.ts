@@ -647,14 +647,15 @@ async function ensureRunConversation(params: {
 }): Promise<z.infer<typeof SelectConversationSchema>> {
   const { run, userId, organizationId } = params;
 
-  const agentId = run.agentIdSnapshot;
-  if (!agentId) {
+  const trigger = await ScheduleTriggerModel.findById(run.triggerId);
+  if (!trigger) {
     throw new ApiError(
       400,
-      "This run has not started yet — no agent snapshot available",
+      "The trigger for this run no longer exists",
     );
   }
 
+  const agentId = trigger.agentId;
   const agent = await AgentModel.findById(agentId);
   if (!agent || agent.organizationId !== organizationId) {
     throw new ApiError(
@@ -693,9 +694,9 @@ async function ensureRunConversation(params: {
       sessionId: `scheduled-${run.id}`,
     },
   );
-  const uiMessages = buildMessagesFromInteractions(interactionResult.data, run);
+  const uiMessages = buildMessagesFromInteractions(interactionResult.data, trigger.messageTemplate);
   const conversationTitle = buildRunConversationSeedTitle(
-    run.messageTemplateSnapshot ?? "",
+    trigger.messageTemplate,
   );
 
   const conversation = await ConversationModel.create({
@@ -740,7 +741,7 @@ function buildMessagesFromInteractions(
     model?: string | null;
     dualLlmAnalyses?: unknown;
   }>,
-  run: z.infer<typeof SelectScheduleTriggerRunSchema>,
+  messageTemplate: string,
 ): PartialUIMessage[] {
   // Interactions are fetched desc — the first one is the most recent (last in
   // the agentic loop). Its request contains the full conversation history and
@@ -764,18 +765,20 @@ function buildMessagesFromInteractions(
   }
 
   // Fallback: simple prompt + placeholder
-  const fallbackOutput = run.error?.trim()
-    ? `This scheduled run failed.\n\n${run.error.trim()}`
-    : run.status === "running"
-      ? "This scheduled run is still in progress."
-      : "No output was captured for this scheduled run.";
-
   return [
     {
       role: "user",
-      parts: [{ type: "text", text: run.messageTemplateSnapshot ?? "" }],
+      parts: [{ type: "text", text: messageTemplate }],
     },
-    { role: "assistant", parts: [{ type: "text", text: fallbackOutput }] },
+    {
+      role: "assistant",
+      parts: [
+        {
+          type: "text",
+          text: "No output was captured for this scheduled run.",
+        },
+      ],
+    },
   ];
 }
 

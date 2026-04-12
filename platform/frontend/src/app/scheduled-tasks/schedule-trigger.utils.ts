@@ -1,8 +1,5 @@
 import type { UseMutationResult } from "@tanstack/react-query";
-import type {
-  ScheduleTrigger,
-  ScheduleTriggerRunStatus,
-} from "@/lib/schedule-trigger.query";
+import type { ScheduleTriggerRunStatus } from "@/lib/schedule-trigger.query";
 
 export type AgentOption = {
   value: string;
@@ -48,82 +45,6 @@ export function buildScheduleTriggerPayload(
   }
 
   return payload;
-}
-
-export function deriveScheduleTriggerName(
-  formState: ScheduleTriggerFormState,
-  agentLabel?: string | null,
-) {
-  const prompt = formState.messageTemplate.trim().replace(/\s+/g, " ");
-  if (prompt) {
-    return prompt.length > 52 ? `${prompt.slice(0, 49).trimEnd()}...` : prompt;
-  }
-
-  const fallback = agentLabel?.trim() || "Scheduled run";
-  return fallback.length > 52
-    ? `${fallback.slice(0, 49).trimEnd()}...`
-    : fallback;
-}
-
-export function partitionScheduleTriggers(triggers: ScheduleTrigger[]) {
-  return {
-    enabledTriggers: triggers.filter((trigger) => trigger.enabled),
-    disabledTriggers: triggers.filter((trigger) => !trigger.enabled),
-  };
-}
-
-export function buildTimezoneOptions(timezone: string): AgentOption[] {
-  const browserTimezone =
-    Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  const currentValue = timezone.trim() || browserTimezone;
-  const supportedTimezones = getSupportedTimezones();
-  const prioritizedValues = [
-    browserTimezone,
-    "UTC",
-    currentValue,
-    ...supportedTimezones,
-  ];
-
-  return prioritizedValues.reduce<AgentOption[]>((options, value) => {
-    if (!value || options.some((option) => option.value === value)) {
-      return options;
-    }
-
-    options.push({
-      value,
-      label: value,
-      description:
-        value === browserTimezone
-          ? "Current browser timezone"
-          : value === "UTC"
-            ? "Coordinated Universal Time"
-            : value === currentValue && currentValue !== browserTimezone
-              ? "Current value"
-              : "IANA timezone",
-    });
-
-    return options;
-  }, []);
-}
-
-function getSupportedTimezones(): string[] {
-  if (typeof Intl.supportedValuesOf === "function") {
-    return Intl.supportedValuesOf("timeZone");
-  }
-
-  return [
-    "UTC",
-    "Africa/Johannesburg",
-    "America/Chicago",
-    "America/Los_Angeles",
-    "America/New_York",
-    "Asia/Dubai",
-    "Asia/Singapore",
-    "Asia/Tokyo",
-    "Australia/Sydney",
-    "Europe/London",
-    "Europe/Oslo",
-  ];
 }
 
 export function getActiveMutationVariable<T>(
@@ -179,23 +100,6 @@ export function getRunNowTrackingState(params: {
     shouldPollRuns: isTrackedRunActive,
     shouldClearTrackedRun: !isTrackedRunActive,
   };
-}
-
-export function getTimezonePreview(timezone: string): string | null {
-  const normalized = timezone.trim();
-  if (!normalized) {
-    return null;
-  }
-
-  try {
-    return `Current time there: ${new Intl.DateTimeFormat(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-      timeZone: normalized,
-    }).format(new Date())}`;
-  } catch {
-    return "Timezone must be a valid IANA value such as UTC or America/New_York.";
-  }
 }
 
 export function getScheduleTriggerRunSessionId(runId: string): string {

@@ -1,5 +1,14 @@
 import { Cron } from "croner";
-import { and, count, desc, eq, ilike, inArray, ne } from "drizzle-orm";
+import {
+  type SQL,
+  and,
+  count,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  ne,
+} from "drizzle-orm";
 import db, { schema } from "@/database";
 import {
   normalizeCronExpression,
@@ -37,49 +46,8 @@ class ScheduleTriggerModel {
       | "name"
     >,
   ): Promise<number> {
-    const filters = [
-      eq(schema.scheduleTriggersTable.organizationId, params.organizationId),
-    ];
-
-    if (params.enabled !== undefined) {
-      filters.push(eq(schema.scheduleTriggersTable.enabled, params.enabled));
-    }
-
-    if (params.agentIds !== undefined) {
-      if (params.agentIds.length === 0) {
-        return 0;
-      }
-      filters.push(
-        inArray(schema.scheduleTriggersTable.agentId, params.agentIds),
-      );
-    }
-
-    if (params.actorUserId !== undefined) {
-      filters.push(
-        eq(schema.scheduleTriggersTable.actorUserId, params.actorUserId),
-      );
-    }
-
-    if (params.actorUserIds !== undefined) {
-      if (params.actorUserIds.length === 0) {
-        return 0;
-      }
-      filters.push(
-        inArray(schema.scheduleTriggersTable.actorUserId, params.actorUserIds),
-      );
-    }
-
-    if (params.excludeActorUserId !== undefined) {
-      filters.push(
-        ne(schema.scheduleTriggersTable.actorUserId, params.excludeActorUserId),
-      );
-    }
-
-    if (params.name) {
-      filters.push(
-        ilike(schema.scheduleTriggersTable.name, `%${params.name}%`),
-      );
-    }
+    const filters = buildListFilters(params);
+    if (!filters) return 0;
 
     const [result] = await db
       .select({ count: count() })
@@ -92,49 +60,8 @@ class ScheduleTriggerModel {
   static async listByOrganization(
     params: ScheduleTriggerListFilters,
   ): Promise<ScheduleTrigger[]> {
-    const filters = [
-      eq(schema.scheduleTriggersTable.organizationId, params.organizationId),
-    ];
-
-    if (params.enabled !== undefined) {
-      filters.push(eq(schema.scheduleTriggersTable.enabled, params.enabled));
-    }
-
-    if (params.agentIds !== undefined) {
-      if (params.agentIds.length === 0) {
-        return [];
-      }
-      filters.push(
-        inArray(schema.scheduleTriggersTable.agentId, params.agentIds),
-      );
-    }
-
-    if (params.actorUserId !== undefined) {
-      filters.push(
-        eq(schema.scheduleTriggersTable.actorUserId, params.actorUserId),
-      );
-    }
-
-    if (params.actorUserIds !== undefined) {
-      if (params.actorUserIds.length === 0) {
-        return [];
-      }
-      filters.push(
-        inArray(schema.scheduleTriggersTable.actorUserId, params.actorUserIds),
-      );
-    }
-
-    if (params.excludeActorUserId !== undefined) {
-      filters.push(
-        ne(schema.scheduleTriggersTable.actorUserId, params.excludeActorUserId),
-      );
-    }
-
-    if (params.name) {
-      filters.push(
-        ilike(schema.scheduleTriggersTable.name, `%${params.name}%`),
-      );
-    }
+    const filters = buildListFilters(params);
+    if (!filters) return [];
 
     let query = db
       .select({
@@ -282,6 +209,73 @@ class ScheduleTriggerModel {
 }
 
 export default ScheduleTriggerModel;
+
+function escapeLikePattern(value: string): string {
+  return value.replace(/[%_\\]/g, "\\$&");
+}
+
+function buildListFilters(
+  params: Pick<
+    ScheduleTriggerListFilters,
+    | "organizationId"
+    | "enabled"
+    | "agentIds"
+    | "actorUserId"
+    | "actorUserIds"
+    | "excludeActorUserId"
+    | "name"
+  >,
+): SQL[] | null {
+  if (
+    (params.agentIds !== undefined && params.agentIds.length === 0) ||
+    (params.actorUserIds !== undefined && params.actorUserIds.length === 0)
+  ) {
+    return null;
+  }
+
+  const filters: SQL[] = [
+    eq(schema.scheduleTriggersTable.organizationId, params.organizationId),
+  ];
+
+  if (params.enabled !== undefined) {
+    filters.push(eq(schema.scheduleTriggersTable.enabled, params.enabled));
+  }
+
+  if (params.agentIds !== undefined && params.agentIds.length > 0) {
+    filters.push(
+      inArray(schema.scheduleTriggersTable.agentId, params.agentIds),
+    );
+  }
+
+  if (params.actorUserId !== undefined) {
+    filters.push(
+      eq(schema.scheduleTriggersTable.actorUserId, params.actorUserId),
+    );
+  }
+
+  if (params.actorUserIds !== undefined && params.actorUserIds.length > 0) {
+    filters.push(
+      inArray(schema.scheduleTriggersTable.actorUserId, params.actorUserIds),
+    );
+  }
+
+  if (params.excludeActorUserId !== undefined) {
+    filters.push(
+      ne(schema.scheduleTriggersTable.actorUserId, params.excludeActorUserId),
+    );
+  }
+
+  if (params.name) {
+    filters.push(
+      ilike(
+        schema.scheduleTriggersTable.name,
+        `%${escapeLikePattern(params.name)}%`,
+      ),
+    );
+  }
+
+  return filters;
+}
 
 function triggerColumns() {
   return {

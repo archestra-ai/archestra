@@ -22,6 +22,16 @@ export async function handleCheckDueScheduleTriggers(): Promise<void> {
           { triggerId: trigger.id, triggerName: trigger.name },
           "Skipping due trigger, task already in flight",
         );
+        const skippedRun = await ScheduleTriggerRunModel.create({
+          organizationId: trigger.organizationId,
+          triggerId: trigger.id,
+          runKind: "due",
+        });
+        await ScheduleTriggerRunModel.markCompleted({
+          runId: skippedRun.id,
+          status: "failed",
+          error: "Skipped: previous run was still in progress",
+        });
         await ScheduleTriggerModel.markExecuted(trigger.id, now);
         continue;
       }
@@ -30,8 +40,6 @@ export async function handleCheckDueScheduleTriggers(): Promise<void> {
         organizationId: trigger.organizationId,
         triggerId: trigger.id,
         runKind: "due",
-        agentIdSnapshot: trigger.agentId,
-        messageTemplateSnapshot: trigger.messageTemplate,
       });
 
       await ScheduleTriggerModel.markExecuted(trigger.id, now);

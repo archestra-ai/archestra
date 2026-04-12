@@ -5,13 +5,11 @@ CREATE TABLE "schedule_trigger_runs" (
 	"run_kind" text NOT NULL,
 	"status" text DEFAULT 'running' NOT NULL,
 	"initiated_by_user_id" text,
-	"agent_id_snapshot" uuid,
-	"message_template_snapshot" text,
 	"chat_conversation_id" uuid,
 	"started_at" timestamp with time zone,
 	"completed_at" timestamp with time zone,
 	"error" text,
-	"created_at" timestamp DEFAULT now() NOT NULL
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "schedule_triggers" (
@@ -25,7 +23,7 @@ CREATE TABLE "schedule_triggers" (
 	"enabled" boolean DEFAULT true NOT NULL,
 	"actor_user_id" text NOT NULL,
 	"last_executed_at" timestamp with time zone,
-	"created_at" timestamp DEFAULT now() NOT NULL
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 ALTER TABLE "schedule_trigger_runs" ADD CONSTRAINT "schedule_trigger_runs_trigger_id_schedule_triggers_id_fk" FOREIGN KEY ("trigger_id") REFERENCES "public"."schedule_triggers"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint

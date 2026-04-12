@@ -102,7 +102,6 @@ export async function deleteVisibleProviderKeys(
     `${API_BASE_URL}/api/llm-provider-api-keys?provider=${encodeURIComponent(provider)}`,
     {
       headers: {
-        "Content-Type": "application/json",
         Origin: UI_BASE_URL,
       },
     },
@@ -120,7 +119,6 @@ export async function deleteVisibleProviderKeys(
       `${API_BASE_URL}/api/llm-provider-api-keys/${key.id}`,
       {
         headers: {
-          "Content-Type": "application/json",
           Origin: UI_BASE_URL,
         },
       },

@@ -10,6 +10,7 @@ import {
   ADMIN_EMAIL,
   DEFAULT_TEAM_NAME,
   VAULT_ADDR,
+  VAULT_KV_VERSION,
   VAULT_TEAM_FOLDER_PATH,
 } from "../consts";
 import { expect, goToPage, test } from "../fixtures";
@@ -381,12 +382,18 @@ async function ensureDefaultTeamVaultFolder(cookieHeaders: string) {
 
 async function ensureVaultSecretExists() {
   const fullSecretPath = `${VAULT_TEAM_FOLDER_PATH}/${secretName}`;
-  const secretData = {
-    data: {
-      [secretKey]: secretValue,
-      description: "Example API credentials for Default Team",
-    },
-  };
+  const secretData =
+    VAULT_KV_VERSION === "1"
+      ? {
+          [secretKey]: secretValue,
+          description: "Example API credentials for Default Team",
+        }
+      : {
+          data: {
+            [secretKey]: secretValue,
+            description: "Example API credentials for Default Team",
+          },
+        };
 
   const response = await fetch(`${VAULT_ADDR}/v1/${fullSecretPath}`, {
     method: "POST",
@@ -408,5 +415,9 @@ async function ensureVaultSecretExists() {
 
   expect(readResponse.ok).toBeTruthy();
   const readData = await readResponse.json();
-  expect(readData.data.data[secretKey]).toBe(secretValue);
+  const persistedSecret =
+    VAULT_KV_VERSION === "1"
+      ? readData.data?.[secretKey]
+      : readData.data?.data?.[secretKey];
+  expect(persistedSecret).toBe(secretValue);
 }

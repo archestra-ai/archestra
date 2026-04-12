@@ -1,12 +1,11 @@
-import type { APIRequestContext } from "@playwright/test";
 import { E2eTestId, getVirtualKeyRowTestId } from "@shared";
-import { API_BASE_URL, UI_BASE_URL } from "../consts";
 import { expect, test } from "../fixtures";
 import {
   clickButton,
   createLlmProviderApiKey,
   createVirtualKey,
   deleteLlmProviderApiKey,
+  deleteVisibleProviderKeys,
   goToLlmProviderApiKeysPage,
   goToVirtualKeysPage,
 } from "../utils";
@@ -118,43 +117,3 @@ test.describe("Provider Settings - Virtual Keys for Keyless Provider", () => {
     }
   });
 });
-
-async function deleteVisibleProviderKeys(
-  request: APIRequestContext,
-  provider: string,
-): Promise<void> {
-  const listResponse = await request.get(
-    `${API_BASE_URL}/api/llm-provider-api-keys?provider=${encodeURIComponent(provider)}`,
-    {
-      headers: {
-        "Content-Type": "application/json",
-        Origin: UI_BASE_URL,
-      },
-    },
-  );
-
-  if (!listResponse.ok()) {
-    throw new Error(
-      `Failed to list LLM provider API keys for ${provider}: ${listResponse.status()} ${await listResponse.text()}`,
-    );
-  }
-
-  const keys = (await listResponse.json()) as Array<{ id: string }>;
-  for (const key of keys) {
-    const deleteResponse = await request.delete(
-      `${API_BASE_URL}/api/llm-provider-api-keys/${key.id}`,
-      {
-        headers: {
-          "Content-Type": "application/json",
-          Origin: UI_BASE_URL,
-        },
-      },
-    );
-
-    if (!deleteResponse.ok()) {
-      throw new Error(
-        `Failed to delete LLM provider API key ${key.id}: ${deleteResponse.status()} ${await deleteResponse.text()}`,
-      );
-    }
-  }
-}

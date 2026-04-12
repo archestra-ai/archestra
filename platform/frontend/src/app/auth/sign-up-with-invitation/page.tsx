@@ -12,6 +12,9 @@ import { useInvitationCheck } from "@/lib/auth/invitation.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 
 function setInputValue(input: HTMLInputElement, value: string) {
+  // Better Auth UI owns these inputs internally, so direct assignment is not
+  // enough to notify its React handlers. Use the native setter to keep the
+  // third-party controlled field state in sync with the DOM value.
   const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
     window.HTMLInputElement.prototype,
     "value",

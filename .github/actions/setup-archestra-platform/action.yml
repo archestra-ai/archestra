@@ -348,9 +348,20 @@ runs:
             exit 1
           fi
 
+          echo "Starting local port-forwards for dependency health checks..."
+          kubectl port-forward service/e2e-tests-wiremock 30080:8080 >/tmp/wiremock-port-forward.log 2>&1 &
+          WIREMOCK_PORT_FORWARD_PID=$!
+          kubectl port-forward service/e2e-tests-keycloak 30081:8080 >/tmp/keycloak-port-forward.log 2>&1 &
+          KEYCLOAK_PORT_FORWARD_PID=$!
+
+          cleanup_port_forwards() {
+            kill "${WIREMOCK_PORT_FORWARD_PID}" "${KEYCLOAK_PORT_FORWARD_PID}" 2>/dev/null || true
+          }
+          trap cleanup_port_forwards EXIT
+
           echo "Verifying WireMock is accessible and stubs are loaded..."
           for i in $(seq 1 10); do
-            HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:30080/__admin/health 2>/dev/null || echo "000")
+            HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:30080/__admin/health || true)
             if [ "$HTTP_CODE" = "200" ]; then
               echo "WireMock is accessible (HTTP $HTTP_CODE)"
               break
@@ -362,6 +373,7 @@ runs:
             echo "ERROR: WireMock not accessible after 10 attempts"
             kubectl get pods -l app.kubernetes.io/name=wiremock -o wide
             kubectl logs -l app.kubernetes.io/name=wiremock --tail=30 2>/dev/null || true
+            cat /tmp/wiremock-port-forward.log 2>/dev/null || true
             exit 1
           fi
 
@@ -370,7 +382,7 @@ runs:
           # Keycloak's /health/ready is on the management port (9000), NOT the main HTTP port (8080).
           # The NodePort service routes to 8080, so we check the OIDC discovery endpoint instead.
           for i in $(seq 1 10); do
-            HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:30081/realms/archestra/.well-known/openid-configuration 2>/dev/null || echo "000")
+            HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:30081/realms/archestra/.well-known/openid-configuration || true)
             if [ "$HTTP_CODE" = "200" ]; then
               echo "Keycloak is accessible (HTTP $HTTP_CODE)"
               break
@@ -382,6 +394,7 @@ runs:
             echo "ERROR: Keycloak not accessible after 10 attempts (last HTTP $HTTP_CODE)"
             kubectl get pods -l app.kubernetes.io/name=keycloak -o wide
             kubectl logs -l app.kubernetes.io/name=keycloak --tail=30 2>/dev/null || true
+            cat /tmp/keycloak-port-forward.log 2>/dev/null || true
             exit 1
           fi
           echo "E2e dependency services are ready"

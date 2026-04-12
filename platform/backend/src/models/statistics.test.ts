@@ -1,5 +1,7 @@
 import type { StatisticsTimeFrame } from "@shared";
 import { describe, expect, test } from "@/test";
+import LimitModel from "./limit";
+import OptimizationRuleModel from "./optimization-rule";
 import StatisticsModel from "./statistics";
 
 describe("StatisticsModel", () => {
@@ -795,6 +797,106 @@ describe("StatisticsModel", () => {
 
       expect(result).toHaveLength(1);
       expect(result[0].cost).toBeCloseTo(0.15);
+    });
+  });
+
+  describe("getCostHealth", () => {
+    test("returns health score for org with no configuration", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      const result = await StatisticsModel.getCostHealth(org.id);
+
+      expect(result).toHaveProperty("score");
+      expect(result).toHaveProperty("dimensions");
+      expect(result.dimensions).toHaveProperty("limits");
+      expect(result.dimensions).toHaveProperty("optimizationRules");
+      expect(result.dimensions).toHaveProperty("compression");
+      expect(result.dimensions).toHaveProperty("toolHygiene");
+    });
+
+    test("limits dimension reflects agent coverage", async ({
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await makeAgent({
+        name: "test-agent",
+        organizationId: org.id,
+      });
+
+      // No limits — should be 0
+      const noLimits = await StatisticsModel.getCostHealth(org.id);
+      expect(noLimits.dimensions.limits.score).toBe(0);
+
+      // Add agent-level limit
+      await LimitModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 100000,
+        model: ["gpt-4o"],
+      });
+
+      const withLimit = await StatisticsModel.getCostHealth(org.id);
+      expect(withLimit.dimensions.limits.score).toBe(100);
+    });
+
+    test("optimization rules dimension reflects enabled state", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      // No rules — score 0
+      const noRules = await StatisticsModel.getCostHealth(org.id);
+      expect(noRules.dimensions.optimizationRules.score).toBe(0);
+
+      // Add disabled rule
+      await OptimizationRuleModel.create({
+        entityType: "organization",
+        entityId: org.id,
+        provider: "openai",
+        targetModel: "gpt-4o-mini",
+        conditions: [],
+        enabled: false,
+      });
+
+      const disabledRule = await StatisticsModel.getCostHealth(org.id);
+      expect(disabledRule.dimensions.optimizationRules.score).toBe(50);
+    });
+
+    test("compression dimension reflects org TOON setting", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      // TOON defaults to true
+      const result = await StatisticsModel.getCostHealth(org.id);
+      expect(result.dimensions.compression.score).toBe(100);
+    });
+
+    test("tool hygiene dimension reflects too many agent tool counts", async ({
+      makeOrganization,
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await makeAgent({
+        name: "heavy-agent",
+        organizationId: org.id,
+      });
+
+      // Assign 25 tools
+      for (let i = 0; i < 25; i++) {
+        const tool = await makeTool({ name: `tool-${i}` });
+        await makeAgentTool(agent.id, tool.id);
+      }
+
+      const result = await StatisticsModel.getCostHealth(org.id);
+      expect(result.dimensions.toolHygiene.score).toBe(0);
+      expect(result.dimensions.toolHygiene.severity).toBe("high");
     });
   });
 });

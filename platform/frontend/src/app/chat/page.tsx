@@ -82,6 +82,10 @@ import { TypingText } from "@/components/ui/typing-text";
 import { Version } from "@/components/version";
 import { useDefaultAgentId, useInternalAgents } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  clearOAuthReauthChatResume,
+  getOAuthReauthChatResume,
+} from "@/lib/auth/oauth-session";
 import { useRecentlyGeneratedTitles } from "@/lib/chat/chat.hook";
 import {
   fetchConversationEnabledTools,
@@ -167,6 +171,7 @@ export function ChatPageContent({
   );
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const autoSendTriggeredRef = useRef(false);
+  const oauthReauthResumeTriggeredRef = useRef(false);
   // Store pending URL for browser navigation after conversation is created
   const [pendingBrowserUrl, setPendingBrowserUrl] = useState<
     string | undefined
@@ -1374,6 +1379,26 @@ export function ChatPageContent({
     selectConversation,
     createConversationMutation.isPending,
   ]);
+
+  useEffect(() => {
+    const pendingReauthResume = getOAuthReauthChatResume();
+    if (
+      oauthReauthResumeTriggeredRef.current ||
+      !pendingReauthResume ||
+      pendingReauthResume.conversationId !== conversationId ||
+      !sendMessage ||
+      status !== "ready"
+    ) {
+      return;
+    }
+
+    oauthReauthResumeTriggeredRef.current = true;
+    clearOAuthReauthChatResume();
+    sendMessage({
+      role: "user",
+      parts: [{ type: "text", text: pendingReauthResume.message }],
+    });
+  }, [conversationId, sendMessage, status]);
 
   // Check if the conversation's agent was deleted
   const isAgentDeleted = conversationId && conversation && !conversation.agent;

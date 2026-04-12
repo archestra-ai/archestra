@@ -1,6 +1,11 @@
 import { ExternalLink, KeyRound } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface AuthErrorToolProps {
   title: string;
@@ -9,6 +14,7 @@ interface AuthErrorToolProps {
   buttonUrl: string;
   /** When provided, renders an inline button instead of an external link */
   onAction?: () => void;
+  actionTooltipText?: string;
 }
 
 export function AuthErrorTool({
@@ -17,6 +23,7 @@ export function AuthErrorTool({
   buttonText,
   buttonUrl,
   onAction,
+  actionTooltipText,
 }: AuthErrorToolProps) {
   return (
     <div className="mt-3 rounded-xl border border-border px-5 py-4">
@@ -27,9 +34,16 @@ export function AuthErrorTool({
           <span>{description}</span>
         </div>
         {onAction ? (
-          <Button variant="secondary" size="sm" onClick={onAction}>
-            {buttonText}
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="secondary" size="sm" onClick={onAction}>
+                {buttonText}
+              </Button>
+            </TooltipTrigger>
+            {actionTooltipText ? (
+              <TooltipContent>{actionTooltipText}</TooltipContent>
+            ) : null}
+          </Tooltip>
         ) : (
           <Button variant="secondary" size="sm" asChild>
             <a href={buttonUrl} target="_blank" rel="noopener noreferrer">

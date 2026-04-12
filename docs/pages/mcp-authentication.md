@@ -332,7 +332,9 @@ Your server (or its OAuth provider) needs to expose two things:
 
 Archestra handles everything else: endpoint discovery, client registration, the authorization code flow with PKCE, token storage, and automatic refresh when tokens expire.
 
-If the MCP server URL is different from the OAuth issuer or metadata host, configure explicit OAuth discovery overrides in the MCP catalog item. Archestra can use a separate authorization server URL, a direct well-known metadata URL, and a direct resource metadata URL instead of deriving discovery from the MCP server URL.
+If the MCP server URL is different from the OAuth issuer or metadata host, configure explicit OAuth overrides in the MCP catalog item. Archestra can use a separate authorization server URL, a direct well-known metadata URL, a direct resource metadata URL, or direct authorization and token endpoints instead of deriving everything from the MCP server URL.
+
+Direct authorization and token endpoints act as explicit overrides when configured, and are useful for legacy or self-hosted OAuth providers that expose fixed OAuth URLs but do not publish any `/.well-known` metadata.
 
 Your server receives an `Authorization: Bearer <access_token>` header with each request from the gateway.
 

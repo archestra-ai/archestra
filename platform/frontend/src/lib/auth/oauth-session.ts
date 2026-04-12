@@ -24,6 +24,7 @@ const OAUTH_SERVER_TYPE = "oauth_server_type";
 const OAUTH_ENVIRONMENT_VALUES = "oauth_environment_values";
 const OAUTH_PENDING_AFTER_ENV_VARS = "oauth_pending_after_env_vars";
 const OAUTH_RETURN_URL = "oauth_return_url";
+const OAUTH_REAUTH_CHAT_RESUME = "oauth_reauth_chat_resume";
 
 // Dynamic key prefix (combined with code + state to deduplicate callbacks)
 const OAUTH_PROCESSING_PREFIX = "oauth_processing_";
@@ -158,6 +159,58 @@ export function clearOAuthReturnUrl() {
   sessionStorage.removeItem(OAUTH_RETURN_URL);
 }
 
+export function setOAuthReauthChatResume(params: {
+  returnUrl: string;
+  serverName: string;
+}) {
+  const conversationId = extractConversationIdFromChatUrl(params.returnUrl);
+  if (!conversationId) {
+    return;
+  }
+
+  sessionStorage.setItem(
+    OAUTH_REAUTH_CHAT_RESUME,
+    JSON.stringify({
+      conversationId,
+      message: `I re-authenticated the "${params.serverName}" connection. Please retry the last failed tool call and continue from where we left off.`,
+    }),
+  );
+}
+
+export function getOAuthReauthChatResume(): {
+  conversationId: string;
+  message: string;
+} | null {
+  const json = sessionStorage.getItem(OAUTH_REAUTH_CHAT_RESUME);
+  if (!json) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(json) as {
+      conversationId?: unknown;
+      message?: unknown;
+    };
+    if (
+      typeof parsed.conversationId !== "string" ||
+      typeof parsed.message !== "string"
+    ) {
+      return null;
+    }
+
+    return {
+      conversationId: parsed.conversationId,
+      message: parsed.message,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function clearOAuthReauthChatResume() {
+  sessionStorage.removeItem(OAUTH_REAUTH_CHAT_RESUME);
+}
+
 // ─── Cleanup ─────────────────────────────────────────────────────────
 
 /** Remove re-authentication context. */
@@ -184,4 +237,14 @@ export function clearInstallationCompleteCatalogId() {
 /** Remove the "pending after env vars" flag. */
 export function clearPendingAfterEnvVars() {
   sessionStorage.removeItem(OAUTH_PENDING_AFTER_ENV_VARS);
+}
+
+function extractConversationIdFromChatUrl(url: string): string | null {
+  try {
+    const parsedUrl = new URL(url, window.location.origin);
+    const match = parsedUrl.pathname.match(/^\/chat\/([^/]+)$/);
+    return match?.[1] ?? null;
+  } catch {
+    return null;
+  }
 }

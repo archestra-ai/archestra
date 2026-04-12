@@ -30,8 +30,6 @@ describe("OAuthConfigSchema", () => {
         authorization_endpoint:
           "https://legacy-idp.example.com/oauth/authorize",
       }),
-    ).toThrow(
-      "authorization_endpoint and token_endpoint must be set together",
-    );
+    ).toThrow("authorization_endpoint and token_endpoint must be set together");
   });
 });

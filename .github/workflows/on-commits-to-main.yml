@@ -16,93 +16,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-staging-image:
-    name: Build Platform Staging Docker Image
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+  deploy-dev-platform-images:
+    name: Build Platform Staging and MCP Server Base Images
+    uses: ./.github/workflows/deploy-dev-platform-images.yml
     permissions:
-      contents: read # Required to checkout the repository and build the staging image.
-      id-token: write # Required for Workload Identity Federation.
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-
-      - name: Authenticate to Google Artifact Registry
-        uses: ./.github/actions/auth-to-gar
-        with:
-          service_account: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
-          workload_identity_provider: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
-
-      - name: Install gke-gcloud-auth-plugin
-        run: gcloud components install gke-gcloud-auth-plugin
-
-      - name: Configure kubectl
-        run: |
-          gcloud container clusters get-credentials archestra-staging \
-            --zone us-central1-a --project friendly-path-465518-r6
-
-      - name: Extract previous version static assets
-        run: |
-          PREV_TAG=$(kubectl get deployment archestra-platform -n archestra \
-            -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null \
-            | cut -d: -f2) || true
-
-          mkdir -p platform/prev-static-assets
-          if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "$GITHUB_SHA_VALUE" ]; then
-            PREV_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${PREV_TAG}"
-            echo "Pulling previous image: $PREV_IMAGE"
-            docker pull "$PREV_IMAGE" || { echo "Warning: Failed to pull previous image"; true; }
-            CID=$(docker create "$PREV_IMAGE" 2>/dev/null) || true
-            if [ -n "$CID" ]; then
-              # Extract from /static-assets-source/ which has ONLY that build's chunks (not accumulated)
-              echo "Extracting previous static assets from container $CID"
-              docker cp "${CID}:/static-assets-source/." platform/prev-static-assets/ || echo "Warning: Failed to copy previous assets"
-              docker rm "$CID"
-              echo "Successfully extracted previous static assets"
-            else
-              echo "No previous container created, skipping asset extraction"
-            fi
-          else
-            echo "No previous version to extract (PREV_TAG: $PREV_TAG)"
-          fi
-        env:
-          GITHUB_SHA_VALUE: ${{ github.sha }}
-
-      # NOTE: only build on amd64 for now as our staging environment runs on amd64
-      # if we will need to support arm64, we should follow the pattern we do in
-      # .github/workflows/build-dockerhub-image.yml and do a matrix build so that we are build
-      # on both amd64 and arm64 using native arch (to massively speed up the builds)
-      - name: Build Docker image
-        uses: ./.github/actions/build-platform-docker-image
-        with:
-          context: ./platform
-          push: "true"
-          platforms: linux/amd64
-          version: ${{ github.sha }}
-          tags: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${{ github.sha }}
-          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-          sentry-auth-token: ${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
-
-  build-mcp-server-base-image:
-    name: Build MCP Server Base Image
-    uses: ./.github/workflows/build-base-mcp-server-docker-image.yml
-    permissions:
-      contents: read # Required to invoke the reusable MCP server base image workflow.
+      contents: read # Required to invoke the reusable image publishing workflow.
       id-token: write # Required for Workload Identity Federation.
     with:
-      push_to_gcr: true
       version: ${{ github.sha }}
     secrets:
-      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+      DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
+      DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+      PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN: ${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
+      TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+      TURBOREPO_REMOTE_CACHING_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
 
   deploy-to-staging:
     name: Deploy to staging
     runs-on: blacksmith-2vcpu-ubuntu-2404
-    needs: [build-staging-image, build-mcp-server-base-image]
+    needs: [deploy-dev-platform-images]
     permissions:
       contents: read # Required to checkout the repository and deploy the chart.
       id-token: write # Required for Workload Identity Federation.

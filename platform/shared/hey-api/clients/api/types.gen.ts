@@ -24808,6 +24808,7 @@ export type GetInternalMcpCatalogResponses = {
             name: string;
             server_url: string;
             auth_server_url?: string;
+            authorization_endpoint?: string;
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
@@ -24939,6 +24940,7 @@ export type CreateInternalMcpCatalogItemData = {
             name: string;
             server_url: string;
             auth_server_url?: string;
+            authorization_endpoint?: string;
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
@@ -25129,6 +25131,7 @@ export type CreateInternalMcpCatalogItemResponses = {
             name: string;
             server_url: string;
             auth_server_url?: string;
+            authorization_endpoint?: string;
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
@@ -25410,6 +25413,7 @@ export type GetInternalMcpCatalogItemResponses = {
             name: string;
             server_url: string;
             auth_server_url?: string;
+            authorization_endpoint?: string;
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
@@ -25540,6 +25544,7 @@ export type UpdateInternalMcpCatalogItemData = {
             name: string;
             server_url: string;
             auth_server_url?: string;
+            authorization_endpoint?: string;
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
@@ -25732,6 +25737,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
             name: string;
             server_url: string;
             auth_server_url?: string;
+            authorization_endpoint?: string;
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
@@ -30197,6 +30203,7 @@ export type GetMcpServerInstallationRequestsResponses = {
                 name: string;
                 server_url: string;
                 auth_server_url?: string;
+                authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
@@ -30293,6 +30300,7 @@ export type CreateMcpServerInstallationRequestData = {
                 name: string;
                 server_url: string;
                 auth_server_url?: string;
+                authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
@@ -30443,6 +30451,7 @@ export type CreateMcpServerInstallationRequestResponses = {
                 name: string;
                 server_url: string;
                 auth_server_url?: string;
+                authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
@@ -30692,6 +30701,7 @@ export type GetMcpServerInstallationRequestResponses = {
                 name: string;
                 server_url: string;
                 auth_server_url?: string;
+                authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
@@ -30788,6 +30798,7 @@ export type UpdateMcpServerInstallationRequestData = {
                 name: string;
                 server_url: string;
                 auth_server_url?: string;
+                authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
@@ -30950,6 +30961,7 @@ export type UpdateMcpServerInstallationRequestResponses = {
                 name: string;
                 server_url: string;
                 auth_server_url?: string;
+                authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
@@ -31122,6 +31134,7 @@ export type ApproveMcpServerInstallationRequestResponses = {
                 name: string;
                 server_url: string;
                 auth_server_url?: string;
+                authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
@@ -31294,6 +31307,7 @@ export type DeclineMcpServerInstallationRequestResponses = {
                 name: string;
                 server_url: string;
                 auth_server_url?: string;
+                authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
@@ -31466,6 +31480,7 @@ export type AddMcpServerInstallationRequestNoteResponses = {
                 name: string;
                 server_url: string;
                 auth_server_url?: string;
+                authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;

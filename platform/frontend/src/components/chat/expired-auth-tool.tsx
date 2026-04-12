@@ -28,6 +28,11 @@ export function ExpiredAuthTool({
       buttonText={onReauth ? "Re-authenticate" : "Manage credentials"}
       buttonUrl={reauthUrl}
       onAction={onReauth}
+      actionTooltipText={
+        onReauth
+          ? `This will redirect you to ${displayName} to authorize access, then return you to this chat.`
+          : undefined
+      }
     />
   );
 }

@@ -93829,6 +93829,9 @@
                           "auth_server_url": {
                             "type": "string"
                           },
+                          "authorization_endpoint": {
+                            "type": "string"
+                          },
                           "resource_metadata_url": {
                             "type": "string"
                           },
@@ -94675,6 +94678,9 @@
                       "auth_server_url": {
                         "type": "string"
                       },
+                      "authorization_endpoint": {
+                        "type": "string"
+                      },
                       "resource_metadata_url": {
                         "type": "string"
                       },
@@ -95252,6 +95258,9 @@
                           "type": "string"
                         },
                         "auth_server_url": {
+                          "type": "string"
+                        },
+                        "authorization_endpoint": {
                           "type": "string"
                         },
                         "resource_metadata_url": {
@@ -96124,6 +96133,9 @@
                         "auth_server_url": {
                           "type": "string"
                         },
+                        "authorization_endpoint": {
+                          "type": "string"
+                        },
                         "resource_metadata_url": {
                           "type": "string"
                         },
@@ -96964,6 +96976,9 @@
                       "auth_server_url": {
                         "type": "string"
                       },
+                      "authorization_endpoint": {
+                        "type": "string"
+                      },
                       "resource_metadata_url": {
                         "type": "string"
                       },
@@ -97549,6 +97564,9 @@
                           "type": "string"
                         },
                         "auth_server_url": {
+                          "type": "string"
+                        },
+                        "authorization_endpoint": {
                           "type": "string"
                         },
                         "resource_metadata_url": {
@@ -114781,6 +114799,9 @@
                                   "auth_server_url": {
                                     "type": "string"
                                   },
+                                  "authorization_endpoint": {
+                                    "type": "string"
+                                  },
                                   "resource_metadata_url": {
                                     "type": "string"
                                   },
@@ -115435,6 +115456,9 @@
                               "auth_server_url": {
                                 "type": "string"
                               },
+                              "authorization_endpoint": {
+                                "type": "string"
+                              },
                               "resource_metadata_url": {
                                 "type": "string"
                               },
@@ -115806,6 +115830,9 @@
                                   "type": "string"
                                 },
                                 "auth_server_url": {
+                                  "type": "string"
+                                },
+                                "authorization_endpoint": {
                                   "type": "string"
                                 },
                                 "resource_metadata_url": {
@@ -116492,6 +116519,9 @@
                                 "auth_server_url": {
                                   "type": "string"
                                 },
+                                "authorization_endpoint": {
+                                  "type": "string"
+                                },
                                 "resource_metadata_url": {
                                   "type": "string"
                                 },
@@ -117149,6 +117179,9 @@
                               "auth_server_url": {
                                 "type": "string"
                               },
+                              "authorization_endpoint": {
+                                "type": "string"
+                              },
                               "resource_metadata_url": {
                                 "type": "string"
                               },
@@ -117571,6 +117604,9 @@
                                   "type": "string"
                                 },
                                 "auth_server_url": {
+                                  "type": "string"
+                                },
+                                "authorization_endpoint": {
                                   "type": "string"
                                 },
                                 "resource_metadata_url": {
@@ -118528,6 +118564,9 @@
                                 "auth_server_url": {
                                   "type": "string"
                                 },
+                                "authorization_endpoint": {
+                                  "type": "string"
+                                },
                                 "resource_metadata_url": {
                                   "type": "string"
                                 },
@@ -119225,6 +119264,9 @@
                                   "type": "string"
                                 },
                                 "auth_server_url": {
+                                  "type": "string"
+                                },
+                                "authorization_endpoint": {
                                   "type": "string"
                                 },
                                 "resource_metadata_url": {
@@ -119928,6 +119970,9 @@
                                   "type": "string"
                                 },
                                 "auth_server_url": {
+                                  "type": "string"
+                                },
+                                "authorization_endpoint": {
                                   "type": "string"
                                 },
                                 "resource_metadata_url": {

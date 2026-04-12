@@ -1005,6 +1005,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         oauthRefreshFailedAt: null,
       });
 
+      // Re-auth swaps the secret behind the same MCP server ID. Cached MCP clients
+      // are keyed by server ID and can otherwise keep reusing the stale auth/session.
+      await mcpClient.invalidateConnectionsForServer(id);
+
       // For local servers, trigger pod restart to pick up new credentials
       if (mcpServer.serverType === "local") {
         try {

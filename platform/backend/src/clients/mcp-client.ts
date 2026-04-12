@@ -1171,8 +1171,29 @@ class McpClient {
       };
     }
 
-    // No server found - return an actionable error with install link
+    // Check if the only available servers are personal servers owned by other users.
+    // This happens when a personal MCP server is attached to an org-wide agent
+    // and a different user tries to use the agent.
     const catalogDisplayName = tool.catalogName || tool.catalogId;
+    const otherUsersPersonalServers = allServers.filter(
+      (s) => s.ownerId && s.ownerId !== tokenAuth.userId && !s.teamId,
+    );
+    if (otherUsersPersonalServers.length > 0) {
+      const errorMessage =
+        `This tool ("${catalogDisplayName}") is configured with a personal MCP server that belongs to another user. ` +
+        `Personal servers cannot be shared across users. ` +
+        `Please ask the agent administrator to connect a team or organization-level server for "${catalogDisplayName}" instead.`;
+      return {
+        error: await this.createErrorResult(
+          toolCall,
+          agentId,
+          errorMessage,
+          fallbackName,
+        ),
+      };
+    }
+
+    // No server found - return an actionable error with install link
     const authError = this.buildAuthRequiredMessage(
       catalogDisplayName,
       tool.catalogId,

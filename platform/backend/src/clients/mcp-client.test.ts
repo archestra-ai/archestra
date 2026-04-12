@@ -941,7 +941,7 @@ describe("McpClient", () => {
         );
       });
 
-      test("returns auth-required error with team context when servers exist but no owner is in team", async ({
+      test("returns personal-server-scope error when servers exist but belong to another user (team token)", async ({
         makeUser,
         makeTeam,
         makeOrganization,
@@ -1008,18 +1008,87 @@ describe("McpClient", () => {
 
         expect(result).toMatchObject({ isError: true });
         expect(result?.error).toContain(
-          `Authentication required for "slack-mcp-server"`,
-        );
-        expect(result?.error).toContain(`team: ${team.id}`);
-        expect(result?.error).toContain(
-          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?install=${dynCatalog.id}`,
+          "personal MCP server that belongs to another user",
         );
         expect(result?.error).toContain(
-          "Once you have completed authentication, retry this tool call.",
+          "Personal servers cannot be shared across users",
         );
-        expect(result?.content).toEqual([
-          { type: "text", text: result?.error },
-        ]);
+        expect(result?.error).toContain(
+          'connect a team or organization-level server for "slack-mcp-server"',
+        );
+        // Should NOT contain auth_required install URL since user can't fix this
+        expect(result?._meta?.archestraError).toMatchObject({
+          type: "generic",
+        });
+      });
+
+      test("returns personal-server-scope error when user token hits another user's personal server on org agent", async ({
+        makeUser,
+      }) => {
+        // User A owns a personal MCP server attached to an org-wide agent
+        const userA = await makeUser({ email: "user-a@example.com" });
+        const userB = await makeUser({ email: "user-b@example.com" });
+
+        const dynCatalog = await InternalMcpCatalogModel.create({
+          name: "excalidraw-mcp",
+          serverType: "remote",
+          serverUrl: "https://mcp.excalidraw.com/v1/mcp",
+        });
+
+        const ownerSecret = await secretManager().createSecret(
+          { access_token: "user-a-token" },
+          "excalidraw-secret",
+        );
+
+        await McpServerModel.create({
+          name: "excalidraw-mcp",
+          catalogId: dynCatalog.id,
+          secretId: ownerSecret.id,
+          serverType: "remote",
+          ownerId: userA.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "excalidraw-mcp__create_drawing",
+          description: "Create a drawing",
+          parameters: {},
+          catalogId: dynCatalog.id,
+        });
+
+        await AgentToolModel.createOrUpdateCredentials(
+          agentId,
+          tool.id,
+          null,
+          "dynamic",
+        );
+
+        const toolCall = {
+          id: "call_personal_scope_mismatch",
+          name: "excalidraw-mcp__create_drawing",
+          arguments: { name: "test" },
+        };
+
+        // User B tries to use the org agent - hits User A's personal server
+        const result = await mcpClient.executeToolCall(toolCall, agentId, {
+          tokenId: "user-b-token",
+          userId: userB.id,
+          teamId: null,
+          isOrganizationToken: false,
+        });
+
+        expect(result).toMatchObject({ isError: true });
+        expect(result?.error).toContain(
+          "personal MCP server that belongs to another user",
+        );
+        expect(result?.error).toContain(
+          'connect a team or organization-level server for "excalidraw-mcp"',
+        );
+        // Should be a generic error, not auth_required
+        expect(result?._meta?.archestraError).toMatchObject({
+          type: "generic",
+        });
+        // Should NOT have install URL since the user can't fix this themselves
+        expect(result?.error).not.toContain("install=");
       });
     });
 

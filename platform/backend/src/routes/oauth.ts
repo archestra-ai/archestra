@@ -293,6 +293,23 @@ export async function discoverOAuthEndpoints(
         wellKnownUrl: oauthConfig.well_known_url,
       },
     );
+    if (
+      (explicitEndpoints.authorizationEndpoint &&
+        explicitEndpoints.authorizationEndpoint !==
+          metadata.authorization_endpoint) ||
+      (explicitEndpoints.tokenEndpoint &&
+        explicitEndpoints.tokenEndpoint !== metadata.token_endpoint)
+    ) {
+      log?.warn(
+        {
+          discoveredAuthorizationEndpoint: metadata.authorization_endpoint,
+          discoveredTokenEndpoint: metadata.token_endpoint,
+          authorizationEndpoint: explicitEndpoints.authorizationEndpoint,
+          tokenEndpoint: explicitEndpoints.tokenEndpoint,
+        },
+        "Using explicitly configured OAuth endpoint overrides instead of discovered metadata",
+      );
+    }
     log?.info(
       {
         authorizationEndpoint:
@@ -717,16 +734,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           registrationEndpoint = endpoints.registrationEndpoint;
         } catch (error) {
           fastify.log.error({ error }, "Authorization server discovery failed");
-          if (oauthConfig.authorization_endpoint) {
-            authorizationEndpoint = oauthConfig.authorization_endpoint;
-            registrationEndpoint = undefined;
-            fastify.log.warn(
-              { authorizationEndpoint },
-              "Using explicitly configured authorization endpoint after discovery failure",
-            );
-          } else {
-            throw new ApiError(500, "Failed to discover OAuth endpoints");
-          }
+          throw new ApiError(500, "Failed to discover OAuth endpoints");
         }
       }
 

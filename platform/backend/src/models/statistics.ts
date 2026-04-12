@@ -1,15 +1,20 @@
 import type { StatisticsTimeFrame } from "@shared";
-import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, count, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   AgentStatistics,
+  CostHealth,
   CostSavingsStatistics,
   ModelStatistics,
   OverviewStatistics,
   StatisticsTimeSeriesData,
   TeamStatistics,
 } from "@/types";
+import { computeCostHealth } from "@/utils/cost-health";
 import AgentTeamModel from "./agent-team";
+import LimitModel from "./limit";
+import OptimizationRuleModel from "./optimization-rule";
+import OrganizationModel from "./organization";
 
 class StatisticsModel {
   /**
@@ -945,6 +950,45 @@ class StatisticsModel {
       totalToonSavings,
       timeSeries,
     };
+  }
+
+  static async getCostHealth(organizationId: string): Promise<CostHealth> {
+    const [limits, rules, org, agents, agentToolCounts] = await Promise.all([
+      LimitModel.findAll(undefined, undefined, "token_cost"),
+      OptimizationRuleModel.findByOrganizationId(organizationId),
+      OrganizationModel.getById(organizationId),
+      db
+        .select({ id: schema.agentsTable.id })
+        .from(schema.agentsTable)
+        .where(eq(schema.agentsTable.organizationId, organizationId)),
+      db
+        .select({
+          agentId: schema.agentToolsTable.agentId,
+          toolCount: count(schema.agentToolsTable.toolId),
+        })
+        .from(schema.agentToolsTable)
+        .innerJoin(
+          schema.agentsTable,
+          eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+        )
+        .where(eq(schema.agentsTable.organizationId, organizationId))
+        .groupBy(schema.agentToolsTable.agentId),
+    ]);
+
+    return computeCostHealth({
+      limits: limits.map((l) => ({
+        entityType: l.entityType,
+        entityId: l.entityId,
+      })),
+      rules: rules.map((r) => ({ enabled: r.enabled })),
+      toonEnabled: org?.convertToolResultsToToon ?? false,
+      totalAgents: agents.length,
+      agentIds: agents.map((a) => a.id),
+      agentToolCounts: agentToolCounts.map((a) => ({
+        agentId: a.agentId,
+        toolCount: Number(a.toolCount),
+      })),
+    });
   }
 }
 

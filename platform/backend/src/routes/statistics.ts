@@ -5,6 +5,7 @@ import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import { StatisticsModel } from "@/models";
 import {
   AgentStatisticsSchema,
+  CostHealthSchema,
   CostSavingsStatisticsSchema,
   constructResponseSchema,
   ModelStatisticsSchema,
@@ -147,6 +148,22 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           user.id,
           isAgentAdmin,
         ),
+      );
+    },
+  );
+  fastify.get(
+    "/api/statistics/cost-health",
+    {
+      schema: {
+        operationId: RouteId.GetCostHealth,
+        description: "Get cost health score",
+        tags: ["Statistics"],
+        response: constructResponseSchema(CostHealthSchema),
+      },
+    },
+    async ({ organizationId }, reply) => {
+      return reply.send(
+        await StatisticsModel.getCostHealth(organizationId),
       );
     },
   );

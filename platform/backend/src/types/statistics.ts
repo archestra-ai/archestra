@@ -125,6 +125,7 @@ export const CostHealthSchema = z.object({
 });
 
 export type CostHealth = z.infer<typeof CostHealthSchema>;
+export type CostHealthDimension = z.infer<typeof CostHealthDimensionSchema>;
 
 export type StatisticsTeamTimeSeriesData = z.infer<
   typeof StatisticsTeamTimeSeriesDataSchema

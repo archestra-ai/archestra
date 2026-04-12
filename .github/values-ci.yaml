@@ -71,9 +71,9 @@ archestra:
     # Includes both the internal K8s service name and the NodePort URL that appears in OIDC discovery
     ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS: "http://e2e-tests-keycloak:8080,http://localhost:30081"
     # Shared CI secrets-manager configuration.
-    # We run the platform in READONLY_VAULT mode with Vault K8s auth so the BYOS
-    # and Vault-startup suites can execute against the same deployment.
-    ARCHESTRA_SECRETS_MANAGER: "READONLY_VAULT"
+    # Keep the generic suite on the standard DB-backed secrets manager. The
+    # readonly-vault coverage runs in its own dedicated job via a Helm override.
+    ARCHESTRA_SECRETS_MANAGER: "DB"
     ARCHESTRA_HASHICORP_VAULT_ADDR: "http://vault:8200"
     ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD: "K8S"
     ARCHESTRA_HASHICORP_VAULT_K8S_ROLE: "archestra"

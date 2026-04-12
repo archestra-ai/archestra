@@ -556,7 +556,7 @@ jobs:
         id: e2e
         uses: ./.github/actions/run-e2e-tests
         with:
-          projects: chromium
+          projects: quickstart
           # Run all tests tagged @quickstart: MCP install, auth origin, and first-time chat flow
           extra_args: "--grep '@quickstart'"
           env_file: /tmp/quickstart-e2e.env

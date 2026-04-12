@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { E2eTestId } from "@shared";
+import { LLM_PROVIDER_API_KEYS_ROUTE } from "../consts";
 import { expect, goToPage } from "../fixtures";
-import { LLM_PROVIDER_API_KEYS_ROUTE } from "../tests/api/fixtures";
 import { clickButton, expandTablePagination } from "./dialogs";
 
 export async function goToLlmProviderApiKeysPage(page: Page): Promise<void> {

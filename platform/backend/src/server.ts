@@ -368,7 +368,7 @@ export const createFastifyInstance = () =>
  * Error: A metric with the name http_request_duration_seconds has already been registered.
  * at Registry.registerMetric (/app/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/registry.js:103:10)
  */
-const registerMetricsPlugin = async (
+export const registerMetricsPlugin = async (
   fastify: ReturnType<typeof createFastifyInstance>,
   endpointEnabled: boolean,
 ): Promise<void> => {
@@ -385,7 +385,7 @@ const registerMetricsPlugin = async (
   });
 };
 
-const addMetricsAuthenticationHook = (
+export const addMetricsAuthenticationHook = (
   fastify: FastifyInstanceWithZod,
 ): void => {
   const { secret: metricsSecret } = observability.metrics;
@@ -418,7 +418,7 @@ const addMetricsAuthenticationHook = (
   });
 };
 
-const registerStandaloneMetricsEndpoint = async (params: {
+export const registerStandaloneMetricsEndpoint = async (params: {
   fastify: FastifyInstanceWithZod;
   enableDefaultMetrics: boolean;
 }): Promise<void> => {

@@ -1062,9 +1062,9 @@ export function McpCatalogForm({
                           />
                         </FormControl>
                         <FormDescription>
-                          Optional direct authorization endpoint override.
-                          When set, it overrides discovery. Set together with
-                          Token Endpoint.
+                          Optional direct authorization endpoint override. When
+                          set, it overrides discovery. Set together with Token
+                          Endpoint.
                         </FormDescription>
                         <FormMessage />
                       </FormItem>

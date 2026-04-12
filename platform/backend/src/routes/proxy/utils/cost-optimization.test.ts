@@ -1,6 +1,7 @@
 import { ModelModel } from "@/models";
 import { describe, expect, test } from "@/test";
-import { calculateCost } from "./cost-optimization";
+import type { CommonMcpToolDefinition } from "@/types";
+import { calculateCost, estimateToolTokens } from "./cost-optimization";
 
 describe("calculateCost", () => {
   test("returns undefined when inputTokens is null", async () => {
@@ -118,5 +119,117 @@ describe("calculateCost", () => {
       "anthropic",
     );
     expect(anthropicCost).toBeCloseTo(0.004);
+  });
+});
+
+describe("estimateToolTokens", () => {
+  test("returns 0 for empty tools array", () => {
+    expect(estimateToolTokens([])).toBe(0);
+  });
+
+  test("estimates tokens for a single tool", () => {
+    const tools: CommonMcpToolDefinition[] = [
+      {
+        name: "get_weather",
+        description: "Get the current weather for a location",
+        inputSchema: {
+          type: "object",
+          properties: {
+            location: { type: "string", description: "City name" },
+          },
+          required: ["location"],
+        },
+      },
+    ];
+
+    const tokens = estimateToolTokens(tools);
+    // Should be > 0 since the tool has content
+    expect(tokens).toBeGreaterThan(0);
+    // chars/4 approximation: serialized text length / 4, rounded up
+    const serialized = `get_weather Get the current weather for a location ${JSON.stringify(tools[0].inputSchema)}`;
+    expect(tokens).toBe(Math.ceil(serialized.length / 4));
+  });
+
+  test("estimates more tokens for tools with large schemas", () => {
+    const smallTool: CommonMcpToolDefinition[] = [
+      {
+        name: "ping",
+        inputSchema: {},
+      },
+    ];
+
+    const largeTool: CommonMcpToolDefinition[] = [
+      {
+        name: "complex_query",
+        description: "Execute a complex database query with many parameters",
+        inputSchema: {
+          type: "object",
+          properties: {
+            table: { type: "string" },
+            columns: { type: "array", items: { type: "string" } },
+            where: {
+              type: "object",
+              properties: {
+                field: { type: "string" },
+                operator: { type: "string", enum: ["eq", "gt", "lt", "in"] },
+                value: { type: "string" },
+              },
+            },
+            orderBy: { type: "string" },
+            limit: { type: "number" },
+            offset: { type: "number" },
+          },
+          required: ["table"],
+        },
+      },
+    ];
+
+    expect(estimateToolTokens(largeTool)).toBeGreaterThan(
+      estimateToolTokens(smallTool),
+    );
+  });
+
+  test("accumulates tokens across multiple tools", () => {
+    const singleTool: CommonMcpToolDefinition[] = [
+      {
+        name: "tool_a",
+        description: "First tool",
+        inputSchema: { type: "object" },
+      },
+    ];
+
+    const multipleTools: CommonMcpToolDefinition[] = [
+      {
+        name: "tool_a",
+        description: "First tool",
+        inputSchema: { type: "object" },
+      },
+      {
+        name: "tool_b",
+        description: "Second tool",
+        inputSchema: { type: "object" },
+      },
+      {
+        name: "tool_c",
+        description: "Third tool",
+        inputSchema: { type: "object" },
+      },
+    ];
+
+    expect(estimateToolTokens(multipleTools)).toBeGreaterThan(
+      estimateToolTokens(singleTool),
+    );
+  });
+
+  test("handles tools without description", () => {
+    const tools: CommonMcpToolDefinition[] = [
+      {
+        name: "no_desc",
+        inputSchema: { type: "object" },
+      },
+    ];
+
+    const tokens = estimateToolTokens(tools);
+    expect(tokens).toBeGreaterThan(0);
   });
 });

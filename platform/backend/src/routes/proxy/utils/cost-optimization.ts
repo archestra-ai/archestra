@@ -12,6 +12,7 @@ import type {
   Anthropic,
   Cerebras,
   Cohere,
+  CommonMcpToolDefinition,
   DeepSeek,
   Gemini,
   Groq,
@@ -44,6 +45,23 @@ type ProviderMessages = {
 };
 
 /**
+ * Estimate token count for tool definitions by serializing them
+ * and using the same chars/4 approximation as the base tokenizer.
+ */
+export function estimateToolTokens(tools: CommonMcpToolDefinition[]): number {
+  if (tools.length === 0) return 0;
+  const serialized = tools
+    .map((t) => {
+      let text = t.name;
+      if (t.description) text += ` ${t.description}`;
+      if (t.inputSchema) text += ` ${JSON.stringify(t.inputSchema)}`;
+      return text;
+    })
+    .join(" ");
+  return Math.ceil(serialized.length / 4);
+}
+
+/**
  * Get optimized model based on dynamic optimization rules
  * Returns the optimized model name or null if no optimization applies
  */
@@ -54,6 +72,7 @@ export async function getOptimizedModel<
   messages: ProviderMessages[Provider],
   provider: Provider,
   hasTools: boolean,
+  tools: CommonMcpToolDefinition[] = [],
 ): Promise<string | null> {
   const agentId = agent.id;
 
@@ -109,10 +128,12 @@ export async function getOptimizedModel<
 
   // Use provider-specific tokenizer to count tokens
   const tokenizer = getTokenizer(provider);
-  const tokenCount = tokenizer.countTokens(messages);
+  const messageTokenCount = tokenizer.countTokens(messages);
+  const toolTokenCount = estimateToolTokens(tools);
+  const tokenCount = messageTokenCount + toolTokenCount;
 
   logger.info(
-    { tokenCount, hasTools },
+    { tokenCount, messageTokenCount, toolTokenCount, hasTools },
     "[CostOptimization] LLM request evaluated",
   );
 

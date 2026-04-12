@@ -227,6 +227,56 @@ function asOptionalStringArray(value: unknown): string[] | undefined {
   return undefined;
 }
 
+/**
+ * Check if a redirect URI targets a loopback address (127.0.0.1, [::1], or localhost).
+ * Per RFC 8252 Section 7.3, authorization servers MUST allow any port
+ * for loopback IP redirect URIs to support native app OAuth flows.
+ */
+export function isLoopbackRedirectUri(uri: string): boolean {
+  try {
+    const url = new URL(uri);
+    const host = url.hostname.toLowerCase();
+    return (
+      host === "127.0.0.1" || host === "localhost" || host === "[::1]"
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check if a requested loopback redirect URI matches any registered URI,
+ * ignoring the port component. Returns true when scheme, host, and path
+ * match but the port differs — per RFC 8252 Section 7.3.
+ */
+export function loopbackRedirectUriMatchesIgnoringPort(
+  requestedUri: string,
+  registeredUris: string[],
+): boolean {
+  if (!isLoopbackRedirectUri(requestedUri)) return false;
+
+  let reqUrl: URL;
+  try {
+    reqUrl = new URL(requestedUri);
+  } catch {
+    return false;
+  }
+
+  return registeredUris.some((regUri) => {
+    if (!isLoopbackRedirectUri(regUri)) return false;
+    try {
+      const regUrl = new URL(regUri);
+      return (
+        reqUrl.protocol === regUrl.protocol &&
+        reqUrl.hostname.toLowerCase() === regUrl.hostname.toLowerCase() &&
+        reqUrl.pathname === regUrl.pathname
+      );
+    } catch {
+      return false;
+    }
+  });
+}
+
 /** Ranges from ipaddr.js that should be blocked for SSRF mitigation. */
 const BLOCKED_RANGES = new Set([
   "loopback",

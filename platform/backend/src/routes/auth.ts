@@ -4,7 +4,12 @@ import { verifyPassword } from "better-auth/crypto";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { betterAuth } from "@/auth";
-import { ensureCimdClientRegistered, isCimdClientId } from "@/auth/cimd";
+import {
+  ensureCimdClientRegistered,
+  isCimdClientId,
+  isLoopbackRedirectUri,
+  loopbackRedirectUriMatchesIgnoringPort,
+} from "@/auth/cimd";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -230,6 +235,29 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
           return reply.status(400).send({
             error: `CIMD registration failed: ${(error as Error).message}`,
           });
+        }
+
+        // RFC 8252 Section 7.3: loopback redirect URIs MUST allow any port.
+        // CIMD documents contain fixed redirect_uris, but native CLI clients
+        // (e.g. Claude Code) start a callback server on an ephemeral port.
+        // If the requested redirect_uri is loopback and matches a registered
+        // URI except for port, dynamically add it so better-auth's exact
+        // match succeeds.
+        const redirectUri = query.redirect_uri;
+        if (redirectUri && isLoopbackRedirectUri(redirectUri)) {
+          const client =
+            await OAuthClientModel.findByClientId(clientId);
+          const registered = client?.redirectUris ?? [];
+          if (
+            !registered.includes(redirectUri) &&
+            loopbackRedirectUriMatchesIgnoringPort(redirectUri, registered)
+          ) {
+            await OAuthClientModel.addRedirectUri(clientId, redirectUri);
+            logger.debug(
+              { clientId, redirectUri },
+              "[auth:oauth2/authorize] Added loopback redirect_uri with ephemeral port (RFC 8252)",
+            );
+          }
         }
       }
 

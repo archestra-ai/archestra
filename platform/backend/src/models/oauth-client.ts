@@ -41,6 +41,26 @@ class OAuthClientModel {
   }
 
   /**
+   * Append a redirect URI to a client's redirect_uris if not already present.
+   * Used by the loopback port relaxation logic (RFC 8252 Section 7.3).
+   */
+  static async addRedirectUri(
+    clientId: string,
+    redirectUri: string,
+  ): Promise<void> {
+    const client = await this.findByClientId(clientId);
+    if (!client) return;
+
+    const currentUris: string[] = client.redirectUris ?? [];
+    if (currentUris.includes(redirectUri)) return;
+
+    await db
+      .update(schema.oauthClientsTable)
+      .set({ redirectUris: [...currentUris, redirectUri] })
+      .where(eq(schema.oauthClientsTable.clientId, clientId));
+  }
+
+  /**
    * Atomically insert or update an OAuth client from a CIMD document.
    * Uses onConflictDoUpdate on the unique clientId column to avoid
    * race conditions between concurrent requests.

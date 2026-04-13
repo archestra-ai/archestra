@@ -244,6 +244,36 @@ export async function registerApiRoutes(fastify: FastifyInstanceWithZod) {
 }
 
 /**
+ * Register only the routes needed by the worker for A2A / scheduled task execution.
+ * These routes are called via localhost by executeA2AMessage and are not exposed
+ * externally — the K8s Service only targets platform pods, not worker pods.
+ */
+export async function registerWorkerRoutes(fastify: FastifyInstanceWithZod) {
+  // LLM Proxy routes (all providers)
+  fastify.register(routes.anthropicProxyRoutes);
+  fastify.register(routes.openAiProxyRoutes);
+  fastify.register(routes.geminiProxyRoutes);
+  fastify.register(routes.azureProxyRoutes);
+  fastify.register(routes.bedrockProxyRoutes);
+  fastify.register(routes.cerebrasProxyRoutes);
+  fastify.register(routes.cohereProxyRoutes);
+  fastify.register(routes.deepseekProxyRoutes);
+  fastify.register(routes.groqProxyRoutes);
+  fastify.register(routes.minimaxProxyRoutes);
+  fastify.register(routes.mistralProxyRoutes);
+  fastify.register(routes.ollamaProxyRoutes);
+  fastify.register(routes.openrouterProxyRoutes);
+  fastify.register(routes.perplexityProxyRoutes);
+  fastify.register(routes.vllmProxyRoutes);
+  fastify.register(routes.xaiProxyRoutes);
+  fastify.register(routes.zhipuaiProxyRoutes);
+  // MCP Gateway (tool listing + tool calls via JSON-RPC)
+  fastify.register(routes.mcpGatewayRoutes);
+  // MCP Proxy (forwards tool execution to K8s MCP server pods)
+  fastify.register(routes.mcpProxyRoutes);
+}
+
+/**
  * Sets up logging and zod type provider + request validation & response serialization
  */
 export const createFastifyInstance = () =>
@@ -942,7 +972,7 @@ const startWorker = async () => {
     );
 
     const labelKeys = await initializeObservabilityMetrics({
-      includeMcpMetrics: false,
+      includeMcpMetrics: true,
       includeAgentExecutionMetrics: false,
     });
 
@@ -950,7 +980,10 @@ const startWorker = async () => {
     await taskQueueService.seedPeriodicTasks();
     taskQueueService.startWorker();
 
-    // Minimal worker server for Kubernetes probes and Prometheus scraping
+    // Worker server for Kubernetes probes, Prometheus scraping,
+    // and LLM Proxy / MCP Gateway routes for A2A and scheduled task execution.
+    // These routes handle their own auth (Bearer tokens / API keys) and are
+    // not reachable from outside the pod — the K8s Service only targets platform pods.
     const healthServer = createFastifyInstance();
 
     healthServer.get("/health", async () => ({ status: "ok" }));
@@ -961,6 +994,15 @@ const startWorker = async () => {
       }
       return { status: "ok" };
     });
+
+    // Auth plugin decorates request.user / request.organizationId which route
+    // handlers reference. The proxy and gateway routes are skipped by the auth
+    // check (shouldSkipAuthCheck) but the decorators must exist.
+    healthServer.register(fastifyAuthPlugin);
+
+    // Register LLM Proxy and MCP Gateway routes so executeA2AMessage can call
+    // localhost instead of requiring the platform service URL.
+    await registerWorkerRoutes(healthServer);
 
     await registerStandaloneMetricsEndpoint({
       fastify: healthServer,

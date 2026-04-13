@@ -242,6 +242,56 @@ Chart-managed diagnostics PVCs are validated conservatively. If more than one di
 - `archestra.tolerations` - Tolerations for scheduling pods on nodes with specific taints (e.g., dedicated nodes, GPU nodes, spot instances). These values are also inherited by MCP server pods as defaults. See [Kubernetes docs](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)
 - `archestra.deploymentStrategy` - Deployment strategy configuration (default: RollingUpdate with `maxUnavailable: 25%` and `maxSurge: 25%`)
 - `archestra.resources` - CPU and memory requests/limits for the container (default: 2Gi request, 3Gi limit for memory)
+- `archestra.horizontalPodAutoscaler` - Optional HPA for the main `archestra-platform` Deployment. When enabled, the chart defaults to `minReplicas: 2`, `maxReplicas: 10`, a memory utilization target of 70%, immediate scale-up, and a 5-minute scale-down stabilization window.
+- `archestra.worker.replicaCount` - Manual replica count for the separate worker Deployment
+- `archestra.worker.resources` - Resource requests/limits for worker pods (default: 1Gi request, 2Gi limit for memory)
+- `archestra.worker.deploymentStrategy` - Rolling update strategy for worker pods (default: `maxUnavailable: 25%`, `maxSurge: 25%`)
+
+#### HorizontalPodAutoscaler
+
+The Helm chart can optionally create a Kubernetes `HorizontalPodAutoscaler` for the main `archestra-platform` Deployment. It does not autoscale the separate worker Deployment.
+
+Default behavior when enabled:
+
+- Maintains at least 2 web pods
+- Scales up to 10 web pods
+- Uses memory utilization because the chart defines memory requests by default
+- Scales up aggressively (up to 100% or 2 pods per minute)
+- Scales down conservatively with a 5-minute stabilization window
+
+If your cluster has reliable CPU requests for the platform pods and you prefer request-rate-driven scaling, override `archestra.horizontalPodAutoscaler.metrics` with a CPU target instead.
+
+#### Existing Scaling Controls
+
+The chart already exposes a few scaling-related controls, even without autoscaling:
+
+- `archestra.replicaCount` sets the manual replica count for web pods when HPA is disabled
+- `archestra.worker.replicaCount` sets the manual replica count for worker pods
+- `archestra.deploymentStrategy` and `archestra.worker.deploymentStrategy` control rollout overlap (`maxSurge` and `maxUnavailable`), which affects rollout capacity but not steady-state scaling
+- `archestra.podDisruptionBudget` protects availability during voluntary disruptions, but it is not an autoscaler
+
+The chart does not currently create worker HPAs, KEDA `ScaledObject`s, or a VerticalPodAutoscaler.
+
+#### Worker Scaling Recommendations
+
+Worker throughput is driven by a Postgres-backed task queue, so resource-based autoscaling is usually the wrong first signal. The worker currently polls the `tasks` table for rows where `status = 'pending'` and `scheduled_for <= NOW()`, and each pod processes up to `ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT` tasks at once (default: `2`).
+
+Recommended approach:
+
+- Keep the platform HPA focused on web traffic and leave workers on manual replicas until you have queue metrics
+- Tune `archestra.worker.replicaCount` together with `ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT`; increasing concurrency per pod is often cheaper than adding pods for modest backlog
+- If you use KEDA, scale workers from queue backlog instead of CPU or memory
+
+For KEDA-backed worker autoscaling, use KEDA's PostgreSQL scaler against the `tasks` table with a query that counts ready work, for example:
+
+- `SELECT COUNT(*) FROM tasks WHERE status = 'pending' AND scheduled_for <= NOW()`
+
+Practical starting point for worker autoscaling:
+
+- Start with `minReplicaCount: 1`
+- Set `activationQueryValue: "1"` so KEDA stays idle when there is no ready work
+- With the default `ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT=2`, start with `targetQueryValue: "4"` so each worker pod is asked to absorb about two waves of ready tasks before KEDA adds another pod
+- Keep `maxReplicaCount` aligned with database capacity, embedding provider rate limits, and downstream connector quotas
 
 **Service Settings**:
 

@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   isLoopbackAddress,
   isLoopbackRedirectUri,
+  isPrivateOrLoopbackHostname,
   loopbackRedirectUriMatchesIgnoringPort,
 } from "./network";
 
@@ -179,5 +180,41 @@ describe("loopbackRedirectUriMatchesIgnoringPort", () => {
         "http://127.0.0.1:3000/callback",
       ]),
     ).toBe(false);
+  });
+});
+
+describe("isPrivateOrLoopbackHostname", () => {
+  test("returns true for localhost hostnames", () => {
+    expect(isPrivateOrLoopbackHostname("localhost")).toBe(true);
+    expect(isPrivateOrLoopbackHostname("idp.localhost")).toBe(true);
+  });
+
+  test("returns true for loopback and private IPv4 addresses", () => {
+    expect(isPrivateOrLoopbackHostname("127.0.0.1")).toBe(true);
+    expect(isPrivateOrLoopbackHostname("10.0.0.1")).toBe(true);
+    expect(isPrivateOrLoopbackHostname("172.16.0.10")).toBe(true);
+    expect(isPrivateOrLoopbackHostname("192.168.1.20")).toBe(true);
+    expect(isPrivateOrLoopbackHostname("169.254.10.5")).toBe(true);
+  });
+
+  test("returns true for loopback and private IPv6 addresses", () => {
+    expect(isPrivateOrLoopbackHostname("::1")).toBe(true);
+    expect(isPrivateOrLoopbackHostname("::")).toBe(true);
+    expect(isPrivateOrLoopbackHostname("fc00::1")).toBe(true);
+    expect(isPrivateOrLoopbackHostname("fd12::1")).toBe(true);
+    expect(isPrivateOrLoopbackHostname("fe80::1")).toBe(true);
+    expect(isPrivateOrLoopbackHostname("::ffff:10.0.0.1")).toBe(true);
+  });
+
+  test("returns false for public hostnames and IP addresses", () => {
+    expect(isPrivateOrLoopbackHostname("example.com")).toBe(false);
+    expect(isPrivateOrLoopbackHostname("idp.example.net")).toBe(false);
+    expect(isPrivateOrLoopbackHostname("8.8.8.8")).toBe(false);
+    expect(isPrivateOrLoopbackHostname("2001:4860:4860::8888")).toBe(false);
+  });
+
+  test("returns false for invalid hostname input", () => {
+    expect(isPrivateOrLoopbackHostname("")).toBe(false);
+    expect(isPrivateOrLoopbackHostname("not a host")).toBe(false);
   });
 });

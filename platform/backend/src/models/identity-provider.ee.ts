@@ -1,5 +1,5 @@
 import type { SSOOptions } from "@better-auth/sso";
-import type { IdpRoleMappingConfig } from "@shared";
+import type { IdentityProviderOidcConfig, IdpRoleMappingConfig } from "@shared";
 import { IDENTITY_TRUSTED_PROVIDER_IDS, MEMBER_ROLE_NAME } from "@shared";
 import { APIError } from "better-auth";
 import { and, eq } from "drizzle-orm";
@@ -18,6 +18,8 @@ import type {
   PublicIdentityProvider,
   UpdateIdentityProvider,
 } from "@/types";
+import { ApiError } from "@/types";
+import { isPrivateOrLoopbackHostname } from "@/utils/network";
 import AccountModel from "./account";
 import MemberModel from "./member";
 
@@ -594,9 +596,11 @@ class IdentityProviderModel {
       };
     }
 
+    const registrationData = await hydrateOidcConfigForRegistration(parsedData);
+
     // Register with Better Auth
     await auth.api.registerSSOProvider({
-      body: parsedData,
+      body: registrationData,
       headers: new Headers(headers),
     });
 
@@ -626,7 +630,7 @@ class IdentityProviderModel {
      */
     // Also store roleMapping and teamSyncConfig if provided (Better Auth doesn't handle these fields)
     // Note: These are stored as JSON text but typed as objects in Drizzle schema
-    const oidcConfigJson = serializeConfigValue(data.oidcConfig);
+    const oidcConfigJson = serializeConfigValue(registrationData.oidcConfig);
     const samlConfigJson = serializeConfigValue(data.samlConfig);
     const roleMappingJson = serializeConfigValue(data.roleMapping);
     const teamSyncConfigJson = serializeConfigValue(data.teamSyncConfig);
@@ -821,6 +825,8 @@ class IdentityProviderModel {
 
 export default IdentityProviderModel;
 
+const OIDC_DISCOVERY_TIMEOUT_MS = 10_000;
+
 function serializeConfigValue(
   value: string | object | null | undefined,
 ): string | null | undefined {
@@ -833,4 +839,188 @@ function serializeConfigValue(
   }
 
   return JSON.stringify(value);
+}
+
+async function hydrateOidcConfigForRegistration<
+  T extends {
+    providerId: string;
+    issuer: string;
+    domain: string;
+    oidcConfig?: IdentityProviderOidcConfig;
+    samlConfig?: InsertIdentityProvider["samlConfig"];
+  },
+>(data: T): Promise<T> {
+  if (!data.oidcConfig || data.samlConfig) {
+    return data;
+  }
+
+  const hydratedOidcConfig = await discoverOidcConfig(data.oidcConfig);
+
+  logger.info(
+    {
+      providerId: data.providerId,
+      issuer: data.issuer,
+      discoveryEndpoint: hydratedOidcConfig.discoveryEndpoint,
+    },
+    "Hydrated OIDC configuration before Better Auth registration",
+  );
+
+  return {
+    ...data,
+    oidcConfig: hydratedOidcConfig,
+  };
+}
+
+async function discoverOidcConfig(
+  oidcConfig: IdentityProviderOidcConfig,
+): Promise<IdentityProviderOidcConfig> {
+  if (oidcConfig.skipDiscovery) {
+    return oidcConfig;
+  }
+
+  const discoveryEndpoint =
+    oidcConfig.discoveryEndpoint ||
+    `${normalizeIssuer(oidcConfig.issuer)}/.well-known/openid-configuration`;
+  assertValidOidcDiscoveryEndpoint(discoveryEndpoint);
+
+  try {
+    const response = await fetch(discoveryEndpoint, {
+      headers: {
+        Accept: "application/json",
+      },
+      signal: AbortSignal.timeout(OIDC_DISCOVERY_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      logger.error(
+        { discoveryEndpoint, status: response.status },
+        "OIDC discovery fetch failed during IdP registration",
+      );
+      throw new ApiError(
+        400,
+        `OIDC discovery request to "${discoveryEndpoint}" failed with status ${response.status}.`,
+      );
+    }
+
+    const discoveryDocument = (await response.json()) as Partial<OidcDiscovery>;
+    const validationError = getOidcDiscoveryValidationError(
+      discoveryDocument,
+      oidcConfig.issuer,
+    );
+    if (validationError) {
+      logger.error(
+        {
+          discoveryEndpoint,
+          issuer: oidcConfig.issuer,
+          validationError,
+        },
+        "OIDC discovery document was incomplete or issuer mismatched during IdP registration",
+      );
+      throw new ApiError(400, validationError);
+    }
+
+    return {
+      ...oidcConfig,
+      skipDiscovery: true,
+      authorizationEndpoint: discoveryDocument.authorization_endpoint,
+      tokenEndpoint: discoveryDocument.token_endpoint,
+      jwksEndpoint: discoveryDocument.jwks_uri,
+      userInfoEndpoint:
+        discoveryDocument.userinfo_endpoint ?? oidcConfig.userInfoEndpoint,
+      tokenEndpointAuthentication:
+        oidcConfig.tokenEndpointAuthentication ||
+        selectTokenEndpointAuthentication(
+          discoveryDocument.token_endpoint_auth_methods_supported,
+        ),
+    };
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+
+    logger.error(
+      {
+        discoveryEndpoint,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      "OIDC discovery request failed during IdP registration",
+    );
+    throw new ApiError(
+      400,
+      `OIDC discovery request to "${discoveryEndpoint}" failed before registration could complete.`,
+    );
+  }
+}
+
+function getOidcDiscoveryValidationError(
+  document: Partial<OidcDiscovery>,
+  configuredIssuer: string,
+): string | null {
+  if (
+    typeof document.issuer !== "string" ||
+    typeof document.authorization_endpoint !== "string" ||
+    typeof document.token_endpoint !== "string" ||
+    typeof document.jwks_uri !== "string"
+  ) {
+    return "OIDC discovery document is missing one or more required endpoints.";
+  }
+
+  if (normalizeIssuer(document.issuer) !== normalizeIssuer(configuredIssuer)) {
+    return `OIDC discovery issuer "${document.issuer}" did not match configured issuer "${configuredIssuer}".`;
+  }
+
+  return null;
+}
+
+function normalizeIssuer(issuer: string): string {
+  return issuer.replace(/\/$/, "");
+}
+
+function selectTokenEndpointAuthentication(
+  methods: string[] | undefined,
+): IdentityProviderOidcConfig["tokenEndpointAuthentication"] | undefined {
+  if (!methods?.length) {
+    return undefined;
+  }
+
+  if (methods.includes("client_secret_basic")) {
+    return "client_secret_basic";
+  }
+
+  if (methods.includes("client_secret_post")) {
+    return "client_secret_post";
+  }
+
+  return undefined;
+}
+
+function assertValidOidcDiscoveryEndpoint(discoveryEndpoint: string): void {
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(discoveryEndpoint);
+  } catch {
+    throw new ApiError(
+      400,
+      `OIDC discovery endpoint "${discoveryEndpoint}" is not a valid URL.`,
+    );
+  }
+
+  if (parsedUrl.protocol !== "https:") {
+    throw new ApiError(400, "OIDC discovery endpoint must use HTTPS.");
+  }
+
+  if (isPrivateOrLoopbackHostname(parsedUrl.hostname)) {
+    throw new ApiError(
+      400,
+      `OIDC discovery endpoint host "${parsedUrl.hostname}" is not allowed.`,
+    );
+  }
+}
+
+interface OidcDiscovery {
+  issuer: string;
+  authorization_endpoint: string;
+  token_endpoint: string;
+  jwks_uri: string;
+  userinfo_endpoint?: string;
+  token_endpoint_auth_methods_supported?: string[];
 }

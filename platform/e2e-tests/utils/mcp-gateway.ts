@@ -1,16 +1,14 @@
 import { type APIRequestContext, expect, type Page } from "@playwright/test";
 import { archestraApiSdk, getManageCredentialsButtonTestId } from "@shared";
 import {
+  API_BASE_URL,
   DEFAULT_TEAM_NAME,
   E2eTestId,
   ENGINEERING_TEAM_NAME,
   MARKETING_TEAM_NAME,
+  MCP_GATEWAY_URL_SUFFIX,
+  UI_BASE_URL,
 } from "../consts";
-import {
-  callMcpTool,
-  getOrgTokenForProfile,
-  getTeamTokenForProfile,
-} from "../tests/api/mcp-gateway-utils";
 import { closeOpenDialogs } from "./dialogs";
 
 export async function verifyToolCallResultViaApi({
@@ -99,6 +97,223 @@ export async function verifyToolCallResultViaApi({
       `Expected tool result to contain "${expectedResult}" but got "${textContent?.text}"`,
     );
   }
+}
+
+export function makeMcpGatewayRequestHeaders(
+  token: string,
+): Record<string, string> {
+  return {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+    Accept: "application/json, text/event-stream",
+    Origin: UI_BASE_URL,
+  };
+}
+
+export async function makeApiRequest(params: {
+  request: APIRequestContext;
+  method: "get" | "post" | "put" | "patch" | "delete";
+  urlSuffix: string;
+  data?: unknown;
+  headers?: Record<string, string>;
+  ignoreStatusCheck?: boolean;
+  timeoutMs?: number;
+}) {
+  const response = await params.request[params.method](
+    `${API_BASE_URL}${params.urlSuffix}`,
+    {
+      headers: params.headers ?? {
+        "Content-Type": "application/json",
+        Origin: UI_BASE_URL,
+      },
+      data: params.data ?? null,
+      timeout: params.timeoutMs,
+    },
+  );
+
+  if (!params.ignoreStatusCheck && !response.ok()) {
+    throw new Error(
+      `Failed to ${params.method} ${params.urlSuffix} with data ${JSON.stringify(
+        params.data ?? null,
+      )}: ${response.status()} ${await response.text()}`,
+    );
+  }
+
+  return response;
+}
+
+export async function getOrgTokenForProfile(
+  request: APIRequestContext,
+): Promise<string> {
+  const tokensResponse = await makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: "/api/tokens",
+  });
+  const tokensData = await tokensResponse.json();
+  const orgToken = tokensData.tokens.find(
+    (token: { isOrganizationToken: boolean }) => token.isOrganizationToken,
+  );
+
+  if (!orgToken) {
+    throw new Error("No organization token found");
+  }
+
+  const valueResponse = await makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: `/api/tokens/${orgToken.id}/value`,
+  });
+  return (await valueResponse.json()).value;
+}
+
+export async function initializeMcpSession(
+  request: APIRequestContext,
+  options: {
+    profileId: string;
+    token: string;
+  },
+): Promise<void> {
+  await makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: `${MCP_GATEWAY_URL_SUFFIX}/${options.profileId}`,
+    headers: makeMcpGatewayRequestHeaders(options.token),
+    data: {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2024-11-05",
+        capabilities: { tools: {} },
+        clientInfo: { name: "e2e-test-client", version: "1.0.0" },
+      },
+    },
+  });
+}
+
+export async function callMcpTool(
+  request: APIRequestContext,
+  options: {
+    profileId: string;
+    token: string;
+    toolName: string;
+    arguments?: Record<string, unknown>;
+    timeoutMs?: number;
+  },
+): Promise<{ content: Array<{ type: string; text?: string }> }> {
+  const callToolResponse = await makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: `${MCP_GATEWAY_URL_SUFFIX}/${options.profileId}`,
+    headers: makeMcpGatewayRequestHeaders(options.token),
+    data: {
+      jsonrpc: "2.0",
+      id: 2,
+      method: "tools/call",
+      params: {
+        name: options.toolName,
+        arguments: options.arguments ?? {},
+      },
+    },
+    timeoutMs: options.timeoutMs,
+  });
+
+  const callResult = await callToolResponse.json();
+  if (callResult.error) {
+    throw new Error(
+      `Tool call failed: ${callResult.error.message} (code: ${callResult.error.code})`,
+    );
+  }
+
+  return callResult.result;
+}
+
+export async function getTeamTokenForProfile(
+  request: APIRequestContext,
+  teamName: string,
+): Promise<string> {
+  const tokensResponse = await makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: "/api/tokens",
+  });
+  const tokensData = await tokensResponse.json();
+  const teamToken = tokensData.tokens.find(
+    (token: { isOrganizationToken: boolean; team?: { name: string } }) =>
+      !token.isOrganizationToken && token.team?.name === teamName,
+  );
+
+  if (!teamToken) {
+    throw new Error(`No team token found for team ${teamName}`);
+  }
+
+  const valueResponse = await makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: `/api/tokens/${teamToken.id}/value`,
+  });
+  return (await valueResponse.json()).value;
+}
+
+export async function listMcpTools(
+  request: APIRequestContext,
+  options: {
+    profileId: string;
+    token: string;
+  },
+): Promise<
+  Array<{ name: string; description?: string; inputSchema?: unknown }>
+> {
+  const listToolsResponse = await makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: `${MCP_GATEWAY_URL_SUFFIX}/${options.profileId}`,
+    headers: makeMcpGatewayRequestHeaders(options.token),
+    data: {
+      jsonrpc: "2.0",
+      id: 2,
+      method: "tools/list",
+      params: {},
+    },
+  });
+
+  const listResult = await listToolsResponse.json();
+  if (listResult.error) {
+    throw new Error(
+      `List tools failed: ${listResult.error.message} (code: ${listResult.error.code})`,
+    );
+  }
+
+  return listResult.result.tools;
+}
+
+export async function assignArchestraToolsToProfile(
+  request: APIRequestContext,
+  profileId: string,
+): Promise<string[]> {
+  const toolsResponse = await makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: "/api/tools",
+  });
+  const tools = await toolsResponse.json();
+  const archestraTools = tools.filter((tool: { name: string }) =>
+    tool.name.startsWith("archestra__"),
+  );
+
+  const assignedToolIds: string[] = [];
+  for (const tool of archestraTools) {
+    await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: `/api/agents/${profileId}/tools/${tool.id}`,
+      data: {},
+    });
+    assignedToolIds.push(tool.id);
+  }
+
+  return assignedToolIds;
 }
 
 export async function openManageCredentialsDialog(

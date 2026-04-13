@@ -68,6 +68,10 @@ function OAuthCallbackContent() {
         return;
       }
 
+      if (!code || !state) {
+        return;
+      }
+
       // Prevent duplicate processing (persists across React Strict Mode remounts)
       if (isCallbackProcessed(code, state)) {
         return;

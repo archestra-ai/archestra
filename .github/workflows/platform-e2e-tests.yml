@@ -338,7 +338,7 @@ jobs:
           platform-image-tag: ${{ steps.load-platform-image.outputs.image-tag }}
           platform-context: ./platform
           mcp-server-base-image-tag: ${{ steps.load-mcp-server-base-image.outputs.image-tag }}
-          extra-helm-set: "archestra.env.ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT"
+          extra-helm-set: "archestra.env.ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT,archestra.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION=2"
 
       - name: Run readonly-vault E2E tests
         id: e2e

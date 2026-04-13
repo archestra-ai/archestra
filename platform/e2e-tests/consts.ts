@@ -108,7 +108,7 @@ export const VAULT_ADDR =
   process.env.ARCHESTRA_HASHICORP_VAULT_ADDR ??
   (IS_CI ? "http://127.0.0.1:8200" : "http://127.0.0.1:30200");
 export const VAULT_KV_VERSION =
-  process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION ?? (IS_CI ? "1" : "2");
+  process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION ?? "2";
 export const VAULT_TEAM_FOLDER_PATH =
   VAULT_KV_VERSION === "1" ? "secret/teams" : "secret/data/teams";
 

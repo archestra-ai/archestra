@@ -8,6 +8,7 @@ import type { InternalMcpCatalog, McpServer } from "@/types";
  *
  * Returns true (manual reinstall required) when:
  * - Server name changed (local servers) - affects secret paths
+ * - Local execution config changed (command/args/docker/transport) - restart should be explicit
  * - Prompted env vars changed: added, removed, or key/required/type changed (local servers)
  * - OAuth config changed: added or removed (remote servers)
  * - Required userConfig fields changed: added, removed, or type changed (remote servers)
@@ -46,6 +47,14 @@ export function requiresNewUserInputForReinstall(
       logger.info(
         { catalogId: newCatalogItem.id },
         "Prompted env vars changed - manual reinstall required",
+      );
+      return true;
+    }
+
+    if (localExecutionConfigChanged(oldCatalogItem, newCatalogItem)) {
+      logger.info(
+        { catalogId: newCatalogItem.id },
+        "Local execution config changed - manual reinstall required",
       );
       return true;
     }
@@ -196,6 +205,15 @@ export async function autoReinstallServer(
 // ===== Internal helpers =====
 
 type PromptedEnvVarInfo = { required: boolean; type: string };
+type LocalExecutionConfigInfo = {
+  command: string;
+  arguments: string[];
+  dockerImage: string;
+  transportType: string;
+  httpPort: number | null;
+  httpPath: string;
+  serviceAccount: string;
+};
 
 /**
  * Extract prompted env vars from a catalog item as a map of key -> { required, type }
@@ -234,6 +252,30 @@ function promptedEnvVarsChanged(
   }
 
   return false;
+}
+
+function localExecutionConfigChanged(
+  oldCatalog: InternalMcpCatalog,
+  newCatalog: InternalMcpCatalog,
+): boolean {
+  return (
+    JSON.stringify(getLocalExecutionConfig(oldCatalog)) !==
+    JSON.stringify(getLocalExecutionConfig(newCatalog))
+  );
+}
+
+function getLocalExecutionConfig(
+  catalog: InternalMcpCatalog,
+): LocalExecutionConfigInfo {
+  return {
+    command: catalog.localConfig?.command ?? "",
+    arguments: catalog.localConfig?.arguments ?? [],
+    dockerImage: catalog.localConfig?.dockerImage ?? "",
+    transportType: catalog.localConfig?.transportType ?? "",
+    httpPort: catalog.localConfig?.httpPort ?? null,
+    httpPath: catalog.localConfig?.httpPath ?? "",
+    serviceAccount: catalog.localConfig?.serviceAccount ?? "",
+  };
 }
 
 type UserConfigFieldInfo = { type: string };

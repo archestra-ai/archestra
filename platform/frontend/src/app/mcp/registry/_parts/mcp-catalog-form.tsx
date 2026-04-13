@@ -85,6 +85,9 @@ const ExternalSecretSelector = lazy(
     import("@/components/external-secret-selector.ee"),
 );
 
+const MCP_CONFIG_AUTOCOMPLETE = "off";
+const MCP_SECRET_AUTOCOMPLETE = "new-password";
+
 interface McpCatalogFormProps {
   mode: "create" | "edit";
   initialValues?: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
@@ -359,6 +362,8 @@ export function McpCatalogForm({
       <form
         onSubmit={form.handleSubmit(handleSubmit)}
         className="flex min-h-0 flex-1 flex-col"
+        autoComplete={MCP_CONFIG_AUTOCOMPLETE}
+        data-1p-ignore="true"
       >
         <div
           className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 ${embedded ? "space-y-4 pt-4 pb-0" : "space-y-4 py-4"}`}
@@ -549,6 +554,7 @@ export function McpCatalogForm({
                       <Input
                         placeholder="https://api.example.com/mcp"
                         className="font-mono"
+                        autoComplete={MCP_CONFIG_AUTOCOMPLETE}
                         {...field}
                       />
                     </FormControl>
@@ -570,6 +576,7 @@ export function McpCatalogForm({
                         <Input
                           placeholder="node"
                           className="font-mono"
+                          autoComplete={MCP_CONFIG_AUTOCOMPLETE}
                           {...field}
                         />
                       </FormControl>
@@ -843,6 +850,7 @@ export function McpCatalogForm({
                             <Input
                               placeholder="e.g. quay.io"
                               className="font-mono"
+                              autoComplete={MCP_CONFIG_AUTOCOMPLETE}
                               value={watchField("server")}
                               onChange={(e) =>
                                 setField("server", e.target.value)
@@ -853,6 +861,7 @@ export function McpCatalogForm({
                             <Label className="text-xs">Username</Label>
                             <Input
                               placeholder="username"
+                              autoComplete={MCP_CONFIG_AUTOCOMPLETE}
                               value={watchField("username")}
                               onChange={(e) =>
                                 setField("username", e.target.value)
@@ -863,6 +872,7 @@ export function McpCatalogForm({
                             <Label className="text-xs">Password</Label>
                             <Input
                               type="password"
+                              autoComplete={MCP_SECRET_AUTOCOMPLETE}
                               placeholder={
                                 mode === "edit" && !watchField("password")
                                   ? "Saved — leave blank to keep"
@@ -878,6 +888,7 @@ export function McpCatalogForm({
                             <Label className="text-xs">Email (optional)</Label>
                             <Input
                               placeholder="email@example.com"
+                              autoComplete={MCP_CONFIG_AUTOCOMPLETE}
                               value={watchField("email")}
                               onChange={(e) =>
                                 setField("email", e.target.value)
@@ -1185,6 +1196,7 @@ export function McpCatalogForm({
                               type="password"
                               placeholder="your-client-secret (optional)"
                               className="font-mono"
+                              autoComplete={MCP_SECRET_AUTOCOMPLETE}
                               {...field}
                             />
                           </FormControl>

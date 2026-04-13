@@ -50,6 +50,9 @@ const ExternalSecretSelector = lazy(
     import("@/components/external-secret-selector.ee"),
 );
 
+const MCP_CONFIG_AUTOCOMPLETE = "off";
+const MCP_SECRET_AUTOCOMPLETE = "new-password";
+
 interface ExternalSecretValue {
   teamId: string | null;
   secretPath: string | null;
@@ -436,6 +439,11 @@ export function EnvironmentVariablesFormField<
                                     }
                                     placeholder="your-value"
                                     className="font-mono"
+                                    autoComplete={
+                                      envType === "secret"
+                                        ? MCP_SECRET_AUTOCOMPLETE
+                                        : MCP_CONFIG_AUTOCOMPLETE
+                                    }
                                     {...field}
                                   />
                                 </FormControl>
@@ -852,6 +860,7 @@ function AutoResizeSecretTextarea({
         <Textarea
           className="font-mono text-xs resize-none min-h-10 max-h-32 overflow-y-auto"
           rows={1}
+          autoComplete={MCP_SECRET_AUTOCOMPLETE}
           {...field}
           ref={(el) => {
             textareaRef.current = el;

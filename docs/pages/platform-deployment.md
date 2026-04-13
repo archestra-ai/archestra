@@ -280,11 +280,11 @@ Recommended approach:
 
 - Keep the platform HPA focused on web traffic and leave workers on manual replicas until you have queue metrics
 - Tune `archestra.worker.replicaCount` together with `ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT`; increasing concurrency per pod is often cheaper than adding pods for modest backlog
-- If your customer has KEDA, scale workers from queue backlog instead of CPU or memory
+- If you use KEDA, scale workers from queue backlog instead of CPU or memory
 
-Two good KEDA patterns for workers:
+For KEDA-backed worker autoscaling, use KEDA's PostgreSQL scaler against the `tasks` table with a query that counts ready work, for example:
 
-- Use KEDA's PostgreSQL scaler against the `tasks` table with a query that counts ready work, for example `SELECT COUNT(*) FROM tasks WHERE status = 'pending' AND scheduled_for <= NOW()`
+- `SELECT COUNT(*) FROM tasks WHERE status = 'pending' AND scheduled_for <= NOW()`
 
 Practical starting point for worker autoscaling:
 

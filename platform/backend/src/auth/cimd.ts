@@ -231,6 +231,7 @@ function asOptionalStringArray(value: unknown): string[] | undefined {
  * Check if a redirect URI targets a loopback address (127.0.0.1, [::1], or localhost).
  * Per RFC 8252 Section 7.3, authorization servers MUST allow any port
  * for loopback IP redirect URIs to support native app OAuth flows.
+ * https://datatracker.ietf.org/doc/html/rfc8252#section-7.3
  */
 export function isLoopbackRedirectUri(uri: string): boolean {
   try {

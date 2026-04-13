@@ -19,11 +19,6 @@ vi.mock("@/config", async (importOriginal) => {
       auth: {
         ...actual.default.auth,
         trustedOrigins: ["https://app.example.com"],
-        google: {
-          clientId: "google-client-id",
-          clientSecret: "google-client-secret",
-          hd: "example.com",
-        },
         get disableInvitations() {
           return mockDisableInvitations.value;
         },
@@ -307,16 +302,6 @@ describe("handleBeforeHook", () => {
 
       const result = await handleBeforeHook(ctx);
       expect(result).toBe(ctx);
-    });
-  });
-});
-
-describe("socialProviders", () => {
-  test("wires the configured Google hosted domain into Better Auth", () => {
-    expect(auth.options.socialProviders?.google).toEqual({
-      clientId: "google-client-id",
-      clientSecret: "google-client-secret",
-      hd: "example.com",
     });
   });
 });

@@ -19,7 +19,6 @@ import {
   parseCommaSeparatedList,
   parseConnectorSyncMaxDuration,
   parseContentMaxLength,
-  parseGoogleAuthConfig,
   parseProcessType,
   parseSampleRate,
   parseTrustProxy,
@@ -785,51 +784,6 @@ describe("parseContentMaxLength", () => {
     expect(logger.warn).toHaveBeenCalledWith(
       'Invalid ARCHESTRA_OTEL_CONTENT_MAX_LENGTH value "-100", using default 10000',
     );
-  });
-});
-
-describe("parseGoogleAuthConfig", () => {
-  const originalEnv = process.env;
-
-  beforeEach(() => {
-    process.env = { ...originalEnv };
-    delete process.env.ARCHESTRA_AUTH_GOOGLE_CLIENT_ID;
-    delete process.env.ARCHESTRA_AUTH_GOOGLE_CLIENT_SECRET;
-    delete process.env.ARCHESTRA_AUTH_GOOGLE_HD;
-  });
-
-  afterEach(() => {
-    process.env = originalEnv;
-  });
-
-  test("returns undefined when Google auth credentials are incomplete", () => {
-    process.env.ARCHESTRA_AUTH_GOOGLE_CLIENT_ID = "google-client-id";
-
-    expect(parseGoogleAuthConfig()).toBeUndefined();
-  });
-
-  test("returns trimmed Google auth config when credentials are present", () => {
-    process.env.ARCHESTRA_AUTH_GOOGLE_CLIENT_ID = " google-client-id ";
-    process.env.ARCHESTRA_AUTH_GOOGLE_CLIENT_SECRET = " google-client-secret ";
-    process.env.ARCHESTRA_AUTH_GOOGLE_HD = " example.com ";
-
-    expect(parseGoogleAuthConfig()).toEqual({
-      clientId: "google-client-id",
-      clientSecret: "google-client-secret",
-      hd: "example.com",
-    });
-  });
-
-  test("omits hd when it is blank", () => {
-    process.env.ARCHESTRA_AUTH_GOOGLE_CLIENT_ID = "google-client-id";
-    process.env.ARCHESTRA_AUTH_GOOGLE_CLIENT_SECRET = "google-client-secret";
-    process.env.ARCHESTRA_AUTH_GOOGLE_HD = "   ";
-
-    expect(parseGoogleAuthConfig()).toEqual({
-      clientId: "google-client-id",
-      clientSecret: "google-client-secret",
-      hd: undefined,
-    });
   });
 });
 

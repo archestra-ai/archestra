@@ -257,22 +257,6 @@ export const parseBodyLimit = (
   return defaultValue;
 };
 
-export const parseGoogleAuthConfig = () => {
-  const clientId = process.env.ARCHESTRA_AUTH_GOOGLE_CLIENT_ID?.trim();
-  const clientSecret = process.env.ARCHESTRA_AUTH_GOOGLE_CLIENT_SECRET?.trim();
-  const hostedDomain = process.env.ARCHESTRA_AUTH_GOOGLE_HD?.trim();
-
-  if (!clientId || !clientSecret) {
-    return undefined;
-  }
-
-  return {
-    clientId,
-    clientSecret,
-    hd: hostedDomain || undefined,
-  };
-};
-
 const DEFAULT_BODY_LIMIT = 50 * 1024 * 1024; // 50MB
 
 // Default OTEL OTLP endpoint for HTTP/Protobuf (4318). For gRPC, the typical port is 4317.
@@ -539,7 +523,6 @@ const config = {
     disableBasicAuth: process.env.ARCHESTRA_AUTH_DISABLE_BASIC_AUTH === "true",
     disableInvitations:
       process.env.ARCHESTRA_AUTH_DISABLE_INVITATIONS === "true",
-    google: parseGoogleAuthConfig(),
   },
   analytics: getAnalyticsConfig(),
   database: {

@@ -81,9 +81,6 @@ export const auth = betterAuth({
   // Prevent JWT plugin's /token endpoint from conflicting with OAuth provider's /oauth2/token
   disabledPaths: ["/token"],
   ...(config.authRateLimitDisabled ? { rateLimit: { enabled: false } } : {}),
-  socialProviders: {
-    google: config.auth.google,
-  },
   plugins: [
     organization({
       requireEmailVerificationOnInvitation: false,

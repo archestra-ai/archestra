@@ -718,6 +718,16 @@ The following environment variables can be used to configure Archestra Platform.
   - Use this to trust external identity providers (IdPs) for SSO, or to allow access from multiple URLs (e.g., both a LAN IP and a domain name)
   - Example for LAN access alongside localhost: `http://192.168.1.5:3000,http://192.168.1.5:9000`
 
+- **`ARCHESTRA_AUTH_GOOGLE_CLIENT_ID`** - OAuth client ID for Google social sign-in.
+  - Required together with `ARCHESTRA_AUTH_GOOGLE_CLIENT_SECRET` to show the Google sign-in button
+
+- **`ARCHESTRA_AUTH_GOOGLE_CLIENT_SECRET`** - OAuth client secret for Google social sign-in.
+  - Required together with `ARCHESTRA_AUTH_GOOGLE_CLIENT_ID`
+
+- **`ARCHESTRA_AUTH_GOOGLE_HD`** - Optional Google hosted domain hint passed as the `hd` authorization parameter during Google sign-in.
+  - Example: `example.com`
+  - Use this to prefer or restrict account selection to a specific Google Workspace domain on the Google sign-in screen
+
 - **`ARCHESTRA_SECRETS_MANAGER`** - Secrets storage backend for managing sensitive data (API keys, tokens, etc.)
   - Default: `DB` (database storage)
   - Options: `DB` or `Vault`

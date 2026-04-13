@@ -267,8 +267,9 @@ export default function OrganizationSettingsPage() {
                   maxLength={500}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Shown alongside errors in chat. Use this to direct users to
-                  your support team.
+                  Replaces the default chat error text. Users will only see this
+                  message plus correlation IDs they can share with your support
+                  team.
                 </p>
               </div>
               <div className="flex items-start justify-between gap-4">

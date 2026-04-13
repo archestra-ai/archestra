@@ -20,6 +20,7 @@ import {
 } from "@shared";
 import { APICallError, NoOutputGeneratedError, RetryError } from "ai";
 import logger from "@/logging";
+import { getActiveSessionId } from "@/observability/request-context";
 
 // =============================================================================
 // ProviderError — carries a fully-mapped ChatErrorResponse with correct provider
@@ -1525,17 +1526,35 @@ export function mapProviderError(
  * Returns an object with traceId and spanId if available.
  */
 export function getActiveTraceContext(): {
+  sessionId?: string;
   traceId?: string;
   spanId?: string;
 } {
   const span = trace.getSpan(otelContext.active());
-  if (!span) return {};
+  const sessionId = getActiveSessionId();
+  if (!span) return sessionId ? { sessionId } : {};
 
   const spanContext = span.spanContext();
-  if (!isSpanContextValid(spanContext)) return {};
+  if (!isSpanContextValid(spanContext)) {
+    return sessionId ? { sessionId } : {};
+  }
 
   return {
+    sessionId,
     traceId: spanContext.traceId,
     spanId: spanContext.spanId,
+  };
+}
+
+export function sanitizeChatErrorForFrontend(
+  error: ChatErrorResponse,
+): ChatErrorResponse {
+  return {
+    code: error.code,
+    message: error.message,
+    isRetryable: error.isRetryable,
+    sessionId: error.sessionId,
+    traceId: error.traceId,
+    spanId: error.spanId,
   };
 }

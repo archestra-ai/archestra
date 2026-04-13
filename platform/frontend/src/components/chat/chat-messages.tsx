@@ -170,9 +170,9 @@ export function ChatMessages({
   onUserMessageEdit,
   error = null,
   onToolApprovalResponse,
-  agentName,
-  selectedModel,
-  modelSource,
+  agentName: _agentName,
+  selectedModel: _selectedModel,
+  modelSource: _modelSource,
   unsafeContextBoundary,
 }: ChatMessagesProps) {
   const isStreamingStalled = useStreamingStallDetection(messages, status);
@@ -1133,9 +1133,6 @@ export function ChatMessages({
               error={error}
               conversationId={conversationId}
               supportMessage={organization?.chatErrorSupportMessage}
-              agentName={agentName}
-              selectedModel={selectedModel}
-              modelSource={modelSource}
             />
           )}
           {pendingToolCalls.map((toolCall) => (

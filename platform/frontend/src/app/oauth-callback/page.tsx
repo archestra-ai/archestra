@@ -157,7 +157,7 @@ function OAuthCallbackContent() {
 
   if (callbackError) {
     return (
-      <div className="container mx-auto p-6 max-w-2xl">
+      <OAuthCallbackLayout>
         <Card>
           <CardHeader>
             <CardTitle>OAuth Authentication</CardTitle>
@@ -176,12 +176,12 @@ function OAuthCallbackContent() {
             </Button>
           </CardContent>
         </Card>
-      </div>
+      </OAuthCallbackLayout>
     );
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-2xl">
+    <OAuthCallbackLayout>
       <Card>
         <CardHeader>
           <CardTitle>OAuth Authentication</CardTitle>
@@ -196,13 +196,13 @@ function OAuthCallbackContent() {
           </div>
         </CardContent>
       </Card>
-    </div>
+    </OAuthCallbackLayout>
   );
 }
 
 function LoadingFallback() {
   return (
-    <div className="container mx-auto p-6 max-w-2xl">
+    <OAuthCallbackLayout>
       <Card>
         <CardHeader>
           <CardTitle>OAuth Authentication</CardTitle>
@@ -217,6 +217,14 @@ function LoadingFallback() {
           </div>
         </CardContent>
       </Card>
+    </OAuthCallbackLayout>
+  );
+}
+
+function OAuthCallbackLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mx-auto flex min-h-[calc(100vh-8rem)] w-full max-w-2xl items-center justify-center p-6">
+      <div className="w-full">{children}</div>
     </div>
   );
 }

@@ -13,7 +13,7 @@ permissions: {}
 
 concurrency:
   group: on-commits-to-main-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy-dev-platform-images:

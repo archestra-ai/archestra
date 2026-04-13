@@ -29,10 +29,6 @@ concurrency:
   group: deploy-dev-platform-images-${{ github.event.pull_request.number || inputs.version || github.ref }}
   cancel-in-progress: true
 
-env:
-  IMAGE_VERSION: ${{ inputs.version || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
-  CHECKOUT_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-
 jobs:
   publish-dev-platform-image:
     name: Build Platform Dev Docker Image
@@ -47,7 +43,7 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 1
-          ref: ${{ env.CHECKOUT_REF }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Authenticate to Google Artifact Registry
         uses: ./.github/actions/auth-to-gar
@@ -76,7 +72,7 @@ jobs:
             echo "previous-image=" >> "$GITHUB_OUTPUT"
           fi
         env:
-          IMAGE_VERSION: ${{ env.IMAGE_VERSION }}
+          IMAGE_VERSION: ${{ inputs.version || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
 
       - name: Build Docker image
         uses: ./.github/actions/build-platform-docker-image
@@ -84,9 +80,9 @@ jobs:
           context: ./platform
           push: "true"
           platforms: linux/amd64
-          version: ${{ env.IMAGE_VERSION }}
+          version: ${{ inputs.version || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
           previous-image: ${{ steps.previous-platform-image.outputs.previous-image }}
-          tags: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${{ env.IMAGE_VERSION }}
+          tags: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${{ inputs.version || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
           sentry-auth-token: ${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
@@ -100,7 +96,7 @@ jobs:
       id-token: write # Required for Workload Identity Federation.
     with:
       push_to_gcr: true
-      version: ${{ env.IMAGE_VERSION }}
+      version: ${{ inputs.version || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}

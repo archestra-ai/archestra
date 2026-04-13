@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-04-03
+lastUpdated: 2026-04-10
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -38,6 +38,7 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 |----------|--------|
 | Agents | `read`, `create`, `update`, `delete`, `team-admin` |
 | Agent Triggers | `read`, `create`, `update`, `delete` |
+| Scheduled Tasks | `read`, `create`, `update`, `delete` |
 | LLM Proxies | `read`, `create`, `update`, `delete`, `team-admin` |
 | LLM Provider API Keys | `read`, `create`, `update`, `delete` |
 | LLM Virtual Keys | `read`, `create`, `update`, `delete` |
@@ -74,6 +75,7 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Resource | Actions |
 |----------|--------|
 | Agents | `read`, `create`, `update`, `delete` |
+| Scheduled Tasks | `read`, `create`, `update`, `delete` |
 | LLM Proxies | `read`, `create`, `update`, `delete` |
 | LLM Provider API Keys | `read` |
 | LLM Virtual Keys | `read` |
@@ -197,6 +199,11 @@ The following table lists all available permissions that can be assigned to cust
 | `optimizationRule:delete` | Remove optimization rules |
 | `organizationSettings:read` | View organization settings (appearance, authentication, etc) |
 | `organizationSettings:update` | Customize organization appearance, authentication, etc |
+| `scheduledTask:read` | View scheduled tasks and their run history |
+| `scheduledTask:create` | Create new scheduled tasks and trigger runs |
+| `scheduledTask:update` | Modify scheduled task configuration |
+| `scheduledTask:delete` | Delete scheduled tasks |
+| `scheduledTask:admin` | View and manage all scheduled tasks, not just your own |
 | `secret:read` | View secrets manager configuration |
 | `secret:update` | Modify secrets manager settings and test connectivity |
 | `simpleView:enable` | Sidebar is collapsed by default on page load |

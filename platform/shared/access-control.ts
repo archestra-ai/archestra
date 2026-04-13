@@ -27,6 +27,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete", "team-admin", "admin"],
   agentTrigger: ["read", "create", "update", "delete"],
+  scheduledTask: ["read", "create", "update", "delete", "admin"],
 
   // LLM
   llmProxy: ["read", "create", "update", "delete", "team-admin", "admin"],
@@ -78,6 +79,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete", "team-admin"],
   agentTrigger: ["read", "create", "update", "delete"],
+  scheduledTask: ["read", "create", "update", "delete"],
 
   // LLM
   llmProxy: ["read", "create", "update", "delete", "team-admin"],
@@ -129,6 +131,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete"],
   agentTrigger: [],
+  scheduledTask: ["read", "create", "update", "delete"],
 
   // LLM
   llmProxy: ["read", "create", "update", "delete"],
@@ -209,6 +212,12 @@ export const permissionDescriptions: Record<string, string> = {
   "agentTrigger:create": "Set up new agent triggers",
   "agentTrigger:update": "Modify agent trigger configurations",
   "agentTrigger:delete": "Remove agent triggers",
+  "scheduledTask:read": "View scheduled tasks and their run history",
+  "scheduledTask:create": "Create new scheduled tasks and trigger runs",
+  "scheduledTask:update": "Modify scheduled task configuration",
+  "scheduledTask:delete": "Delete scheduled tasks",
+  "scheduledTask:admin":
+    "View and manage all scheduled tasks, not just your own",
 
   // MCP
   "mcpGateway:read": "View and list MCP gateways",
@@ -928,6 +937,41 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.RefreshChatOpsChannelDiscovery]: {
     agentTrigger: ["read"],
   },
+  // Schedule Trigger Routes
+  [RouteId.GetScheduleTriggers]: {
+    scheduledTask: ["read"],
+  },
+  [RouteId.CreateScheduleTrigger]: {
+    scheduledTask: ["create"],
+  },
+  [RouteId.GetScheduleTrigger]: {
+    scheduledTask: ["read"],
+  },
+  [RouteId.UpdateScheduleTrigger]: {
+    scheduledTask: ["update"],
+  },
+  [RouteId.DeleteScheduleTrigger]: {
+    scheduledTask: ["delete"],
+  },
+  [RouteId.EnableScheduleTrigger]: {
+    scheduledTask: ["update"],
+  },
+  [RouteId.DisableScheduleTrigger]: {
+    scheduledTask: ["update"],
+  },
+  [RouteId.RunScheduleTriggerNow]: {
+    scheduledTask: ["create"],
+  },
+  [RouteId.GetScheduleTriggerRuns]: {
+    scheduledTask: ["read"],
+  },
+  [RouteId.GetScheduleTriggerRun]: {
+    scheduledTask: ["read"],
+  },
+  [RouteId.CreateScheduleTriggerRunConversation]: {
+    scheduledTask: ["create"],
+  },
+
   // Knowledge Base Routes
   [RouteId.GetKnowledgeBases]: { knowledgeSource: ["read"] },
   [RouteId.CreateKnowledgeBase]: { knowledgeSource: ["create"] },
@@ -981,6 +1025,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/agents/triggers/slack": { agentTrigger: ["read"] },
   "/agents/triggers/ms-teams": { agentTrigger: ["read"] },
   "/agents/triggers/email": { agentTrigger: ["read"] },
+  "/scheduled-tasks": { scheduledTask: ["read"] },
 
   // LLM
   "/llm/proxies": { llmProxy: ["read"] },

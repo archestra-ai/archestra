@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.11](https://github.com/archestra-ai/archestra/compare/platform-v1.2.10...platform-v1.2.11) (2026-04-12)
+
+
+### Features
+
+* support explicit OAuth endpoints without discovery ([#3727](https://github.com/archestra-ai/archestra/issues/3727)) ([c2fd828](https://github.com/archestra-ai/archestra/commit/c2fd82852cb07a0725ba91480506db505cd37fd2))
+
+
+### Miscellaneous Chores
+
+* Fix chat OAuth re-authentication flow ([#3729](https://github.com/archestra-ai/archestra/issues/3729)) ([823d756](https://github.com/archestra-ai/archestra/commit/823d7569b23e94c036f9b9772fce01928be33b81))
+
 ## [1.2.10](https://github.com/archestra-ai/archestra/compare/platform-v1.2.9...platform-v1.2.10) (2026-04-11)
 
 

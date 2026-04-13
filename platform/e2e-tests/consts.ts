@@ -50,6 +50,11 @@ export const METRICS_BEARER_TOKEN = "foo-bar";
 export const METRICS_ENDPOINT = "/metrics";
 
 export const MCP_GATEWAY_URL_SUFFIX = "/v1/mcp";
+export const LLM_PROVIDER_API_KEYS_ROUTE = "/api/llm-provider-api-keys";
+export const LLM_PROVIDER_API_KEYS_AVAILABLE_ROUTE =
+  "/api/llm-provider-api-keys/available";
+export const LLM_MODELS_ROUTE = "/api/llm-models";
+export const SYNC_LLM_MODELS_ROUTE = "/api/llm-models/sync";
 
 /**
  * Admin credentials - read from environment with fallback to defaults
@@ -99,6 +104,13 @@ export const KEYCLOAK_BACKEND_URL = IS_CI
   ? "http://e2e-tests-keycloak:8080"
   : "http://localhost:30081";
 export const KEYCLOAK_REALM = "archestra";
+export const VAULT_ADDR =
+  process.env.ARCHESTRA_HASHICORP_VAULT_ADDR ??
+  (IS_CI ? "http://127.0.0.1:8200" : "http://127.0.0.1:30200");
+export const VAULT_KV_VERSION =
+  process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION ?? "2";
+export const VAULT_TEAM_FOLDER_PATH =
+  VAULT_KV_VERSION === "1" ? "secret/teams" : "secret/data/teams";
 
 /** OIDC client configuration for Keycloak */
 export const KEYCLOAK_OIDC = {
@@ -143,6 +155,9 @@ export const MCP_EXAMPLE_OAUTH_EXTERNAL_URL = "http://localhost:30083";
 export const MCP_EXAMPLE_OAUTH_BACKEND_URL = IS_CI
   ? "http://e2e-tests-mcp-example-oauth:3232"
   : "http://localhost:30083";
+export const MCP_EXAMPLE_OAUTH_URL = IS_CI
+  ? MCP_EXAMPLE_OAUTH_EXTERNAL_URL
+  : process.env.MCP_EXAMPLE_OAUTH_URL || "http://localhost:3232";
 
 export const MCP_SERVER_JWKS_EXTERNAL_URL = "http://localhost:30082";
 export const MCP_SERVER_JWKS_BACKEND_URL = IS_CI

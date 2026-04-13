@@ -41,6 +41,7 @@ export * from "./oauth-client";
 export * from "./optimization-rule";
 export * from "./organization";
 export * from "./role";
+export * from "./schedule-trigger";
 export * from "./secret";
 export * from "./secrets-manager";
 export * from "./session";

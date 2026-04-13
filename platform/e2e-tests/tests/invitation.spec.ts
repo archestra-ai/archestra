@@ -1,0 +1,170 @@
+import type { Page } from "@playwright/test";
+import { E2eTestId } from "@shared";
+import { ADMIN_EMAIL, ADMIN_PASSWORD } from "../consts";
+import { expect, test } from "../fixtures";
+import { clickButton, expandSidebar, navigateAndVerifyAuth } from "../utils";
+
+/**
+ * Navigate to the users settings page and open the invite dialog.
+ * Returns the email input and generate button locators.
+ */
+async function openInviteDialog(
+  page: Page,
+  goToPage: (page: Page, path: string) => Promise<void>,
+) {
+  const inviteButton = page.getByRole("button", { name: /invite user/i });
+  await navigateAndVerifyAuth({
+    page,
+    path: "/settings/users",
+    email: ADMIN_EMAIL,
+    password: ADMIN_PASSWORD,
+    verifyLocator: inviteButton,
+    goToPage,
+  });
+
+  await clickButton({ page, options: { name: /invite user/i } });
+  await page.waitForTimeout(500);
+
+  const emailInput = page.getByTestId(E2eTestId.InviteEmailInput);
+  await expect(emailInput).toBeVisible();
+
+  const generateButton = page.getByTestId(E2eTestId.GenerateInvitationButton);
+  await expect(generateButton).toBeVisible();
+
+  return { emailInput, generateButton };
+}
+
+test.describe("Invitation functionality", {
+  tag: ["@firefox", "@webkit"],
+}, () => {
+  // increase stability
+  // Extended timeout for Firefox/WebKit CI environments where React hydration
+  // and permission checks may take longer than the default 60s
+  test.describe.configure({ mode: "serial", retries: 4, timeout: 120_000 });
+
+  test("shows error message when email is invalid", async ({
+    page,
+    goToPage,
+  }) => {
+    const { emailInput, generateButton } = await openInviteDialog(
+      page,
+      goToPage,
+    );
+
+    await emailInput.fill("invalid-email");
+
+    // The "Generate Invitation Link" button should be disabled for invalid email
+    await expect(generateButton).toBeDisabled();
+  });
+
+  test("can generate invitation link and successfully sign up with it", async ({
+    page,
+    makeRandomString,
+    goToPage,
+    browser,
+  }) => {
+    // Generate a random email for testing
+    const TEST_EMAIL = `${makeRandomString(10, "test")}@example.com`;
+    const TEST_PASSWORD = "TestPassword123!";
+
+    // PART 1: Generate the invitation link (as admin)
+    const { emailInput, generateButton } = await openInviteDialog(
+      page,
+      goToPage,
+    );
+
+    await emailInput.fill(TEST_EMAIL);
+
+    await expect(generateButton).toBeEnabled();
+    await generateButton.click();
+
+    // Wait for the invitation link to be generated
+    // Increased timeout for CI environments where API calls may be slower
+    const invitationLinkInput = page.getByTestId(E2eTestId.InvitationLinkInput);
+    await expect(invitationLinkInput).toBeVisible({ timeout: 30000 });
+
+    // Get the invitation link
+    const invitationLink = await invitationLinkInput.inputValue();
+    expect(invitationLink).toBeTruthy();
+    expect(invitationLink).toContain("/auth/sign-up-with-invitation");
+
+    // PART 2: Use the invitation link to sign up (as new user in incognito context)
+    // Create a new incognito context to simulate a new user (no shared storage)
+    const newUserContext = await browser.newContext({
+      // Ensure no storage state is shared
+      storageState: undefined,
+    });
+
+    const newUserPage = await newUserContext.newPage();
+
+    try {
+      // Navigate to the invitation link
+      await newUserPage.goto(invitationLink);
+
+      // Wait for the sign-up page to load
+      await newUserPage.waitForTimeout(2000);
+
+      // Verify we're on the invitation sign-up page
+      await expect(
+        newUserPage.getByText(/You've been invited to join the .* workspace/i),
+      ).toBeVisible();
+      await expect(newUserPage.getByText(`Email: ${TEST_EMAIL}`)).toBeVisible();
+
+      // Fill in the sign-up form
+      // The email should be pre-filled, but we need to fill in name and password
+      const nameInput = newUserPage.getByRole("textbox", { name: /name/i });
+      await expect(nameInput).toBeVisible();
+      const uniqueName = `Test User ${makeRandomString(5)}`;
+      await nameInput.fill(uniqueName);
+
+      // Email should be pre-filled, but let's verify it's there
+      const emailInputSignup = newUserPage.getByRole("textbox", {
+        name: /email/i,
+      });
+      await expect(emailInputSignup).toBeVisible();
+      const emailValue = await emailInputSignup.inputValue();
+      if (emailValue !== TEST_EMAIL) {
+        await emailInputSignup.fill(TEST_EMAIL);
+      }
+
+      // Fill in password
+      const passwordInput = newUserPage.getByRole("textbox", {
+        name: /password/i,
+      });
+      await expect(passwordInput).toBeVisible();
+      await passwordInput.fill(TEST_PASSWORD);
+
+      // Submit the form
+      const signUpButton = newUserPage.getByRole("button", {
+        name: /create an account/i,
+      });
+      await expect(signUpButton).toBeVisible();
+      await signUpButton.click();
+
+      // Wait for sign-up to complete and redirect
+      // The page redirects to /chat (or root /) after successful sign-up
+      await newUserPage.waitForURL(/\/(chat)?$/, { timeout: 15000 });
+
+      // Verify we're successfully logged in by checking that the authenticated
+      // UI shell loaded after redirect.
+      await expandSidebar(newUserPage);
+      await expect(
+        newUserPage
+          .getByRole("link", { name: /chat/i })
+          .or(newUserPage.getByRole("button", { name: /new conversation/i })),
+      ).toBeVisible({ timeout: 15_000 });
+
+      // PART 3: Verify the new user is listed in members (back to admin context)
+      // Go back to the admin page and verify the new member appears
+      await goToPage(page, "/settings/users");
+      await page.waitForTimeout(1000);
+
+      // Look for the new user in the members list
+      await expect(page.getByText(TEST_EMAIL)).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByText(uniqueName)).toBeVisible({ timeout: 15_000 });
+    } finally {
+      // Clean up the new user context
+      await newUserContext.close();
+    }
+  });
+});

@@ -102,10 +102,22 @@ spec:
                 path "kv/archestra/*" {
                   capabilities = ["create", "read", "update", "delete", "list"]
                 }
+                path "kv/teams" {
+                  capabilities = ["list"]
+                }
+                path "kv/teams/*" {
+                  capabilities = ["create", "read", "update", "delete", "list"]
+                }
                 path "secret/data/archestra/*" {
                   capabilities = ["create", "read", "update", "delete", "list"]
                 }
                 path "secret/metadata/archestra/*" {
+                  capabilities = ["read", "delete", "list"]
+                }
+                path "secret/data/teams/*" {
+                  capabilities = ["create", "read", "update", "delete", "list"]
+                }
+                path "secret/metadata/teams/*" {
                   capabilities = ["read", "delete", "list"]
                 }
                 POLICY

@@ -1,20 +1,22 @@
 # CI-specific values for the Archestra Helm chart
-# This file is used during e2e testing in GitHub Actions
+# This file is used for the shared non-quickstart E2E environment in GitHub Actions.
 
 archestra:
   # Image will be set via --set during deployment
   # image: archestra/platform:ci-test
 
-  # Deploy multiple replicas for the e2e environment to test issues we may face
-  # which could be caused by storing state in pod memory, which may only be discovered
-  # when replicas is > 1
-  replicaCount: 3
+  # The shared non-quickstart CI environment now includes the Vault K8s startup
+  # scenario, which injects the database URL via an init container. Keep a single
+  # backend replica here to avoid concurrent first-boot migrations racing each
+  # other against a fresh CI database.
+  replicaCount: 1
 
   worker:
     replicaCount: 2
 
   # Environment variables for e2e testing
   env:
+    ENABLE_E2E_TEST_ENDPOINTS: "true"
     ARCHESTRA_ANALYTICS: disabled
     # LLM Proxy base URLs (for LLM proxy routes)
     # Each provider uses a distinct path prefix to avoid WireMock stub conflicts
@@ -68,15 +70,26 @@ archestra:
     # Add Keycloak as trusted origin for SSO e2e tests (OIDC discovery URL validation)
     # Includes both the internal K8s service name and the NodePort URL that appears in OIDC discovery
     ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS: "http://e2e-tests-keycloak:8080,http://localhost:30081"
-    # Secrets manager configuration - "Vault" mode for standard Vault read/write
-    # The BYOS (READONLY_VAULT) mode is set via extra-helm-set in the Vault e2e job
-    # to ensure all replicas start in BYOS mode (avoids in-memory state issues with replicaCount > 1)
-    ARCHESTRA_SECRETS_MANAGER: "Vault"
-    # Vault runs as a Kubernetes service in the cluster
-    # Pods access via K8s service name, host/Playwright access via NodePort mapped to 8200
+    # Shared CI secrets-manager configuration.
+    # Keep the generic suite on the standard DB-backed secrets manager. The
+    # readonly-vault coverage runs in its own dedicated job via a Helm override.
+    ARCHESTRA_SECRETS_MANAGER: "DB"
     ARCHESTRA_HASHICORP_VAULT_ADDR: "http://vault:8200"
-    ARCHESTRA_HASHICORP_VAULT_TOKEN: "dev-root-token"
-    ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD: "TOKEN"
+    ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD: "K8S"
+    ARCHESTRA_HASHICORP_VAULT_K8S_ROLE: "archestra"
+    ARCHESTRA_HASHICORP_VAULT_KV_VERSION: "1"
+
+  # Load database and test values from Vault before the platform starts.
+  initContainers:
+    vaultSecrets:
+      enabled: true
+      secrets:
+        - envVar: ARCHESTRA_DATABASE_URL
+          path: kv/archestra/config
+          key: dburl
+        - envVar: TEST_VALUE
+          path: kv/archestra/config
+          key: dummy_var
 
   orchestrator:
     kubernetes:
@@ -100,13 +113,13 @@ archestra:
 
 # PostgreSQL configuration for CI
 postgresql:
-  # Use the internal PostgreSQL instance
-  external_database_url: null
+  # Vault provides the connection URL, but we still deploy the PostgreSQL subchart.
+  external_database_url: "from_vault"
   enabled: true
   auth:
     database: archestra_dev
     username: archestra
-    password: archestra_dev_password
+    password: vault_e2e_custom_pw
   primary:
     initdb:
       scripts:

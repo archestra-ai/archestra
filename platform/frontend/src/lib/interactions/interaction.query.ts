@@ -29,6 +29,8 @@ export function useInteractions({
   sortBy,
   sortDirection = "desc",
   initialData,
+  enabled = true,
+  refetchInterval,
 }: {
   profileId?: string;
   externalAgentId?: string;
@@ -45,6 +47,8 @@ export function useInteractions({
     archestraApiTypes.GetInteractionsData["query"]
   >["sortDirection"];
   initialData?: archestraApiTypes.GetInteractionsResponses["200"];
+  enabled?: boolean;
+  refetchInterval?: number | false;
 } = {}) {
   return useQuery({
     queryKey: [
@@ -92,6 +96,7 @@ export function useInteractions({
       }
       return response.data ?? emptyResponse;
     },
+    enabled,
     // Only use initialData for the first page (offset 0) with default sorting and default limit
     initialData:
       offset === 0 &&
@@ -106,6 +111,7 @@ export function useInteractions({
       !endDate
         ? initialData
         : undefined,
+    ...(refetchInterval ? { refetchInterval } : {}),
   });
 }
 

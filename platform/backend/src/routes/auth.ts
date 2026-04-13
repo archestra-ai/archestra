@@ -8,8 +8,6 @@ import { betterAuth } from "@/auth";
 import {
   ensureCimdClientRegistered,
   isCimdClientId,
-  isLoopbackRedirectUri,
-  loopbackRedirectUriMatchesIgnoringPort,
 } from "@/auth/cimd";
 import config from "@/config";
 import logger from "@/logging";
@@ -30,6 +28,10 @@ import {
   MCP_RESOURCE_REFERENCE_PREFIX,
 } from "@/services/identity-providers/enterprise-managed/authorization";
 import { ApiError, constructResponseSchema } from "@/types";
+import {
+  isLoopbackRedirectUri,
+  loopbackRedirectUriMatchesIgnoringPort,
+} from "@/utils/network";
 
 const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.route({

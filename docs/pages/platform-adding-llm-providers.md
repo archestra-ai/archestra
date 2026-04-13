@@ -3,7 +3,7 @@ title: Adding LLM Providers
 category: Development
 order: 2
 description: Developer guide for implementing new LLM provider support in Archestra Platform
-lastUpdated: 2026-03-23
+lastUpdated: 2026-04-13
 ---
 
 <!--
@@ -15,6 +15,8 @@ This is a development guide for adding new LLM providers to Archestra.
 ## Overview
 
 This guide covers how to add a new LLM provider to Archestra Platform. Each provider requires:
+
+![LLM provider development flow in the platform shell](/assets/automated_screenshots/platform-adding-llm-providers_platform-shell.png)
 
 1. **[LLM Proxy](/docs/platform-llm-proxy)** - The proxy that sits between clients and LLM providers. Handles security policies, tool invocation controls, metrics, and observability. Clients send requests to the proxy, which forwards them to the provider. It must handle both streaming and non-streaming provider responses.
 
@@ -185,27 +187,40 @@ Interaction handlers parse stored request/response data for display in the LLM P
 | `frontend/src/lib/interactions/llmProviders/{provider}.ts` | Implement `InteractionUtils` interface for parsing provider-specific request/response JSON |
 | `frontend/src/lib/interactions/interaction.utils.ts`       | Add case to `getInteractionClass()` switch to route discriminator to handler               |
 
-### E2E Tests
+### Testing
 
-Each provider must be added to the LLM Proxy and Chat UI e2e tests to ensure all features work correctly.
+New provider work should add backend proxy coverage first, then only add WireMock e2e coverage where transport-level smoke coverage is still needed.
 
-#### LLM Proxy E2E Tests
+#### Backend Proxy Matrix
 
-| File                                                            | Description                                                                                                                            |
-| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `helm/e2e-tests/mappings/{provider}-*.json`                     | WireMock stub mappings for mocking provider API responses (models list, chat completions, tool calls, etc.)                            |
-| `helm/e2e-tests/mappings/{provider}-chat-ui-e2e-test.json`      | WireMock stub mapping for Chat UI streaming responses - must use SSE format with `bodyPatterns` matching on `chat-ui-e2e-test`         |
-| `.github/values-ci.yaml`                                        | Add provider base URL pointing to WireMock (e.g., `ARCHESTRA_{PROVIDER}_BASE_URL: "http://e2e-tests-wiremock:8080/v1"`)                |
-| `e2e-tests/tests/api/llm-proxy/tool-invocation.spec.ts`         | Tool invocation policy tests - add `{provider}Config` to `testConfigs` map                                                             |
-| `e2e-tests/tests/api/llm-proxy/tool-persistence.spec.ts`        | Tool call persistence tests - add `{provider}Config` to `testConfigs` map                                                              |
-| `e2e-tests/tests/api/llm-proxy/tool-result-compression.spec.ts` | TOON compression tests - add `{provider}Config` to `testConfigs` map                                                                   |
-| `e2e-tests/tests/api/llm-proxy/model-optimization.spec.ts`      | Model optimization tests - add `{provider}Config` to `testConfigs` map                                                                 |
-| `e2e-tests/tests/api/llm-proxy/token-cost-limits.spec.ts`       | Token cost limits tests - add `{provider}Config` to `testConfigs` map                                                                  |
-| `e2e-tests/tests/api/llm-proxy/execution-metrics.spec.ts`       | Execution metrics tests (agent execution ID tracking) - add `{provider}Config` to `testConfigs` map                                    |
-| `e2e-tests/tests/api/llm-proxy/streaming-tool-calls.spec.ts`    | Streaming tool call tests - add `{provider}Config` to `testConfigs` map (or `null` if provider uses non-SSE streaming format)          |
-| `e2e-tests/tests/ui/chat.spec.ts`                               | Chat UI tests - add `{provider}Config` to `testConfigs` map with `providerName`, `modelId`, `modelDisplayName`, and `expectedResponse` |
+| File                                                  | Description                                                                                                                                 |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `backend/src/routes/proxy/routesv2/provider-matrix.test.ts` | Primary conformance suite for provider onboarding. Add the provider config, request builders, route plugin, adapter factory, and any provider-specific stream assertions. |
+| `backend/src/test/llm-provider-stubs.ts` and route-local harnesses | Reuse or extend SDK-level stubs instead of adding WireMock mappings for proxy-only behavior.                                               |
 
-All LLM Proxy test files use the `satisfies Record<SupportedProvider, Config>` pattern to enforce at compile time that every provider has a config entry. When a new provider is added to `SupportedProvider` without adding its test config, TypeScript will report a compile error.
+The backend matrix covers the proxy behaviors that used to require dedicated e2e suites:
+
+- declared tool persistence
+- execution ID persistence
+- streaming tool call handling
+- model optimization
+- token cost limit enforcement
+- TOON compression
+
+The preferred test seam is the provider client created by `adapterFactory.createClient()`. Return a fake SDK-shaped client from the test and let the real route, handler, policy, persistence, and metrics code run around it.
+
+#### Remaining E2E Coverage
+
+| File                                               | Description                                                                                                                            |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `e2e-tests/tests/llm-proxy/tool-invocation.spec.ts` | Keep provider entries here for end-to-end policy enforcement against the running stack.                                                |
+| `e2e-tests/tests/llm-proxy/jwks-auth.spec.ts`       | Keep this as transport and auth smoke coverage.                                                                                        |
+| `e2e-tests/tests/llm-proxy/virtual-api-keys.spec.ts` | Keep this for virtual key routing and custom base URL behavior.                                                                        |
+| `e2e-tests/tests/ui/chat.spec.ts`                   | Add provider entries for built-in chat model selection and response rendering.                                                         |
+| `helm/e2e-tests/mappings/{provider}-chat-ui-e2e-test.json` | Add WireMock chat stubs only when the provider needs chat UI e2e coverage.                                                            |
+| `.github/values-ci.yaml`                            | Add provider base URL overrides only if a remaining e2e test still needs WireMock for that provider.                                   |
+
+Do not add a full set of `helm/e2e-tests/mappings/{provider}-*.json` files by default. Most new provider proxy behavior should be covered in backend Vitest.
 
 ## Chat Support
 

@@ -269,8 +269,6 @@ export async function registerWorkerRoutes(fastify: FastifyInstanceWithZod) {
   fastify.register(routes.zhipuaiProxyRoutes);
   // MCP Gateway (tool listing + tool calls via JSON-RPC)
   fastify.register(routes.mcpGatewayRoutes);
-  // MCP Proxy (forwards tool execution to K8s MCP server pods)
-  fastify.register(routes.mcpProxyRoutes);
 }
 
 /**

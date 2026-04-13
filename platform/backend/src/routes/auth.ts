@@ -25,6 +25,10 @@ import {
   MCP_RESOURCE_REFERENCE_PREFIX,
 } from "@/services/identity-providers/enterprise-managed/authorization";
 import { ApiError, constructResponseSchema } from "@/types";
+import {
+  isLoopbackRedirectUri,
+  loopbackRedirectUriMatchesIgnoringPort,
+} from "@/utils/network";
 
 const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.route({
@@ -231,6 +235,28 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
           return reply.status(400).send({
             error: `CIMD registration failed: ${(error as Error).message}`,
           });
+        }
+
+        // RFC 8252 Section 7.3: loopback redirect URIs MUST allow any port.
+        // CIMD documents contain fixed redirect_uris, but native CLI clients
+        // (e.g. Claude Code) start a callback server on an ephemeral port.
+        // If the requested redirect_uri is loopback and matches a registered
+        // URI except for port, dynamically add it so better-auth's exact
+        // match succeeds.
+        const redirectUri = query.redirect_uri;
+        if (redirectUri && isLoopbackRedirectUri(redirectUri)) {
+          const client = await OAuthClientModel.findByClientId(clientId);
+          const registered = client?.redirectUris ?? [];
+          if (
+            !registered.includes(redirectUri) &&
+            loopbackRedirectUriMatchesIgnoringPort(redirectUri, registered)
+          ) {
+            await OAuthClientModel.addRedirectUri(clientId, redirectUri);
+            logger.debug(
+              { clientId, redirectUri },
+              "[auth:oauth2/authorize] Added loopback redirect_uri with ephemeral port (RFC 8252)",
+            );
+          }
         }
       }
 

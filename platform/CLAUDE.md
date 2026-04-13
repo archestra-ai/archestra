@@ -16,6 +16,7 @@
 6. **Enterprise Edition Imports** - NEVER directly import from `.ee.ts` files unless the importing file is itself an `.ee.ts` file. Use runtime conditional logic with `config.enterpriseFeatures.core` checks instead to avoid bundling enterprise code into free builds
 7. **No Auto Commits** - Never commit or push changes without explicit user approval. Always ask before running git commit or git push
 8. **No Database Modifications Without Approval** - NEVER run INSERT, UPDATE, DELETE, or any data-modifying SQL queries without explicit user approval. SELECT queries for reading data are allowed. Always ask before modifying database data directly.
+9. **NEVER MENTION REAL CUSTOMER NAMES OR IDENTIFIERS ANYWHERE IN CODE, COMMENTS, TESTS, DOCS, COMMITS, OR PR TEXT!!!!!!!!!!**
 
 ## Docs
 

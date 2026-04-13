@@ -1,5 +1,6 @@
 "use client";
 
+import { calculateCostSavings, DynamicInteraction } from "@shared";
 import {
   ArrowLeft,
   Bot,
@@ -31,10 +32,6 @@ import {
   useInteractionSessions,
   useInteractions,
 } from "@/lib/interactions/interaction.query";
-import {
-  calculateCostSavings,
-  DynamicInteraction,
-} from "@/lib/interactions/interaction.utils";
 import { formatDate } from "@/lib/utils";
 
 export default function SessionDetailPage({

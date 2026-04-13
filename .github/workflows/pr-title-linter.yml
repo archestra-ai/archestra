@@ -6,6 +6,7 @@ on:
       - opened
       - edited
       - reopened
+      - synchronize
   # This check can be required with merge queue enabled. The actual title lint
   # only needs PR metadata, but required checks must also post on merge_group.
   merge_group:

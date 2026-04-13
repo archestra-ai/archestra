@@ -1268,6 +1268,64 @@ describe("createAgentServer tools/list", () => {
 
     archestraMcpBranding.syncFromOrganization(null);
   });
+
+  test("preserves user context when calling restricted Archestra tools", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const org = await makeOrganization();
+    const adminUser = await makeUser();
+    await makeMember(adminUser.id, org.id, { role: "admin" });
+
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+    });
+    await seedAndAssignArchestraTools(agent.id);
+
+    const { server } = await createAgentServer(agent.id, {
+      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+      teamId: null,
+      isOrganizationToken: false,
+      organizationId: org.id,
+      isUserToken: true,
+      userId: adminUser.id,
+    });
+    const callToolHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<
+          string,
+          (request: unknown) => Promise<{
+            content: Array<{ type: string; text: string }>;
+            isError?: boolean;
+            structuredContent?: { items?: unknown[] };
+          }>
+        >;
+      }
+    )._requestHandlers.get("tools/call");
+
+    expect(callToolHandler).toBeDefined();
+    if (!callToolHandler) {
+      throw new Error("Expected tools/call handler to be registered");
+    }
+
+    const response = await callToolHandler({
+      method: "tools/call",
+      params: {
+        name: "archestra__get_mcp_servers",
+        arguments: {},
+      },
+    });
+
+    expect(response.isError).not.toBe(true);
+    expect(response.structuredContent?.items).toEqual(expect.any(Array));
+    expect(response.content[0]?.text).not.toContain(
+      "User context not available",
+    );
+  });
 });
 
 describe("extractPassthroughHeaders", async () => {

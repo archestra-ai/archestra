@@ -39,6 +39,10 @@ patchedDependencies:
 importers:
 
   .:
+    dependencies:
+      croner:
+        specifier: ^10.0.1
+        version: 10.0.1
     devDependencies:
       '@biomejs/biome':
         specifier: 2.4.6
@@ -558,6 +562,9 @@ importers:
       cmdk:
         specifier: ^1.1.1
         version: 1.1.1(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      croner:
+        specifier: ^10.0.1
+        version: 10.0.1
       cronstrue:
         specifier: ^3.13.0
         version: 3.13.0
@@ -730,6 +737,9 @@ importers:
 
   shared:
     dependencies:
+      ai:
+        specifier: ^6.0.116
+        version: 6.0.116(zod@4.3.6)
       better-auth:
         specifier: 1.5.5
         version: 1.5.5(drizzle-kit@0.31.9)(drizzle-orm@0.45.2(@electric-sql/pglite@0.3.16)(@opentelemetry/api@1.9.0)(@types/pg@8.18.0)(kysely@0.28.14)(pg@8.20.0))(mongodb@7.1.0(@aws-sdk/credential-providers@3.1009.0)(socks@2.8.7))(next@16.2.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.58.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(pg@8.20.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(vitest@4.1.0(@opentelemetry/api@1.9.0)(@types/node@25.5.0)(jsdom@29.0.0(@noble/hashes@2.0.1))(vite@7.3.1(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.2)))

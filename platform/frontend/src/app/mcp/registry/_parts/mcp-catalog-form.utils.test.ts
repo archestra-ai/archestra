@@ -1,10 +1,14 @@
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
-import { transformFormToApiData } from "./mcp-catalog-form.utils";
+import {
+  transformCatalogItemToFormValues,
+  transformExternalCatalogToFormValues,
+  transformFormToApiData,
+} from "./mcp-catalog-form.utils";
 
 describe("transformFormToApiData", () => {
   it("includes OAuth discovery overrides in the API payload", () => {
     const values: McpCatalogFormValues = {
-      name: "Jira MCP",
+      name: "Direct OAuth MCP",
       description: "",
       icon: null,
       serverType: "local",
@@ -18,10 +22,12 @@ describe("transformFormToApiData", () => {
         supports_resource_metadata: true,
         oauthServerUrl: "https://mcp.example.com",
         authServerUrl: "https://auth.example.com",
+        authorizationEndpoint: "https://legacy-idp.example.com/oauth/authorize",
         wellKnownUrl:
           "https://auth.example.com/.well-known/openid-configuration",
         resourceMetadataUrl:
           "https://mcp.example.com/.well-known/oauth-protected-resource/mcp",
+        tokenEndpoint: "https://legacy-idp.example.com/oauth/token",
       },
       enterpriseManagedConfig: null,
       localConfig: {
@@ -50,16 +56,18 @@ describe("transformFormToApiData", () => {
     expect(transformFormToApiData(values).oauthConfig).toMatchObject({
       server_url: "https://mcp.example.com",
       auth_server_url: "https://auth.example.com",
+      authorization_endpoint: "https://legacy-idp.example.com/oauth/authorize",
       well_known_url:
         "https://auth.example.com/.well-known/openid-configuration",
       resource_metadata_url:
         "https://mcp.example.com/.well-known/oauth-protected-resource/mcp",
+      token_endpoint: "https://legacy-idp.example.com/oauth/token",
     });
   });
 
   it("uses the remote server URL as the OAuth server URL for remote servers", () => {
     const values: McpCatalogFormValues = {
-      name: "Remote Jira MCP",
+      name: "Remote Direct OAuth MCP",
       description: "",
       icon: null,
       serverType: "remote",
@@ -73,10 +81,12 @@ describe("transformFormToApiData", () => {
         supports_resource_metadata: true,
         oauthServerUrl: "",
         authServerUrl: "https://auth.example.com",
+        authorizationEndpoint: "https://legacy-idp.example.com/oauth/authorize",
         wellKnownUrl:
           "https://auth.example.com/.well-known/openid-configuration",
         resourceMetadataUrl:
           "https://mcp.example.com/.well-known/oauth-protected-resource/mcp",
+        tokenEndpoint: "https://legacy-idp.example.com/oauth/token",
       },
       enterpriseManagedConfig: null,
       localConfig: undefined,
@@ -94,10 +104,93 @@ describe("transformFormToApiData", () => {
     expect(transformFormToApiData(values).oauthConfig).toMatchObject({
       server_url: "https://mcp.example.com",
       auth_server_url: "https://auth.example.com",
+      authorization_endpoint: "https://legacy-idp.example.com/oauth/authorize",
       well_known_url:
         "https://auth.example.com/.well-known/openid-configuration",
       resource_metadata_url:
         "https://mcp.example.com/.well-known/oauth-protected-resource/mcp",
+      token_endpoint: "https://legacy-idp.example.com/oauth/token",
     });
+  });
+
+  it("hydrates explicit OAuth endpoints from internal catalog items", () => {
+    const values = transformCatalogItemToFormValues({
+      id: "catalog-1",
+      name: "Direct OAuth MCP",
+      description: "",
+      icon: null,
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com",
+      oauthConfig: {
+        client_id: "client-id",
+        client_secret: "client-secret",
+        redirect_uris: ["https://app.example.com/oauth-callback"],
+        scopes: ["read"],
+        default_scopes: ["read", "write"],
+        supports_resource_metadata: false,
+        server_url: "https://mcp.example.com",
+        auth_server_url: "https://auth.example.com",
+        authorization_endpoint:
+          "https://legacy-idp.example.com/oauth/authorize",
+        well_known_url:
+          "https://auth.example.com/.well-known/openid-configuration",
+        resource_metadata_url:
+          "https://mcp.example.com/.well-known/oauth-protected-resource/mcp",
+        token_endpoint: "https://legacy-idp.example.com/oauth/token",
+        name: "Direct OAuth MCP",
+      },
+      enterpriseManagedConfig: null,
+      localConfig: null,
+      deploymentSpecYaml: null,
+      userConfig: {},
+      scope: "personal",
+      teams: [],
+      labels: [],
+    } as never);
+
+    expect(values.oauthConfig?.authorizationEndpoint).toBe(
+      "https://legacy-idp.example.com/oauth/authorize",
+    );
+    expect(values.oauthConfig?.tokenEndpoint).toBe(
+      "https://legacy-idp.example.com/oauth/token",
+    );
+  });
+
+  it("hydrates explicit OAuth endpoints from external catalog manifests", () => {
+    const values = transformExternalCatalogToFormValues({
+      name: "direct-oauth-mcp",
+      display_name: "Direct OAuth MCP",
+      description: "",
+      icon: null,
+      server: {
+        type: "remote",
+        url: "https://mcp.example.com",
+      },
+      oauth_config: {
+        client_id: "client-id",
+        client_secret: "client-secret",
+        redirect_uris: ["https://app.example.com/oauth-callback"],
+        scopes: ["read"],
+        default_scopes: ["read", "write"],
+        supports_resource_metadata: false,
+        server_url: "https://mcp.example.com",
+        auth_server_url: "https://auth.example.com",
+        authorization_endpoint:
+          "https://legacy-idp.example.com/oauth/authorize",
+        well_known_url:
+          "https://auth.example.com/.well-known/openid-configuration",
+        resource_metadata_url:
+          "https://mcp.example.com/.well-known/oauth-protected-resource/mcp",
+        token_endpoint: "https://legacy-idp.example.com/oauth/token",
+        name: "Direct OAuth MCP",
+      },
+    } as never);
+
+    expect(values.oauthConfig?.authorizationEndpoint).toBe(
+      "https://legacy-idp.example.com/oauth/authorize",
+    );
+    expect(values.oauthConfig?.tokenEndpoint).toBe(
+      "https://legacy-idp.example.com/oauth/token",
+    );
   });
 });

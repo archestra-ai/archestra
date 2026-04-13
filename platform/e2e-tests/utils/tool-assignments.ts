@@ -131,6 +131,7 @@ async function openCatalogToolAssignment({
     )
     .toBe("enabled");
   await enabledCatalogItem.click();
+  await page.keyboard.press("Escape");
 
   const visibleTokenSelect = page.getByTestId(E2eTestId.TokenSelect).last();
   const pillButtonByTestId = page.getByTestId(
@@ -162,9 +163,9 @@ async function openCatalogToolAssignment({
       .not.toBe("missing");
 
     if (await pillButtonByTestId.isVisible().catch(() => false)) {
-      await pillButtonByTestId.click();
+      await pillButtonByTestId.click({ force: true });
     } else if (await pillButtonByRole.isVisible().catch(() => false)) {
-      await pillButtonByRole.click();
+      await pillButtonByRole.click({ force: true });
     }
 
     await expect(visibleTokenSelect).toBeVisible({ timeout: 10_000 });

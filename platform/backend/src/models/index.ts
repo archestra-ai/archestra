@@ -42,6 +42,8 @@ export { default as OptimizationRuleModel } from "./optimization-rule";
 export { default as OrganizationModel } from "./organization";
 export { default as OrganizationRoleModel } from "./organization-role";
 export { default as ProcessedEmailModel } from "./processed-email";
+export { default as ScheduleTriggerModel } from "./schedule-trigger";
+export { default as ScheduleTriggerRunModel } from "./schedule-trigger-run";
 export { default as SecretModel } from "./secret";
 export { default as SessionModel } from "./session";
 export { default as StatisticsModel } from "./statistics";

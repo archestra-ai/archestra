@@ -154,97 +154,149 @@ jobs:
           retention-days: 1
           compression-level: 0 # Already gzipped
 
-  # E2E tests - runs all e2e test suites in parallel
-  # Uses matrix strategy to run API, UI (sharded), and Vault tests concurrently
   platform-e2e-tests-placeholder:
-    name: Platform E2E Tests (${{ matrix.name }})
+    name: Platform E2E Tests
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name != 'run-e2e') }}
-    strategy:
-      fail-fast: false
-      matrix:
-        name:
-          [
-            API,
-            UI 1/2,
-            UI 2/2,
-            UI Identity Providers,
-            UI Firefox,
-            UI Webkit,
-            Vault,
-          ]
     steps:
-      - name: Skip full E2E shard on ordinary PR updates
-        run: echo "Full E2E shards run on merge queue or when the run-e2e label is added."
+      - name: Skip full non-quickstart E2E job on ordinary PR updates
+        run: echo "Full non-quickstart E2E runs on merge queue or when the run-e2e label is added."
 
+  # E2E tests - runs the generic non-quickstart suites plus the Vault K8s startup
+  # coverage against one shared CI deployment in the standard DB secrets mode.
+  # Quickstart remains separate because it validates the docker run path.
   platform-e2e-tests:
-    name: Platform E2E Tests (${{ matrix.name }})
+    name: Platform E2E Tests
     needs: [platform-e2e-build]
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
-    runs-on: ${{ matrix.runner }}
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    timeout-minutes: 180
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # API tests — requires NetworkPolicy enforcement for SSRF protection
-          # (provided by kindnet's built-in kube-network-policies since Kind v0.24.0)
-          - name: API
-            runner: blacksmith-16vcpu-ubuntu-2404
-            projects: api
-            shard: ""
-            extra_args: ""
-            artifact: blob-report-api
-          # UI tests - sharded across 2 parallel jobs
-          # Tests tagged @firefox/@webkit/@quickstart are excluded here:
-          # - @firefox/@webkit run in dedicated sequential jobs
-          # - @quickstart runs in the dedicated Quickstart job (needs a fresh env with no API keys)
-          - name: UI 1/2
-            runner: blacksmith-16vcpu-ubuntu-2404
-            projects: chromium
-            shard: "--shard=1/2"
-            extra_args: "--grep-invert '@firefox|@webkit|@quickstart'"
-            artifact: blob-report-ui-1
-          - name: UI 2/2
-            runner: blacksmith-16vcpu-ubuntu-2404
-            projects: chromium
-            shard: "--shard=2/2"
-            extra_args: "--grep-invert '@firefox|@webkit|@quickstart'"
-            artifact: blob-report-ui-2
-          # Identity provider tests manipulate shared SSO backend state and are
-          # more reliable when isolated from the generic Chromium shards.
-          - name: UI Identity Providers
-            runner: blacksmith-8vcpu-ubuntu-2404
-            projects: identity-providers
-            shard: ""
-            extra_args: "--workers=1"
-            artifact: blob-report-ui-identity-providers
-          # Firefox tests - run sequentially to avoid race conditions on shared backend state
-          - name: UI Firefox
-            runner: blacksmith-8vcpu-ubuntu-2404
-            projects: firefox
-            shard: ""
-            extra_args: "--grep '@firefox' --workers=1"
-            artifact: blob-report-ui-firefox
-          # Webkit tests - run sequentially to avoid race conditions on shared backend state
-          - name: UI Webkit
-            runner: blacksmith-8vcpu-ubuntu-2404
-            projects: webkit
-            shard: ""
-            extra_args: "--grep '@webkit' --workers=1"
-            artifact: blob-report-ui-webkit
-          # Vault tests - isolated to avoid race conditions with secrets manager switching
-          # Uses READONLY_VAULT so all replicas start in BYOS mode (in-memory initializeSecretsManager
-          # only affects one replica, which fails with replicaCount > 1)
-          - name: Vault
-            runner: blacksmith-8vcpu-ubuntu-2404
-            projects: credentials-with-vault
-            shard: ""
-            extra_args: ""
-            artifact: blob-report-vault
-            extra_helm_set: "archestra.env.ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./platform
+
+      - name: Load platform image
+        id: load-platform-image
+        uses: ./.github/actions/load-platform-image
+        with:
+          source: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'artifact' || 'registry' }}
+          image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
+
+      - name: Load MCP server base image
+        id: load-mcp-server-base-image
+        uses: ./.github/actions/load-mcp-server-base-image
+        with:
+          source: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'artifact' || 'registry' }}
+          image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('mcp-server-base:{0}', github.sha) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
+
+      - name: Prepare blob report workspace
+        run: |
+          rm -rf platform/e2e-tests/blob-report platform/e2e-tests/blob-reports
+          mkdir -p platform/e2e-tests/blob-reports
+
+      - name: Setup Archestra Platform
+        id: setup-platform
+        uses: ./.github/actions/setup-archestra-platform
+        with:
+          kind-config-path: .github/kind.yaml
+          kind-cluster-name: archestra-ci-cluster
+          helm-values-path: .github/values-ci.yaml
+          deploy-e2e-dependencies: "true"
+          e2e-dependencies-install-mode: "foreground"
+          e2e-dependencies-extra-helm-set: "vault.k8sAuth.enabled=true,vault.k8sAuth.boundServiceAccountName=archestra-platform,vault.k8sAuth.boundServiceAccountNamespace=default"
+          e2e-dependencies-wait-for-vault: "true"
+          build-platform-image: "false"
+          platform-image-tag: ${{ steps.load-platform-image.outputs.image-tag }}
+          platform-context: ./platform
+          mcp-server-base-image-tag: ${{ steps.load-mcp-server-base-image.outputs.image-tag }}
+
+      - name: Run all non-quickstart E2E tests
+        id: e2e
+        continue-on-error: true
+        uses: ./.github/actions/run-e2e-tests
+        with:
+          projects: api --project=chromium --project=firefox --project=webkit --project=identity-providers --project=vault-k8s
+          extra_args: "--grep-invert '@quickstart'"
+          timeout: "120"
+
+      - name: Upload blob report
+        if: ${{ !cancelled() }}
+        uses: ./.github/actions/github-upload-artifact
+        with:
+          name: blob-report-main
+          path: platform/e2e-tests/blob-report/
+          retention-days: 1
+
+      - name: Show logs on failure or flaky tests
+        if: steps.setup-platform.outcome == 'failure' || steps.e2e.outcome == 'failure' || steps.e2e.outputs.has_flaky_tests == 'true'
+        run: |
+          echo "=== Kubernetes Pods ==="
+          kubectl get pods -o wide || true
+
+          echo "=== Kubernetes Services ==="
+          kubectl get services || true
+
+          echo "=== Archestra Platform Logs ==="
+          kubectl logs -l app.kubernetes.io/name=archestra-platform --tail=200 || true
+
+          echo "=== PostgreSQL Logs ==="
+          kubectl logs -l app.kubernetes.io/name=postgresql --tail=200 || true
+
+          echo "=== WireMock Logs ==="
+          kubectl logs -l app=e2e-tests-wiremock --tail=200 2>/dev/null || true
+
+          echo "=== Keycloak Logs ==="
+          kubectl logs -l app.kubernetes.io/name=keycloak --tail=200 2>/dev/null || true
+
+          echo "=== Vault Logs ==="
+          kubectl logs -l app.kubernetes.io/name=vault --tail=200 2>/dev/null || true
+
+          echo "=== MCP Example OAuth Server Logs ==="
+          kubectl logs -l app.kubernetes.io/name=mcp-example-oauth --tail=200 2>/dev/null || true
+
+          echo "=== Describe Platform Pod ==="
+          kubectl describe pod -l app.kubernetes.io/name=archestra-platform || true
+
+      - name: Cleanup Kind cluster
+        if: always()
+        run: kind delete cluster --name archestra-ci-cluster || true
+
+      - name: Fail if non-quickstart E2E tests failed
+        if: ${{ always() && steps.e2e.outcome == 'failure' }}
+        run: |
+          echo "The non-quickstart E2E run failed."
+          exit 1
+
+  platform-readonly-vault-e2e-tests-placeholder:
+    name: Platform E2E Tests (Readonly Vault)
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name != 'run-e2e') }}
+    steps:
+      - name: Skip readonly-vault E2E on ordinary PR updates
+        run: echo "Readonly-vault E2E runs on merge queue or when the run-e2e label is added."
+
+  # Dedicated readonly-vault coverage. These tests need BYOS/readonly-vault runtime
+  # behavior, which conflicts with the generic suite's manual secret entry flows.
+  platform-readonly-vault-e2e-tests:
+    name: Platform E2E Tests (Readonly Vault)
+    needs: [platform-e2e-build]
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    timeout-minutes: 120
+    permissions:
+      contents: read # Required to checkout the repository and read test assets.
+      id-token: write # Required for Workload Identity Federation in setup actions.
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -272,48 +324,52 @@ jobs:
           image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('mcp-server-base:{0}', github.sha) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
 
       - name: Setup Archestra Platform
+        id: setup-platform
         uses: ./.github/actions/setup-archestra-platform
         with:
           kind-config-path: .github/kind.yaml
           kind-cluster-name: archestra-ci-cluster
           helm-values-path: .github/values-ci.yaml
           deploy-e2e-dependencies: "true"
+          e2e-dependencies-install-mode: "foreground"
+          e2e-dependencies-extra-helm-set: "vault.k8sAuth.enabled=true,vault.k8sAuth.boundServiceAccountName=archestra-platform,vault.k8sAuth.boundServiceAccountNamespace=default"
+          e2e-dependencies-wait-for-vault: "true"
           build-platform-image: "false"
           platform-image-tag: ${{ steps.load-platform-image.outputs.image-tag }}
           platform-context: ./platform
           mcp-server-base-image-tag: ${{ steps.load-mcp-server-base-image.outputs.image-tag }}
-          extra-helm-set: ${{ matrix.extra_helm_set }}
+          extra-helm-set: "archestra.env.ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT,archestra.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION=2"
 
-      - name: Run E2E tests
+      - name: Run readonly-vault E2E tests
         id: e2e
+        continue-on-error: true
         uses: ./.github/actions/run-e2e-tests
         with:
-          projects: ${{ matrix.projects }}
-          shard: ${{ matrix.shard }}
-          extra_args: ${{ matrix.extra_args }}
+          projects: credentials-with-vault
+          timeout: "90"
 
       - name: Upload blob report
         if: ${{ !cancelled() }}
         uses: ./.github/actions/github-upload-artifact
         with:
-          name: ${{ matrix.artifact }}
+          name: blob-report-readonly-vault
           path: platform/e2e-tests/blob-report/
           retention-days: 1
 
       - name: Show logs on failure or flaky tests
-        if: failure() || steps.e2e.outputs.has_flaky_tests == 'true'
+        if: steps.setup-platform.outcome == 'failure' || steps.e2e.outcome == 'failure' || steps.e2e.outputs.has_flaky_tests == 'true'
         run: |
           echo "=== Kubernetes Pods ==="
-          kubectl get pods -o wide
+          kubectl get pods -o wide || true
 
           echo "=== Kubernetes Services ==="
-          kubectl get services
+          kubectl get services || true
 
           echo "=== Archestra Platform Logs ==="
-          kubectl logs -l app.kubernetes.io/name=archestra-platform --tail=200
+          kubectl logs -l app.kubernetes.io/name=archestra-platform --tail=200 || true
 
           echo "=== PostgreSQL Logs ==="
-          kubectl logs -l app.kubernetes.io/name=postgresql --tail=200
+          kubectl logs -l app.kubernetes.io/name=postgresql --tail=200 || true
 
           echo "=== WireMock Logs ==="
           kubectl logs -l app=e2e-tests-wiremock --tail=200 2>/dev/null || true
@@ -326,6 +382,19 @@ jobs:
 
           echo "=== MCP Example OAuth Server Logs ==="
           kubectl logs -l app.kubernetes.io/name=mcp-example-oauth --tail=200 2>/dev/null || true
+
+          echo "=== Describe Platform Pod ==="
+          kubectl describe pod -l app.kubernetes.io/name=archestra-platform || true
+
+      - name: Cleanup Kind cluster
+        if: always()
+        run: kind delete cluster --name archestra-ci-cluster || true
+
+      - name: Fail if readonly-vault E2E tests failed
+        if: ${{ always() && steps.e2e.outcome == 'failure' }}
+        run: |
+          echo "The readonly-vault E2E run failed."
+          exit 1
 
   # Quickstart E2E tests - validates docker run quickstart instructions work correctly
   # Runs the mcp-install.spec.ts test against the platform started via docker run
@@ -487,7 +556,7 @@ jobs:
         id: e2e
         uses: ./.github/actions/run-e2e-tests
         with:
-          projects: chromium
+          projects: quickstart
           # Run all tests tagged @quickstart: MCP install, auth origin, and first-time chat flow
           extra_args: "--grep '@quickstart'"
           env_file: /tmp/quickstart-e2e.env
@@ -524,125 +593,6 @@ jobs:
           docker volume rm archestra-ci-postgres-data 2>/dev/null || true
           docker volume rm archestra-ci-app-data 2>/dev/null || true
 
-  # Vault K8s E2E tests - validates platform starts when DB URL is sourced from Vault via K8s auth
-  platform-vault-k8s-e2e-tests-placeholder:
-    name: Platform E2E Tests (Vault K8s)
-    runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name != 'run-e2e') }}
-    steps:
-      - name: Skip Vault K8s E2E on ordinary PR updates
-        run: echo "Vault K8s E2E runs on merge queue or when the run-e2e label is added."
-
-  platform-vault-k8s-e2e-tests:
-    name: Platform E2E Tests (Vault K8s)
-    needs: [platform-e2e-build]
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
-    permissions:
-      contents: read # Required to checkout the repository and read Helm assets.
-      id-token: write # Required for Workload Identity Federation in setup actions.
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-
-      - name: Setup environment
-        uses: ./.github/actions/setup-env
-        with:
-          working-directory: ./platform
-
-      - name: Load platform image
-        id: load-platform-image
-        uses: ./.github/actions/load-platform-image
-        with:
-          source: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'artifact' || 'registry' }}
-          image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
-
-      - name: Install Kind cluster
-        uses: ./.github/actions/install-kind-cluster
-        with:
-          config: .github/kind.yaml
-
-      - name: Load Docker image into Kind
-        env:
-          PLATFORM_IMAGE_TAG: ${{ steps.load-platform-image.outputs.image-tag }}
-        run: kind load docker-image "${PLATFORM_IMAGE_TAG}" --name archestra-ci-cluster
-
-      - name: Deploy e2e-tests Helm chart (Vault only, K8s auth enabled)
-        run: |
-          helm install e2e-tests platform/helm/e2e-tests \
-            --set vault.enabled=true \
-            --set vault.k8sAuth.enabled=true \
-            --set vault.k8sAuth.boundServiceAccountName=archestra-platform \
-            --set vault.k8sAuth.boundServiceAccountNamespace=default \
-            --set 'vault.secrets[0].path=kv/archestra/config' \
-            --set 'vault.secrets[0].data.dburl=postgresql://archestra:vault_e2e_custom_pw@archestra-platform-postgresql:5432/archestra_dev' \
-            --set 'vault.secrets[0].data.dummy_var=hello-from-vault' \
-            --set wiremock.enabled=false \
-            --set keycloak.enabled=false
-
-      - name: Wait for Vault to be ready
-        run: |
-          echo "Waiting for Vault pod to be ready..."
-          kubectl wait --for=condition=Ready pod/vault --timeout=120s
-          echo "Vault pod is ready"
-
-      - name: Deploy platform with Vault K8s values
-        env:
-          PLATFORM_IMAGE_TAG: ${{ steps.load-platform-image.outputs.image-tag }}
-        run: |
-          helm install archestra-platform platform/helm/archestra \
-            --values .github/values-ci-vault-k8s.yaml \
-            --set "archestra.image=${PLATFORM_IMAGE_TAG}" \
-            --atomic --timeout=4m
-
-      - name: Wait for platform to be healthy
-        run: |
-          echo "Waiting for platform pods to be ready..."
-          kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=archestra-platform --timeout=90s
-          echo "Platform pods are ready"
-
-          echo "Verifying backend is accessible..."
-          curl --retry 10 --retry-delay 2 --retry-connrefused http://localhost:9000/health || (echo "Backend not accessible" && exit 1)
-          echo "Backend is healthy"
-
-      - name: Run Vault K8s E2E tests
-        id: e2e
-        uses: ./.github/actions/run-e2e-tests
-        with:
-          projects: vault-k8s
-
-      - name: Upload blob report
-        if: ${{ !cancelled() }}
-        uses: ./.github/actions/github-upload-artifact
-        with:
-          name: blob-report-vault-k8s
-          path: platform/e2e-tests/blob-report/
-          retention-days: 1
-
-      - name: Show logs on failure
-        if: failure()
-        run: |
-          echo "=== Kubernetes Pods ==="
-          kubectl get pods -o wide
-
-          echo "=== Kubernetes Services ==="
-          kubectl get services
-
-          echo "=== Archestra Platform Logs ==="
-          kubectl logs -l app.kubernetes.io/name=archestra-platform --tail=200
-
-          echo "=== Vault Logs ==="
-          kubectl logs vault --tail=200 2>/dev/null || true
-
-          echo "=== PostgreSQL Logs ==="
-          kubectl logs -l app.kubernetes.io/name=postgresql --tail=200 2>/dev/null || true
-
-          echo "=== Describe Platform Pod ==="
-          kubectl describe pod -l app.kubernetes.io/name=archestra-platform
-
   # Merge all Playwright reports into a single HTML report
   platform-e2e-merge-reports-placeholder:
     name: Merge E2E Test Reports
@@ -654,12 +604,7 @@ jobs:
 
   platform-e2e-merge-reports:
     name: Merge E2E Test Reports
-    needs:
-      [
-        platform-e2e-tests,
-        platform-quickstart-e2e-tests,
-        platform-vault-k8s-e2e-tests,
-      ]
+    needs: [platform-e2e-tests, platform-readonly-vault-e2e-tests, platform-quickstart-e2e-tests]
     if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
@@ -704,7 +649,7 @@ jobs:
           name: playwright-report
           path: platform/e2e-tests/playwright-report/
           # Shorter retention for success, full retention for failures
-          retention-days: ${{ (needs.platform-e2e-tests.result == 'success' && needs.platform-quickstart-e2e-tests.result == 'success' && needs.platform-vault-k8s-e2e-tests.result == 'success') && 7 || 30 }}
+          retention-days: ${{ (needs.platform-e2e-tests.result == 'success' && needs.platform-quickstart-e2e-tests.result == 'success') && 7 || 30 }}
 
       - name: Write test summary
         if: always()

@@ -15,6 +15,7 @@ import { useHandleOAuthCallback } from "@/lib/auth/oauth.query";
 import {
   clearCallbackProcessing,
   clearInstallContext,
+  clearOAuthReauthChatResume,
   clearOAuthReturnUrl,
   clearReauthContext,
   getOAuthEnvironmentValues,
@@ -26,11 +27,13 @@ import {
   isCallbackProcessed,
   markCallbackProcessing,
   setOAuthInstallationCompleteCatalogId,
+  setOAuthReauthChatResume,
 } from "@/lib/auth/oauth-session";
 import {
   useInstallMcpServer,
   useReauthenticateMcpServer,
 } from "@/lib/mcp/mcp-server.query";
+import { replaceBrowserUrl } from "@/lib/utils/browser-redirect";
 
 function OAuthCallbackContent() {
   const searchParams = useSearchParams();
@@ -87,7 +90,8 @@ function OAuthCallbackContent() {
 
           // Redirect back to where the user was (e.g. chat page)
           if (returnUrl) {
-            router.push(returnUrl);
+            setOAuthReauthChatResume({ returnUrl, serverName: name });
+            replaceBrowserUrl(returnUrl);
             return;
           }
         } else {
@@ -123,6 +127,7 @@ function OAuthCallbackContent() {
         router.push("/mcp/registry");
       } catch (error) {
         console.error("OAuth completion error:", error);
+        clearOAuthReauthChatResume();
         // The mutation's onError handler will show the error toast
         // Redirect back to catalog
         router.push("/mcp/registry");

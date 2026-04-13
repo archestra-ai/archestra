@@ -45,6 +45,7 @@ export const resources = [
   "llmSettings",
   "agentSettings",
   "agentTrigger",
+  "scheduledTask",
   /**
    * Better-auth access control resource - needed for organization role management
    * See: https://github.com/better-auth/better-auth/issues/2336#issuecomment-2820620809
@@ -101,6 +102,7 @@ export const resourceLabels: Record<Resource, string> = {
   llmSettings: "LLM Settings",
   agentSettings: "Agent Settings",
   agentTrigger: "Agent Triggers",
+  scheduledTask: "Scheduled Tasks",
   simpleView: "Simple View",
   chatAgentPicker: "Chat Agent Picker",
   chatProviderSettings: "Chat Provider Settings",
@@ -115,6 +117,7 @@ export const resourceDescriptions: Record<Resource, string> = {
   log: "LLM proxy and MCP tool call logs",
   chat: "Chat conversations",
   agentTrigger: "Agent triggers (Slack, MS Teams, incoming emails)",
+  scheduledTask: "Scheduled agent tasks that run on a schedule",
   llmProviderApiKey: "LLM provider API keys and their visibility",
   llmVirtualKey: "LLM virtual keys and their visibility",
   llmModel: "LLM model catalog entries and chat capabilities",
@@ -160,7 +163,7 @@ export const internalResources: Resource[] = ["organization"];
  * Used in both the create/edit role dialog and the account permissions display.
  */
 export const resourceCategories: Record<string, Resource[]> = {
-  Agents: ["agent", "agentTrigger", "agentSettings"],
+  Agents: ["agent", "agentTrigger", "scheduledTask", "agentSettings"],
   MCP: [
     "mcpGateway",
     "toolPolicy",

@@ -136,21 +136,26 @@ export function ScheduleTriggersIndexPage() {
 
   const agentOptions = useMemo(
     () =>
-      agents.map((agent) => ({
-        value: agent.id,
-        label: agent.name || "Untitled agent",
-        description:
-          agent.scope === "personal"
-            ? "Personal agent"
-            : `${agent.scope} agent`,
-        content: (
-          <span className="flex items-center gap-2">
-            <AgentIcon icon={agent.icon} size={16} />
-            {agent.name || "Untitled agent"}
-          </span>
-        ),
-      })),
-    [agents],
+      agents
+        .filter(
+          (agent) =>
+            agent.scope !== "personal" || agent.authorId === currentUserId,
+        )
+        .map((agent) => ({
+          value: agent.id,
+          label: agent.name || "Untitled agent",
+          description:
+            agent.scope === "personal"
+              ? "Personal agent"
+              : `${agent.scope} agent`,
+          content: (
+            <span className="flex items-center gap-2">
+              <AgentIcon icon={agent.icon} size={16} />
+              {agent.name || "Untitled agent"}
+            </span>
+          ),
+        })),
+    [agents, currentUserId],
   );
 
   const allTriggers = triggersResponse?.data ?? [];
@@ -460,6 +465,8 @@ export function ScheduleTriggerDetailPage({
   triggerId: string;
 }) {
   const router = useRouter();
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
   const { data: canUpdateTrigger = false } = useHasPermissions({
     scheduledTask: ["update"],
   });
@@ -497,21 +504,26 @@ export function ScheduleTriggerDetailPage({
 
   const agentOptions = useMemo(
     () =>
-      agents.map((agent) => ({
-        value: agent.id,
-        label: agent.name || "Untitled agent",
-        description:
-          agent.scope === "personal"
-            ? "Personal agent"
-            : `${agent.scope} agent`,
-        content: (
-          <span className="flex items-center gap-2">
-            <AgentIcon icon={agent.icon} size={16} />
-            {agent.name || "Untitled agent"}
-          </span>
-        ),
-      })),
-    [agents],
+      agents
+        .filter(
+          (agent) =>
+            agent.scope !== "personal" || agent.authorId === currentUserId,
+        )
+        .map((agent) => ({
+          value: agent.id,
+          label: agent.name || "Untitled agent",
+          description:
+            agent.scope === "personal"
+              ? "Personal agent"
+              : `${agent.scope} agent`,
+          content: (
+            <span className="flex items-center gap-2">
+              <AgentIcon icon={agent.icon} size={16} />
+              {agent.name || "Untitled agent"}
+            </span>
+          ),
+        })),
+    [agents, currentUserId],
   );
   const formPayload = buildScheduleTriggerPayload(formState);
   const isSaving = updateMutation.isPending;

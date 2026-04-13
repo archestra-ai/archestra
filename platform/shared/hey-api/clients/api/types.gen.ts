@@ -36517,6 +36517,7 @@ export type GetScheduleTriggersData = {
         enabled?: boolean;
         name?: string;
         actorUserIds?: string;
+        agentIds?: string;
         showAll?: boolean;
     };
     url: '/api/schedule-triggers';

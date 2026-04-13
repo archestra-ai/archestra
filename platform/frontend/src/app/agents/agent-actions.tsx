@@ -1,5 +1,5 @@
 import { E2eTestId } from "@shared";
-import { MessageSquare, Pencil, Plug, Trash2 } from "lucide-react";
+import { Clock, MessageSquare, Pencil, Plug, Trash2 } from "lucide-react";
 import {
   type TableRowAction,
   TableRowActions,
@@ -42,6 +42,14 @@ export function AgentActions({
       disabled: isBuiltIn,
       disabledTooltip: "Built-in agents cannot be chatted with",
       href: `/chat/new?agent_id=${agent.id}`,
+    },
+    {
+      icon: <Clock className="h-4 w-4" />,
+      label: "Schedule",
+      disabled: isBuiltIn,
+      disabledTooltip: "Built-in agents cannot be scheduled",
+      permissions: { scheduledTask: ["read"] },
+      href: `/scheduled-tasks?agentId=${agent.id}`,
     },
     {
       icon: <Pencil className="h-4 w-4" />,

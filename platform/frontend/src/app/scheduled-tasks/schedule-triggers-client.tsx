@@ -15,9 +15,9 @@ import {
   XCircle,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import type React from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { SearchInput } from "@/components/search-input";
@@ -85,6 +85,8 @@ import {
 
 export function ScheduleTriggersIndexPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const agentIdParam = searchParams.get("agentId");
   const { data: isScheduledTaskAdmin = false } = useHasPermissions({
     scheduledTask: ["admin"],
   });
@@ -113,6 +115,7 @@ export function ScheduleTriggersIndexPage() {
     offset: pageIndex * pageSize,
     name: searchName || undefined,
     showAll: showOtherUsers,
+    agentIds: agentIdParam ? [agentIdParam] : undefined,
     actorUserIds:
       showOtherUsers && selectedAuthorIds.length > 0
         ? selectedAuthorIds
@@ -178,6 +181,26 @@ export function ScheduleTriggersIndexPage() {
     setFormState((current) => ({ ...current, agentId: preferredAgentId }));
   }, [createFormOpen, editingTrigger, formState.agentId, preferredAgentId]);
 
+  const handledAgentIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      !agentIdParam ||
+      !triggersResponse ||
+      isLoading ||
+      handledAgentIdRef.current === agentIdParam
+    )
+      return;
+    handledAgentIdRef.current = agentIdParam;
+    if (triggersResponse.data.length === 0) {
+      setEditingTrigger(null);
+      setFormState({
+        ...DEFAULT_FORM_STATE(),
+        agentId: agentIdParam,
+      });
+      setCreateFormOpen(true);
+    }
+  }, [agentIdParam, triggersResponse, isLoading]);
+
   const openCreateComposer = () => {
     setEditingTrigger(null);
     setFormState({
@@ -203,6 +226,9 @@ export function ScheduleTriggersIndexPage() {
     setEditingTrigger(null);
     setCreateFormOpen(false);
     setFormState(DEFAULT_FORM_STATE());
+    if (agentIdParam) {
+      router.replace("/scheduled-tasks");
+    }
   };
 
   const submitForm = async () => {

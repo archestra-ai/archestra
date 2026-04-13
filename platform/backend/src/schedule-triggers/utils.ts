@@ -27,5 +27,3 @@ export function createCron(params: {
     timezone: normalizeTimezone(params.timezone),
   });
 }
-
-

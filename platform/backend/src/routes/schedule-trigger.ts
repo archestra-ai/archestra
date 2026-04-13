@@ -649,10 +649,7 @@ async function ensureRunConversation(params: {
 
   const trigger = await ScheduleTriggerModel.findById(run.triggerId);
   if (!trigger) {
-    throw new ApiError(
-      400,
-      "The trigger for this run no longer exists",
-    );
+    throw new ApiError(400, "The trigger for this run no longer exists");
   }
 
   const agentId = trigger.agentId;
@@ -694,7 +691,10 @@ async function ensureRunConversation(params: {
       sessionId: `scheduled-${run.id}`,
     },
   );
-  const uiMessages = buildMessagesFromInteractions(interactionResult.data, trigger.messageTemplate);
+  const uiMessages = buildMessagesFromInteractions(
+    interactionResult.data,
+    trigger.messageTemplate,
+  );
   const conversationTitle = buildRunConversationSeedTitle(
     trigger.messageTemplate,
   );

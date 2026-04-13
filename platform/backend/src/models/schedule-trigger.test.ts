@@ -50,9 +50,7 @@ describe("ScheduleTriggerModel.findDueTriggers", () => {
     expect(due.map((t) => t.id)).toContain(trigger.id);
   });
 
-  test("does not return disabled triggers", async ({
-    makeScheduleTrigger,
-  }) => {
+  test("does not return disabled triggers", async ({ makeScheduleTrigger }) => {
     const trigger = await makeScheduleTrigger({
       cronExpression: "* * * * *",
       enabled: false,

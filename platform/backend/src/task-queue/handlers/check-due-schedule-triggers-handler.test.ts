@@ -8,9 +8,7 @@ const mockHasPendingOrProcessingForTrigger = vi.hoisted(() =>
 const mockRunCreate = vi.hoisted(() =>
   vi.fn().mockResolvedValue({ id: "run-1" }),
 );
-const mockRunMarkCompleted = vi.hoisted(() =>
-  vi.fn().mockResolvedValue(null),
-);
+const mockRunMarkCompleted = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 
 vi.mock("@/models", () => ({
   ScheduleTriggerModel: {

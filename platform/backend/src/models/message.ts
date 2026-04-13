@@ -44,9 +44,7 @@ class MessageModel {
     );
   }
 
-  static async findByConversation(
-    conversationId: string,
-  ): Promise<Message[]> {
+  static async findByConversation(conversationId: string): Promise<Message[]> {
     const messages = await db
       .select()
       .from(schema.messagesTable)

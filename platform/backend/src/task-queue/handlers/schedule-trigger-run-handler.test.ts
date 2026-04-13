@@ -1,9 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 const mockRunFindById = vi.hoisted(() => vi.fn().mockResolvedValue(null));
-const mockRunMarkCompleted = vi.hoisted(() =>
-  vi.fn().mockResolvedValue(null),
-);
+const mockRunMarkCompleted = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 const mockTriggerFindById = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 const mockUserGetById = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 const mockAgentFindById = vi.hoisted(() => vi.fn().mockResolvedValue(null));
@@ -109,7 +107,10 @@ describe("handleScheduleTriggerRunExecution", () => {
     mockAgentFindById.mockResolvedValue(null);
     mockUserHasAgentAccess.mockResolvedValue(true);
     mockHasAnyAgentTypeAdminPermission.mockResolvedValue({ success: false });
-    mockExecuteA2AMessage.mockResolvedValue({ messageId: "msg-1", text: "done" });
+    mockExecuteA2AMessage.mockResolvedValue({
+      messageId: "msg-1",
+      text: "done",
+    });
   });
 
   test("executes A2A message and marks run as success", async () => {

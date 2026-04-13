@@ -382,8 +382,7 @@ export function ScheduleTriggerRunPage({
   );
 
   const isLoadingPage = triggerLoading || runLoading;
-  const activeAgentId =
-    conversation?.agentId ?? trigger?.agentId ?? undefined;
+  const activeAgentId = conversation?.agentId ?? trigger?.agentId ?? undefined;
   const activeAgentName =
     conversation?.agent?.name ??
     internalAgents.find((agent) => agent.id === activeAgentId)?.name ??

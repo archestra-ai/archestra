@@ -105,7 +105,8 @@ export const KEYCLOAK_BACKEND_URL = IS_CI
   : "http://localhost:30081";
 export const KEYCLOAK_REALM = "archestra";
 export const VAULT_ADDR =
-  process.env.ARCHESTRA_HASHICORP_VAULT_ADDR ?? "http://127.0.0.1:30200";
+  process.env.ARCHESTRA_HASHICORP_VAULT_ADDR ??
+  (IS_CI ? "http://127.0.0.1:8200" : "http://127.0.0.1:30200");
 export const VAULT_KV_VERSION =
   process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION ?? (IS_CI ? "1" : "2");
 export const VAULT_TEAM_FOLDER_PATH =

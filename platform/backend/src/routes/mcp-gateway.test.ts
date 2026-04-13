@@ -240,6 +240,68 @@ describe("MCP Gateway (stateless mode)", () => {
     expect(body.capabilities).toHaveProperty("tools", true);
   });
 
+  test("handles whoami tool call successfully after initialize", async ({
+    makeAgent,
+    makeOrganization,
+    seedAndAssignArchestraTools,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+    });
+    await seedAndAssignArchestraTools(agent.id);
+
+    const token = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+
+    const initResponse = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: makeMcpHeaders(token.value),
+      payload: {
+        jsonrpc: "2.0",
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "test-client", version: "1.0.0" },
+        },
+        id: 1,
+      },
+    });
+    expect(initResponse.statusCode).toBe(200);
+
+    const callResponse = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: makeMcpHeaders(token.value),
+      payload: {
+        jsonrpc: "2.0",
+        method: "tools/call",
+        params: {
+          name: "archestra__whoami",
+          arguments: {},
+        },
+        id: 2,
+      },
+    });
+
+    expect(callResponse.statusCode).toBe(200);
+    expect(callResponse.json().result.content).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "text",
+          text: expect.stringContaining(agent.id),
+        }),
+      ]),
+    );
+  });
+
   test("GET endpoint resolves agent by slug", async ({
     makeAgent,
     makeOrganization,

@@ -157,6 +157,118 @@ describe("resolveEnterpriseTransportCredential", () => {
     fetchMock.mockRestore();
   });
 
+  test("exchanges caller-provided ID-JAG at an OAuth protected resource", async ({
+    makeAgent,
+    makeIdentityProvider,
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const identityProvider = await makeIdentityProvider(organization.id, {
+      providerId: "id-jag-demo-idp",
+      issuer: "https://idp.example.com",
+      oidcConfig: {
+        clientId: "gateway-client",
+        tokenEndpoint: "https://idp.example.com/token",
+        enterpriseManagedCredentials: {
+          clientId: "resource-client",
+          tokenEndpointAuthentication: "client_secret_basic",
+          clientSecret: "resource-secret",
+        },
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      identityProviderId: identityProvider.id,
+    });
+
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        const url = String(input);
+        if (
+          url ===
+          "https://resource.example.com/.well-known/oauth-protected-resource/mcp"
+        ) {
+          return new Response(
+            JSON.stringify({
+              resource: "https://resource.example.com/mcp",
+              authorization_servers: ["https://resource.example.com"],
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        if (
+          url ===
+          "https://resource.example.com/.well-known/oauth-authorization-server"
+        ) {
+          return new Response(
+            JSON.stringify({
+              issuer: "https://resource.example.com",
+              token_endpoint: "https://resource.example.com/token",
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        if (url === "https://resource.example.com/token") {
+          return new Response(
+            JSON.stringify({
+              access_token: "mcp-server-access-token",
+              issued_token_type:
+                "urn:ietf:params:oauth:token-type:access_token",
+              expires_in: 300,
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        throw new Error(`Unexpected fetch URL: ${url}`);
+      });
+
+    const result = await resolveEnterpriseTransportCredential({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: "external-id-jag",
+        teamId: null,
+        isOrganizationToken: false,
+        userId: "user-1",
+        isExternalIdp: true,
+        rawToken: "caller-id-jag",
+      },
+      enterpriseManagedConfig: {
+        requestedCredentialType: "id_jag",
+        resourceType: "oauth_protected_resource",
+        resourceIdentifier: "https://resource.example.com/mcp",
+        tokenInjectionMode: "authorization_bearer",
+      },
+    });
+
+    expect(result).toEqual({
+      headerName: "Authorization",
+      headerValue: "Bearer mcp-server-access-token",
+      expiresInSeconds: 300,
+    });
+
+    const tokenRequest = fetchMock.mock.calls.find(
+      ([input]) => String(input) === "https://resource.example.com/token",
+    );
+    expect(String(tokenRequest?.[1]?.body)).toContain(
+      "grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer",
+    );
+    expect(String(tokenRequest?.[1]?.body)).toContain(
+      "assertion=caller-id-jag",
+    );
+    const tokenRequestHeaders = tokenRequest?.[1]?.headers as
+      | Headers
+      | undefined;
+    expect(tokenRequestHeaders?.get("authorization")).toBe(
+      `Basic ${Buffer.from("resource-client:resource-secret").toString("base64")}`,
+    );
+
+    fetchMock.mockRestore();
+  });
+
   test("exchanges a Keycloak session access token for a brokered downstream bearer token", async ({
     makeAgent,
     makeIdentityProvider,

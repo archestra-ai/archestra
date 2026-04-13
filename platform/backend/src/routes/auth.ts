@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { IncomingHttpHeaders } from "node:http";
 import { DEFAULT_ADMIN_EMAIL, RouteId } from "@shared";
 import { verifyPassword } from "better-auth/crypto";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -23,8 +24,8 @@ import {
   UserTokenModel,
 } from "@/models";
 import {
+  buildOAuthIssuer,
   exchangeIdentityAssertionForAccessToken,
-  extractProfileIdFromMcpResource,
   JWT_BEARER_GRANT_TYPE,
   MCP_RESOURCE_REFERENCE_PREFIX,
 } from "@/services/identity-providers/enterprise-managed/authorization";
@@ -349,7 +350,11 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         delete body.resource;
       }
 
-      const url = new URL(request.url, `http://${request.headers.host}`);
+      const tokenEndpointOrigin = getRequestOrigin({
+        protocol: request.protocol,
+        headers: request.headers,
+      });
+      const url = new URL(request.url, tokenEndpointOrigin);
       const headers = new Headers();
       Object.entries(request.headers).forEach(([key, value]) => {
         if (value) headers.append(key, value.toString());
@@ -372,6 +377,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const responseBody = await applyMcpOauthTokenLifetimeToResponse({
         response,
         resource,
+        tokenEndpointOrigin,
       });
 
       reply.status(response.status);
@@ -638,6 +644,7 @@ function shouldSkipForwardedAuthHeader(headerName: string): boolean {
 async function applyMcpOauthTokenLifetimeToResponse(params: {
   response: Response;
   resource: unknown;
+  tokenEndpointOrigin: string;
 }): Promise<string | null> {
   if (!params.response.body) {
     return null;
@@ -667,6 +674,7 @@ async function applyMcpOauthTokenLifetimeToResponse(params: {
   const lifetimeSeconds = await getMcpOauthAccessTokenLifetimeSeconds({
     resource: params.resource,
     referenceId: storedToken?.referenceId,
+    tokenEndpointOrigin: params.tokenEndpointOrigin,
   });
   if (!storedToken || !lifetimeSeconds) {
     return responseText;
@@ -692,10 +700,13 @@ async function applyMcpOauthTokenLifetimeToResponse(params: {
 async function getMcpOauthAccessTokenLifetimeSeconds(params: {
   resource: unknown;
   referenceId: string | null | undefined;
+  tokenEndpointOrigin: string;
 }): Promise<number | null> {
   const profileId =
-    getProfileIdFromResource(params.resource) ??
-    getProfileIdFromReferenceId(params.referenceId);
+    (await getProfileIdFromResource({
+      resource: params.resource,
+      tokenEndpointOrigin: params.tokenEndpointOrigin,
+    })) ?? getProfileIdFromReferenceId(params.referenceId);
   if (!profileId) {
     return null;
   }
@@ -747,12 +758,28 @@ function getIssuedAtSeconds(tokenBody: Record<string, unknown>): number {
   return Math.floor(Date.now() / 1000);
 }
 
-function getProfileIdFromResource(resource: unknown): string | null {
-  if (typeof resource !== "string") {
+async function getProfileIdFromResource(params: {
+  resource: unknown;
+  tokenEndpointOrigin: string;
+}): Promise<string | null> {
+  if (typeof params.resource !== "string") {
     return null;
   }
 
-  return extractProfileIdFromMcpResource(resource);
+  try {
+    const resourceUrl = new URL(params.resource);
+    const issuerOrigin = new URL(buildOAuthIssuer()).origin;
+    const allowedOrigins = new Set([issuerOrigin, params.tokenEndpointOrigin]);
+    if (!allowedOrigins.has(resourceUrl.origin)) {
+      return null;
+    }
+
+    const match = resourceUrl.pathname.match(/^\/v1\/mcp\/([^/]+)$/);
+    const idOrSlug = match?.[1] ? decodeURIComponent(match[1]) : null;
+    return idOrSlug ? AgentModel.resolveIdFromIdOrSlug(idOrSlug) : null;
+  } catch {
+    return null;
+  }
 }
 
 function getProfileIdFromReferenceId(
@@ -763,6 +790,31 @@ function getProfileIdFromReferenceId(
   }
 
   return referenceId.slice(MCP_RESOURCE_REFERENCE_PREFIX.length) || null;
+}
+
+function getRequestOrigin(params: {
+  protocol: string;
+  headers: IncomingHttpHeaders;
+}): string {
+  const host = Array.isArray(params.headers.host)
+    ? params.headers.host[0]
+    : params.headers.host;
+  const forwardedProto = getFirstHeaderValue(
+    params.headers["x-forwarded-proto"],
+  );
+  const protocol = (forwardedProto || params.protocol || "http").replace(
+    /:$/,
+    "",
+  );
+
+  return `${protocol}://${host}`;
+}
+
+function getFirstHeaderValue(
+  header: string | string[] | undefined,
+): string | undefined {
+  const value = Array.isArray(header) ? header[0] : header;
+  return value?.split(",")[0]?.trim() || undefined;
 }
 
 function hashOAuthAccessTokenForLookup(oauthAccessToken: string): string {

@@ -33,6 +33,10 @@ inputs:
     description: "Version to pass as VERSION build arg"
     required: false
     default: ""
+  previous-image:
+    description: "Optional previously published platform image to extract static assets from before building"
+    required: false
+    default: ""
   # Secrets must be passed as regular inputs in composite actions
   turbo-team:
     description: "Turborepo remote caching team"
@@ -64,6 +68,29 @@ runs:
       run: mkdir -p "${INPUT_CONTEXT}/prev-static-assets"
       env:
         INPUT_CONTEXT: ${{ inputs.context }}
+
+    - name: Extract previous version static assets
+      if: ${{ inputs.previous-image != '' }}
+      shell: bash
+      run: |
+        echo "Pulling previous image: $INPUT_PREVIOUS_IMAGE"
+        docker pull "$INPUT_PREVIOUS_IMAGE" || {
+          echo "Warning: Failed to pull previous image"
+          exit 0
+        }
+
+        CID=$(docker create "$INPUT_PREVIOUS_IMAGE" 2>/dev/null) || true
+        if [ -n "$CID" ]; then
+          echo "Extracting previous static assets from container $CID"
+          docker cp "${CID}:/static-assets-source/." "${INPUT_CONTEXT}/prev-static-assets/" || echo "Warning: Failed to copy previous assets"
+          docker rm "$CID"
+          echo "Successfully extracted previous static assets"
+        else
+          echo "No previous container created, skipping asset extraction"
+        fi
+      env:
+        INPUT_CONTEXT: ${{ inputs.context }}
+        INPUT_PREVIOUS_IMAGE: ${{ inputs.previous-image }}
 
     - name: Setup Blacksmith Builder
       uses: ./.github/actions/setup-blacksmith-builder

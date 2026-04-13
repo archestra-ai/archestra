@@ -152,6 +152,21 @@ class TaskModel {
     return (rows[0] as { exists: boolean } | undefined)?.exists ?? false;
   }
 
+  static async hasPendingOrProcessingForTrigger(
+    taskType: string,
+    triggerId: string,
+  ): Promise<boolean> {
+    const { rows } = await db.execute<{ exists: boolean }>(sql`
+      SELECT EXISTS (
+        SELECT 1 FROM tasks
+        WHERE task_type = ${taskType}
+          AND status IN ('pending', 'processing')
+          AND payload->>'triggerId' = ${triggerId}
+      ) AS exists
+    `);
+    return (rows[0] as { exists: boolean } | undefined)?.exists ?? false;
+  }
+
   static async hasPendingOrProcessingByType(
     taskType: string,
   ): Promise<boolean> {

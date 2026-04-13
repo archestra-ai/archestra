@@ -620,6 +620,14 @@ The following environment variables can be used to configure Archestra Platform.
   - Default: `enabled`
   - Set to `disabled` to opt-out of analytics
 
+- **`ARCHESTRA_ANALYTICS_POSTHOG_KEY`** - PostHog project key used when analytics is enabled.
+  - Default: Archestra's hosted PostHog project key
+  - Set this with `ARCHESTRA_ANALYTICS_POSTHOG_HOST` to send analytics to your own PostHog instance
+
+- **`ARCHESTRA_ANALYTICS_POSTHOG_HOST`** - PostHog API host used when analytics is enabled.
+  - Default: `https://eu.i.posthog.com`
+  - Example: `https://posthog.example.com`
+
 - **`ARCHESTRA_LOGGING_LEVEL`** - Log level for Archestra
   - Default: `info`
   - Supported values: `trace`, `debug`, `info`, `warn`, `error`, `fatal`
@@ -740,7 +748,7 @@ These environment variables set the default base URL for each LLM provider. Per-
 
 - **`ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS`** - Maximum number of virtual API keys per LLM API key.
   - Default: `10`
-  - Virtual keys are `archestra_`-prefixed tokens used by external LLM Proxy clients
+  - Newly generated virtual keys use the neutral `arch_` prefix. Legacy `archestra_` virtual keys remain valid.
   - See: [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication)
 
 - **`ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS`** - Default expiration time for newly created virtual API keys, in seconds.

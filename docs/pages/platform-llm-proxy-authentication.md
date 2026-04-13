@@ -28,7 +28,7 @@ This is the simplest approach but means the real provider key is sent with every
 
 ## Virtual API Keys
 
-Virtual API keys are `archestra_`-prefixed tokens that map to a real provider API key stored in Archestra. The real key never leaves Archestra.
+Virtual API keys are platform-managed bearer tokens that map to a real provider API key stored in Archestra. Newly generated virtual keys use the neutral `arch_` prefix. Legacy `archestra_` keys remain valid. The real provider key never leaves Archestra.
 
 ### Benefits
 
@@ -42,7 +42,7 @@ Virtual API keys are `archestra_`-prefixed tokens that map to a real provider AP
 1. Go to **Settings > LLM API Keys**
 2. Click the edit icon on an existing API key
 3. In the **Virtual API Keys** section at the bottom, enter a name and click the add button
-4. Copy the generated `archestra_...` token (shown only once)
+4. Copy the generated token (shown only once)
 
 ### Using Virtual Keys
 
@@ -50,7 +50,7 @@ Use the virtual key in place of the provider key:
 
 ```bash
 curl -X POST "https://archestra.example.com/v1/openai/{proxyId}/chat/completions" \
-  -H "Authorization: Bearer archestra_abc123def456..." \
+  -H "Authorization: Bearer arch_abc123def456..." \
   -H "Content-Type: application/json" \
   -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "Hello"}]}'
 ```

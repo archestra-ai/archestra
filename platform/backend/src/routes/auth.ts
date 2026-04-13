@@ -5,10 +5,7 @@ import { verifyPassword } from "better-auth/crypto";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { betterAuth } from "@/auth";
-import {
-  ensureCimdClientRegistered,
-  isCimdClientId,
-} from "@/auth/cimd";
+import { ensureCimdClientRegistered, isCimdClientId } from "@/auth/cimd";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -248,8 +245,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // match succeeds.
         const redirectUri = query.redirect_uri;
         if (redirectUri && isLoopbackRedirectUri(redirectUri)) {
-          const client =
-            await OAuthClientModel.findByClientId(clientId);
+          const client = await OAuthClientModel.findByClientId(clientId);
           const registered = client?.redirectUris ?? [];
           if (
             !registered.includes(redirectUri) &&

@@ -122,10 +122,9 @@ describe("loopbackRedirectUriMatchesIgnoringPort", () => {
 
   test("does not match different paths", () => {
     expect(
-      loopbackRedirectUriMatchesIgnoringPort(
-        "http://127.0.0.1:54321/other",
-        ["http://127.0.0.1:3000/callback"],
-      ),
+      loopbackRedirectUriMatchesIgnoringPort("http://127.0.0.1:54321/other", [
+        "http://127.0.0.1:3000/callback",
+      ]),
     ).toBe(false);
   });
 
@@ -169,10 +168,7 @@ describe("loopbackRedirectUriMatchesIgnoringPort", () => {
     expect(
       loopbackRedirectUriMatchesIgnoringPort(
         "http://127.0.0.1:54321/callback",
-        [
-          "https://example.com/callback",
-          "http://127.0.0.1:3000/callback",
-        ],
+        ["https://example.com/callback", "http://127.0.0.1:3000/callback"],
       ),
     ).toBe(true);
   });

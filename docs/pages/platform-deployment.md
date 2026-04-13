@@ -259,14 +259,6 @@ Default behavior when enabled:
 - Scales up aggressively (up to 100% or 2 pods per minute)
 - Scales down conservatively with a 5-minute stabilization window
 
-Example:
-
-```yaml
-archestra:
-  horizontalPodAutoscaler:
-    enabled: true
-```
-
 If your cluster has reliable CPU requests for the platform pods and you prefer request-rate-driven scaling, override `archestra.horizontalPodAutoscaler.metrics` with a CPU target instead.
 
 #### Existing Scaling Controls
@@ -293,13 +285,13 @@ Recommended approach:
 Two good KEDA patterns for workers:
 
 - Use KEDA's PostgreSQL scaler against the `tasks` table with a query that counts ready work, for example `SELECT COUNT(*) FROM tasks WHERE status = 'pending' AND scheduled_for <= NOW()`
-- Add a Prometheus gauge for ready backlog, such as `task_queue_ready_tasks`, and let a KEDA Prometheus scaler target that metric
+- Add a Prometheus gauge for ready backlog and let a KEDA Prometheus scaler target that metric. Archestra does not expose a ready-backlog metric today; the built-in `task_queue_active_tasks` metric only covers in-flight work, not queued work.
 
 Practical starting point for worker autoscaling:
 
 - Start with `minReplicaCount: 1`
-- Set a low activation threshold so scale-from-zero or scale-from-one happens only when real backlog exists
-- Target roughly 5 to 10 ready tasks per worker pod, then tune based on average task duration
+- Set `activationQueryValue: "1"` so KEDA stays idle when there is no ready work
+- With the default `ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT=2`, start with `targetQueryValue: "4"` so each worker pod is asked to absorb about two waves of ready tasks before KEDA adds another pod
 - Keep `maxReplicaCount` aligned with database capacity, embedding provider rate limits, and downstream connector quotas
 
 **Service Settings**:

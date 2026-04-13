@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { CimdUpsertData } from "@/types";
 
@@ -48,16 +48,17 @@ class OAuthClientModel {
     clientId: string,
     redirectUri: string,
   ): Promise<void> {
-    const client = await this.findByClientId(clientId);
-    if (!client) return;
-
-    const currentUris: string[] = client.redirectUris ?? [];
-    if (currentUris.includes(redirectUri)) return;
-
     await db
       .update(schema.oauthClientsTable)
-      .set({ redirectUris: [...currentUris, redirectUri] })
-      .where(eq(schema.oauthClientsTable.clientId, clientId));
+      .set({
+        redirectUris: sql`array_append(${schema.oauthClientsTable.redirectUris}, ${redirectUri})`,
+      })
+      .where(
+        and(
+          eq(schema.oauthClientsTable.clientId, clientId),
+          sql`NOT (${schema.oauthClientsTable.redirectUris} @> ARRAY[${redirectUri}]::text[])`,
+        ),
+      );
   }
 
   /**

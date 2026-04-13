@@ -188,6 +188,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     agentType: AgentType;
   } | null>(null);
   const [editingAgent, setEditingAgent] = useState<AgentData | null>(null);
+  const [viewingAgent, setViewingAgent] = useState<AgentData | null>(null);
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
 
   // Handle 'create' URL parameter to open the Create Agent dialog
@@ -215,6 +216,25 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     editAgentId,
     editAgentData,
     editingAgent,
+    searchParams,
+    pathname,
+    router,
+  ]);
+
+  // Handle 'view' URL parameter to open the View Agent dialog (read-only)
+  const viewAgentId = searchParams.get("view");
+  const { data: viewAgentData } = useProfile(viewAgentId ?? undefined);
+  useEffect(() => {
+    if (viewAgentId && viewAgentData && !viewingAgent) {
+      setViewingAgent(viewAgentData as AgentData);
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete("view");
+      router.replace(`${pathname}?${newParams.toString()}`);
+    }
+  }, [
+    viewAgentId,
+    viewAgentData,
+    viewingAgent,
     searchParams,
     pathname,
     router,
@@ -412,6 +432,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             onEdit={(agentData) => {
               setEditingAgent(agentData);
             }}
+            onView={(agentData) => {
+              setViewingAgent(agentData);
+            }}
             onDelete={setDeletingAgentId}
           />
         );
@@ -506,6 +529,14 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               onOpenChange={(open) => !open && setEditingAgent(null)}
               agent={editingAgent}
               agentType="agent"
+            />
+
+            <AgentDialog
+              open={!!viewingAgent}
+              onOpenChange={(open) => !open && setViewingAgent(null)}
+              agent={viewingAgent}
+              agentType="agent"
+              readOnly
             />
 
             {deletingAgentId && (

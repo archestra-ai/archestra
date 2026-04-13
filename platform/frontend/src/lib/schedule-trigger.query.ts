@@ -77,8 +77,12 @@ export const scheduleTriggerKeys = {
   all: ["schedule-triggers"] as const,
   detail: (triggerId: string) =>
     [...scheduleTriggerKeys.all, "detail", triggerId] as const,
-  list: (params: { enabled?: boolean; limit?: number; offset?: number }) =>
-    [...scheduleTriggerKeys.all, "list", params] as const,
+  list: (params: {
+    enabled?: boolean;
+    limit?: number;
+    offset?: number;
+    agentIds?: string[];
+  }) => [...scheduleTriggerKeys.all, "list", params] as const,
   runsPrefix: (triggerId: string) =>
     [...scheduleTriggerKeys.all, triggerId, "runs"] as const,
   runs: (
@@ -100,6 +104,7 @@ export function getScheduleTriggerListQueryParams(params?: {
   offset?: number;
   name?: string;
   actorUserIds?: string[];
+  agentIds?: string[];
   showAll?: boolean;
   refetchInterval?: number | false;
 }) {
@@ -109,6 +114,7 @@ export function getScheduleTriggerListQueryParams(params?: {
     offset: params?.offset,
     name: params?.name,
     actorUserIds: params?.actorUserIds,
+    agentIds: params?.agentIds,
     showAll: params?.showAll,
   };
 }
@@ -133,6 +139,7 @@ export function useScheduleTriggers(params?: {
   offset?: number;
   name?: string;
   actorUserIds?: string[];
+  agentIds?: string[];
   showAll?: boolean;
   refetchInterval?: number | false;
 }) {
@@ -155,6 +162,9 @@ export function useScheduleTriggers(params?: {
           ...(queryParams.name ? { name: queryParams.name } : {}),
           ...(queryParams.actorUserIds?.length
             ? { actorUserIds: queryParams.actorUserIds.join(",") }
+            : {}),
+          ...(queryParams.agentIds?.length
+            ? { agentIds: queryParams.agentIds.join(",") }
             : {}),
           ...(queryParams.showAll ? { showAll: queryParams.showAll } : {}),
         },

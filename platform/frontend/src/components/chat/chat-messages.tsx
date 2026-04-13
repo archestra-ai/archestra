@@ -1133,6 +1133,10 @@ export function ChatMessages({
               error={error}
               conversationId={conversationId}
               supportMessage={organization?.chatErrorSupportMessage}
+              slimChatErrorUi={organization?.slimChatErrorUi ?? false}
+              agentName={_agentName}
+              selectedModel={_selectedModel}
+              modelSource={_modelSource}
             />
           )}
           {pendingToolCalls.map((toolCall) => (

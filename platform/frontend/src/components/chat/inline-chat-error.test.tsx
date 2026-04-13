@@ -7,6 +7,10 @@ vi.mock("sonner", () => ({
   },
 }));
 
+vi.mock("@/lib/auth/auth.query", () => ({
+  useHasPermissions: () => ({ data: true }),
+}));
+
 import { InlineChatError } from "./inline-chat-error";
 
 describe("InlineChatError", () => {
@@ -14,7 +18,7 @@ describe("InlineChatError", () => {
     vi.clearAllMocks();
   });
 
-  it("shows only the support message and correlation IDs", () => {
+  it("shows only the support message and correlation IDs in slim mode", () => {
     render(
       <InlineChatError
         error={
@@ -34,6 +38,7 @@ describe("InlineChatError", () => {
           )
         }
         supportMessage="Contact support@example.com and include these IDs."
+        slimChatErrorUi
       />,
     );
 
@@ -49,6 +54,39 @@ describe("InlineChatError", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Copy error details" }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the detailed error UI by default", () => {
+    render(
+      <InlineChatError
+        error={
+          new Error(
+            JSON.stringify({
+              code: "server_error",
+              message: "The provider failed",
+              isRetryable: true,
+              sessionId: "session-12345678",
+              traceId: "trace-12345678",
+              spanId: "span-12345678",
+              originalError: {
+                provider: "openai",
+                message: "secret provider detail",
+              },
+            }),
+          )
+        }
+        agentName="Support Agent"
+        selectedModel="gpt-5"
+        modelSource="organization"
+      />,
+    );
+
+    expect(screen.getByText("Support Agent")).toBeInTheDocument();
+    expect(screen.getByText("gpt-5")).toBeInTheDocument();
+    expect(screen.getByText("openai")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Copy debug info" }),
     ).toBeInTheDocument();
   });
 

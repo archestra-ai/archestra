@@ -125,6 +125,7 @@ class OrganizationModel {
         chatLinks: schema.organizationsTable.chatLinks,
         chatErrorSupportMessage:
           schema.organizationsTable.chatErrorSupportMessage,
+        slimChatErrorUi: schema.organizationsTable.slimChatErrorUi,
         animateChatPlaceholders:
           schema.organizationsTable.animateChatPlaceholders,
       })
@@ -145,6 +146,7 @@ class OrganizationModel {
         footerText: null,
         chatLinks: null,
         chatErrorSupportMessage: null,
+        slimChatErrorUi: false,
         animateChatPlaceholders: true,
       };
     }

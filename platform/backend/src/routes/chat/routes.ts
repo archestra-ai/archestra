@@ -46,6 +46,7 @@ import {
   LlmProviderApiKeyModel,
   MemberModel,
   MessageModel,
+  OrganizationModel,
   TeamModel,
 } from "@/models";
 import { startActiveChatSpan } from "@/observability/tracing";
@@ -178,10 +179,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = agentId;
 
       // Fetch enabled tool IDs and custom selection status in parallel
-      const [enabledToolIds, hasCustomSelection] = await Promise.all([
-        ConversationEnabledToolModel.findByConversation(conversationId),
-        ConversationEnabledToolModel.hasCustomSelection(conversationId),
-      ]);
+      const [enabledToolIds, hasCustomSelection, organization] =
+        await Promise.all([
+          ConversationEnabledToolModel.findByConversation(conversationId),
+          ConversationEnabledToolModel.hasCustomSelection(conversationId),
+          OrganizationModel.getById(organizationId),
+        ]);
+      const useSlimChatErrorUi = organization?.slimChatErrorUi ?? false;
 
       // Fetch MCP tools with enabled tool filtering
       // Pass undefined if no custom selection (use all tools)
@@ -414,12 +418,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 });
 
                 const mapped = mapProviderError(error, provider);
-                const frontendError = sanitizeChatErrorForFrontend({
-                  ...mapped,
-                  ...getActiveTraceContext(),
-                });
+                const errorForFrontend = useSlimChatErrorUi
+                  ? sanitizeChatErrorForFrontend({
+                      ...mapped,
+                      ...getActiveTraceContext(),
+                    })
+                  : { ...mapped, ...getActiveTraceContext() };
                 try {
-                  return JSON.stringify(frontendError);
+                  return JSON.stringify(errorForFrontend);
                 } catch {
                   return JSON.stringify({
                     code: mapped.code,
@@ -651,14 +657,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         error instanceof ProviderError
                           ? error.chatErrorResponse
                           : mapProviderError(error, provider);
-                      const frontendError = sanitizeChatErrorForFrontend({
-                        ...mappedError,
-                        ...getActiveTraceContext(),
-                      });
+                      const errorForFrontend = useSlimChatErrorUi
+                        ? sanitizeChatErrorForFrontend({
+                            ...mappedError,
+                            ...getActiveTraceContext(),
+                          })
+                        : { ...mappedError, ...getActiveTraceContext() };
 
                       logger.info(
                         {
-                          errorForFrontend: frontendError,
+                          errorForFrontend,
                           originalErrorType:
                             error instanceof Error ? error.name : typeof error,
                           willBeSentToFrontend: true,
@@ -668,7 +676,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
                       // mapProviderError safely serializes raw errors, but add defensive try-catch
                       try {
-                        return JSON.stringify(frontendError);
+                        return JSON.stringify(errorForFrontend);
                       } catch (stringifyError) {
                         logger.error(
                           { stringifyError, errorCode: mappedError.code },

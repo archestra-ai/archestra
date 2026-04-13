@@ -34800,6 +34800,7 @@ export type GetOrganizationResponses = {
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
+        slimChatErrorUi: boolean;
         showTwoFactor: boolean;
         mcpOauthAccessTokenLifetimeSeconds: number;
     };
@@ -34892,6 +34893,7 @@ export type GetAppearanceSettingsResponses = {
             url: string;
         }> | null;
         chatErrorSupportMessage: string | null;
+        slimChatErrorUi: boolean;
         animateChatPlaceholders: boolean;
     };
 };
@@ -34914,6 +34916,7 @@ export type UpdateAppearanceSettingsData = {
             url: string;
         }> | null;
         chatErrorSupportMessage?: string | null;
+        slimChatErrorUi?: boolean;
         chatPlaceholders?: Array<string> | null;
         animateChatPlaceholders?: boolean;
         showTwoFactor?: boolean;
@@ -35023,6 +35026,7 @@ export type UpdateAppearanceSettingsResponses = {
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
+        slimChatErrorUi: boolean;
         showTwoFactor: boolean;
         mcpOauthAccessTokenLifetimeSeconds: number;
     };
@@ -35140,6 +35144,7 @@ export type UpdateSecuritySettingsResponses = {
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
+        slimChatErrorUi: boolean;
         showTwoFactor: boolean;
         mcpOauthAccessTokenLifetimeSeconds: number;
     };
@@ -35258,6 +35263,7 @@ export type UpdateLlmSettingsResponses = {
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
+        slimChatErrorUi: boolean;
         showTwoFactor: boolean;
         mcpOauthAccessTokenLifetimeSeconds: number;
     };
@@ -35377,6 +35383,7 @@ export type UpdateAgentSettingsResponses = {
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
+        slimChatErrorUi: boolean;
         showTwoFactor: boolean;
         mcpOauthAccessTokenLifetimeSeconds: number;
     };
@@ -35493,6 +35500,7 @@ export type UpdateMcpSettingsResponses = {
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
+        slimChatErrorUi: boolean;
         showTwoFactor: boolean;
         mcpOauthAccessTokenLifetimeSeconds: number;
     };
@@ -35612,6 +35620,7 @@ export type UpdateKnowledgeSettingsResponses = {
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
+        slimChatErrorUi: boolean;
         showTwoFactor: boolean;
         mcpOauthAccessTokenLifetimeSeconds: number;
     };
@@ -35726,6 +35735,7 @@ export type DropEmbeddingConfigResponses = {
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
+        slimChatErrorUi: boolean;
         showTwoFactor: boolean;
         mcpOauthAccessTokenLifetimeSeconds: number;
     };
@@ -35923,6 +35933,7 @@ export type CompleteOnboardingResponses = {
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
+        slimChatErrorUi: boolean;
         showTwoFactor: boolean;
         mcpOauthAccessTokenLifetimeSeconds: number;
     };

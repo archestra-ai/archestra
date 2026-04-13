@@ -8,7 +8,9 @@ import {
   AlertCircle,
   ArrowLeft,
   CheckCircle2,
+  FileText,
   Loader2,
+  MessageSquare,
   PauseCircle,
   Pencil,
   Play,
@@ -21,6 +23,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
+import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
@@ -248,26 +251,6 @@ export function ScheduleTriggersIndexPage() {
       setCreateFormOpen(true);
     }
   }, [agentIdParam, triggersResponse, isLoading, getDefaultName]);
-
-  const handledAgentIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (
-      !agentIdParam ||
-      !triggersResponse ||
-      isLoading ||
-      handledAgentIdRef.current === agentIdParam
-    )
-      return;
-    handledAgentIdRef.current = agentIdParam;
-    if (triggersResponse.data.length === 0) {
-      setEditingTrigger(null);
-      setFormState({
-        ...DEFAULT_FORM_STATE(),
-        agentId: agentIdParam,
-      });
-      setCreateFormOpen(true);
-    }
-  }, [agentIdParam, triggersResponse, isLoading]);
 
   const openCreateComposer = () => {
     setEditingTrigger(null);
@@ -627,6 +610,7 @@ export function ScheduleTriggerDetailPage({
 
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [trackedRunId, setTrackedRunId] = useState<string | null>(null);
+  const [artifactContent, setArtifactContent] = useState<string | null>(null);
   const [formState, setFormState] =
     useState<ScheduleTriggerFormState>(DEFAULT_FORM_STATE);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -789,7 +773,8 @@ export function ScheduleTriggerDetailPage({
   const agentLinkParam = canModifyAgent ? "edit" : "view";
 
   return (
-    <div className="mr-auto flex w-full flex-col gap-6">
+    <div className="flex w-full gap-0">
+    <div className="mr-auto flex min-w-0 flex-1 flex-col gap-6">
       {/* Back link */}
       <Button
         variant="ghost"
@@ -925,6 +910,8 @@ export function ScheduleTriggerDetailPage({
             setTrackedRunId(null);
           }
         }}
+        onArtifactToggle={setArtifactContent}
+        activeArtifactContent={artifactContent}
       />
 
       <ScheduleTriggerFormDialog
@@ -975,6 +962,15 @@ export function ScheduleTriggerDetailPage({
         confirmLabel="Delete"
         pendingLabel="Deleting..."
       />
+    </div>
+
+    {artifactContent && (
+      <ConversationArtifactPanel
+        artifact={artifactContent}
+        isOpen
+        onToggle={() => setArtifactContent(null)}
+      />
+    )}
     </div>
   );
 }
@@ -1421,11 +1417,15 @@ function ScheduleTriggerRunsTable({
   trackedRunId,
   activeMutationTriggerId,
   onTrackedRunSettled,
+  onArtifactToggle,
+  activeArtifactContent,
 }: {
   trigger: ScheduleTrigger;
   trackedRunId: string | null;
   activeMutationTriggerId: string | null;
   onTrackedRunSettled: (runId: string) => void;
+  onArtifactToggle: (artifact: string | null) => void;
+  activeArtifactContent: string | null;
 }) {
   const router = useRouter();
   const ensureConversationMutation = useCreateScheduleTriggerRunConversation();
@@ -1498,14 +1498,53 @@ function ScheduleTriggerRunsTable({
       {
         id: "result",
         header: "",
-        cell: ({ row }) => (
-          <div className="flex items-center justify-end pr-2">
-            <RunStatusIcon status={row.original.status} />
-          </div>
-        ),
+        cell: ({ row }) => {
+          const run = row.original;
+          const isComplete = run.status === "success" || run.status === "failed";
+          return (
+            <div
+              className="flex items-center justify-end gap-1.5 pr-2"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {isComplete && run.artifact && (
+                <Button
+                  variant={
+                    activeArtifactContent === run.artifact
+                      ? "secondary"
+                      : "ghost"
+                  }
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() =>
+                    onArtifactToggle(
+                      activeArtifactContent === run.artifact
+                        ? null
+                        : run.artifact,
+                    )
+                  }
+                >
+                  <FileText className="mr-1 h-3 w-3" />
+                  Artifact
+                </Button>
+              )}
+              {isComplete && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => void navigateToRunChat(run)}
+                >
+                  <MessageSquare className="mr-1 h-3 w-3" />
+                  Chat
+                </Button>
+              )}
+              <RunStatusIcon status={run.status} />
+            </div>
+          );
+        },
       },
     ],
-    [],
+    [navigateToRunChat, activeArtifactContent, onArtifactToggle],
   );
 
   return (
@@ -1522,18 +1561,11 @@ function ScheduleTriggerRunsTable({
           total: runsResponse?.pagination.total ?? 0,
         }}
         onPaginationChange={(p) => setPageIndex(p.pageIndex)}
-        onRowClick={(run) => {
-          void navigateToRunChat(run);
-        }}
-        getRowClassName={(run) =>
-          run.status !== "success" && run.status !== "failed"
-            ? "!cursor-default hover:!bg-transparent"
-            : ""
-        }
         hideHeader
         hideSelectedCount
         compactPagination
       />
+
     </section>
   );
 }

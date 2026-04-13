@@ -90,6 +90,7 @@ export async function handleScheduleTriggerRunExecution(
       userId: actor.id,
       sessionId: `scheduled-${run.id}`,
       source: "schedule-trigger",
+      scheduleTriggerRunId: run.id,
     });
   } catch (error) {
     status = "failed";

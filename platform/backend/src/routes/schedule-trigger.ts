@@ -685,6 +685,18 @@ async function ensureRunConversation(params: {
       organizationId,
     });
     if (existing) {
+      // Sync run artifact into conversation if missing
+      if (run.artifact && !existing.artifact) {
+        const updated = await ConversationModel.update(
+          existing.id,
+          userId,
+          organizationId,
+          { artifact: run.artifact },
+        );
+        if (updated) {
+          return updated;
+        }
+      }
       return existing;
     }
   }
@@ -715,6 +727,7 @@ async function ensureRunConversation(params: {
     selectedModel: llmSelection.selectedModel,
     selectedProvider: llmSelection.selectedProvider,
     chatApiKeyId: llmSelection.chatApiKeyId,
+    artifact: run.artifact ?? undefined,
   });
 
   const createdAt = Date.now();

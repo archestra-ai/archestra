@@ -71,6 +71,10 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
 import { getVisibleDocsUrl } from "@/lib/docs/docs";
 import { useK8sImagePullSecrets } from "@/lib/mcp/internal-mcp-catalog.query";
+import {
+  MCP_CONFIG_AUTOCOMPLETE,
+  MCP_SECRET_AUTOCOMPLETE,
+} from "@/lib/mcp/mcp-form-autocomplete";
 import { useGetSecret } from "@/lib/secrets.query";
 import { useTeams } from "@/lib/teams/team.query";
 import {
@@ -84,9 +88,6 @@ const ExternalSecretSelector = lazy(
     // biome-ignore lint/style/noRestrictedImports: lazy loading
     import("@/components/external-secret-selector.ee"),
 );
-
-const MCP_CONFIG_AUTOCOMPLETE = "off";
-const MCP_SECRET_AUTOCOMPLETE = "new-password";
 
 interface McpCatalogFormProps {
   mode: "create" | "edit";

@@ -43,15 +43,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  MCP_CONFIG_AUTOCOMPLETE,
+  MCP_SECRET_AUTOCOMPLETE,
+} from "@/lib/mcp/mcp-form-autocomplete";
 
 const ExternalSecretSelector = lazy(
   () =>
     // biome-ignore lint/style/noRestrictedImports: lazy loading
     import("@/components/external-secret-selector.ee"),
 );
-
-const MCP_CONFIG_AUTOCOMPLETE = "off";
-const MCP_SECRET_AUTOCOMPLETE = "new-password";
 
 interface ExternalSecretValue {
   teamId: string | null;

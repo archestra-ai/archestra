@@ -285,7 +285,6 @@ Recommended approach:
 Two good KEDA patterns for workers:
 
 - Use KEDA's PostgreSQL scaler against the `tasks` table with a query that counts ready work, for example `SELECT COUNT(*) FROM tasks WHERE status = 'pending' AND scheduled_for <= NOW()`
-- Add a Prometheus gauge for ready backlog and let a KEDA Prometheus scaler target that metric. Archestra does not expose a ready-backlog metric today; the built-in `task_queue_active_tasks` metric only covers in-flight work, not queued work.
 
 Practical starting point for worker autoscaling:
 

@@ -61,10 +61,68 @@ tests:
     asserts:
       - equal:
           path: spec.minReplicas
-          value: 1
+          value: 2
       - equal:
           path: spec.maxReplicas
           value: 10
+
+  - it: should configure default memory utilization metric
+    set:
+      archestra.horizontalPodAutoscaler.enabled: true
+    asserts:
+      - equal:
+          path: spec.metrics[0].type
+          value: Resource
+      - equal:
+          path: spec.metrics[0].resource.name
+          value: memory
+      - equal:
+          path: spec.metrics[0].resource.target.type
+          value: Utilization
+      - equal:
+          path: spec.metrics[0].resource.target.averageUtilization
+          value: 70
+
+  - it: should configure default scaling behavior
+    set:
+      archestra.horizontalPodAutoscaler.enabled: true
+    asserts:
+      - equal:
+          path: spec.behavior.scaleUp.stabilizationWindowSeconds
+          value: 0
+      - equal:
+          path: spec.behavior.scaleUp.selectPolicy
+          value: Max
+      - equal:
+          path: spec.behavior.scaleUp.policies[0].type
+          value: Percent
+      - equal:
+          path: spec.behavior.scaleUp.policies[0].value
+          value: 100
+      - equal:
+          path: spec.behavior.scaleUp.policies[1].type
+          value: Pods
+      - equal:
+          path: spec.behavior.scaleUp.policies[1].value
+          value: 2
+      - equal:
+          path: spec.behavior.scaleDown.stabilizationWindowSeconds
+          value: 300
+      - equal:
+          path: spec.behavior.scaleDown.selectPolicy
+          value: Min
+      - equal:
+          path: spec.behavior.scaleDown.policies[0].type
+          value: Percent
+      - equal:
+          path: spec.behavior.scaleDown.policies[0].value
+          value: 25
+      - equal:
+          path: spec.behavior.scaleDown.policies[1].type
+          value: Pods
+      - equal:
+          path: spec.behavior.scaleDown.policies[1].value
+          value: 1
 
   - it: should configure custom minReplicas
     set:
@@ -186,7 +244,7 @@ tests:
       archestra.horizontalPodAutoscaler.enabled: true
       archestra.horizontalPodAutoscaler.minReplicas: 1
       archestra.horizontalPodAutoscaler.maxReplicas: 10
-      archestra.horizontalPodAutoscaler.behavior: {}
+      archestra.horizontalPodAutoscaler.behavior: null
     asserts:
       - isNull:
           path: spec.behavior

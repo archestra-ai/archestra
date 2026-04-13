@@ -272,7 +272,7 @@ function getLocalExecutionConfig(
     command: catalog.localConfig?.command ?? "",
     arguments: catalog.localConfig?.arguments ?? [],
     dockerImage: catalog.localConfig?.dockerImage ?? "",
-    transportType: catalog.localConfig?.transportType ?? "",
+    transportType: catalog.localConfig?.transportType,
     httpPort: catalog.localConfig?.httpPort,
     httpPath: catalog.localConfig?.httpPath ?? "",
     serviceAccount: catalog.localConfig?.serviceAccount ?? "",

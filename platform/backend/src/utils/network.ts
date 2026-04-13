@@ -1,4 +1,4 @@
-import { isIPv4 } from "node:net";
+import { isIP, isIPv4 } from "node:net";
 
 /**
  * Check whether an IP address string is a loopback (localhost) address.
@@ -37,6 +37,42 @@ export function isLoopbackRedirectUri(uri: string): boolean {
 }
 
 /**
+ * Check whether a hostname is an explicit loopback/private target.
+ *
+ * This is intentionally limited to cases we can determine locally without DNS:
+ *  - localhost / *.localhost
+ *  - literal IP addresses in loopback, RFC1918, link-local, or unspecified ranges
+ */
+export function isPrivateOrLoopbackHostname(hostname: string): boolean {
+  const normalizedHostname = hostname
+    .trim()
+    .toLowerCase()
+    .replace(/^\[(.*)\]$/, "$1");
+
+  if (
+    normalizedHostname === "localhost" ||
+    normalizedHostname.endsWith(".localhost")
+  ) {
+    return true;
+  }
+
+  if (isLoopbackAddress(normalizedHostname)) {
+    return true;
+  }
+
+  const ipVersion = isIP(normalizedHostname);
+  if (ipVersion === 4) {
+    return isPrivateIpv4Address(normalizedHostname);
+  }
+
+  if (ipVersion === 6) {
+    return isPrivateIpv6Address(normalizedHostname);
+  }
+
+  return false;
+}
+
+/**
  * Check if a requested loopback redirect URI matches any registered URI,
  * ignoring the port component. Returns true when scheme, host, and path
  * match but the port differs.
@@ -69,4 +105,39 @@ export function loopbackRedirectUriMatchesIgnoringPort(
       return false;
     }
   });
+}
+
+function isPrivateIpv4Address(ipAddress: string): boolean {
+  const octets = ipAddress.split(".").map((segment) => Number(segment));
+  const [firstOctet, secondOctet] = octets;
+
+  return (
+    firstOctet === 10 ||
+    firstOctet === 0 ||
+    (firstOctet === 169 && secondOctet === 254) ||
+    (firstOctet === 172 && secondOctet >= 16 && secondOctet <= 31) ||
+    (firstOctet === 192 && secondOctet === 168)
+  );
+}
+
+function isPrivateIpv6Address(ipAddress: string): boolean {
+  const normalizedIpAddress = ipAddress.toLowerCase();
+
+  if (normalizedIpAddress === "::") {
+    return true;
+  }
+
+  if (
+    normalizedIpAddress.startsWith("fc") ||
+    normalizedIpAddress.startsWith("fd") ||
+    normalizedIpAddress.startsWith("fe80:")
+  ) {
+    return true;
+  }
+
+  if (normalizedIpAddress.startsWith("::ffff:")) {
+    return isPrivateIpv4Address(normalizedIpAddress.slice(7));
+  }
+
+  return false;
 }

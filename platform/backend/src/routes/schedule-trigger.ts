@@ -103,6 +103,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .optional(),
           name: z.string().optional(),
           actorUserIds: z.string().optional(),
+          agentIds: z.string().optional(),
           showAll: z
             .preprocess(
               (value) =>
@@ -126,6 +127,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           enabled,
           name,
           actorUserIds: actorUserIdsParam,
+          agentIds: agentIdsParam,
           showAll,
         },
         user,
@@ -156,12 +158,17 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      const agentIds = agentIdsParam
+        ? agentIdsParam.split(",").filter(Boolean)
+        : undefined;
+
       const [data, total] = await Promise.all([
         ScheduleTriggerModel.listByOrganization({
           organizationId,
           limit,
           offset,
           enabled,
+          agentIds,
           actorUserId,
           actorUserIds,
           excludeActorUserId,
@@ -170,6 +177,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ScheduleTriggerModel.countByOrganization({
           organizationId,
           enabled,
+          agentIds,
           actorUserId,
           actorUserIds,
           excludeActorUserId,

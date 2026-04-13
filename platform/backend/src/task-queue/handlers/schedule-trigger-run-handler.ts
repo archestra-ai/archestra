@@ -8,6 +8,7 @@ import {
   ScheduleTriggerRunModel,
   UserModel,
 } from "@/models";
+import { metrics } from "@/observability";
 
 export async function handleScheduleTriggerRunExecution(
   payload: Record<string, unknown>,
@@ -42,8 +43,12 @@ export async function handleScheduleTriggerRunExecution(
       status: "failed",
       error: "Trigger no longer exists",
     });
+    metrics.scheduleTrigger.reportScheduleTriggerRun("unknown", "failed");
     return;
   }
+
+  const triggerAgent = await AgentModel.findById(trigger.agentId);
+  const agentName = triggerAgent?.name ?? "unknown";
 
   let status: "success" | "failed" = "success";
   let errorMessage: string | null = null;
@@ -70,12 +75,11 @@ export async function handleScheduleTriggerRunExecution(
       );
     }
 
-    const agent = await AgentModel.findById(trigger.agentId);
-    if (!agent) {
+    if (!triggerAgent) {
       throw new Error("Scheduled trigger target agent no longer exists");
     }
 
-    if (agent.agentType !== "agent") {
+    if (triggerAgent.agentType !== "agent") {
       throw new Error("Scheduled trigger target must be an internal agent");
     }
 
@@ -103,6 +107,8 @@ export async function handleScheduleTriggerRunExecution(
     status,
     error: errorMessage,
   });
+
+  metrics.scheduleTrigger.reportScheduleTriggerRun(agentName, status);
 
   logger.info(
     { runId: run.id, triggerId: run.triggerId, status, error: errorMessage },

@@ -1,5 +1,5 @@
 import { E2eTestId } from "@shared";
-import { MessageSquare, Pencil, Plug, Trash2 } from "lucide-react";
+import { Clock, Eye, MessageSquare, Pencil, Plug, Trash2 } from "lucide-react";
 import {
   type TableRowAction,
   TableRowActions,
@@ -15,6 +15,7 @@ type AgentActionsProps = {
   canModify: boolean;
   onConnect: (agent: Pick<Agent, "id" | "name" | "agentType">) => void;
   onEdit: (agent: Agent) => void;
+  onView: (agent: Agent) => void;
   onDelete: (agentId: string) => void;
 };
 
@@ -23,9 +24,27 @@ export function AgentActions({
   canModify,
   onConnect,
   onEdit,
+  onView,
   onDelete,
 }: AgentActionsProps) {
   const isBuiltIn = Boolean(agent.builtIn);
+
+  const editOrViewAction: TableRowAction =
+    canModify || isBuiltIn
+      ? {
+          icon: <Pencil className="h-4 w-4" />,
+          label: "Edit",
+          permissions: { agent: ["update"] },
+          disabled: !canModify && !isBuiltIn,
+          onClick: () => onEdit(agent),
+          testId: `${E2eTestId.EditAgentButton}-${agent.name}`,
+        }
+      : {
+          icon: <Eye className="h-4 w-4" />,
+          label: "View",
+          onClick: () => onView(agent),
+          testId: `${E2eTestId.EditAgentButton}-${agent.name}`,
+        };
 
   const actions: TableRowAction[] = [
     {
@@ -44,13 +63,14 @@ export function AgentActions({
       href: `/chat/new?agent_id=${agent.id}`,
     },
     {
-      icon: <Pencil className="h-4 w-4" />,
-      label: "Edit",
-      permissions: { agent: ["update"] },
-      disabled: !canModify && !isBuiltIn,
-      onClick: () => onEdit(agent),
-      testId: `${E2eTestId.EditAgentButton}-${agent.name}`,
+      icon: <Clock className="h-4 w-4" />,
+      label: "Schedule",
+      disabled: isBuiltIn,
+      disabledTooltip: "Built-in agents cannot be scheduled",
+      permissions: { scheduledTask: ["read"] },
+      href: `/scheduled-tasks?agentId=${agent.id}`,
     },
+    editOrViewAction,
     {
       icon: <Trash2 className="h-4 w-4" />,
       label: "Delete",

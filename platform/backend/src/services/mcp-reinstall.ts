@@ -1,7 +1,7 @@
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import { McpServerModel, ToolModel } from "@/models";
-import type { InternalMcpCatalog, McpServer } from "@/types";
+import type { InternalMcpCatalog, LocalConfig, McpServer } from "@/types";
 
 /**
  * Checks if a catalog edit requires new user input for reinstallation.
@@ -205,15 +205,16 @@ export async function autoReinstallServer(
 // ===== Internal helpers =====
 
 type PromptedEnvVarInfo = { required: boolean; type: string };
-type LocalExecutionConfigInfo = {
-  command: string;
-  arguments: string[];
-  dockerImage: string;
-  transportType: string;
-  httpPort: number | null;
-  httpPath: string;
-  serviceAccount: string;
-};
+type ComparableLocalConfig = Pick<
+  LocalConfig,
+  | "command"
+  | "arguments"
+  | "dockerImage"
+  | "transportType"
+  | "httpPort"
+  | "httpPath"
+  | "serviceAccount"
+>;
 
 /**
  * Extract prompted env vars from a catalog item as a map of key -> { required, type }
@@ -266,13 +267,13 @@ function localExecutionConfigChanged(
 
 function getLocalExecutionConfig(
   catalog: InternalMcpCatalog,
-): LocalExecutionConfigInfo {
+): ComparableLocalConfig {
   return {
     command: catalog.localConfig?.command ?? "",
     arguments: catalog.localConfig?.arguments ?? [],
     dockerImage: catalog.localConfig?.dockerImage ?? "",
     transportType: catalog.localConfig?.transportType ?? "",
-    httpPort: catalog.localConfig?.httpPort ?? null,
+    httpPort: catalog.localConfig?.httpPort,
     httpPath: catalog.localConfig?.httpPath ?? "",
     serviceAccount: catalog.localConfig?.serviceAccount ?? "",
   };

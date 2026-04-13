@@ -1,5 +1,74 @@
 # Changelog
 
+## [1.2.12](https://github.com/archestra-ai/archestra/compare/platform-v1.2.11...platform-v1.2.12) (2026-04-13)
+
+
+### Features
+
+* add platform HPA defaults and scaling guidance ([#3744](https://github.com/archestra-ai/archestra/issues/3744)) ([475f408](https://github.com/archestra-ai/archestra/commit/475f4086e6bdb2da0ef48a82570476535f5c2eb5))
+* scheduled agent tasks ([#3700](https://github.com/archestra-ai/archestra/issues/3700)) ([73807c3](https://github.com/archestra-ai/archestra/commit/73807c3a1762d9b3546e3d82a42de216fa9e3751))
+
+
+### Bug Fixes
+
+* hide other users' personal agents in scheduled task agent selector ([#3737](https://github.com/archestra-ai/archestra/issues/3737)) ([c58c9b9](https://github.com/archestra-ai/archestra/commit/c58c9b90b29a8f6123acbe950ab60c64602c7776))
+* prehydrate OIDC discovery during IdP registration ([#3746](https://github.com/archestra-ai/archestra/issues/3746)) ([4f9428f](https://github.com/archestra-ai/archestra/commit/4f9428fa8afb6a520fadf5041d35dfe0044c7c01))
+* support Claude Code MCP gateway OAuth and preserve user context ([#3732](https://github.com/archestra-ai/archestra/issues/3732)) ([43655e8](https://github.com/archestra-ai/archestra/commit/43655e85bf1637cb72edf2ffdb02dfc8128c9c0e))
+
+
+### Miscellaneous Chores
+
+* **ci:** consolidate e2e coverage and test refactors ([#3687](https://github.com/archestra-ai/archestra/issues/3687)) ([005835d](https://github.com/archestra-ai/archestra/commit/005835d2932d4cfffc74c063584594343747f0cc))
+* remove unnecessary routes from worker ([#3745](https://github.com/archestra-ai/archestra/issues/3745)) ([1b6a462](https://github.com/archestra-ai/archestra/commit/1b6a462dee28ec94101c053a1839b442d837ac3c))
+* run llmproxy/mcp-gateway workers in a worker for a2a ([#3740](https://github.com/archestra-ai/archestra/issues/3740)) ([95ccdbe](https://github.com/archestra-ai/archestra/commit/95ccdbef0496e9ba02ab266cd177994ad52f866f))
+* scheduled agents polish ([#3750](https://github.com/archestra-ai/archestra/issues/3750)) ([1ad11a7](https://github.com/archestra-ai/archestra/commit/1ad11a7f9d5893478610bf3d8093f99892f64885))
+
+## [1.2.11](https://github.com/archestra-ai/archestra/compare/platform-v1.2.10...platform-v1.2.11) (2026-04-12)
+
+
+### Features
+
+* support explicit OAuth endpoints without discovery ([#3727](https://github.com/archestra-ai/archestra/issues/3727)) ([c2fd828](https://github.com/archestra-ai/archestra/commit/c2fd82852cb07a0725ba91480506db505cd37fd2))
+
+
+### Miscellaneous Chores
+
+* Fix chat OAuth re-authentication flow ([#3729](https://github.com/archestra-ai/archestra/issues/3729)) ([823d756](https://github.com/archestra-ai/archestra/commit/823d7569b23e94c036f9b9772fce01928be33b81))
+
+## [1.2.10](https://github.com/archestra-ai/archestra/compare/platform-v1.2.9...platform-v1.2.10) (2026-04-11)
+
+
+### Features
+
+* make posthog analytics configurable ([#3707](https://github.com/archestra-ai/archestra/issues/3707)) ([7ae9101](https://github.com/archestra-ai/archestra/commit/7ae9101aad7ce1c1cc5843f1c2d0e67fa7d5132f))
+
+
+### Bug Fixes
+
+* `/llm/costs` table scrolling ([#3722](https://github.com/archestra-ai/archestra/issues/3722)) ([6a42ba8](https://github.com/archestra-ai/archestra/commit/6a42ba8de8ab971295e96c499d887c7d790a691d))
+* apply MCP OAuth lifetime for gateway slugs ([#3711](https://github.com/archestra-ai/archestra/issues/3711)) ([362aaec](https://github.com/archestra-ai/archestra/commit/362aaec5126ce828727961ed46207e998c5f6627))
+* Bedrock tool name encoding ([#3706](https://github.com/archestra-ai/archestra/issues/3706)) ([0e2c2d1](https://github.com/archestra-ai/archestra/commit/0e2c2d1521c3e0a86fa573e95f6c8695867dc6dd))
+* costs timeframes and surface limit reset settings ([#3709](https://github.com/archestra-ai/archestra/issues/3709)) ([6e4154b](https://github.com/archestra-ai/archestra/commit/6e4154b292bb4fc8c0abce36d7f6de7b425a5859))
+* jira oauth discovery overrides ([#3721](https://github.com/archestra-ai/archestra/issues/3721)) ([2c4cf8f](https://github.com/archestra-ai/archestra/commit/2c4cf8f39248272cc2b97b3752870c07914a6c2a))
+* OIDC discovery trusted origins for IdP registration ([#3714](https://github.com/archestra-ai/archestra/issues/3714)) ([adb5f5e](https://github.com/archestra-ai/archestra/commit/adb5f5edb39868ede3091ec61324b2872abb1385))
+* preserve shared chat agents on fork ([#3715](https://github.com/archestra-ai/archestra/issues/3715)) ([252edfc](https://github.com/archestra-ai/archestra/commit/252edfc0178e60f975ba4597a0e7154a30312aaf))
+* reranker model dropdown labels ([#3704](https://github.com/archestra-ai/archestra/issues/3704)) ([ebd1c8a](https://github.com/archestra-ai/archestra/commit/ebd1c8a1268d0a55a897628e57a427ffd21b8458))
+* session logs loading state ([#3712](https://github.com/archestra-ai/archestra/issues/3712)) ([ffba126](https://github.com/archestra-ai/archestra/commit/ffba126525dc0824ebe686817f97895219944bad))
+
+
+### Miscellaneous Chores
+
+* **ci:** add ID-JAG MCP e2e test ([#3702](https://github.com/archestra-ai/archestra/issues/3702)) ([1a5078a](https://github.com/archestra-ai/archestra/commit/1a5078a7a65134be0ee0009b3710c79d256034ee))
+* **deps:** bump next from 16.1.7 to 16.2.3 in /platform/frontend ([#3708](https://github.com/archestra-ai/archestra/issues/3708)) ([d47967c](https://github.com/archestra-ai/archestra/commit/d47967cf4635804c79951668813200831cb0af1a))
+* use neutral token prefixes with legacy support ([#3719](https://github.com/archestra-ai/archestra/issues/3719)) ([db5929c](https://github.com/archestra-ai/archestra/commit/db5929cb83d4aaef565836f8a934201b6396fbff))
+
+## [1.2.9](https://github.com/archestra-ai/archestra/compare/platform-v1.2.8...platform-v1.2.9) (2026-04-10)
+
+
+### Bug Fixes
+
+* apply MCP OAuth lifetime for inspector resources ([#3701](https://github.com/archestra-ai/archestra/issues/3701)) ([e4a4592](https://github.com/archestra-ai/archestra/commit/e4a45927dcbeb220b58f758c4ebea28175b00a59))
+
 ## [1.2.8](https://github.com/archestra-ai/archestra/compare/platform-v1.2.7...platform-v1.2.8) (2026-04-10)
 
 

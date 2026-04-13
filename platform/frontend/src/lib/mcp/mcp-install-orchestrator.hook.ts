@@ -26,6 +26,7 @@ import {
   useMcpServers,
   useReauthenticateMcpServer,
 } from "@/lib/mcp/mcp-server.query";
+import { redirectBrowserToUrl } from "@/lib/utils/browser-redirect";
 
 type DialogKey =
   | "remote-install"
@@ -59,6 +60,41 @@ export function useMcpInstallOrchestrator() {
   const findCatalogItem = useCallback(
     (catalogId: string) => catalogItems?.find((item) => item.id === catalogId),
     [catalogItems],
+  );
+
+  const initiateOAuthRedirect = useCallback(
+    async (params: {
+      catalogItem: CatalogItem;
+      teamId?: string | null;
+      reauthServerId?: string | null;
+    }) => {
+      try {
+        const { authorizationUrl, state } =
+          await initiateOAuthMutation.mutateAsync({
+            catalogId: params.catalogItem.id,
+          });
+
+        setOAuthState(state);
+        setOAuthCatalogId(params.catalogItem.id);
+        setOAuthTeamId(params.teamId ?? null);
+
+        if (params.reauthServerId) {
+          setOAuthMcpServerId(params.reauthServerId);
+          setOAuthReturnUrl(window.location.href);
+          setReauthServerId(null);
+        } else {
+          const isFirstInstallation = !installedServers?.some(
+            (server) => server.catalogId === params.catalogItem.id,
+          );
+          setOAuthIsFirstInstallation(isFirstInstallation);
+        }
+
+        redirectBrowserToUrl(authorizationUrl);
+      } catch {
+        toast.error("Failed to initiate OAuth flow");
+      }
+    },
+    [initiateOAuthMutation, installedServers],
   );
 
   const handleInstallRemoteServer = useCallback(
@@ -150,11 +186,10 @@ export function useMcpInstallOrchestrator() {
           Object.keys(catalogItem.userConfig).length > 0;
 
         if (!hasUserConfig) {
-          // Pure OAuth — set reauth context and open OAuth confirmation
-          setOAuthMcpServerId(serverId);
-          setOAuthReturnUrl(window.location.href);
-          setSelectedCatalogItem(catalogItem);
-          openDialog("oauth");
+          void initiateOAuthRedirect({
+            catalogItem,
+            reauthServerId: serverId,
+          });
           return;
         }
 
@@ -173,7 +208,7 @@ export function useMcpInstallOrchestrator() {
         openDialog("remote-install");
       }
     },
-    [findCatalogItem, openDialog],
+    [findCatalogItem, initiateOAuthRedirect, openDialog],
   );
 
   // --- Confirm handlers ---
@@ -309,32 +344,11 @@ export function useMcpInstallOrchestrator() {
   const handleOAuthConfirm = async (result: OAuthInstallResult) => {
     if (!selectedCatalogItem) return;
 
-    try {
-      const { authorizationUrl, state } =
-        await initiateOAuthMutation.mutateAsync({
-          catalogId: selectedCatalogItem.id,
-        });
-
-      setOAuthState(state);
-      setOAuthCatalogId(selectedCatalogItem.id);
-      setOAuthTeamId(result.teamId ?? null);
-
-      // If re-authenticating via OAuth, store reauth context
-      if (reauthServerId) {
-        setOAuthMcpServerId(reauthServerId);
-        setOAuthReturnUrl(window.location.href);
-        setReauthServerId(null);
-      } else {
-        const isFirstInstallation = !installedServers?.some(
-          (s) => s.catalogId === selectedCatalogItem.id,
-        );
-        setOAuthIsFirstInstallation(isFirstInstallation);
-      }
-
-      window.location.href = authorizationUrl;
-    } catch {
-      toast.error("Failed to initiate OAuth flow");
-    }
+    await initiateOAuthRedirect({
+      catalogItem: selectedCatalogItem,
+      teamId: result.teamId,
+      reauthServerId,
+    });
   };
 
   const handleManageDialogClose = useCallback(() => {

@@ -1334,10 +1334,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Shared conversation not found");
       }
 
+      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
+      const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
+
+      if (!agent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
       const newConversation = await ConversationModel.create({
         userId: user.id,
         organizationId,
-        agentId,
+        agentId: agent.id,
         selectedModel: sharedConversation.selectedModel,
         selectedProvider: sharedConversation.selectedProvider ?? undefined,
       });

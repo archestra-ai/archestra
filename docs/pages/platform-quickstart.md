@@ -80,7 +80,7 @@ graph LR
     "archestra": {
       "url": "http://localhost:9000/v1/mcp/e1b0272c-3839-4575-a49d-aabb864d638d",
       "headers": {
-        "Authorization": "Bearer archestra_119220a7bfc485d66b678d3e9fb2db36"
+        "Authorization": "Bearer arch_119220a7bfc485d66b678d3e9fb2db36"
       }
     }
   }
@@ -90,7 +90,7 @@ graph LR
 I converted it to the command for claude:
 
 ```
-claude mcp add archestra "http://localhost:9000/v1/mcp/e1b0272c-3839-4575-a49d-aabb864d638d" --transport http --header "Authorization: Bearer archestra_119220a7bfc485d66b678d3e9fb2db36"
+claude mcp add archestra "http://localhost:9000/v1/mcp/e1b0272c-3839-4575-a49d-aabb864d638d" --transport http --header "Authorization: Bearer arch_119220a7bfc485d66b678d3e9fb2db36"
 ```
 
 Now ask Claude:

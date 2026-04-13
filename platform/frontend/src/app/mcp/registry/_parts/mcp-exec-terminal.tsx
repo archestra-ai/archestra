@@ -57,7 +57,6 @@ export function McpExecTerminal({ serverId, isActive }: McpExecTerminalProps) {
       ]);
 
       // Dynamically import the CSS
-      // @ts-expect-error -- CSS module import handled by Next.js bundler
       await import("@xterm/xterm/css/xterm.css");
 
       if (disposed || !terminalRef.current) return;

@@ -16,7 +16,7 @@ function TabLabel({
   iconSrc?: string;
   icon?: React.ComponentType<{ className?: string }>;
   label: string;
-  active: boolean;
+  active?: boolean;
 }) {
   return (
     <span className="flex items-center gap-1.5">
@@ -26,16 +26,18 @@ function TabLabel({
         <Icon className="h-4 w-4" />
       ) : null}
       {label}
-      <span
-        className={cn(
-          "text-[11px] px-1.5 py-0.5 rounded-full font-normal",
-          active
-            ? "bg-green-500/10 text-green-600 dark:text-green-400"
-            : "bg-muted text-muted-foreground",
-        )}
-      >
-        {active ? "Active" : "Configure"}
-      </span>
+      {active !== undefined && (
+        <span
+          className={cn(
+            "text-[11px] px-1.5 py-0.5 rounded-full font-normal",
+            active
+              ? "bg-green-500/10 text-green-600 dark:text-green-400"
+              : "bg-muted text-muted-foreground",
+          )}
+        >
+          {active ? "Active" : "Configure"}
+        </span>
+      )}
     </span>
   );
 }
@@ -45,7 +47,7 @@ export default function AgentTriggersLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { data: canUpdate } = useHasPermissions({
+  const { data: canReadTriggers } = useHasPermissions({
     agentTrigger: ["read"],
   });
   const {
@@ -89,14 +91,14 @@ export default function AgentTriggersLayout({
     return allTabs.sort((a, b) => (b.active ? 1 : 0) - (a.active ? 1 : 0));
   }, [msTeamsActive, slackActive, emailActive]);
 
-  if (canUpdate === false) {
+  if (canReadTriggers === false) {
     return null;
   }
 
   return (
     <PageLayout
       title="Triggers"
-      description="Manage how your agents connect to messaging channels"
+      description="Manage how agents are invoked through schedules and messaging channels"
       tabs={tabs}
     >
       {children}

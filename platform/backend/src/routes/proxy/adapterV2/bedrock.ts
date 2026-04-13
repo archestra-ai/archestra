@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { ConverseStreamOutput } from "@aws-sdk/client-bedrock-runtime";
 import { EventStreamCodec } from "@smithy/eventstream-codec";
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
@@ -40,6 +41,34 @@ type BedrockRequest = Bedrock.Types.ConverseRequest;
 type BedrockResponse = Bedrock.Types.ConverseResponse;
 type BedrockMessages = Bedrock.Types.Message[];
 type BedrockHeaders = Bedrock.Types.ConverseHeaders;
+type BedrockCommandContext = {
+  commandInput: {
+    modelId: string;
+    messages: BedrockMessages | undefined;
+    system:
+      | Array<{ text?: string; guardContent?: unknown; cachePoint?: unknown }>
+      | undefined;
+    inferenceConfig: BedrockRequest["inferenceConfig"];
+    toolConfig:
+      | {
+          tools:
+            | Array<{
+                toolSpec:
+                  | {
+                      name?: string;
+                      description?: string;
+                      inputSchema?: { json: Record<string, unknown> };
+                    }
+                  | undefined;
+              }>
+            | undefined;
+          toolChoice: Bedrock.Types.ToolChoice | undefined;
+        }
+      | undefined;
+  };
+  toolNameMapping: ToolNameMapping;
+};
+type BedrockCommandInput = BedrockCommandContext["commandInput"];
 
 // Stream event types from the SDK
 type BedrockStreamEvent = ConverseStreamOutput;
@@ -55,6 +84,13 @@ const eventStreamCodec = new EventStreamCodec(toUtf8, fromUtf8);
 // Padding alphabet used by Bedrock (lowercase + uppercase + digits)
 const PADDING_ALPHABET =
   "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+const BEDROCK_MAX_TOOL_NAME_LENGTH = 64;
+const TOOL_NAME_HASH_LENGTH = 8;
+const TOOL_NAME_HASH_SEPARATOR = "_";
+const bedrockCommandContextCache = new WeakMap<
+  BedrockRequest,
+  BedrockCommandContext
+>();
 
 /**
  * Generate padding string to match Bedrock's format.
@@ -104,39 +140,177 @@ function isNovaModel(modelId: string): boolean {
   return modelId.toLowerCase().includes("nova");
 }
 
+type ToolNameMapping = {
+  toProvider: Map<string, string>;
+  toOriginal: Map<string, string>;
+};
+
 /**
- * Nova models faeil with "Model produced invalid sequence as part of ToolUse" when
- * tool names contain hyphens. We replace hyphens with underscores before sending
- * to Bedrock and use a name mapping to restore original names in responses.
+ * Nova models fail with "Model produced invalid sequence as part of ToolUse" when
+ * tool names contain hyphens. Bedrock also rejects names longer than 64 chars.
+ * Encode only the provider-facing names and keep mappings to restore originals.
  */
-function encodeToolName(name: string): string {
-  return name.replaceAll("-", "_");
+function encodeToolName(name: string, options: { isNova: boolean }): string {
+  const normalizedName = options.isNova ? name.replaceAll("-", "_") : name;
+  return truncateToolName(normalizedName, name);
 }
 
 /**
  * Build a mapping from encoded tool names back to original names.
  */
-function buildToolNameMapping(request: BedrockRequest): Map<string, string> {
-  const mapping = new Map<string, string>();
+function buildToolNameMapping(request: BedrockRequest): ToolNameMapping {
+  const isNova = isNovaModel(request.modelId);
+  const toProvider = new Map<string, string>();
+  const toOriginal = new Map<string, string>();
   const tools = request.toolConfig?.tools ?? [];
+
   for (const tool of tools) {
     const originalName = tool.toolSpec?.name;
     if (originalName) {
-      const encodedName = encodeToolName(originalName);
-      mapping.set(encodedName, originalName);
+      const encodedName = getUniqueProviderToolName({
+        originalName,
+        isNova,
+        usedNames: toOriginal,
+      });
+      toProvider.set(originalName, encodedName);
+      toOriginal.set(encodedName, originalName);
     }
   }
-  return mapping;
+
+  return { toProvider, toOriginal };
 }
 
 /**
  * Decode tool name using the mapping (encoded → original).
  */
-function decodeToolName(
-  encodedName: string,
-  mapping: Map<string, string>,
+function decodeToolName(encodedName: string, mapping: ToolNameMapping): string {
+  return mapping.toOriginal.get(encodedName) ?? encodedName;
+}
+
+function getProviderToolName(
+  originalName: string,
+  mapping: ToolNameMapping,
+  options: { isNova: boolean },
 ): string {
-  return mapping.get(encodedName) ?? encodedName;
+  return (
+    mapping.toProvider.get(originalName) ??
+    encodeToolName(originalName, options)
+  );
+}
+
+function createEmptyToolNameMapping(): ToolNameMapping {
+  return {
+    toProvider: new Map(),
+    toOriginal: new Map(),
+  };
+}
+
+function getUniqueProviderToolName(params: {
+  originalName: string;
+  isNova: boolean;
+  usedNames: Map<string, string>;
+}): string {
+  const encodedName = encodeToolName(params.originalName, {
+    isNova: params.isNova,
+  });
+  const existingOriginalName = params.usedNames.get(encodedName);
+
+  if (!existingOriginalName || existingOriginalName === params.originalName) {
+    return encodedName;
+  }
+
+  return appendToolNameHash(encodedName, params.originalName);
+}
+
+function truncateToolName(name: string, hashInput: string): string {
+  if (name.length <= BEDROCK_MAX_TOOL_NAME_LENGTH) {
+    return name;
+  }
+
+  return appendToolNameHash(name, hashInput);
+}
+
+function appendToolNameHash(name: string, hashInput: string): string {
+  const hash = createHash("sha256")
+    .update(hashInput)
+    .digest("hex")
+    .slice(0, TOOL_NAME_HASH_LENGTH);
+  const prefixLength =
+    BEDROCK_MAX_TOOL_NAME_LENGTH -
+    TOOL_NAME_HASH_SEPARATOR.length -
+    TOOL_NAME_HASH_LENGTH;
+
+  return `${name.slice(0, prefixLength)}${TOOL_NAME_HASH_SEPARATOR}${hash}`;
+}
+
+function encodeProviderMessageToolNames(params: {
+  messages: BedrockMessages | undefined;
+  mapping: ToolNameMapping;
+  isNova: boolean;
+}): BedrockMessages | undefined {
+  if (!params.messages) {
+    return params.messages;
+  }
+
+  return params.messages.map((message) => {
+    if (!Array.isArray(message.content)) {
+      return message;
+    }
+
+    const content = message.content.map((contentBlock) => {
+      if (!isToolUseBlock(contentBlock)) {
+        return contentBlock;
+      }
+
+      const name = contentBlock.toolUse.name;
+      if (!name) {
+        return contentBlock;
+      }
+
+      return {
+        ...contentBlock,
+        toolUse: {
+          ...contentBlock.toolUse,
+          name: getProviderToolName(name, params.mapping, {
+            isNova: params.isNova,
+          }),
+        },
+      };
+    });
+
+    return {
+      ...message,
+      content,
+    };
+  }) as BedrockMessages;
+}
+
+function encodeProviderToolChoiceName(params: {
+  toolChoice: Bedrock.Types.ToolChoice | undefined;
+  mapping: ToolNameMapping;
+  isNova: boolean;
+}): Bedrock.Types.ToolChoice | undefined {
+  if (!params.toolChoice || !("tool" in params.toolChoice)) {
+    return params.toolChoice;
+  }
+
+  const toolChoice = params.toolChoice.tool as
+    | { name?: unknown }
+    | null
+    | undefined;
+  if (typeof toolChoice?.name !== "string") {
+    return params.toolChoice;
+  }
+
+  return {
+    ...params.toolChoice,
+    tool: {
+      ...toolChoice,
+      name: getProviderToolName(toolChoice.name, params.mapping, {
+        isNova: params.isNova,
+      }),
+    },
+  };
 }
 
 /**
@@ -200,14 +374,11 @@ class BedrockRequestAdapter
   private request: BedrockRequest;
   private modifiedModel: string | null = null;
   private toolResultUpdates: Record<string, string> = {};
-  private toolNameMapping: Map<string, string>;
+  private toolNameMapping: ToolNameMapping;
 
   constructor(request: BedrockRequest) {
     this.request = request;
-    // Only build mapping for Nova models (which require tool name encoding)
-    this.toolNameMapping = isNovaModel(request.modelId)
-      ? buildToolNameMapping(request)
-      : new Map();
+    this.toolNameMapping = buildToolNameMapping(request);
   }
 
   // ---------------------------------------------------------------------------
@@ -637,7 +808,7 @@ class BedrockStreamAdapter
   readonly provider = "bedrock" as const;
   readonly state: StreamAccumulatorState;
   private currentToolCallIndex = -1;
-  private toolNameMapping: Map<string, string> = new Map();
+  private toolNameMapping: ToolNameMapping = createEmptyToolNameMapping();
 
   // Bedrock-specific extended state
   private bedrockState: {
@@ -671,12 +842,9 @@ class BedrockStreamAdapter
 
   /**
    * Set the tool name mapping from the request for decoding tool names in responses.
-   * Only builds mapping for Nova models (which require tool name encoding).
    */
-  setToolNameMapping(request: BedrockRequest): void {
-    if (isNovaModel(request.modelId)) {
-      this.toolNameMapping = buildToolNameMapping(request);
-    }
+  setToolNameMapping(toolNameMapping: ToolNameMapping): void {
+    this.toolNameMapping = toolNameMapping;
   }
 
   processChunk(chunk: BedrockStreamEventWithRaw): ChunkProcessingResult {
@@ -1205,45 +1373,71 @@ export async function convertToolResultsToToon(
 // HELPER: Build Command Input
 // =============================================================================
 
+function buildBedrockCommandContext(
+  request: BedrockRequest,
+): BedrockCommandContext {
+  const cachedContext = bedrockCommandContextCache.get(request);
+  if (cachedContext) {
+    return cachedContext;
+  }
+
+  const shouldEncodeHyphens = isNovaModel(request.modelId);
+  const toolNameMapping = buildToolNameMapping(request);
+
+  const context = {
+    commandInput: {
+      modelId: request.modelId,
+      messages: encodeProviderMessageToolNames({
+        messages: request.messages,
+        mapping: toolNameMapping,
+        isNova: shouldEncodeHyphens,
+      }),
+      system: request.system?.map((s) => {
+        if ("text" in s) return { text: s.text };
+        return s;
+      }),
+      inferenceConfig: request.inferenceConfig,
+      toolConfig: request.toolConfig
+        ? {
+            tools: request.toolConfig.tools?.map((t) => ({
+              toolSpec: t.toolSpec
+                ? {
+                    name: t.toolSpec.name
+                      ? getProviderToolName(t.toolSpec.name, toolNameMapping, {
+                          isNova: shouldEncodeHyphens,
+                        })
+                      : t.toolSpec.name,
+                    description: t.toolSpec.description,
+                    inputSchema: t.toolSpec.inputSchema
+                      ? {
+                          json: t.toolSpec.inputSchema.json,
+                        }
+                      : undefined,
+                  }
+                : undefined,
+            })),
+            toolChoice: encodeProviderToolChoiceName({
+              toolChoice: request.toolConfig.toolChoice,
+              mapping: toolNameMapping,
+              isNova: shouldEncodeHyphens,
+            }),
+          }
+        : undefined,
+    },
+    toolNameMapping,
+  };
+
+  bedrockCommandContextCache.set(request, context);
+  return context;
+}
+
 /**
  * Convert BedrockRequest to AWS SDK command input format.
  * Used by both ConverseCommand and ConverseStreamCommand.
- * Only maps tool names for Nova models (which don't support hyphens).
+ * Maps tool names to provider-safe names and decodes them after Bedrock returns.
  */
-export function getCommandInput(request: BedrockRequest) {
-  const shouldEncode = isNovaModel(request.modelId);
-
-  return {
-    modelId: request.modelId,
-    messages: request.messages,
-    system: request.system?.map((s) => {
-      if ("text" in s) return { text: s.text };
-      return s;
-    }),
-    inferenceConfig: request.inferenceConfig,
-    toolConfig: request.toolConfig
-      ? {
-          tools: request.toolConfig.tools?.map((t) => ({
-            toolSpec: t.toolSpec
-              ? {
-                  // Only encode hyphens for Nova models
-                  name:
-                    t.toolSpec.name && shouldEncode
-                      ? encodeToolName(t.toolSpec.name)
-                      : t.toolSpec.name,
-                  description: t.toolSpec.description,
-                  inputSchema: t.toolSpec.inputSchema
-                    ? {
-                        json: t.toolSpec.inputSchema.json,
-                      }
-                    : undefined,
-                }
-              : undefined,
-          })),
-          toolChoice: request.toolConfig.toolChoice,
-        }
-      : undefined,
-  };
+export function getCommandInput(request: BedrockRequest): BedrockCommandInput {
+  return buildBedrockCommandContext(request).commandInput;
 }
 
 // =============================================================================
@@ -1277,7 +1471,8 @@ export const bedrockAdapterFactory: LLMProvider<
   ): LLMStreamAdapter<BedrockStreamEvent, BedrockResponse> {
     const adapter = new BedrockStreamAdapter();
     if (request) {
-      adapter.setToolNameMapping(request);
+      const { toolNameMapping } = buildBedrockCommandContext(request);
+      adapter.setToolNameMapping(toolNameMapping);
     }
     return adapter;
   },
@@ -1334,11 +1529,8 @@ export const bedrockAdapterFactory: LLMProvider<
     request: BedrockRequest,
   ): Promise<BedrockResponse> {
     const bedrockClient = client as BedrockClient;
-    const commandInput = getCommandInput(request);
-    // Only build mapping for Nova models (which require tool name encoding)
-    const toolNameMapping = isNovaModel(request.modelId)
-      ? buildToolNameMapping(request)
-      : new Map<string, string>();
+    const { commandInput, toolNameMapping } =
+      buildBedrockCommandContext(request);
 
     // Use fetch-based client.converse()
     const response = await bedrockClient.converse(
@@ -1403,7 +1595,7 @@ export const bedrockAdapterFactory: LLMProvider<
     request: BedrockRequest,
   ): Promise<AsyncIterable<BedrockStreamEventWithRaw>> {
     const bedrockClient = client as BedrockClient;
-    const commandInput = getCommandInput(request);
+    const { commandInput } = buildBedrockCommandContext(request);
 
     // Use fetch-based client.converseStream() - returns events with __rawBytes already set
     return bedrockClient.converseStream(request.modelId, commandInput);

@@ -11,6 +11,46 @@ import { LoadingSpinner } from "@/components/loading";
 import { useInvitationCheck } from "@/lib/auth/invitation.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 
+function setInputValue(input: HTMLInputElement, value: string) {
+  // Better Auth UI owns these inputs internally, so direct assignment is not
+  // enough to notify its React handlers. Use the native setter to keep the
+  // third-party controlled field state in sync with the DOM value.
+  const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+    window.HTMLInputElement.prototype,
+    "value",
+  )?.set;
+
+  if (nativeInputValueSetter) {
+    nativeInputValueSetter.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    return;
+  }
+
+  input.value = value;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function prefillInvitationFormField(params: {
+  selector: string;
+  value: string | null;
+}) {
+  if (!params.value) {
+    return true;
+  }
+
+  const input = document.querySelector<HTMLInputElement>(params.selector);
+  if (!input) {
+    return false;
+  }
+
+  if (!input.value) {
+    setInputValue(input, params.value);
+  }
+
+  return input.value === params.value;
+}
+
 function SignUpWithInvitationContent() {
   const appName = useAppName();
   const router = useRouter();
@@ -36,47 +76,58 @@ function SignUpWithInvitationContent() {
 
   // Prefill form fields (but keep them editable for form validation)
   useEffect(() => {
-    if (!email && !name) return;
+    if (!email && !name) {
+      return;
+    }
 
-    const setInputValue = (input: HTMLInputElement, value: string) => {
-      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-        window.HTMLInputElement.prototype,
-        "value",
-      )?.set;
+    const prefillFields = () =>
+      prefillInvitationFormField({
+        selector: 'input[name="email"], input[type="email"]',
+        value: email,
+      }) &&
+      prefillInvitationFormField({
+        selector: 'input[name="name"]',
+        value: name,
+      });
 
-      if (nativeInputValueSetter) {
-        nativeInputValueSetter.call(input, value);
-        input.dispatchEvent(new Event("input", { bubbles: true }));
-      } else {
-        input.value = value;
-        input.dispatchEvent(new Event("input", { bubbles: true }));
-        input.dispatchEvent(new Event("change", { bubbles: true }));
+    if (prefillFields()) {
+      return;
+    }
+
+    const cleanupCallbacks: Array<() => void> = [];
+
+    const stopWatching = () => {
+      for (const cleanup of cleanupCallbacks) {
+        cleanup();
       }
     };
 
-    const prefillFields = () => {
-      if (email) {
-        const emailInput = document.querySelector<HTMLInputElement>(
-          'input[name="email"], input[type="email"]',
-        );
-        if (emailInput && !emailInput.value) setInputValue(emailInput, email);
-      }
-      if (name) {
-        const nameInput =
-          document.querySelector<HTMLInputElement>('input[name="name"]');
-        if (nameInput && !nameInput.value) setInputValue(nameInput, name);
+    const ensureFieldsPrefilled = () => {
+      if (prefillFields()) {
+        stopWatching();
       }
     };
 
-    // Try multiple times as form might not be rendered immediately
-    const timer1 = setTimeout(prefillFields, 100);
-    const timer2 = setTimeout(prefillFields, 300);
-    const timer3 = setTimeout(prefillFields, 500);
+    const observer = new MutationObserver(() => {
+      ensureFieldsPrefilled();
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["value"],
+    });
+    cleanupCallbacks.push(() => observer.disconnect());
+
+    const interval = window.setInterval(ensureFieldsPrefilled, 100);
+    cleanupCallbacks.push(() => window.clearInterval(interval));
+
+    const timeout = window.setTimeout(stopWatching, 5_000);
+    cleanupCallbacks.push(() => window.clearTimeout(timeout));
 
     return () => {
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-      clearTimeout(timer3);
+      stopWatching();
     };
   }, [email, name]);
 

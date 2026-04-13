@@ -20166,6 +20166,13 @@ export type GetPublicConfigResponses = {
     200: {
         disableBasicAuth: boolean;
         disableInvitations: boolean;
+        analytics: {
+            enabled: boolean;
+            posthog: {
+                key: string;
+                host: string;
+            };
+        };
     };
 };
 
@@ -21516,7 +21523,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
             response: OpenAiChatCompletionResponse;
@@ -21559,7 +21566,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: {
                 model: string;
                 input: string | Array<string>;
@@ -21622,7 +21629,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: GeminiGenerateContentRequest;
             processedRequest?: GeminiGenerateContentRequest | null;
             response: GeminiGenerateContentResponse;
@@ -21665,7 +21672,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: AnthropicMessagesRequest;
             processedRequest?: AnthropicMessagesRequest | null;
             response: AnthropicMessagesResponse;
@@ -21708,7 +21715,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: {
                 modelId: string;
                 messages?: Array<{
@@ -22125,7 +22132,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
             response: CerebrasChatCompletionResponse;
@@ -22168,7 +22175,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
             response: MistralChatCompletionResponse;
@@ -22211,7 +22218,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
             response: PerplexityChatCompletionResponse;
@@ -22254,7 +22261,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
             response: GroqChatCompletionResponse;
@@ -22297,7 +22304,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
             response: XaiChatCompletionResponse;
@@ -22340,7 +22347,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
             response: OpenrouterChatCompletionResponse;
@@ -22383,7 +22390,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: VllmChatCompletionRequest;
             processedRequest?: VllmChatCompletionRequest | null;
             response: VllmChatCompletionResponse;
@@ -22424,7 +22431,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: OllamaChatCompletionRequest;
             processedRequest?: OllamaChatCompletionRequest | null;
             response: OllamaChatCompletionResponse;
@@ -22465,7 +22472,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: CohereChatRequest;
             processedRequest?: CohereChatRequest | null;
             response: CohereChatResponse;
@@ -22508,7 +22515,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: ZhipuaiChatCompletionRequest;
             processedRequest?: ZhipuaiChatCompletionRequest | null;
             response: ZhipuaiChatCompletionResponse;
@@ -22551,7 +22558,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: DeepSeekChatCompletionRequest;
             processedRequest?: DeepSeekChatCompletionRequest | null;
             response: DeepSeekChatCompletionResponse;
@@ -22594,7 +22601,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: MinimaxChatCompletionRequest;
             processedRequest?: MinimaxChatCompletionRequest | null;
             response: MinimaxChatCompletionResponse;
@@ -22637,7 +22644,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
             response: {
@@ -22747,7 +22754,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: {
                 model: string;
                 input?: string | Array<{
@@ -22915,7 +22922,7 @@ export type GetInteractionSessionsData = {
         /**
          * Filter by interaction source
          */
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         /**
          * Filter by session ID
          */
@@ -23005,7 +23012,7 @@ export type GetInteractionSessionsResponses = {
         data: Array<{
             sessionId: string | null;
             sessionSource: string | null;
-            source: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             interactionId: string | null;
             requestCount: number;
             totalInputTokens: number;
@@ -23281,7 +23288,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
         response: OpenAiChatCompletionResponse;
@@ -23324,7 +23331,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: {
             model: string;
             input: string | Array<string>;
@@ -23387,7 +23394,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: GeminiGenerateContentRequest;
         processedRequest?: GeminiGenerateContentRequest | null;
         response: GeminiGenerateContentResponse;
@@ -23430,7 +23437,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: AnthropicMessagesRequest;
         processedRequest?: AnthropicMessagesRequest | null;
         response: AnthropicMessagesResponse;
@@ -23473,7 +23480,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: {
             modelId: string;
             messages?: Array<{
@@ -23890,7 +23897,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
         response: CerebrasChatCompletionResponse;
@@ -23933,7 +23940,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
         response: MistralChatCompletionResponse;
@@ -23976,7 +23983,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
         response: PerplexityChatCompletionResponse;
@@ -24019,7 +24026,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
         response: GroqChatCompletionResponse;
@@ -24062,7 +24069,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
         response: XaiChatCompletionResponse;
@@ -24105,7 +24112,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
         response: OpenrouterChatCompletionResponse;
@@ -24148,7 +24155,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: VllmChatCompletionRequest;
         processedRequest?: VllmChatCompletionRequest | null;
         response: VllmChatCompletionResponse;
@@ -24189,7 +24196,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: OllamaChatCompletionRequest;
         processedRequest?: OllamaChatCompletionRequest | null;
         response: OllamaChatCompletionResponse;
@@ -24230,7 +24237,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: CohereChatRequest;
         processedRequest?: CohereChatRequest | null;
         response: CohereChatResponse;
@@ -24273,7 +24280,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: ZhipuaiChatCompletionRequest;
         processedRequest?: ZhipuaiChatCompletionRequest | null;
         response: ZhipuaiChatCompletionResponse;
@@ -24316,7 +24323,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: DeepSeekChatCompletionRequest;
         processedRequest?: DeepSeekChatCompletionRequest | null;
         response: DeepSeekChatCompletionResponse;
@@ -24359,7 +24366,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: MinimaxChatCompletionRequest;
         processedRequest?: MinimaxChatCompletionRequest | null;
         response: MinimaxChatCompletionResponse;
@@ -24402,7 +24409,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
         response: {
@@ -24512,7 +24519,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: {
             model: string;
             input?: string | Array<{
@@ -24801,6 +24808,7 @@ export type GetInternalMcpCatalogResponses = {
             name: string;
             server_url: string;
             auth_server_url?: string;
+            authorization_endpoint?: string;
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
@@ -24932,6 +24940,7 @@ export type CreateInternalMcpCatalogItemData = {
             name: string;
             server_url: string;
             auth_server_url?: string;
+            authorization_endpoint?: string;
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
@@ -25122,6 +25131,7 @@ export type CreateInternalMcpCatalogItemResponses = {
             name: string;
             server_url: string;
             auth_server_url?: string;
+            authorization_endpoint?: string;
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
@@ -25403,6 +25413,7 @@ export type GetInternalMcpCatalogItemResponses = {
             name: string;
             server_url: string;
             auth_server_url?: string;
+            authorization_endpoint?: string;
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
@@ -25533,6 +25544,7 @@ export type UpdateInternalMcpCatalogItemData = {
             name: string;
             server_url: string;
             auth_server_url?: string;
+            authorization_endpoint?: string;
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
@@ -25725,6 +25737,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
             name: string;
             server_url: string;
             auth_server_url?: string;
+            authorization_endpoint?: string;
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
@@ -30190,6 +30203,7 @@ export type GetMcpServerInstallationRequestsResponses = {
                 name: string;
                 server_url: string;
                 auth_server_url?: string;
+                authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
@@ -30286,6 +30300,7 @@ export type CreateMcpServerInstallationRequestData = {
                 name: string;
                 server_url: string;
                 auth_server_url?: string;
+                authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
@@ -30436,6 +30451,7 @@ export type CreateMcpServerInstallationRequestResponses = {
                 name: string;
                 server_url: string;
                 auth_server_url?: string;
+                authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
@@ -30685,6 +30701,7 @@ export type GetMcpServerInstallationRequestResponses = {
                 name: string;
                 server_url: string;
                 auth_server_url?: string;
+                authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
@@ -30781,6 +30798,7 @@ export type UpdateMcpServerInstallationRequestData = {
                 name: string;
                 server_url: string;
                 auth_server_url?: string;
+                authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
@@ -30943,6 +30961,7 @@ export type UpdateMcpServerInstallationRequestResponses = {
                 name: string;
                 server_url: string;
                 auth_server_url?: string;
+                authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
@@ -31115,6 +31134,7 @@ export type ApproveMcpServerInstallationRequestResponses = {
                 name: string;
                 server_url: string;
                 auth_server_url?: string;
+                authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
@@ -31287,6 +31307,7 @@ export type DeclineMcpServerInstallationRequestResponses = {
                 name: string;
                 server_url: string;
                 auth_server_url?: string;
+                authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
@@ -31459,6 +31480,7 @@ export type AddMcpServerInstallationRequestNoteResponses = {
                 name: string;
                 server_url: string;
                 auth_server_url?: string;
+                authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
@@ -36486,6 +36508,1096 @@ export type PerplexityChatCompletionsWithAgentResponses = {
 
 export type PerplexityChatCompletionsWithAgentResponse = PerplexityChatCompletionsWithAgentResponses[keyof PerplexityChatCompletionsWithAgentResponses];
 
+export type GetScheduleTriggersData = {
+    body?: never;
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+        enabled?: boolean;
+        name?: string;
+        actorUserIds?: string;
+        agentIds?: string;
+        showAll?: boolean;
+    };
+    url: '/api/schedule-triggers';
+};
+
+export type GetScheduleTriggersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetScheduleTriggersError = GetScheduleTriggersErrors[keyof GetScheduleTriggersErrors];
+
+export type GetScheduleTriggersResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            organizationId: string;
+            name: string;
+            agentId: string;
+            messageTemplate: string;
+            cronExpression: string;
+            timezone: string;
+            enabled: boolean;
+            actorUserId: string;
+            lastExecutedAt: string | null;
+            createdAt: string;
+            actor?: {
+                id: string;
+                name: string | null;
+                email: string | null;
+            } | null;
+            agent?: {
+                id: string;
+                name: string | null;
+                agentType: string | null;
+            } | null;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetScheduleTriggersResponse = GetScheduleTriggersResponses[keyof GetScheduleTriggersResponses];
+
+export type CreateScheduleTriggerData = {
+    body: {
+        name: string;
+        agentId: string;
+        enabled?: boolean;
+        cronExpression: string;
+        timezone: string;
+        messageTemplate: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/schedule-triggers';
+};
+
+export type CreateScheduleTriggerErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CreateScheduleTriggerError = CreateScheduleTriggerErrors[keyof CreateScheduleTriggerErrors];
+
+export type CreateScheduleTriggerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        agentId: string;
+        messageTemplate: string;
+        cronExpression: string;
+        timezone: string;
+        enabled: boolean;
+        actorUserId: string;
+        lastExecutedAt: string | null;
+        createdAt: string;
+        actor?: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
+        agent?: {
+            id: string;
+            name: string | null;
+            agentType: string | null;
+        } | null;
+    };
+};
+
+export type CreateScheduleTriggerResponse = CreateScheduleTriggerResponses[keyof CreateScheduleTriggerResponses];
+
+export type DeleteScheduleTriggerData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/schedule-triggers/{id}';
+};
+
+export type DeleteScheduleTriggerErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteScheduleTriggerError = DeleteScheduleTriggerErrors[keyof DeleteScheduleTriggerErrors];
+
+export type DeleteScheduleTriggerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteScheduleTriggerResponse = DeleteScheduleTriggerResponses[keyof DeleteScheduleTriggerResponses];
+
+export type GetScheduleTriggerData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/schedule-triggers/{id}';
+};
+
+export type GetScheduleTriggerErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetScheduleTriggerError = GetScheduleTriggerErrors[keyof GetScheduleTriggerErrors];
+
+export type GetScheduleTriggerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        agentId: string;
+        messageTemplate: string;
+        cronExpression: string;
+        timezone: string;
+        enabled: boolean;
+        actorUserId: string;
+        lastExecutedAt: string | null;
+        createdAt: string;
+        actor?: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
+        agent?: {
+            id: string;
+            name: string | null;
+            agentType: string | null;
+        } | null;
+    };
+};
+
+export type GetScheduleTriggerResponse = GetScheduleTriggerResponses[keyof GetScheduleTriggerResponses];
+
+export type UpdateScheduleTriggerData = {
+    body: {
+        name?: string;
+        agentId?: string;
+        enabled?: boolean;
+        cronExpression?: string;
+        timezone?: string;
+        messageTemplate?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/schedule-triggers/{id}';
+};
+
+export type UpdateScheduleTriggerErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateScheduleTriggerError = UpdateScheduleTriggerErrors[keyof UpdateScheduleTriggerErrors];
+
+export type UpdateScheduleTriggerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        agentId: string;
+        messageTemplate: string;
+        cronExpression: string;
+        timezone: string;
+        enabled: boolean;
+        actorUserId: string;
+        lastExecutedAt: string | null;
+        createdAt: string;
+        actor?: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
+        agent?: {
+            id: string;
+            name: string | null;
+            agentType: string | null;
+        } | null;
+    };
+};
+
+export type UpdateScheduleTriggerResponse = UpdateScheduleTriggerResponses[keyof UpdateScheduleTriggerResponses];
+
+export type EnableScheduleTriggerData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/schedule-triggers/{id}/enable';
+};
+
+export type EnableScheduleTriggerErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type EnableScheduleTriggerError = EnableScheduleTriggerErrors[keyof EnableScheduleTriggerErrors];
+
+export type EnableScheduleTriggerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        agentId: string;
+        messageTemplate: string;
+        cronExpression: string;
+        timezone: string;
+        enabled: boolean;
+        actorUserId: string;
+        lastExecutedAt: string | null;
+        createdAt: string;
+        actor?: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
+        agent?: {
+            id: string;
+            name: string | null;
+            agentType: string | null;
+        } | null;
+    };
+};
+
+export type EnableScheduleTriggerResponse = EnableScheduleTriggerResponses[keyof EnableScheduleTriggerResponses];
+
+export type DisableScheduleTriggerData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/schedule-triggers/{id}/disable';
+};
+
+export type DisableScheduleTriggerErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DisableScheduleTriggerError = DisableScheduleTriggerErrors[keyof DisableScheduleTriggerErrors];
+
+export type DisableScheduleTriggerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        agentId: string;
+        messageTemplate: string;
+        cronExpression: string;
+        timezone: string;
+        enabled: boolean;
+        actorUserId: string;
+        lastExecutedAt: string | null;
+        createdAt: string;
+        actor?: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
+        agent?: {
+            id: string;
+            name: string | null;
+            agentType: string | null;
+        } | null;
+    };
+};
+
+export type DisableScheduleTriggerResponse = DisableScheduleTriggerResponses[keyof DisableScheduleTriggerResponses];
+
+export type RunScheduleTriggerNowData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/schedule-triggers/{id}/run-now';
+};
+
+export type RunScheduleTriggerNowErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type RunScheduleTriggerNowError = RunScheduleTriggerNowErrors[keyof RunScheduleTriggerNowErrors];
+
+export type RunScheduleTriggerNowResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        triggerId: string;
+        runKind: 'due' | 'manual';
+        status: 'running' | 'success' | 'failed';
+        initiatedByUserId: string | null;
+        chatConversationId: string | null;
+        startedAt: string | null;
+        completedAt: string | null;
+        error: string | null;
+        createdAt: string;
+    };
+};
+
+export type RunScheduleTriggerNowResponse = RunScheduleTriggerNowResponses[keyof RunScheduleTriggerNowResponses];
+
+export type GetScheduleTriggerRunsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        limit?: number;
+        offset?: number;
+        status?: 'running' | 'success' | 'failed';
+    };
+    url: '/api/schedule-triggers/{id}/runs';
+};
+
+export type GetScheduleTriggerRunsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetScheduleTriggerRunsError = GetScheduleTriggerRunsErrors[keyof GetScheduleTriggerRunsErrors];
+
+export type GetScheduleTriggerRunsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            organizationId: string;
+            triggerId: string;
+            runKind: 'due' | 'manual';
+            status: 'running' | 'success' | 'failed';
+            initiatedByUserId: string | null;
+            chatConversationId: string | null;
+            startedAt: string | null;
+            completedAt: string | null;
+            error: string | null;
+            createdAt: string;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetScheduleTriggerRunsResponse = GetScheduleTriggerRunsResponses[keyof GetScheduleTriggerRunsResponses];
+
+export type GetScheduleTriggerRunData = {
+    body?: never;
+    path: {
+        id: string;
+        runId: string;
+    };
+    query?: never;
+    url: '/api/schedule-triggers/{id}/runs/{runId}';
+};
+
+export type GetScheduleTriggerRunErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetScheduleTriggerRunError = GetScheduleTriggerRunErrors[keyof GetScheduleTriggerRunErrors];
+
+export type GetScheduleTriggerRunResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        triggerId: string;
+        runKind: 'due' | 'manual';
+        status: 'running' | 'success' | 'failed';
+        initiatedByUserId: string | null;
+        chatConversationId: string | null;
+        startedAt: string | null;
+        completedAt: string | null;
+        error: string | null;
+        createdAt: string;
+    };
+};
+
+export type GetScheduleTriggerRunResponse = GetScheduleTriggerRunResponses[keyof GetScheduleTriggerRunResponses];
+
+export type CreateScheduleTriggerRunConversationData = {
+    body?: never;
+    path: {
+        id: string;
+        runId: string;
+    };
+    query?: never;
+    url: '/api/schedule-triggers/{id}/runs/{runId}/conversation';
+};
+
+export type CreateScheduleTriggerRunConversationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CreateScheduleTriggerRunConversationError = CreateScheduleTriggerRunConversationErrors[keyof CreateScheduleTriggerRunConversationErrors];
+
+export type CreateScheduleTriggerRunConversationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        userId: string;
+        organizationId: string;
+        agentId: string | null;
+        chatApiKeyId: string | null;
+        title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+        hasCustomToolSelection: boolean;
+        todoList: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        artifact: string | null;
+        pinnedAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+            systemPrompt: string | null;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            llmApiKeyId: string | null;
+        } | null;
+        share: {
+            id: string;
+            visibility: 'organization' | 'team' | 'user';
+        } | null;
+        messages: Array<unknown>;
+    };
+};
+
+export type CreateScheduleTriggerRunConversationResponse = CreateScheduleTriggerRunConversationResponses[keyof CreateScheduleTriggerRunConversationResponses];
+
 export type GetSecretsTypeData = {
     body?: never;
     path?: never;
@@ -40203,6 +41315,7 @@ export type GetIdentityProvidersResponses = {
          */
         oidcConfig?: {
             issuer: string;
+            skipDiscovery?: boolean;
             pkce: boolean;
             enableRpInitiatedLogout?: boolean;
             clientId: string;
@@ -40330,6 +41443,7 @@ export type CreateIdentityProviderData = {
          */
         oidcConfig?: {
             issuer: string;
+            skipDiscovery?: boolean;
             pkce: boolean;
             enableRpInitiatedLogout?: boolean;
             clientId: string;
@@ -40520,6 +41634,7 @@ export type CreateIdentityProviderResponses = {
          */
         oidcConfig?: {
             issuer: string;
+            skipDiscovery?: boolean;
             pkce: boolean;
             enableRpInitiatedLogout?: boolean;
             clientId: string;
@@ -40875,6 +41990,7 @@ export type GetIdentityProviderResponses = {
          */
         oidcConfig?: {
             issuer: string;
+            skipDiscovery?: boolean;
             pkce: boolean;
             enableRpInitiatedLogout?: boolean;
             clientId: string;
@@ -41002,6 +42118,7 @@ export type UpdateIdentityProviderData = {
          */
         oidcConfig?: {
             issuer: string;
+            skipDiscovery?: boolean;
             pkce: boolean;
             enableRpInitiatedLogout?: boolean;
             clientId: string;
@@ -41193,6 +42310,7 @@ export type UpdateIdentityProviderResponses = {
          */
         oidcConfig?: {
             issuer: string;
+            skipDiscovery?: boolean;
             pkce: boolean;
             enableRpInitiatedLogout?: boolean;
             clientId: string;

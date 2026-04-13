@@ -145,6 +145,53 @@ describe("McpClient", () => {
     mockListTools.mockResolvedValue({ tools: [] });
   });
 
+  test("invalidateConnectionsForServer closes cached active connections for the server", async () => {
+    const tool = await ToolModel.createToolIfNotExists({
+      name: "github-mcp-server__list_repos",
+      description: "List repos",
+      parameters: {},
+      catalogId,
+    });
+
+    await AgentToolModel.create(agentId, tool.id, {
+      mcpServerId,
+    });
+
+    mockCallTool.mockResolvedValue({
+      content: [{ type: "text", text: "ok" }],
+      isError: false,
+    });
+
+    await mcpClient.executeToolCall(
+      {
+        id: "call_invalidate_connection",
+        name: "github-mcp-server__list_repos",
+        arguments: {},
+      },
+      agentId,
+    );
+
+    expect(mockConnect).toHaveBeenCalledTimes(1);
+
+    await mcpClient.invalidateConnectionsForServer(mcpServerId);
+
+    expect(mockClose).toHaveBeenCalled();
+    expect(McpHttpSessionModel.deleteStaleSession).toHaveBeenCalled();
+
+    mockConnect.mockClear();
+
+    await mcpClient.executeToolCall(
+      {
+        id: "call_invalidate_connection_after",
+        name: "github-mcp-server__list_repos",
+        arguments: {},
+      },
+      agentId,
+    );
+
+    expect(mockConnect).toHaveBeenCalledTimes(1);
+  });
+
   describe("executeToolCall", () => {
     test("returns error when tool not found for agent", async () => {
       const toolCall = {

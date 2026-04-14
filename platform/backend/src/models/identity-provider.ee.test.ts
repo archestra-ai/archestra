@@ -3,6 +3,7 @@ import { IDENTITY_TRUSTED_PROVIDER_IDS, MEMBER_ROLE_NAME } from "@shared";
 import { APIError } from "better-auth";
 import { vi } from "vitest";
 import { retrieveIdpGroups } from "@/auth/idp-team-sync-cache.ee";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import AccountModel from "./account";
@@ -50,6 +51,8 @@ const mockProvider = {
   id: "test-provider-id",
   providerId: "TestOIDC",
 };
+
+const originalEnableE2eTestEndpoints = config.test.enableE2eTestEndpoints;
 
 // Helper to create test params with proper typing for resolveSsoRole tests
 // Note: userInfo is included for compatibility with better-auth's IdpGetRoleData type
@@ -371,6 +374,88 @@ describe("IdentityProviderModel", () => {
         expect(registerSSOProvider).not.toHaveBeenCalled();
       } finally {
         globalThis.fetch = originalFetch;
+      }
+    });
+
+    test("allows insecure discovery endpoints when E2E test endpoints are enabled", async ({
+      makeOrganization,
+      makeUser,
+    }) => {
+      Object.defineProperty(config.test, "enableE2eTestEndpoints", {
+        value: true,
+        writable: true,
+        configurable: true,
+      });
+
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const registerSSOProvider = vi.fn(async ({ body }) => {
+        await db.insert(schema.identityProvidersTable).values({
+          id: crypto.randomUUID(),
+          providerId: body.providerId,
+          issuer: body.issuer,
+          domain: body.domain,
+          organizationId: org.id,
+          userId: user.id,
+          domainVerified: true,
+          oidcConfig: JSON.stringify(
+            body.oidcConfig,
+          ) as unknown as typeof schema.identityProvidersTable.$inferInsert.oidcConfig,
+        });
+      });
+      const fetchSpy = vi.fn(async () => {
+        return new Response(
+          JSON.stringify({
+            issuer: "https://idp.example.com/oauth2/example",
+            authorization_endpoint: "http://localhost:30081/auth",
+            token_endpoint: "http://localhost:30081/token",
+            jwks_uri: "http://localhost:30081/jwks",
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      });
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = fetchSpy as typeof fetch;
+
+      try {
+        await expect(
+          IdentityProviderModel.create(
+            {
+              providerId: "example-idp-http-e2e",
+              issuer: "https://idp.example.com/oauth2/example",
+              domain: "example.com",
+              userId: user.id,
+              oidcConfig: {
+                issuer: "https://idp.example.com/oauth2/example",
+                pkce: true,
+                clientId: "load-spark-platform",
+                clientSecret: "secret",
+                discoveryEndpoint:
+                  "http://localhost:30081/realms/archestra/.well-known/openid-configuration",
+              },
+            },
+            org.id,
+            new Headers(),
+            {
+              api: {
+                registerSSOProvider,
+              },
+            } as unknown as Parameters<typeof IdentityProviderModel.create>[3],
+          ),
+        ).resolves.toBeDefined();
+
+        expect(fetchSpy).toHaveBeenCalledOnce();
+        expect(registerSSOProvider).toHaveBeenCalledOnce();
+      } finally {
+        globalThis.fetch = originalFetch;
+        Object.defineProperty(config.test, "enableE2eTestEndpoints", {
+          value: originalEnableE2eTestEndpoints,
+          writable: true,
+          configurable: true,
+        });
       }
     });
   });

@@ -27,14 +27,16 @@ global.ResizeObserver = class ResizeObserver {
 
 function TestWrapper({
   onSubmit,
+  providerId = "test",
 }: {
   onSubmit?: (data: IdentityProviderFormValues) => void;
+  providerId?: string;
 }) {
   const form = useForm<IdentityProviderFormValues>({
     // biome-ignore lint/suspicious/noExplicitAny: test setup
     resolver: zodResolver(IdentityProviderFormSchema as any),
     defaultValues: {
-      providerId: "test",
+      providerId,
       issuer: "https://example.com",
       domain: "example.com",
       providerType: "oidc",
@@ -42,6 +44,7 @@ function TestWrapper({
         issuer: "https://example.com",
         pkce: true,
         enableRpInitiatedLogout: true,
+        hd: "",
         clientId: "test",
         clientSecret: "secret",
         discoveryEndpoint:
@@ -85,5 +88,21 @@ describe("OidcConfigForm", () => {
         }),
       }),
     );
+  });
+
+  it("shows the hosted domain field for Google providers", () => {
+    render(<TestWrapper providerId="Google" />);
+
+    expect(
+      screen.getByLabelText("Hosted Domain Hint (Optional)"),
+    ).toBeInTheDocument();
+  });
+
+  it("hides the hosted domain field for non-Google providers", () => {
+    render(<TestWrapper />);
+
+    expect(
+      screen.queryByLabelText("Hosted Domain Hint (Optional)"),
+    ).not.toBeInTheDocument();
   });
 });

@@ -1,20 +1,25 @@
 import { randomUUID } from "node:crypto";
-import Fastify, { type FastifyInstance, type FastifyPluginAsync } from "fastify";
 import type Anthropic from "@anthropic-ai/sdk";
 import { FinishReason, type GenerateContentResponse } from "@google/genai";
-import { serializerCompiler, validatorCompiler, type ZodTypeProvider } from "fastify-type-provider-zod";
+import type { SupportedProvider } from "@shared";
+import Fastify, {
+  type FastifyInstance,
+  type FastifyPluginAsync,
+} from "fastify";
+import {
+  serializerCompiler,
+  validatorCompiler,
+  type ZodTypeProvider,
+} from "fastify-type-provider-zod";
 import type OpenAI from "openai";
 import { vi } from "vitest";
-import type { SupportedProvider } from "@shared";
-import { LimitValidationService } from "@/models";
-import { InteractionModel, ModelModel, ToolModel } from "@/models";
 import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  test,
-} from "@/test";
+  InteractionModel,
+  LimitValidationService,
+  ModelModel,
+  ToolModel,
+} from "@/models";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { anthropicAdapterFactory } from "../adapterV2/anthropic";
 import { azureAdapterFactory } from "../adapterV2/azure";
@@ -31,6 +36,7 @@ import { openaiAdapterFactory } from "../adapterV2/openai";
 import { openrouterAdapterFactory } from "../adapterV2/openrouter";
 import { perplexityAdapterFactory } from "../adapterV2/perplexity";
 import { xaiAdapterFactory } from "../adapterV2/xai";
+import * as proxyUtils from "../utils";
 import anthropicProxyRoutesV2 from "./anthropic";
 import azureProxyRoutesV2 from "./azure";
 import bedrockProxyRoutesV2 from "./bedrock";
@@ -46,8 +52,6 @@ import openAiProxyRoutesV2 from "./openai";
 import openrouterProxyRoutesV2 from "./openrouter";
 import perplexityProxyRoutesV2 from "./perplexity";
 import xaiProxyRoutesV2 from "./xai";
-
-import * as proxyUtils from "../utils";
 
 type ProviderFamily =
   | "openai"
@@ -69,14 +73,19 @@ type ToolDefinition = {
 };
 
 type RequestBuilder = {
-  buildTextRequest: (params: { model: string; content: string }) => Record<string, unknown>;
+  buildTextRequest: (params: {
+    model: string;
+    content: string;
+  }) => Record<string, unknown>;
   buildToolRequest: (params: {
     model: string;
     content: string;
     tools: ToolDefinition[];
     stream?: boolean;
   }) => Record<string, unknown>;
-  buildCompressionRequest: (params: { model: string }) => Record<string, unknown>;
+  buildCompressionRequest: (params: {
+    model: string;
+  }) => Record<string, unknown>;
 };
 
 type ProviderTestConfig = {
@@ -85,7 +94,7 @@ type ProviderTestConfig = {
   provider: SupportedProvider;
   family: ProviderFamily;
   routePlugin: FastifyPluginAsync;
-  adapterFactory: { createClient: (...args: any[]) => unknown };
+  adapterFactory: { createClient: (...args: never[]) => unknown };
   endpoint: (agentId: string) => string;
   streamEndpoint?: (agentId: string) => string;
   headers: () => Record<string, string>;
@@ -166,10 +175,7 @@ function createAsyncIterable<T>(
       let index = 0;
       return {
         async next() {
-          if (
-            interruptAtChunk !== undefined &&
-            index === interruptAtChunk
-          ) {
+          if (interruptAtChunk !== undefined && index === interruptAtChunk) {
             return { done: true, value: undefined };
           }
 
@@ -367,36 +373,80 @@ function createOpenAiLikeHarness(options: HarnessOptions = {}) {
 
             if (request.stream) {
               if (options.streamingToolCall) {
-                const streamChunks: OpenAI.Chat.Completions.ChatCompletionChunk[] = [
+                const streamChunks: OpenAI.Chat.Completions.ChatCompletionChunk[] =
+                  [
+                    {
+                      id: "chatcmpl_stream_tool",
+                      object: "chat.completion.chunk",
+                      created: 1,
+                      model,
+                      choices: [
+                        {
+                          index: 0,
+                          delta: {
+                            role: "assistant",
+                            tool_calls: [
+                              {
+                                index: 0,
+                                id: "call_stream_tool",
+                                type: "function",
+                                function: {
+                                  name: options.streamingToolCall.name,
+                                  arguments:
+                                    options.streamingToolCall.arguments,
+                                },
+                              },
+                            ],
+                          },
+                          finish_reason: null,
+                          logprobs: null,
+                        },
+                      ],
+                    },
+                    {
+                      id: "chatcmpl_stream_tool",
+                      object: "chat.completion.chunk",
+                      created: 1,
+                      model,
+                      choices: [
+                        {
+                          index: 0,
+                          delta: {},
+                          finish_reason: "tool_calls",
+                          logprobs: null,
+                        },
+                      ],
+                      usage: {
+                        prompt_tokens: usage.inputTokens,
+                        completion_tokens: usage.outputTokens,
+                        total_tokens: usage.inputTokens + usage.outputTokens,
+                      },
+                    },
+                  ];
+                return createAsyncIterable(
+                  streamChunks,
+                  options.interruptAtChunk,
+                );
+              }
+
+              const streamChunks: OpenAI.Chat.Completions.ChatCompletionChunk[] =
+                [
                   {
-                    id: "chatcmpl_stream_tool",
+                    id: "chatcmpl_stream_text",
                     object: "chat.completion.chunk",
                     created: 1,
                     model,
                     choices: [
                       {
                         index: 0,
-                        delta: {
-                          role: "assistant",
-                          tool_calls: [
-                            {
-                              index: 0,
-                              id: "call_stream_tool",
-                              type: "function",
-                              function: {
-                                name: options.streamingToolCall.name,
-                                arguments: options.streamingToolCall.arguments,
-                              },
-                            },
-                          ],
-                        },
+                        delta: { role: "assistant", content: text },
                         finish_reason: null,
                         logprobs: null,
                       },
                     ],
                   },
                   {
-                    id: "chatcmpl_stream_tool",
+                    id: "chatcmpl_stream_text",
                     object: "chat.completion.chunk",
                     created: 1,
                     model,
@@ -404,7 +454,7 @@ function createOpenAiLikeHarness(options: HarnessOptions = {}) {
                       {
                         index: 0,
                         delta: {},
-                        finish_reason: "tool_calls",
+                        finish_reason: "stop",
                         logprobs: null,
                       },
                     ],
@@ -415,45 +465,10 @@ function createOpenAiLikeHarness(options: HarnessOptions = {}) {
                     },
                   },
                 ];
-                return createAsyncIterable(streamChunks, options.interruptAtChunk);
-              }
-
-              const streamChunks: OpenAI.Chat.Completions.ChatCompletionChunk[] = [
-                {
-                  id: "chatcmpl_stream_text",
-                  object: "chat.completion.chunk",
-                  created: 1,
-                  model,
-                  choices: [
-                    {
-                      index: 0,
-                      delta: { role: "assistant", content: text },
-                      finish_reason: null,
-                      logprobs: null,
-                    },
-                  ],
-                },
-                {
-                  id: "chatcmpl_stream_text",
-                  object: "chat.completion.chunk",
-                  created: 1,
-                  model,
-                  choices: [
-                    {
-                      index: 0,
-                      delta: {},
-                      finish_reason: "stop",
-                      logprobs: null,
-                    },
-                  ],
-                  usage: {
-                    prompt_tokens: usage.inputTokens,
-                    completion_tokens: usage.outputTokens,
-                    total_tokens: usage.inputTokens + usage.outputTokens,
-                  },
-                },
-              ];
-              return createAsyncIterable(streamChunks, options.interruptAtChunk);
+              return createAsyncIterable(
+                streamChunks,
+                options.interruptAtChunk,
+              );
             }
 
             return {
@@ -819,7 +834,9 @@ function createGeminiHarness(options: HarnessOptions = {}) {
                         {
                           functionCall: {
                             name: options.nonStreamingToolCall.name,
-                            args: JSON.parse(options.nonStreamingToolCall.arguments),
+                            args: JSON.parse(
+                              options.nonStreamingToolCall.arguments,
+                            ),
                           },
                         },
                       ]
@@ -841,7 +858,7 @@ function createGeminiHarness(options: HarnessOptions = {}) {
         generateContentStream: async (request: Record<string, unknown>) => {
           requests.push(request);
           options.onRequest?.(request);
-          const chunks: any[] = options.streamingToolCall
+          const chunks: unknown[] = options.streamingToolCall
             ? [
                 {
                   candidates: [
@@ -852,7 +869,9 @@ function createGeminiHarness(options: HarnessOptions = {}) {
                           {
                             functionCall: {
                               name: options.streamingToolCall.name,
-                              args: JSON.parse(options.streamingToolCall.arguments),
+                              args: JSON.parse(
+                                options.streamingToolCall.arguments,
+                              ),
                             },
                           },
                         ],
@@ -934,7 +953,9 @@ function createCohereHarness(options: HarnessOptions = {}) {
                   ]
                 : undefined,
             },
-            finish_reason: options.nonStreamingToolCall ? "TOOL_CALL" : "COMPLETE",
+            finish_reason: options.nonStreamingToolCall
+              ? "TOOL_CALL"
+              : "COMPLETE",
             usage: {
               tokens: {
                 input_tokens: usage.inputTokens,
@@ -947,7 +968,7 @@ function createCohereHarness(options: HarnessOptions = {}) {
         stream: async (request: Record<string, unknown>) => {
           requests.push(request);
           options.onRequest?.(request);
-          const chunks: any[] = options.streamingToolCall
+          const chunks: unknown[] = options.streamingToolCall
             ? [
                 {
                   type: "message-start",
@@ -1073,7 +1094,9 @@ function createMinimaxHarness(options: HarnessOptions = {}) {
                     role: "assistant",
                     content: text,
                   },
-              finish_reason: options.nonStreamingToolCall ? "tool_calls" : "stop",
+              finish_reason: options.nonStreamingToolCall
+                ? "tool_calls"
+                : "stop",
             },
           ],
           usage: {
@@ -1086,7 +1109,7 @@ function createMinimaxHarness(options: HarnessOptions = {}) {
       chatCompletionsStream: async (request: Record<string, unknown>) => {
         requests.push(request);
         options.onRequest?.(request);
-        const chunks: any[] = options.streamingToolCall
+        const chunks: unknown[] = options.streamingToolCall
           ? [
               {
                 id: "minimax_stream",
@@ -1194,7 +1217,9 @@ function createBedrockHarness(options: HarnessOptions = {}) {
                       toolUse: {
                         toolUseId: "tooluse_123",
                         name: options.nonStreamingToolCall.name,
-                        input: JSON.parse(options.nonStreamingToolCall.arguments),
+                        input: JSON.parse(
+                          options.nonStreamingToolCall.arguments,
+                        ),
                       },
                     },
                   ]
@@ -1214,7 +1239,7 @@ function createBedrockHarness(options: HarnessOptions = {}) {
       ) => {
         requests.push({ modelId, ...request });
         options.onRequest?.({ modelId, ...request });
-        const events: any[] = options.streamingToolCall
+        const events: unknown[] = options.streamingToolCall
           ? [
               {
                 contentBlockStart: {
@@ -1324,7 +1349,8 @@ function makeOpenAiCompatibleBuilder(defaultModel: string): RequestBuilder {
         },
       })),
     }),
-    buildCompressionRequest: ({ model }) => makeOpenAiCompressionRequest(model || defaultModel),
+    buildCompressionRequest: ({ model }) =>
+      makeOpenAiCompressionRequest(model || defaultModel),
   };
 }
 
@@ -1351,7 +1377,7 @@ function makeAnthropicBuilder(defaultModel: string): RequestBuilder {
   };
 }
 
-function makeGeminiBuilder(defaultModel: string): RequestBuilder {
+function makeGeminiBuilder(_defaultModel: string): RequestBuilder {
   return {
     buildTextRequest: ({ content }) => ({
       contents: [{ role: "user", parts: [{ text: content }] }],
@@ -1372,7 +1398,7 @@ function makeGeminiBuilder(defaultModel: string): RequestBuilder {
   };
 }
 
-function makeAzureResponsesBuilder(defaultModel: string): RequestBuilder {
+function _makeAzureResponsesBuilder(defaultModel: string): RequestBuilder {
   return {
     buildTextRequest: ({ model, content }) => ({
       model: model || defaultModel,
@@ -1395,7 +1421,12 @@ function makeAzureResponsesBuilder(defaultModel: string): RequestBuilder {
         {
           type: "message",
           role: "user",
-          content: [{ type: "input_text", text: "What files are in the current directory?" }],
+          content: [
+            {
+              type: "input_text",
+              text: "What files are in the current directory?",
+            },
+          ],
         },
         {
           type: "function_call",
@@ -1432,7 +1463,8 @@ function makeCohereBuilder(defaultModel: string): RequestBuilder {
         },
       })),
     }),
-    buildCompressionRequest: ({ model }) => makeCohereCompressionRequest(model || defaultModel),
+    buildCompressionRequest: ({ model }) =>
+      makeCohereCompressionRequest(model || defaultModel),
   };
 }
 
@@ -1456,7 +1488,8 @@ function makeBedrockBuilder(defaultModel: string): RequestBuilder {
         })),
       },
     }),
-    buildCompressionRequest: ({ model }) => makeBedrockCompressionRequest(model || defaultModel),
+    buildCompressionRequest: ({ model }) =>
+      makeBedrockCompressionRequest(model || defaultModel),
   };
 }
 
@@ -1588,7 +1621,9 @@ const providerConfigs: ProviderTestConfig[] = [
       Authorization: "Bearer test-key",
       "Content-Type": "application/json",
     }),
-    requestBuilder: makeOpenAiCompatibleBuilder("llama-4-scout-17b-16e-instruct"),
+    requestBuilder: makeOpenAiCompatibleBuilder(
+      "llama-4-scout-17b-16e-instruct",
+    ),
     model: "llama-4-scout-17b-16e-instruct",
     optimizedModel: "llama-3.3-70b",
     supportsDeclaredTools: true,
@@ -1722,7 +1757,9 @@ const providerConfigs: ProviderTestConfig[] = [
       Authorization: "Bearer test-key",
       "Content-Type": "application/json",
     }),
-    requestBuilder: makeBedrockBuilder("anthropic.claude-3-sonnet-20240229-v1:0"),
+    requestBuilder: makeBedrockBuilder(
+      "anthropic.claude-3-sonnet-20240229-v1:0",
+    ),
     model: "anthropic.claude-3-sonnet-20240229-v1:0",
     optimizedModel: "amazon.nova-lite-v1:0",
     supportsDeclaredTools: true,
@@ -1789,7 +1826,10 @@ describe("LLM proxy provider matrix", () => {
 
   for (const config of providerConfigs) {
     describe(config.providerName, () => {
-      async function setupRoute(agent: Agent, harnessOptions: HarnessOptions = {}) {
+      async function setupRoute(
+        _agent: Agent,
+        harnessOptions: HarnessOptions = {},
+      ) {
         app = createFastifyApp();
         const harness = createHarness(config.family, {
           model: config.model,
@@ -1804,36 +1844,40 @@ describe("LLM proxy provider matrix", () => {
 
       test.skipIf(config.supportsDeclaredTools === false)(
         "persists declared tools from LLM proxy requests",
-        async ({
-        makeAgent,
-      }) => {
-        const agent = await makeAgent({ agentType: "llm_proxy", name: `${config.providerName} proxy` });
-        await setupRoute(agent, {
-          nonStreamingToolCall: {
-            name: READ_FILE_TOOL.name,
-            arguments: '{"file_path":"/tmp/test.txt"}',
-          },
-        });
+        async ({ makeAgent }) => {
+          const agent = await makeAgent({
+            agentType: "llm_proxy",
+            name: `${config.providerName} proxy`,
+          });
+          await setupRoute(agent, {
+            nonStreamingToolCall: {
+              name: READ_FILE_TOOL.name,
+              arguments: '{"file_path":"/tmp/test.txt"}',
+            },
+          });
 
-        const response = await app.inject({
-          method: "POST",
-          url: config.endpoint(agent.id),
-          headers: config.headers(),
-          payload: config.requestBuilder.buildToolRequest({
-            model: config.model,
-            content: "Read a file",
-            tools: [READ_FILE_TOOL],
-          }),
-        });
+          const response = await app.inject({
+            method: "POST",
+            url: config.endpoint(agent.id),
+            headers: config.headers(),
+            payload: config.requestBuilder.buildToolRequest({
+              model: config.model,
+              content: "Read a file",
+              tools: [READ_FILE_TOOL],
+            }),
+          });
 
-        expect(response.statusCode).toBe(200);
+          expect(response.statusCode).toBe(200);
 
-        const storedTool = await ToolModel.findByName(READ_FILE_TOOL.name);
-        expect(storedTool).not.toBeNull();
-      });
+          const storedTool = await ToolModel.findByName(READ_FILE_TOOL.name);
+          expect(storedTool).not.toBeNull();
+        },
+      );
 
       test("stores execution IDs on interactions", async ({ makeAgent }) => {
-        const agent = await makeAgent({ name: `${config.providerName} execution` });
+        const agent = await makeAgent({
+          name: `${config.providerName} execution`,
+        });
         await ModelModel.upsert({
           externalId: `${config.provider}/${config.model}`,
           provider: config.provider,
@@ -1862,45 +1906,51 @@ describe("LLM proxy provider matrix", () => {
 
         expect(response.statusCode).toBe(200);
 
-        const interactions = await InteractionModel.getAllInteractionsForProfile(
-          agent.id,
-        );
+        const interactions =
+          await InteractionModel.getAllInteractionsForProfile(agent.id);
         expect(
-          interactions.some((interaction) => interaction.executionId === executionId),
+          interactions.some(
+            (interaction) => interaction.executionId === executionId,
+          ),
         ).toBe(true);
       });
 
       test.skipIf(config.supportsStreamingToolCalls === false)(
         "streams tool calls through the proxy",
         async ({ makeAgent }) => {
-        const agent = await makeAgent({ name: `${config.providerName} stream` });
-        await setupRoute(agent, {
-          streamingToolCall: {
-            name: READ_FILE_TOOL.name,
-            arguments: '{"file_path":"/tmp/test.txt"}',
-          },
-        });
+          const agent = await makeAgent({
+            name: `${config.providerName} stream`,
+          });
+          await setupRoute(agent, {
+            streamingToolCall: {
+              name: READ_FILE_TOOL.name,
+              arguments: '{"file_path":"/tmp/test.txt"}',
+            },
+          });
 
-        const response = await app.inject({
-          method: "POST",
-          url: config.streamEndpoint?.(agent.id) ?? config.endpoint(agent.id),
-          headers: config.headers(),
-          payload: config.requestBuilder.buildToolRequest({
-            model: config.model,
-            content: "Stream a tool call",
-            tools: [READ_FILE_TOOL],
-            stream: true,
-          }),
-        });
+          const response = await app.inject({
+            method: "POST",
+            url: config.streamEndpoint?.(agent.id) ?? config.endpoint(agent.id),
+            headers: config.headers(),
+            payload: config.requestBuilder.buildToolRequest({
+              model: config.model,
+              content: "Stream a tool call",
+              tools: [READ_FILE_TOOL],
+              stream: true,
+            }),
+          });
 
-        expect(response.statusCode).toBe(200);
-        config.assertStreamingToolCall(response.body);
-      });
+          expect(response.statusCode).toBe(200);
+          config.assertStreamingToolCall(response.body);
+        },
+      );
 
       test("applies optimized models before provider execution", async ({
         makeAgent,
       }) => {
-        const agent = await makeAgent({ name: `${config.providerName} optimization` });
+        const agent = await makeAgent({
+          name: `${config.providerName} optimization`,
+        });
         const optimizedModelSpy = vi
           .spyOn(proxyUtils.costOptimization, "getOptimizedModel")
           .mockResolvedValue(config.optimizedModel);
@@ -1919,56 +1969,64 @@ describe("LLM proxy provider matrix", () => {
 
         expect(response.statusCode).toBe(200);
         expect(optimizedModelSpy).toHaveBeenCalled();
-        expect(JSON.stringify(harness.requests.at(-1))).toContain(config.optimizedModel);
+        expect(JSON.stringify(harness.requests.at(-1))).toContain(
+          config.optimizedModel,
+        );
       });
 
       test.skipIf(config.supportsCompression === false)(
         "toggles TOON compression before provider execution",
-        async ({
-        makeAgent,
-      }) => {
-        const agent = await makeAgent({ name: `${config.providerName} compression` });
-        vi.spyOn(proxyUtils.toonConversion, "shouldApplyToonCompression")
-          .mockResolvedValueOnce(true)
-          .mockResolvedValueOnce(false);
+        async ({ makeAgent }) => {
+          const agent = await makeAgent({
+            name: `${config.providerName} compression`,
+          });
+          vi.spyOn(proxyUtils.toonConversion, "shouldApplyToonCompression")
+            .mockResolvedValueOnce(true)
+            .mockResolvedValueOnce(false);
 
-        const enabledHarness = await setupRoute(agent);
-        const enabledResponse = await app.inject({
-          method: "POST",
-          url: config.endpoint(agent.id),
-          headers: config.headers(),
-          payload: config.requestBuilder.buildCompressionRequest({
-            model: config.model,
-          }),
-        });
+          const enabledHarness = await setupRoute(agent);
+          const enabledResponse = await app.inject({
+            method: "POST",
+            url: config.endpoint(agent.id),
+            headers: config.headers(),
+            payload: config.requestBuilder.buildCompressionRequest({
+              model: config.model,
+            }),
+          });
 
-        expect(enabledResponse.statusCode).toBe(200);
-        expect(JSON.stringify(enabledHarness.requests.at(-1))).toContain(
-          "files[5]{name,size,type}",
-        );
+          expect(enabledResponse.statusCode).toBe(200);
+          expect(JSON.stringify(enabledHarness.requests.at(-1))).toContain(
+            "files[5]{name,size,type}",
+          );
 
-        await app.close();
-        const disabledHarness = await setupRoute(agent);
-        const disabledResponse = await app.inject({
-          method: "POST",
-          url: config.endpoint(agent.id),
-          headers: config.headers(),
-          payload: config.requestBuilder.buildCompressionRequest({
-            model: config.model,
-          }),
-        });
+          await app.close();
+          const disabledHarness = await setupRoute(agent);
+          const disabledResponse = await app.inject({
+            method: "POST",
+            url: config.endpoint(agent.id),
+            headers: config.headers(),
+            payload: config.requestBuilder.buildCompressionRequest({
+              model: config.model,
+            }),
+          });
 
-        expect(disabledResponse.statusCode).toBe(200);
-        expect(JSON.stringify(disabledHarness.requests.at(-1))).toContain(
-          "README.md",
-        );
-      });
+          expect(disabledResponse.statusCode).toBe(200);
+          expect(JSON.stringify(disabledHarness.requests.at(-1))).toContain(
+            "README.md",
+          );
+        },
+      );
 
       test("blocks requests when token cost limits are exceeded", async ({
         makeAgent,
       }) => {
-        const agent = await makeAgent({ name: `${config.providerName} limits` });
-        vi.spyOn(LimitValidationService, "checkLimitsBeforeRequest").mockResolvedValue([
+        const agent = await makeAgent({
+          name: `${config.providerName} limits`,
+        });
+        vi.spyOn(
+          LimitValidationService,
+          "checkLimitsBeforeRequest",
+        ).mockResolvedValue([
           "Refusal",
           "The token cost limit has been exceeded.",
         ]);

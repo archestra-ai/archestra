@@ -29,14 +29,26 @@ concurrency:
   group: deploy-dev-platform-images-${{ github.event.pull_request.number || inputs.version || github.ref }}
   cancel-in-progress: true
 
+env:
+  IMAGE_REGISTRY: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
+  PLATFORM_IMAGE_NAME: platform
+
 jobs:
   publish-dev-platform-image:
-    name: Build Platform Dev Docker Image
+    name: Build Platform Dev Docker Image (${{ matrix.os_and_arch }})
     permissions:
       contents: read # Required to checkout the repository and build the platform image.
       id-token: write # Required for Workload Identity Federation.
     if: ${{ github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.label.name == 'deploy-dev-platform-images' && github.event.pull_request.head.repo.fork != true) }}
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: blacksmith-16vcpu-ubuntu-2404
+            os_and_arch: linux/amd64
+          - platform: blacksmith-16vcpu-ubuntu-2404-arm
+            os_and_arch: linux/arm64
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -75,17 +87,84 @@ jobs:
           IMAGE_VERSION: ${{ inputs.version || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
 
       - name: Build Docker image
+        id: build
         uses: ./.github/actions/build-platform-docker-image
         with:
           context: ./platform
           push: "true"
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ matrix.os_and_arch }}
+          outputs: type=image,name=${{ env.IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
           version: ${{ inputs.version || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
           previous-image: ${{ steps.previous-platform-image.outputs.previous-image }}
-          tags: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${{ inputs.version || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
           sentry-auth-token: ${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${DIGEST}"
+          touch "/tmp/digests/${digest#sha256:}"
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+
+      - name: Upload digest
+        uses: ./.github/actions/github-upload-artifact
+        with:
+          name: platform-digests-${{ strategy.job-index }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge-platform-manifests:
+    name: Create Platform multi-arch manifest
+    needs:
+      - publish-dev-platform-image
+    permissions:
+      contents: read # Required to download digests and create the manifest.
+      id-token: write # Required for Workload Identity Federation.
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Download digests
+        uses: ./.github/actions/github-download-artifact
+        with:
+          path: /tmp/digests
+          pattern: platform-digests-*
+          merge-multiple: true
+
+      - name: Setup Blacksmith Builder
+        uses: ./.github/actions/setup-blacksmith-builder
+
+      - name: Authenticate to Google Artifact Registry
+        uses: ./.github/actions/auth-to-gar
+        with:
+          service_account: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create \
+            -t "${IMAGE_REGISTRY}/${IMAGE_NAME}:${VERSION}" \
+            $(printf "${IMAGE_REGISTRY}/${IMAGE_NAME}@sha256:%s " *)
+        env:
+          IMAGE_REGISTRY: ${{ env.IMAGE_REGISTRY }}
+          IMAGE_NAME: ${{ env.PLATFORM_IMAGE_NAME }}
+          VERSION: ${{ inputs.version || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
+
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect "${IMAGE_REGISTRY}/${IMAGE_NAME}:${VERSION}"
+        env:
+          IMAGE_REGISTRY: ${{ env.IMAGE_REGISTRY }}
+          IMAGE_NAME: ${{ env.PLATFORM_IMAGE_NAME }}
+          VERSION: ${{ inputs.version || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
 
   publish-dev-mcp-server-base-image:
     name: Build MCP Server Base Dev Image

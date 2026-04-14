@@ -214,7 +214,22 @@ export type LinearConfig = z.infer<typeof LinearConfigSchema>;
 export const LinearCheckpointSchema = z.object({
   type: LINEAR,
   lastSyncedAt: z.string().optional(),
+  /** High-water `updatedAt` (ISO) after a completed issues sweep; drives the next incremental issues lower bound. */
   lastRawUpdatedAt: z.string().optional(),
+  /** Active sync phase for multi-entity runs (resume across batches). */
+  linearSyncPhase: z.enum(["issues", "projects", "cycles"]).optional(),
+  issuePageCursor: z.string().optional(),
+  /**
+   * `updatedAt: { gt }` lower bound for the in-flight issues sweep.
+   * Kept stable while paginating; cleared when the issues sweep completes.
+   */
+  issueUpdatedAfter: z.string().optional(),
+  projectLastRawUpdatedAt: z.string().optional(),
+  projectPageCursor: z.string().optional(),
+  projectUpdatedAfter: z.string().optional(),
+  cycleLastRawUpdatedAt: z.string().optional(),
+  cyclePageCursor: z.string().optional(),
+  cycleUpdatedAfter: z.string().optional(),
 });
 export type LinearCheckpoint = z.infer<typeof LinearCheckpointSchema>;
 

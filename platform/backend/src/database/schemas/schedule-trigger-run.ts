@@ -26,6 +26,7 @@ const scheduleTriggerRunsTable = pgTable(
       mode: "date",
     }),
     error: text("error"),
+    artifact: text("artifact"),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
       .notNull()
       .defaultNow(),

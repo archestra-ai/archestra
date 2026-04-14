@@ -709,6 +709,7 @@ export async function getChatMcpTools({
   abortSignal,
   user,
   blockOnApprovalRequired,
+  scheduleTriggerRunId,
 }: {
   agentName: string;
   agentId: string;
@@ -726,6 +727,8 @@ export async function getChatMcpTools({
   user?: { id: string; email?: string; name?: string };
   /** Block tool execution when policy is require_approval (for A2A/autonomous contexts where no one can approve) */
   blockOnApprovalRequired?: boolean;
+  /** Schedule trigger run ID — enables artifact_write to target the run */
+  scheduleTriggerRunId?: string;
 }): Promise<Record<string, Tool>> {
   const toolCacheKey = getToolCacheKey(agentId, userId, conversationId);
   const shouldUseToolCache = !abortSignal;
@@ -884,6 +887,14 @@ export async function getChatMcpTools({
                   throwIfAborted(abortSignal);
                   // Check if this is an Archestra tool - handle directly without DB lookup
                   if (archestraMcpBranding.isToolName(mcpTool.name)) {
+                    logger.debug(
+                      {
+                        toolName: mcpTool.name,
+                        scheduleTriggerRunId: scheduleTriggerRunId ?? null,
+                        conversationId: conversationId ?? null,
+                      },
+                      "Executing archestra tool with context",
+                    );
                     const archestraResponse = await executeArchestraTool(
                       mcpTool.name,
                       toolArguments,
@@ -894,6 +905,7 @@ export async function getChatMcpTools({
                         agentId,
                         organizationId,
                         sessionId,
+                        scheduleTriggerRunId,
                         abortSignal,
                       },
                     );
@@ -1005,6 +1017,7 @@ export async function getChatMcpTools({
           organizationId,
           conversationId,
           sessionId,
+          scheduleTriggerRunId,
           // Pass delegation chain for tracking delegated agent calls
           delegationChain,
           abortSignal,

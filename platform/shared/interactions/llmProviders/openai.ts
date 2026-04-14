@@ -166,11 +166,7 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
 
     if (role === "assistant") {
       const { tool_calls: toolCalls } = message;
-      /**
-       * TODO: remove this as string assertion once we figure out the openapi/zod weirdness
-       * (ie. there shouldn't be | unknown in the codegen'd type here..)
-       */
-      const refusal = message.refusal as string;
+      const refusal = message.refusal;
 
       if (Array.isArray(toolCalls)) {
         // Handle assistant messages with tool calls
@@ -280,8 +276,6 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
               mediaType: "image/*",
               url: part.image_url.url,
             });
-          } else if (part.type === "refusal") {
-            parts.push({ type: "text", text: part.refusal });
           }
           // Note: input_audio and file types from API would need additional handling
         }

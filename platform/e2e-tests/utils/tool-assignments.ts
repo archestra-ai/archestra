@@ -124,13 +124,19 @@ async function openCatalogToolAssignment({
     ),
   );
 
-  let catalogAssignmentState:
+  type CatalogAssignmentState =
     | "token-select"
     | "pill-testid"
     | "pill-role"
     | "enabled"
     | "disabled"
-    | "missing" = "missing";
+    | "missing";
+  // Widen the literal initializer to the full union: TS narrows `let` vars
+  // initialized with a literal to that literal type and does not widen the
+  // narrowing when the variable is mutated only through a captured closure
+  // (like the expect.poll callback below). Casting the initializer prevents
+  // narrowing from the start so subsequent comparisons type-check correctly.
+  let catalogAssignmentState = "missing" as CatalogAssignmentState;
 
   await expect
     .poll(

@@ -17,6 +17,7 @@ import {
   McpServerModel,
   ToolModel,
 } from "@/models";
+import * as oauthRoutes from "@/routes/oauth";
 import { secretManager } from "@/secrets-manager";
 import { beforeEach, describe, expect, test } from "@/test";
 import mcpClient from "./mcp-client";
@@ -1498,6 +1499,624 @@ describe("McpClient", () => {
     });
 
     describe("Auth error actionable message", () => {
+      test("refreshes and retries when an OAuth server returns an auth-related tool error result", async ({
+        makeUser,
+      }) => {
+        const testUser = await makeUser({
+          email: "oauth-tool-error-refresh@example.com",
+        });
+
+        const oauthCatalog = await InternalMcpCatalogModel.create({
+          name: "jira-oauth-server",
+          serverType: "remote",
+          serverUrl: "https://mcp.atlassian.example.com/mcp/",
+          oauthConfig: {
+            name: "Jira",
+            server_url: "https://mcp.atlassian.example.com/mcp/",
+            client_id: "test-client-id",
+            redirect_uris: ["http://localhost:3000/callback"],
+            scopes: ["read:jira-work"],
+            default_scopes: ["read:jira-work"],
+            supports_resource_metadata: false,
+          },
+        });
+
+        const secret = await secretManager().createSecret(
+          {
+            access_token: "expired-token",
+            refresh_token: "refresh-token",
+            expires_at: Date.now() + 24 * 3_600_000,
+          },
+          "jira-oauth-refresh-secret",
+        );
+
+        const mcpServer = await McpServerModel.create({
+          name: "jira-oauth-server",
+          catalogId: oauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: testUser.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "jira-oauth-server__get_issue",
+          description: "Get issue",
+          parameters: {},
+          catalogId: oauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: mcpServer.id,
+        });
+
+        const refreshSpy = vi
+          .spyOn(oauthRoutes, "refreshOAuthToken")
+          .mockImplementation(async () => {
+            await secretManager().updateSecret(secret.id, {
+              access_token: "refreshed-token",
+              refresh_token: "refresh-token",
+              expires_at: Date.now() + 3_600_000,
+            });
+            return true;
+          });
+
+        mockConnect.mockResolvedValue(undefined);
+        mockCallTool
+          .mockResolvedValueOnce({
+            content: [
+              {
+                type: "text",
+                text: "Authentication failed: access token expired",
+              },
+            ],
+            isError: true,
+          })
+          .mockResolvedValueOnce({
+            content: [{ type: "text", text: "Issue fetched" }],
+            isError: false,
+          });
+
+        const result = await mcpClient.executeToolCall(
+          {
+            id: "call_oauth_tool_error_refresh",
+            name: "jira-oauth-server__get_issue",
+            arguments: { issue_key: "CTAZ-1015" },
+          },
+          agentId,
+          {
+            tokenId: "test-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: testUser.id,
+          },
+        );
+
+        expect(refreshSpy).toHaveBeenCalledWith(secret.id, oauthCatalog.id);
+        expect(mockCallTool).toHaveBeenCalledTimes(2);
+        expect(result).toMatchObject({
+          isError: false,
+          content: [{ type: "text", text: "Issue fetched" }],
+        });
+
+        refreshSpy.mockRestore();
+      });
+
+      test("does not refresh when a tool returns an application-level access denied error", async ({
+        makeUser,
+      }) => {
+        const testUser = await makeUser({
+          email: "oauth-tool-error-access-denied@example.com",
+        });
+
+        const oauthCatalog = await InternalMcpCatalogModel.create({
+          name: "jira-oauth-access-denied-server",
+          serverType: "remote",
+          serverUrl: "https://mcp.atlassian.example.com/mcp/",
+          oauthConfig: {
+            name: "Jira",
+            server_url: "https://mcp.atlassian.example.com/mcp/",
+            client_id: "test-client-id",
+            redirect_uris: ["http://localhost:3000/callback"],
+            scopes: ["read:jira-work"],
+            default_scopes: ["read:jira-work"],
+            supports_resource_metadata: false,
+          },
+        });
+
+        const secret = await secretManager().createSecret(
+          {
+            access_token: "valid-token",
+            refresh_token: "refresh-token",
+            expires_at: Date.now() + 24 * 3_600_000,
+          },
+          "jira-oauth-access-denied-secret",
+        );
+
+        const mcpServer = await McpServerModel.create({
+          name: "jira-oauth-access-denied-server",
+          catalogId: oauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: testUser.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "jira-oauth-access-denied-server__get_issue",
+          description: "Get issue",
+          parameters: {},
+          catalogId: oauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: mcpServer.id,
+        });
+
+        const refreshSpy = vi.spyOn(oauthRoutes, "refreshOAuthToken");
+
+        mockConnect.mockResolvedValue(undefined);
+        mockCallTool.mockResolvedValue({
+          content: [
+            {
+              type: "text",
+              text: "Access denied: you do not have permission to view this project",
+            },
+          ],
+          isError: true,
+        });
+
+        const result = await mcpClient.executeToolCall(
+          {
+            id: "call_oauth_tool_error_access_denied",
+            name: "jira-oauth-access-denied-server__get_issue",
+            arguments: { issue_key: "CTAZ-1015" },
+          },
+          agentId,
+          {
+            tokenId: "test-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: testUser.id,
+          },
+        );
+
+        expect(refreshSpy).not.toHaveBeenCalled();
+        expect(result).toMatchObject({
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: "Access denied: you do not have permission to view this project",
+            },
+          ],
+        });
+
+        refreshSpy.mockRestore();
+      });
+
+      test("does not refresh when a tool error only mentions bearer auth guidance", async ({
+        makeUser,
+      }) => {
+        const testUser = await makeUser({
+          email: "oauth-tool-error-bearer-guidance@example.com",
+        });
+
+        const oauthCatalog = await InternalMcpCatalogModel.create({
+          name: "jira-oauth-bearer-guidance-server",
+          serverType: "remote",
+          serverUrl: "https://mcp.atlassian.example.com/mcp/",
+          oauthConfig: {
+            name: "Jira",
+            server_url: "https://mcp.atlassian.example.com/mcp/",
+            client_id: "test-client-id",
+            redirect_uris: ["http://localhost:3000/callback"],
+            scopes: ["read:jira-work"],
+            default_scopes: ["read:jira-work"],
+            supports_resource_metadata: false,
+          },
+        });
+
+        const secret = await secretManager().createSecret(
+          {
+            access_token: "valid-token",
+            refresh_token: "refresh-token",
+            expires_at: Date.now() + 24 * 3_600_000,
+          },
+          "jira-oauth-bearer-guidance-secret",
+        );
+
+        const mcpServer = await McpServerModel.create({
+          name: "jira-oauth-bearer-guidance-server",
+          catalogId: oauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: testUser.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "jira-oauth-bearer-guidance-server__get_issue",
+          description: "Get issue",
+          parameters: {},
+          catalogId: oauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: mcpServer.id,
+        });
+
+        const refreshSpy = vi.spyOn(oauthRoutes, "refreshOAuthToken");
+
+        mockConnect.mockResolvedValue(undefined);
+        mockCallTool.mockResolvedValue({
+          content: [
+            {
+              type: "text",
+              text: "This endpoint requires Bearer token authentication. See docs for setup steps.",
+            },
+          ],
+          isError: true,
+        });
+
+        const result = await mcpClient.executeToolCall(
+          {
+            id: "call_oauth_tool_error_bearer_guidance",
+            name: "jira-oauth-bearer-guidance-server__get_issue",
+            arguments: { issue_key: "CTAZ-1015" },
+          },
+          agentId,
+          {
+            tokenId: "test-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: testUser.id,
+          },
+        );
+
+        expect(refreshSpy).not.toHaveBeenCalled();
+        expect(result).toMatchObject({
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: "This endpoint requires Bearer token authentication. See docs for setup steps.",
+            },
+          ],
+        });
+
+        refreshSpy.mockRestore();
+      });
+
+      test("proactively refreshes an OAuth token shortly before expiry", async ({
+        makeUser,
+      }) => {
+        const testUser = await makeUser({
+          email: "oauth-proactive-refresh@example.com",
+        });
+
+        const oauthCatalog = await InternalMcpCatalogModel.create({
+          name: "jira-proactive-server",
+          serverType: "remote",
+          serverUrl: "https://mcp.atlassian.example.com/mcp/",
+          oauthConfig: {
+            name: "Jira",
+            server_url: "https://mcp.atlassian.example.com/mcp/",
+            client_id: "test-client-id",
+            redirect_uris: ["http://localhost:3000/callback"],
+            scopes: ["read:jira-work"],
+            default_scopes: ["read:jira-work"],
+            supports_resource_metadata: false,
+          },
+        });
+
+        const secret = await secretManager().createSecret(
+          {
+            access_token: "soon-expiring-token",
+            refresh_token: "refresh-token",
+            expires_at: Date.now() + 30_000,
+          },
+          "jira-oauth-proactive-secret",
+        );
+
+        const mcpServer = await McpServerModel.create({
+          name: "jira-proactive-server",
+          catalogId: oauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: testUser.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "jira-proactive-server__get_issue",
+          description: "Get issue",
+          parameters: {},
+          catalogId: oauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: mcpServer.id,
+        });
+
+        const refreshSpy = vi
+          .spyOn(oauthRoutes, "refreshOAuthToken")
+          .mockImplementation(async () => {
+            await secretManager().updateSecret(secret.id, {
+              access_token: "proactively-refreshed-token",
+              refresh_token: "refresh-token",
+              expires_at: Date.now() + 3_600_000,
+            });
+            return true;
+          });
+
+        mockConnect.mockResolvedValue(undefined);
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Issue fetched proactively" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCall(
+          {
+            id: "call_oauth_proactive_refresh",
+            name: "jira-proactive-server__get_issue",
+            arguments: { issue_key: "CTAZ-1015" },
+          },
+          agentId,
+          {
+            tokenId: "test-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: testUser.id,
+          },
+        );
+
+        expect(refreshSpy).toHaveBeenCalledWith(secret.id, oauthCatalog.id);
+        expect(mockCallTool).toHaveBeenCalledTimes(1);
+        expect(result).toMatchObject({
+          isError: false,
+          content: [{ type: "text", text: "Issue fetched proactively" }],
+        });
+
+        refreshSpy.mockRestore();
+      });
+
+      test("falls back to the existing token when proactive refresh fails transiently", async ({
+        makeUser,
+      }) => {
+        const testUser = await makeUser({
+          email: "oauth-proactive-refresh-fallback@example.com",
+        });
+
+        const oauthCatalog = await InternalMcpCatalogModel.create({
+          name: "jira-proactive-fallback-server",
+          serverType: "remote",
+          serverUrl: "https://mcp.atlassian.example.com/mcp/",
+          oauthConfig: {
+            name: "Jira",
+            server_url: "https://mcp.atlassian.example.com/mcp/",
+            client_id: "test-client-id",
+            redirect_uris: ["http://localhost:3000/callback"],
+            scopes: ["read:jira-work"],
+            default_scopes: ["read:jira-work"],
+            supports_resource_metadata: false,
+          },
+        });
+
+        const secret = await secretManager().createSecret(
+          {
+            access_token: "still-valid-token",
+            refresh_token: "refresh-token",
+            expires_at: Date.now() + 30_000,
+          },
+          "jira-oauth-proactive-fallback-secret",
+        );
+
+        const mcpServer = await McpServerModel.create({
+          name: "jira-proactive-fallback-server",
+          catalogId: oauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: testUser.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "jira-proactive-fallback-server__get_issue",
+          description: "Get issue",
+          parameters: {},
+          catalogId: oauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: mcpServer.id,
+        });
+
+        const refreshSpy = vi
+          .spyOn(oauthRoutes, "refreshOAuthToken")
+          .mockResolvedValue(false);
+
+        mockConnect.mockResolvedValue(undefined);
+        mockCallTool.mockResolvedValue({
+          content: [
+            { type: "text", text: "Issue fetched with existing token" },
+          ],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCall(
+          {
+            id: "call_oauth_proactive_refresh_fallback",
+            name: "jira-proactive-fallback-server__get_issue",
+            arguments: { issue_key: "CTAZ-1015" },
+          },
+          agentId,
+          {
+            tokenId: "test-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: testUser.id,
+          },
+        );
+
+        expect(refreshSpy).toHaveBeenCalledWith(secret.id, oauthCatalog.id);
+        expect(mockCallTool).toHaveBeenCalledTimes(1);
+        expect(result).toMatchObject({
+          isError: false,
+          content: [
+            { type: "text", text: "Issue fetched with existing token" },
+          ],
+        });
+
+        refreshSpy.mockRestore();
+      });
+
+      test("deduplicates concurrent proactive refresh attempts for the same OAuth secret", async ({
+        makeUser,
+      }) => {
+        const testUser = await makeUser({
+          email: "oauth-concurrent-refresh@example.com",
+        });
+
+        const oauthCatalog = await InternalMcpCatalogModel.create({
+          name: "jira-concurrent-server",
+          serverType: "remote",
+          serverUrl: "https://mcp.atlassian.example.com/mcp/",
+          oauthConfig: {
+            name: "Jira",
+            server_url: "https://mcp.atlassian.example.com/mcp/",
+            client_id: "test-client-id",
+            redirect_uris: ["http://localhost:3000/callback"],
+            scopes: ["read:jira-work"],
+            default_scopes: ["read:jira-work"],
+            supports_resource_metadata: false,
+          },
+        });
+
+        const secret = await secretManager().createSecret(
+          {
+            access_token: "initial-token",
+            refresh_token: "refresh-token",
+            expires_at: Date.now() + 24 * 3_600_000,
+          },
+          "jira-oauth-concurrent-secret",
+        );
+
+        const mcpServer = await McpServerModel.create({
+          name: "jira-concurrent-server",
+          catalogId: oauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: testUser.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "jira-concurrent-server__get_issue",
+          description: "Get issue",
+          parameters: {},
+          catalogId: oauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: mcpServer.id,
+        });
+
+        mockConnect.mockResolvedValue(undefined);
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Issue fetched concurrently" }],
+          isError: false,
+        });
+
+        await mcpClient.executeToolCall(
+          {
+            id: "call_oauth_concurrent_seed",
+            name: "jira-concurrent-server__get_issue",
+            arguments: { issue_key: "CTAZ-1014" },
+          },
+          agentId,
+          {
+            tokenId: "seed-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: testUser.id,
+          },
+        );
+
+        await secretManager().updateSecret(secret.id, {
+          access_token: "soon-expiring-token",
+          refresh_token: "refresh-token",
+          expires_at: Date.now() + 30_000,
+        });
+        (
+          mcpClient as unknown as {
+            secretsCache: { set: (key: string, value: unknown) => void };
+          }
+        ).secretsCache.set(mcpServer.id, {
+          secrets: {
+            access_token: "soon-expiring-token",
+            refresh_token: "refresh-token",
+            expires_at: Date.now() + 30_000,
+          },
+          secretId: secret.id,
+        });
+
+        mockCallTool.mockClear();
+        mockClose.mockClear();
+
+        const refreshSpy = vi
+          .spyOn(oauthRoutes, "refreshOAuthToken")
+          .mockImplementation(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 25));
+            await secretManager().updateSecret(secret.id, {
+              access_token: "concurrently-refreshed-token",
+              refresh_token: "rotated-refresh-token",
+              expires_at: Date.now() + 3_600_000,
+            });
+            return true;
+          });
+
+        const toolCall = {
+          id: "call_oauth_concurrent_refresh",
+          name: "jira-concurrent-server__get_issue",
+          arguments: { issue_key: "CTAZ-1015" },
+        };
+
+        const results = await Promise.all([
+          mcpClient.executeToolCall(toolCall, agentId, {
+            tokenId: "test-token-1",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: testUser.id,
+          }),
+          mcpClient.executeToolCall(
+            { ...toolCall, id: "call_oauth_concurrent_refresh_2" },
+            agentId,
+            {
+              tokenId: "test-token-2",
+              teamId: null,
+              isOrganizationToken: false,
+              userId: testUser.id,
+            },
+          ),
+          mcpClient.executeToolCall(
+            { ...toolCall, id: "call_oauth_concurrent_refresh_3" },
+            agentId,
+            {
+              tokenId: "test-token-3",
+              teamId: null,
+              isOrganizationToken: false,
+              userId: testUser.id,
+            },
+          ),
+        ]);
+
+        expect(refreshSpy).toHaveBeenCalledTimes(1);
+        expect(mockClose).toHaveBeenCalledTimes(1);
+        for (const result of results) {
+          expect(result).toMatchObject({
+            isError: false,
+            content: [{ type: "text", text: "Issue fetched concurrently" }],
+          });
+        }
+
+        refreshSpy.mockRestore();
+      });
+
       test("returns expired-auth message with manage URL when tool call throws UnauthorizedError on OAuth server with existing credentials", async ({
         makeUser,
       }) => {

@@ -25,10 +25,10 @@ import * as Sentry from "@sentry/node";
 import Fastify from "fastify";
 import metricsPlugin from "fastify-metrics";
 import {
+  createJsonSchemaTransformObject,
   hasZodFastifySchemaValidationErrors,
   isResponseSerializationError,
   jsonSchemaTransform,
-  jsonSchemaTransformObject,
   serializerCompiler,
   validatorCompiler,
   type ZodTypeProvider,
@@ -43,6 +43,7 @@ import {
   PROCESSED_EMAIL_CLEANUP_INTERVAL_MS,
   renewEmailSubscriptionIfNeeded,
 } from "@/agents/incoming-email";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { fastifyAuthPlugin } from "@/auth";
 import { cacheManager } from "@/cache-manager";
 import config, { shouldRunWebServer, shouldRunWorker } from "@/config";
@@ -226,7 +227,9 @@ export async function registerSwaggerPlugin(fastify: FastifyInstanceWithZod) {
     },
     hideUntagged: true,
     transform: jsonSchemaTransform,
-    transformObject: jsonSchemaTransformObject,
+    transformObject: createJsonSchemaTransformObject({
+      zodToJsonConfig: { target: "openapi-3.0" },
+    }),
   });
 }
 
@@ -961,6 +964,14 @@ const startWorker = async () => {
   try {
     await initializeDatabase();
     cacheManager.start();
+
+    // Sync Archestra MCP branding so the worker recognises branded tool names
+    // (e.g. "archestra_staging__artifact_write") when executing scheduled tasks.
+    // Without this, isToolName() only matches the default "archestra__" prefix
+    // and builtin tools fall through to mcpClient.executeToolCall() which fails
+    // because they have credentialResolutionMode "static" with no mcpServerId.
+    const organization = await OrganizationModel.getFirst();
+    archestraMcpBranding.syncFromOrganization(organization);
 
     // Set OpenMetrics content type to enable exemplar support
     const promClient = await import("prom-client");

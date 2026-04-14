@@ -1,5 +1,6 @@
 import { ModelModel } from "@/models";
 import { describe, expect, test } from "@/test";
+import { TiktokenTokenizer } from "@/tokenizers";
 import type { CommonMcpToolDefinition } from "@/types";
 import { calculateCost, estimateToolTokens } from "./cost-optimization";
 
@@ -123,8 +124,10 @@ describe("calculateCost", () => {
 });
 
 describe("estimateToolTokens", () => {
+  const tokenizer = new TiktokenTokenizer();
+
   test("returns 0 for empty tools array", () => {
-    expect(estimateToolTokens([])).toBe(0);
+    expect(estimateToolTokens([], tokenizer)).toBe(0);
   });
 
   test("estimates tokens for a single tool", () => {
@@ -142,12 +145,8 @@ describe("estimateToolTokens", () => {
       },
     ];
 
-    const tokens = estimateToolTokens(tools);
-    // Should be > 0 since the tool has content
+    const tokens = estimateToolTokens(tools, tokenizer);
     expect(tokens).toBeGreaterThan(0);
-    // chars/4 approximation: serialized text length / 4, rounded up
-    const serialized = `get_weather Get the current weather for a location ${JSON.stringify(tools[0].inputSchema)}`;
-    expect(tokens).toBe(Math.ceil(serialized.length / 4));
   });
 
   test("estimates more tokens for tools with large schemas", () => {
@@ -184,8 +183,8 @@ describe("estimateToolTokens", () => {
       },
     ];
 
-    expect(estimateToolTokens(largeTool)).toBeGreaterThan(
-      estimateToolTokens(smallTool),
+    expect(estimateToolTokens(largeTool, tokenizer)).toBeGreaterThan(
+      estimateToolTokens(smallTool, tokenizer),
     );
   });
 
@@ -216,8 +215,8 @@ describe("estimateToolTokens", () => {
       },
     ];
 
-    expect(estimateToolTokens(multipleTools)).toBeGreaterThan(
-      estimateToolTokens(singleTool),
+    expect(estimateToolTokens(multipleTools, tokenizer)).toBeGreaterThan(
+      estimateToolTokens(singleTool, tokenizer),
     );
   });
 
@@ -229,7 +228,7 @@ describe("estimateToolTokens", () => {
       },
     ];
 
-    const tokens = estimateToolTokens(tools);
+    const tokens = estimateToolTokens(tools, tokenizer);
     expect(tokens).toBeGreaterThan(0);
   });
 });

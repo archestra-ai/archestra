@@ -6,7 +6,7 @@ import {
   OptimizationRuleModel,
   TeamModel,
 } from "@/models";
-import { getTokenizer } from "@/tokenizers";
+import { getTokenizer, type ProviderMessage, type Tokenizer } from "@/tokenizers";
 import type {
   Agent,
   Anthropic,
@@ -46,9 +46,12 @@ type ProviderMessages = {
 
 /**
  * Estimate token count for tool definitions by serializing them
- * and using the same chars/4 approximation as the base tokenizer.
+ * and using the provider-specific tokenizer for accurate counting.
  */
-export function estimateToolTokens(tools: CommonMcpToolDefinition[]): number {
+export function estimateToolTokens(
+  tools: CommonMcpToolDefinition[],
+  tokenizer: Tokenizer,
+): number {
   if (tools.length === 0) return 0;
   const serialized = tools
     .map((t) => {
@@ -58,7 +61,7 @@ export function estimateToolTokens(tools: CommonMcpToolDefinition[]): number {
       return text;
     })
     .join(" ");
-  return Math.ceil(serialized.length / 4);
+  return tokenizer.countTokens({ role: "user", content: serialized } as ProviderMessage);
 }
 
 /**
@@ -129,7 +132,7 @@ export async function getOptimizedModel<
   // Use provider-specific tokenizer to count tokens
   const tokenizer = getTokenizer(provider);
   const messageTokenCount = tokenizer.countTokens(messages);
-  const toolTokenCount = estimateToolTokens(tools);
+  const toolTokenCount = estimateToolTokens(tools, tokenizer);
   const tokenCount = messageTokenCount + toolTokenCount;
 
   logger.info(

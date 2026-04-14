@@ -27294,7 +27294,7 @@ export type CreateConnectorData = {
             batchSize?: number;
         } | {
             type: 'linear';
-            linearApiUrl: string;
+            linearApiUrl?: string;
             teamIds?: Array<string>;
             projectIds?: Array<string>;
             states?: Array<string>;
@@ -27789,7 +27789,7 @@ export type UpdateConnectorData = {
             batchSize?: number;
         } | {
             type: 'linear';
-            linearApiUrl: string;
+            linearApiUrl?: string;
             teamIds?: Array<string>;
             projectIds?: Array<string>;
             states?: Array<string>;

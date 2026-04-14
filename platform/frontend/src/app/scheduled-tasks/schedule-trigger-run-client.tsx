@@ -3,7 +3,13 @@
 import type { UIMessage } from "@ai-sdk/react";
 import type { SupportedProvider } from "@shared";
 import type { ChatStatus } from "ai";
-import { ArrowLeft, ChevronDown, ExternalLink, Loader2 } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronDown,
+  ExternalLink,
+  FileText,
+  Loader2,
+} from "lucide-react";
 import Link from "next/link";
 import type { FormEvent } from "react";
 import {
@@ -16,6 +22,7 @@ import {
 } from "react";
 import ArchestraPromptInput from "@/app/chat/prompt-input";
 import { ChatMessages } from "@/components/chat/chat-messages";
+import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { LoadingSpinner } from "@/components/loading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -82,6 +89,7 @@ export function ScheduleTriggerRunPage({
     string | null
   >(null);
   const [showDetails, setShowDetails] = useState(false);
+  const [isArtifactOpen, setIsArtifactOpen] = useState(false);
 
   const { data: trigger, isLoading: triggerLoading } = useScheduleTrigger(
     triggerId,
@@ -417,7 +425,12 @@ export function ScheduleTriggerRunPage({
   const humanCadence = formatCronSchedule(trigger.cronExpression);
 
   return (
-    <div className="mr-auto flex w-full max-w-[1080px] flex-col gap-4">
+    <div
+      className={cn(
+        "mr-auto flex w-full flex-col gap-4",
+        isArtifactOpen ? "max-w-[1520px]" : "max-w-[1080px]",
+      )}
+    >
       {/* Header */}
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-2">
@@ -443,6 +456,16 @@ export function ScheduleTriggerRunPage({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {run.artifact && (
+              <Button
+                variant={isArtifactOpen ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => setIsArtifactOpen((prev) => !prev)}
+              >
+                <FileText className="mr-1.5 h-3.5 w-3.5" />
+                Artifact
+              </Button>
+            )}
             {conversationId && (
               <Button variant="outline" size="sm" asChild>
                 <Link
@@ -532,121 +555,134 @@ export function ScheduleTriggerRunPage({
         )}
       </div>
 
-      {/* Chat thread — the hero */}
-      <div className="overflow-hidden rounded-xl border border-border/60 bg-background">
-        {isRunActive && (
-          <div className="flex items-center gap-2 border-b border-border/60 px-4 py-2.5 text-xs text-amber-700 dark:text-amber-400">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            Run in progress — conversation unlocks when complete
-          </div>
-        )}
-
-        {(!conversationId && ensureConversationMutation.isPending) ||
-        (!conversationBootstrapError &&
-          !!conversationId &&
-          conversationLoading) ? (
-          <div className="flex items-center gap-2 border-b border-border/60 px-4 py-2.5 text-xs text-muted-foreground">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            Preparing conversation
-          </div>
-        ) : null}
-
-        <div className="flex min-h-[60vh] flex-col">
-          {conversationId ? (
-            <>
-              <div className="min-h-0 flex-1 px-3 md:px-4">
-                <ChatMessages
-                  conversationId={conversationId}
-                  agentId={activeAgentId}
-                  messages={messages}
-                  status={status}
-                  optimisticToolCalls={optimisticToolCalls}
-                  isLoadingConversation={conversationLoading}
-                  onMessagesUpdate={setMessages}
-                  error={error}
-                  agentName={activeAgentName}
-                  selectedModel={conversation?.selectedModel ?? ""}
-                  onToolApprovalResponse={
-                    addToolApprovalResponse
-                      ? ({ id, approved, reason }) => {
-                          addToolApprovalResponse({ id, approved, reason });
-                        }
-                      : undefined
-                  }
-                />
-              </div>
-
-              {activeAgentId && conversation ? (
-                <div className="sticky bottom-0 border-t border-border/60 bg-background/98 p-4 backdrop-blur-sm">
-                  <div className="mx-auto w-full max-w-4xl">
-                    {isRunActive ? (
-                      <div className="flex items-center justify-center gap-2 rounded-xl border border-border/60 bg-muted/20 px-4 py-4 text-sm text-muted-foreground">
-                        <LoadingSpinner />
-                        <span>Waiting for run to finish...</span>
-                      </div>
-                    ) : ensureConversationMutation.isPending ? (
-                      <div className="flex items-center justify-center gap-2 rounded-xl border border-border/60 bg-muted/20 px-4 py-4 text-sm text-muted-foreground">
-                        <LoadingSpinner />
-                        <span>Syncing run output...</span>
-                      </div>
-                    ) : (
-                      <ArchestraPromptInput
-                        onSubmit={handleSubmit}
-                        status={status}
-                        selectedModel={conversation.selectedModel ?? ""}
-                        onModelChange={handleModelChange}
-                        agentId={activeAgentId}
-                        conversationId={conversationId}
-                        currentConversationChatApiKeyId={
-                          conversation.chatApiKeyId
-                        }
-                        currentProvider={currentProvider}
-                        textareaRef={textareaRef}
-                        onProviderChange={handleProviderChange}
-                        allowFileUploads={
-                          organization?.allowChatFileUploads ?? false
-                        }
-                        tokensUsed={tokensUsed}
-                        maxContextLength={selectedModelContextLength}
-                        inputModalities={selectedModelInputModalities}
-                        agentLlmApiKeyId={
-                          conversation.agent?.llmApiKeyId ?? null
-                        }
-                        submitDisabled={false}
-                        isPlaywrightSetupVisible={false}
-                      />
-                    )}
-                  </div>
-                </div>
-              ) : null}
-            </>
-          ) : conversationBootstrapError ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-16 text-center">
-              <p className="text-sm text-muted-foreground">
-                {conversationBootstrapError}
-              </p>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  bootstrapRequestedRef.current = false;
-                  recoveryAttemptedRef.current = false;
-                  setBootstrappedConversationId(null);
-                  void ensureConversation();
-                }}
-                disabled={ensureConversationMutation.isPending}
-              >
-                Retry
-              </Button>
-            </div>
-          ) : (
-            <div className="flex flex-1 items-center justify-center px-6 py-16 text-sm text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Creating conversation...
-              </div>
+      {/* Chat thread + optional artifact panel */}
+      <div className="flex gap-4">
+        <div className="min-w-0 flex-1 overflow-hidden rounded-xl border border-border/60 bg-background">
+          {isRunActive && (
+            <div className="flex items-center gap-2 border-b border-border/60 px-4 py-2.5 text-xs text-amber-700 dark:text-amber-400">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Run in progress — conversation unlocks when complete
             </div>
           )}
+
+          {(!conversationId && ensureConversationMutation.isPending) ||
+          (!conversationBootstrapError &&
+            !!conversationId &&
+            conversationLoading) ? (
+            <div className="flex items-center gap-2 border-b border-border/60 px-4 py-2.5 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Preparing conversation
+            </div>
+          ) : null}
+
+          <div className="flex min-h-[60vh] flex-col">
+            {conversationId ? (
+              <>
+                <div className="min-h-0 flex-1 px-3 md:px-4">
+                  <ChatMessages
+                    conversationId={conversationId}
+                    agentId={activeAgentId}
+                    messages={messages}
+                    status={status}
+                    optimisticToolCalls={optimisticToolCalls}
+                    isLoadingConversation={conversationLoading}
+                    onMessagesUpdate={setMessages}
+                    error={error}
+                    agentName={activeAgentName}
+                    selectedModel={conversation?.selectedModel ?? ""}
+                    onToolApprovalResponse={
+                      addToolApprovalResponse
+                        ? ({ id, approved, reason }) => {
+                            addToolApprovalResponse({ id, approved, reason });
+                          }
+                        : undefined
+                    }
+                  />
+                </div>
+
+                {activeAgentId && conversation ? (
+                  <div className="sticky bottom-0 border-t border-border/60 bg-background/98 p-4 backdrop-blur-sm">
+                    <div className="mx-auto w-full max-w-4xl">
+                      {isRunActive ? (
+                        <div className="flex items-center justify-center gap-2 rounded-xl border border-border/60 bg-muted/20 px-4 py-4 text-sm text-muted-foreground">
+                          <LoadingSpinner />
+                          <span>Waiting for run to finish...</span>
+                        </div>
+                      ) : ensureConversationMutation.isPending ? (
+                        <div className="flex items-center justify-center gap-2 rounded-xl border border-border/60 bg-muted/20 px-4 py-4 text-sm text-muted-foreground">
+                          <LoadingSpinner />
+                          <span>Syncing run output...</span>
+                        </div>
+                      ) : (
+                        <ArchestraPromptInput
+                          onSubmit={handleSubmit}
+                          status={status}
+                          selectedModel={conversation.selectedModel ?? ""}
+                          onModelChange={handleModelChange}
+                          agentId={activeAgentId}
+                          conversationId={conversationId}
+                          currentConversationChatApiKeyId={
+                            conversation.chatApiKeyId
+                          }
+                          currentProvider={currentProvider}
+                          textareaRef={textareaRef}
+                          onProviderChange={handleProviderChange}
+                          allowFileUploads={
+                            organization?.allowChatFileUploads ?? false
+                          }
+                          tokensUsed={tokensUsed}
+                          maxContextLength={selectedModelContextLength}
+                          inputModalities={selectedModelInputModalities}
+                          agentLlmApiKeyId={
+                            conversation.agent?.llmApiKeyId ?? null
+                          }
+                          submitDisabled={false}
+                          isPlaywrightSetupVisible={false}
+                        />
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+              </>
+            ) : conversationBootstrapError ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-16 text-center">
+                <p className="text-sm text-muted-foreground">
+                  {conversationBootstrapError}
+                </p>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    bootstrapRequestedRef.current = false;
+                    recoveryAttemptedRef.current = false;
+                    setBootstrappedConversationId(null);
+                    void ensureConversation();
+                  }}
+                  disabled={ensureConversationMutation.isPending}
+                >
+                  Retry
+                </Button>
+              </div>
+            ) : (
+              <div className="flex flex-1 items-center justify-center px-6 py-16 text-sm text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Creating conversation...
+                </div>
+              </div>
+            )}
+          </div>
         </div>
+
+        {isArtifactOpen && run.artifact && (
+          <div className="w-[400px] shrink-0 overflow-hidden rounded-xl border border-border/60">
+            <ConversationArtifactPanel
+              artifact={run.artifact}
+              isOpen={isArtifactOpen}
+              onToggle={() => setIsArtifactOpen(false)}
+              embedded
+            />
+          </div>
+        )}
       </div>
     </div>
   );

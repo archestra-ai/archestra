@@ -1,5 +1,5 @@
 {
-  "id": "289792c3-7217-447a-a748-554f7f191e82",
+  "id": "ff83ad83-98ae-4ac4-a028-d03e01bd1570",
   "prevId": "6b07ded5-64b5-454b-b45a-53c3d01729f0",
   "version": "7",
   "dialect": "postgresql",
@@ -6230,13 +6230,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "slim_chat_error_ui": {
-          "name": "slim_chat_error_ui",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
         "show_two_factor": {
           "name": "show_two_factor",
           "type": "boolean",
@@ -6387,6 +6380,12 @@
         },
         "error": {
           "name": "error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "artifact": {
+          "name": "artifact",
           "type": "text",
           "primaryKey": false,
           "notNull": false

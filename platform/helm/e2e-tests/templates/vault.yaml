@@ -134,7 +134,12 @@ spec:
                   ttl="{{ .Values.vault.k8sAuth.ttl }}"
 
                 {{- range .Values.vault.secrets }}
-                vault write {{ .path }}{{ range $key, $value := .data }} {{ $key }}={{ $value | quote }}{{ end }}
+                {{- $path := .path }}
+                {{- if contains "/data/" $path }}
+                vault kv put -mount="{{ regexReplaceAll "/data/.*$" $path "" }}" "{{ regexReplaceAll "^.*/data/" $path "" }}"{{ range $key, $value := .data }} {{ $key }}={{ $value | quote }}{{ end }}
+                {{- else }}
+                vault write {{ $path }}{{ range $key, $value := .data }} {{ $key }}={{ $value | quote }}{{ end }}
+                {{- end }}
                 {{- end }}
       {{- end }}
 {{- end }}

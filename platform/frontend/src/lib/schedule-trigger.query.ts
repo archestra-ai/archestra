@@ -56,6 +56,7 @@ export type ScheduleTriggerRun = {
   startedAt: string | null;
   completedAt: string | null;
   error: string | null;
+  artifact: string | null;
   createdAt: string;
 };
 

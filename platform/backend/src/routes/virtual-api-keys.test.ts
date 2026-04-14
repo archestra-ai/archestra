@@ -1,4 +1,6 @@
+import { hasArchestraTokenPrefix } from "@shared";
 import { vi } from "vitest";
+import { LlmProviderApiKeyModel } from "@/models";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -218,6 +220,253 @@ describe("virtualApiKeysRoutes", () => {
       name: "Team Key",
       scope: "team",
       teams: [expect.objectContaining({ id: otherTeam.id })],
+    });
+  });
+
+  test("POST /api/llm-provider-api-keys/:id/virtual-keys returns the full token value once", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    mockUserHasPermission.mockResolvedValue(true);
+
+    const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
+    const parentKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/llm-provider-api-keys/${parentKey.id}/virtual-keys`,
+      payload: {
+        name: "my-test-key",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(hasArchestraTokenPrefix(body.value)).toBe(true);
+    expect(body.id).toBeTruthy();
+    expect(body.name).toBe("my-test-key");
+    expect(body.tokenStart).toBe(body.value.substring(0, 14));
+    expect(body.createdAt).toBeTruthy();
+    expect(body.expiresAt).toBeNull();
+    expect(body.lastUsedAt).toBeNull();
+  });
+
+  test("GET /api/llm-provider-api-keys/:id/virtual-keys lists keys without exposing token values", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    mockUserHasPermission.mockResolvedValue(true);
+
+    const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
+    const parentKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+    });
+
+    const firstResponse = await app.inject({
+      method: "POST",
+      url: `/api/llm-provider-api-keys/${parentKey.id}/virtual-keys`,
+      payload: {
+        name: "key-alpha",
+      },
+    });
+    const secondResponse = await app.inject({
+      method: "POST",
+      url: `/api/llm-provider-api-keys/${parentKey.id}/virtual-keys`,
+      payload: {
+        name: "key-beta",
+      },
+    });
+
+    expect(firstResponse.statusCode).toBe(200);
+    expect(secondResponse.statusCode).toBe(200);
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/llm-provider-api-keys/${parentKey.id}/virtual-keys`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as Array<{
+      id: string;
+      name: string;
+      tokenStart: string;
+      value?: string;
+    }>;
+    expect(body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: firstResponse.json().id,
+          name: "key-alpha",
+        }),
+        expect.objectContaining({
+          id: secondResponse.json().id,
+          name: "key-beta",
+        }),
+      ]),
+    );
+    for (const key of body) {
+      expect(key.value).toBeUndefined();
+      expect(key.tokenStart).toBeTruthy();
+    }
+  });
+
+  test("GET /api/llm-virtual-keys returns paginated parent key metadata", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    mockUserHasPermission.mockResolvedValue(true);
+
+    const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
+    const parentKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      name: "Org Listing Parent",
+      provider: "openai",
+    });
+
+    await app.inject({
+      method: "POST",
+      url: `/api/llm-provider-api-keys/${parentKey.id}/virtual-keys`,
+      payload: {
+        name: "org-list-key-1",
+      },
+    });
+    await app.inject({
+      method: "POST",
+      url: `/api/llm-provider-api-keys/${parentKey.id}/virtual-keys`,
+      payload: {
+        name: "org-list-key-2",
+      },
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/llm-virtual-keys?limit=50&offset=0",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as {
+      data: Array<{
+        name: string;
+        parentKeyName: string;
+        parentKeyProvider: string;
+        parentKeyBaseUrl: string | null;
+      }>;
+      pagination: {
+        total: number;
+        currentPage: number;
+        totalPages: number;
+        limit: number;
+        hasNext: boolean;
+        hasPrev: boolean;
+      };
+    };
+    const listedKeys = body.data.filter(
+      (key) => key.parentKeyName === "Org Listing Parent",
+    );
+    expect(body.pagination.total).toBeGreaterThanOrEqual(2);
+    expect(listedKeys).toHaveLength(2);
+    for (const key of listedKeys) {
+      expect(key.parentKeyProvider).toBe("openai");
+      expect(key.parentKeyBaseUrl).toBeNull();
+    }
+  });
+
+  test("DELETE /api/llm-provider-api-keys/:chatApiKeyId/virtual-keys/:id removes the key", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    mockUserHasPermission.mockResolvedValue(true);
+
+    const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
+    const parentKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+    });
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: `/api/llm-provider-api-keys/${parentKey.id}/virtual-keys`,
+      payload: {
+        name: "delete-me",
+      },
+    });
+
+    expect(createResponse.statusCode).toBe(200);
+
+    const deleteResponse = await app.inject({
+      method: "DELETE",
+      url: `/api/llm-provider-api-keys/${parentKey.id}/virtual-keys/${createResponse.json().id}`,
+    });
+
+    expect(deleteResponse.statusCode).toBe(200);
+    expect(deleteResponse.json()).toEqual({ success: true });
+
+    const listResponse = await app.inject({
+      method: "GET",
+      url: `/api/llm-provider-api-keys/${parentKey.id}/virtual-keys`,
+    });
+
+    expect(listResponse.statusCode).toBe(200);
+    expect(
+      listResponse
+        .json()
+        .map((key: { id: string }) => key.id)
+        .includes(createResponse.json().id),
+    ).toBe(false);
+  });
+
+  test("POST /api/llm-provider-api-keys/:id/virtual-keys supports keyless parent keys", async () => {
+    mockUserHasPermission.mockResolvedValue(true);
+
+    const parentKey = await LlmProviderApiKeyModel.create({
+      organizationId,
+      secretId: null,
+      name: "Keyless Parent",
+      provider: "ollama",
+      scope: "org",
+      userId: null,
+      teamId: null,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/llm-provider-api-keys/${parentKey.id}/virtual-keys`,
+      payload: {
+        name: "vk-for-keyless",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(hasArchestraTokenPrefix(body.value)).toBe(true);
+    expect(body.name).toBe("vk-for-keyless");
+  });
+
+  test("POST /api/llm-provider-api-keys/:id/virtual-keys rejects past expiration dates", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    mockUserHasPermission.mockResolvedValue(true);
+
+    const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
+    const parentKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/llm-provider-api-keys/${parentKey.id}/virtual-keys`,
+      payload: {
+        name: "expired-from-the-start",
+        expiresAt: new Date(Date.now() - 60_000).toISOString(),
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: {
+        message: "Expiration date must be in the future",
+      },
     });
   });
 });

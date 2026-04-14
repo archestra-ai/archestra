@@ -9,6 +9,7 @@ import {
   cacheIdpGroups,
   extractGroupsFromClaims,
 } from "@/auth/idp-team-sync-cache.ee";
+import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import { evaluateRoleMappingTemplate } from "@/templating";
@@ -1004,11 +1005,14 @@ function assertValidOidcDiscoveryEndpoint(discoveryEndpoint: string): void {
     );
   }
 
-  if (parsedUrl.protocol !== "https:") {
+  if (!config.test.enableE2eTestEndpoints && parsedUrl.protocol !== "https:") {
     throw new ApiError(400, "OIDC discovery endpoint must use HTTPS.");
   }
 
-  if (isPrivateOrLoopbackHostname(parsedUrl.hostname)) {
+  if (
+    !config.test.enableE2eTestEndpoints &&
+    isPrivateOrLoopbackHostname(parsedUrl.hostname)
+  ) {
     throw new ApiError(
       400,
       `OIDC discovery endpoint host "${parsedUrl.hostname}" is not allowed.`,

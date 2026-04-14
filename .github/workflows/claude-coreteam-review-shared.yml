@@ -45,3 +45,4 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           use_sticky_comment: "true"
           track_progress: "true"
+          show_full_output: "true"

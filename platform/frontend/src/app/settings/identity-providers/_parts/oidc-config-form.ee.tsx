@@ -195,6 +195,26 @@ export function OidcConfigForm({
           )}
         />
 
+        {providerId === "Google" && (
+          <FormField
+            control={form.control}
+            name="oidcConfig.hd"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Hosted Domain Hint (Optional)</FormLabel>
+                <FormControl>
+                  <Input placeholder="example.com" {...field} />
+                </FormControl>
+                <FormDescription>
+                  Passes Google&apos;s `hd` parameter to prefer or restrict
+                  account selection to a specific Workspace domain.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
+
         <FormField
           control={form.control}
           name="oidcConfig.discoveryEndpoint"

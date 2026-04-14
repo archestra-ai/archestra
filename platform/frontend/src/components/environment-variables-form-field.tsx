@@ -43,6 +43,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  MCP_CONFIG_AUTOCOMPLETE,
+  MCP_SECRET_AUTOCOMPLETE,
+} from "@/lib/mcp/mcp-form-autocomplete";
 
 const ExternalSecretSelector = lazy(
   () =>
@@ -436,6 +440,11 @@ export function EnvironmentVariablesFormField<
                                     }
                                     placeholder="your-value"
                                     className="font-mono"
+                                    autoComplete={
+                                      envType === "secret"
+                                        ? MCP_SECRET_AUTOCOMPLETE
+                                        : MCP_CONFIG_AUTOCOMPLETE
+                                    }
                                     {...field}
                                   />
                                 </FormControl>
@@ -852,6 +861,7 @@ function AutoResizeSecretTextarea({
         <Textarea
           className="font-mono text-xs resize-none min-h-10 max-h-32 overflow-y-auto"
           rows={1}
+          autoComplete={MCP_SECRET_AUTOCOMPLETE}
           {...field}
           ref={(el) => {
             textareaRef.current = el;

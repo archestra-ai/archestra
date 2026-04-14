@@ -1,0 +1,212 @@
+name: Build Native Multi-Arch Image
+
+on:
+  workflow_call:
+    inputs:
+      image_directory:
+        description: "Directory containing the Dockerfile"
+        required: true
+        type: string
+      image_name:
+        description: "Image name without registry prefix"
+        required: true
+        type: string
+      image_registry:
+        description: "Registry/repository prefix, e.g. docker.io/archestra"
+        required: true
+        type: string
+      version:
+        description: "Version tag for the Docker image"
+        required: true
+        type: string
+      push_image:
+        description: "Whether to push the image and publish a manifest"
+        required: true
+        type: boolean
+      auth_provider:
+        description: "Registry auth provider: gar, dockerhub, or none"
+        required: true
+        type: string
+      dockerfile:
+        description: "Optional Dockerfile path"
+        required: false
+        type: string
+        default: ""
+      previous_image:
+        description: "Optional previous image to extract static assets from"
+        required: false
+        type: string
+        default: ""
+      include_latest_tag:
+        description: "Whether to also tag the merged manifest as latest"
+        required: false
+        type: boolean
+        default: false
+      checkout_fetch_depth:
+        description: "Checkout fetch depth"
+        required: false
+        type: number
+        default: 1
+      checkout_ref:
+        description: "Optional ref to checkout"
+        required: false
+        type: string
+        default: ""
+    secrets:
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
+        required: false
+      GCP_SERVICE_ACCOUNT_NAME:
+        required: false
+      DOCKER_USERNAME:
+        required: false
+      DOCKER_PASSWORD:
+        required: false
+      PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN:
+        required: false
+      TURBOREPO_REMOTE_CACHING_TOKEN:
+        required: false
+      TURBOREPO_REMOTE_CACHING_TEAM:
+        required: false
+
+permissions: {}
+
+concurrency:
+  group: build-native-multi-arch-image-${{ inputs.image_registry }}-${{ inputs.image_name }}-${{ inputs.version }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-image:
+    name: Build ${{ inputs.image_name }} (${{ matrix.os_and_arch }})
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: blacksmith-16vcpu-ubuntu-2404
+            os_and_arch: linux/amd64
+          - platform: blacksmith-16vcpu-ubuntu-2404-arm
+            os_and_arch: linux/arm64
+    permissions:
+      contents: read # Required to checkout the repository and build the image.
+      id-token: write # Required for Workload Identity Federation when pushing images.
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          fetch-depth: ${{ inputs.checkout_fetch_depth }}
+          ref: ${{ inputs.checkout_ref != '' && inputs.checkout_ref || github.sha }}
+
+      - name: Authenticate to Google Artifact Registry
+        if: ${{ inputs.push_image && inputs.auth_provider == 'gar' }}
+        uses: ./.github/actions/auth-to-gar
+        with:
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+      - name: Log in to Docker Hub
+        if: ${{ inputs.push_image && inputs.auth_provider == 'dockerhub' }}
+        uses: ./.github/actions/docker-login
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build Docker image
+        id: build
+        uses: ./.github/actions/build-docker-image
+        with:
+          context: ${{ inputs.image_directory }}
+          dockerfile: ${{ inputs.dockerfile }}
+          push: ${{ inputs.push_image }}
+          platforms: ${{ matrix.os_and_arch }}
+          outputs: ${{ inputs.push_image && format('type=image,name={0}/{1},push-by-digest=true,name-canonical=true,push=true', inputs.image_registry, inputs.image_name) || '' }}
+          version: ${{ inputs.version }}
+          previous-image: ${{ inputs.previous_image }}
+          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+          sentry-auth-token: ${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
+
+      - name: Export digest
+        if: ${{ inputs.push_image }}
+        run: |
+          mkdir -p /tmp/digests
+          digest="${DIGEST}"
+          touch "/tmp/digests/${digest#sha256:}"
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+
+      - name: Upload digest
+        if: ${{ inputs.push_image }}
+        uses: ./.github/actions/github-upload-artifact
+        with:
+          name: ${{ inputs.image_name }}-digests-${{ strategy.job-index }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge-manifests:
+    name: Create multi-arch manifest
+    if: ${{ inputs.push_image }}
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs:
+      - build-image
+    permissions:
+      contents: read # Required to download per-arch digests and publish the merged manifest.
+      id-token: write # Required for Workload Identity Federation when pushing the manifest.
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Download digests
+        uses: ./.github/actions/github-download-artifact
+        with:
+          path: /tmp/digests
+          pattern: ${{ inputs.image_name }}-digests-*
+          merge-multiple: true
+
+      - name: Setup Blacksmith Builder
+        uses: ./.github/actions/setup-blacksmith-builder
+
+      - name: Authenticate to Google Artifact Registry
+        if: ${{ inputs.auth_provider == 'gar' }}
+        uses: ./.github/actions/auth-to-gar
+        with:
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+      - name: Log in to Docker Hub
+        if: ${{ inputs.auth_provider == 'dockerhub' }}
+        uses: ./.github/actions/docker-login
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        run: |
+          EXTRA_TAGS=()
+          if [ "${INCLUDE_LATEST_TAG}" = "true" ]; then
+            # supply-chain-policy: allow-latest internal release channel
+            EXTRA_TAGS+=(-t "${IMAGE_REGISTRY}/${IMAGE_NAME}:latest")
+          fi
+
+          docker buildx imagetools create \
+            -t "${IMAGE_REGISTRY}/${IMAGE_NAME}:${VERSION}" \
+            "${EXTRA_TAGS[@]}" \
+            $(printf "${IMAGE_REGISTRY}/${IMAGE_NAME}@sha256:%s " *)
+        env:
+          IMAGE_REGISTRY: ${{ inputs.image_registry }}
+          IMAGE_NAME: ${{ inputs.image_name }}
+          VERSION: ${{ inputs.version }}
+          INCLUDE_LATEST_TAG: ${{ inputs.include_latest_tag }}
+
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect "${IMAGE_REGISTRY}/${IMAGE_NAME}:${VERSION}"
+        env:
+          IMAGE_REGISTRY: ${{ inputs.image_registry }}
+          IMAGE_NAME: ${{ inputs.image_name }}
+          VERSION: ${{ inputs.version }}

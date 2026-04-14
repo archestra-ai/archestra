@@ -30,20 +30,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  publish-dev-platform-image:
-    name: Build Platform Dev Docker Image
-    permissions:
-      contents: read # Required to checkout the repository and build the platform image.
-      id-token: write # Required for Workload Identity Federation.
+  resolve-previous-platform-image:
+    name: Resolve previous platform image
     if: ${{ github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.label.name == 'deploy-dev-platform-images' && github.event.pull_request.head.repo.fork != true) }}
     runs-on: blacksmith-16vcpu-ubuntu-2404
+    permissions:
+      contents: read # Required to resolve the currently deployed platform image from staging.
+      id-token: write # Required for Workload Identity Federation and GKE credential retrieval.
+    outputs:
+      previous_image: ${{ steps.previous-platform-image.outputs.previous-image }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-
       - name: Authenticate to Google Artifact Registry
         uses: ./.github/actions/auth-to-gar
         with:
@@ -71,20 +67,29 @@ jobs:
             echo "previous-image=" >> "$GITHUB_OUTPUT"
           fi
         env:
-          IMAGE_VERSION: ${{ inputs.version || github.sha }}
+          IMAGE_VERSION: ${{ inputs.version || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
 
-      - name: Build Docker image
-        uses: ./.github/actions/build-platform-docker-image
-        with:
-          context: ./platform
-          push: "true"
-          platforms: linux/amd64
-          version: ${{ inputs.version || github.sha }}
-          previous-image: ${{ steps.previous-platform-image.outputs.previous-image }}
-          tags: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${{ inputs.version || github.sha }}
-          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-          sentry-auth-token: ${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
+  publish-dev-platform-image:
+    name: Build Platform Dev Docker Image
+    needs:
+      - resolve-previous-platform-image
+    if: ${{ github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.label.name == 'deploy-dev-platform-images' && github.event.pull_request.head.repo.fork != true) }}
+    uses: ./.github/workflows/build-native-multi-arch-image.yml
+    with:
+      image_directory: ./platform
+      image_name: platform
+      image_registry: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
+      version: ${{ inputs.version || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
+      push_image: true
+      auth_provider: gar
+      checkout_ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      previous_image: ${{ needs.resolve-previous-platform-image.outputs.previous_image }}
+    secrets:
+      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+      PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN: ${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
+      TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+      TURBOREPO_REMOTE_CACHING_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
 
   publish-dev-mcp-server-base-image:
     name: Build MCP Server Base Dev Image
@@ -95,7 +100,7 @@ jobs:
       id-token: write # Required for Workload Identity Federation.
     with:
       push_to_gcr: true
-      version: ${{ inputs.version || github.sha }}
+      version: ${{ inputs.version || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}

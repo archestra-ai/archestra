@@ -175,6 +175,39 @@ Known limitations:
 
 Incremental sync uses the `modifiedTime` field with a 5-minute safety buffer to fetch only files modified since the last run.
 
+## Dropbox
+
+Ingests files from Dropbox via the Dropbox API v2. Text is extracted from `.txt`, `.md`, `.csv`, `.json`, `.xml`, `.html`, `.htm`, `.yaml`, `.log` files, as well as `.docx`, `.pdf`, and `.pptx` documents.
+
+| Field                  | Description                                                                                                 |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Folder Path            | Dropbox folder path to sync, e.g. `/Projects/Docs` (optional -- leave blank to sync from the account root). Must start with `/` when provided. |
+| File Types             | Comma-separated file extensions to include, e.g. `.md, .pdf` (optional -- leave blank for all supported types) |
+| Recursive Traversal    | Sync files from all nested subfolders (default: on)                                                          |
+| Include Shared Folders | Include files from team shared folders mounted at the path. Requires a team-scoped access token (default: off) |
+
+Authentication uses a Dropbox **access token**. Create one at [dropbox.com/developers/apps](https://www.dropbox.com/developers/apps):
+
+1. Click **Create app**, choose **Scoped access**, and select **Full Dropbox** (or App folder for scoped access).
+2. Under **Permissions**, enable `files.metadata.read` and `files.content.read`.
+3. Under **Settings → OAuth 2**, generate an access token (for quick testing) or wire up your own OAuth2 flow and paste the access token returned by Dropbox.
+4. Paste the token into the **Access Token** field.
+
+To configure the connector:
+
+- Create a Dropbox app with the scopes above
+- Generate or obtain an access token
+- Paste the token into the access token field
+- Optionally set a **Folder Path** to scope the sync to a specific directory
+
+Known limitations:
+
+- File size limit for text extraction is 50 MB per file.
+- Paper docs and other Dropbox-native document types are not currently ingested (export them to a supported format first).
+- Refresh tokens are not yet supported -- tokens must be valid at sync time.
+
+Incremental sync uses Dropbox's `list_folder/continue` delta API with a persisted cursor, plus a 5-minute `server_modified` safety buffer as a belt-and-braces guard. If the saved cursor becomes invalid (occasionally Dropbox requires a reset), the connector automatically falls back to a full listing.
+
 ## Managing Connectors
 
 Connectors can be managed from either the **Connectors** page or a knowledge base's detail page. After creation you can:

@@ -26619,7 +26619,7 @@ export type GetKnowledgeBasesResponses = {
             connectors: Array<{
                 id: string;
                 name: string;
-                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive';
+                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox';
             }>;
             totalDocsIndexed: number;
             assignedAgents: Array<{
@@ -27067,7 +27067,7 @@ export type GetConnectorsData = {
         offset?: number;
         knowledgeBaseId?: string;
         search?: string;
-        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive';
+        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox';
     };
     url: '/api/connectors';
 };
@@ -27143,7 +27143,7 @@ export type GetConnectorsResponses = {
             description: string | null;
             visibility: 'org-wide' | 'team-scoped';
             teamIds: Array<string>;
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox';
             config: {
                 type: 'jira';
                 jiraBaseUrl: unknown;
@@ -27213,6 +27213,13 @@ export type GetConnectorsResponses = {
                 maxDepth?: number;
                 fileTypes?: Array<string>;
                 batchSize?: number;
+            } | {
+                type: 'dropbox';
+                folderPath?: string;
+                recursive?: boolean;
+                fileTypes?: Array<string>;
+                includeSharedFolders?: boolean;
+                batchSize?: number;
             };
             secretId: string | null;
             schedule: string;
@@ -27250,7 +27257,7 @@ export type CreateConnectorData = {
         description?: string | null;
         visibility?: 'org-wide' | 'team-scoped';
         teamIds?: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox';
         config: {
             type: 'jira';
             jiraBaseUrl: string;
@@ -27319,6 +27326,13 @@ export type CreateConnectorData = {
             recursive?: boolean;
             maxDepth?: number;
             fileTypes?: Array<string>;
+            batchSize?: number;
+        } | {
+            type: 'dropbox';
+            folderPath?: string;
+            recursive?: boolean;
+            fileTypes?: Array<string>;
+            includeSharedFolders?: boolean;
             batchSize?: number;
         };
         credentials: {
@@ -27404,7 +27418,7 @@ export type CreateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -27473,6 +27487,13 @@ export type CreateConnectorResponses = {
             recursive?: boolean;
             maxDepth?: number;
             fileTypes?: Array<string>;
+            batchSize?: number;
+        } | {
+            type: 'dropbox';
+            folderPath?: string;
+            recursive?: boolean;
+            fileTypes?: Array<string>;
+            includeSharedFolders?: boolean;
             batchSize?: number;
         };
         secretId: string | null;
@@ -27649,7 +27670,7 @@ export type GetConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -27718,6 +27739,13 @@ export type GetConnectorResponses = {
             recursive?: boolean;
             maxDepth?: number;
             fileTypes?: Array<string>;
+            batchSize?: number;
+        } | {
+            type: 'dropbox';
+            folderPath?: string;
+            recursive?: boolean;
+            fileTypes?: Array<string>;
+            includeSharedFolders?: boolean;
             batchSize?: number;
         };
         secretId: string | null;
@@ -27812,6 +27840,13 @@ export type UpdateConnectorData = {
             maxDepth?: number;
             fileTypes?: Array<string>;
             batchSize?: number;
+        } | {
+            type: 'dropbox';
+            folderPath?: string;
+            recursive?: boolean;
+            fileTypes?: Array<string>;
+            includeSharedFolders?: boolean;
+            batchSize?: number;
         };
         credentials?: {
             email?: string;
@@ -27897,7 +27932,7 @@ export type UpdateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -27966,6 +28001,13 @@ export type UpdateConnectorResponses = {
             recursive?: boolean;
             maxDepth?: number;
             fileTypes?: Array<string>;
+            batchSize?: number;
+        } | {
+            type: 'dropbox';
+            folderPath?: string;
+            recursive?: boolean;
+            fileTypes?: Array<string>;
+            includeSharedFolders?: boolean;
             batchSize?: number;
         };
         secretId: string | null;

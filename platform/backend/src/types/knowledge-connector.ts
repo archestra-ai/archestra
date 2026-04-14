@@ -11,6 +11,7 @@ const SERVICENOW = z.literal("servicenow");
 const NOTION = z.literal("notion");
 const SHAREPOINT = z.literal("sharepoint");
 const GDRIVE = z.literal("gdrive");
+const DROPBOX = z.literal("dropbox");
 
 export const ConnectorTypeSchema = z.union([
   JIRA,
@@ -21,6 +22,7 @@ export const ConnectorTypeSchema = z.union([
   NOTION,
   SHAREPOINT,
   GDRIVE,
+  DROPBOX,
 ]);
 export type ConnectorType = z.infer<typeof ConnectorTypeSchema>;
 
@@ -216,6 +218,34 @@ export const GoogleDriveCheckpointSchema = z.object({
 });
 export type GoogleDriveCheckpoint = z.infer<typeof GoogleDriveCheckpointSchema>;
 
+// ===== Dropbox Config & Checkpoint =====
+
+export const DropboxConfigSchema = z.object({
+  type: DROPBOX,
+  /** Root path to sync from. Defaults to "" (account root) when omitted. */
+  folderPath: z.string().optional(),
+  /** When true, traverse subfolders. Defaults to true. */
+  recursive: z.boolean().optional(),
+  /** Restrict sync to files with these extensions (e.g. [".md", ".pdf"]). */
+  fileTypes: z.array(z.string()).optional(),
+  /** When true, include files from team shared folders (requires team-scoped token). */
+  includeSharedFolders: z.boolean().optional(),
+  batchSize: z.number().optional(),
+});
+export type DropboxConfig = z.infer<typeof DropboxConfigSchema>;
+
+export const DropboxCheckpointSchema = z.object({
+  type: DROPBOX,
+  lastSyncedAt: z.string().optional(),
+  /**
+   * Dropbox list-folder cursor — enables O(delta) incremental sync via
+   * `/files/list_folder/continue`. When present, the next sync fetches only
+   * files changed since the cursor was issued.
+   */
+  cursor: z.string().optional(),
+});
+export type DropboxCheckpoint = z.infer<typeof DropboxCheckpointSchema>;
+
 // ===== Discriminated Unions =====
 
 export const ConnectorConfigSchema = z.discriminatedUnion("type", [
@@ -227,6 +257,7 @@ export const ConnectorConfigSchema = z.discriminatedUnion("type", [
   NotionConfigSchema,
   SharePointConfigSchema,
   GoogleDriveConfigSchema,
+  DropboxConfigSchema,
 ]);
 export type ConnectorConfig = z.infer<typeof ConnectorConfigSchema>;
 
@@ -239,6 +270,7 @@ export const ConnectorCheckpointSchema = z.discriminatedUnion("type", [
   NotionCheckpointSchema,
   SharePointCheckpointSchema,
   GoogleDriveCheckpointSchema,
+  DropboxCheckpointSchema,
 ]);
 export type ConnectorCheckpoint = z.infer<typeof ConnectorCheckpointSchema>;
 

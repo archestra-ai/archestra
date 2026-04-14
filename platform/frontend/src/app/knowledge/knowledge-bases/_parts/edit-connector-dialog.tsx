@@ -32,6 +32,7 @@ import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useUpdateConnector } from "@/lib/knowledge/connector.query";
 import { ConfluenceConfigFields } from "./confluence-config-fields";
 import { ConnectorTypeIcon } from "./connector-icons";
+import { DropboxConfigFields } from "./dropbox-config-fields";
 import { GoogleDriveConfigFields } from "./gdrive-config-fields";
 import { GithubConfigFields } from "./github-config-fields";
 import { GitlabConfigFields } from "./gitlab-config-fields";
@@ -407,11 +408,13 @@ export function EditConnectorDialog({
                         ? "Client Secret"
                         : connectorType === "gdrive"
                           ? "Service Account Key / OAuth Token"
-                          : needsEmail
-                            ? emailRequired
-                              ? "API Token"
-                              : "API Token / Personal Access Token"
-                            : "Personal Access Token"}
+                          : connectorType === "dropbox"
+                            ? "Access Token"
+                            : needsEmail
+                              ? emailRequired
+                                ? "API Token"
+                                : "API Token / Personal Access Token"
+                              : "Personal Access Token"}
                 </FormLabel>
                 <FormControl>
                   <Input
@@ -437,6 +440,13 @@ export function EditConnectorDialog({
                   <p className="text-[0.8rem] text-muted-foreground">
                     Paste a service account JSON key (entire file content) or an
                     OAuth2 access token with <code>drive.readonly</code> scope.
+                  </p>
+                )}
+                {connectorType === "dropbox" && (
+                  <p className="text-[0.8rem] text-muted-foreground">
+                    Paste a Dropbox OAuth2 access token or app access token with
+                    the <code>files.metadata.read</code> and{" "}
+                    <code>files.content.read</code> scopes.
                   </p>
                 )}
                 <FormMessage />
@@ -472,6 +482,9 @@ export function EditConnectorDialog({
               )}
               {connectorType === "gdrive" && (
                 <GoogleDriveConfigFields form={form} />
+              )}
+              {connectorType === "dropbox" && (
+                <DropboxConfigFields form={form} />
               )}
             </CollapsibleContent>
           </Collapsible>
@@ -549,6 +562,8 @@ function getEditUrlConfig(type: ConnectorType): {
       return { typeLabel: "Notion", urlFields: null };
     case "gdrive":
       return { typeLabel: "Google Drive", urlFields: null };
+    case "dropbox":
+      return { typeLabel: "Dropbox", urlFields: null };
     case "sharepoint":
       return {
         typeLabel: "SharePoint",

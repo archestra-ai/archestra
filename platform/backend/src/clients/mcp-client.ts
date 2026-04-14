@@ -229,7 +229,13 @@ class McpClient {
   private sessionRecoveryLocks = new Map<string, Promise<void>>();
   // Per-secretId lock to prevent concurrent OAuth refresh attempts from
   // thrashing rotating refresh tokens when multiple tool calls arrive at once.
-  private oauthRefreshLocks = new Map<string, Promise<boolean>>();
+  private oauthRefreshLocks = new Map<
+    string,
+    Promise<{
+      refreshed: boolean;
+      updatedSecret: Record<string, unknown> | null;
+    }>
+  >();
   // Session affinity metadata discovered during transport creation.
   // Used when persisting fresh session IDs after connect().
   private pendingHttpSessionMetadata = new Map<
@@ -1676,26 +1682,16 @@ class McpClient {
       "attemptTokenRefreshAndRetry: authentication error detected, attempting token refresh and retry",
     );
 
-    // Invalidate existing client since token is going to be changed
-    const existingClient = this.activeConnections.get(connectionKey);
-    if (existingClient) {
-      try {
-        await existingClient.close();
-      } catch {
-        // Ignore close errors
-      }
-      this.activeConnections.delete(connectionKey);
-      this.pendingHttpSessionMetadata.delete(connectionKey);
-    }
-
     // Attempt refresh, deduplicated per secret so concurrent callers do not
-    // race a rotating refresh token and incorrectly flag the server as broken.
-    const refreshResult = await this.refreshOAuthTokenWithLock(
+    // race a rotating refresh token or thrash connection teardown state.
+    const refreshResult = await this.refreshOAuthTokenWithLock({
       secretId,
       catalogId,
-    );
+      connectionKey,
+      targetMcpServerId,
+    });
 
-    if (!refreshResult) {
+    if (!refreshResult.refreshed) {
       logger.warn(
         { toolName: toolCall.name, secretId },
         "attemptTokenRefreshAndRetry: token refresh failed",
@@ -1723,8 +1719,8 @@ class McpClient {
 
     try {
       // Re-fetch updated secrets and retry once
-      const updatedSecret = await secretManager().getSecret(secretId);
-      if (!updatedSecret?.secret) {
+      const updatedSecret = refreshResult.updatedSecret;
+      if (!updatedSecret) {
         logger.warn(
           { toolName: toolCall.name, secretId },
           "attemptTokenRefreshAndRetry: failed to fetch updated secret after refresh",
@@ -1732,16 +1728,11 @@ class McpClient {
         return null;
       }
 
-      this.secretsCache.set(targetMcpServerId, {
-        secrets: updatedSecret.secret,
-        secretId,
-      });
-
       // Create new transport with updated secrets
       const getUpdatedTransport = () =>
-        this.getTransport(catalogItem, targetMcpServerId, updatedSecret.secret);
+        this.getTransport(catalogItem, targetMcpServerId, updatedSecret);
 
-      return await executeRetry(getUpdatedTransport, updatedSecret.secret);
+      return await executeRetry(getUpdatedTransport, updatedSecret);
     } catch (retryError) {
       const retryErrorMsg =
         retryError instanceof Error ? retryError.message : String(retryError);
@@ -1784,10 +1775,16 @@ class McpClient {
     }
   }
 
-  private async refreshOAuthTokenWithLock(
-    secretId: string,
-    catalogId: string,
-  ): Promise<boolean> {
+  private async refreshOAuthTokenWithLock(params: {
+    secretId: string;
+    catalogId: string;
+    connectionKey: string;
+    targetMcpServerId: string;
+  }): Promise<{
+    refreshed: boolean;
+    updatedSecret: Record<string, unknown> | null;
+  }> {
+    const { secretId, catalogId, connectionKey, targetMcpServerId } = params;
     const existingRefresh = this.oauthRefreshLocks.get(secretId);
     if (existingRefresh) {
       logger.info(
@@ -1797,13 +1794,45 @@ class McpClient {
       return existingRefresh;
     }
 
-    const refreshPromise = refreshOAuthToken(secretId, catalogId)
+    const refreshPromise = (async () => {
+      const existingClient = this.activeConnections.get(connectionKey);
+      if (existingClient) {
+        try {
+          await existingClient.close();
+        } catch {
+          // Ignore close errors during refresh teardown.
+        }
+        this.activeConnections.delete(connectionKey);
+        this.pendingHttpSessionMetadata.delete(connectionKey);
+      }
+
+      const refreshed = await refreshOAuthToken(secretId, catalogId);
+      if (!refreshed) {
+        return { refreshed: false, updatedSecret: null };
+      }
+
+      const updatedSecret = await secretManager().getSecret(secretId);
+      if (!updatedSecret?.secret) {
+        logger.warn(
+          { secretId, catalogId },
+          "OAuth token refresh succeeded but updated secret could not be loaded",
+        );
+        return { refreshed: false, updatedSecret: null };
+      }
+
+      this.secretsCache.set(targetMcpServerId, {
+        secrets: updatedSecret.secret,
+        secretId,
+      });
+
+      return { refreshed: true, updatedSecret: updatedSecret.secret };
+    })()
       .catch((error) => {
         logger.error(
           { secretId, catalogId, error },
           "OAuth token refresh lock encountered an unexpected error",
         );
-        return false;
+        return { refreshed: false, updatedSecret: null };
       })
       .finally(() => {
         this.oauthRefreshLocks.delete(secretId);
@@ -2642,7 +2671,9 @@ function isAuthRelatedToolResult(result: {
     : "";
   const metaText = result._meta ? JSON.stringify(result._meta) : "";
 
-  return isAuthRelatedError(`${contentText}\n${structuredText}\n${metaText}`);
+  return isOAuthTokenFailureText(
+    `${contentText}\n${structuredText}\n${metaText}`,
+  );
 }
 
 function shouldProactivelyRefreshOAuthToken(
@@ -2654,6 +2685,22 @@ function shouldProactivelyRefreshOAuthToken(
   }
 
   return expiresAt <= Date.now() + OAUTH_TOKEN_REFRESH_BUFFER_MS;
+}
+
+function isOAuthTokenFailureText(errorText: string): boolean {
+  const lower = errorText.toLowerCase();
+  return (
+    lower.includes("invalid_token") ||
+    lower.includes("invalid token") ||
+    lower.includes("invalid bearer token") ||
+    lower.includes("token_expired") ||
+    lower.includes("token expired") ||
+    lower.includes("expired token") ||
+    lower.includes("access token expired") ||
+    lower.includes("refresh token expired") ||
+    lower.includes("bearer") ||
+    lower.includes("www-authenticate")
+  );
 }
 
 function isHighFrequencyBrowserTool(toolName: string): boolean {

@@ -296,8 +296,9 @@ describe("OAuth helper functions", () => {
       vi.restoreAllMocks();
     });
 
-    test("prefers explicitly configured scopes when discovery falls back", async () => {
-      globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network error"));
+    test("prefers explicitly configured scopes without running discovery", async () => {
+      const fetchMock = vi.fn().mockRejectedValue(new Error("Network error"));
+      globalThis.fetch = fetchMock;
 
       const result = await resolveOAuthScopesForAuthorization({
         oauthConfig: {
@@ -313,6 +314,7 @@ describe("OAuth helper functions", () => {
         discoveredScopes: ["READ"],
         scopesToUse: ["READ"],
       });
+      expect(fetchMock).not.toHaveBeenCalled();
 
       globalThis.fetch = originalFetch;
     });
@@ -340,6 +342,33 @@ describe("OAuth helper functions", () => {
         configuredScopes: [],
         discoveredScopes: ["jira:read"],
         scopesToUse: ["jira:read"],
+      });
+
+      globalThis.fetch = originalFetch;
+    });
+
+    test("uses discovered scopes when the catalog leaves scopes undefined", async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          authorization_endpoint: "https://example.com/authorize",
+          token_endpoint: "https://example.com/token",
+          scopes_supported: ["jira:write"],
+        }),
+      }) as Mock;
+
+      const result = await resolveOAuthScopesForAuthorization({
+        oauthConfig: {
+          server_url: "https://example.com",
+          supports_resource_metadata: false,
+          default_scopes: ["read", "write"],
+        },
+      });
+
+      expect(result).toEqual({
+        configuredScopes: [],
+        discoveredScopes: ["jira:write"],
+        scopesToUse: ["jira:write"],
       });
 
       globalThis.fetch = originalFetch;

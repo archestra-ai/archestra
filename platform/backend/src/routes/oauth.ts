@@ -139,10 +139,15 @@ export async function resolveOAuthScopesForAuthorization(params: {
   scopesToUse: string[];
 }> {
   const configuredScopes = params.oauthConfig.scopes ?? [];
-  const fallbackScopes =
-    configuredScopes.length > 0
-      ? configuredScopes
-      : (params.oauthConfig.default_scopes ?? []);
+  if (configuredScopes.length > 0) {
+    return {
+      configuredScopes,
+      discoveredScopes: configuredScopes,
+      scopesToUse: configuredScopes,
+    };
+  }
+
+  const fallbackScopes = params.oauthConfig.default_scopes ?? [];
 
   const discoveredScopes = await discoverScopes(
     params.oauthConfig.server_url,
@@ -717,9 +722,19 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       // Discover actual scopes from the OAuth server (like desktop app does)
-      const { scopesToUse } = await resolveOAuthScopesForAuthorization({
-        oauthConfig,
-      });
+      const { configuredScopes, discoveredScopes, scopesToUse } =
+        await resolveOAuthScopesForAuthorization({
+          oauthConfig,
+        });
+
+      fastify.log.info(
+        {
+          configured: configuredScopes,
+          discovered: discoveredScopes,
+          used: scopesToUse,
+        },
+        "Resolved OAuth scopes",
+      );
 
       // Check if dynamic registration is needed
       if (!clientId) {

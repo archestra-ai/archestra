@@ -149,10 +149,9 @@ Ingests files from Google Drive (My Drive and Shared Drives) via the Google Driv
 
 | Field                 | Description                                                                                        |
 | --------------------- | -------------------------------------------------------------------------------------------------- |
-| Drive IDs             | Comma-separated shared drive IDs to sync (optional -- leave blank to sync from My Drive)           |
+| Drive IDs             | Comma-separated shared drive IDs to sync (optional -- providing Drive IDs automatically enables shared-drive API access; leave blank to sync from My Drive) |
 | Folder ID             | Restrict sync to a specific folder (optional -- find the ID in the folder's Google Drive URL)      |
 | File Types            | Comma-separated file extensions to include, e.g. `.pdf, .docx` (optional -- leave blank for all)  |
-| Include Shared Drives | Toggle to also search files in shared (team) drives (default: off)                                 |
 | Recursive Traversal   | Sync files from all nested subfolders when a Folder ID is set (default: on)                        |
 
 Authentication supports two modes via the **Service Account Key / OAuth Token** field:

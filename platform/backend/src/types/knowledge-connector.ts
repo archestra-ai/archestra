@@ -203,7 +203,6 @@ export const GoogleDriveConfigSchema = z.object({
   driveId: z.string().optional(),
   driveIds: z.array(z.string()).optional(),
   folderId: z.string().optional(),
-  includeSharedDrives: z.boolean().optional(),
   recursive: z.boolean().optional(),
   maxDepth: z.number().int().min(1).max(100).optional(),
   fileTypes: z.array(z.string()).optional(),

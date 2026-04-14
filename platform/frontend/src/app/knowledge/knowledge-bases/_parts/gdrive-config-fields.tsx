@@ -38,8 +38,9 @@ export function GoogleDriveConfigFields({
               />
             </FormControl>
             <FormDescription>
-              Comma-separated list of shared drive IDs to sync. Leave blank to
-              sync files from My Drive.
+              Comma-separated list of shared drive IDs to sync. Providing Drive
+              IDs automatically enables shared-drive sync. Leave blank to sync
+              files from My Drive.
             </FormDescription>
             <FormMessage />
           </FormItem>
@@ -86,27 +87,6 @@ export function GoogleDriveConfigFields({
               sync all supported file types.
             </FormDescription>
             <FormMessage />
-          </FormItem>
-        )}
-      />
-
-      <FormField
-        control={form.control}
-        name={`${prefix}.includeSharedDrives`}
-        render={({ field }) => (
-          <FormItem className="flex items-center justify-between rounded-lg border p-3">
-            <div className="space-y-0.5">
-              <FormLabel>Include Shared Drives</FormLabel>
-              <FormDescription>
-                Also search files in shared (team) drives.
-              </FormDescription>
-            </div>
-            <FormControl>
-              <Switch
-                checked={field.value ?? false}
-                onCheckedChange={field.onChange}
-              />
-            </FormControl>
           </FormItem>
         )}
       />

@@ -99,11 +99,10 @@ describe("GoogleDriveConnector", () => {
       expect(result.valid).toBe(true);
     });
 
-    it("accepts config with driveIds and includeSharedDrives", async () => {
+    it("accepts config with driveIds", async () => {
       const connector = new GoogleDriveConnector();
       const result = await connector.validateConfig({
         driveIds: ["drive-1", "drive-2"],
-        includeSharedDrives: true,
       });
       expect(result.valid).toBe(true);
     });
@@ -614,6 +613,39 @@ describe("GoogleDriveConnector", () => {
       await expect(generator.next()).rejects.toThrow(
         "Google Drive folder query failed",
       );
+    });
+
+    it("enables shared-drive API flags in folder mode when driveIds are provided", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+
+      mockFilesList.mockResolvedValueOnce({
+        data: {
+          files: [makeDriveFile("folder-file-1", "shared-folder-file.txt")],
+          nextPageToken: undefined,
+        },
+      });
+      mockFilesGet.mockResolvedValueOnce({
+        data: Buffer.from("shared folder content").buffer,
+      });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {
+          folderId: "folder-123",
+          driveIds: ["shared-drive-1"],
+          recursive: false,
+        },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches[0].documents).toHaveLength(1);
+      const call = mockFilesList.mock.calls[0][0] as Record<string, unknown>;
+      expect(call.includeItemsFromAllDrives).toBe(true);
+      expect(call.supportsAllDrives).toBe(true);
     });
   });
 
@@ -1195,7 +1227,6 @@ describe("GoogleDriveConnector", () => {
       for await (const batch of connector.sync({
         config: {
           driveIds: ["shared-drive-A", "shared-drive-B"],
-          includeSharedDrives: true,
         },
         credentials,
         checkpoint: null,
@@ -1214,10 +1245,14 @@ describe("GoogleDriveConnector", () => {
       const callA = mockFilesList.mock.calls[0][0] as Record<string, unknown>;
       expect(callA.driveId).toBe("shared-drive-A");
       expect(callA.corpora).toBe("drive");
+      expect(callA.includeItemsFromAllDrives).toBe(true);
+      expect(callA.supportsAllDrives).toBe(true);
 
       const callB = mockFilesList.mock.calls[1][0] as Record<string, unknown>;
       expect(callB.driveId).toBe("shared-drive-B");
       expect(callB.corpora).toBe("drive");
+      expect(callB.includeItemsFromAllDrives).toBe(true);
+      expect(callB.supportsAllDrives).toBe(true);
     });
 
     it("falls back to My Drive when driveIds is empty", async () => {
@@ -1250,6 +1285,8 @@ describe("GoogleDriveConnector", () => {
       const call = mockFilesList.mock.calls[0][0] as Record<string, unknown>;
       expect(call.driveId).toBeUndefined();
       expect(call.corpora).toBeUndefined();
+      expect(call.includeItemsFromAllDrives).toBe(false);
+      expect(call.supportsAllDrives).toBe(false);
     });
   });
 
@@ -1300,7 +1337,6 @@ describe("GoogleDriveConnector", () => {
       const result = await connector.estimateTotalItems({
         config: {
           driveIds: ["drive-A", "drive-B"],
-          includeSharedDrives: true,
         },
         credentials,
         checkpoint: null,

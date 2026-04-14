@@ -27209,7 +27209,6 @@ export type GetConnectorsResponses = {
                 driveId?: string;
                 driveIds?: Array<string>;
                 folderId?: string;
-                includeSharedDrives?: boolean;
                 recursive?: boolean;
                 maxDepth?: number;
                 fileTypes?: Array<string>;
@@ -27317,7 +27316,6 @@ export type CreateConnectorData = {
             driveId?: string;
             driveIds?: Array<string>;
             folderId?: string;
-            includeSharedDrives?: boolean;
             recursive?: boolean;
             maxDepth?: number;
             fileTypes?: Array<string>;
@@ -27472,7 +27470,6 @@ export type CreateConnectorResponses = {
             driveId?: string;
             driveIds?: Array<string>;
             folderId?: string;
-            includeSharedDrives?: boolean;
             recursive?: boolean;
             maxDepth?: number;
             fileTypes?: Array<string>;
@@ -27718,7 +27715,6 @@ export type GetConnectorResponses = {
             driveId?: string;
             driveIds?: Array<string>;
             folderId?: string;
-            includeSharedDrives?: boolean;
             recursive?: boolean;
             maxDepth?: number;
             fileTypes?: Array<string>;
@@ -27812,7 +27808,6 @@ export type UpdateConnectorData = {
             driveId?: string;
             driveIds?: Array<string>;
             folderId?: string;
-            includeSharedDrives?: boolean;
             recursive?: boolean;
             maxDepth?: number;
             fileTypes?: Array<string>;
@@ -27968,7 +27963,6 @@ export type UpdateConnectorResponses = {
             driveId?: string;
             driveIds?: Array<string>;
             folderId?: string;
-            includeSharedDrives?: boolean;
             recursive?: boolean;
             maxDepth?: number;
             fileTypes?: Array<string>;

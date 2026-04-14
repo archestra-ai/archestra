@@ -156,6 +156,10 @@ export class GoogleDriveConnector extends BaseConnector {
       for (const currentDriveId of targetDriveIds) {
         const query = buildFileQuery(parsed, safetyBufferedSyncFrom);
         let pageToken: string | undefined;
+        const useSharedDriveApi = hasSharedDriveTarget({
+          ...parsed,
+          driveId: currentDriveId,
+        });
 
         do {
           await this.rateLimit();
@@ -164,8 +168,8 @@ export class GoogleDriveConnector extends BaseConnector {
             pageSize: 1000,
             pageToken,
             fields: "nextPageToken,files(id)",
-            includeItemsFromAllDrives: parsed.includeSharedDrives ?? false,
-            supportsAllDrives: parsed.includeSharedDrives ?? false,
+            includeItemsFromAllDrives: useSharedDriveApi,
+            supportsAllDrives: useSharedDriveApi,
             ...(currentDriveId
               ? { driveId: currentDriveId, corpora: "drive" as const }
               : {}),
@@ -224,7 +228,7 @@ export class GoogleDriveConnector extends BaseConnector {
         driveId: parsed.driveId,
         driveIds: parsed.driveIds,
         folderId: parsed.folderId,
-        includeSharedDrives: parsed.includeSharedDrives,
+        useSharedDriveApi: hasSharedDriveTarget(parsed),
         recursive: parsed.recursive,
         syncFrom,
         supportsImages,
@@ -302,6 +306,7 @@ export class GoogleDriveConnector extends BaseConnector {
   }): AsyncGenerator<ConnectorSyncBatch> {
     const { drive, config, progress, syncFrom, batchSize, supportsImages } =
       params;
+    const useSharedDriveApi = hasSharedDriveTarget(config);
 
     const query = buildFileQuery(config, syncFrom);
     let pageToken: string | undefined;
@@ -320,8 +325,8 @@ export class GoogleDriveConnector extends BaseConnector {
           fields:
             "nextPageToken,files(id,name,mimeType,modifiedTime,createdTime,owners,webViewLink,parents,size)",
           orderBy: "modifiedTime asc",
-          includeItemsFromAllDrives: config.includeSharedDrives ?? false,
-          supportsAllDrives: config.includeSharedDrives ?? false,
+          includeItemsFromAllDrives: useSharedDriveApi,
+          supportsAllDrives: useSharedDriveApi,
           ...(config.driveId
             ? { driveId: config.driveId, corpora: "drive" as const }
             : {}),
@@ -501,6 +506,7 @@ export class GoogleDriveConnector extends BaseConnector {
       supportsImages,
       hasMoreFolders,
     } = params;
+    const useSharedDriveApi = hasSharedDriveTarget(config);
 
     let pageToken: string | undefined;
     let hasMore = true;
@@ -529,8 +535,8 @@ export class GoogleDriveConnector extends BaseConnector {
           fields:
             "nextPageToken,files(id,name,mimeType,modifiedTime,createdTime,owners,webViewLink,parents,size)",
           orderBy: "modifiedTime asc",
-          includeItemsFromAllDrives: config.includeSharedDrives ?? false,
-          supportsAllDrives: config.includeSharedDrives ?? false,
+          includeItemsFromAllDrives: useSharedDriveApi,
+          supportsAllDrives: useSharedDriveApi,
         })) as FileListResponse;
       } catch (error) {
         throw new Error(
@@ -610,6 +616,7 @@ export class GoogleDriveConnector extends BaseConnector {
   ): Promise<string[]> {
     const subfolders: string[] = [];
     let pageToken: string | undefined;
+    const useSharedDriveApi = hasSharedDriveTarget(config);
 
     do {
       await this.rateLimit();
@@ -618,8 +625,8 @@ export class GoogleDriveConnector extends BaseConnector {
         pageSize: 1000,
         pageToken,
         fields: "nextPageToken,files(id,name)",
-        includeItemsFromAllDrives: config.includeSharedDrives ?? false,
-        supportsAllDrives: config.includeSharedDrives ?? false,
+        includeItemsFromAllDrives: useSharedDriveApi,
+        supportsAllDrives: useSharedDriveApi,
       })) as FileListResponse;
 
       for (const folder of res.data.files ?? []) {
@@ -788,6 +795,10 @@ function getFileExtension(name: string): string {
   const lastDot = name.lastIndexOf(".");
   if (lastDot < 0) return "";
   return name.slice(lastDot).toLowerCase();
+}
+
+function hasSharedDriveTarget(config: GoogleDriveConfig): boolean {
+  return Boolean(config.driveId) || Boolean(config.driveIds?.length);
 }
 
 function fileToDocument(

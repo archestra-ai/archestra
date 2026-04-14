@@ -383,7 +383,7 @@ export class LRUCacheManager<T = unknown> {
 
     // Check if expired
     if (entry.expiresAt > 0 && Date.now() > entry.expiresAt) {
-      this.lruStore.delete(key);
+      this.evictExpiredEntry(key, entry);
       return undefined;
     }
 
@@ -424,7 +424,7 @@ export class LRUCacheManager<T = unknown> {
       return false;
     }
     if (entry.expiresAt > 0 && Date.now() > entry.expiresAt) {
-      this.lruStore.delete(key);
+      this.evictExpiredEntry(key, entry);
       return false;
     }
     return true;
@@ -461,5 +461,12 @@ export class LRUCacheManager<T = unknown> {
    */
   keys(): IterableIterator<string> {
     return this.lruStore.keys();
+  }
+
+  private evictExpiredEntry(key: string, entry: LRUCacheEntry<T>): void {
+    if (this.onEviction) {
+      this.onEviction(key, entry.value);
+    }
+    this.lruStore.delete(key);
   }
 }

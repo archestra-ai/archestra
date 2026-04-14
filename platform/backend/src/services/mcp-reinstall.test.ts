@@ -247,7 +247,7 @@ describe("mcp-reinstall", () => {
         expect(result).toBe(true);
       });
 
-      test("returns false when only non-prompted config changes (command/args)", () => {
+      test("returns true when command or args change", () => {
         const envVars = [
           {
             key: "API_KEY",
@@ -274,7 +274,40 @@ describe("mcp-reinstall", () => {
 
         const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
 
-        expect(result).toBe(false);
+        expect(result).toBe(true);
+      });
+
+      test("returns true when docker or transport config changes", () => {
+        const oldConfig = {
+          ...createLocalCatalog([]),
+          localConfig: {
+            command: "node",
+            arguments: ["server.js"],
+            dockerImage: "registry.example.com/mcp:1",
+            transportType: "stdio",
+            httpPort: undefined,
+            httpPath: undefined,
+            serviceAccount: "default",
+            environment: [],
+          },
+        } as InternalMcpCatalog;
+        const newConfig = {
+          ...createLocalCatalog([]),
+          localConfig: {
+            command: "node",
+            arguments: ["server.js"],
+            dockerImage: "registry.example.com/mcp:2",
+            transportType: "streamable-http",
+            httpPort: 8080,
+            httpPath: "/mcp",
+            serviceAccount: "custom-sa",
+            environment: [],
+          },
+        } as InternalMcpCatalog;
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(true);
       });
 
       test("returns false when only non-prompted env vars are added", () => {

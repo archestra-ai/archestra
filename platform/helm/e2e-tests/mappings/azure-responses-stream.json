@@ -1,0 +1,16 @@
+{
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/azure/openai/responses",
+    "bodyPatterns": [{ "contains": "azure-responses-stream" }]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache"
+    },
+    "body": "data: {\"type\":\"response.created\",\"sequence_number\":1,\"response\":{\"id\":\"resp_azure_stream\",\"object\":\"response\",\"created_at\":1234567890,\"status\":\"in_progress\",\"model\":\"gpt-4.1\",\"output\":[]}}\n\ndata: {\"type\":\"response.in_progress\",\"sequence_number\":2,\"response\":{\"id\":\"resp_azure_stream\",\"object\":\"response\",\"created_at\":1234567890,\"status\":\"in_progress\",\"model\":\"gpt-4.1\",\"output\":[]}}\n\ndata: {\"type\":\"response.output_item.added\",\"sequence_number\":3,\"output_index\":0,\"item\":{\"id\":\"msg_azure_stream\",\"type\":\"message\",\"role\":\"assistant\",\"status\":\"in_progress\",\"content\":[]}}\n\ndata: {\"type\":\"response.content_part.added\",\"sequence_number\":4,\"output_index\":0,\"item_id\":\"msg_azure_stream\",\"content_index\":0,\"part\":{\"type\":\"output_text\",\"text\":\"\",\"annotations\":[]}}\n\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":5,\"output_index\":0,\"item_id\":\"msg_azure_stream\",\"content_index\":0,\"delta\":\"This is a streamed Azure Responses reply.\",\"logprobs\":[]}\n\ndata: {\"type\":\"response.output_text.done\",\"sequence_number\":6,\"output_index\":0,\"item_id\":\"msg_azure_stream\",\"content_index\":0,\"text\":\"This is a streamed Azure Responses reply.\",\"logprobs\":[]}\n\ndata: {\"type\":\"response.content_part.done\",\"sequence_number\":7,\"output_index\":0,\"item_id\":\"msg_azure_stream\",\"content_index\":0,\"part\":{\"type\":\"output_text\",\"text\":\"This is a streamed Azure Responses reply.\",\"annotations\":[]}}\n\ndata: {\"type\":\"response.output_item.done\",\"sequence_number\":8,\"output_index\":0,\"item\":{\"id\":\"msg_azure_stream\",\"type\":\"message\",\"role\":\"assistant\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"text\":\"This is a streamed Azure Responses reply.\",\"annotations\":[]}]}}\n\ndata: {\"type\":\"response.completed\",\"sequence_number\":9,\"response\":{\"id\":\"resp_azure_stream\",\"object\":\"response\",\"created_at\":1234567890,\"status\":\"completed\",\"model\":\"gpt-4.1\",\"output\":[{\"id\":\"msg_azure_stream\",\"type\":\"message\",\"role\":\"assistant\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"text\":\"This is a streamed Azure Responses reply.\",\"annotations\":[]}]}],\"usage\":{\"input_tokens\":11,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":8,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":19}}}\n\ndata: [DONE]\n\n"
+  }
+}

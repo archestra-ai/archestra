@@ -30,19 +30,22 @@ export const resources = [
   "identityProvider",
   "mcpRegistry",
   "mcpServerInstallation",
-  "knowledgeBase",
+  "knowledgeSource",
   "knowledgeSettings",
   "mcpServerInstallationRequest",
   "chat",
   "llmCost",
   "llmLimit",
   "optimizationRule",
-  "llmProvider",
+  "llmProviderApiKey",
+  "llmVirtualKey",
+  "llmModel",
   "secret",
   "organizationSettings",
   "llmSettings",
   "agentSettings",
   "agentTrigger",
+  "scheduledTask",
   /**
    * Better-auth access control resource - needed for organization role management
    * See: https://github.com/better-auth/better-auth/issues/2336#issuecomment-2820620809
@@ -81,7 +84,7 @@ export const resourceLabels: Record<Resource, string> = {
   invitation: "Invitations",
   mcpRegistry: "MCP Registry",
   mcpServerInstallation: "MCP Server Installations",
-  knowledgeBase: "Knowledge Bases",
+  knowledgeSource: "Knowledge Sources",
   knowledgeSettings: "Knowledge Settings",
   mcpServerInstallationRequest: "MCP Server Installation Requests",
   team: "Teams",
@@ -90,13 +93,16 @@ export const resourceLabels: Record<Resource, string> = {
   llmCost: "LLM Costs",
   llmLimit: "LLM Limits",
   optimizationRule: "Optimization Rules",
-  llmProvider: "LLM Providers",
+  llmProviderApiKey: "LLM Provider API Keys",
+  llmVirtualKey: "LLM Virtual Keys",
+  llmModel: "LLM Models",
   secret: "Secrets",
   apiKey: "API Keys",
   organizationSettings: "Organization Settings",
   llmSettings: "LLM Settings",
   agentSettings: "Agent Settings",
   agentTrigger: "Agent Triggers",
+  scheduledTask: "Scheduled Tasks",
   simpleView: "Simple View",
   chatAgentPicker: "Chat Agent Picker",
   chatProviderSettings: "Chat Provider Settings",
@@ -111,7 +117,10 @@ export const resourceDescriptions: Record<Resource, string> = {
   log: "LLM proxy and MCP tool call logs",
   chat: "Chat conversations",
   agentTrigger: "Agent triggers (Slack, MS Teams, incoming emails)",
-  llmProvider: "LLM provider API keys, virtual keys, and models",
+  scheduledTask: "Scheduled agent tasks that run on a schedule",
+  llmProviderApiKey: "LLM provider API keys and their visibility",
+  llmVirtualKey: "LLM virtual keys and their visibility",
+  llmModel: "LLM model catalog entries and chat capabilities",
   llmLimit: "LLM usage limits",
   llmSettings: "LLM settings (compression, cleanup interval)",
   agentSettings:
@@ -130,8 +139,8 @@ export const resourceDescriptions: Record<Resource, string> = {
   apiKey: "User API keys for programmatic access",
   organizationSettings:
     "Organization settings (appearance, authentication, etc)",
-  knowledgeBase:
-    "Knowledge bases and connectors for RAG-based document retrieval",
+  knowledgeSource:
+    "Knowledge sources including knowledge bases and connectors for RAG-based document retrieval",
   knowledgeSettings:
     "Knowledge settings (embedding and reranking models configuration)",
   simpleView: "Controls if the simple view of the app is enabled",
@@ -154,7 +163,7 @@ export const internalResources: Resource[] = ["organization"];
  * Used in both the create/edit role dialog and the account permissions display.
  */
 export const resourceCategories: Record<string, Resource[]> = {
-  Agents: ["agent", "agentTrigger", "agentSettings"],
+  Agents: ["agent", "agentTrigger", "scheduledTask", "agentSettings"],
   MCP: [
     "mcpGateway",
     "toolPolicy",
@@ -164,13 +173,15 @@ export const resourceCategories: Record<string, Resource[]> = {
   ],
   LLM: [
     "llmProxy",
-    "llmProvider",
+    "llmProviderApiKey",
+    "llmVirtualKey",
+    "llmModel",
     "llmLimit",
     "optimizationRule",
     "llmSettings",
     "llmCost",
   ],
-  Knowledge: ["knowledgeBase", "knowledgeSettings"],
+  Knowledge: ["knowledgeSource", "knowledgeSettings"],
   Other: [
     "chat",
     "log",

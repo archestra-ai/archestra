@@ -38,6 +38,8 @@ const appVersion = process.env.ARCHESTRA_VERSION || packageJson.version;
 
 const frontendBaseUrl =
   process.env.ARCHESTRA_FRONTEND_URL?.trim() || "http://localhost:3000";
+const DEFAULT_POSTHOG_KEY = "phc_FFZO7LacnsvX2exKFWehLDAVaXLBfoBaJypdOuYoTk7";
+const DEFAULT_POSTHOG_HOST = "https://eu.i.posthog.com";
 
 /**
  * Determines OTLP authentication headers based on environment variables
@@ -444,6 +446,18 @@ export const parseTrustProxy = (
     .join(",");
 };
 
+export const getAnalyticsConfig = () => ({
+  enabled: process.env.ARCHESTRA_ANALYTICS !== "disabled",
+  posthog: {
+    key:
+      process.env.ARCHESTRA_ANALYTICS_POSTHOG_KEY?.trim() ||
+      DEFAULT_POSTHOG_KEY,
+    host:
+      process.env.ARCHESTRA_ANALYTICS_POSTHOG_HOST?.trim() ||
+      DEFAULT_POSTHOG_HOST,
+  },
+});
+
 const config = {
   frontendBaseUrl,
   api: {
@@ -510,6 +524,7 @@ const config = {
     disableInvitations:
       process.env.ARCHESTRA_AUTH_DISABLE_INVITATIONS === "true",
   },
+  analytics: getAnalyticsConfig(),
   database: {
     url: getDatabaseUrl(),
   },
@@ -611,6 +626,14 @@ const config = {
       baseUrl:
         process.env.ARCHESTRA_MINIMAX_BASE_URL || "https://api.minimax.io/v1",
     },
+    azure: {
+      baseUrl: process.env.ARCHESTRA_AZURE_OPENAI_BASE_URL || "",
+      apiVersion:
+        process.env.ARCHESTRA_AZURE_OPENAI_API_VERSION || "2024-02-01",
+      responsesApiVersion:
+        process.env.ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION ||
+        "2025-04-01-preview",
+    },
   },
   chat: {
     openai: {
@@ -660,6 +683,9 @@ const config = {
     },
     minimax: {
       apiKey: process.env.ARCHESTRA_CHAT_MINIMAX_API_KEY || "",
+    },
+    azure: {
+      apiKey: process.env.ARCHESTRA_CHAT_AZURE_OPENAI_API_KEY || "",
     },
     defaultModel:
       process.env.ARCHESTRA_CHAT_DEFAULT_MODEL || "claude-opus-4-1-20250805",
@@ -756,7 +782,7 @@ const config = {
         process.env.ARCHESTRA_SENTRY_ENVIRONMENT?.toLowerCase() || environment,
       tracesSampleRate: parseSampleRate(
         process.env.ARCHESTRA_SENTRY_TRACES_SAMPLE_RATE,
-        0.2,
+        0.1,
       ),
       mcpGatewayTracesSampleRate: parseSampleRate(
         process.env.ARCHESTRA_SENTRY_MCP_GATEWAY_TRACES_SAMPLE_RATE,

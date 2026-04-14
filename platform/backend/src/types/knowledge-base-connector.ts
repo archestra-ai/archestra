@@ -5,7 +5,7 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
-import { KnowledgeBaseVisibilitySchema } from "./knowledge-base";
+import { KnowledgeSourceVisibilitySchema } from "./knowledge-base";
 import {
   ConnectorCheckpointSchema,
   ConnectorConfigSchema,
@@ -17,30 +17,16 @@ import {
 
 export const SelectKnowledgeBaseSchema = createSelectSchema(
   schema.knowledgeBasesTable,
-  {
-    visibility: KnowledgeBaseVisibilitySchema,
-    teamIds: z.array(z.string()),
-  },
 );
 export const InsertKnowledgeBaseSchema = createInsertSchema(
   schema.knowledgeBasesTable,
-  {
-    visibility: KnowledgeBaseVisibilitySchema.optional(),
-    teamIds: z.array(z.string()).optional(),
-  },
 ).omit({ id: true, createdAt: true, updatedAt: true });
 export const UpdateKnowledgeBaseSchema = createUpdateSchema(
   schema.knowledgeBasesTable,
-  {
-    visibility: KnowledgeBaseVisibilitySchema.optional(),
-    teamIds: z.array(z.string()).optional(),
-  },
 ).pick({
   name: true,
   description: true,
   status: true,
-  visibility: true,
-  teamIds: true,
 });
 
 export type KnowledgeBase = z.infer<typeof SelectKnowledgeBaseSchema>;
@@ -54,6 +40,8 @@ const NullableConnectorSyncStatusSchema = ConnectorSyncStatusSchema.nullable();
 export const SelectKnowledgeBaseConnectorSchema = createSelectSchema(
   schema.knowledgeBaseConnectorsTable,
   {
+    visibility: KnowledgeSourceVisibilitySchema,
+    teamIds: z.array(z.string()),
     connectorType: ConnectorTypeSchema,
     config: ConnectorConfigSchema,
     lastSyncStatus: NullableConnectorSyncStatusSchema,
@@ -62,6 +50,8 @@ export const SelectKnowledgeBaseConnectorSchema = createSelectSchema(
 export const InsertKnowledgeBaseConnectorSchema = createInsertSchema(
   schema.knowledgeBaseConnectorsTable,
   {
+    visibility: KnowledgeSourceVisibilitySchema.optional(),
+    teamIds: z.array(z.string()).optional(),
     connectorType: ConnectorTypeSchema,
     config: ConnectorConfigSchema,
     checkpoint: ConnectorCheckpointSchema.optional(),
@@ -71,6 +61,8 @@ export const InsertKnowledgeBaseConnectorSchema = createInsertSchema(
 export const UpdateKnowledgeBaseConnectorSchema = createUpdateSchema(
   schema.knowledgeBaseConnectorsTable,
   {
+    visibility: KnowledgeSourceVisibilitySchema.optional(),
+    teamIds: z.array(z.string()).optional(),
     connectorType: ConnectorTypeSchema.optional(),
     config: ConnectorConfigSchema.optional(),
     checkpoint: ConnectorCheckpointSchema.nullable().optional(),
@@ -79,6 +71,8 @@ export const UpdateKnowledgeBaseConnectorSchema = createUpdateSchema(
 ).pick({
   name: true,
   description: true,
+  visibility: true,
+  teamIds: true,
   config: true,
   secretId: true,
   schedule: true,

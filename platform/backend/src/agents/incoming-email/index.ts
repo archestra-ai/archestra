@@ -570,7 +570,7 @@ export async function processIncomingEmail(
     "[IncomingEmail] Applying security mode validation",
   );
 
-  // Determine userId for the request (used for 'private' mode)
+  // Determine userId for the request (used for 'private' mode).
   let userId: string = "system";
 
   switch (securityMode) {

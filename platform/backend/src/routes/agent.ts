@@ -1,5 +1,4 @@
 import {
-  BUILT_IN_AGENT_IDS,
   createPaginatedResponseSchema,
   LABELS_ENTRY_DELIMITER,
   LABELS_VALUE_DELIMITER,
@@ -13,6 +12,7 @@ import {
   hasAnyAgentTypeReadPermission,
   requireAgentModifyPermission,
 } from "@/auth";
+import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import {
   AgentLabelModel,
   AgentModel,
@@ -21,7 +21,7 @@ import {
   MemberModel,
   TeamModel,
 } from "@/models";
-import { metrics } from "@/observability";
+import { initializeObservabilityMetrics } from "@/observability";
 import {
   type AgentScope,
   AgentScopeFilterSchema,
@@ -363,11 +363,17 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Knowledge bases cannot be assigned to LLM Proxy agents",
           );
         }
+        const knowledgeSourceAccess =
+          await knowledgeSourceAccessControlService.buildAccessControlContext({
+            userId: user.id,
+            organizationId,
+          });
         for (const kbId of body.knowledgeBaseIds) {
-          const kb = await KnowledgeBaseModel.findById(kbId);
-          if (!kb || kb.organizationId !== organizationId) {
-            throw new ApiError(404, `Knowledge base not found: ${kbId}`);
-          }
+          await validateKnowledgeBaseAccess({
+            kbId,
+            organizationId,
+            access: knowledgeSourceAccess,
+          });
         }
       }
 
@@ -379,12 +385,17 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Connectors cannot be assigned to LLM Proxy agents",
           );
         }
+        const knowledgeSourceAccess =
+          await knowledgeSourceAccessControlService.buildAccessControlContext({
+            userId: user.id,
+            organizationId,
+          });
         for (const connectorId of body.connectorIds) {
-          const connector =
-            await KnowledgeBaseConnectorModel.findById(connectorId);
-          if (!connector || connector.organizationId !== organizationId) {
-            throw new ApiError(404, `Connector not found: ${connectorId}`);
-          }
+          await validateConnectorAccess({
+            connectorId,
+            organizationId,
+            access: knowledgeSourceAccess,
+          });
         }
       }
 
@@ -394,13 +405,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...(body.scope !== "team" && { teams: [] }),
       };
       const agent = await AgentModel.create(createData, user.id);
-      const labelKeys = await AgentLabelModel.getAllKeys();
-
       // We need to re-init metrics with the new label keys in case label keys changed.
       // Otherwise the newly added labels will not make it to metrics. The labels with new keys, that is.
-      metrics.llm.initializeMetrics(labelKeys);
-      metrics.mcp.initializeMcpMetrics(labelKeys);
-      metrics.agentExecution.initializeAgentExecutionMetrics(labelKeys);
+      await initializeObservabilityMetrics();
 
       return reply.send(agent);
     },
@@ -560,11 +567,17 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Knowledge bases cannot be assigned to LLM Proxy agents",
           );
         }
+        const knowledgeSourceAccess =
+          await knowledgeSourceAccessControlService.buildAccessControlContext({
+            userId: user.id,
+            organizationId,
+          });
         for (const kbId of body.knowledgeBaseIds) {
-          const kb = await KnowledgeBaseModel.findById(kbId);
-          if (!kb || kb.organizationId !== organizationId) {
-            throw new ApiError(404, `Knowledge base not found: ${kbId}`);
-          }
+          await validateKnowledgeBaseAccess({
+            kbId,
+            organizationId,
+            access: knowledgeSourceAccess,
+          });
         }
       }
 
@@ -576,12 +589,17 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Connectors cannot be assigned to LLM Proxy agents",
           );
         }
+        const knowledgeSourceAccess =
+          await knowledgeSourceAccessControlService.buildAccessControlContext({
+            userId: user.id,
+            organizationId,
+          });
         for (const connectorId of body.connectorIds) {
-          const connector =
-            await KnowledgeBaseConnectorModel.findById(connectorId);
-          if (!connector || connector.organizationId !== organizationId) {
-            throw new ApiError(404, `Connector not found: ${connectorId}`);
-          }
+          await validateConnectorAccess({
+            connectorId,
+            organizationId,
+            access: knowledgeSourceAccess,
+          });
         }
       }
 
@@ -598,23 +616,14 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
-        const allowsSystemPromptUpdate =
-          existingAgent.builtInAgentConfig.name ===
-            BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN ||
-          existingAgent.builtInAgentConfig.name ===
-            BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE;
-
         // Only allow specific fields for built-in agents.
-        // The policy configuration built-in keeps its seeded prompt immutable,
-        // while the dual LLM built-ins allow prompt customization.
         updateData = {
           ...(body.builtInAgentConfig !== undefined && {
             builtInAgentConfig: body.builtInAgentConfig,
           }),
-          ...(allowsSystemPromptUpdate &&
-            body.systemPrompt !== undefined && {
-              systemPrompt: body.systemPrompt,
-            }),
+          ...(body.systemPrompt !== undefined && {
+            systemPrompt: body.systemPrompt,
+          }),
           ...(body.llmApiKeyId !== undefined && {
             llmApiKeyId: body.llmApiKeyId,
           }),
@@ -640,10 +649,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Only re-init metrics when labels were part of the update payload,
       // since that's the only field that can introduce new label keys.
       if (body.labels !== undefined) {
-        const labelKeys = await AgentLabelModel.getAllKeys();
-        metrics.llm.initializeMetrics(labelKeys);
-        metrics.mcp.initializeMcpMetrics(labelKeys);
-        metrics.agentExecution.initializeAgentExecutionMetrics(labelKeys);
+        await initializeObservabilityMetrics();
       }
 
       return reply.send(agent);
@@ -792,6 +798,52 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default agentRoutes;
+
+async function validateKnowledgeBaseAccess(params: {
+  kbId: string;
+  organizationId: string;
+  access: Awaited<
+    ReturnType<
+      typeof knowledgeSourceAccessControlService.buildAccessControlContext
+    >
+  >;
+}) {
+  const kb = await KnowledgeBaseModel.findById(params.kbId);
+  if (
+    !kb ||
+    kb.organizationId !== params.organizationId ||
+    !knowledgeSourceAccessControlService.canAccessKnowledgeBase(
+      params.access,
+      kb,
+    )
+  ) {
+    throw new ApiError(404, `Knowledge base not found: ${params.kbId}`);
+  }
+}
+
+async function validateConnectorAccess(params: {
+  connectorId: string;
+  organizationId: string;
+  access: Awaited<
+    ReturnType<
+      typeof knowledgeSourceAccessControlService.buildAccessControlContext
+    >
+  >;
+}) {
+  const connector = await KnowledgeBaseConnectorModel.findById(
+    params.connectorId,
+  );
+  if (
+    !connector ||
+    connector.organizationId !== params.organizationId ||
+    !knowledgeSourceAccessControlService.canAccessConnector(
+      params.access,
+      connector,
+    )
+  ) {
+    throw new ApiError(404, `Connector not found: ${params.connectorId}`);
+  }
+}
 
 function parseLabelsParam(
   labels: string | undefined,

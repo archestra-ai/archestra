@@ -2,22 +2,121 @@ import { LocalConfigFormSchema } from "@shared";
 import { z } from "zod";
 
 // Simplified OAuth config schema
-export const oauthConfigSchema = z.object({
-  client_id: z.string().optional().or(z.literal("")),
-  client_secret: z.string().optional().or(z.literal("")),
-  redirect_uris: z.string().min(1, "At least one redirect URI is required"),
-  scopes: z.string().optional().or(z.literal("")),
-  supports_resource_metadata: z.boolean(),
-  // OAuth Server URL for local servers (since they don't have a serverUrl field)
-  // Used for OAuth discovery/authorization, NOT for tool execution
-  oauthServerUrl: z
-    .string()
-    .url({ error: "Must be a valid URL" })
-    .refine((val) => val.startsWith("http://") || val.startsWith("https://"), {
-      message: "Must be an HTTP or HTTPS URL",
-    })
-    .optional()
-    .or(z.literal("")),
+export const oauthConfigSchema = z
+  .object({
+    client_id: z.string().optional().or(z.literal("")),
+    client_secret: z.string().optional().or(z.literal("")),
+    redirect_uris: z.string().min(1, "At least one redirect URI is required"),
+    scopes: z.string().optional().or(z.literal("")),
+    supports_resource_metadata: z.boolean(),
+    authServerUrl: z
+      .string()
+      .url({ error: "Must be a valid URL" })
+      .refine(
+        (val) => val.startsWith("http://") || val.startsWith("https://"),
+        {
+          message: "Must be an HTTP or HTTPS URL",
+        },
+      )
+      .optional()
+      .or(z.literal("")),
+    authorizationEndpoint: z
+      .string()
+      .url({ error: "Must be a valid URL" })
+      .refine(
+        (val) => val.startsWith("http://") || val.startsWith("https://"),
+        {
+          message: "Must be an HTTP or HTTPS URL",
+        },
+      )
+      .optional()
+      .or(z.literal("")),
+    wellKnownUrl: z
+      .string()
+      .url({ error: "Must be a valid URL" })
+      .refine(
+        (val) => val.startsWith("http://") || val.startsWith("https://"),
+        {
+          message: "Must be an HTTP or HTTPS URL",
+        },
+      )
+      .optional()
+      .or(z.literal("")),
+    resourceMetadataUrl: z
+      .string()
+      .url({ error: "Must be a valid URL" })
+      .refine(
+        (val) => val.startsWith("http://") || val.startsWith("https://"),
+        {
+          message: "Must be an HTTP or HTTPS URL",
+        },
+      )
+      .optional()
+      .or(z.literal("")),
+    tokenEndpoint: z
+      .string()
+      .url({ error: "Must be a valid URL" })
+      .refine(
+        (val) => val.startsWith("http://") || val.startsWith("https://"),
+        {
+          message: "Must be an HTTP or HTTPS URL",
+        },
+      )
+      .optional()
+      .or(z.literal("")),
+    // OAuth Server URL for local servers (since they don't have a serverUrl field)
+    // Used for OAuth discovery/authorization, NOT for tool execution
+    oauthServerUrl: z
+      .string()
+      .url({ error: "Must be a valid URL" })
+      .refine(
+        (val) => val.startsWith("http://") || val.startsWith("https://"),
+        {
+          message: "Must be an HTTP or HTTPS URL",
+        },
+      )
+      .optional()
+      .or(z.literal("")),
+  })
+  .superRefine((value, ctx) => {
+    if (Boolean(value.authorizationEndpoint) !== Boolean(value.tokenEndpoint)) {
+      const message = "Authorization and token endpoints must be set together";
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message,
+        path: ["authorizationEndpoint"],
+      });
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message,
+        path: ["tokenEndpoint"],
+      });
+    }
+  });
+
+const enterpriseManagedConfigSchema = z.object({
+  resourceIdentifier: z.string().optional(),
+  requestedIssuer: z.string().optional(),
+  requestedCredentialType: z
+    .enum([
+      "bearer_token",
+      "id_jag",
+      "secret",
+      "service_account",
+      "opaque_json",
+    ])
+    .optional(),
+  tokenInjectionMode: z
+    .enum([
+      "authorization_bearer",
+      "raw_authorization",
+      "header",
+      "env",
+      "body_field",
+    ])
+    .optional(),
+  headerName: z.string().optional(),
+  responseFieldPath: z.string().optional(),
 });
 
 export const formSchema = z
@@ -31,8 +130,17 @@ export const formSchema = z
       .url({ error: "Must be a valid URL" })
       .optional()
       .or(z.literal("")),
-    authMethod: z.enum(["none", "bearer", "raw_token", "oauth"]),
+    authMethod: z.enum([
+      "none",
+      "bearer",
+      "raw_token",
+      "oauth",
+      "enterprise_managed",
+    ]),
     oauthConfig: oauthConfigSchema.optional(),
+    enterpriseManagedConfig: enterpriseManagedConfigSchema
+      .nullable()
+      .optional(),
     localConfig: LocalConfigFormSchema.optional(),
     // Kubernetes Deployment spec YAML (for local servers)
     deploymentSpecYaml: z.string().optional(),
@@ -107,6 +215,23 @@ export const formSchema = z
       message:
         "Either command or Docker image must be provided. If Docker image is set, command is optional.",
       path: ["localConfig", "command"],
+    },
+  )
+  .refine(
+    (data) => {
+      if (
+        data.serverType !== "local" ||
+        data.authMethod !== "enterprise_managed"
+      ) {
+        return true;
+      }
+
+      return data.localConfig?.transportType === "streamable-http";
+    },
+    {
+      message:
+        "Enterprise-managed credentials require streamable-http transport for self-hosted servers.",
+      path: ["localConfig", "transportType"],
     },
   );
 

@@ -4,6 +4,18 @@ templates:
 values:
   - ../ci/test-values.yaml
 tests:
+  - it: worker deployment uses percentage-based rolling update defaults
+    asserts:
+      - equal:
+          path: spec.strategy.type
+          value: RollingUpdate
+      - equal:
+          path: spec.strategy.rollingUpdate.maxSurge
+          value: "25%"
+      - equal:
+          path: spec.strategy.rollingUpdate.maxUnavailable
+          value: "25%"
+
   - it: worker deployment inherits global pod annotations
     set:
       archestra.podAnnotations:
@@ -93,3 +105,32 @@ tests:
           content:
             name: ARCHESTRA_NODE_HEAPSNAPSHOT_NEAR_HEAP_LIMIT
             value: "1"
+
+  - it: worker supports overriding the wait-for-postgres image
+    set:
+      archestra.initContainers.busyboxImage: registry.internal.example.com/platform/busybox:1.36
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-for-postgres
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: registry.internal.example.com/platform/busybox:1.36
+
+  - it: worker applies shared resources to chart-managed init containers
+    set:
+      archestra.initContainers.resources:
+        requests:
+          cpu: 100m
+          memory: 64Mi
+        limits:
+          memory: 128Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].resources
+          value:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              memory: 128Mi

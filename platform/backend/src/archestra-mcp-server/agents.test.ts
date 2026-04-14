@@ -132,7 +132,7 @@ describe("agent tool execution", () => {
         ),
       );
     expect(assignment).toBeDefined();
-    expect(assignment.useDynamicTeamCredential).toBe(true);
+    expect(assignment.credentialResolutionMode).toBe("dynamic");
   });
 
   test("create_agent reports invalid remote toolAssignments without credentials", async ({
@@ -161,7 +161,9 @@ describe("agent tool execution", () => {
     expect(result.isError).toBe(false);
     expect((result.content[0] as any).text).toContain("Tool Assignments:");
     expect((result.content[0] as any).text).toContain(`${tool.id}: error`);
-    expect((result.content[0] as any).text).toContain("Credential source");
+    expect((result.content[0] as any).text).toContain(
+      "An MCP server installation or non-static credential resolution is required for remote MCP server tools",
+    );
   });
 
   test("create_agent assigns local MCP tools with late-bound resolution via toolAssignments", async ({
@@ -203,7 +205,7 @@ describe("agent tool execution", () => {
         ),
       );
     expect(assignment).toBeDefined();
-    expect(assignment.useDynamicTeamCredential).toBe(true);
+    expect(assignment.credentialResolutionMode).toBe("dynamic");
   });
 
   test("edit_agent replaces assigned knowledge bases and connectors", async ({
@@ -308,7 +310,7 @@ describe("agent tool execution", () => {
         ),
       );
     expect(assignment).toBeDefined();
-    expect(assignment.useDynamicTeamCredential).toBe(true);
+    expect(assignment.credentialResolutionMode).toBe("dynamic");
   });
 
   test("get_agent requires id or name", async () => {

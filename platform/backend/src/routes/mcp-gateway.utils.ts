@@ -11,13 +11,14 @@ import {
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import {
-  ARCHESTRA_TOKEN_PREFIX,
+  hasArchestraTokenPrefix,
   isAgentTool,
+  MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
+  MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
   OAUTH_TOKEN_ID_PREFIX,
   parseFullToolName,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@shared";
-import { eq } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
 import {
   archestraMcpBranding,
@@ -29,7 +30,6 @@ import { userHasPermission } from "@/auth/utils";
 import { LRUCacheManager } from "@/cache-manager";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
-import db, { schema as dbSchema } from "@/database";
 import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
@@ -52,15 +52,20 @@ import {
   ATTR_MCP_IS_ERROR_RESULT,
   startActiveMcpSpan,
 } from "@/observability/tracing";
-import { jwksValidator } from "@/services/jwks-validator";
+import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import {
-  type AgentAccessContext,
-  type AgentType,
-  type CommonToolCall,
-  type SelectTeamToken,
-  type SelectUserToken,
-  UuidIdSchema,
+  discoverOidcJwksUrl,
+  findExternalIdentityProviderById,
+} from "@/services/identity-providers/oidc";
+import { jwksValidator } from "@/services/jwks-validator";
+import type {
+  AgentAccessContext,
+  AgentType,
+  CommonToolCall,
+  SelectTeamToken,
+  SelectUserToken,
 } from "@/types";
+import type { McpServerCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { estimateToolResultContentLength } from "@/utils/tool-result-preview";
 
@@ -90,6 +95,7 @@ export type AgentInfo = {
   id: string;
   agentType?: AgentType;
   labels?: Array<{ key: string; value: string }>;
+  passthroughHeaders?: string[] | null;
 };
 
 type TokenHashes = {
@@ -123,14 +129,16 @@ const rawArchestraTokenCache =
 
 /**
  * Creates an MCP server for the given agent.
- * Pass `preloadedAgent` (e.g. from the proxy's access cache) to skip the
- * redundant DB lookup that would otherwise happen inside this function.
  */
 export async function createAgentServer(
   agentId: string,
   tokenAuth?: TokenAuthContext,
-  preloadedAgent?: AgentInfo,
 ): Promise<{ server: McpServer; agent: AgentInfo }> {
+  const extensionCapabilities = {
+    ...MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
+    ...MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
+  } as const;
+
   const mcpServer = new McpServer(
     {
       name: `archestra-agent-${agentId}`,
@@ -142,21 +150,16 @@ export async function createAgentServer(
           subscribe: true,
           listChanged: true,
         },
+        extensions: extensionCapabilities,
         prompts: {},
         tools: { listChanged: false },
-      },
+      } as McpServerCapabilitiesWithExtensions,
     },
   );
   const { server } = mcpServer;
 
-  let agent: AgentInfo;
-  if (preloadedAgent) {
-    agent = preloadedAgent;
-  } else {
-    const fetched = await AgentModel.findById(agentId);
-    if (!fetched) throw new Error(`Agent not found: ${agentId}`);
-    agent = fetched;
-  }
+  const agent = await AgentModel.findById(agentId);
+  if (!agent) throw new Error(`Agent not found: ${agentId}`);
 
   // Create a map of Archestra tool names to their titles
   // This is needed because the database schema doesn't include a title field
@@ -325,6 +328,7 @@ export async function createAgentServer(
               const result = await executeArchestraTool(name, args, {
                 agent: { id: agent.id, name: agent.name },
                 agentId: agent.id,
+                userId: tokenAuth?.userId,
                 organizationId: tokenAuth?.organizationId,
                 tokenAuth,
               });
@@ -533,33 +537,52 @@ export function extractBearerToken(request: FastifyRequest): string | null {
 }
 
 /**
- * Extract profile ID from URL path and token from Authorization header
- * URL format: /v1/mcp/:profileId
+ * Extract profile ID from URL path and token from Authorization header.
+ * URL format: /v1/mcp/:profileId (accepts both UUID and slug)
  */
-export function extractProfileIdAndTokenFromRequest(
+export async function extractProfileIdAndTokenFromRequest(
   request: FastifyRequest,
-): { profileId: string; token: string } | null {
+): Promise<{ profileId: string; token: string } | null> {
   const token = extractBearerToken(request);
   if (!token) {
     return null;
   }
 
-  // Extract profile ID from URL path (last segment)
-  const profileId = request.url.split("/").at(-1)?.split("?")[0];
-  if (!profileId) {
+  // Extract profile ID or slug from URL path (last segment)
+  const idOrSlug = request.url.split("/").at(-1)?.split("?")[0];
+  if (!idOrSlug) {
     return null;
   }
 
-  try {
-    const parsedProfileId = UuidIdSchema.parse(profileId);
-    return parsedProfileId ? { profileId: parsedProfileId, token } : null;
-  } catch {
-    return null;
-  }
+  const profileId = await AgentModel.resolveIdFromIdOrSlug(idOrSlug);
+  return profileId ? { profileId, token } : null;
 }
 
 /**
- * Validate an archestra_ prefixed token for a specific profile
+ * Extract headers from an incoming request that match the gateway's passthrough allowlist.
+ * Returns a map of header name → value, or undefined if none matched.
+ */
+export function extractPassthroughHeaders(
+  allowlist: string[] | null | undefined,
+  requestHeaders: Record<string, string | string[] | undefined>,
+): Record<string, string> | undefined {
+  if (!allowlist || allowlist.length === 0) {
+    return undefined;
+  }
+  const extracted: Record<string, string> = {};
+  for (const headerName of allowlist) {
+    const value = requestHeaders[headerName.toLowerCase()];
+    if (typeof value === "string") {
+      extracted[headerName] = value;
+    } else if (Array.isArray(value)) {
+      extracted[headerName] = value.join(", ");
+    }
+  }
+  return Object.keys(extracted).length > 0 ? extracted : undefined;
+}
+
+/**
+ * Validate a platform-managed token for a specific profile
  * Returns token auth info if valid, null otherwise
  *
  * Validates that:
@@ -785,6 +808,21 @@ async function validateOAuthTokenByHash(params: {
       return null;
     }
 
+    if (
+      accessToken.referenceId?.startsWith(MCP_RESOURCE_REFERENCE_PREFIX) &&
+      accessToken.referenceId !==
+        `${MCP_RESOURCE_REFERENCE_PREFIX}${params.profileId}`
+    ) {
+      logger.warn(
+        {
+          profileId: params.profileId,
+          tokenReferenceId: accessToken.referenceId,
+        },
+        "validateOAuthToken: token is bound to a different MCP resource",
+      );
+      return null;
+    }
+
     const userId = accessToken.userId;
     if (!userId) {
       return null;
@@ -871,7 +909,7 @@ export async function validateMCPGatewayToken(
     };
 
   // Try external IdP JWKS validation first (if profile has an IdP configured)
-  if (!tokenValue.startsWith(ARCHESTRA_TOKEN_PREFIX)) {
+  if (!hasArchestraTokenPrefix(tokenValue)) {
     const externalIdpResult = await validateExternalIdpToken(
       profileId,
       tokenValue,
@@ -882,7 +920,7 @@ export async function validateMCPGatewayToken(
     }
   }
 
-  if (tokenValue.startsWith(ARCHESTRA_TOKEN_PREFIX)) {
+  if (hasArchestraTokenPrefix(tokenValue)) {
     const resolvedToken = await resolveArchestraToken(
       tokenValue,
       tokenHashes.rawTokenHash,
@@ -961,7 +999,7 @@ export async function validateExternalIdpToken(
     }
 
     // Look up the identity provider to get OIDC config
-    const idpProvider = await findIdentityProviderById(
+    const idpProvider = await findExternalIdentityProviderById(
       agent.identityProviderId,
     );
     if (!idpProvider) {
@@ -981,10 +1019,16 @@ export async function validateExternalIdpToken(
       return null;
     }
 
-    const oidcConfig = parseJsonField<OidcConfigForJwks>(
-      idpProvider.oidcConfig,
-    );
+    const oidcConfig = idpProvider.oidcConfig;
     if (!oidcConfig) {
+      return null;
+    }
+
+    if (!oidcConfig.clientId) {
+      logger.warn(
+        { profileId, identityProviderId: agent.identityProviderId },
+        "validateExternalIdpToken: identity provider OIDC clientId is required for audience validation",
+      );
       return null;
     }
 
@@ -993,7 +1037,8 @@ export async function validateExternalIdpToken(
     // e.g. in CI where the issuer is a NodePort URL but the backend runs in a pod).
     // Fall back to OIDC discovery from the issuer URL.
     const jwksUrl =
-      oidcConfig.jwksEndpoint ?? (await discoverJwksUrl(idpProvider.issuer));
+      oidcConfig.jwksEndpoint ??
+      (await discoverOidcJwksUrl(idpProvider.issuer));
     if (!jwksUrl) {
       logger.warn(
         { profileId, issuer: idpProvider.issuer },
@@ -1007,7 +1052,7 @@ export async function validateExternalIdpToken(
       token: tokenValue,
       issuerUrl: idpProvider.issuer,
       jwksUrl,
-      audience: oidcConfig.clientId ?? null,
+      audience: oidcConfig.clientId,
     });
 
     if (!result) {
@@ -1098,121 +1143,6 @@ export async function validateExternalIdpToken(
         error: error instanceof Error ? error.message : String(error),
       },
       "validateExternalIdpToken: unexpected error",
-    );
-    return null;
-  }
-}
-
-// =============================================================================
-// Internal helpers for external IdP validation
-// =============================================================================
-
-type OidcConfigForJwks = {
-  clientId?: string;
-  jwksEndpoint?: string;
-};
-
-/**
- * Simple identity provider lookup by ID (no org check).
- * Uses direct DB query since the IdentityProviderModel is enterprise-only (.ee.ts).
- * The schema file (identity-provider.ts) is NOT .ee, so this is safe to use.
- */
-async function findIdentityProviderById(id: string) {
-  const [provider] = await db
-    .select({
-      id: dbSchema.identityProvidersTable.id,
-      providerId: dbSchema.identityProvidersTable.providerId,
-      issuer: dbSchema.identityProvidersTable.issuer,
-      oidcConfig: dbSchema.identityProvidersTable.oidcConfig,
-    })
-    .from(dbSchema.identityProvidersTable)
-    .where(eq(dbSchema.identityProvidersTable.id, id));
-
-  return provider ?? null;
-}
-
-function parseJsonField<T>(value: unknown): T | null {
-  if (!value) return null;
-  if (typeof value === "object") return value as T;
-  if (typeof value === "string") {
-    try {
-      return JSON.parse(value);
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
-
-/**
- * Cache for OIDC discovery results (issuer → jwks_uri).
- * Bounded to MAX_OIDC_DISCOVERY_CACHE_SIZE entries with LRU-style eviction
- * (oldest entry removed when full). In practice this cache is very small —
- * entries correspond to configured identity providers, not user-controlled input.
- */
-const MAX_OIDC_DISCOVERY_CACHE_SIZE = 100;
-const oidcDiscoveryCache = new Map<string, string>();
-const oidcDiscoveryInflight = new Map<string, Promise<string | null>>();
-
-/**
- * Discover the JWKS URL from an OIDC issuer's well-known configuration.
- * Results are cached in memory. Concurrent requests for the same issuer
- * are deduplicated to avoid redundant network calls.
- */
-async function discoverJwksUrl(issuerUrl: string): Promise<string | null> {
-  const cached = oidcDiscoveryCache.get(issuerUrl);
-  if (cached) return cached;
-
-  const inflight = oidcDiscoveryInflight.get(issuerUrl);
-  if (inflight) return inflight;
-
-  const promise = fetchOidcJwksUrl(issuerUrl);
-  oidcDiscoveryInflight.set(issuerUrl, promise);
-  try {
-    return await promise;
-  } finally {
-    oidcDiscoveryInflight.delete(issuerUrl);
-  }
-}
-
-async function fetchOidcJwksUrl(issuerUrl: string): Promise<string | null> {
-  try {
-    // Normalize issuer URL (remove trailing slash for consistent well-known URL construction)
-    const normalizedIssuer = issuerUrl.replace(/\/$/, "");
-    const discoveryUrl = `${normalizedIssuer}/.well-known/openid-configuration`;
-
-    const response = await fetch(discoveryUrl, {
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!response.ok) {
-      logger.warn(
-        { issuerUrl, status: response.status },
-        "OIDC discovery failed",
-      );
-      return null;
-    }
-
-    const metadata = (await response.json()) as { jwks_uri?: string };
-    const jwksUri = metadata.jwks_uri;
-    if (!jwksUri || typeof jwksUri !== "string") {
-      logger.warn({ issuerUrl }, "OIDC discovery: no jwks_uri in metadata");
-      return null;
-    }
-
-    // Evict oldest entry if cache is full
-    if (oidcDiscoveryCache.size >= MAX_OIDC_DISCOVERY_CACHE_SIZE) {
-      const oldestKey = oidcDiscoveryCache.keys().next().value;
-      if (oldestKey) oidcDiscoveryCache.delete(oldestKey);
-    }
-    oidcDiscoveryCache.set(issuerUrl, jwksUri);
-    return jwksUri;
-  } catch (error) {
-    logger.warn(
-      {
-        issuerUrl,
-        error: error instanceof Error ? error.message : String(error),
-      },
-      "OIDC discovery request failed",
     );
     return null;
   }

@@ -28,8 +28,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useModelsWithApiKeys } from "@/lib/chat/chat-models.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { useModelsWithApiKeys } from "@/lib/llm-models.query";
 import type { OptimizationRule } from "@/lib/optimization-rule.query";
 import {
   useCreateOptimizationRule,
@@ -69,6 +69,7 @@ function getProviderLogoName(provider: keyof typeof providerDisplayNames) {
     zhipuai: "zhipuai",
     deepseek: "deepseek",
     minimax: "minimax",
+    azure: "azure",
   } as const;
 
   return logoNames[provider];

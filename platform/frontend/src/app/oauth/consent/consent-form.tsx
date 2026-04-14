@@ -23,6 +23,9 @@ export function ConsentForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const [externalRedirectTarget, setExternalRedirectTarget] = useState<
+    string | null
+  >(null);
 
   const clientId = searchParams.get("client_id");
   const queryClientName = searchParams.get("client_name");
@@ -53,7 +56,13 @@ export function ConsentForm() {
       });
 
       if (data?.redirectTo) {
-        window.location.href = data.redirectTo;
+        if (isExternalProtocolRedirect(data.redirectTo)) {
+          setExternalRedirectTarget(data.redirectTo);
+          window.location.assign(data.redirectTo);
+          return;
+        }
+
+        window.location.replace(data.redirectTo);
         return;
       }
 
@@ -78,54 +87,92 @@ export function ConsentForm() {
         </div>
         <CardTitle>Authorization Request</CardTitle>
         <CardDescription>
-          <span className="font-semibold text-foreground">{clientName}</span> is
-          requesting access to your account
+          {externalRedirectTarget ? (
+            <>
+              Returning you to{" "}
+              <span className="font-semibold text-foreground">
+                {clientName}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="font-semibold text-foreground">
+                {clientName}
+              </span>{" "}
+              is requesting access to your account
+            </>
+          )}
         </CardDescription>
       </CardHeader>
 
       <CardContent>
-        <div className="space-y-3">
-          <p className="text-muted-foreground text-sm">
-            This application is requesting the following permissions:
-          </p>
-          <div className="space-y-2">
-            {scopes.map((s) => (
-              <div
-                key={s}
-                className="flex items-center gap-2 rounded-md border p-2"
+        {externalRedirectTarget ? (
+          <div className="space-y-3">
+            <p className="text-muted-foreground text-sm">
+              If the app did not open automatically,{" "}
+              <a
+                href={externalRedirectTarget}
+                className="font-medium text-primary underline underline-offset-2"
               >
-                <Badge variant="secondary" className="shrink-0">
-                  {s}
-                </Badge>
-                <span className="text-sm">
-                  {OAUTH_SCOPE_DESCRIPTIONS[
-                    s as keyof typeof OAUTH_SCOPE_DESCRIPTIONS
-                  ] || s}
-                </span>
-              </div>
-            ))}
+                switch back to it manually
+              </a>
+              . You can close this tab after the authorization flow completes.
+            </p>
           </div>
-        </div>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-muted-foreground text-sm">
+              This application is requesting the following permissions:
+            </p>
+            <div className="space-y-2">
+              {scopes.map((s) => (
+                <div
+                  key={s}
+                  className="flex items-center gap-2 rounded-md border p-2"
+                >
+                  <Badge variant="secondary" className="shrink-0">
+                    {s}
+                  </Badge>
+                  <span className="text-sm">
+                    {OAUTH_SCOPE_DESCRIPTIONS[
+                      s as keyof typeof OAUTH_SCOPE_DESCRIPTIONS
+                    ] || s}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {error && <p className="mt-3 text-destructive text-sm">{error}</p>}
       </CardContent>
 
-      <CardFooter className="flex gap-3">
-        <Button
-          variant="outline"
-          className="flex-1"
-          onClick={() => handleConsent(false)}
-          disabled={consentMutation.isPending}
-        >
-          Deny
-        </Button>
-        <Button
-          className="flex-1"
-          onClick={() => handleConsent(true)}
-          disabled={consentMutation.isPending}
-        >
-          {consentMutation.isPending ? "Processing..." : "Allow"}
-        </Button>
-      </CardFooter>
+      {!externalRedirectTarget && (
+        <CardFooter className="flex gap-3">
+          <Button
+            variant="outline"
+            className="flex-1"
+            onClick={() => handleConsent(false)}
+            disabled={consentMutation.isPending}
+          >
+            Deny
+          </Button>
+          <Button
+            className="flex-1"
+            onClick={() => handleConsent(true)}
+            disabled={consentMutation.isPending}
+          >
+            {consentMutation.isPending ? "Processing..." : "Allow"}
+          </Button>
+        </CardFooter>
+      )}
     </Card>
+  );
+}
+
+function isExternalProtocolRedirect(redirectTo: string): boolean {
+  return (
+    !redirectTo.startsWith("/") &&
+    !redirectTo.startsWith("http://") &&
+    !redirectTo.startsWith("https://")
   );
 }

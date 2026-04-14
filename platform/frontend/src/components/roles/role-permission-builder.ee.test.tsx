@@ -9,10 +9,10 @@ describe("RolePermissionBuilder", () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     const permission: Permissions = {
-      knowledgeBase: ["query"],
+      knowledgeSource: ["query"],
     };
     const userPermissions: Permissions = {
-      knowledgeBase: ["read", "create", "update", "delete", "query"],
+      knowledgeSource: ["read", "create", "update", "delete", "query"],
       knowledgeSettings: ["read", "update"],
     };
 
@@ -30,7 +30,7 @@ describe("RolePermissionBuilder", () => {
       screen.getByRole("checkbox", { name: "Knowledge permissions" }),
     ).toHaveAttribute("data-state", "indeterminate");
     expect(
-      screen.getByRole("checkbox", { name: "Knowledge Bases permissions" }),
+      screen.getByRole("checkbox", { name: "Knowledge Sources permissions" }),
     ).toHaveAttribute("data-state", "indeterminate");
     expect(screen.getByLabelText("Query")).toHaveAttribute(
       "data-state",

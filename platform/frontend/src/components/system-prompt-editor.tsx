@@ -1,10 +1,11 @@
 "use client";
 
-import { DocsPage, SYSTEM_PROMPT_TEMPLATE_EXPRESSIONS } from "@shared";
+import { DocsPage, getSystemPromptTemplateExpressions } from "@shared";
 import { Maximize2, Minimize2 } from "lucide-react";
 import { useState } from "react";
 
 import { Editor } from "@/components/editor";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Button } from "@/components/ui/button";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import {
@@ -19,6 +20,8 @@ export function SystemPromptEditor({
   height = "200px",
   expandedHeight = "420px",
   variant = "default",
+  headerExtra,
+  builtInAgentId,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -27,6 +30,10 @@ export function SystemPromptEditor({
   expandedHeight?: string;
   /** "section" uses bold h3 (matching section headings), "default" uses lighter text */
   variant?: "default" | "section";
+  /** Extra element rendered in the header next to the expand button */
+  headerExtra?: React.ReactNode;
+  /** Optional built-in agent id to expose built-in-agent-specific template variables */
+  builtInAgentId?: string | null;
 }) {
   const docsUrl = getFrontendDocsUrl(
     DocsPage.PlatformAgents,
@@ -34,6 +41,9 @@ export function SystemPromptEditor({
   );
   const [isExpanded, setIsExpanded] = useState(false);
   const editorHeight = isExpanded ? expandedHeight : height;
+  const templateExpressions = getSystemPromptTemplateExpressions({
+    builtInAgentId,
+  });
 
   return (
     <div className="space-y-2">
@@ -59,14 +69,13 @@ export function SystemPromptEditor({
               <>
                 {" "}
                 — see{" "}
-                <a
+                <ExternalDocsLink
                   href={docsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
                   className="underline hover:text-foreground"
+                  showIcon={false}
                 >
                   docs
-                </a>{" "}
+                </ExternalDocsLink>{" "}
                 for available variables.
               </>
             ) : (
@@ -74,20 +83,22 @@ export function SystemPromptEditor({
             )}
           </p>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="shrink-0"
-          onClick={() => setIsExpanded((current) => !current)}
-        >
-          {isExpanded ? (
-            <Minimize2 className="size-4" />
-          ) : (
-            <Maximize2 className="size-4" />
-          )}
-          <span>{isExpanded ? "Collapse" : "Expand"}</span>
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          {headerExtra}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setIsExpanded((current) => !current)}
+          >
+            {isExpanded ? (
+              <Minimize2 className="size-4" />
+            ) : (
+              <Maximize2 className="size-4" />
+            )}
+            <span>{isExpanded ? "Collapse" : "Expand"}</span>
+          </Button>
+        </div>
       </div>
       <div className="border rounded-md overflow-hidden">
         <Editor
@@ -96,7 +107,7 @@ export function SystemPromptEditor({
           value={value}
           onChange={(v) => onChange(v || "")}
           beforeMount={(monaco) => {
-            registerSystemPromptCompletions(monaco);
+            registerSystemPromptCompletions(monaco, templateExpressions);
           }}
           options={{
             minimap: { enabled: false },
@@ -123,15 +134,27 @@ export function SystemPromptEditor({
 // Internal helpers
 // ===
 
-let completionsRegistered = false;
+let completionsProviderRegistered = false;
+let currentTemplateExpressions: ReadonlyArray<{
+  expression: string;
+  description: string;
+}> = [];
 
 type Monaco = Parameters<
   NonNullable<import("@monaco-editor/react").EditorProps["beforeMount"]>
 >[0];
 
-function registerSystemPromptCompletions(monaco: Monaco) {
-  if (completionsRegistered) return;
-  completionsRegistered = true;
+function registerSystemPromptCompletions(
+  monaco: Monaco,
+  templateExpressions: ReadonlyArray<{
+    expression: string;
+    description: string;
+  }>,
+) {
+  currentTemplateExpressions = templateExpressions;
+
+  if (completionsProviderRegistered) return;
+  completionsProviderRegistered = true;
 
   // biome-ignore lint/suspicious/noExplicitAny: Monaco namespace types aren't directly indexable
   const provideCompletionItems = (model: any, position: any) => {
@@ -155,7 +178,7 @@ function registerSystemPromptCompletions(monaco: Monaco) {
       endColumn: col + endOffset,
     };
     return {
-      suggestions: SYSTEM_PROMPT_TEMPLATE_EXPRESSIONS.map((v) => ({
+      suggestions: currentTemplateExpressions.map((v) => ({
         label: v.expression,
         kind: monaco.languages.CompletionItemKind.Variable,
         insertText: v.expression,

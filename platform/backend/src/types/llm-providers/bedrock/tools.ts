@@ -23,24 +23,29 @@ export const ToolSchema = z.object({
 });
 
 // Tool choice configurations
-const ToolChoiceAutoSchema = z.object({
-  auto: z.object({}).optional(),
-});
+// Using .passthrough() so Zod doesn't strip keys from the discriminated union.
+// Without it, { any: {} } matches ToolChoiceAutoSchema (auto is optional),
+// Zod strips "any", and Bedrock receives {} which it rejects.
+const ToolChoiceAutoSchema = z
+  .object({ auto: z.object({}).passthrough() })
+  .passthrough();
 
-const ToolChoiceAnySchema = z.object({
-  any: z.object({}).optional(),
-});
+const ToolChoiceAnySchema = z
+  .object({ any: z.object({}).passthrough() })
+  .passthrough();
 
-const ToolChoiceToolSchema = z.object({
-  tool: z.object({
-    name: z.string(),
-  }),
-});
+const ToolChoiceToolSchema = z
+  .object({
+    tool: z.object({
+      name: z.string(),
+    }),
+  })
+  .passthrough();
 
 export const ToolChoiceSchema = z.union([
-  ToolChoiceAutoSchema,
-  ToolChoiceAnySchema,
   ToolChoiceToolSchema,
+  ToolChoiceAnySchema,
+  ToolChoiceAutoSchema,
 ]);
 
 // Tool configuration

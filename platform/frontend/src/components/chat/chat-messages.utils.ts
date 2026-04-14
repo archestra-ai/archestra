@@ -4,7 +4,7 @@ import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import {
   getToolErrorText,
   isCompactEligible,
-} from "./chat-tools-display.utils";
+} from "@/lib/chat/chat-tools-display.utils";
 import type { FileAttachment } from "./editable-user-message";
 
 export type OptimisticToolCall = {
@@ -77,50 +77,6 @@ export function filterOptimisticToolCalls(
   return optimisticToolCalls.filter(
     (toolCall) => !renderedToolCallIds.has(toolCall.toolCallId),
   );
-}
-
-export function stripDanglingToolCalls(messages: UIMessage[]): UIMessage[] {
-  return messages.map((message) => {
-    if (!message.parts?.length) {
-      return message;
-    }
-
-    const completedToolCallIds = new Set<string>();
-    for (const part of message.parts) {
-      if (
-        isToolPart(part) &&
-        typeof part.toolCallId === "string" &&
-        isCompletedToolPart(part)
-      ) {
-        completedToolCallIds.add(part.toolCallId);
-      }
-    }
-
-    const sanitizedParts = message.parts.filter((part) => {
-      if (
-        !isToolPart(part) ||
-        typeof part.toolCallId !== "string" ||
-        part.state !== "input-available"
-      ) {
-        return true;
-      }
-
-      // If a stream is stopped mid-tool-execution, AI SDK can leave behind a
-      // lone input-available tool part with no matching result. Sending that
-      // stale part back on the next turn triggers MissingToolResultsError at
-      // the provider layer, so we strip only the dangling invocation here.
-      return completedToolCallIds.has(part.toolCallId);
-    });
-
-    if (sanitizedParts.length === message.parts.length) {
-      return message;
-    }
-
-    return {
-      ...message,
-      parts: sanitizedParts,
-    };
-  });
 }
 
 export function identifyCompactToolGroups(
@@ -244,14 +200,6 @@ function isToolPart(part: unknown): part is DynamicToolUIPart | ToolUIPart {
     "type" in part &&
     typeof part.type === "string" &&
     (part.type.startsWith("tool-") || part.type === "dynamic-tool")
-  );
-}
-
-function isCompletedToolPart(part: DynamicToolUIPart | ToolUIPart) {
-  return (
-    part.state === "output-available" ||
-    part.state === "output-error" ||
-    part.state === "output-denied"
   );
 }
 

@@ -11,27 +11,15 @@ import {
   hasConnectorIcon,
 } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { Button } from "@/components/ui/button";
+import { getToolNameFromPart } from "@/lib/chat/chat-tools-display.utils";
 
 export function hasKnowledgeBaseToolCall(parts: ChatMessagePart[]): boolean {
-  return parts.some((part) => {
-    // dynamic-tool parts have toolName directly
-    if (
-      "toolName" in part &&
-      typeof part.toolName === "string" &&
-      part.toolName.endsWith(TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME)
-    ) {
-      return true;
-    }
-    // Older persisted tool parts encode the tool name in the `type` field
-    // (for example "tool-archestra__query_knowledge_sources").
-    if (
-      typeof part.type === "string" &&
-      part.type.endsWith(TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME)
-    ) {
-      return true;
-    }
-    return false;
-  });
+  return parts.some(
+    (part) =>
+      getToolNameFromPart(part)?.endsWith(
+        TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+      ) ?? false,
+  );
 }
 
 export interface ExtractedCitation {
@@ -49,9 +37,9 @@ export function extractCitations(
 
   for (const part of parts) {
     const isKbTool =
-      (typeof part.toolName === "string" &&
-        part.toolName.endsWith(TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME)) ||
-      part.type.endsWith(TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME);
+      getToolNameFromPart(part)?.endsWith(
+        TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+      ) ?? false;
 
     if (!isKbTool || part.state !== "output-available") continue;
 

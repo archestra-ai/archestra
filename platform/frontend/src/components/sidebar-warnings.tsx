@@ -52,7 +52,10 @@ export function SidebarWarnings() {
             <span>
               Security engine off
               {" - "}
-              <Link href="/mcp/tool-policies" className="underline font-medium">
+              <Link
+                href="/mcp/tool-guardrails"
+                className="underline font-medium"
+              >
                 Fix
               </Link>
             </span>

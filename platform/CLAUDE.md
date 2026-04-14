@@ -16,6 +16,7 @@
 6. **Enterprise Edition Imports** - NEVER directly import from `.ee.ts` files unless the importing file is itself an `.ee.ts` file. Use runtime conditional logic with `config.enterpriseFeatures.core` checks instead to avoid bundling enterprise code into free builds
 7. **No Auto Commits** - Never commit or push changes without explicit user approval. Always ask before running git commit or git push
 8. **No Database Modifications Without Approval** - NEVER run INSERT, UPDATE, DELETE, or any data-modifying SQL queries without explicit user approval. SELECT queries for reading data are allowed. Always ask before modifying database data directly.
+9. **NEVER MENTION REAL CUSTOMER NAMES OR IDENTIFIERS ANYWHERE IN CODE, COMMENTS, TESTS, DOCS, COMMITS, OR PR TEXT!!!!!!!!!!**
 
 ## Docs
 
@@ -203,6 +204,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 **General**:
 
 - **Prefer Classes for Stateful Modules**: When encapsulating functionality that involves state (cached values, intervals, connections, etc.), prefer creating a class over standalone module functions. Export a singleton instance. This improves encapsulation, testability, and makes state management explicit.
+- **Use Shared Cache Utilities**: Do not introduce custom cache implementations with ad hoc `Map`s, manual TTLs, or hand-rolled eviction. Use one of the existing cache primitives in `backend/src/cache-manager.ts` (`cacheManager` or `LRUCacheManager`) unless there is a documented reason not to.
 
   ```typescript
   // Good - class with singleton
@@ -451,6 +453,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 **Testing**:
 
 - **Backend**: Vitest with PGLite for in-memory PostgreSQL testing - never mock database interfaces, use real database operations via models for comprehensive integration testing
+- **Test What Matters**: Prefer behavior-focused tests over implementation-detail tests. Do not add tests that only assert class names, prop plumbing, or incidental markup unless that detail is itself the contract.
 - **E2E Tests**: Playwright with test fixtures pattern - import from `./fixtures` in API/UI test directories
 - **E2E Test Fixtures**:
   - API fixtures: `makeApiRequest`, `createAgent`, `deleteAgent`, `createApiKey`, `deleteApiKey`, `createToolInvocationPolicy`, `deleteToolInvocationPolicy`, `createTrustedDataPolicy`, `deleteTrustedDataPolicy`

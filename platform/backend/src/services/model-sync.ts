@@ -1,10 +1,10 @@
-import type { SupportedProvider } from "@shared";
+import type { SupportedEmbeddingDimension, SupportedProvider } from "@shared";
 import {
   type ModelsDevApiResponse,
   modelsDevClient,
 } from "@/clients/models-dev-client";
 import logger from "@/logging";
-import { ApiKeyModelModel, ModelModel } from "@/models";
+import { LlmProviderApiKeyModelLinkModel, ModelModel } from "@/models";
 import { modelFetchers } from "@/routes/chat/model-fetchers";
 import type {
   CreateModel,
@@ -56,7 +56,11 @@ class ModelSyncService {
       if (providerModels.length === 0) {
         logger.info({ provider, apiKeyId }, "No models returned from provider");
         // Clear any existing links since no models are available
-        await ApiKeyModelModel.syncModelsForApiKey(apiKeyId, [], provider);
+        await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+          apiKeyId,
+          [],
+          provider,
+        );
         return 0;
       }
 
@@ -92,7 +96,7 @@ class ModelSyncService {
         id: m.id,
         modelId: m.modelId,
       }));
-      await ApiKeyModelModel.syncModelsForApiKey(
+      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
         apiKeyId,
         modelsWithIds,
         provider,
@@ -203,9 +207,39 @@ export function buildModelsToUpsert(params: {
       supportsToolCalling: capabilities.supportsToolCalling,
       promptPricePerToken: capabilities.promptPricePerToken,
       completionPricePerToken: capabilities.completionPricePerToken,
+      embeddingDimensions: inferEmbeddingDimensions(model.id, provider),
       lastSyncedAt: new Date(),
     };
   });
+}
+
+/**
+ * Best-effort inference of embedding dimensions for known models.
+ * Unknown models return null and can be configured manually in the model editor.
+ */
+export function inferEmbeddingDimensions(
+  modelId: string,
+  provider: SupportedProvider,
+): SupportedEmbeddingDimension | null {
+  const id = modelId.toLowerCase();
+  if (provider === "openai" && id === "text-embedding-3-small") {
+    return 1536;
+  }
+  if (provider === "openai" && id === "text-embedding-3-large") {
+    // Default to 1536 for backwards compatibility with existing OpenAI KB
+    // embeddings; admins can opt into 3072 manually in the model editor.
+    return 1536;
+  }
+  if (provider === "gemini" && id === "gemini-embedding-001") {
+    return 3072;
+  }
+  if (provider === "gemini" && id === "gemini-embedding-2-preview") {
+    return 3072;
+  }
+  if (id === "nomic-embed-text") {
+    return 768;
+  }
+  return null;
 }
 
 export function resolveModelCapabilities(params: {
@@ -219,20 +253,24 @@ export function resolveModelCapabilities(params: {
     modelId,
   });
 
-  return {
-    description: capabilities?.description ?? null,
-    contextLength:
-      capabilities?.contextLength ?? inferredCapabilities.contextLength,
-    inputModalities:
-      capabilities?.inputModalities ?? inferredCapabilities.inputModalities,
-    outputModalities:
-      capabilities?.outputModalities ?? inferredCapabilities.outputModalities,
-    supportsToolCalling:
-      capabilities?.supportsToolCalling ??
-      inferredCapabilities.supportsToolCalling,
-    promptPricePerToken: capabilities?.promptPricePerToken ?? null,
-    completionPricePerToken: capabilities?.completionPricePerToken ?? null,
-  };
+  return normalizeKnownModelCapabilities({
+    provider,
+    modelId,
+    capabilities: {
+      description: capabilities?.description ?? null,
+      contextLength:
+        capabilities?.contextLength ?? inferredCapabilities.contextLength,
+      inputModalities:
+        capabilities?.inputModalities ?? inferredCapabilities.inputModalities,
+      outputModalities:
+        capabilities?.outputModalities ?? inferredCapabilities.outputModalities,
+      supportsToolCalling:
+        capabilities?.supportsToolCalling ??
+        inferredCapabilities.supportsToolCalling,
+      promptPricePerToken: capabilities?.promptPricePerToken ?? null,
+      completionPricePerToken: capabilities?.completionPricePerToken ?? null,
+    },
+  });
 }
 
 /**
@@ -389,6 +427,29 @@ function inferGeminiCapabilities(modelId: string): ProviderModelCapabilities {
     inputModalities: ["text"],
     outputModalities: ["text"],
   };
+}
+
+function normalizeKnownModelCapabilities(params: {
+  provider: SupportedProvider;
+  modelId: string;
+  capabilities: ProviderModelCapabilities;
+}): ProviderModelCapabilities {
+  const { provider, modelId, capabilities } = params;
+  const normalizedModelId = modelId.toLowerCase();
+
+  if (
+    provider === "gemini" &&
+    normalizedModelId === "gemini-embedding-2-preview"
+  ) {
+    return {
+      ...capabilities,
+      inputModalities: ["text", "image"],
+      outputModalities: [],
+      supportsToolCalling: false,
+    };
+  }
+
+  return capabilities;
 }
 
 function emptyCapabilities(): ProviderModelCapabilities {

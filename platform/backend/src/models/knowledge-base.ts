@@ -86,11 +86,12 @@ class KnowledgeBaseModel {
   }
 
   static async delete(id: string): Promise<boolean> {
-    const result = await db
+    const rows = await db
       .delete(schema.knowledgeBasesTable)
-      .where(eq(schema.knowledgeBasesTable.id, id));
+      .where(eq(schema.knowledgeBasesTable.id, id))
+      .returning({ id: schema.knowledgeBasesTable.id });
 
-    return result.rowCount !== null && result.rowCount > 0;
+    return rows.length > 0;
   }
 
   static async countByOrganization(params: {

@@ -24,7 +24,7 @@ vi.mock("@/config", async (importOriginal) => {
 const { default: browserStreamRoutes } = await import(
   "./browser-stream.routes"
 );
-const { default: chatRoutes } = await import("@/routes/chat/routes.chat");
+const { default: chatRoutes } = await import("@/routes/chat/routes");
 
 const buildAppWithUser = async (user: User, organizationId: string) => {
   const app = Fastify({ logger: false })

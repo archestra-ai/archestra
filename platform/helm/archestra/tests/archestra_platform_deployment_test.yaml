@@ -83,7 +83,7 @@ tests:
           path: spec.replicas
           value: 3
 
-  - it: should configure RollingUpdate deployment strategy with zero-downtime defaults
+  - it: should configure RollingUpdate deployment strategy with percentage defaults
     documentIndex: 1
     asserts:
       - equal:
@@ -91,10 +91,10 @@ tests:
           value: RollingUpdate
       - equal:
           path: spec.strategy.rollingUpdate.maxSurge
-          value: 1
+          value: "25%"
       - equal:
           path: spec.strategy.rollingUpdate.maxUnavailable
-          value: 0
+          value: "25%"
 
   - it: should allow overriding deployment strategy
     documentIndex: 1
@@ -275,6 +275,43 @@ tests:
       - equal:
           path: spec.template.spec.initContainers[1].image
           value: busybox:1.36
+
+  - it: should allow overriding the wait-for-postgres image
+    documentIndex: 1
+    set:
+      archestra.initContainers.busyboxImage: registry.internal.example.com/platform/busybox:1.36
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].image
+          value: registry.internal.example.com/platform/busybox:1.36
+
+  - it: should apply shared resources to chart-managed init containers
+    documentIndex: 1
+    set:
+      postgresql.enabled: true
+      archestra.initContainers.resources:
+        requests:
+          cpu: 100m
+          memory: 64Mi
+        limits:
+          memory: 128Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].resources
+          value:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+      - equal:
+          path: spec.template.spec.initContainers[1].resources
+          value:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
 
   - it: should configure init container with env vars and parse ARCHESTRA_DATABASE_URL
     documentIndex: 1

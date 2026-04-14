@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createContext, useContext, useMemo, useState } from "react";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { PageLayout } from "@/components/page-layout";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 
@@ -83,12 +84,13 @@ export default function CostsLayout({
           pathname === "/llm/costs" && prometheusDocsUrl ? (
             <>
               {config.description} Check{" "}
-              <Link
+              <ExternalDocsLink
                 href={prometheusDocsUrl}
-                className="text-primary hover:underline"
+                className="hover:underline"
+                showIcon={false}
               >
                 Prometheus metrics capabilities
-              </Link>{" "}
+              </ExternalDocsLink>{" "}
               to get cost-related insights at scale.
             </>
           ) : (

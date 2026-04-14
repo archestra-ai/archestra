@@ -1,4 +1,6 @@
-import { DEFAULT_ADMIN_EMAIL, RouteId } from "@shared";
+import { createHash } from "node:crypto";
+import type { IncomingHttpHeaders } from "node:http";
+import { DEFAULT_ADMIN_EMAIL, IDENTITY_PROVIDER_ID, RouteId } from "@shared";
 import { verifyPassword } from "better-auth/crypto";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -8,12 +10,25 @@ import config from "@/config";
 import logger from "@/logging";
 import {
   AccountModel,
+  AgentModel,
   MemberModel,
+  OAuthAccessTokenModel,
   OAuthClientModel,
+  OrganizationModel,
   UserModel,
   UserTokenModel,
 } from "@/models";
+import {
+  buildOAuthIssuer,
+  exchangeIdentityAssertionForAccessToken,
+  JWT_BEARER_GRANT_TYPE,
+  MCP_RESOURCE_REFERENCE_PREFIX,
+} from "@/services/identity-providers/enterprise-managed/authorization";
 import { ApiError, constructResponseSchema } from "@/types";
+import {
+  isLoopbackRedirectUri,
+  loopbackRedirectUriMatchesIgnoringPort,
+} from "@/utils/network";
 
 const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.route({
@@ -221,6 +236,28 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
             error: `CIMD registration failed: ${(error as Error).message}`,
           });
         }
+
+        // RFC 8252 Section 7.3: loopback redirect URIs MUST allow any port.
+        // CIMD documents contain fixed redirect_uris, but native CLI clients
+        // (e.g. Claude Code) start a callback server on an ephemeral port.
+        // If the requested redirect_uri is loopback and matches a registered
+        // URI except for port, dynamically add it so better-auth's exact
+        // match succeeds.
+        const redirectUri = query.redirect_uri;
+        if (redirectUri && isLoopbackRedirectUri(redirectUri)) {
+          const client = await OAuthClientModel.findByClientId(clientId);
+          const registered = client?.redirectUris ?? [];
+          if (
+            !registered.includes(redirectUri) &&
+            loopbackRedirectUriMatchesIgnoringPort(redirectUri, registered)
+          ) {
+            await OAuthClientModel.addRedirectUri(clientId, redirectUri);
+            logger.debug(
+              { clientId, redirectUri },
+              "[auth:oauth2/authorize] Added loopback redirect_uri with ephemeral port (RFC 8252)",
+            );
+          }
+        }
       }
 
       // Forward to better-auth
@@ -267,6 +304,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async handler(request, reply) {
       const body = request.body as Record<string, unknown> | undefined;
+      const resource = body?.resource;
 
       // CIMD: auto-register client if client_id is a URL
       const clientId = body?.client_id as string | undefined;
@@ -284,6 +322,24 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      if (body?.grant_type === JWT_BEARER_GRANT_TYPE) {
+        const { clientId: authenticatedClientId, clientSecret } =
+          extractOAuthClientCredentials({
+            authorizationHeader: request.headers.authorization,
+            body,
+          });
+
+        const result = await exchangeIdentityAssertionForAccessToken({
+          assertion: body.assertion as string | undefined,
+          clientId: authenticatedClientId,
+          clientSecret,
+        });
+
+        return reply
+          .status(result.ok ? 200 : result.statusCode)
+          .send(result.body);
+      }
+
       if (body?.resource) {
         logger.debug(
           { resource: body.resource },
@@ -292,7 +348,11 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         delete body.resource;
       }
 
-      const url = new URL(request.url, `http://${request.headers.host}`);
+      const tokenEndpointOrigin = getRequestOrigin({
+        protocol: request.protocol,
+        headers: request.headers,
+      });
+      const url = new URL(request.url, tokenEndpointOrigin);
       const headers = new Headers();
       Object.entries(request.headers).forEach(([key, value]) => {
         if (value) headers.append(key, value.toString());
@@ -312,12 +372,20 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       const response = await betterAuth.handler(req);
+      const responseBody = await applyMcpOauthTokenLifetimeToResponse({
+        response,
+        resource,
+        tokenEndpointOrigin,
+      });
 
       reply.status(response.status);
       response.headers.forEach((value: string, key: string) => {
+        if (key.toLowerCase() === "content-length") {
+          return;
+        }
         reply.header(key, value);
       });
-      reply.send(response.body ? await response.text() : null);
+      reply.send(responseBody);
     },
   });
 
@@ -445,6 +513,39 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   });
 
+  fastify.route({
+    method: "POST",
+    url: "/api/auth/sign-in/sso",
+    schema: {
+      tags: ["Auth"],
+    },
+    async handler(request, reply) {
+      const url = new URL(request.url, `http://${request.headers.host}`);
+      const headers = new Headers();
+
+      Object.entries(request.headers).forEach(([key, value]) => {
+        if (value) headers.append(key, value.toString());
+      });
+
+      const req = new Request(url.toString(), {
+        method: request.method,
+        headers,
+        body: request.body ? JSON.stringify(request.body) : undefined,
+      });
+
+      const response = await rewriteGoogleSsoResponseWithHostedDomainHint({
+        response: await betterAuth.handler(req),
+        requestBody: request.body as Record<string, unknown> | undefined,
+      });
+
+      reply.status(response.status);
+      response.headers.forEach((value: string, key: string) => {
+        reply.header(key, value);
+      });
+      reply.send(response.body ? await response.text() : null);
+    },
+  });
+
   // Existing auth handler for all other auth routes
   fastify.route({
     method: ["GET", "POST"],
@@ -530,6 +631,110 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
 export default authRoutes;
 
+async function rewriteGoogleSsoResponseWithHostedDomainHint(params: {
+  requestBody?: Record<string, unknown>;
+  response: Response;
+}): Promise<Response> {
+  const providerId = params.requestBody?.providerId;
+  if (providerId !== IDENTITY_PROVIDER_ID.GOOGLE) {
+    return params.response;
+  }
+
+  const hostedDomainHint = await getGoogleHostedDomainHint();
+  if (!hostedDomainHint) {
+    return params.response;
+  }
+
+  const responseText = params.response.body
+    ? await params.response.text()
+    : undefined;
+  if (!responseText) {
+    return params.response;
+  }
+
+  let payload: Record<string, unknown>;
+  try {
+    payload = JSON.parse(responseText) as Record<string, unknown>;
+  } catch {
+    return new Response(responseText, {
+      status: params.response.status,
+      statusText: params.response.statusText,
+      headers: params.response.headers,
+    });
+  }
+
+  const headers = new Headers(params.response.headers);
+  headers.delete("content-length");
+
+  const location = headers.get("location");
+  if (location) {
+    headers.set("location", appendHostedDomainHint(location, hostedDomainHint));
+  }
+
+  if (typeof payload.url === "string") {
+    payload.url = appendHostedDomainHint(payload.url, hostedDomainHint);
+  }
+
+  return new Response(JSON.stringify(payload), {
+    status: params.response.status,
+    statusText: params.response.statusText,
+    headers,
+  });
+}
+
+async function getGoogleHostedDomainHint(): Promise<string | undefined> {
+  if (!config.enterpriseFeatures.core) {
+    return undefined;
+  }
+
+  const { default: IdentityProviderModel } = await import(
+    // biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
+    "@/models/identity-provider.ee"
+  );
+  const provider = await IdentityProviderModel.findByProviderId(
+    IDENTITY_PROVIDER_ID.GOOGLE,
+  );
+
+  return provider?.oidcConfig?.hd?.trim() || undefined;
+}
+
+function appendHostedDomainHint(urlString: string, hostedDomainHint: string) {
+  const url = new URL(urlString);
+  url.searchParams.set("hd", hostedDomainHint);
+  return url.toString();
+}
+
+function extractOAuthClientCredentials(params: {
+  authorizationHeader: string | string[] | undefined;
+  body: Record<string, unknown> | undefined;
+}): { clientId: string | undefined; clientSecret: string | undefined } {
+  const authHeader = Array.isArray(params.authorizationHeader)
+    ? params.authorizationHeader[0]
+    : params.authorizationHeader;
+  if (authHeader?.startsWith("Basic ")) {
+    try {
+      const decoded = Buffer.from(authHeader.slice("Basic ".length), "base64")
+        .toString("utf8")
+        .split(":");
+      const [clientId, ...secretParts] = decoded;
+      return {
+        clientId,
+        clientSecret: secretParts.join(":") || undefined,
+      };
+    } catch {
+      return {
+        clientId: undefined,
+        clientSecret: undefined,
+      };
+    }
+  }
+
+  return {
+    clientId: params.body?.client_id as string | undefined,
+    clientSecret: params.body?.client_secret as string | undefined,
+  };
+}
+
 function shouldSkipForwardedAuthHeader(headerName: string): boolean {
   const normalizedHeaderName = headerName.toLowerCase();
   return (
@@ -538,4 +743,185 @@ function shouldSkipForwardedAuthHeader(headerName: string): boolean {
     normalizedHeaderName === "connection" ||
     normalizedHeaderName === "transfer-encoding"
   );
+}
+
+async function applyMcpOauthTokenLifetimeToResponse(params: {
+  response: Response;
+  resource: unknown;
+  tokenEndpointOrigin: string;
+}): Promise<string | null> {
+  if (!params.response.body) {
+    return null;
+  }
+
+  const responseText = await params.response.text();
+  if (!params.response.ok) {
+    return responseText;
+  }
+
+  const tokenBody = parseOAuthTokenResponseBody(responseText);
+  if (!tokenBody) {
+    return responseText;
+  }
+
+  const accessToken =
+    typeof tokenBody.access_token === "string" ? tokenBody.access_token : null;
+  if (
+    !accessToken ||
+    !isMcpTokenResponse({ tokenBody, resource: params.resource })
+  ) {
+    return responseText;
+  }
+
+  const tokenHash = hashOAuthAccessTokenForLookup(accessToken);
+  const storedToken = await OAuthAccessTokenModel.getByTokenHash(tokenHash);
+  const lifetimeSeconds = await getMcpOauthAccessTokenLifetimeSeconds({
+    resource: params.resource,
+    referenceId: storedToken?.referenceId,
+    tokenEndpointOrigin: params.tokenEndpointOrigin,
+  });
+  if (!storedToken || !lifetimeSeconds) {
+    return responseText;
+  }
+
+  const issuedAtSeconds = getIssuedAtSeconds(tokenBody);
+  const expiresAtSeconds = issuedAtSeconds + lifetimeSeconds;
+  const updatedToken = await OAuthAccessTokenModel.updateExpiresAtByTokenHash({
+    tokenHash,
+    expiresAt: new Date(expiresAtSeconds * 1000),
+  });
+  if (!updatedToken) {
+    return responseText;
+  }
+
+  return JSON.stringify({
+    ...tokenBody,
+    expires_in: lifetimeSeconds,
+    expires_at: expiresAtSeconds,
+  });
+}
+
+async function getMcpOauthAccessTokenLifetimeSeconds(params: {
+  resource: unknown;
+  referenceId: string | null | undefined;
+  tokenEndpointOrigin: string;
+}): Promise<number | null> {
+  const profileId =
+    (await getProfileIdFromResource({
+      resource: params.resource,
+      tokenEndpointOrigin: params.tokenEndpointOrigin,
+    })) ?? getProfileIdFromReferenceId(params.referenceId);
+  if (!profileId) {
+    return null;
+  }
+
+  const agent = await AgentModel.findById(profileId);
+  if (!agent) {
+    return null;
+  }
+
+  const organization = await OrganizationModel.getById(agent.organizationId);
+  return organization?.mcpOauthAccessTokenLifetimeSeconds ?? null;
+}
+
+function parseOAuthTokenResponseBody(
+  responseText: string,
+): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(responseText);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return null;
+    }
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function isMcpTokenResponse(params: {
+  tokenBody: Record<string, unknown>;
+  resource: unknown;
+}): boolean {
+  if (typeof params.resource === "string") {
+    return true;
+  }
+
+  const scope =
+    typeof params.tokenBody.scope === "string" ? params.tokenBody.scope : "";
+  return scope.split(/\s+/).includes("mcp");
+}
+
+function getIssuedAtSeconds(tokenBody: Record<string, unknown>): number {
+  if (
+    typeof tokenBody.expires_at === "number" &&
+    typeof tokenBody.expires_in === "number"
+  ) {
+    return tokenBody.expires_at - tokenBody.expires_in;
+  }
+
+  return Math.floor(Date.now() / 1000);
+}
+
+async function getProfileIdFromResource(params: {
+  resource: unknown;
+  tokenEndpointOrigin: string;
+}): Promise<string | null> {
+  if (typeof params.resource !== "string") {
+    return null;
+  }
+
+  try {
+    const resourceUrl = new URL(params.resource);
+    const issuerOrigin = new URL(buildOAuthIssuer()).origin;
+    const allowedOrigins = new Set([issuerOrigin, params.tokenEndpointOrigin]);
+    if (!allowedOrigins.has(resourceUrl.origin)) {
+      return null;
+    }
+
+    const match = resourceUrl.pathname.match(/^\/v1\/mcp\/([^/]+)$/);
+    const idOrSlug = match?.[1] ? decodeURIComponent(match[1]) : null;
+    return idOrSlug ? AgentModel.resolveIdFromIdOrSlug(idOrSlug) : null;
+  } catch {
+    return null;
+  }
+}
+
+function getProfileIdFromReferenceId(
+  referenceId: string | null | undefined,
+): string | null {
+  if (!referenceId?.startsWith(MCP_RESOURCE_REFERENCE_PREFIX)) {
+    return null;
+  }
+
+  return referenceId.slice(MCP_RESOURCE_REFERENCE_PREFIX.length) || null;
+}
+
+function getRequestOrigin(params: {
+  protocol: string;
+  headers: IncomingHttpHeaders;
+}): string {
+  const host = Array.isArray(params.headers.host)
+    ? params.headers.host[0]
+    : params.headers.host;
+  const forwardedProto = getFirstHeaderValue(
+    params.headers["x-forwarded-proto"],
+  );
+  const protocol = (forwardedProto || params.protocol || "http").replace(
+    /:$/,
+    "",
+  );
+
+  return `${protocol}://${host}`;
+}
+
+function getFirstHeaderValue(
+  header: string | string[] | undefined,
+): string | undefined {
+  const value = Array.isArray(header) ? header[0] : header;
+  return value?.split(",")[0]?.trim() || undefined;
+}
+
+function hashOAuthAccessTokenForLookup(oauthAccessToken: string): string {
+  // codeql[js/insufficient-password-hash] This hashes a high-entropy OAuth bearer token for lookup, not a user password.
+  return createHash("sha256").update(oauthAccessToken).digest("base64url");
 }

@@ -30,7 +30,6 @@ const { default: McpServerRuntimeManager } = await import(
 interface WebSocketClientContext {
   userId: string;
   organizationId: string;
-  userIsAgentAdmin: boolean;
   userIsMcpServerAdmin: boolean;
 }
 
@@ -141,7 +140,6 @@ describe("websocket browser-stream authorization", () => {
     service.clientContexts.set(ws, {
       userId: otherUser.id,
       organizationId: org.id,
-      userIsAgentAdmin: false,
       userIsMcpServerAdmin: false,
     });
 
@@ -210,7 +208,6 @@ describe("websocket browser-stream screenshot handling", () => {
     service.clientContexts.set(ws, {
       userId: user.id,
       organizationId: org.id,
-      userIsAgentAdmin: false,
       userIsMcpServerAdmin: false,
     });
 
@@ -294,7 +291,6 @@ describe("websocket MCP logs", () => {
     service.clientContexts.set(ws, {
       userId: otherUser.id,
       organizationId: org.id,
-      userIsAgentAdmin: false,
       userIsMcpServerAdmin: false,
     });
 
@@ -347,7 +343,6 @@ describe("websocket MCP logs", () => {
     service.clientContexts.set(ws, {
       userId: adminUser.id,
       organizationId: org.id,
-      userIsAgentAdmin: false,
       userIsMcpServerAdmin: true,
     });
 
@@ -414,7 +409,6 @@ describe("websocket MCP logs", () => {
     service.clientContexts.set(ws, {
       userId: teamMember.id,
       organizationId: org.id,
-      userIsAgentAdmin: false,
       userIsMcpServerAdmin: false,
     });
 
@@ -465,7 +459,6 @@ describe("websocket MCP logs", () => {
     service.clientContexts.set(ws, {
       userId: user.id,
       organizationId: org.id,
-      userIsAgentAdmin: false,
       userIsMcpServerAdmin: true, // Even admin can't access non-existent server
     });
 
@@ -523,7 +516,6 @@ describe("websocket MCP logs", () => {
     service.clientContexts.set(ws, {
       userId: user.id,
       organizationId: org.id,
-      userIsAgentAdmin: false,
       userIsMcpServerAdmin: true,
     });
 
@@ -637,7 +629,6 @@ describe("websocket MCP deployment statuses", () => {
     service.clientContexts.set(ws, {
       userId: user.id,
       organizationId: org.id,
-      userIsAgentAdmin: false,
       userIsMcpServerAdmin: true,
     });
 
@@ -735,7 +726,6 @@ describe("websocket MCP deployment statuses", () => {
     service.clientContexts.set(ws, {
       userId: user.id,
       organizationId: org.id,
-      userIsAgentAdmin: false,
       userIsMcpServerAdmin: true,
     });
 
@@ -788,7 +778,6 @@ describe("websocket MCP deployment statuses", () => {
     service.clientContexts.set(ws, {
       userId: user.id,
       organizationId: org.id,
-      userIsAgentAdmin: false,
       userIsMcpServerAdmin: true,
     });
 
@@ -847,7 +836,6 @@ describe("websocket MCP deployment statuses", () => {
     service.clientContexts.set(ws, {
       userId: user.id,
       organizationId: org.id,
-      userIsAgentAdmin: false,
       userIsMcpServerAdmin: true,
     });
 
@@ -908,7 +896,6 @@ describe("websocket MCP deployment statuses", () => {
     service.clientContexts.set(ws, {
       userId: user.id,
       organizationId: org.id,
-      userIsAgentAdmin: false,
       userIsMcpServerAdmin: true,
     });
 
@@ -1023,7 +1010,6 @@ describe("websocket MCP exec", () => {
     service.clientContexts.set(ws, {
       userId: otherUser.id,
       organizationId: org.id,
-      userIsAgentAdmin: false,
       userIsMcpServerAdmin: false,
     });
 
@@ -1064,7 +1050,6 @@ describe("websocket MCP exec", () => {
     service.clientContexts.set(ws, {
       userId: user.id,
       organizationId: org.id,
-      userIsAgentAdmin: false,
       userIsMcpServerAdmin: true,
     });
 
@@ -1128,7 +1113,6 @@ describe("websocket MCP exec", () => {
     service.clientContexts.set(ws, {
       userId: adminUser.id,
       organizationId: org.id,
-      userIsAgentAdmin: false,
       userIsMcpServerAdmin: true,
     });
 
@@ -1186,7 +1170,6 @@ describe("websocket MCP exec", () => {
     service.clientContexts.set(ws, {
       userId: user.id,
       organizationId: org.id,
-      userIsAgentAdmin: false,
       userIsMcpServerAdmin: true,
     });
 
@@ -1247,7 +1230,6 @@ describe("websocket MCP exec", () => {
     service.clientContexts.set(ws, {
       userId: user.id,
       organizationId: org.id,
-      userIsAgentAdmin: false,
       userIsMcpServerAdmin: true,
     });
 
@@ -1313,7 +1295,6 @@ describe("websocket MCP exec", () => {
     service.clientContexts.set(ws, {
       userId: user.id,
       organizationId: org.id,
-      userIsAgentAdmin: false,
       userIsMcpServerAdmin: true,
     });
 
@@ -1384,7 +1365,6 @@ describe("websocket MCP exec", () => {
     service.clientContexts.set(ws, {
       userId: user.id,
       organizationId: org.id,
-      userIsAgentAdmin: false,
       userIsMcpServerAdmin: true,
     });
 
@@ -1450,7 +1430,6 @@ describe("websocket MCP exec", () => {
     service.clientContexts.set(ws, {
       userId: user.id,
       organizationId: org.id,
-      userIsAgentAdmin: false,
       userIsMcpServerAdmin: true,
     });
 
@@ -1525,7 +1504,6 @@ describe("websocket MCP exec", () => {
     service.clientContexts.set(ws, {
       userId: user.id,
       organizationId: org.id,
-      userIsAgentAdmin: false,
       userIsMcpServerAdmin: true,
     });
 

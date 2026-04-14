@@ -6,9 +6,9 @@ import {
   ARCHESTRA_TOKEN_PREFIX,
   AUTO_PROVISIONED_INVITATION_STATUS,
   DEFAULT_APP_NAME,
+  IDENTITY_TRUSTED_PROVIDER_IDS,
   OAUTH_PAGES,
   OAUTH_SCOPES,
-  SSO_TRUSTED_PROVIDER_IDS,
 } from "@shared";
 import {
   allAvailableActions,
@@ -45,7 +45,7 @@ const APP_NAME = DEFAULT_APP_NAME;
 const {
   api: { apiKeyAuthorizationHeaderName },
   frontendBaseUrl,
-  auth: { secret, cookieDomain, trustedOrigins },
+  auth: { secret, cookieDomain, trustedOrigins: staticTrustedOrigins },
 } = config;
 
 const ac = createAccessControl(allAvailableActions);
@@ -198,7 +198,7 @@ export const auth = betterAuth({
     },
   },
 
-  trustedOrigins,
+  trustedOrigins: getTrustedOriginsForAuthRequest,
 
   database: drizzleAdapter(db, {
     provider: "pg", // or "mysql", "sqlite"
@@ -395,9 +395,41 @@ function getBetterAuthLogLevel(
 
 export type BetterAuth = typeof auth;
 
+/**
+ * Better Auth applies `trustedOrigins` to OIDC discovery during SSO provider
+ * registration, which means custom IdP setup can fail before the provider is
+ * saved unless the discovery origin is already trusted:
+ * https://better-auth.com/docs/plugins/sso#trusted-origins
+ *
+ * Archestra admins are explicitly configuring their own IdPs, so we widen
+ * origin trust only for provider registration instead of requiring per-IdP
+ * allowlisting. Better Auth also invokes this callback with `request`
+ * undefined during internal `auth.api` calls, which is one registration path
+ * used by `IdentityProviderModel.create()`. In practice, the same flow can
+ * also inherit the outer `/api/identity-providers` request, so that route
+ * needs the same treatment during provider creation.
+ */
+async function getTrustedOriginsForAuthRequest(request?: Request) {
+  const trustedOrigins = [...staticTrustedOrigins];
+
+  if (!shouldTrustAllOriginsForIdentityProviderRegistration(request)) {
+    return trustedOrigins;
+  }
+
+  return [
+    ...new Set([
+      ...trustedOrigins,
+      "http://*:*",
+      "https://*:*",
+      "http://*",
+      "https://*",
+    ]),
+  ];
+}
+
 async function getTrustedAccountLinkingProviderIds(): Promise<string[]> {
   if (!config.enterpriseFeatures.core) {
-    return [...SSO_TRUSTED_PROVIDER_IDS];
+    return [...IDENTITY_TRUSTED_PROVIDER_IDS];
   }
 
   const { default: IdentityProviderModel } = await import(
@@ -406,6 +438,29 @@ async function getTrustedAccountLinkingProviderIds(): Promise<string[]> {
   );
 
   return IdentityProviderModel.getTrustedAccountLinkingProviderIds();
+}
+
+/**
+ * Keep the wildcard expansion scoped to identity-provider registration so
+ * every other auth request still uses the configured trusted origins
+ * unchanged.
+ */
+function shouldTrustAllOriginsForIdentityProviderRegistration(
+  request?: Request,
+) {
+  if (!request) {
+    return true;
+  }
+
+  try {
+    const { pathname } = new URL(request.url);
+    return (
+      pathname.endsWith("/sso/register") ||
+      pathname === "/api/identity-providers"
+    );
+  } catch {
+    return false;
+  }
 }
 
 /**

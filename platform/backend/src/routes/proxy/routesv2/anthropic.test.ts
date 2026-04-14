@@ -334,6 +334,57 @@ describe("Anthropic V2 tool call accumulation", () => {
     expect(body).toContain("San Francisco");
     expect(body).toContain("fahrenheit");
   });
+
+  test("accepts document content blocks in request payloads", async ({
+    makeAgent,
+  }) => {
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+
+    await app.register(anthropicProxyRoutesV2);
+
+    const agent = await makeAgent({ name: "Test Document Agent" });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/anthropic/${agent.id}/v1/messages`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        "user-agent": "test-client",
+        "anthropic-version": "2023-06-01",
+        "anthropic-beta": "pdfs-2024-09-25",
+        "x-api-key": "test-anthropic-key",
+      },
+      payload: {
+        model: "claude-opus-4-20250514",
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "document",
+                title: "Spec",
+                source: {
+                  type: "base64",
+                  media_type: "application/pdf",
+                  data: "JVBERi0xLjQK",
+                },
+              },
+              {
+                type: "text",
+                text: "Summarize this document.",
+              },
+            ],
+          },
+        ],
+        max_tokens: 1024,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+  });
 });
 
 describe("Anthropic V2 proxy routing", () => {

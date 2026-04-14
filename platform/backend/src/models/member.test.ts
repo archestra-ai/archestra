@@ -453,4 +453,41 @@ describe("MemberModel", () => {
       expect(result.pagination.total).toBe(0);
     });
   });
+
+  describe("findUserIdsInOrganization", () => {
+    test("returns empty array for empty input", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      const result = await MemberModel.findUserIdsInOrganization({
+        organizationId: org.id,
+        userIds: [],
+      });
+
+      expect(result).toEqual([]);
+    });
+
+    test("returns only user ids that belong to the specified organization", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const otherOrg = await makeOrganization();
+      const inOrgUser = await makeUser();
+      const otherOrgUser = await makeUser();
+      const nonMemberUser = await makeUser();
+
+      await makeMember(inOrgUser.id, org.id);
+      await makeMember(otherOrgUser.id, otherOrg.id);
+
+      const result = await MemberModel.findUserIdsInOrganization({
+        organizationId: org.id,
+        userIds: [inOrgUser.id, otherOrgUser.id, nonMemberUser.id],
+      });
+
+      expect(result).toEqual([inOrgUser.id]);
+    });
+  });
 });

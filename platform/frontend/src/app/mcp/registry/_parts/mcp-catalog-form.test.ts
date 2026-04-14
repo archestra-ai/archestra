@@ -234,6 +234,32 @@ describe("formSchema", () => {
 
       expect(formSchema.parse(data)).toEqual(data);
     });
+
+    it("should reject enterprise-managed credentials for local stdio servers", () => {
+      const data = {
+        ...baseValidData,
+        authMethod: "enterprise_managed" as const,
+        enterpriseManagedConfig: {
+          requestedCredentialType: "bearer_token" as const,
+          tokenInjectionMode: "authorization_bearer" as const,
+        },
+        serverType: "local" as const,
+        serverUrl: "",
+        localConfig: {
+          command: "node",
+          arguments: "",
+          environment: [],
+          dockerImage: "",
+          transportType: "stdio" as const,
+          httpPort: "",
+          httpPath: "/mcp",
+        },
+      };
+
+      expect(() => formSchema.parse(data)).toThrow(
+        "Enterprise-managed credentials require streamable-http transport for self-hosted servers.",
+      );
+    });
   });
 
   describe("required fields", () => {
@@ -261,11 +287,38 @@ describe("formSchema", () => {
           redirect_uris: "https://localhost:3000/oauth-callback",
           scopes: "read,write",
           supports_resource_metadata: true,
+          authServerUrl: "https://auth.example.com",
+          wellKnownUrl:
+            "https://auth.example.com/.well-known/openid-configuration",
+          resourceMetadataUrl:
+            "https://api.example.com/.well-known/oauth-protected-resource",
         },
         localConfig: undefined,
       };
 
       expect(formSchema.parse(data)).toEqual(data);
+    });
+
+    it("should reject OAuth config when only one explicit endpoint is set", () => {
+      const data = {
+        ...baseValidData,
+        authMethod: "oauth" as const,
+        serverType: "remote" as const,
+        serverUrl: "https://api.example.com/mcp",
+        oauthConfig: {
+          client_id: "test-client-id",
+          client_secret: "test-secret",
+          redirect_uris: "https://localhost:3000/oauth-callback",
+          scopes: "read,write",
+          supports_resource_metadata: true,
+          authorizationEndpoint: "https://auth.example.com/oauth/authorize",
+        },
+        localConfig: undefined,
+      };
+
+      expect(() => formSchema.parse(data)).toThrow(
+        "Authorization and token endpoints must be set together",
+      );
     });
 
     it("should reject OAuth config with empty redirect_uris", () => {

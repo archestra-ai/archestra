@@ -1,4 +1,10 @@
+import type { archestraApiTypes } from "@shared";
+
 const DEFAULT_SESSION_NAME = "New Chat Session";
+
+export type ConversationShareVisibility = NonNullable<
+  archestraApiTypes.GetChatConversationsResponses["200"][number]["share"]
+>["visibility"];
 
 /**
  * Builds the external agent ID header value for chat requests.
@@ -103,4 +109,18 @@ export function getConversationDisplayTitle(
   }
 
   return DEFAULT_SESSION_NAME;
+}
+
+export function getConversationShareTooltip(
+  visibility: ConversationShareVisibility | undefined,
+) {
+  if (visibility === "team") {
+    return "Shared with selected teams";
+  }
+
+  if (visibility === "user") {
+    return "Shared with selected users";
+  }
+
+  return "Shared with your organization";
 }

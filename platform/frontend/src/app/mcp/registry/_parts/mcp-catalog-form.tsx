@@ -21,7 +21,12 @@ import {
   ProfileLabels,
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
+import {
+  type EnterpriseManagedConfigInput,
+  EnterpriseManagedCredentialFields,
+} from "@/components/enterprise-managed-credential-fields";
 import { EnvironmentVariablesFormField } from "@/components/environment-variables-form-field";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -63,9 +68,13 @@ import {
 } from "@/components/visibility-selector";
 import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
+import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
 import { getVisibleDocsUrl } from "@/lib/docs/docs";
 import { useK8sImagePullSecrets } from "@/lib/mcp/internal-mcp-catalog.query";
+import {
+  MCP_CONFIG_AUTOCOMPLETE,
+  MCP_SECRET_AUTOCOMPLETE,
+} from "@/lib/mcp/mcp-form-autocomplete";
 import { useGetSecret } from "@/lib/secrets.query";
 import { useTeams } from "@/lib/teams/team.query";
 import {
@@ -121,6 +130,7 @@ export function McpCatalogForm({
   const mcpServerBaseImage = useFeature("mcpServerBaseImage") ?? "";
 
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
+  const isEnterpriseCoreEnabled = useEnterpriseFeature("core");
 
   const form = useForm<McpCatalogFormValues>({
     // biome-ignore lint/suspicious/noExplicitAny: Version mismatch between @hookform/resolvers and Zod
@@ -134,6 +144,7 @@ export function McpCatalogForm({
           serverType: "remote",
           serverUrl: "",
           authMethod: "none",
+          enterpriseManagedConfig: null,
           oauthConfig: {
             client_id: "",
             client_secret: "",
@@ -143,6 +154,11 @@ export function McpCatalogForm({
                 : "",
             scopes: "read, write",
             supports_resource_metadata: true,
+            authServerUrl: "",
+            authorizationEndpoint: "",
+            wellKnownUrl: "",
+            resourceMetadataUrl: "",
+            tokenEndpoint: "",
           },
           localConfig: {
             command: "",
@@ -173,6 +189,13 @@ export function McpCatalogForm({
 
   const authMethod = form.watch("authMethod");
   const currentServerType = form.watch("serverType");
+
+  useEffect(() => {
+    if (!isEnterpriseCoreEnabled && authMethod === "enterprise_managed") {
+      form.setValue("authMethod", "none", { shouldDirty: true });
+      form.setValue("enterpriseManagedConfig", null, { shouldDirty: true });
+    }
+  }, [authMethod, form, isEnterpriseCoreEnabled]);
 
   // BYOS (Bring Your Own Secrets) state for OAuth
   const [oauthVaultTeamId, setOauthVaultTeamId] = useState<string | null>(null);
@@ -340,6 +363,8 @@ export function McpCatalogForm({
       <form
         onSubmit={form.handleSubmit(handleSubmit)}
         className="flex min-h-0 flex-1 flex-col"
+        autoComplete={MCP_CONFIG_AUTOCOMPLETE}
+        data-1p-ignore="true"
       >
         <div
           className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 ${embedded ? "space-y-4 pt-4 pb-0" : "space-y-4 py-4"}`}
@@ -530,6 +555,7 @@ export function McpCatalogForm({
                       <Input
                         placeholder="https://api.example.com/mcp"
                         className="font-mono"
+                        autoComplete={MCP_CONFIG_AUTOCOMPLETE}
                         {...field}
                       />
                     </FormControl>
@@ -551,6 +577,7 @@ export function McpCatalogForm({
                         <Input
                           placeholder="node"
                           className="font-mono"
+                          autoComplete={MCP_CONFIG_AUTOCOMPLETE}
                           {...field}
                         />
                       </FormControl>
@@ -711,14 +738,13 @@ export function McpCatalogForm({
                     <FormDescription>
                       {defaultImageDocsUrl ? (
                         <>
-                          <a
+                          <ExternalDocsLink
                             href={defaultImageDocsUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-primary underline hover:no-underline"
+                            className="underline hover:no-underline"
+                            showIcon={false}
                           >
                             Default image
-                          </a>{" "}
+                          </ExternalDocsLink>{" "}
                           includes alpine, npx, mcp[cli]. Use custom for
                           additional packages.
                         </>
@@ -736,14 +762,13 @@ export function McpCatalogForm({
                 <p className="text-sm text-muted-foreground">
                   Kubernetes secrets for pulling container images from private
                   registries.{" "}
-                  <a
+                  <ExternalDocsLink
                     href="https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary underline underline-offset-2 hover:text-primary/80"
+                    className="underline underline-offset-2 hover:text-primary/80"
+                    showIcon={false}
                   >
                     Learn more
-                  </a>
+                  </ExternalDocsLink>
                 </p>
 
                 {imagePullSecretFields.map((field, index) => {
@@ -826,6 +851,7 @@ export function McpCatalogForm({
                             <Input
                               placeholder="e.g. quay.io"
                               className="font-mono"
+                              autoComplete={MCP_CONFIG_AUTOCOMPLETE}
                               value={watchField("server")}
                               onChange={(e) =>
                                 setField("server", e.target.value)
@@ -836,6 +862,7 @@ export function McpCatalogForm({
                             <Label className="text-xs">Username</Label>
                             <Input
                               placeholder="username"
+                              autoComplete={MCP_CONFIG_AUTOCOMPLETE}
                               value={watchField("username")}
                               onChange={(e) =>
                                 setField("username", e.target.value)
@@ -846,6 +873,7 @@ export function McpCatalogForm({
                             <Label className="text-xs">Password</Label>
                             <Input
                               type="password"
+                              autoComplete={MCP_SECRET_AUTOCOMPLETE}
                               placeholder={
                                 mode === "edit" && !watchField("password")
                                   ? "Saved — leave blank to keep"
@@ -861,6 +889,7 @@ export function McpCatalogForm({
                             <Label className="text-xs">Email (optional)</Label>
                             <Input
                               placeholder="email@example.com"
+                              autoComplete={MCP_CONFIG_AUTOCOMPLETE}
                               value={watchField("email")}
                               onChange={(e) =>
                                 setField("email", e.target.value)
@@ -949,6 +978,20 @@ export function McpCatalogForm({
                             OAuth 2.0 (recommended)
                           </FormLabel>
                         </div>
+                        {isEnterpriseCoreEnabled && (
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem
+                              value="enterprise_managed"
+                              id="auth-enterprise-managed"
+                            />
+                            <FormLabel
+                              htmlFor="auth-enterprise-managed"
+                              className="font-normal cursor-pointer"
+                            >
+                              Enterprise-managed credentials
+                            </FormLabel>
+                          </div>
+                        )}
                       </RadioGroup>
                     </FormControl>
                     <FormMessage />
@@ -985,15 +1028,127 @@ export function McpCatalogForm({
                             />
                           </FormControl>
                           <FormDescription>
-                            The OAuth server endpoint used for authorization and
-                            token exchange. This is separate from the
-                            K8s-deployed server.
+                            Base URL used for OAuth discovery. Use the issuer or
+                            auth server base URL here, not the token endpoint.
+                            This is separate from the K8s-deployed server.
                           </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
                   )}
+
+                  <FormField
+                    control={form.control}
+                    name="oauthConfig.authServerUrl"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Authorization Server URL</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="https://auth.example.com"
+                            className="font-mono"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Optional override for discovery when the MCP server
+                          URL is not the OAuth issuer.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="oauthConfig.authorizationEndpoint"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Authorization Endpoint</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="https://auth.example.com/oauth/authorize"
+                            className="font-mono"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Optional direct authorization endpoint override. When
+                          set, it overrides discovery. Set together with Token
+                          Endpoint.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="oauthConfig.wellKnownUrl"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Well-Known Metadata URL</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="https://auth.example.com/.well-known/openid-configuration"
+                            className="font-mono"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Optional direct metadata endpoint override when
+                          provider discovery is non-standard.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="oauthConfig.resourceMetadataUrl"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Resource Metadata URL</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="https://mcp.example.com/.well-known/oauth-protected-resource"
+                            className="font-mono"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Optional override for OAuth protected resource
+                          metadata discovery.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="oauthConfig.tokenEndpoint"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Token Endpoint</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="https://auth.example.com/oauth/token"
+                            className="font-mono"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Optional direct token endpoint override. When set, it
+                          overrides discovery. Set together with Authorization
+                          Endpoint.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
                   <FormField
                     control={form.control}
@@ -1042,6 +1197,7 @@ export function McpCatalogForm({
                               type="password"
                               placeholder="your-client-secret (optional)"
                               className="font-mono"
+                              autoComplete={MCP_SECRET_AUTOCOMPLETE}
                               {...field}
                             />
                           </FormControl>
@@ -1124,6 +1280,46 @@ export function McpCatalogForm({
                   />
                 </div>
               )}
+
+              {isEnterpriseCoreEnabled &&
+                authMethod === "enterprise_managed" && (
+                  <div className="space-y-4 pl-6 border-l-2">
+                    <div className="bg-muted p-4 rounded-lg">
+                      <p className="text-sm text-muted-foreground">
+                        Archestra will request a downstream credential for this
+                        MCP server from the signed-in user&apos;s identity
+                        provider at tool-call time. Installations inherit these
+                        defaults automatically.
+                      </p>
+                    </div>
+
+                    <FormField
+                      control={form.control}
+                      name="enterpriseManagedConfig"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <EnterpriseManagedCredentialFields
+                              value={
+                                (field.value as
+                                  | EnterpriseManagedConfigInput
+                                  | null
+                                  | undefined) ?? null
+                              }
+                              onChange={field.onChange}
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            Configure the managed resource identifier and how
+                            the returned credential should be injected into
+                            requests made to this MCP server.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                )}
             </div>
           )}
 

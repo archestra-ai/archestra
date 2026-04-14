@@ -1,10 +1,22 @@
+import {
+  ARCHESTRA_TOKEN_PREFIX,
+  LEGACY_ARCHESTRA_TOKEN_PREFIXES,
+} from "@shared";
 import { describe, expect, test } from "@/test";
 import TeamTokenModel, { isArchestraPrefixedToken } from "./team-token";
 
 describe("TeamTokenModel", () => {
   describe("isArchestraPrefixedToken", () => {
-    test("returns true for archestra_ prefixed tokens", () => {
-      expect(isArchestraPrefixedToken("archestra_abc123")).toBe(true);
+    test("returns true for current platform token prefix", () => {
+      expect(isArchestraPrefixedToken(`${ARCHESTRA_TOKEN_PREFIX}abc123`)).toBe(
+        true,
+      );
+    });
+
+    test("returns true for legacy token prefixes", () => {
+      expect(
+        isArchestraPrefixedToken(`${LEGACY_ARCHESTRA_TOKEN_PREFIXES[0]}abc123`),
+      ).toBe(true);
     });
 
     test("returns false for non-prefixed tokens", () => {
@@ -29,7 +41,9 @@ describe("TeamTokenModel", () => {
       expect(token.name).toBe("Test Token");
       expect(token.organizationId).toBe(org.id);
       expect(token.teamId).toBeNull();
-      expect(value).toMatch(/^archestra_[a-f0-9]{32}$/);
+      expect(value).toMatch(
+        new RegExp(`^${ARCHESTRA_TOKEN_PREFIX}[a-f0-9]{32}$`),
+      );
       expect(token.tokenStart).toBe(value.substring(0, 14));
     });
 
@@ -49,7 +63,7 @@ describe("TeamTokenModel", () => {
       });
 
       expect(token.teamId).toBe(team.id);
-      expect(value.startsWith("archestra_")).toBe(true);
+      expect(value.startsWith(ARCHESTRA_TOKEN_PREFIX)).toBe(true);
     });
   });
 
@@ -169,7 +183,7 @@ describe("TeamTokenModel", () => {
       const result = await TeamTokenModel.rotate(token.id);
       expect(result?.value).toBeDefined();
       expect(result?.value).not.toBe(originalValue);
-      expect(result?.value.startsWith("archestra_")).toBe(true);
+      expect(result?.value.startsWith(ARCHESTRA_TOKEN_PREFIX)).toBe(true);
 
       const updated = await TeamTokenModel.findById(token.id);
       expect(updated?.tokenStart).toBe(result?.value.substring(0, 14));
@@ -198,7 +212,7 @@ describe("TeamTokenModel", () => {
 
     test("returns null for invalid token", async () => {
       const validated = await TeamTokenModel.validateToken(
-        "archestra_invalidtoken12345",
+        `${LEGACY_ARCHESTRA_TOKEN_PREFIXES[0]}invalidtoken12345`,
       );
       expect(validated).toBeNull();
     });
@@ -241,7 +255,7 @@ describe("TeamTokenModel", () => {
 
     test("returns null when no tokens exist", async () => {
       const validated = await TeamTokenModel.validateToken(
-        "archestra_nonexistent0000000000000",
+        `${LEGACY_ARCHESTRA_TOKEN_PREFIXES[0]}nonexistent0000000000000`,
       );
       expect(validated).toBeNull();
     });

@@ -1,4 +1,4 @@
-import type { SupportedProvider } from "@shared";
+import type { SupportedEmbeddingDimension, SupportedProvider } from "@shared";
 import {
   boolean,
   index,
@@ -75,6 +75,14 @@ const modelsTable = pgTable(
 
     /** Whether this model should be excluded from chat model selection. */
     ignored: boolean("ignored").notNull().default(false),
+
+    /**
+     * Embedding dimension metadata. When non-null, the model is treated as an
+     * embedding model and can be selected for knowledge base embeddings.
+     */
+    embeddingDimensions: integer(
+      "embedding_dimensions",
+    ).$type<SupportedEmbeddingDimension>(),
 
     /** Whether this model was discovered via an LLM Proxy request (ensureModelExists).
      * Models with this flag are preserved even without API key links,

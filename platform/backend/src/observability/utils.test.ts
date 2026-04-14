@@ -1,5 +1,10 @@
 import { describe, expect, test } from "@/test";
-import { isNoiseRoute, isNoisyMcpGatewayGetRoute } from "./utils";
+import {
+  isNoiseRoute,
+  isNoisyMcpGatewayGetRoute,
+  isNoisyMcpGatewayTransactionName,
+  isNoisyTransactionName,
+} from "./utils";
 
 describe("isNoiseRoute", () => {
   test("should match /health", () => {
@@ -71,5 +76,49 @@ describe("isNoisyMcpGatewayGetRoute", () => {
         url: "/api/agents",
       }),
     ).toBe(false);
+  });
+});
+
+describe("isNoisyTransactionName", () => {
+  test("matches MCP gateway discovery transaction names", () => {
+    expect(isNoisyTransactionName("GET /v1/mcp/:profileId")).toBe(true);
+    expect(isNoisyTransactionName("GET /v1/mcp/some-profile-id")).toBe(true);
+  });
+
+  test("matches health and metrics transaction names", () => {
+    expect(isNoisyTransactionName("GET /health")).toBe(true);
+    expect(isNoisyTransactionName("GET /ready")).toBe(true);
+    expect(isNoisyTransactionName("GET /metrics")).toBe(true);
+  });
+
+  test("matches OAuth well-known transaction names", () => {
+    expect(
+      isNoisyTransactionName("GET /.well-known/oauth-authorization-server"),
+    ).toBe(true);
+  });
+
+  test("does not match normal application transactions", () => {
+    expect(isNoisyTransactionName("POST /v1/mcp/:profileId")).toBe(false);
+    expect(isNoisyTransactionName("GET /api/agents")).toBe(false);
+  });
+});
+
+describe("isNoisyMcpGatewayTransactionName", () => {
+  test("matches templated MCP discovery transaction names", () => {
+    expect(isNoisyMcpGatewayTransactionName("GET /v1/mcp/:profileId")).toBe(
+      true,
+    );
+  });
+
+  test("matches concrete MCP discovery transaction names", () => {
+    expect(
+      isNoisyMcpGatewayTransactionName("GET /v1/mcp/some-profile-id"),
+    ).toBe(true);
+  });
+
+  test("does not match MCP POST transaction names", () => {
+    expect(isNoisyMcpGatewayTransactionName("POST /v1/mcp/:profileId")).toBe(
+      false,
+    );
   });
 });

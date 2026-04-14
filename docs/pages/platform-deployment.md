@@ -1,7 +1,7 @@
 ---
 title: Deployment
 category: Archestra Platform
-order: 2
+order: 3
 ---
 
 <!--
@@ -171,6 +171,15 @@ openssl rand -base64 32
 --set archestra.env.ARCHESTRA_AUTH_SECRET=<your-generated-secret>
 ```
 
+#### Init Container Configuration
+
+Use the `archestra.initContainers` block to override the helper containers that prepare the platform pod before the main container starts.
+
+Available values:
+
+- `archestra.initContainers.busyboxImage` - Overrides the `wait-for-postgres` image. Use this when your cluster cannot pull from Docker Hub and you need to point at a private mirror.
+- `archestra.initContainers.resources` - Applies Kubernetes resource requests and limits to the chart-managed init containers. This is useful on clusters that enforce `ResourceQuota` for init containers, such as OpenShift with restricted SCCs.
+
 #### Diagnostics Storage
 
 To persist Node fatal error reports from the backend, enable chart-managed diagnostics storage. This mounts a persistent volume at `/var/diagnostics` in both the platform and worker pods and configures the backend to write diagnostic reports there automatically.
@@ -231,8 +240,58 @@ Chart-managed diagnostics PVCs are validated conservatively. If more than one di
 - `archestra.podAnnotations` - Annotations to add to pods (useful for Prometheus, Vault agent, service mesh sidecars, etc.)
 - `archestra.nodeSelector` - Node selector for scheduling pods on specific nodes (e.g., specific node pools or instance types). These values are also inherited by MCP server pods as defaults.
 - `archestra.tolerations` - Tolerations for scheduling pods on nodes with specific taints (e.g., dedicated nodes, GPU nodes, spot instances). These values are also inherited by MCP server pods as defaults. See [Kubernetes docs](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)
-- `archestra.deploymentStrategy` - Deployment strategy configuration (default: RollingUpdate with maxUnavailable: 0 for zero-downtime deployments)
+- `archestra.deploymentStrategy` - Deployment strategy configuration (default: RollingUpdate with `maxUnavailable: 25%` and `maxSurge: 25%`)
 - `archestra.resources` - CPU and memory requests/limits for the container (default: 2Gi request, 3Gi limit for memory)
+- `archestra.horizontalPodAutoscaler` - Optional HPA for the main `archestra-platform` Deployment. When enabled, the chart defaults to `minReplicas: 2`, `maxReplicas: 10`, a memory utilization target of 70%, immediate scale-up, and a 5-minute scale-down stabilization window.
+- `archestra.worker.replicaCount` - Manual replica count for the separate worker Deployment
+- `archestra.worker.resources` - Resource requests/limits for worker pods (default: 1Gi request, 2Gi limit for memory)
+- `archestra.worker.deploymentStrategy` - Rolling update strategy for worker pods (default: `maxUnavailable: 25%`, `maxSurge: 25%`)
+
+#### HorizontalPodAutoscaler
+
+The Helm chart can optionally create a Kubernetes `HorizontalPodAutoscaler` for the main `archestra-platform` Deployment. It does not autoscale the separate worker Deployment.
+
+Default behavior when enabled:
+
+- Maintains at least 2 web pods
+- Scales up to 10 web pods
+- Uses memory utilization because the chart defines memory requests by default
+- Scales up aggressively (up to 100% or 2 pods per minute)
+- Scales down conservatively with a 5-minute stabilization window
+
+If your cluster has reliable CPU requests for the platform pods and you prefer request-rate-driven scaling, override `archestra.horizontalPodAutoscaler.metrics` with a CPU target instead.
+
+#### Existing Scaling Controls
+
+The chart already exposes a few scaling-related controls, even without autoscaling:
+
+- `archestra.replicaCount` sets the manual replica count for web pods when HPA is disabled
+- `archestra.worker.replicaCount` sets the manual replica count for worker pods
+- `archestra.deploymentStrategy` and `archestra.worker.deploymentStrategy` control rollout overlap (`maxSurge` and `maxUnavailable`), which affects rollout capacity but not steady-state scaling
+- `archestra.podDisruptionBudget` protects availability during voluntary disruptions, but it is not an autoscaler
+
+The chart does not currently create worker HPAs, KEDA `ScaledObject`s, or a VerticalPodAutoscaler.
+
+#### Worker Scaling Recommendations
+
+Worker throughput is driven by a Postgres-backed task queue, so resource-based autoscaling is usually the wrong first signal. The worker currently polls the `tasks` table for rows where `status = 'pending'` and `scheduled_for <= NOW()`, and each pod processes up to `ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT` tasks at once (default: `2`).
+
+Recommended approach:
+
+- Keep the platform HPA focused on web traffic and leave workers on manual replicas until you have queue metrics
+- Tune `archestra.worker.replicaCount` together with `ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT`; increasing concurrency per pod is often cheaper than adding pods for modest backlog
+- If you use KEDA, scale workers from queue backlog instead of CPU or memory
+
+For KEDA-backed worker autoscaling, use KEDA's PostgreSQL scaler against the `tasks` table with a query that counts ready work, for example:
+
+- `SELECT COUNT(*) FROM tasks WHERE status = 'pending' AND scheduled_for <= NOW()`
+
+Practical starting point for worker autoscaling:
+
+- Start with `minReplicaCount: 1`
+- Set `activationQueryValue: "1"` so KEDA stays idle when there is no ready work
+- With the default `ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT=2`, start with `targetQueryValue: "4"` so each worker pod is asked to absorb about two waves of ready tasks before KEDA adds another pod
+- Keep `maxReplicaCount` aligned with database capacity, embedding provider rate limits, and downstream connector quotas
 
 **Service Settings**:
 
@@ -372,7 +431,7 @@ The Helm chart deploys a separate worker `Deployment` for processing background 
 - `archestra.worker.enabled` - Deploy a separate worker Deployment (default: true)
 - `archestra.worker.replicaCount` - Number of worker pod replicas (default: 1)
 - `archestra.worker.resources` - Resource requests/limits for worker pods (default: 1Gi request, 2Gi limit)
-- `archestra.worker.deploymentStrategy` - Deployment strategy (default: RollingUpdate)
+- `archestra.worker.deploymentStrategy` - Deployment strategy (default: RollingUpdate with `maxUnavailable: 25%` and `maxSurge: 25%`)
 - `archestra.worker.podAnnotations` - Pod annotations (inherits from `archestra.podAnnotations` if not set)
 - `archestra.worker.nodeSelector` - Node selector (inherits from `archestra.nodeSelector` if not set)
 - `archestra.worker.tolerations` - Tolerations (inherits from `archestra.tolerations` if not set)
@@ -611,6 +670,14 @@ The following environment variables can be used to configure Archestra Platform.
   - Default: `enabled`
   - Set to `disabled` to opt-out of analytics
 
+- **`ARCHESTRA_ANALYTICS_POSTHOG_KEY`** - PostHog project key used when analytics is enabled.
+  - Default: Archestra's hosted PostHog project key
+  - Set this with `ARCHESTRA_ANALYTICS_POSTHOG_HOST` to send analytics to your own PostHog instance
+
+- **`ARCHESTRA_ANALYTICS_POSTHOG_HOST`** - PostHog API host used when analytics is enabled.
+  - Default: `https://eu.i.posthog.com`
+  - Example: `https://posthog.example.com`
+
 - **`ARCHESTRA_LOGGING_LEVEL`** - Log level for Archestra
   - Default: `info`
   - Supported values: `trace`, `debug`, `info`, `warn`, `error`, `fatal`
@@ -718,9 +785,20 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: `https://api.minimax.io/v1`
   - Use this to point to your own proxy or other custom endpoints
 
+- **`ARCHESTRA_AZURE_OPENAI_BASE_URL`** - Azure AI Foundry deployment endpoint URL.
+  - Format: `https://<resource-name>.openai.azure.com/openai/deployments/<deployment-name>`
+  - Required to enable the Azure AI Foundry provider.
+
+- **`ARCHESTRA_AZURE_OPENAI_API_VERSION`** - Azure OpenAI REST API version.
+  - Default: `2024-02-01`
+
+- **`ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION`** - Azure Responses API version.
+  - Default: `2025-04-01-preview`
+  - Used only for Azure `/responses` requests. Keep `ARCHESTRA_AZURE_OPENAI_API_VERSION` for Azure Chat Completions and deployment discovery.
+
 - **`ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS`** - Maximum number of virtual API keys per LLM API key.
   - Default: `10`
-  - Virtual keys are `archestra_`-prefixed tokens used by external LLM Proxy clients
+  - Newly generated virtual keys use the neutral `arch_` prefix. Legacy `archestra_` virtual keys remain valid.
   - See: [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication)
 
 - **`ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS`** - Default expiration time for newly created virtual API keys, in seconds.
@@ -770,7 +848,7 @@ These environment variables set the default base URL for each LLM provider. Per-
   - See: [Vertex AI setup guide](/docs/platform-supported-llm-providers#using-vertex-ai)
 
 - **`ARCHESTRA_CHAT_<PROVIDER>_API_KEY`** - LLM provider API keys for the built-in Chat feature.
-  - Supported `<PROVIDER>` values: `ANTHROPIC`, `OPENAI`, `OPENROUTER`, `GEMINI`, `CEREBRAS`, `COHERE`, `GROQ`, `XAI`, `MISTRAL`, `PERPLEXITY`, `VLLM`, `OLLAMA`, `ZHIPUAI`, `DEEPSEEK`, `BEDROCK`, `MINIMAX`
+  - Supported `<PROVIDER>` values: `ANTHROPIC`, `OPENAI`, `OPENROUTER`, `GEMINI`, `CEREBRAS`, `COHERE`, `GROQ`, `XAI`, `MISTRAL`, `PERPLEXITY`, `VLLM`, `OLLAMA`, `ZHIPUAI`, `DEEPSEEK`, `BEDROCK`, `MINIMAX`, `AZURE_OPENAI`
   - These serve as fallback API keys when no organization default or profile-specific key is configured
   - Note: `ARCHESTRA_CHAT_VLLM_API_KEY` and `ARCHESTRA_CHAT_OLLAMA_API_KEY` are optional as most vLLM/Ollama deployments don't require authentication
   - See [Chat](/docs/platform-chat) for full details on API key configuration and resolution order

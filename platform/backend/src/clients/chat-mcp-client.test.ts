@@ -1,6 +1,8 @@
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import {
   getArchestraToolFullName,
+  TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_WHOAMI_SHORT_NAME,
@@ -10,6 +12,7 @@ import { beforeEach, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { TeamTokenModel } from "@/models";
 import ToolModel from "@/models/tool";
+import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import { describe, expect, test } from "@/test";
 import * as chatClient from "./chat-mcp-client";
 import { mcpToolToModelOutput } from "./chat-mcp-client";
@@ -48,6 +51,14 @@ vi.mock("@/features/browser-stream/services/browser-stream.feature", () => ({
     isEnabled: vi.fn().mockReturnValue(false),
   },
 }));
+
+vi.mock("@/services/identity-providers/session-token", () => ({
+  resolveSessionExternalIdpToken: vi.fn(),
+}));
+
+beforeEach(() => {
+  vi.mocked(resolveSessionExternalIdpToken).mockResolvedValue(null);
+});
 
 describe("isBrowserMcpTool", () => {
   test("returns true for tools containing 'playwright'", () => {
@@ -246,6 +257,65 @@ describe("normalizeJsonSchema", () => {
 });
 
 describe("chat-mcp-client health check", () => {
+  test("expires idle cached conversation clients and closes them on cleanup", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    vi.useFakeTimers();
+
+    try {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id);
+      const agent = await makeAgent({ teams: [team.id] });
+      await makeTeamMember(team.id, user.id);
+      await TeamTokenModel.createTeamToken(team.id, team.name);
+
+      const cacheKey = chatClient.__test.getCacheKey(
+        agent.id,
+        user.id,
+        "conv-1",
+      );
+      chatClient.clearChatMcpClient(agent.id);
+      await chatClient.__test.clearToolCache(cacheKey);
+
+      const expiredClient = {
+        ping: vi.fn(),
+        listTools: vi.fn(),
+        callTool: vi.fn(),
+        close: vi.fn(),
+      };
+
+      chatClient.__test.setCachedClient(
+        cacheKey,
+        expiredClient as unknown as Client,
+        1_000,
+      );
+
+      await vi.advanceTimersByTimeAsync(1_001);
+
+      const tools = await chatClient.getChatMcpTools({
+        agentName: agent.name,
+        agentId: agent.id,
+        userId: user.id,
+        organizationId: org.id,
+        conversationId: "conv-1",
+      });
+
+      expect(expiredClient.ping).not.toHaveBeenCalled();
+      expect(expiredClient.close).toHaveBeenCalledTimes(1);
+      expect(tools).toEqual({});
+
+      chatClient.clearChatMcpClient(agent.id);
+      await chatClient.__test.clearToolCache(cacheKey);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("discards cached client when ping fails and fetches fresh tools", async ({
     makeAgent,
     makeUser,
@@ -285,7 +355,6 @@ describe("chat-mcp-client health check", () => {
       agentId: agent.id,
       userId: user.id,
       organizationId: org.id,
-      userIsAgentAdmin: false,
     });
 
     // Ping should have been called on the dead client
@@ -338,7 +407,6 @@ describe("chat-mcp-client health check", () => {
         agentId: agent.id,
         userId: user.id,
         organizationId: org.id,
-        userIsAgentAdmin: false,
       });
 
       await vi.advanceTimersByTimeAsync(5_000);
@@ -361,12 +429,14 @@ describe("executeMcpTool error handling", () => {
   const baseCtx = {
     toolName: "test_tool",
     toolArguments: {},
-    agentId: "agent-1",
+    agentId: "00000000-0000-4000-8000-000000000001",
     agentName: "Test Agent",
-    userId: "user-1",
-    organizationId: "org-1",
+    userId: "00000000-0000-4000-8000-000000000002",
+    organizationId: "00000000-0000-4000-8000-000000000003",
     userIsAgentAdmin: false,
     mcpGwToken: null,
+    globalToolPolicy: "permissive" as const,
+    considerContextUntrusted: false,
   };
 
   const mockResult = (overrides: Record<string, unknown>) => ({
@@ -381,11 +451,44 @@ describe("executeMcpTool error handling", () => {
     vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce(
       mockResult({
         content: [{ type: "text", text: "Auth required: install the server" }],
+        _meta: {
+          archestraError: {
+            type: "auth_required",
+            message: "Auth required: install the server",
+            catalogId: "cat_123",
+            catalogName: "jwks demo",
+            installUrl: "http://localhost:3000/mcp/registry?install=cat_123",
+          },
+        },
+        structuredContent: {
+          archestraError: {
+            type: "auth_required",
+            message: "Auth required: install the server",
+            catalogId: "cat_123",
+            catalogName: "jwks demo",
+            installUrl: "http://localhost:3000/mcp/registry?install=cat_123",
+          },
+        },
       }),
     );
 
     const result = await chatClient.__test.executeMcpTool(baseCtx);
     expect(result.content).toBe("Auth required: install the server");
+    expect(result._meta).toMatchObject({
+      archestraError: expect.objectContaining({
+        type: "auth_required",
+        catalogId: "cat_123",
+      }),
+    });
+    expect(result.structuredContent).toMatchObject({
+      archestraError: expect.objectContaining({
+        type: "auth_required",
+        catalogId: "cat_123",
+      }),
+    });
+    expect(result.rawContent).toEqual([
+      { type: "text", text: "Auth required: install the server" },
+    ]);
   });
 
   test("joins multiple text content items with newline", async () => {
@@ -431,6 +534,104 @@ describe("executeMcpTool error handling", () => {
 
     const result = await chatClient.__test.executeMcpTool(baseCtx);
     expect(result.content).toBe("Tool execution failed");
+  });
+
+  test("preserves structured error metadata for auth-expired tool errors", async () => {
+    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce(
+      mockResult({
+        content: [
+          {
+            type: "text",
+            text: 'Expired or invalid authentication for "id-jag test".',
+          },
+        ],
+        _meta: {
+          archestraError: {
+            type: "auth_expired",
+            message: 'Expired or invalid authentication for "id-jag test".',
+            catalogId: "cat_abc",
+            catalogName: "id-jag test",
+            serverId: "srv_xyz",
+            reauthUrl:
+              "http://localhost:3000/mcp/registry?reauth=cat_abc&server=srv_xyz",
+          },
+        },
+        structuredContent: {
+          archestraError: {
+            type: "auth_expired",
+            message: 'Expired or invalid authentication for "id-jag test".',
+            catalogId: "cat_abc",
+            catalogName: "id-jag test",
+            serverId: "srv_xyz",
+            reauthUrl:
+              "http://localhost:3000/mcp/registry?reauth=cat_abc&server=srv_xyz",
+          },
+        },
+      }),
+    );
+
+    const result = await chatClient.__test.executeMcpTool(baseCtx);
+
+    expect(result._meta).toMatchObject({
+      archestraError: expect.objectContaining({
+        type: "auth_expired",
+        serverId: "srv_xyz",
+      }),
+    });
+    expect(result.structuredContent).toMatchObject({
+      archestraError: expect.objectContaining({
+        type: "auth_expired",
+        serverId: "srv_xyz",
+      }),
+    });
+    expect(result.rawContent).toEqual([
+      {
+        type: "text",
+        text: 'Expired or invalid authentication for "id-jag test".',
+      },
+    ]);
+  });
+
+  test("attaches unsafe-context boundary metadata when a tool result is marked untrusted", async ({
+    makeAgent,
+    makeTool,
+    makeTrustedDataPolicy,
+  }) => {
+    const agent = await makeAgent();
+    const tool = await makeTool({ name: "test_tool" });
+
+    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce({
+      id: "call-1",
+      name: "test_tool",
+      content: [{ type: "text", text: "ARCH_TEST = secret-value" }],
+      isError: false,
+    } as never);
+
+    await makeTrustedDataPolicy(tool.id, {
+      conditions: [],
+      action: "mark_as_untrusted",
+    });
+
+    const result = await chatClient.__test.executeMcpTool({
+      ...baseCtx,
+      agentId: agent.id,
+      globalToolPolicy: "restrictive",
+    });
+
+    expect(result.unsafeContextBoundary).toMatchObject({
+      kind: "tool_result",
+      reason: "tool_result_marked_untrusted",
+      toolCallId: expect.any(String),
+      toolName: "test_tool",
+    });
+    expect(result._meta).toMatchObject({
+      unsafeContextBoundary: {
+        kind: "tool_result",
+        reason: "tool_result_marked_untrusted",
+        toolCallId: expect.any(String),
+        toolName: "test_tool",
+      },
+    });
   });
 });
 
@@ -486,7 +687,6 @@ describe("chat-mcp-client tool caching", () => {
       agentId: agent.id,
       userId: user.id,
       organizationId: org.id,
-      userIsAgentAdmin: false,
     });
     expect(Object.keys(first)).toEqual(["lookup_email"]);
 
@@ -495,7 +695,6 @@ describe("chat-mcp-client tool caching", () => {
       agentId: agent.id,
       userId: user.id,
       organizationId: org.id,
-      userIsAgentAdmin: false,
     });
 
     // Check that second call returns the same tool names
@@ -876,7 +1075,6 @@ describe("fetchToolUiResource", () => {
       agentId: AGENT_ID,
       userId: USER_ID,
       organizationId: ORG_ID,
-      userIsAgentAdmin: false,
       toolName: TOOL_NAME,
       uri: URI,
     });
@@ -900,7 +1098,6 @@ describe("fetchToolUiResource", () => {
       agentId: AGENT_ID,
       userId: USER_ID,
       organizationId: ORG_ID,
-      userIsAgentAdmin: false,
       toolName: TOOL_NAME,
       uri: URI,
     });
@@ -918,7 +1115,6 @@ describe("fetchToolUiResource", () => {
       agentId: AGENT_ID,
       userId: USER_ID,
       organizationId: ORG_ID,
-      userIsAgentAdmin: false,
       toolName: TOOL_NAME,
       uri: URI,
     });
@@ -934,12 +1130,46 @@ describe("fetchToolUiResource", () => {
       agentId: AGENT_ID,
       userId: USER_ID,
       organizationId: ORG_ID,
-      userIsAgentAdmin: false,
       toolName: TOOL_NAME,
       uri: URI,
     });
 
     expect(result).toBeNull();
+  });
+});
+
+describe("getChatMcpClient", () => {
+  test("prefers a session-derived external IdP token over internal gateway tokens", async () => {
+    mockConnect.mockReset();
+    mockConnect.mockResolvedValue(undefined);
+    mockClose.mockReset();
+    vi.mocked(resolveSessionExternalIdpToken).mockResolvedValue({
+      identityProviderId: crypto.randomUUID(),
+      providerId: "okta-chat",
+      rawToken: "external-idp-jwt",
+    });
+
+    const teamTokenSpy = vi.spyOn(TeamTokenModel, "findAll");
+
+    const agentId = crypto.randomUUID();
+    const userId = crypto.randomUUID();
+    const organizationId = crypto.randomUUID();
+
+    const client = await chatClient.getChatMcpClient(
+      agentId,
+      userId,
+      organizationId,
+      undefined,
+      "internal-fallback-token",
+    );
+
+    expect(client).not.toBeNull();
+    expect(teamTokenSpy).not.toHaveBeenCalled();
+
+    const [, options] = vi.mocked(StreamableHTTPClientTransport).mock
+      .calls[0] as [URL, { requestInit?: RequestInit }];
+    const headers = new Headers(options.requestInit?.headers);
+    expect(headers.get("Authorization")).toBe("Bearer external-idp-jwt");
   });
 });
 
@@ -1015,5 +1245,51 @@ describe("mcpToolToModelOutput", () => {
     });
 
     expect(result).toEqual({ type: "text", value: "Just text, no metadata" });
+  });
+});
+
+describe("throwIfApprovalRequired", () => {
+  const { throwIfApprovalRequired } = chatClient.__test;
+
+  test("does not throw when globalToolPolicy is permissive", async () => {
+    await expect(
+      throwIfApprovalRequired("some-tool", {}, "permissive"),
+    ).resolves.toBeUndefined();
+  });
+
+  test("does not throw when tool has no require_approval policy", async ({
+    makeTool,
+    makeToolPolicy,
+  }) => {
+    const tool = await makeTool({ name: "allowed-tool" });
+    await makeToolPolicy(tool.id, {
+      action: "allow_when_context_is_untrusted",
+      conditions: [],
+    });
+
+    await expect(
+      throwIfApprovalRequired("allowed-tool", {}, "restrictive"),
+    ).resolves.toBeUndefined();
+  });
+
+  test("throws when tool has require_approval policy", async ({
+    makeTool,
+    makeToolPolicy,
+  }) => {
+    const tool = await makeTool({ name: "restricted-tool" });
+    await makeToolPolicy(tool.id, {
+      action: "require_approval",
+      conditions: [],
+    });
+
+    await expect(
+      throwIfApprovalRequired("restricted-tool", {}, "restrictive"),
+    ).rejects.toThrow(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);
+  });
+
+  test("does not throw when tool is not found in DB", async () => {
+    await expect(
+      throwIfApprovalRequired("nonexistent-tool", {}, "restrictive"),
+    ).resolves.toBeUndefined();
   });
 });

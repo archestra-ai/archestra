@@ -105,11 +105,13 @@ describe("QueryService", () => {
         documentId: doc.id,
         content: "First chunk about TypeScript",
         chunkIndex: 0,
+        acl: ["org:*"],
       },
       {
         documentId: doc.id,
         content: "Second chunk about JavaScript",
         chunkIndex: 1,
+        acl: ["org:*"],
       },
     ]);
 
@@ -154,7 +156,7 @@ describe("QueryService", () => {
 
     expect(mockEmbeddingsCreate).toHaveBeenCalledWith({
       model: "text-embedding-3-small",
-      input: "TypeScript",
+      input: ["TypeScript"],
       dimensions: 1536,
     });
   });
@@ -186,6 +188,71 @@ describe("QueryService", () => {
     });
 
     expect(results).toEqual([]);
+  });
+
+  test("bypasses chunk ACL filtering when requested", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    setupEmbeddingConfig();
+    setupSingleQueryExpansion();
+
+    const alphaDoc = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Alpha Doc",
+      content: "Some content",
+      contentHash: "hash-query-admin-alpha",
+      embeddingStatus: "completed",
+    });
+    const betaDoc = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Beta Doc",
+      content: "Some content",
+      contentHash: "hash-query-admin-beta",
+      embeddingStatus: "completed",
+    });
+
+    await KbChunkModel.insertMany([
+      {
+        documentId: alphaDoc.id,
+        content: "admin can read alpha",
+        chunkIndex: 0,
+        acl: ["team:alpha"],
+      },
+      {
+        documentId: betaDoc.id,
+        content: "admin can read beta",
+        chunkIndex: 0,
+        acl: ["team:beta"],
+      },
+    ]);
+
+    const queryEmb = makeFakeEmbedding(1);
+    mockEmbeddingsCreate.mockResolvedValueOnce({
+      object: "list",
+      data: [{ object: "embedding", embedding: queryEmb, index: 0 }],
+      model: "text-embedding-3-small",
+      usage: { prompt_tokens: 5, total_tokens: 5 },
+    });
+
+    const results = await queryService.query({
+      connectorIds: [connector.id],
+      organizationId: org.id,
+      queryText: "admin read",
+      userAcl: [],
+      bypassAcl: true,
+    });
+
+    expect(results).toHaveLength(2);
+    expect(results.map((result) => result.citation.documentId).sort()).toEqual(
+      [alphaDoc.id, betaDoc.id].sort(),
+    );
   });
 
   test("returns empty array when chunks have no embeddings", async ({
@@ -259,6 +326,7 @@ describe("QueryService", () => {
       documentId: doc.id,
       content: `Chunk ${i}`,
       chunkIndex: i,
+      acl: ["org:*"],
     }));
     await KbChunkModel.insertMany(chunkData);
 

@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto";
-import { OAUTH_TOKEN_ID_PREFIX } from "@shared";
+import {
+  ARCHESTRA_TOKEN_PREFIX,
+  LEGACY_ARCHESTRA_TOKEN_PREFIXES,
+  OAUTH_TOKEN_ID_PREFIX,
+} from "@shared";
 import { vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import type * as originalConfigModule from "@/config";
@@ -9,6 +13,7 @@ import {
   ToolModel,
   UserTokenModel,
 } from "@/models";
+import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import type { JwksValidationResult } from "@/services/jwks-validator";
 import { describe, expect, test } from "@/test";
 
@@ -43,7 +48,7 @@ describe("validateMCPGatewayToken", () => {
     test("returns null for invalid token", async () => {
       const result = await validateMCPGatewayToken(
         crypto.randomUUID(),
-        "archestra_invalidtoken1234567890ab",
+        `${LEGACY_ARCHESTRA_TOKEN_PREFIXES[0]}invalidtoken1234567890ab`,
       );
       expect(result).toBeNull();
     });
@@ -396,19 +401,26 @@ describe("validateMCPGatewayToken", () => {
       expect(result).toBeNull();
     });
 
-    test("validateMCPGatewayToken skips OAuth validation for archestra_ prefixed tokens", async () => {
-      // archestra_ prefixed tokens should never reach validateOAuthToken
+    test("validateMCPGatewayToken skips OAuth validation for legacy prefixed tokens", async () => {
       const result = await validateMCPGatewayToken(
         crypto.randomUUID(),
-        "archestra_fake_token_that_does_not_exist",
+        `${LEGACY_ARCHESTRA_TOKEN_PREFIXES[0]}fake_token_that_does_not_exist`,
       );
-      // Returns null because the archestra_ token is invalid, but importantly
+      // Returns null because the legacy token is invalid, but importantly
       // it should NOT have tried OAuth token validation
       expect(result).toBeNull();
     });
 
-    test("validateMCPGatewayToken tries OAuth validation for non-archestra tokens", async () => {
-      // A non-archestra token should try OAuth validation path and return null
+    test("validateMCPGatewayToken skips OAuth validation for current prefixed tokens", async () => {
+      const result = await validateMCPGatewayToken(
+        crypto.randomUUID(),
+        `${ARCHESTRA_TOKEN_PREFIX}fake_token_that_does_not_exist`,
+      );
+      expect(result).toBeNull();
+    });
+
+    test("validateMCPGatewayToken tries OAuth validation for non-platform tokens", async () => {
+      // A non-platform token should try OAuth validation path and return null
       const result = await validateMCPGatewayToken(
         crypto.randomUUID(),
         "some-random-bearer-token",
@@ -517,6 +529,37 @@ describe("validateMCPGatewayToken", () => {
       expect(result?.userId).toBe(user.id);
       expect(result?.isUserToken).toBe(true);
       expect(result?.organizationId).toBe(org.id);
+    });
+
+    test("validateOAuthToken returns null when token is bound to another MCP resource", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeOAuthClient,
+      makeOAuthAccessToken,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "admin" });
+
+      const client = await makeOAuthClient({ userId: user.id });
+      const otherAgent = await makeAgent({ organizationId: org.id });
+      const targetAgent = await makeAgent({ organizationId: org.id });
+
+      const rawToken = `test-bound-resource-token-${crypto.randomUUID()}`;
+      const tokenHash = createHash("sha256")
+        .update(rawToken)
+        .digest("base64url");
+
+      await makeOAuthAccessToken(client.clientId, user.id, {
+        token: tokenHash,
+        referenceId: `${MCP_RESOURCE_REFERENCE_PREFIX}${otherAgent.id}`,
+      });
+
+      const result = await validateOAuthToken(targetAgent.id, rawToken);
+
+      expect(result).toBeNull();
     });
 
     test("validateOAuthToken returns valid result when refresh token is not revoked", async ({
@@ -632,6 +675,35 @@ describe("validateExternalIdpToken", () => {
 
     const result = await validateExternalIdpToken(agent.id, FAKE_JWT);
     expect(result).toBeNull();
+  });
+
+  test("returns null when the identity provider OIDC config has no clientId for audience validation", async ({
+    makeOrganization,
+    makeIdentityProvider,
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    mockValidateJwt.mockClear();
+
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+
+    const idp = await makeIdentityProvider(org.id, {
+      oidcConfig: {
+        jwksEndpoint: "https://example.com/.well-known/jwks.json",
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      identityProviderId: idp.id,
+    });
+
+    const result = await validateExternalIdpToken(agent.id, FAKE_JWT);
+
+    expect(result).toBeNull();
+    expect(mockValidateJwt).not.toHaveBeenCalled();
   });
 
   test("returns null when email does not match any Archestra user", async ({
@@ -1195,5 +1267,111 @@ describe("createAgentServer tools/list", () => {
     ).toBe(true);
 
     archestraMcpBranding.syncFromOrganization(null);
+  });
+
+  test("preserves user context when calling restricted Archestra tools", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const org = await makeOrganization();
+    const adminUser = await makeUser();
+    await makeMember(adminUser.id, org.id, { role: "admin" });
+
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+    });
+    await seedAndAssignArchestraTools(agent.id);
+
+    const { server } = await createAgentServer(agent.id, {
+      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+      teamId: null,
+      isOrganizationToken: false,
+      organizationId: org.id,
+      isUserToken: true,
+      userId: adminUser.id,
+    });
+    const callToolHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<
+          string,
+          (request: unknown) => Promise<{
+            content: Array<{ type: string; text: string }>;
+            isError?: boolean;
+            structuredContent?: { items?: unknown[] };
+          }>
+        >;
+      }
+    )._requestHandlers.get("tools/call");
+
+    expect(callToolHandler).toBeDefined();
+    if (!callToolHandler) {
+      throw new Error("Expected tools/call handler to be registered");
+    }
+
+    const response = await callToolHandler({
+      method: "tools/call",
+      params: {
+        name: "archestra__get_mcp_servers",
+        arguments: {},
+      },
+    });
+
+    expect(response.isError).not.toBe(true);
+    expect(response.structuredContent?.items).toEqual(expect.any(Array));
+    expect(response.content[0]?.text).not.toContain(
+      "User context not available",
+    );
+  });
+});
+
+describe("extractPassthroughHeaders", async () => {
+  const { extractPassthroughHeaders } = await import("./mcp-gateway.utils");
+
+  test("returns undefined when allowlist is null", () => {
+    expect(extractPassthroughHeaders(null, { "x-foo": "bar" })).toBeUndefined();
+  });
+
+  test("returns undefined when allowlist is empty", () => {
+    expect(extractPassthroughHeaders([], { "x-foo": "bar" })).toBeUndefined();
+  });
+
+  test("extracts matching headers from request", () => {
+    const result = extractPassthroughHeaders(
+      ["x-correlation-id", "x-tenant-id"],
+      {
+        "x-correlation-id": "abc-123",
+        "x-tenant-id": "tenant-1",
+        "x-other": "ignored",
+      },
+    );
+    expect(result).toEqual({
+      "x-correlation-id": "abc-123",
+      "x-tenant-id": "tenant-1",
+    });
+  });
+
+  test("returns undefined when no headers match", () => {
+    const result = extractPassthroughHeaders(["x-correlation-id"], {
+      "x-other": "value",
+    });
+    expect(result).toBeUndefined();
+  });
+
+  test("joins array header values with comma", () => {
+    const result = extractPassthroughHeaders(["x-multi"], {
+      "x-multi": ["val1", "val2"],
+    });
+    expect(result).toEqual({ "x-multi": "val1, val2" });
+  });
+
+  test("skips undefined header values", () => {
+    const result = extractPassthroughHeaders(["x-present", "x-missing"], {
+      "x-present": "yes",
+    });
+    expect(result).toEqual({ "x-present": "yes" });
   });
 });

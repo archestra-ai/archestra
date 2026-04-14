@@ -91,7 +91,7 @@ Isolating dangerous tool responses from the main agent to prevent prompt injecti
 
 Models could consume prompt injections via MCP uncontrollably (read your inbox, read your GitHub issues, read your customer's inquiries) and follow them resulting in data exfiltration.
 
-[Learn more about Dynamic Tools →](https://archestra.ai/docs/platform-dynamic-tools) | [The Lethal Trifecta →](https://archestra.ai/docs/platform-lethal-trifecta)
+[Learn more about Tool Guardrails →](https://archestra.ai/docs/platform-ai-tool-guardrails) | [The Lethal Trifecta →](https://archestra.ai/docs/platform-lethal-trifecta)
 
 Live demo of archestra security engine preventing data leak from the private GitHub repo to the public repo:
 [![Archestra Demo](https://img.youtube.com/vi/SkmluS-xzmM/0.jpg)](https://www.youtube.com/watch?v=SkmluS-xzmM&t=2155s)

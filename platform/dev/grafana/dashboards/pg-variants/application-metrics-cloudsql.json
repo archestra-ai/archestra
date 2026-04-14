@@ -882,10 +882,10 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "nodejs_eventloop_lag_p99_seconds",
+          "expr": "max by (pod) (nodejs_eventloop_lag_p99_seconds)",
           "hide": false,
           "instant": false,
-          "legendFormat": "p99",
+          "legendFormat": "p99 - {{pod}}",
           "queryType": "range",
           "range": true,
           "refId": "A"
@@ -895,10 +895,10 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "nodejs_eventloop_lag_p90_seconds",
+          "expr": "max by (pod) (nodejs_eventloop_lag_p90_seconds)",
           "hide": false,
           "instant": false,
-          "legendFormat": "p90",
+          "legendFormat": "p90 - {{pod}}",
           "queryType": "range",
           "range": true,
           "refId": "B"
@@ -908,10 +908,10 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "nodejs_eventloop_lag_p50_seconds",
+          "expr": "max by (pod) (nodejs_eventloop_lag_p50_seconds)",
           "hide": false,
           "instant": false,
-          "legendFormat": "p50",
+          "legendFormat": "p50 - {{pod}}",
           "queryType": "range",
           "range": true,
           "refId": "C"
@@ -1016,10 +1016,10 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "rate(nodejs_gc_duration_seconds_sum[$__rate_interval])",
+          "expr": "max by (pod) (rate(nodejs_gc_duration_seconds_sum[$__rate_interval]))",
           "hide": false,
           "instant": false,
-          "legendFormat": "GC Time (all kinds)",
+          "legendFormat": "GC Time - {{pod}}",
           "queryType": "range",
           "range": true,
           "refId": "A"
@@ -1029,10 +1029,10 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "rate(nodejs_gc_duration_seconds_sum{kind=\"major\"}[$__rate_interval])",
+          "expr": "max by (pod) (rate(nodejs_gc_duration_seconds_sum{kind=\"major\"}[$__rate_interval]))",
           "hide": false,
           "instant": false,
-          "legendFormat": "Major GC",
+          "legendFormat": "Major GC - {{pod}}",
           "queryType": "range",
           "range": true,
           "refId": "B"
@@ -1042,10 +1042,10 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "rate(nodejs_gc_duration_seconds_sum{kind=\"minor\"}[$__rate_interval])",
+          "expr": "max by (pod) (rate(nodejs_gc_duration_seconds_sum{kind=\"minor\"}[$__rate_interval]))",
           "hide": false,
           "instant": false,
-          "legendFormat": "Minor GC",
+          "legendFormat": "Minor GC - {{pod}}",
           "queryType": "range",
           "range": true,
           "refId": "C"
@@ -1140,10 +1140,10 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "nodejs_heap_space_size_used_bytes",
+          "expr": "max by (pod, space) (nodejs_heap_space_size_used_bytes)",
           "hide": false,
           "instant": false,
-          "legendFormat": "{{space}}",
+          "legendFormat": "{{pod}} - {{space}}",
           "queryType": "range",
           "range": true,
           "refId": "A"
@@ -1238,10 +1238,10 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "nodejs_active_handles_total",
+          "expr": "max by (pod) (nodejs_active_handles_total)",
           "hide": false,
           "instant": false,
-          "legendFormat": "Active Handles",
+          "legendFormat": "Active Handles - {{pod}}",
           "queryType": "range",
           "range": true,
           "refId": "A"
@@ -1251,10 +1251,10 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "nodejs_active_requests_total",
+          "expr": "max by (pod) (nodejs_active_requests_total)",
           "hide": false,
           "instant": false,
-          "legendFormat": "Active Requests",
+          "legendFormat": "Active Requests - {{pod}}",
           "queryType": "range",
           "range": true,
           "refId": "B"
@@ -1366,10 +1366,10 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "rate(process_cpu_seconds_total[$__rate_interval])",
+          "expr": "max by (pod) (rate(process_cpu_seconds_total[$__rate_interval]))",
           "hide": false,
           "instant": false,
-          "legendFormat": "CPU Usage",
+          "legendFormat": "{{pod}}",
           "queryType": "range",
           "range": true,
           "refId": "A"
@@ -1468,10 +1468,10 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "process_resident_memory_bytes",
+          "expr": "max by (pod) (process_resident_memory_bytes)",
           "hide": false,
           "instant": false,
-          "legendFormat": "Resident (RSS)",
+          "legendFormat": "Resident (RSS) - {{pod}}",
           "queryType": "range",
           "range": true,
           "refId": "A"
@@ -1481,10 +1481,10 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "process_heap_bytes",
+          "expr": "max by (pod) (process_heap_bytes)",
           "hide": false,
           "instant": false,
-          "legendFormat": "Heap Total",
+          "legendFormat": "Heap Total - {{pod}}",
           "queryType": "range",
           "range": true,
           "refId": "B"
@@ -1494,10 +1494,10 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "nodejs_external_memory_bytes",
+          "expr": "max by (pod) (nodejs_external_memory_bytes)",
           "hide": false,
           "instant": false,
-          "legendFormat": "External",
+          "legendFormat": "External - {{pod}}",
           "queryType": "range",
           "range": true,
           "refId": "C"
@@ -1560,10 +1560,10 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "time() - last_over_time(process_start_time_seconds[5m])",
+          "expr": "max by (pod) (time() - last_over_time(process_start_time_seconds[5m]))",
           "hide": false,
           "instant": true,
-          "legendFormat": "{{instance}}",
+          "legendFormat": "{{pod}}",
           "queryType": "instant",
           "refId": "A"
         }

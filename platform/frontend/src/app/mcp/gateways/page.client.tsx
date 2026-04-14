@@ -13,12 +13,9 @@ import {
   ChevronUp,
   DollarSign,
   Eye,
-  Globe,
   Plus,
   Route,
   Server,
-  User,
-  Users,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -35,11 +32,13 @@ import {
   ConnectDialogSection,
 } from "@/components/connect-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { PageLayout } from "@/components/page-layout";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
+import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -102,90 +101,6 @@ function SortIcon({
   );
 }
 
-function VisibilityBadge({
-  scope,
-  teams,
-  authorId,
-  authorName,
-  currentUserId,
-}: {
-  scope: string | undefined;
-  teams: Array<{ id: string; name: string }> | undefined;
-  authorId: string | null | undefined;
-  authorName: string | null | undefined;
-  currentUserId: string | undefined;
-}) {
-  const MAX_TEAMS_TO_SHOW = 3;
-
-  const scopeBadge =
-    scope === "org" ? (
-      <Badge variant="secondary" className="text-xs gap-1">
-        <Globe className="h-3 w-3" />
-        Organization
-      </Badge>
-    ) : scope === "personal" ? (
-      (() => {
-        const displayName =
-          currentUserId && authorId === currentUserId ? "Me" : authorName;
-        return displayName ? (
-          <Badge variant="secondary" className="text-xs gap-1">
-            <User className="h-3 w-3" />
-            {displayName}
-          </Badge>
-        ) : null;
-      })()
-    ) : null;
-
-  const hasTeams = teams && teams.length > 0;
-
-  if (!scopeBadge && !hasTeams) {
-    return (
-      <Badge variant="secondary" className="text-xs gap-1">
-        <Users className="h-3 w-3" />
-        Team
-      </Badge>
-    );
-  }
-
-  const visibleTeams = hasTeams ? teams.slice(0, MAX_TEAMS_TO_SHOW) : [];
-  const remainingTeams = hasTeams ? teams.slice(MAX_TEAMS_TO_SHOW) : [];
-
-  const truncateTeamName = (value: string) =>
-    value.length > 20 ? `${value.slice(0, 20)}...` : value;
-
-  return (
-    <div className="flex items-center gap-1 flex-wrap">
-      {scopeBadge}
-      {visibleTeams.map((team) => (
-        <Badge key={team.id} variant="secondary" className="text-xs gap-1">
-          <Users className="h-3 w-3" />
-          {truncateTeamName(team.name)}
-        </Badge>
-      ))}
-      {remainingTeams.length > 0 && (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="text-xs text-muted-foreground cursor-help">
-                +{remainingTeams.length} more
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>
-              <div className="flex flex-col gap-1">
-                {remainingTeams.map((team) => (
-                  <div key={team.id} className="text-xs">
-                    {team.name}
-                  </div>
-                ))}
-              </div>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      )}
-    </div>
-  );
-}
-
 function McpGateways({
   initialData,
 }: {
@@ -226,6 +141,10 @@ function McpGateways({
 
   const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
   const sortDirection = sortDirectionFromUrl || DEFAULT_SORT_DIRECTION;
+  const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
+  const gatewayAgentTypes: Array<"mcp_gateway" | "profile"> = canReadAgents
+    ? ["mcp_gateway", "profile"]
+    : ["mcp_gateway"];
 
   const { data: agentsResponse, isPending } = useProfilesPaginated({
     initialData: initialData?.agents ?? undefined,
@@ -234,7 +153,7 @@ function McpGateways({
     sortBy,
     sortDirection,
     name: nameFilter || undefined,
-    agentTypes: ["mcp_gateway", "profile"],
+    agentTypes: gatewayAgentTypes,
     scope: scopeFromUrl || undefined,
     teamIds: teamIdsFromUrl ? teamIdsFromUrl.split(",") : undefined,
     authorIds: authorIdsFromUrl ? authorIdsFromUrl.split(",") : undefined,
@@ -434,7 +353,7 @@ function McpGateways({
             header: "Accessible to",
             enableSorting: false,
             cell: ({ row }: { row: { original: GatewayData } }) => (
-              <VisibilityBadge
+              <ResourceVisibilityBadge
                 scope={row.original.scope}
                 teams={row.original.teams}
                 authorId={row.original.authorId}
@@ -493,14 +412,13 @@ function McpGateways({
             {docsUrl && (
               <>
                 {" "}
-                <a
+                <ExternalDocsLink
                   href={docsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
                   className="underline hover:text-foreground"
+                  showIcon={false}
                 >
                   Read more in the docs
-                </a>
+                </ExternalDocsLink>
               </>
             )}
           </p>

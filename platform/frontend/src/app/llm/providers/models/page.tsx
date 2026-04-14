@@ -1,24 +1,36 @@
 "use client";
 
-import type { ModelInputModality, ModelOutputModality } from "@shared";
+import {
+  type archestraApiTypes,
+  INPUT_MODALITY_OPTIONS,
+  type ModelInputModality,
+  type ModelOutputModality,
+  OUTPUT_MODALITY_OPTIONS,
+  SUPPORTED_EMBEDDING_DIMENSIONS,
+} from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   AlertCircle,
   ArrowLeftRight,
+  Boxes,
+  Brain,
   Eye,
   EyeOff,
+  Fingerprint,
   Pencil,
   RefreshCw,
   RotateCcw,
   Server,
+  X,
 } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
-import { PROVIDER_CONFIG } from "@/components/chat-api-key-form";
+import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
 import { LlmProviderApiKeyFilterSelect } from "@/components/llm-provider-options";
 import {
   BestModelBadge,
+  EmbeddingModelBadge,
   FastestModelBadge,
   UnknownCapabilitiesBadge,
 } from "@/components/model-badges";
@@ -38,29 +50,37 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { MultiSelect } from "@/components/ui/multi-select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   type ModelWithApiKeys,
   useModelsWithApiKeys,
+  useSyncLlmModels,
   useUpdateModel,
-} from "@/lib/chat/chat-models.query";
-import {
-  useChatApiKeys,
-  useSyncChatModels,
-} from "@/lib/chat/chat-settings.query";
-import { useAppName } from "@/lib/hooks/use-app-name";
+} from "@/lib/llm-models.query";
+import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useSetProviderAction } from "../layout";
 
 export default function ModelsPage() {
   const { data: models = [], isPending, refetch } = useModelsWithApiKeys();
-  const { data: apiKeys = [] } = useChatApiKeys();
-  const syncModelsMutation = useSyncChatModels();
+  const { data: apiKeys = [] } = useLlmProviderApiKeys();
+  const syncModelsMutation = useSyncLlmModels();
   const updateModel = useUpdateModel();
   const [isRefreshingModels, setIsRefreshingModels] = useState(false);
   const [search, setSearch] = useState("");
   const [apiKeyFilter, setApiKeyFilter] = useState<string>("all");
+  const [modelTypeFilter, setModelTypeFilter] = useState<
+    "all" | "chat" | "embedding"
+  >("all");
   const [editingModel, setEditingModel] = useState<ModelWithApiKeys | null>(
     null,
   );
@@ -76,13 +96,18 @@ export default function ModelsPage() {
         m.apiKeys.some((k) => k.id === apiKeyFilter),
       );
     }
+    if (modelTypeFilter === "embedding") {
+      result = result.filter((m) => m.embeddingDimensions !== null);
+    } else if (modelTypeFilter === "chat") {
+      result = result.filter((m) => m.embeddingDimensions === null);
+    }
     // Stable sort so rows don't jump when data refetches after edits
     return [...result].sort(
       (a, b) =>
         a.provider.localeCompare(b.provider) ||
         a.modelId.localeCompare(b.modelId),
     );
-  }, [models, search, apiKeyFilter]);
+  }, [models, search, apiKeyFilter, modelTypeFilter]);
 
   const availableApiKeys = useMemo(() => {
     const keyMap = new Map<
@@ -149,12 +174,18 @@ export default function ModelsPage() {
       },
       {
         accessorKey: "modelId",
+        size: 280,
         header: "Model ID",
         cell: ({ row }) => (
-          <div className="flex items-center gap-2">
+          <div className="min-w-0 space-y-2">
             <span className="font-mono text-sm">{row.original.modelId}</span>
-            {row.original.isFastest && <FastestModelBadge />}
-            {row.original.isBest && <BestModelBadge />}
+            <div className="mt-0.5 flex flex-wrap items-center gap-2">
+              {row.original.isFastest && <FastestModelBadge />}
+              {row.original.isBest && <BestModelBadge />}
+              {row.original.embeddingDimensions !== null && (
+                <EmbeddingModelBadge />
+              )}
+            </div>
           </div>
         ),
       },
@@ -192,7 +223,7 @@ export default function ModelsPage() {
       },
       {
         id: "pricingInput",
-        size: 120,
+        size: 104,
         header: "$/M Input",
         cell: ({ row }) => {
           const price = row.original.pricePerMillionInput;
@@ -206,7 +237,7 @@ export default function ModelsPage() {
       },
       {
         id: "pricingOutput",
-        size: 120,
+        size: 104,
         header: "$/M Output",
         cell: ({ row }) => {
           const price = row.original.pricePerMillionOutput;
@@ -235,7 +266,6 @@ export default function ModelsPage() {
       },
       {
         id: "actions",
-        size: 60,
         header: "Actions",
         cell: ({ row }) => (
           <TableRowActions
@@ -246,7 +276,7 @@ export default function ModelsPage() {
                 ) : (
                   <EyeOff className="h-4 w-4" />
                 ),
-                label: row.original.ignored ? "Show in chat" : "Ignore in chat",
+                label: row.original.ignored ? "Show model" : "Hide model",
                 onClick: () =>
                   updateModel.mutate({
                     id: row.original.id,
@@ -297,6 +327,64 @@ export default function ModelsPage() {
                 ];
               })}
             />
+            <SearchableSelect
+              value={modelTypeFilter}
+              onValueChange={(v) =>
+                setModelTypeFilter(v as "all" | "chat" | "embedding")
+              }
+              placeholder="Model type"
+              className="w-full sm:w-[200px]"
+              items={[
+                {
+                  value: "all",
+                  label: "All models",
+                  content: (
+                    <span className="flex items-center gap-2">
+                      <Boxes className="h-4 w-4 text-muted-foreground" />
+                      <span>All models</span>
+                    </span>
+                  ),
+                  selectedContent: (
+                    <span className="flex items-center gap-2">
+                      <Boxes className="h-4 w-4 text-muted-foreground" />
+                      <span>All models</span>
+                    </span>
+                  ),
+                },
+                {
+                  value: "chat",
+                  label: "Chat / generation",
+                  content: (
+                    <span className="flex items-center gap-2">
+                      <Brain className="h-4 w-4 text-muted-foreground" />
+                      <span>Chat / generation</span>
+                    </span>
+                  ),
+                  selectedContent: (
+                    <span className="flex items-center gap-2">
+                      <Brain className="h-4 w-4 text-muted-foreground" />
+                      <span>Chat / generation</span>
+                    </span>
+                  ),
+                },
+                {
+                  value: "embedding",
+                  label: "Embedding",
+                  content: (
+                    <span className="flex items-center gap-2">
+                      <Fingerprint className="h-4 w-4 text-muted-foreground" />
+                      <span>Embedding</span>
+                    </span>
+                  ),
+                  selectedContent: (
+                    <span className="flex items-center gap-2">
+                      <Fingerprint className="h-4 w-4 text-muted-foreground" />
+                      <span>Embedding</span>
+                    </span>
+                  ),
+                },
+              ]}
+            />
           </div>
         )}
         <DataTable
@@ -308,11 +396,14 @@ export default function ModelsPage() {
           }
           hideSelectedCount
           isLoading={isPending}
-          hasActiveFilters={Boolean(search || apiKeyFilter !== "all")}
+          hasActiveFilters={Boolean(
+            search || apiKeyFilter !== "all" || modelTypeFilter !== "all",
+          )}
           filteredEmptyMessage="No models match your filters. Try adjusting your search."
           onClearFilters={() => {
             setSearch("");
             setApiKeyFilter("all");
+            setModelTypeFilter("all");
           }}
           emptyMessage={
             apiKeys.length === 0
@@ -337,30 +428,27 @@ export default function ModelsPage() {
 
 // --- Edit Model Dialog ---
 
-const INPUT_MODALITY_OPTIONS: Array<{
-  value: ModelInputModality;
-  label: string;
-}> = [
-  { value: "text", label: "Text" },
-  { value: "image", label: "Image" },
-  { value: "audio", label: "Audio" },
-  { value: "video", label: "Video" },
-  { value: "pdf", label: "PDF" },
-];
+type UpdateModelBody = archestraApiTypes.UpdateModelData["body"];
+type UpdateModelEmbeddingDimensions = NonNullable<
+  UpdateModelBody["embeddingDimensions"]
+>;
 
-const OUTPUT_MODALITY_OPTIONS: Array<{
-  value: ModelOutputModality;
-  label: string;
-}> = [
-  { value: "text", label: "Text" },
-  { value: "image", label: "Image" },
-  { value: "audio", label: "Audio" },
-];
+const EMBEDDING_DIMENSION_MAP = {
+  "768": 768,
+  "1536": 1536,
+  "3072": 3072,
+} satisfies Record<string, UpdateModelEmbeddingDimensions>;
+const NOT_EMBEDDING_MODEL_VALUE = "none";
+
+type EditModelEmbeddingDimensionsValue =
+  | ""
+  | keyof typeof EMBEDDING_DIMENSION_MAP;
 
 interface EditModelFormValues {
   customPricePerMillionInput: string;
   customPricePerMillionOutput: string;
   ignored: boolean;
+  embeddingDimensions: EditModelEmbeddingDimensionsValue;
   inputModalities: string[];
   outputModalities: string[];
 }
@@ -375,12 +463,15 @@ function EditModelDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const appName = useAppName();
+  const [inputModalityToAdd, setInputModalityToAdd] = useState("");
+  const [outputModalityToAdd, setOutputModalityToAdd] = useState("");
   const updateModel = useUpdateModel();
   const providerConfig = PROVIDER_CONFIG[model.provider];
   const fallbackPricing = getFallbackPricing(model);
   const form = useForm<EditModelFormValues>({
     defaultValues: getDefaults(model),
   });
+  const selectedEmbeddingDimensions = form.watch("embeddingDimensions");
 
   useEffect(() => {
     if (open) {
@@ -391,12 +482,16 @@ function EditModelDialog({
   const handleSubmit = async (values: EditModelFormValues) => {
     const inputPrice = values.customPricePerMillionInput.trim() || null;
     const outputPrice = values.customPricePerMillionOutput.trim() || null;
+    const embeddingDimensions = getEmbeddingDimensionsValue(
+      values.embeddingDimensions,
+    );
 
     const result = await updateModel.mutateAsync({
       id: model.id,
       customPricePerMillionInput: inputPrice,
       customPricePerMillionOutput: outputPrice,
       ignored: values.ignored,
+      embeddingDimensions,
       inputModalities: values.inputModalities as ModelInputModality[],
       outputModalities: values.outputModalities as ModelOutputModality[],
     });
@@ -540,12 +635,15 @@ function EditModelDialog({
                 <ul className="list-disc space-y-1 pl-5">
                   <li>
                     Text input means the model can accept normal chat prompts.
-                    Text output means it can return standard chat responses.
+                    In {appName} chat, it also enables text-based uploads such
+                    as <code>.txt</code> and <code>.csv</code>, which are passed
+                    to the model as text content. Text output means the model
+                    can return standard chat responses.
                   </li>
                   <li>
-                    A model is considered a supported chat model only when both
-                    text input and text output are enabled, and the model is not
-                    marked as ignored.
+                    In {appName} chat, a model appears as a standard chat model
+                    when it supports both text input and text output and is not
+                    hidden.
                   </li>
                   <li>
                     Image, audio, video, and PDF input modalities control
@@ -561,7 +659,7 @@ function EditModelDialog({
               </AlertDescription>
             </Alert>
 
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid items-start gap-3 md:grid-cols-2">
               <FormField
                 control={form.control}
                 name="inputModalities"
@@ -573,12 +671,13 @@ function EditModelDialog({
                   <FormItem>
                     <FormLabel>Input</FormLabel>
                     <FormControl>
-                      <MultiSelect
-                        items={INPUT_MODALITY_OPTIONS}
+                      <ModalitySelectField
+                        options={INPUT_MODALITY_OPTIONS}
                         value={field.value}
                         onValueChange={field.onChange}
-                        placeholder="Select input modalities..."
-                        searchable={false}
+                        selectValue={inputModalityToAdd}
+                        onSelectValueChange={setInputModalityToAdd}
+                        placeholder="Add input modality..."
                       />
                     </FormControl>
                     <FormMessage />
@@ -591,18 +690,22 @@ function EditModelDialog({
                 name="outputModalities"
                 rules={{
                   validate: (v) =>
-                    v.length > 0 || "At least one output modality is required",
+                    shouldRequireOutputModalities(selectedEmbeddingDimensions)
+                      ? v.length > 0 ||
+                        "At least one output modality is required"
+                      : true,
                 }}
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Output</FormLabel>
                     <FormControl>
-                      <MultiSelect
-                        items={OUTPUT_MODALITY_OPTIONS}
+                      <ModalitySelectField
+                        options={OUTPUT_MODALITY_OPTIONS}
                         value={field.value}
                         onValueChange={field.onChange}
-                        placeholder="Select output modalities..."
-                        searchable={false}
+                        selectValue={outputModalityToAdd}
+                        onSelectValueChange={setOutputModalityToAdd}
+                        placeholder="Add output modality..."
                       />
                     </FormControl>
                     <FormMessage />
@@ -614,6 +717,83 @@ function EditModelDialog({
 
           <Separator />
 
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <span className="text-sm font-medium">Embedding</span>
+              <p className="text-sm text-muted-foreground">
+                Set embedding dimensions to make this model available for
+                knowledge base embeddings. Leave it unset for chat-only models.
+                This must match the vector size the provider returns or the size
+                you intentionally truncate to.
+              </p>
+            </div>
+
+            <Alert variant="info">
+              <AlertCircle />
+              <AlertTitle>How embedding input modalities are used</AlertTitle>
+              <AlertDescription>
+                <ul className="list-disc space-y-1 pl-5">
+                  <li>
+                    Input modalities control which source content types can be
+                    sent to this model when {appName} generates embeddings for
+                    knowledge connectors and uploaded files.
+                  </li>
+                  <li>
+                    Text input enables text-based content such as documents,
+                    pages, and extracted file text.
+                  </li>
+                  <li>
+                    Image input enables image files to be considered for
+                    embedding when the connector and model both support it.
+                  </li>
+                  <li>
+                    Output modalities are not required for embedding-only
+                    models.
+                  </li>
+                </ul>
+              </AlertDescription>
+            </Alert>
+
+            <FormField
+              control={form.control}
+              name="embeddingDimensions"
+              render={({ field }) => (
+                <FormItem>
+                  <Select
+                    value={field.value || NOT_EMBEDDING_MODEL_VALUE}
+                    onValueChange={(value) =>
+                      field.onChange(
+                        value === NOT_EMBEDDING_MODEL_VALUE ? "" : value,
+                      )
+                    }
+                  >
+                    <FormControl>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Not an embedding model" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value={NOT_EMBEDDING_MODEL_VALUE}>
+                        Not an embedding model
+                      </SelectItem>
+                      {SUPPORTED_EMBEDDING_DIMENSIONS.map((dimension) => (
+                        <SelectItem
+                          key={dimension}
+                          value={dimension.toString()}
+                        >
+                          {dimension}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+
+          <Separator />
+
           <FormField
             control={form.control}
             name="ignored"
@@ -621,11 +801,11 @@ function EditModelDialog({
               <FormItem className="rounded-lg border p-3">
                 <div className="flex items-center justify-between gap-4">
                   <div className="space-y-1">
-                    <FormLabel>Ignore this model</FormLabel>
+                    <FormLabel>Hide this model</FormLabel>
                     <p className="text-sm text-muted-foreground">
-                      Ignored models remain synced and editable in this catalog,
-                      but they are excluded from the {appName} chat model
-                      selection list.
+                      Hidden models remain synced and editable in this catalog,
+                      but they are excluded anywhere {appName} offers model
+                      selection.
                     </p>
                   </div>
                   <FormControl>
@@ -646,6 +826,86 @@ function EditModelDialog({
 }
 
 // --- Internal helpers ---
+
+function ModalitySelectField<T extends string>(params: {
+  options: Array<{ value: T; label: string; description: string }>;
+  value: string[];
+  onValueChange: (value: string[]) => void;
+  selectValue: string;
+  onSelectValueChange: (value: string) => void;
+  placeholder: string;
+}) {
+  const {
+    options,
+    value,
+    onValueChange,
+    selectValue,
+    onSelectValueChange,
+    placeholder,
+  } = params;
+
+  return (
+    <div className="space-y-2">
+      <SearchableSelect
+        value={selectValue}
+        onValueChange={(nextValue) => {
+          onSelectValueChange("");
+          if (value.includes(nextValue)) {
+            return;
+          }
+
+          onValueChange([...value, nextValue]);
+        }}
+        placeholder={placeholder}
+        searchPlaceholder="Search modalities..."
+        className="w-full"
+        items={options.map((option) => ({
+          value: option.value,
+          label: option.label,
+          content: (
+            <span className="block min-w-0">
+              <span className="block text-sm font-medium">{option.label}</span>
+              <span className="block truncate text-xs text-muted-foreground">
+                {option.description}
+              </span>
+            </span>
+          ),
+          checked: value.includes(option.value),
+          disabled: value.includes(option.value),
+        }))}
+      />
+      <div className="flex flex-wrap gap-1">
+        {value.map((selectedValue) => {
+          const option = options.find((item) => item.value === selectedValue);
+          if (!option) {
+            return null;
+          }
+
+          return (
+            <Badge
+              key={option.value}
+              variant="secondary"
+              className="gap-1 pr-1"
+            >
+              {option.label}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-4 w-4"
+                onClick={() =>
+                  onValueChange(value.filter((item) => item !== option.value))
+                }
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </Badge>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function formatContextLength(contextLength: number | null): string {
   if (contextLength === null) return "-";
@@ -705,7 +965,35 @@ function getDefaults(model: ModelWithApiKeys): EditModelFormValues {
     customPricePerMillionInput: model.customPricePerMillionInput ?? "",
     customPricePerMillionOutput: model.customPricePerMillionOutput ?? "",
     ignored: model.ignored,
+    embeddingDimensions: model.embeddingDimensions
+      ? getEmbeddingDimensionsString(model.embeddingDimensions)
+      : "",
     inputModalities: model.inputModalities ?? [],
     outputModalities: model.outputModalities ?? [],
   };
+}
+
+function getEmbeddingDimensionsString(
+  value: UpdateModelEmbeddingDimensions,
+): EditModelEmbeddingDimensionsValue {
+  if (value === 768) return "768";
+  if (value === 1536) return "1536";
+  if (value === 3072) return "3072";
+  return "";
+}
+
+function getEmbeddingDimensionsValue(
+  value: EditModelEmbeddingDimensionsValue,
+): UpdateModelEmbeddingDimensions | null {
+  if (!value) {
+    return null;
+  }
+
+  return EMBEDDING_DIMENSION_MAP[value];
+}
+
+function shouldRequireOutputModalities(
+  embeddingDimensions: EditModelEmbeddingDimensionsValue,
+): boolean {
+  return !embeddingDimensions;
 }

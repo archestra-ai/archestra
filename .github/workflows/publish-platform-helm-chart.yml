@@ -17,6 +17,12 @@ on:
       GCP_SERVICE_ACCOUNT_NAME:
         required: false
 
+permissions: {}
+
+concurrency:
+  group: publish-platform-helm-chart-${{ inputs.version }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # See here for inspiration on how this was put together:
   # https://medium.com/google-cloud/ci-gitops-with-helm-github-actions-google-artifact-registry-and-config-sync-b48604191fda
@@ -24,8 +30,8 @@ jobs:
     name: Publish platform Helm chart
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
-      contents: write
-      id-token: write # Required for Workload Identity Federation
+      contents: write # Required to package the chart from the checked-out repository.
+      id-token: write # Required for Workload Identity Federation.
     defaults:
       run:
         working-directory: ./platform/helm/archestra

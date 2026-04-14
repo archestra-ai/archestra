@@ -11,6 +11,19 @@ export const RouteId = {
   GetLabelKeys: "getLabelKeys",
   GetLabelValues: "getLabelValues",
 
+  // Schedule Trigger Routes
+  GetScheduleTriggers: "getScheduleTriggers",
+  CreateScheduleTrigger: "createScheduleTrigger",
+  GetScheduleTrigger: "getScheduleTrigger",
+  UpdateScheduleTrigger: "updateScheduleTrigger",
+  DeleteScheduleTrigger: "deleteScheduleTrigger",
+  EnableScheduleTrigger: "enableScheduleTrigger",
+  DisableScheduleTrigger: "disableScheduleTrigger",
+  RunScheduleTriggerNow: "runScheduleTriggerNow",
+  GetScheduleTriggerRuns: "getScheduleTriggerRuns",
+  GetScheduleTriggerRun: "getScheduleTriggerRun",
+  CreateScheduleTriggerRunConversation: "createScheduleTriggerRunConversation",
+
   // Agent Tool Routes
   AssignToolToAgent: "assignToolToAgent",
   BulkAssignTools: "bulkAssignTools",
@@ -218,6 +231,12 @@ export const RouteId = {
     "minimaxChatCompletionsWithDefaultAgent",
   MinimaxChatCompletionsWithAgent: "minimaxChatCompletionsWithAgent",
 
+  // Proxy Routes - Azure AI Foundry
+  AzureChatCompletionsWithDefaultAgent: "azureChatCompletionsWithDefaultAgent",
+  AzureChatCompletionsWithAgent: "azureChatCompletionsWithAgent",
+  AzureResponsesWithDefaultAgent: "azureResponsesWithDefaultAgent",
+  AzureResponsesWithAgent: "azureResponsesWithAgent",
+
   // Chat Routes
   StreamChat: "streamChat",
   StopChatStream: "stopChatStream",
@@ -238,16 +257,16 @@ export const RouteId = {
   GetConversationShare: "getConversationShare",
   GetSharedConversation: "getSharedConversation",
   ForkSharedConversation: "forkSharedConversation",
-  GetChatModels: "getChatModels",
-  SyncChatModels: "syncChatModels",
+  GetLlmModels: "getLlmModels",
+  SyncLlmModels: "syncLlmModels",
 
-  // Chat API Key Routes
-  GetChatApiKeys: "getChatApiKeys",
-  GetAvailableChatApiKeys: "getAvailableChatApiKeys",
-  CreateChatApiKey: "createChatApiKey",
-  GetChatApiKey: "getChatApiKey",
-  UpdateChatApiKey: "updateChatApiKey",
-  DeleteChatApiKey: "deleteChatApiKey",
+  // LLM Provider API Key Routes
+  GetLlmProviderApiKeys: "getLlmProviderApiKeys",
+  GetAvailableLlmProviderApiKeys: "getAvailableLlmProviderApiKeys",
+  CreateLlmProviderApiKey: "createLlmProviderApiKey",
+  GetLlmProviderApiKey: "getLlmProviderApiKey",
+  UpdateLlmProviderApiKey: "updateLlmProviderApiKey",
+  DeleteLlmProviderApiKey: "deleteLlmProviderApiKey",
 
   // User API Key Routes
   GetApiKeys: "getApiKeys",
@@ -259,6 +278,7 @@ export const RouteId = {
   GetVirtualApiKeys: "getVirtualApiKeys",
   GetAllVirtualApiKeys: "getAllVirtualApiKeys",
   CreateVirtualApiKey: "createVirtualApiKey",
+  UpdateVirtualApiKey: "updateVirtualApiKey",
   DeleteVirtualApiKey: "deleteVirtualApiKey",
 
   // Models with API Keys Routes
@@ -293,6 +313,9 @@ export const RouteId = {
 
   // Agent Settings Routes (organization-level)
   UpdateAgentSettings: "updateAgentSettings",
+
+  // MCP Settings Routes (organization-level)
+  UpdateMcpSettings: "updateMcpSettings",
 
   // Knowledge Settings Routes (organization-level)
   UpdateKnowledgeSettings: "updateKnowledgeSettings",

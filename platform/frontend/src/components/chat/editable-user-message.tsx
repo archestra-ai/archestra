@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Paperclip } from "lucide-react";
+import { AlertTriangle, FileText, Paperclip } from "lucide-react";
 import {
   type KeyboardEventHandler,
   useEffect,
@@ -13,6 +13,11 @@ import { Response } from "@/components/ai-elements/response";
 import { MessageActions } from "@/components/chat/message-actions";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  getAttachmentFallbackLabel,
+  isCsvAttachment,
+  isPlainTextAttachment,
+} from "@/lib/chat/chat-attachment-display";
 import { preserveNewlines } from "@/lib/chat/chat-utils";
 import { cn } from "@/lib/utils";
 
@@ -220,9 +225,21 @@ export function EditableUserMessage({
                 key={attachment.url}
                 className="flex items-center gap-2 text-sm rounded-lg border bg-muted/50 p-2"
               >
-                <Paperclip className="h-4 w-4 text-muted-foreground" />
+                {isCsvAttachment(attachment.mediaType, attachment.filename) ||
+                isPlainTextAttachment(
+                  attachment.mediaType,
+                  attachment.filename,
+                ) ? (
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <Paperclip className="h-4 w-4 text-muted-foreground" />
+                )}
                 <span className="truncate max-w-[200px]">
-                  {attachment.filename || "Attached file"}
+                  {attachment.filename ||
+                    getAttachmentFallbackLabel({
+                      mediaType: attachment.mediaType,
+                      filename: attachment.filename,
+                    })}
                 </span>
               </div>
             ))}

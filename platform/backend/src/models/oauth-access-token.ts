@@ -3,6 +3,34 @@ import db, { schema } from "@/database";
 
 class OAuthAccessTokenModel {
   /**
+   * Create an OAuth access token row.
+   */
+  static async create(params: {
+    tokenHash: string;
+    clientId: string;
+    userId: string;
+    expiresAt: Date;
+    scopes: string[];
+    referenceId?: string | null;
+  }) {
+    const [accessToken] = await db
+      .insert(schema.oauthAccessTokensTable)
+      .values({
+        id: crypto.randomUUID(),
+        token: params.tokenHash,
+        clientId: params.clientId,
+        userId: params.userId,
+        expiresAt: params.expiresAt,
+        scopes: params.scopes,
+        referenceId: params.referenceId ?? null,
+        createdAt: new Date(),
+      })
+      .returning();
+
+    return accessToken;
+  }
+
+  /**
    * Find an access token by its hashed value.
    * better-auth stores tokens as SHA-256 base64url hashes.
    *
@@ -37,6 +65,22 @@ class OAuthAccessTokenModel {
       .where(eq(schema.oauthAccessTokensTable.token, tokenHash))
       .limit(1);
     return result;
+  }
+
+  /**
+   * Update the persisted expiry for a hashed access token.
+   */
+  static async updateExpiresAtByTokenHash(params: {
+    tokenHash: string;
+    expiresAt: Date;
+  }) {
+    const [accessToken] = await db
+      .update(schema.oauthAccessTokensTable)
+      .set({ expiresAt: params.expiresAt })
+      .where(eq(schema.oauthAccessTokensTable.token, params.tokenHash))
+      .returning();
+
+    return accessToken ?? null;
   }
 }
 

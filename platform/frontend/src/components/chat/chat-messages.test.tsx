@@ -75,11 +75,31 @@ vi.mock("@/components/chat/policy-denied-tool", () => ({
 }));
 
 vi.mock("@/components/chat/auth-required-tool", () => ({
-  AuthRequiredTool: () => null,
+  AuthRequiredTool: ({
+    catalogName,
+    onInstall,
+  }: {
+    catalogName: string;
+    onInstall?: () => void;
+  }) => (
+    <button type="button" onClick={onInstall}>
+      auth-required:{catalogName}
+    </button>
+  ),
 }));
 
 vi.mock("@/components/chat/expired-auth-tool", () => ({
-  ExpiredAuthTool: () => null,
+  ExpiredAuthTool: ({
+    catalogName,
+    onReauth,
+  }: {
+    catalogName: string;
+    onReauth?: () => void;
+  }) => (
+    <button type="button" onClick={onReauth}>
+      expired-auth:{catalogName}
+    </button>
+  ),
 }));
 
 vi.mock("@/components/chat/todo-write-tool", () => ({
@@ -185,6 +205,277 @@ describe("ChatMessages", () => {
     );
 
     expect(screen.getByText("Switched to GitHub Agent")).toBeInTheDocument();
+  });
+
+  it("renders the unsafe-context divider when a tool result marks the context unsafe", () => {
+    const messages = [
+      {
+        id: "assistant-unsafe",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-read_email",
+            toolCallId: "call-unsafe",
+            state: "output-available",
+            input: { folder: "inbox" },
+            output: { emails: [{ from: "ceo@external.com" }] },
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        unsafeContextBoundary={{
+          kind: "tool_result",
+          reason: "tool_result_marked_untrusted",
+          toolCallId: "call-unsafe",
+          toolName: "read_email",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Sensitive context below")).toBeInTheDocument();
+  });
+
+  it("renders the unsafe-context divider immediately after the unsafe tool result within the same message", () => {
+    const messages = [
+      {
+        id: "assistant-live-unsafe",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-read_email",
+            toolCallId: "call-live-unsafe",
+            state: "output-available",
+            input: { folder: "inbox" },
+            output: {
+              content: "ARCH_TEST = secret-value",
+              unsafeContextBoundary: {
+                kind: "tool_result",
+                reason: "tool_result_marked_untrusted",
+                toolCallId: "call-live-unsafe",
+                toolName: "read_email",
+              },
+            },
+          },
+          {
+            type: "text",
+            text: "Done.",
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    const divider = screen.getByText("Sensitive context below");
+    const assistantText = screen.getByText("Done.");
+
+    expect(divider).toBeInTheDocument();
+    expect(
+      divider.compareDocumentPosition(assistantText) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("matches persisted unsafe boundaries by tool name when tool call ids differ", () => {
+    const messages = [
+      {
+        id: "assistant-persisted-unsafe",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-internal-dev-test-server__print_archestra_test",
+            toolCallId: "ai-sdk-tool-call-id",
+            state: "output-available",
+            input: {},
+            output: { content: "ARCHESTRA_TEST = asdfasdfadsf" },
+          },
+          {
+            type: "text",
+            text: "Done.",
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        unsafeContextBoundary={{
+          kind: "tool_result",
+          reason: "tool_result_marked_untrusted",
+          toolCallId: "mcp-tool-call-id",
+          toolName: "internal-dev-test-server__print_archestra_test",
+        }}
+      />,
+    );
+
+    const divider = screen.getByText("Sensitive context below");
+    const assistantText = screen.getByText("Done.");
+
+    expect(
+      divider.compareDocumentPosition(assistantText) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("renders the preexisting unsafe-context divider when the request starts unsafe", () => {
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={
+          [
+            {
+              id: "assistant-1",
+              role: "assistant",
+              parts: [{ type: "text", text: "Continuing the workflow." }],
+            },
+          ] as UIMessage[]
+        }
+        status="ready"
+        unsafeContextBoundary={{
+          kind: "preexisting_untrusted",
+          reason: "inherited_from_parent",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Sensitive context below")).toBeInTheDocument();
+  });
+
+  it("renders the preexisting unsafe-context divider for policy-denied text caused by sensitive context", () => {
+    const messages = [
+      {
+        id: "assistant-denied",
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: "\nI tried to invoke the internal-dev-test-server__print_archestra_test tool with the following arguments: {}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: context contains sensitive data",
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(screen.getByText("Sensitive context below")).toBeInTheDocument();
+  });
+
+  it("infers the sensitive-context boundary before the first assistant text after an unsafe tool result", () => {
+    const messages = [
+      {
+        id: "assistant-sensitive",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-internal-dev-test-server__print_archestra_test",
+            toolCallId: "call-1",
+            state: "output-available",
+            output: "ARCHESTRA_TEST = asdfasdfadsf",
+          },
+          {
+            type: "text",
+            text: "Done.",
+          },
+        ],
+      },
+      {
+        id: "assistant-denied",
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: "\nI tried to invoke the internal-dev-test-server__print_archestra_test tool with the following arguments: {}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: context contains sensitive data",
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    const dividers = screen.getAllByText("Sensitive context below");
+    const firstDivider = dividers[0];
+    const assistantText = screen.getByText("Done.");
+
+    expect(dividers).toHaveLength(1);
+    expect(
+      firstDivider.compareDocumentPosition(assistantText) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("renders the sensitive-context divider only once after the thread becomes unsafe", () => {
+    const messages = [
+      {
+        id: "assistant-sensitive",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-internal-dev-test-server__print_archestra_test",
+            toolCallId: "ai-sdk-tool-call-id",
+            state: "output-available",
+            input: {},
+            output: { content: "ARCHESTRA_TEST = asdfasdfadsf" },
+          },
+          {
+            type: "text",
+            text: '"ARCHESTRA_TEST = asdfasdfadsf"',
+          },
+        ],
+      },
+      {
+        id: "assistant-denied",
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: "\nI tried to invoke the internal-dev-test-server__print_archestra_test tool with the following arguments: {}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: context contains sensitive data",
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        unsafeContextBoundary={{
+          kind: "tool_result",
+          reason: "tool_result_marked_untrusted",
+          toolCallId: "mcp-tool-call-id",
+          toolName: "internal-dev-test-server__print_archestra_test",
+        }}
+      />,
+    );
+
+    expect(screen.getAllByText("Sensitive context below")).toHaveLength(1);
   });
 
   it("keeps an expanded compact tool panel open when later tool calls append to the same message", () => {
@@ -295,6 +586,162 @@ describe("ChatMessages", () => {
     expect(screen.getByText("todo-write-tool")).toBeInTheDocument();
     expect(
       screen.queryByText("tool-sparky__todo_write"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders assistant expired-auth text as the inline reauth tool UI", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: 'Expired or invalid authentication for "id-jag test".\n\nYour credentials (user: usr_123) failed authentication. Please re-authenticate to continue using this tool.\nTo re-authenticate, visit this URL: http://localhost:3000/mcp/registry?reauth=cat_abc&server=srv_xyz',
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "expired-auth:id-jag test" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/To re-authenticate, visit this URL:/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders assistant auth-required text as the inline install tool UI", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: 'Authentication required for "jwks demo".\n\nNo credentials were found for your account (user: usr_123).\nTo set up your credentials, visit this URL: http://localhost:3000/mcp/registry?install=cat_abc',
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "auth-required:jwks demo" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/To set up your credentials, visit this URL:/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders structured auth-expired tool output as the inline reauth tool UI", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-id-jag_test__get_server_info",
+            toolCallId: "call-1",
+            state: "output-available",
+            output: {
+              isError: true,
+              _meta: {
+                archestraError: {
+                  type: "auth_expired",
+                  message:
+                    'Expired or invalid authentication for "id-jag test".',
+                  catalogId: "cat_abc",
+                  catalogName: "id-jag test",
+                  serverId: "srv_xyz",
+                  reauthUrl:
+                    "http://localhost:3000/mcp/registry?reauth=cat_abc&server=srv_xyz",
+                },
+              },
+            },
+          },
+        ],
+      },
+    ] as unknown as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "expired-auth:id-jag test" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("tool-id-jag_test__get_server_info"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("suppresses duplicate assistant auth text when the same message already has a tool auth error", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-id-jag_test__get_server_info",
+            toolCallId: "call-1",
+            state: "output-available",
+            output: {
+              isError: true,
+              _meta: {
+                archestraError: {
+                  type: "auth_expired",
+                  message:
+                    'Expired or invalid authentication for "id-jag test".',
+                  catalogId: "cat_abc",
+                  catalogName: "id-jag test",
+                  serverId: "srv_xyz",
+                  reauthUrl:
+                    "http://localhost:3000/mcp/registry?reauth=cat_abc&server=srv_xyz",
+                },
+              },
+            },
+          },
+          {
+            type: "text",
+            text: 'Your authentication for "id-jag test" is expired or invalid. Please re-authenticate by visiting this URL: http://localhost:3000/mcp/registry?reauth=cat_abc&server=srv_xyz',
+          },
+        ],
+      },
+    ] as unknown as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(
+      screen.getAllByRole("button", { name: "expired-auth:id-jag test" }),
+    ).toHaveLength(1);
+    expect(
+      screen.queryByText(/Please re-authenticate by visiting this URL/i),
     ).not.toBeInTheDocument();
   });
 });

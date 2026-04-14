@@ -11,97 +11,33 @@ on:
 # Each job will explicitly declare the permissions it needs
 permissions: {}
 
+concurrency:
+  group: on-commits-to-main-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  build-staging-image:
-    name: Build Platform Staging Docker Image
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+  deploy-dev-platform-images:
+    name: Build Platform Staging and MCP Server Base Images
+    uses: ./.github/workflows/deploy-dev-platform-images.yml
     permissions:
-      contents: read
-      id-token: write # Required for Workload Identity Federation
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-
-      - name: Authenticate to Google Artifact Registry
-        uses: ./.github/actions/auth-to-gar
-        with:
-          service_account: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
-          workload_identity_provider: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
-
-      - name: Install gke-gcloud-auth-plugin
-        run: gcloud components install gke-gcloud-auth-plugin
-
-      - name: Configure kubectl
-        run: |
-          gcloud container clusters get-credentials archestra-staging \
-            --zone us-central1-a --project friendly-path-465518-r6
-
-      - name: Extract previous version static assets
-        run: |
-          PREV_TAG=$(kubectl get deployment archestra-platform -n archestra \
-            -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null \
-            | cut -d: -f2) || true
-
-          mkdir -p platform/prev-static-assets
-          if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "$GITHUB_SHA_VALUE" ]; then
-            PREV_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${PREV_TAG}"
-            echo "Pulling previous image: $PREV_IMAGE"
-            docker pull "$PREV_IMAGE" || { echo "Warning: Failed to pull previous image"; true; }
-            CID=$(docker create "$PREV_IMAGE" 2>/dev/null) || true
-            if [ -n "$CID" ]; then
-              # Extract from /static-assets-source/ which has ONLY that build's chunks (not accumulated)
-              echo "Extracting previous static assets from container $CID"
-              docker cp "${CID}:/static-assets-source/." platform/prev-static-assets/ || echo "Warning: Failed to copy previous assets"
-              docker rm "$CID"
-              echo "Successfully extracted previous static assets"
-            else
-              echo "No previous container created, skipping asset extraction"
-            fi
-          else
-            echo "No previous version to extract (PREV_TAG: $PREV_TAG)"
-          fi
-        env:
-          GITHUB_SHA_VALUE: ${{ github.sha }}
-
-      # NOTE: only build on amd64 for now as our staging environment runs on amd64
-      # if we will need to support arm64, we should follow the pattern we do in
-      # .github/workflows/build-dockerhub-image.yml and do a matrix build so that we are build
-      # on both amd64 and arm64 using native arch (to massively speed up the builds)
-      - name: Build Docker image
-        uses: ./.github/actions/build-platform-docker-image
-        with:
-          context: ./platform
-          push: "true"
-          platforms: linux/amd64
-          version: ${{ github.sha }}
-          tags: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${{ github.sha }}
-          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-          sentry-auth-token: ${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
-
-  build-mcp-server-base-image:
-    name: Build MCP Server Base Image
-    uses: ./.github/workflows/build-base-mcp-server-docker-image.yml
-    permissions:
-      contents: read
-      id-token: write
+      contents: read # Required to invoke the reusable image publishing workflow.
+      id-token: write # Required for Workload Identity Federation.
     with:
-      push_to_gcr: true
       version: ${{ github.sha }}
     secrets:
-      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+      DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
+      DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+      PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN: ${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
+      TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+      TURBOREPO_REMOTE_CACHING_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
 
   deploy-to-staging:
     name: Deploy to staging
     runs-on: blacksmith-2vcpu-ubuntu-2404
-    needs: [build-staging-image, build-mcp-server-base-image]
+    needs: [deploy-dev-platform-images]
     permissions:
-      contents: read
-      id-token: write # Required for Workload Identity Federation
+      contents: read # Required to checkout the repository and deploy the chart.
+      id-token: write # Required for Workload Identity Federation.
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -129,24 +65,38 @@ jobs:
             --project friendly-path-465518-r6
 
       - name: Deploy to staging
+        env:
+          PLATFORM_IMAGE_TAG: ${{ github.sha }}
+          ARCHESTRA_STAGING_DATABASE_URL: ${{ secrets.ARCHESTRA_STAGING_DATABASE_URL }}
+          ARCHESTRA_STAGING_METRICS_SECRET: ${{ secrets.ARCHESTRA_STAGING_METRICS_SECRET }}
+          ARCHESTRA_STAGING_OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.ARCHESTRA_STAGING_OTEL_EXPORTER_OTLP_ENDPOINT }}
+          ARCHESTRA_STAGING_AUTH_SECRET: ${{ secrets.ARCHESTRA_STAGING_AUTH_SECRET }}
+          ARCHESTRA_STAGING_AUTH_ADMIN_EMAIL: ${{ secrets.ARCHESTRA_STAGING_AUTH_ADMIN_EMAIL }}
+          ARCHESTRA_STAGING_AUTH_ADMIN_PASSWORD: ${{ secrets.ARCHESTRA_STAGING_AUTH_ADMIN_PASSWORD }}
+          ARCHESTRA_STAGING_SENTRY_BACKEND_DSN: ${{ secrets.ARCHESTRA_STAGING_SENTRY_BACKEND_DSN }}
+          ARCHESTRA_STAGING_SENTRY_FRONTEND_DSN: ${{ secrets.ARCHESTRA_STAGING_SENTRY_FRONTEND_DSN }}
+          ARCHESTRA_STAGING_OUTLOOK_TENANT_ID: ${{ secrets.ARCHESTRA_STAGING_OUTLOOK_TENANT_ID }}
+          ARCHESTRA_STAGING_OUTLOOK_CLIENT_ID: ${{ secrets.ARCHESTRA_STAGING_OUTLOOK_CLIENT_ID }}
+          ARCHESTRA_STAGING_OUTLOOK_CLIENT_SECRET: ${{ secrets.ARCHESTRA_STAGING_OUTLOOK_CLIENT_SECRET }}
+          ARCHESTRA_STAGING_CHAT_ANTHROPIC_API_KEY: ${{ secrets.ARCHESTRA_STAGING_CHAT_ANTHROPIC_API_KEY }}
         run: |
           helm upgrade archestra-platform \
             ./platform/helm/archestra \
             --install \
             --namespace archestra \
             --create-namespace \
-            --set archestra.image=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${{ github.sha }} \
-            --set archestra.databaseUrl="${{ secrets.ARCHESTRA_STAGING_DATABASE_URL }}" \
-            --set archestra.env.ARCHESTRA_METRICS_SECRET="${{ secrets.ARCHESTRA_STAGING_METRICS_SECRET }}" \
-            --set archestra.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT="${{ secrets.ARCHESTRA_STAGING_OTEL_EXPORTER_OTLP_ENDPOINT }}" \
-            --set archestra.env.ARCHESTRA_AUTH_SECRET="${{ secrets.ARCHESTRA_STAGING_AUTH_SECRET }}" \
-            --set archestra.env.ARCHESTRA_AUTH_ADMIN_EMAIL="${{ secrets.ARCHESTRA_STAGING_AUTH_ADMIN_EMAIL }}" \
-            --set archestra.env.ARCHESTRA_AUTH_ADMIN_PASSWORD="${{ secrets.ARCHESTRA_STAGING_AUTH_ADMIN_PASSWORD }}" \
-            --set archestra.env.ARCHESTRA_SENTRY_BACKEND_DSN="${{ secrets.ARCHESTRA_STAGING_SENTRY_BACKEND_DSN }}" \
-            --set archestra.env.ARCHESTRA_SENTRY_FRONTEND_DSN="${{ secrets.ARCHESTRA_STAGING_SENTRY_FRONTEND_DSN }}" \
-            --set archestra.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_TENANT_ID="${{ secrets.ARCHESTRA_STAGING_OUTLOOK_TENANT_ID }}" \
-            --set archestra.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_ID="${{ secrets.ARCHESTRA_STAGING_OUTLOOK_CLIENT_ID }}" \
-            --set archestra.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET="${{ secrets.ARCHESTRA_STAGING_OUTLOOK_CLIENT_SECRET }}" \
-            --set archestra.env.ARCHESTRA_CHAT_ANTHROPIC_API_KEY="${{ secrets.ARCHESTRA_STAGING_CHAT_ANTHROPIC_API_KEY }}" \
+            --set "archestra.image=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${PLATFORM_IMAGE_TAG}" \
+            --set "archestra.databaseUrl=${ARCHESTRA_STAGING_DATABASE_URL}" \
+            --set "archestra.env.ARCHESTRA_METRICS_SECRET=${ARCHESTRA_STAGING_METRICS_SECRET}" \
+            --set "archestra.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT=${ARCHESTRA_STAGING_OTEL_EXPORTER_OTLP_ENDPOINT}" \
+            --set "archestra.env.ARCHESTRA_AUTH_SECRET=${ARCHESTRA_STAGING_AUTH_SECRET}" \
+            --set "archestra.env.ARCHESTRA_AUTH_ADMIN_EMAIL=${ARCHESTRA_STAGING_AUTH_ADMIN_EMAIL}" \
+            --set "archestra.env.ARCHESTRA_AUTH_ADMIN_PASSWORD=${ARCHESTRA_STAGING_AUTH_ADMIN_PASSWORD}" \
+            --set "archestra.env.ARCHESTRA_SENTRY_BACKEND_DSN=${ARCHESTRA_STAGING_SENTRY_BACKEND_DSN}" \
+            --set "archestra.env.ARCHESTRA_SENTRY_FRONTEND_DSN=${ARCHESTRA_STAGING_SENTRY_FRONTEND_DSN}" \
+            --set "archestra.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_TENANT_ID=${ARCHESTRA_STAGING_OUTLOOK_TENANT_ID}" \
+            --set "archestra.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_ID=${ARCHESTRA_STAGING_OUTLOOK_CLIENT_ID}" \
+            --set "archestra.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET=${ARCHESTRA_STAGING_OUTLOOK_CLIENT_SECRET}" \
+            --set "archestra.env.ARCHESTRA_CHAT_ANTHROPIC_API_KEY=${ARCHESTRA_STAGING_CHAT_ANTHROPIC_API_KEY}" \
             --values .github/values-staging.yaml \
             --wait

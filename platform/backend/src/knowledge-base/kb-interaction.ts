@@ -213,4 +213,5 @@ const PROVIDER_CHAT_INTERACTION_TYPE: Record<
   zhipuai: "zhipuai:chatCompletions",
   deepseek: "deepseek:chatCompletions",
   minimax: "minimax:chatCompletions",
+  azure: "azure:chatCompletions",
 };

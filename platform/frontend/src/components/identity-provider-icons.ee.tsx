@@ -1,6 +1,6 @@
 "use client";
 
-import { SSO_PROVIDER_ID } from "@shared";
+import { IDENTITY_PROVIDER_ID } from "@shared";
 import { Globe } from "lucide-react";
 import Image from "next/image";
 
@@ -11,7 +11,7 @@ interface IdentityProviderIconProps {
 }
 
 /**
- * Returns the appropriate icon for an SSO provider.
+ * Returns the appropriate icon for an identity provider.
  * Uses brand icons for known providers (Google, Okta, GitHub) and a generic icon for others.
  */
 export function IdentityProviderIcon({
@@ -23,7 +23,7 @@ export function IdentityProviderIcon({
 
   // Google - use brand icon
   if (
-    lowerProviderId === SSO_PROVIDER_ID.GOOGLE.toLowerCase() ||
+    lowerProviderId === IDENTITY_PROVIDER_ID.GOOGLE.toLowerCase() ||
     lowerProviderId.includes("google")
   ) {
     return (
@@ -39,7 +39,7 @@ export function IdentityProviderIcon({
 
   // Okta - use brand icon
   if (
-    lowerProviderId === SSO_PROVIDER_ID.OKTA.toLowerCase() ||
+    lowerProviderId === IDENTITY_PROVIDER_ID.OKTA.toLowerCase() ||
     lowerProviderId.includes("okta")
   ) {
     return (
@@ -55,7 +55,7 @@ export function IdentityProviderIcon({
 
   // GitHub - use SVG icon (better quality at small sizes)
   if (
-    lowerProviderId === SSO_PROVIDER_ID.GITHUB.toLowerCase() ||
+    lowerProviderId === IDENTITY_PROVIDER_ID.GITHUB.toLowerCase() ||
     lowerProviderId.includes("github")
   ) {
     return (
@@ -74,7 +74,7 @@ export function IdentityProviderIcon({
 
   // GitLab - use brand icon
   if (
-    lowerProviderId === SSO_PROVIDER_ID.GITLAB.toLowerCase() ||
+    lowerProviderId === IDENTITY_PROVIDER_ID.GITLAB.toLowerCase() ||
     lowerProviderId.includes("gitlab")
   ) {
     return (
@@ -90,7 +90,7 @@ export function IdentityProviderIcon({
 
   // Microsoft Entra ID - use brand icon
   if (
-    lowerProviderId === SSO_PROVIDER_ID.ENTRA_ID.toLowerCase() ||
+    lowerProviderId === IDENTITY_PROVIDER_ID.ENTRA_ID.toLowerCase() ||
     lowerProviderId.includes("microsoft") ||
     lowerProviderId.includes("entra") ||
     lowerProviderId.includes("azure")

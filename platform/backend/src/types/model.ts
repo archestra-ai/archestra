@@ -1,4 +1,5 @@
 import {
+  EmbeddingDimensionsSchema,
   ModelInputModalitySchema,
   ModelOutputModalitySchema,
   SupportedProvidersSchema,
@@ -20,6 +21,7 @@ export { ModelInputModalitySchema, ModelOutputModalitySchema } from "@shared";
  */
 const fieldsToExtend = {
   provider: SupportedProvidersSchema,
+  embeddingDimensions: EmbeddingDimensionsSchema.nullable(),
   inputModalities: z.array(ModelInputModalitySchema).nullable(),
   outputModalities: z.array(ModelOutputModalitySchema).nullable(),
 };
@@ -43,6 +45,8 @@ export const CreateModelSchema = InsertModelSchema.omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  embeddingDimensions: EmbeddingDimensionsSchema.nullable().optional(),
 });
 
 /**
@@ -90,6 +94,7 @@ export const PatchModelBodySchema = createUpdateSchema(
     customPricePerMillionInput: true,
     customPricePerMillionOutput: true,
     ignored: true,
+    embeddingDimensions: true,
     inputModalities: true,
     outputModalities: true,
   })
@@ -97,16 +102,13 @@ export const PatchModelBodySchema = createUpdateSchema(
     customPricePerMillionInput: z.string().nullable().optional(),
     customPricePerMillionOutput: z.string().nullable().optional(),
     ignored: z.boolean().optional(),
+    embeddingDimensions: EmbeddingDimensionsSchema.nullable().optional(),
     inputModalities: z
       .array(ModelInputModalitySchema)
       .min(1, "At least one input modality is required")
       .nullable()
       .optional(),
-    outputModalities: z
-      .array(ModelOutputModalitySchema)
-      .min(1, "At least one output modality is required")
-      .nullable()
-      .optional(),
+    outputModalities: z.array(ModelOutputModalitySchema).nullable().optional(),
   })
   .refine(
     (data) => {
@@ -124,6 +126,23 @@ export const PatchModelBodySchema = createUpdateSchema(
     },
     {
       message: "Both custom prices must be set together or both must be null",
+    },
+  )
+  .refine(
+    (data) => {
+      if (data.embeddingDimensions != null) {
+        return true;
+      }
+
+      if (data.outputModalities == null) {
+        return true;
+      }
+
+      return data.outputModalities.length > 0;
+    },
+    {
+      message: "At least one output modality is required",
+      path: ["outputModalities"],
     },
   )
   .refine(

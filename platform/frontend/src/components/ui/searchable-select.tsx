@@ -1,5 +1,6 @@
 "use client";
 
+import type { PopoverContentProps } from "@radix-ui/react-popover";
 import { Check, ChevronDown, Search } from "lucide-react";
 import * as React from "react";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,11 @@ interface SearchableSelectProps {
   onSearchQueryChange?: (value: string) => void;
   emptyMessage?: string;
   multiline?: boolean;
+  contentClassName?: string;
+  contentSide?: PopoverContentProps["side"];
+  contentAlign?: PopoverContentProps["align"];
+  contentAvoidCollisions?: PopoverContentProps["avoidCollisions"];
+  listClassName?: string;
 }
 
 export function SearchableSelect({
@@ -49,6 +55,11 @@ export function SearchableSelect({
   onSearchQueryChange,
   emptyMessage = "No results found.",
   multiline = false,
+  contentClassName,
+  contentSide,
+  contentAlign,
+  contentAvoidCollisions,
+  listClassName,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -85,8 +96,8 @@ export function SearchableSelect({
           disabled={disabled}
           className={cn(
             multiline
-              ? "h-auto min-h-9 w-[200px] justify-between py-2 font-normal"
-              : "h-9 w-[200px] justify-between font-normal",
+              ? "border-input h-auto min-h-9 w-[200px] justify-between bg-transparent py-2 font-normal shadow-xs hover:bg-transparent hover:text-foreground"
+              : "border-input h-9 w-[200px] justify-between bg-transparent font-normal shadow-xs hover:bg-transparent hover:text-foreground",
             !value && "text-muted-foreground",
             className,
           )}
@@ -102,8 +113,13 @@ export function SearchableSelect({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[var(--radix-popover-trigger-width)] p-0"
-        align="start"
+        className={cn(
+          "max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] overflow-hidden p-0",
+          contentClassName,
+        )}
+        align={contentAlign ?? "start"}
+        side={contentSide}
+        avoidCollisions={contentAvoidCollisions}
       >
         <div className="flex items-center border-b px-3 py-2">
           {showSearchIcon && (
@@ -126,7 +142,10 @@ export function SearchableSelect({
           </div>
         )}
         <div
-          className="max-h-[300px] overflow-y-auto p-1"
+          className={cn(
+            "max-h-[min(300px,calc(var(--radix-popover-content-available-height)-3rem))] overflow-y-auto p-1",
+            listClassName,
+          )}
           onWheelCapture={(event) => event.stopPropagation()}
         >
           {filteredItems.length === 0 ? (
@@ -160,7 +179,7 @@ export function SearchableSelect({
                 }}
                 className={cn(
                   "relative flex w-full cursor-default select-none items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground",
-                  value === item.value && "bg-accent text-accent-foreground",
+                  value === item.value && "bg-accent/50",
                   item.disabled &&
                     "cursor-not-allowed opacity-60 hover:bg-transparent hover:text-inherit",
                 )}

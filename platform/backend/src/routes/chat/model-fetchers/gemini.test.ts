@@ -21,7 +21,7 @@ describe("gemini model fetchers", () => {
   });
 
   describe("fetchGeminiModels", () => {
-    test("fetches and filters Gemini models that support generateContent", async () => {
+    test("fetches Gemini models that support generateContent or embedContent", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: () =>
@@ -38,9 +38,17 @@ describe("gemini model fetchers", () => {
                 supportedGenerationMethods: ["generateContent", "countTokens"],
               },
               {
-                name: "models/embedding-001",
-                displayName: "Text Embedding",
-                supportedGenerationMethods: ["embedContent"],
+                name: "models/gemini-embedding-001",
+                displayName: "Gemini Embedding 001",
+                supportedGenerationMethods: [
+                  "embedContent",
+                  "batchEmbedContents",
+                ],
+              },
+              {
+                name: "models/aqa",
+                displayName: "AQA",
+                supportedGenerationMethods: ["generateAnswer"],
               },
             ],
           }),
@@ -57,6 +65,37 @@ describe("gemini model fetchers", () => {
         {
           id: "gemini-2.5-flash",
           displayName: "Gemini 2.5 Flash",
+          provider: "gemini",
+        },
+        {
+          id: "gemini-embedding-001",
+          displayName: "Gemini Embedding 001",
+          provider: "gemini",
+        },
+      ]);
+    });
+
+    test("includes Gemini models that only advertise batchEmbedContents", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            models: [
+              {
+                name: "models/gemini-batch-embedding-only",
+                displayName: "Gemini Batch Embedding Only",
+                supportedGenerationMethods: ["batchEmbedContents"],
+              },
+            ],
+          }),
+      });
+
+      const models = await fetchGeminiModels("test-api-key");
+
+      expect(models).toEqual([
+        {
+          id: "gemini-batch-embedding-only",
+          displayName: "Gemini Batch Embedding Only",
           provider: "gemini",
         },
       ]);
@@ -151,6 +190,20 @@ describe("gemini model fetchers", () => {
       };
 
       const mockGet = vi.fn(async ({ model }: { model: string }) => {
+        if (model === "gemini-embedding-001") {
+          return {
+            name: "publishers/google/models/gemini-embedding-001",
+            displayName: "Gemini Embedding 001",
+          };
+        }
+
+        if (model === "gemini-embedding-2-preview") {
+          return {
+            name: "publishers/google/models/gemini-embedding-2-preview",
+            displayName: "Gemini Embedding 2 Preview",
+          };
+        }
+
         if (model === "gemini-2.5-flash") {
           return {
             name: "publishers/google/models/gemini-2.5-flash",
@@ -181,6 +234,16 @@ describe("gemini model fetchers", () => {
 
       expect(models).toEqual([
         {
+          id: "gemini-embedding-001",
+          displayName: "Gemini Embedding 001",
+          provider: "gemini",
+        },
+        {
+          id: "gemini-embedding-2-preview",
+          displayName: "Gemini Embedding 2 Preview",
+          provider: "gemini",
+        },
+        {
           id: "gemini-2.5-pro",
           displayName: "Gemini 2.5 Pro",
           provider: "gemini",
@@ -206,6 +269,8 @@ describe("gemini model fetchers", () => {
 
       const mockGet = vi.fn(async ({ model }: { model: string }) => {
         if (
+          model === "gemini-embedding-001" ||
+          model === "gemini-embedding-2-preview" ||
           model === "gemini-2.5-pro" ||
           model === "gemini-2.5-flash" ||
           model === "gemini-2.5-flash-lite" ||
@@ -236,6 +301,16 @@ describe("gemini model fetchers", () => {
         {
           id: "gemini-live-2.5-flash-native-audio",
           displayName: "Gemini Live 2.5 Flash Native Audio",
+          provider: "gemini",
+        },
+        {
+          id: "gemini-embedding-001",
+          displayName: "Gemini Embedding 001",
+          provider: "gemini",
+        },
+        {
+          id: "gemini-embedding-2-preview",
+          displayName: "Gemini Embedding 2 Preview",
           provider: "gemini",
         },
         {

@@ -8,6 +8,7 @@ import {
 } from "@shared";
 import { AlertTriangle } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useDefaultCredentialsEnabled } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
@@ -47,17 +48,16 @@ export function DefaultCredentialsWarning({
           <span>
             Default credentials
             {" - "}
-            <a
+            <ExternalDocsLink
               href={getDocsUrl(
                 DocsPage.PlatformDeployment,
                 "authentication--security:~:text=ARCHESTRA_AUTH_ADMIN_EMAIL",
               )}
-              target="_blank"
-              rel="noopener noreferrer"
               className="underline font-medium"
+              showIcon={false}
             >
               Fix
-            </a>
+            </ExternalDocsLink>
           </span>
         </p>
       </div>
@@ -91,17 +91,16 @@ export function DefaultCredentialsWarning({
           </div>
         </div>
         <p className="mt-1">
-          <a
+          <ExternalDocsLink
             href={getDocsUrl(
               DocsPage.PlatformDeployment,
               "authentication--security",
             )}
-            target="_blank"
-            rel="noopener noreferrer"
             className="inline-flex items-center underline"
+            showIcon={false}
           >
             Set ENV
-          </a>
+          </ExternalDocsLink>
           {alwaysShow ? (
             " to change"
           ) : (

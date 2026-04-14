@@ -1,6 +1,6 @@
 "use client";
 
-import { E2eTestId } from "@shared";
+import { type AgentScope, E2eTestId } from "@shared";
 import { Zap } from "lucide-react";
 import { useEffect } from "react";
 import {
@@ -25,7 +25,10 @@ interface TokenSelectProps {
   className?: string;
   /** Catalog ID to filter credentials - only shows credentials for the same catalog item */
   catalogId: string;
+  assignmentScope?: AgentScope;
+  assignmentTeamIds?: string[];
   shouldSetDefaultValue: boolean;
+  prefersEnterpriseManaged?: boolean;
 }
 
 /**
@@ -40,12 +43,21 @@ export function TokenSelect({
   disabled,
   className,
   catalogId,
+  assignmentScope,
+  assignmentTeamIds,
   shouldSetDefaultValue,
+  prefersEnterpriseManaged = false,
 }: TokenSelectProps) {
-  const groupedCredentials = useMcpServersGroupedByCatalog({ catalogId });
+  const groupedCredentials = useMcpServersGroupedByCatalog({
+    catalogId,
+    assignmentScope,
+    assignmentTeamIds,
+  });
 
   // Get credentials for this catalogId from the grouped response
   const mcpServers = groupedCredentials?.[catalogId] ?? [];
+  const teamCredentials = mcpServers.filter((server) => server.teamDetails);
+  const userCredentials = mcpServers.filter((server) => !server.teamDetails);
 
   const isLoading = !groupedCredentials;
 
@@ -59,7 +71,9 @@ export function TokenSelect({
   // biome-ignore lint/correctness/useExhaustiveDependencies: it's expected here to avoid unneeded invocations
   useEffect(() => {
     if (shouldSetDefaultValue && !value) {
-      if (mcpServers.length > 0) {
+      if (prefersEnterpriseManaged) {
+        onValueChange(DYNAMIC_CREDENTIAL_VALUE);
+      } else if (mcpServers.length > 0) {
         // Default to the first credential
         onValueChange(mcpServers[0].id);
       } else {
@@ -76,7 +90,7 @@ export function TokenSelect({
   if (staticCredentialOutsideOfGroupedCredentials) {
     return (
       <span className="text-xs text-muted-foreground">
-        Owner outside your team
+        Connection unavailable for this scope
       </span>
     );
   }
@@ -89,7 +103,7 @@ export function TokenSelect({
     >
       <SelectTrigger
         className={cn(
-          "h-fit! w-fit! bg-transparent! border-none! shadow-none! ring-0! outline-none! focus:ring-0! focus:outline-none! focus:border-none! p-0!",
+          "h-fit! w-fit! bg-transparent! border-none! shadow-none! ring-0! outline-none! focus:ring-0! focus:outline-none! focus:border-none! p-0! text-xs font-normal",
           className,
         )}
         size="sm"
@@ -98,34 +112,64 @@ export function TokenSelect({
         <SelectValue placeholder="Select connection..." />
       </SelectTrigger>
       <SelectContent>
-        {mcpServers.length > 0 && (
-          <>
-            <div className="text-xs text-muted-foreground ml-2">Static</div>
-            {mcpServers.map((server) => (
-              <SelectItem
-                key={server.id}
-                value={server.id}
-                className="cursor-pointer"
-                data-testid={E2eTestId.StaticCredentialToUse}
-              >
-                <div className="flex flex-col gap-1">
-                  <div className="flex gap-1 flex-wrap text-xs">
-                    {server.teamDetails
-                      ? server.teamDetails.name
-                      : server.ownerEmail || "Deleted user"}
-                  </div>
-                </div>
-              </SelectItem>
-            ))}
-            <Divider className="my-2" />
-          </>
-        )}
-        <SelectItem value={DYNAMIC_CREDENTIAL_VALUE} className="cursor-pointer">
+        <div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">
+          Dynamic
+        </div>
+        <SelectItem
+          value={DYNAMIC_CREDENTIAL_VALUE}
+          className="cursor-pointer"
+          description={
+            prefersEnterpriseManaged
+              ? "Ask your identity provider for a runtime credential for this server."
+              : "Use the caller's available runtime credential instead of a fixed connection."
+          }
+        >
           <div className="flex items-center gap-1">
             <Zap className="h-3! w-3! text-amber-500" />
-            <span className="text-xs font-medium">Resolve at call time</span>
+            <span>Resolve at call time</span>
           </div>
         </SelectItem>
+        {mcpServers.length > 0 && (
+          <>
+            <Divider className="my-2" />
+            {teamCredentials.length > 0 && (
+              <>
+                <div className="px-2 pt-1 pb-1 text-xs text-muted-foreground">
+                  Static - Team Credentials
+                </div>
+                {teamCredentials.map((server) => (
+                  <SelectItem
+                    key={server.id}
+                    value={server.id}
+                    className="cursor-pointer"
+                    data-testid={E2eTestId.StaticCredentialToUse}
+                    description={`Shared with team ${server.teamDetails?.name ?? "Unknown team"}`}
+                  >
+                    {server.teamDetails?.name ?? "Unknown team"}
+                  </SelectItem>
+                ))}
+              </>
+            )}
+            {userCredentials.length > 0 && (
+              <>
+                <div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">
+                  Static - User Credentials
+                </div>
+                {userCredentials.map((server) => (
+                  <SelectItem
+                    key={server.id}
+                    value={server.id}
+                    className="cursor-pointer"
+                    data-testid={E2eTestId.StaticCredentialToUse}
+                    description={`Owned by ${server.ownerEmail || "Deleted user"}`}
+                  >
+                    {server.ownerEmail || "Deleted user"}
+                  </SelectItem>
+                ))}
+              </>
+            )}
+          </>
+        )}
       </SelectContent>
     </Select>
   );

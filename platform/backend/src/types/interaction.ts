@@ -6,8 +6,10 @@ import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 import { DualLlmAnalysisSchema } from "./dual-llm";
+import { UnsafeContextBoundarySchema } from "./interaction-guardrails";
 import {
   Anthropic,
+  Azure,
   Bedrock,
   Cerebras,
   Cohere,
@@ -55,6 +57,8 @@ export const InteractionRequestSchema = z.union([
   Zhipuai.API.ChatCompletionRequestSchema,
   DeepSeek.API.ChatCompletionRequestSchema,
   Minimax.API.ChatCompletionRequestSchema,
+  Azure.API.ChatCompletionRequestSchema,
+  Azure.API.ResponsesRequestSchema,
 ]);
 
 export const InteractionResponseSchema = z.union([
@@ -75,12 +79,15 @@ export const InteractionResponseSchema = z.union([
   Zhipuai.API.ChatCompletionResponseSchema,
   DeepSeek.API.ChatCompletionResponseSchema,
   Minimax.API.ChatCompletionResponseSchema,
+  Azure.API.ChatCompletionResponseSchema,
+  Azure.API.ResponsesResponseSchema,
 ]);
 
 const extendedFields = {
   source: InteractionSourceSchema.nullable().optional(),
   toonSkipReason: ToonSkipReasonSchema.nullable().optional(),
   dualLlmAnalyses: z.array(DualLlmAnalysisSchema).nullable().optional(),
+  unsafeContextBoundary: UnsafeContextBoundarySchema.nullable().optional(),
 };
 
 /**
@@ -256,6 +263,25 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest:
       Minimax.API.ChatCompletionRequestSchema.nullable().optional(),
     response: Minimax.API.ChatCompletionResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionSchema.extend({
+    type: z.enum(["azure:chatCompletions"]),
+    request: Azure.API.ChatCompletionRequestSchema,
+    processedRequest:
+      Azure.API.ChatCompletionRequestSchema.nullable().optional(),
+    response: Azure.API.ChatCompletionResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionSchema.extend({
+    type: z.enum(["azure:responses"]),
+    request: Azure.API.ResponsesRequestSchema,
+    processedRequest: Azure.API.ResponsesRequestSchema.nullable().optional(),
+    response: Azure.API.ResponsesResponseSchema,
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),

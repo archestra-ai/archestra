@@ -1,0 +1,46 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/azure/openai/responses",
+    "headers": {
+      "Authorization": {
+        "contains": "azure-responses-token-cost-limit-test"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "resp_azure_token_limit",
+      "object": "response",
+      "created_at": 1234567890,
+      "status": "completed",
+      "model": "test-azure-responses-cost-limit",
+      "output": [
+        {
+          "id": "msg_azure_token_limit",
+          "type": "message",
+          "role": "assistant",
+          "status": "completed",
+          "content": [
+            {
+              "type": "output_text",
+              "text": "Azure responses token cost limit test.",
+              "annotations": []
+            }
+          ]
+        }
+      ],
+      "usage": {
+        "input_tokens": 100,
+        "input_tokens_details": { "cached_tokens": 0 },
+        "output_tokens": 20,
+        "output_tokens_details": { "reasoning_tokens": 0 },
+        "total_tokens": 120
+      }
+    }
+  }
+}

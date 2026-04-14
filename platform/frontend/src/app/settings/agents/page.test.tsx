@@ -27,7 +27,7 @@ vi.mock("next/link", () => ({
   }) => <a href={href}>{children}</a>,
 }));
 
-vi.mock("@/components/chat-api-key-form", () => ({
+vi.mock("@/components/llm-provider-api-key-form", () => ({
   PROVIDER_CONFIG: {
     vertex_ai: {
       icon: "/vertex.svg",
@@ -135,8 +135,8 @@ vi.mock("@/lib/agent.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/chat/chat-models.query", () => ({
-  useChatModels: () => ({
+vi.mock("@/lib/llm-models.query", () => ({
+  useLlmModels: () => ({
     data: [
       {
         id: "gemini-2.5-pro",
@@ -148,8 +148,8 @@ vi.mock("@/lib/chat/chat-models.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/chat/chat-settings.query", () => ({
-  useAvailableChatApiKeys: () => ({
+vi.mock("@/lib/llm-provider-api-keys.query", () => ({
+  useAvailableLlmProviderApiKeys: () => ({
     data: mockApiKeys,
   }),
 }));
@@ -202,9 +202,9 @@ beforeEach(() => {
   mockApiKeys = [
     {
       id: "key-1",
-      name: "gemini - org_wide",
+      name: "gemini - org",
       provider: "vertex_ai",
-      scope: "org_wide",
+      scope: "org",
     },
   ];
   mockAgents = [];

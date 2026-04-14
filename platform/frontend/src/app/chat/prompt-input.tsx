@@ -30,10 +30,10 @@ import {
   usePromptInputAttachments,
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
-import { ChatApiKeySelector } from "@/components/chat/chat-api-key-selector";
 import { ContextIndicator } from "@/components/chat/context-indicator";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { KnowledgeBaseUploadIndicator } from "@/components/chat/knowledge-base-upload-indicator";
+import { LlmProviderApiKeySelector } from "@/components/chat/llm-provider-api-key-selector";
 import {
   ModelSelector,
   providerToLogoProvider,
@@ -93,7 +93,7 @@ interface ArchestraPromptInputProps {
   maxContextLength?: number | null;
   /** Input modalities supported by the selected model (for file type filtering) */
   inputModalities?: ModelInputModality[] | null;
-  /** Agent's configured LLM API key ID - passed to ChatApiKeySelector */
+  /** Agent's configured LLM API key ID - passed to LlmProviderApiKeySelector */
   agentLlmApiKeyId?: string | null;
   /** Disable the submit button (e.g., when Playwright setup overlay is visible) */
   submitDisabled?: boolean;
@@ -380,7 +380,7 @@ const PromptInputContent = ({
                             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
                               Provider API Key
                             </p>
-                            <ChatApiKeySelector
+                            <LlmProviderApiKeySelector
                               conversationId={conversationId}
                               currentProvider={currentProvider}
                               currentConversationChatApiKeyId={
@@ -516,7 +516,7 @@ const PromptInputContent = ({
               ) : (
                 <div className="flex items-center h-8 rounded-full border border-border bg-muted/50 overflow-hidden">
                   {(conversationId || onApiKeyChange) && (
-                    <ChatApiKeySelector
+                    <LlmProviderApiKeySelector
                       conversationId={conversationId}
                       currentProvider={currentProvider}
                       currentConversationChatApiKeyId={

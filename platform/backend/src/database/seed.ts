@@ -19,8 +19,8 @@ import db, { schema } from "@/database";
 import logger from "@/logging";
 import {
   AgentModel,
-  ChatApiKeyModel,
   InternalMcpCatalogModel,
+  LlmProviderApiKeyModel,
   McpHttpSessionModel,
   MemberModel,
   OrganizationModel,
@@ -61,6 +61,103 @@ export async function seedDefaultUserAndOrg(
   }
   logger.info("Seeded admin user and default organization");
   return user;
+}
+
+export async function syncBuiltInAgents(): Promise<void> {
+  const organizations = await getOrganizationsForBuiltInAgentSync();
+
+  const builtInAgents = [
+    {
+      builtInAgentId: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+      name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+      description:
+        "Analyzes tool metadata with AI to generate deterministic security policies for handling untrusted data",
+      systemPrompt: POLICY_CONFIG_SYSTEM_PROMPT,
+      builtInAgentConfig: {
+        name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+        autoConfigureOnToolDiscovery: false,
+      } as const,
+    },
+    {
+      builtInAgentId: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+      name: BUILT_IN_AGENT_NAMES.DUAL_LLM_MAIN,
+      description:
+        "Privileged built-in agent that questions quarantined tool results and writes the final safe summary",
+      systemPrompt: DUAL_LLM_MAIN_SYSTEM_PROMPT,
+      builtInAgentConfig: {
+        name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+        maxRounds: 5,
+      } as const,
+    },
+    {
+      builtInAgentId: BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
+      name: BUILT_IN_AGENT_NAMES.DUAL_LLM_QUARANTINE,
+      description:
+        "Quarantine built-in agent that inspects untrusted tool output and returns constrained answers only",
+      systemPrompt: DUAL_LLM_QUARANTINE_SYSTEM_PROMPT,
+      builtInAgentConfig: {
+        name: BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
+      } as const,
+    },
+  ];
+
+  for (const organization of organizations) {
+    for (const builtInAgent of builtInAgents) {
+      const existing = await AgentModel.getBuiltInAgent(
+        builtInAgent.builtInAgentId,
+        organization.id,
+      );
+
+      if (!existing) {
+        await db.insert(schema.agentsTable).values({
+          organizationId: organization.id,
+          name: builtInAgent.name,
+          agentType: "agent",
+          scope: "org",
+          description: builtInAgent.description,
+          systemPrompt: builtInAgent.systemPrompt,
+          builtInAgentConfig: builtInAgent.builtInAgentConfig,
+        });
+        logger.info(
+          {
+            builtInAgentId: builtInAgent.builtInAgentId,
+            organizationId: organization.id,
+          },
+          "Seeded built-in agent",
+        );
+        continue;
+      }
+
+      if (
+        shouldSyncBuiltInAgentSystemPrompt({
+          builtInAgentId: builtInAgent.builtInAgentId,
+          systemPrompt: existing.systemPrompt,
+        })
+      ) {
+        await db
+          .update(schema.agentsTable)
+          .set({ systemPrompt: builtInAgent.systemPrompt })
+          .where(eq(schema.agentsTable.id, existing.id));
+
+        logger.info(
+          {
+            builtInAgentId: builtInAgent.builtInAgentId,
+            organizationId: organization.id,
+          },
+          "Updated built-in agent legacy system prompt",
+        );
+        continue;
+      }
+
+      logger.info(
+        {
+          builtInAgentId: builtInAgent.builtInAgentId,
+          organizationId: organization.id,
+        },
+        "Built-in agent already exists, skipping seed",
+      );
+    }
+  }
 }
 
 /**
@@ -262,10 +359,10 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
     }
 
     // Check if API key already exists for this provider
-    const existing = await ChatApiKeyModel.findByScope(
+    const existing = await LlmProviderApiKeyModel.findByScope(
       org.id,
       provider,
-      "org_wide",
+      "org",
     );
 
     if (existing) {
@@ -281,12 +378,12 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
     );
 
     // Create the API key
-    const apiKey = await ChatApiKeyModel.create({
+    const apiKey = await LlmProviderApiKeyModel.create({
       organizationId: org.id,
       name: getProviderDisplayName(provider),
       provider: provider,
       secretId: secret.id,
-      scope: "org_wide",
+      scope: "org",
       userId: null,
       teamId: null,
     });
@@ -349,6 +446,7 @@ function getProviderDisplayName(provider: SupportedProvider): string {
     deepseek: "DeepSeek",
     bedrock: "AWS Bedrock",
     minimax: "MiniMax",
+    azure: "Azure AI Foundry",
   };
   return displayNames[provider];
 }
@@ -357,7 +455,7 @@ function getProviderDisplayName(provider: SupportedProvider): string {
  * Migrates existing Playwright tool assignments to use dynamic credentials.
  * Static credentials break user isolation since multiple users would share
  * the same browser session. This ensures all Playwright assignments use
- * useDynamicTeamCredential=true.
+ * credentialResolutionMode="dynamic".
  */
 async function migratePlaywrightToolsToDynamicCredential(): Promise<void> {
   // Find all tool IDs belonging to the Playwright catalog
@@ -374,14 +472,13 @@ async function migratePlaywrightToolsToDynamicCredential(): Promise<void> {
   const result = await db
     .update(schema.agentToolsTable)
     .set({
-      useDynamicTeamCredential: true,
-      credentialSourceMcpServerId: null,
-      executionSourceMcpServerId: null,
+      credentialResolutionMode: "dynamic",
+      mcpServerId: null,
     })
     .where(
       and(
         inArray(schema.agentToolsTable.toolId, playwrightToolIds),
-        eq(schema.agentToolsTable.useDynamicTeamCredential, false),
+        eq(schema.agentToolsTable.credentialResolutionMode, "static"),
       ),
     );
 
@@ -416,78 +513,6 @@ async function migrateSecretsToEncrypted(): Promise<void> {
       );
     }
   });
-}
-
-/**
- * Seeds the Policy Configuration Subagent built-in agent for fresh installs.
- * Migration 0159 creates this agent for existing organizations, but new
- * deployments (fresh DB after the migration) need it seeded here.
- */
-async function seedBuiltInAgents(): Promise<void> {
-  const org = await OrganizationModel.getOrCreateDefaultOrganization();
-
-  const builtInAgents = [
-    {
-      builtInAgentId: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-      name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
-      description:
-        "Analyzes tool metadata with AI to generate deterministic security policies for handling untrusted data",
-      systemPrompt: POLICY_CONFIG_SYSTEM_PROMPT,
-      builtInAgentConfig: {
-        name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-        autoConfigureOnToolAssignment: false,
-      } as const,
-    },
-    {
-      builtInAgentId: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
-      name: BUILT_IN_AGENT_NAMES.DUAL_LLM_MAIN,
-      description:
-        "Privileged built-in agent that questions quarantined tool results and writes the final safe summary",
-      systemPrompt: DUAL_LLM_MAIN_SYSTEM_PROMPT,
-      builtInAgentConfig: {
-        name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
-        maxRounds: 5,
-      } as const,
-    },
-    {
-      builtInAgentId: BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
-      name: BUILT_IN_AGENT_NAMES.DUAL_LLM_QUARANTINE,
-      description:
-        "Quarantine built-in agent that inspects untrusted tool output and returns constrained answers only",
-      systemPrompt: DUAL_LLM_QUARANTINE_SYSTEM_PROMPT,
-      builtInAgentConfig: {
-        name: BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
-      } as const,
-    },
-  ];
-
-  for (const builtInAgent of builtInAgents) {
-    const existing = await AgentModel.getBuiltInAgent(
-      builtInAgent.builtInAgentId,
-      org.id,
-    );
-    if (existing) {
-      logger.info(
-        { builtInAgentId: builtInAgent.builtInAgentId },
-        "Built-in agent already exists, skipping seed",
-      );
-      continue;
-    }
-
-    await db.insert(schema.agentsTable).values({
-      organizationId: org.id,
-      name: builtInAgent.name,
-      agentType: "agent",
-      scope: "org",
-      description: builtInAgent.description,
-      systemPrompt: builtInAgent.systemPrompt,
-      builtInAgentConfig: builtInAgent.builtInAgentConfig,
-    });
-    logger.info(
-      { builtInAgentId: builtInAgent.builtInAgentId },
-      "Seeded built-in agent",
-    );
-  }
 }
 
 /**
@@ -540,7 +565,7 @@ export async function seedRequiredStartingData(): Promise<void> {
   // Create default agents before seeding internal agents
   await AgentModel.getMCPGatewayOrCreateDefault();
   await AgentModel.getLLMProxyOrCreateDefault();
-  await seedBuiltInAgents();
+  await syncBuiltInAgents();
   await seedArchestraCatalogAndTools();
   await seedPlaywrightCatalog();
   await migratePlaywrightToolsToDynamicCredential();
@@ -552,3 +577,61 @@ export async function seedRequiredStartingData(): Promise<void> {
   // Clean up orphaned MCP HTTP sessions (older than 24h)
   await McpHttpSessionModel.deleteExpired();
 }
+
+async function getOrganizationsForBuiltInAgentSync(): Promise<
+  Array<{ id: string }>
+> {
+  const organizations = await db
+    .select({ id: schema.organizationsTable.id })
+    .from(schema.organizationsTable);
+
+  if (organizations.length > 0) {
+    return organizations;
+  }
+
+  const organization = await OrganizationModel.getOrCreateDefaultOrganization();
+  return [{ id: organization.id }];
+}
+
+function shouldSyncBuiltInAgentSystemPrompt(params: {
+  builtInAgentId: string;
+  systemPrompt: string | null;
+}): boolean {
+  if (params.systemPrompt === null) {
+    return false;
+  }
+
+  return (
+    params.builtInAgentId === BUILT_IN_AGENT_IDS.POLICY_CONFIG &&
+    params.systemPrompt === LEGACY_POLICY_CONFIG_SYSTEM_PROMPT
+  );
+}
+
+const LEGACY_POLICY_CONFIG_SYSTEM_PROMPT = `Analyze this MCP tool and determine security policies:
+
+Tool: {tool.name}
+Description: {tool.description}
+MCP Server: {mcpServerName}
+Parameters: {tool.parameters}
+
+Determine:
+
+1. toolInvocationAction (enum) - When should this tool be allowed?
+   - "allow_when_context_is_untrusted": Safe to invoke even with untrusted data (read-only, doesn't leak sensitive data)
+   - "block_when_context_is_untrusted": Only invoke when context is trusted (could leak data if untrusted input is present)
+   - "block_always": Never invoke automatically (writes data, executes code, sends data externally)
+
+2. trustedDataAction (enum) - How should the tool's results be treated?
+   - "mark_as_trusted": Internal systems (databases, APIs, dev tools like list-endpoints/get-config)
+   - "mark_as_untrusted": External/filesystem data where exact values are safe to use directly
+   - "sanitize_with_dual_llm": Untrusted data that needs summarization without exposing exact values
+   - "block_always": Highly sensitive or dangerous output that should be blocked entirely
+
+Examples:
+- Internal dev tools: invocation="allow_when_context_is_untrusted", result="mark_as_trusted"
+- Database queries: invocation="allow_when_context_is_untrusted", result="mark_as_trusted"
+- File reads (code/config): invocation="allow_when_context_is_untrusted", result="mark_as_untrusted"
+- Web search/scraping: invocation="allow_when_context_is_untrusted", result="sanitize_with_dual_llm"
+- File writes: invocation="block_always", result="mark_as_trusted"
+- External APIs (raw data): invocation="block_when_context_is_untrusted", result="mark_as_untrusted"
+- Code execution: invocation="block_always", result="mark_as_untrusted"`;

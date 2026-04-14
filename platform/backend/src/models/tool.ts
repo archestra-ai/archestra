@@ -2,6 +2,7 @@ import {
   AGENT_TOOL_PREFIX,
   ARCHESTRA_MCP_CATALOG_ID,
   ARCHESTRA_TOOL_SHORT_NAMES,
+  BUILT_IN_AGENT_IDS,
   DEFAULT_ARCHESTRA_TOOL_NAMES,
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
@@ -15,6 +16,7 @@ import {
   count,
   desc,
   eq,
+  getTableColumns,
   ilike,
   inArray,
   isNotNull,
@@ -35,6 +37,7 @@ import {
 } from "@/database/utils/pagination";
 import logger from "@/logging";
 import type {
+  AssignedTool,
   ExtendedTool,
   InsertTool,
   McpToolAssignment,
@@ -409,22 +412,26 @@ class ToolModel {
    * Get all tools for an agent.
    * All tools are linked via the agent_tools junction table.
    */
-  static async getToolsByAgent(agentId: string): Promise<Tool[]> {
-    const assignedToolIds = await AgentToolModel.findToolIdsByAgent(agentId);
+  static async getToolsByAgent(agentId: string): Promise<AssignedTool[]> {
     const brandedKnowledgeToolName = archestraMcpBranding.getToolName(
       TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
     );
 
-    if (assignedToolIds.length === 0) {
-      return [];
-    }
-
     const tools = await db
-      .select()
-      .from(schema.toolsTable)
+      .select({
+        ...getTableColumns(schema.toolsTable),
+        mcpServerId: schema.agentToolsTable.mcpServerId,
+        credentialResolutionMode:
+          schema.agentToolsTable.credentialResolutionMode,
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
       .where(
         and(
-          inArray(schema.toolsTable.id, assignedToolIds),
+          eq(schema.agentToolsTable.agentId, agentId),
           // Always hide query_knowledge_sources from UI — it's auto-injected behind the scenes
           ne(schema.toolsTable.name, brandedKnowledgeToolName),
         ),
@@ -595,6 +602,9 @@ class ToolModel {
       for (const tool of insertedTools) {
         await ToolModel.createDefaultPolicies(tool.id);
       }
+
+      // Auto-configure policies via LLM if enabled (fire-and-forget)
+      ToolModel.triggerAutoConfigureIfEnabled(insertedTools.map((t) => t.id));
 
       // If some tools weren't inserted due to conflict, fetch them
       if (insertedTools.length < toolsToInsert.length) {
@@ -906,12 +916,9 @@ class ToolModel {
     const mcpTools = await db
       .select({
         toolName: schema.toolsTable.name,
-        credentialSourceMcpServerId:
-          schema.agentToolsTable.credentialSourceMcpServerId,
-        executionSourceMcpServerId:
-          schema.agentToolsTable.executionSourceMcpServerId,
-        useDynamicTeamCredential:
-          schema.agentToolsTable.useDynamicTeamCredential,
+        mcpServerId: schema.agentToolsTable.mcpServerId,
+        credentialResolutionMode:
+          schema.agentToolsTable.credentialResolutionMode,
         catalogId: schema.toolsTable.catalogId,
         catalogName: schema.internalMcpCatalogTable.name,
       })
@@ -952,12 +959,9 @@ class ToolModel {
     const mcpTools = await db
       .select({
         toolName: schema.toolsTable.name,
-        credentialSourceMcpServerId:
-          schema.agentToolsTable.credentialSourceMcpServerId,
-        executionSourceMcpServerId:
-          schema.agentToolsTable.executionSourceMcpServerId,
-        useDynamicTeamCredential:
-          schema.agentToolsTable.useDynamicTeamCredential,
+        mcpServerId: schema.agentToolsTable.mcpServerId,
+        credentialResolutionMode:
+          schema.agentToolsTable.credentialResolutionMode,
         catalogId: schema.toolsTable.catalogId,
         catalogName: schema.internalMcpCatalogTable.name,
       })
@@ -1337,6 +1341,9 @@ class ToolModel {
         await ToolModel.createDefaultPolicies(tool.id);
       }
 
+      // Auto-configure policies via LLM if enabled (fire-and-forget)
+      ToolModel.triggerAutoConfigureIfEnabled(insertedTools.map((t) => t.id));
+
       created.push(...insertedTools);
     }
 
@@ -1409,11 +1416,8 @@ class ToolModel {
               await db.insert(schema.agentToolsTable).values({
                 agentId: agentTool.agentId,
                 toolId: targetTool.id,
-                credentialSourceMcpServerId:
-                  agentTool.credentialSourceMcpServerId,
-                executionSourceMcpServerId:
-                  agentTool.executionSourceMcpServerId,
-                useDynamicTeamCredential: agentTool.useDynamicTeamCredential,
+                mcpServerId: agentTool.mcpServerId,
+                credentialResolutionMode: agentTool.credentialResolutionMode,
               });
             }
           }
@@ -1794,13 +1798,18 @@ class ToolModel {
       );
     }
 
-    // Filter by origin (either "llm-proxy" or a catalogId)
+    // Filter by origin ("llm-proxy", "agent", or a catalogId)
     if (filters?.origin) {
       if (filters.origin === "llm-proxy") {
         // LLM Proxy tools: shared proxy tools with agentId=NULL, catalogId=NULL, no delegation
         toolWhereConditions.push(isNull(schema.toolsTable.catalogId));
         toolWhereConditions.push(isNull(schema.toolsTable.agentId));
         toolWhereConditions.push(isNull(schema.toolsTable.delegateToAgentId));
+      } else if (filters.origin === "agent") {
+        // Agent delegation tools have a non-null delegateToAgentId
+        toolWhereConditions.push(
+          isNotNull(schema.toolsTable.delegateToAgentId),
+        );
       } else {
         // MCP tools have a catalogId
         toolWhereConditions.push(
@@ -1877,9 +1886,8 @@ class ToolModel {
         orderByClause = direction(schema.toolsTable.name);
         break;
       case "origin":
-        // Sort by catalogId (null values for LLM Proxy)
         orderByClause = direction(
-          sql`CASE WHEN ${schema.toolsTable.catalogId} IS NULL THEN '2-llm-proxy' ELSE '1-mcp' END`,
+          sql`CASE WHEN ${schema.toolsTable.catalogId} IS NOT NULL THEN '1-mcp' WHEN ${schema.toolsTable.delegateToAgentId} IS NOT NULL THEN '2-agent' ELSE '3-llm-proxy' END`,
         );
         break;
       case "assignmentCount":
@@ -1959,14 +1967,11 @@ class ToolModel {
         agentToolId: schema.agentToolsTable.id,
         agentId: schema.agentsTable.id,
         agentName: schema.agentsTable.name,
-        credentialSourceMcpServerId:
-          schema.agentToolsTable.credentialSourceMcpServerId,
+        mcpServerId: schema.agentToolsTable.mcpServerId,
         credentialOwnerEmail: credentialOwnerAlias.email,
-        executionSourceMcpServerId:
-          schema.agentToolsTable.executionSourceMcpServerId,
         executionOwnerEmail: executionOwnerAlias.email,
-        useDynamicTeamCredential:
-          schema.agentToolsTable.useDynamicTeamCredential,
+        credentialResolutionMode:
+          schema.agentToolsTable.credentialResolutionMode,
       })
       .from(schema.agentToolsTable)
       .innerJoin(
@@ -1975,10 +1980,7 @@ class ToolModel {
       )
       .leftJoin(
         credentialMcpServerAlias,
-        eq(
-          schema.agentToolsTable.credentialSourceMcpServerId,
-          credentialMcpServerAlias.id,
-        ),
+        eq(schema.agentToolsTable.mcpServerId, credentialMcpServerAlias.id),
       )
       .leftJoin(
         credentialOwnerAlias,
@@ -1986,10 +1988,7 @@ class ToolModel {
       )
       .leftJoin(
         executionMcpServerAlias,
-        eq(
-          schema.agentToolsTable.executionSourceMcpServerId,
-          executionMcpServerAlias.id,
-        ),
+        eq(schema.agentToolsTable.mcpServerId, executionMcpServerAlias.id),
       )
       .leftJoin(
         executionOwnerAlias,
@@ -2003,11 +2002,10 @@ class ToolModel {
       Array<{
         agentToolId: string;
         agent: { id: string; name: string };
-        credentialSourceMcpServerId: string | null;
+        mcpServerId: string | null;
         credentialOwnerEmail: string | null;
-        executionSourceMcpServerId: string | null;
         executionOwnerEmail: string | null;
-        useDynamicTeamCredential: boolean;
+        credentialResolutionMode: "static" | "dynamic" | "enterprise_managed";
       }>
     >();
 
@@ -2018,12 +2016,8 @@ class ToolModel {
       // If not accessible, don't include the owner email (frontend will show "Owner outside your team")
       const credentialServerAccessible =
         !accessibleMcpServerIds ||
-        !assignment.credentialSourceMcpServerId ||
-        accessibleMcpServerIds.has(assignment.credentialSourceMcpServerId);
-      const executionServerAccessible =
-        !accessibleMcpServerIds ||
-        !assignment.executionSourceMcpServerId ||
-        accessibleMcpServerIds.has(assignment.executionSourceMcpServerId);
+        !assignment.mcpServerId ||
+        accessibleMcpServerIds.has(assignment.mcpServerId);
 
       existing.push({
         agentToolId: assignment.agentToolId,
@@ -2031,15 +2025,14 @@ class ToolModel {
           id: assignment.agentId,
           name: assignment.agentName,
         },
-        credentialSourceMcpServerId: assignment.credentialSourceMcpServerId,
+        mcpServerId: assignment.mcpServerId,
         credentialOwnerEmail: credentialServerAccessible
           ? assignment.credentialOwnerEmail
           : null,
-        executionSourceMcpServerId: assignment.executionSourceMcpServerId,
-        executionOwnerEmail: executionServerAccessible
+        executionOwnerEmail: credentialServerAccessible
           ? assignment.executionOwnerEmail
           : null,
-        useDynamicTeamCredential: assignment.useDynamicTeamCredential,
+        credentialResolutionMode: assignment.credentialResolutionMode,
       });
       assignmentsByToolId.set(assignment.toolId, existing);
     }
@@ -2107,6 +2100,53 @@ class ToolModel {
       TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
     );
     return tools.filter((t) => t.name !== brandedKnowledgeToolName);
+  }
+
+  /**
+   * Fire-and-forget: check if auto-configure is enabled, then run LLM-based
+   * policy analysis for newly discovered tools.
+   */
+  private static triggerAutoConfigureIfEnabled(toolIds: string[]) {
+    if (toolIds.length === 0) return;
+
+    db.select({ id: schema.organizationsTable.id })
+      .from(schema.organizationsTable)
+      .limit(1)
+      .then(async (rows) => {
+        if (rows.length === 0) return;
+        const organizationId = rows[0].id;
+
+        const { policyConfigurationService } = await import(
+          "@/agents/subagents/policy-configuration"
+        );
+        const { default: AgentModel } = await import("./agent");
+
+        const builtInAgent = await AgentModel.getBuiltInAgent(
+          BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+          organizationId,
+        );
+        const config = builtInAgent?.builtInAgentConfig;
+        if (
+          config?.name !== BUILT_IN_AGENT_IDS.POLICY_CONFIG ||
+          !config.autoConfigureOnToolDiscovery
+        ) {
+          return;
+        }
+
+        await policyConfigurationService.configurePoliciesForTools({
+          toolIds,
+          organizationId,
+        });
+      })
+      .catch((error) => {
+        logger.error(
+          {
+            toolIds,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          "Failed to trigger auto-configure for discovered tools",
+        );
+      });
   }
 }
 

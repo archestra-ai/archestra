@@ -1907,7 +1907,7 @@ describe("AgentModel", () => {
         agentType: "agent",
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolAssignment: false,
+          autoConfigureOnToolDiscovery: false,
         },
       });
 
@@ -1919,7 +1919,7 @@ describe("AgentModel", () => {
       expect(result?.builtInAgentConfig).toEqual(
         expect.objectContaining({
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolAssignment: false,
+          autoConfigureOnToolDiscovery: false,
         }),
       );
     });
@@ -1979,7 +1979,7 @@ describe("AgentModel", () => {
         agentType: "agent",
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolAssignment: false,
+          autoConfigureOnToolDiscovery: false,
         },
       });
 
@@ -2004,7 +2004,7 @@ describe("AgentModel", () => {
         agentType: "agent",
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolAssignment: false,
+          autoConfigureOnToolDiscovery: false,
         },
       });
 
@@ -2029,7 +2029,7 @@ describe("AgentModel", () => {
         agentType: "agent",
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolAssignment: false,
+          autoConfigureOnToolDiscovery: false,
         },
       });
 
@@ -2065,7 +2065,7 @@ describe("AgentModel", () => {
         agentType: "agent",
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolAssignment: false,
+          autoConfigureOnToolDiscovery: false,
         },
       });
 
@@ -2172,7 +2172,7 @@ describe("AgentModel", () => {
         agentType: "agent",
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolAssignment: false,
+          autoConfigureOnToolDiscovery: false,
         },
       });
 
@@ -2522,6 +2522,143 @@ describe("AgentModel", () => {
       const result = await AgentModel.findByIdsForPermissionCheck([agent.id]);
 
       expect(result.get(agent.id)?.authorId).toBeNull();
+    });
+  });
+
+  describe("slug generation", () => {
+    test("generates slug from name for mcp_gateway", async () => {
+      const agent = await AgentModel.create({
+        name: "My Test Gateway",
+        agentType: "mcp_gateway",
+        teams: [],
+        scope: "org",
+      });
+
+      expect(agent.slug).toBe("my-test-gateway");
+    });
+
+    test("does not generate slug for non-mcp_gateway agents", async () => {
+      const agent = await AgentModel.create({
+        name: "My Agent",
+        agentType: "agent",
+        teams: [],
+        scope: "org",
+      });
+
+      expect(agent.slug).toBeNull();
+    });
+
+    test("generates unique slug when name collides", async () => {
+      const agent1 = await AgentModel.create({
+        name: "Duplicate Name",
+        agentType: "mcp_gateway",
+        teams: [],
+        scope: "org",
+      });
+      const agent2 = await AgentModel.create({
+        name: "Duplicate Name",
+        agentType: "mcp_gateway",
+        teams: [],
+        scope: "org",
+      });
+
+      expect(agent1.slug).toBe("duplicate-name");
+      expect(agent2.slug).not.toBe(agent1.slug);
+      expect(agent2.slug).toMatch(/^duplicate-name-[a-f0-9]{6}$/);
+    });
+
+    test("handles special characters in name", async () => {
+      const agent = await AgentModel.create({
+        name: "Test @#$ Gateway!",
+        agentType: "mcp_gateway",
+        teams: [],
+        scope: "org",
+      });
+
+      expect(agent.slug).toBe("test-gateway");
+    });
+  });
+
+  describe("resolveIdFromIdOrSlug", () => {
+    test("returns null for non-existent UUID", async () => {
+      const uuid = "f47ac10b-58cc-4372-a567-0e02b2c3d479";
+      const result = await AgentModel.resolveIdFromIdOrSlug(uuid);
+      expect(result).toBeNull();
+    });
+
+    test("returns ID for existing UUID", async () => {
+      const agent = await AgentModel.create({
+        name: "UUID Resolve Test",
+        agentType: "mcp_gateway",
+        teams: [],
+        scope: "org",
+      });
+      const result = await AgentModel.resolveIdFromIdOrSlug(agent.id);
+      expect(result).toBe(agent.id);
+    });
+
+    test("resolves slug to agent ID", async () => {
+      const agent = await AgentModel.create({
+        name: "Slug Resolve Test",
+        agentType: "mcp_gateway",
+        teams: [],
+        scope: "org",
+      });
+
+      expect(agent.slug).not.toBeNull();
+      const result = await AgentModel.resolveIdFromIdOrSlug(
+        agent.slug as string,
+      );
+      expect(result).toBe(agent.id);
+    });
+
+    test("returns null for non-existent slug", async () => {
+      const result =
+        await AgentModel.resolveIdFromIdOrSlug("non-existent-slug");
+      expect(result).toBeNull();
+    });
+  });
+
+  describe("passthroughHeaders", () => {
+    test("persists passthrough headers on create", async () => {
+      const agent = await AgentModel.create({
+        name: "Gateway With Headers",
+        agentType: "mcp_gateway",
+        scope: "org",
+        teams: [],
+        passthroughHeaders: ["x-correlation-id", "x-tenant-id"],
+      });
+
+      expect(agent.passthroughHeaders).toEqual([
+        "x-correlation-id",
+        "x-tenant-id",
+      ]);
+
+      const fetched = await AgentModel.findById(agent.id);
+      expect(fetched?.passthroughHeaders).toEqual([
+        "x-correlation-id",
+        "x-tenant-id",
+      ]);
+    });
+
+    test("persists passthrough headers on update", async () => {
+      const agent = await AgentModel.create({
+        name: "Gateway Update Headers",
+        agentType: "mcp_gateway",
+        scope: "org",
+        teams: [],
+      });
+
+      expect(agent.passthroughHeaders).toBeNull();
+
+      const updated = await AgentModel.update(agent.id, {
+        passthroughHeaders: ["x-request-id"],
+      });
+
+      expect(updated?.passthroughHeaders).toEqual(["x-request-id"]);
+
+      const fetched = await AgentModel.findById(agent.id);
+      expect(fetched?.passthroughHeaders).toEqual(["x-request-id"]);
     });
   });
 });

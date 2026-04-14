@@ -43,7 +43,6 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
-  SidebarRail,
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
@@ -84,8 +83,7 @@ const headerNavItems: NavItem[] = [
     title: "New Chat",
     url: "/chat",
     icon: MessageCircle,
-    customIsActive: (pathname: string, searchParams: URLSearchParams) =>
-      pathname === "/chat" && !searchParams.get("conversation"),
+    customIsActive: (pathname: string) => pathname === "/chat",
   },
 ];
 
@@ -102,6 +100,12 @@ const contentNavGroups: NavGroup[] = [
           pathname.startsWith("/agents") &&
           !pathname.startsWith("/agents/triggers"),
         subItems: [
+          {
+            title: "Scheduled",
+            url: "/scheduled-tasks",
+            customIsActive: (pathname: string) =>
+              pathname.startsWith("/scheduled-tasks"),
+          },
           {
             title: "Triggers",
             url: "/agents/triggers",
@@ -130,10 +134,10 @@ const contentNavGroups: NavGroup[] = [
           },
           {
             title: "Guardrails",
-            url: "/mcp/tool-policies",
+            url: "/mcp/tool-guardrails",
             testId: E2eTestId.SidebarNavGuardrails,
             customIsActive: (pathname: string) =>
-              pathname.startsWith("/mcp/tool-policies"),
+              pathname.startsWith("/mcp/tool-guardrails"),
           },
         ],
       },
@@ -526,7 +530,6 @@ export function AppSidebar() {
           </SidebarGroup>
         </SignedIn>
       </SidebarFooter>
-      <SidebarRail />
     </Sidebar>
   );
 }

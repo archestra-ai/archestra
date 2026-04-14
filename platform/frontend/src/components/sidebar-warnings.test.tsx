@@ -99,7 +99,7 @@ describe("SidebarWarnings", () => {
       expect(screen.getByText(/Security engine off/)).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Fix" })).toHaveAttribute(
         "href",
-        "/mcp/tool-policies",
+        "/mcp/tool-guardrails",
       );
     });
 

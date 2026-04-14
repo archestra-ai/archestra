@@ -1,3 +1,7 @@
+import {
+  MCP_APPS_EXTENSION_ID,
+  MCP_ENTERPRISE_AUTH_EXTENSION_ID,
+} from "@shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   serializerCompiler,
@@ -74,6 +78,10 @@ describe("MCP Gateway (stateless mode)", () => {
     // (or if returned, it's ephemeral and not stored)
     const result = initResponse.json();
     expect(result).toHaveProperty("result");
+    expect(result.result.capabilities.extensions).toEqual({
+      [MCP_APPS_EXTENSION_ID]: {},
+      [MCP_ENTERPRISE_AUTH_EXTENSION_ID]: {},
+    });
   });
 
   test("handles tools/list request successfully (stateless)", async ({
@@ -230,5 +238,154 @@ describe("MCP Gateway (stateless mode)", () => {
     expect(body).toHaveProperty("transport", "http");
     expect(body).toHaveProperty("capabilities");
     expect(body.capabilities).toHaveProperty("tools", true);
+  });
+
+  test("handles whoami tool call successfully after initialize", async ({
+    makeAgent,
+    makeOrganization,
+    seedAndAssignArchestraTools,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+    });
+    await seedAndAssignArchestraTools(agent.id);
+
+    const token = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+
+    const initResponse = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: makeMcpHeaders(token.value),
+      payload: {
+        jsonrpc: "2.0",
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "test-client", version: "1.0.0" },
+        },
+        id: 1,
+      },
+    });
+    expect(initResponse.statusCode).toBe(200);
+
+    const callResponse = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: makeMcpHeaders(token.value),
+      payload: {
+        jsonrpc: "2.0",
+        method: "tools/call",
+        params: {
+          name: "archestra__whoami",
+          arguments: {},
+        },
+        id: 2,
+      },
+    });
+
+    expect(callResponse.statusCode).toBe(200);
+    expect(callResponse.json().result.content).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "text",
+          text: expect.stringContaining(agent.id),
+        }),
+      ]),
+    );
+  });
+
+  test("GET endpoint resolves agent by slug", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      name: "Slug Test Gateway",
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+    });
+
+    const token = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/mcp/${agent.slug}`,
+      headers: makeMcpHeaders(token.value),
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body).toHaveProperty("name", `archestra-agent-${agent.id}`);
+    expect(body).toHaveProperty("agentId", agent.id);
+  });
+
+  test("POST endpoint resolves agent by slug", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      name: "Slug POST Test",
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+    });
+
+    const token = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+
+    const initResponse = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.slug}`,
+      headers: makeMcpHeaders(token.value),
+      payload: {
+        jsonrpc: "2.0",
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "test-client", version: "1.0.0" },
+        },
+        id: 1,
+      },
+    });
+
+    expect(initResponse.statusCode).toBe(200);
+  });
+
+  test("returns 401 for non-existent slug", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/mcp/non-existent-slug",
+      headers: makeMcpHeaders("archestra_some_token"),
+      payload: {
+        jsonrpc: "2.0",
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "test-client", version: "1.0.0" },
+        },
+        id: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
   });
 });

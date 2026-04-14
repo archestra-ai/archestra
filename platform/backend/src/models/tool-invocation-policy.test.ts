@@ -225,7 +225,7 @@ describe("ToolInvocationPolicyModel", () => {
 
       expect(result.isAllowed).toBe(false);
       expect(result.reason).toContain(
-        "forbidden in untrusted context by default",
+        "forbidden in sensitive context by default",
       );
     });
 
@@ -793,7 +793,7 @@ describe("ToolInvocationPolicyModel", () => {
 
         expect(result.isAllowed).toBe(false);
         expect(result.reason).toContain(
-          "forbidden in untrusted context by default",
+          "forbidden in sensitive context by default",
         );
       });
 
@@ -1311,7 +1311,7 @@ describe("ToolInvocationPolicyModel", () => {
 
         expect(result.isAllowed).toBe(false);
         expect(result.reason).toContain(
-          "forbidden in untrusted context by default",
+          "forbidden in sensitive context by default",
         );
       });
 

@@ -11,10 +11,11 @@ import {
   propagation,
 } from "@opentelemetry/api";
 import {
-  ARCHESTRA_TOKEN_PREFIX,
+  hasArchestraTokenPrefix,
   type InteractionSource,
   InteractionSourceSchema,
   SOURCE_HEADER,
+  UNTRUSTED_CONTEXT_HEADER,
 } from "@shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { LRUCacheManager } from "@/cache-manager";
@@ -44,10 +45,14 @@ import {
   type Agent,
   ApiError,
   type DualLlmAnalysis,
+  type InteractionRequest,
+  type InteractionResponse,
   type LLMProvider,
   type LLMStreamAdapter,
   type ToolCompressionStats,
   type ToonSkipReason,
+  UNSAFE_CONTEXT_BOUNDARY_REASON,
+  type UnsafeContextBoundary,
 } from "@/types";
 import { isLoopbackAddress } from "@/utils/network";
 import {
@@ -101,6 +106,7 @@ export interface LLMProxyContext<TRequest> {
   toonStats: ToolCompressionStats;
   toonSkipReason: ToonSkipReason | null;
   dualLlmAnalyses: DualLlmAnalysis[];
+  unsafeContextBoundary?: UnsafeContextBoundary;
   externalAgentId?: string;
   userId?: string;
   resolvedUser?: { id: string; email: string; name: string } | null;
@@ -178,6 +184,11 @@ export async function handleLLMProxy<
   );
   const source: InteractionSource =
     InteractionSourceSchema.safeParse(rawSource).data ?? "api";
+  const inheritedContextUntrusted =
+    utils.headers.metaHeader.getHeaderValue(
+      headersForExtraction,
+      UNTRUSTED_CONTEXT_HEADER,
+    ) === "true";
 
   // Extract W3C trace context (traceparent/tracestate) from incoming request headers.
   // When the chat route calls the LLM proxy via localhost, the traced fetch injects these
@@ -189,7 +200,7 @@ export async function handleLLMProxy<
   );
 
   const requestAdapter = provider.createRequestAdapter(body);
-  const streamAdapter = provider.createStreamAdapter();
+  const streamAdapter = provider.createStreamAdapter(body);
   const providerMessages = requestAdapter.getProviderMessages();
   const messagesCount = getProviderMessagesCount(providerMessages);
 
@@ -259,12 +270,16 @@ export async function handleLLMProxy<
     apiKey = provider.extractApiKey(headers);
   }
 
-  // 3. Resolve virtual API key (archestra_ prefixed)
+  // 3. Resolve platform-managed virtual API keys
   // Strip "Bearer " prefix if present — OpenAI's extractApiKey returns the full
-  // Authorization header value (e.g. "Bearer archestra_xxx"), while other providers
+  // Authorization header value (e.g. "Bearer arch_xxx"), while other providers
   // return the raw key.
   const rawApiKey = apiKey?.replace(/^Bearer\s+/i, "") ?? undefined;
-  if (!wasJwksAuthenticated && rawApiKey?.startsWith(ARCHESTRA_TOKEN_PREFIX)) {
+  if (
+    !wasJwksAuthenticated &&
+    rawApiKey &&
+    hasArchestraTokenPrefix(rawApiKey)
+  ) {
     await virtualKeyRateLimiter.check(request.ip);
     try {
       const virtualResult = await validateVirtualApiKey(
@@ -409,50 +424,61 @@ export async function handleLLMProxy<
       {
         resolvedAgentId,
         considerContextUntrusted: resolvedAgent.considerContextUntrusted,
+        inheritedContextUntrusted,
         globalToolPolicy,
       },
       `[${providerName}Proxy] Evaluating trusted data policies`,
     );
 
     const commonMessages = requestAdapter.getMessages();
-    const { toolResultUpdates, contextIsTrusted, dualLlmAnalyses } =
-      await utils.trustedData.evaluateIfContextIsTrusted(
-        commonMessages,
-        resolvedAgentId,
-        resolvedAgent.organizationId,
-        userId,
-        resolvedAgent.considerContextUntrusted,
-        globalToolPolicy,
-        { teamIds, externalAgentId },
-        // Streaming callbacks for dual LLM progress
-        requestAdapter.isStreaming()
-          ? () => {
-              ensureStreamHeaders();
-              reply.raw.write(
-                streamAdapter.formatTextDeltaSSE(
-                  "Analyzing with Dual LLM:\n\n",
-                ),
-              );
-            }
-          : undefined,
-        requestAdapter.isStreaming()
-          ? (progress: {
-              question: string;
-              options: string[];
-              answer: string;
-            }) => {
-              const optionsText = progress.options
-                .map((opt: string, idx: number) => `  ${idx}: ${opt}`)
-                .join("\n");
-              ensureStreamHeaders();
-              reply.raw.write(
-                streamAdapter.formatTextDeltaSSE(
-                  `Question: ${progress.question}\nOptions:\n${optionsText}\nAnswer: ${progress.answer}\n\n`,
-                ),
-              );
-            }
-          : undefined,
-      );
+    const effectiveConsiderContextUntrusted =
+      resolvedAgent.considerContextUntrusted || inheritedContextUntrusted;
+    const initialUntrustedReason = resolvedAgent.considerContextUntrusted
+      ? UNSAFE_CONTEXT_BOUNDARY_REASON.agentConfiguredUntrusted
+      : inheritedContextUntrusted
+        ? UNSAFE_CONTEXT_BOUNDARY_REASON.inheritedFromParent
+        : undefined;
+    const {
+      toolResultUpdates,
+      contextIsTrusted,
+      dualLlmAnalyses,
+      unsafeContextBoundary,
+    } = await utils.trustedData.evaluateIfContextIsTrusted(
+      commonMessages,
+      resolvedAgentId,
+      resolvedAgent.organizationId,
+      userId,
+      effectiveConsiderContextUntrusted,
+      globalToolPolicy,
+      { teamIds, externalAgentId },
+      // Streaming callbacks for dual LLM progress
+      requestAdapter.isStreaming()
+        ? () => {
+            ensureStreamHeaders();
+            reply.raw.write(
+              streamAdapter.formatTextDeltaSSE("Analyzing with Dual LLM:\n\n"),
+            );
+          }
+        : undefined,
+      requestAdapter.isStreaming()
+        ? (progress: {
+            question: string;
+            options: string[];
+            answer: string;
+          }) => {
+            const optionsText = progress.options
+              .map((opt: string, idx: number) => `  ${idx}: ${opt}`)
+              .join("\n");
+            ensureStreamHeaders();
+            reply.raw.write(
+              streamAdapter.formatTextDeltaSSE(
+                `Question: ${progress.question}\nOptions:\n${optionsText}\nAnswer: ${progress.answer}\n\n`,
+              ),
+            );
+          }
+        : undefined,
+      initialUntrustedReason,
+    );
 
     // Apply tool result updates
     requestAdapter.applyToolResultUpdates(toolResultUpdates);
@@ -562,6 +588,7 @@ export async function handleLLMProxy<
       toonStats,
       toonSkipReason,
       dualLlmAnalyses,
+      unsafeContextBoundary,
       externalAgentId,
       userId,
       resolvedUser,
@@ -587,6 +614,37 @@ export async function handleLLMProxy<
       return handleNonStreaming(client, finalRequest, reply, provider, ctx);
     }
   } catch (error) {
+    // Persist failed interactions so they appear in LLM logs
+    try {
+      const errorMessage = provider.extractErrorMessage(error);
+      logger.info(
+        { profileId: resolvedAgent.id, errorMessage },
+        "Persisting error interaction record",
+      );
+      await InteractionModel.create({
+        profileId: resolvedAgent.id,
+        externalAgentId,
+        executionId,
+        userId,
+        sessionId,
+        sessionSource,
+        source,
+        type: provider.interactionType,
+        request: requestAdapter.getOriginalRequest() as InteractionRequest,
+        processedRequest: null,
+        response: { error: errorMessage } as unknown as InteractionResponse,
+        model: requestAdapter.getModel(),
+        baselineModel: requestAdapter.getModel(),
+        inputTokens: 0,
+        outputTokens: 0,
+      });
+    } catch (interactionError) {
+      logger.error(
+        { err: interactionError, profileId: resolvedAgent.id },
+        "Failed to create error interaction record",
+      );
+    }
+
     return handleError(
       error,
       reply,
@@ -626,6 +684,7 @@ async function handleStreaming<
     toonStats,
     toonSkipReason,
     dualLlmAnalyses,
+    unsafeContextBoundary,
     externalAgentId,
     userId,
     resolvedUser,
@@ -959,6 +1018,7 @@ async function handleStreaming<
             toonStats,
             toonSkipReason,
             dualLlmAnalyses,
+            unsafeContextBoundary,
           }),
         );
       } catch (interactionError) {
@@ -999,6 +1059,7 @@ async function handleNonStreaming<
     toonStats,
     toonSkipReason,
     dualLlmAnalyses,
+    unsafeContextBoundary,
     externalAgentId,
     userId,
     resolvedUser,
@@ -1161,6 +1222,7 @@ async function handleNonStreaming<
           toonStats,
           toonSkipReason,
           dualLlmAnalyses,
+          unsafeContextBoundary,
         }),
       );
 
@@ -1223,6 +1285,7 @@ async function handleNonStreaming<
         toonStats,
         toonSkipReason,
         dualLlmAnalyses,
+        unsafeContextBoundary,
       }),
     );
   } catch (interactionError) {

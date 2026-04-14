@@ -1,15 +1,10 @@
 import {
-  BUILT_IN_AGENT_IDS,
-  BUILT_IN_AGENT_NAMES,
   getArchestraToolFullName,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@shared";
-import { vi } from "vitest";
-import { policyConfigurationService } from "@/agents/subagents/policy-configuration";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { beforeEach, describe, expect, test } from "@/test";
-import AgentModel from "./agent";
 import AgentToolModel from "./agent-tool";
 
 describe("AgentToolModel.findById", () => {
@@ -39,7 +34,7 @@ describe("AgentToolModel.findById", () => {
     expect(result).toBeUndefined();
   });
 
-  test("includes credential and execution source fields", async ({
+  test("includes static MCP server binding field", async ({
     makeAgent,
     makeTool,
     makeAgentTool,
@@ -47,18 +42,15 @@ describe("AgentToolModel.findById", () => {
   }) => {
     const agent = await makeAgent();
     const tool = await makeTool();
-    const credServer = await makeMcpServer({ name: "Cred Server" });
-    const execServer = await makeMcpServer({ name: "Exec Server" });
+    const server = await makeMcpServer({ name: "Bound Server" });
     const agentTool = await makeAgentTool(agent.id, tool.id, {
-      credentialSourceMcpServerId: credServer.id,
-      executionSourceMcpServerId: execServer.id,
+      mcpServerId: server.id,
     });
 
     const result = await AgentToolModel.findById(agentTool.id);
 
     expect(result).toBeDefined();
-    expect(result?.credentialSourceMcpServerId).toBe(credServer.id);
-    expect(result?.executionSourceMcpServerId).toBe(execServer.id);
+    expect(result?.mcpServerId).toBe(server.id);
   });
 });
 
@@ -528,13 +520,13 @@ describe("AgentToolModel.findAll", () => {
       const tool4 = await makeTool({ name: "tool-4" });
 
       await makeAgentTool(agent.id, tool1.id, {
-        credentialSourceMcpServerId: ownerServer1.id,
+        mcpServerId: ownerServer1.id,
       });
       await makeAgentTool(agent.id, tool2.id, {
-        executionSourceMcpServerId: ownerServer2.id,
+        mcpServerId: ownerServer2.id,
       });
       await makeAgentTool(agent.id, tool3.id, {
-        credentialSourceMcpServerId: otherOwnerServer.id,
+        mcpServerId: otherOwnerServer.id,
       });
       await makeAgentTool(agent.id, tool4.id);
 
@@ -546,21 +538,19 @@ describe("AgentToolModel.findAll", () => {
       expect(result.data).toHaveLength(2);
       expect(
         result.data.some(
-          (agentTool) =>
-            agentTool.credentialSourceMcpServerId === ownerServer1.id,
+          (agentTool) => agentTool.mcpServerId === ownerServer1.id,
         ),
       ).toBe(true);
       expect(
         result.data.some(
-          (agentTool) =>
-            agentTool.executionSourceMcpServerId === ownerServer2.id,
+          (agentTool) => agentTool.mcpServerId === ownerServer2.id,
         ),
       ).toBe(true);
       expect(
         result.data.every(
           (agentTool) =>
-            agentTool.credentialSourceMcpServerId === ownerServer1.id ||
-            agentTool.executionSourceMcpServerId === ownerServer2.id,
+            agentTool.mcpServerId === ownerServer1.id ||
+            agentTool.mcpServerId === ownerServer2.id,
         ),
       ).toBe(true);
     });
@@ -951,7 +941,7 @@ describe("AgentToolModel.findAll", () => {
         [agent1.id, agent2.id],
         [tool1.id, tool2.id],
         {
-          executionSourceMcpServerId: mcpServer.id,
+          mcpServerId: mcpServer.id,
         },
       );
 
@@ -976,7 +966,7 @@ describe("AgentToolModel.findAll", () => {
 
       expect(relevantAssignments).toHaveLength(4);
       relevantAssignments.forEach((assignment) => {
-        expect(assignment.executionSourceMcpServerId).toBe(mcpServer.id);
+        expect(assignment.mcpServerId).toBe(mcpServer.id);
       });
     });
 
@@ -1042,111 +1032,6 @@ describe("AgentToolModel.findAll", () => {
       const agent1Tools = await AgentToolModel.findToolIdsByAgent(agent1.id);
       // Only Archestra tools should be present
       expect(agent1Tools.length).toBeGreaterThan(0);
-    });
-  });
-
-  describe("create auto-configure trigger", () => {
-    test("triggers auto-configure when built-in agent has autoConfigureOnToolAssignment enabled", async ({
-      makeAgent,
-      makeTool,
-      makeUser,
-      makeOrganization,
-      makeTeam,
-    }) => {
-      // Spy on the real module — avoids vi.doMock flakiness with dynamic imports
-      const spy = vi
-        .spyOn(
-          policyConfigurationService,
-          "configurePoliciesForToolWithTimeout",
-        )
-        .mockResolvedValue({ success: true });
-
-      const org = await makeOrganization();
-      const user = await makeUser();
-      const team = await makeTeam(org.id, user.id);
-      const agent = await makeAgent({
-        name: "Test Agent",
-        organizationId: org.id,
-        teams: [team.id],
-      });
-      const tool = await makeTool({ name: "test-auto-configure-tool" });
-
-      // Create built-in agent with auto-configure enabled
-      await AgentModel.create({
-        name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
-        teams: [],
-        scope: "org",
-        agentType: "agent",
-        organizationId: org.id,
-        builtInAgentConfig: {
-          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolAssignment: true,
-        },
-      });
-
-      // Create agent-tool assignment — this should trigger auto-configure
-      // Pass organizationId to avoid async DB lookup race condition
-      await AgentToolModel.create(agent.id, tool.id, undefined, org.id);
-
-      // Wait for the async fire-and-forget to complete
-      await vi.waitFor(
-        () => {
-          expect(spy).toHaveBeenCalledWith({
-            toolId: tool.id,
-            organizationId: org.id,
-          });
-        },
-        { timeout: 5000 },
-      );
-
-      spy.mockRestore();
-    });
-
-    test("does not trigger auto-configure when built-in agent has autoConfigureOnToolAssignment disabled", async ({
-      makeAgent,
-      makeTool,
-      makeUser,
-      makeOrganization,
-      makeTeam,
-    }) => {
-      const spy = vi
-        .spyOn(
-          policyConfigurationService,
-          "configurePoliciesForToolWithTimeout",
-        )
-        .mockResolvedValue({ success: true });
-
-      const org = await makeOrganization();
-      const user = await makeUser();
-      const team = await makeTeam(org.id, user.id);
-      const agent = await makeAgent({
-        name: "Test Agent",
-        organizationId: org.id,
-        teams: [team.id],
-      });
-      const tool = await makeTool({ name: "test-no-auto-configure-tool" });
-
-      // Create built-in agent with auto-configure DISABLED
-      await AgentModel.create({
-        name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
-        teams: [],
-        scope: "org",
-        agentType: "agent",
-        organizationId: org.id,
-        builtInAgentConfig: {
-          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolAssignment: false,
-        },
-      });
-
-      await AgentToolModel.create(agent.id, tool.id, undefined, org.id);
-
-      // Give the async operation time to run (or not run)
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      expect(spy).not.toHaveBeenCalled();
-
-      spy.mockRestore();
     });
   });
 
@@ -1294,7 +1179,7 @@ describe("AgentToolModel.bulkCreateOrUpdateCredentials", () => {
 
     // Create initial assignment with server1 as credential source
     await makeAgentTool(agent.id, tool.id, {
-      credentialSourceMcpServerId: server1.id,
+      mcpServerId: server1.id,
     });
 
     // Bulk update to server2
@@ -1302,7 +1187,7 @@ describe("AgentToolModel.bulkCreateOrUpdateCredentials", () => {
       {
         agentId: agent.id,
         toolId: tool.id,
-        credentialSourceMcpServerId: server2.id,
+        mcpServerId: server2.id,
       },
     ]);
 
@@ -1310,7 +1195,7 @@ describe("AgentToolModel.bulkCreateOrUpdateCredentials", () => {
     expect(results[0].status).toBe("updated");
   });
 
-  test("updates useDynamicTeamCredential when it differs", async ({
+  test("updates credentialResolutionMode when it differs", async ({
     makeAgent,
     makeTool,
     makeAgentTool,
@@ -1323,7 +1208,7 @@ describe("AgentToolModel.bulkCreateOrUpdateCredentials", () => {
       {
         agentId: agent.id,
         toolId: tool.id,
-        useDynamicTeamCredential: true,
+        credentialResolutionMode: "dynamic",
       },
     ]);
 
@@ -1400,14 +1285,38 @@ describe("AgentToolModel.bulkCreate", () => {
       {
         agentId: agent.id,
         toolId: tool.id,
-        credentialSourceMcpServerId: server.id,
-        useDynamicTeamCredential: true,
+        mcpServerId: server.id,
+        credentialResolutionMode: "dynamic",
       },
     ]);
 
     expect(rows).toHaveLength(1);
-    expect(rows[0].credentialSourceMcpServerId).toBe(server.id);
-    expect(rows[0].useDynamicTeamCredential).toBe(true);
+    expect(rows[0].mcpServerId).toBe(server.id);
+    expect(rows[0].credentialResolutionMode).toBe("dynamic");
+  });
+
+  test("persists enterprise-managed mode on bulk-created rows", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const agent = await makeAgent();
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const tool = await makeTool({
+      name: "bulk-enterprise-managed",
+      catalogId: catalog.id,
+    });
+
+    const rows = await AgentToolModel.bulkCreate([
+      {
+        agentId: agent.id,
+        toolId: tool.id,
+        credentialResolutionMode: "enterprise_managed",
+      },
+    ]);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].credentialResolutionMode).toBe("enterprise_managed");
   });
 });
 
@@ -1423,9 +1332,8 @@ describe("AgentToolModel.create", () => {
 
     expect(agentTool.agentId).toBe(agent.id);
     expect(agentTool.toolId).toBe(tool.id);
-    expect(agentTool.credentialSourceMcpServerId).toBeNull();
-    expect(agentTool.executionSourceMcpServerId).toBeNull();
-    expect(agentTool.useDynamicTeamCredential).toBe(false);
+    expect(agentTool.mcpServerId).toBeNull();
+    expect(agentTool.credentialResolutionMode).toBe("static");
   });
 
   test("creates assignment with credential options", async ({
@@ -1438,162 +1346,9 @@ describe("AgentToolModel.create", () => {
     const server = await makeMcpServer();
 
     const agentTool = await AgentToolModel.create(agent.id, tool.id, {
-      credentialSourceMcpServerId: server.id,
+      mcpServerId: server.id,
     });
 
-    expect(agentTool.credentialSourceMcpServerId).toBe(server.id);
-  });
-
-  test("accepts organizationId to skip DB lookup in auto-configure", async ({
-    makeAgent,
-    makeTool,
-    makeOrganization,
-  }) => {
-    const org = await makeOrganization();
-    const agent = await makeAgent({ organizationId: org.id });
-    const tool = await makeTool({ name: "create-with-org" });
-
-    // Should not throw — organizationId is passed through so no agent lookup needed
-    const agentTool = await AgentToolModel.create(
-      agent.id,
-      tool.id,
-      undefined,
-      org.id,
-    );
-
-    expect(agentTool.agentId).toBe(agent.id);
-    expect(agentTool.toolId).toBe(tool.id);
-  });
-});
-
-describe("AgentToolModel.triggerAutoConfigureIfEnabled (private)", () => {
-  test("skips DB lookup when organizationId is provided", async ({
-    makeAgent,
-    makeTool,
-    makeOrganization,
-    makeUser,
-    makeTeam,
-  }) => {
-    const spy = vi
-      .spyOn(policyConfigurationService, "configurePoliciesForToolWithTimeout")
-      .mockResolvedValue({ success: true });
-
-    const org = await makeOrganization();
-    const user = await makeUser();
-    const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({
-      organizationId: org.id,
-      teams: [team.id],
-    });
-    const tool = await makeTool({ name: "trigger-with-org" });
-
-    await AgentModel.create({
-      name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
-      teams: [],
-      scope: "org",
-      agentType: "agent",
-      organizationId: org.id,
-      builtInAgentConfig: {
-        name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-        autoConfigureOnToolAssignment: true,
-      },
-    });
-
-    // biome-ignore lint/suspicious/noExplicitAny: accessing private method for testing
-    (AgentToolModel as any).triggerAutoConfigureIfEnabled(
-      "fake-agent-tool-id",
-      agent.id,
-      tool.id,
-      org.id,
-    );
-
-    await vi.waitFor(
-      () => {
-        expect(spy).toHaveBeenCalledWith({
-          toolId: tool.id,
-          organizationId: org.id,
-        });
-      },
-      { timeout: 5000 },
-    );
-
-    spy.mockRestore();
-  });
-
-  test("falls back to DB lookup when organizationId is not provided", async ({
-    makeAgent,
-    makeTool,
-    makeOrganization,
-    makeUser,
-    makeTeam,
-  }) => {
-    const spy = vi
-      .spyOn(policyConfigurationService, "configurePoliciesForToolWithTimeout")
-      .mockResolvedValue({ success: true });
-
-    const org = await makeOrganization();
-    const user = await makeUser();
-    const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({
-      organizationId: org.id,
-      teams: [team.id],
-    });
-    const tool = await makeTool({ name: "trigger-without-org" });
-
-    await AgentModel.create({
-      name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
-      teams: [],
-      scope: "org",
-      agentType: "agent",
-      organizationId: org.id,
-      builtInAgentConfig: {
-        name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-        autoConfigureOnToolAssignment: true,
-      },
-    });
-
-    // biome-ignore lint/suspicious/noExplicitAny: accessing private method for testing
-    (AgentToolModel as any).triggerAutoConfigureIfEnabled(
-      "fake-agent-tool-id",
-      agent.id,
-      tool.id,
-      // no organizationId
-    );
-
-    await vi.waitFor(
-      () => {
-        expect(spy).toHaveBeenCalledWith({
-          toolId: tool.id,
-          organizationId: org.id,
-        });
-      },
-      { timeout: 5000 },
-    );
-
-    spy.mockRestore();
-  });
-
-  test("does not call auto-configure when organizationId resolves to null", async ({
-    makeTool,
-  }) => {
-    const spy = vi
-      .spyOn(policyConfigurationService, "configurePoliciesForToolWithTimeout")
-      .mockResolvedValue({ success: true });
-
-    const tool = await makeTool({ name: "trigger-no-agent" });
-
-    // biome-ignore lint/suspicious/noExplicitAny: accessing private method for testing
-    (AgentToolModel as any).triggerAutoConfigureIfEnabled(
-      "fake-agent-tool-id",
-      "00000000-0000-0000-0000-000000000000",
-      tool.id,
-    );
-
-    // Give the async operation time to run (or not run)
-    await new Promise((resolve) => setTimeout(resolve, 500));
-
-    expect(spy).not.toHaveBeenCalled();
-
-    spy.mockRestore();
+    expect(agentTool.mcpServerId).toBe(server.id);
   });
 });

@@ -38,6 +38,7 @@ import type {
   ThreadHistoryParams,
 } from "@/types";
 import { detectImageType } from "@/utils/detect-image-type";
+import { stripHtmlTags } from "@/utils/strip-html";
 import {
   CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_TEAM_CACHE,
@@ -1420,18 +1421,6 @@ const UUID_REGEX =
 
 function normalizeTeamsId(id: string): string {
   return id.replace(/^28:/, "").toLowerCase();
-}
-
-function stripHtmlTags(html: string): string {
-  return html
-    .replace(/<[^>]*>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&amp;/g, "&")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 /**

@@ -13,6 +13,7 @@ export { TiktokenTokenizer } from "./tiktoken";
  */
 const tokenizerFactories: Record<SupportedProvider, () => Tokenizer> = {
   anthropic: () => new AnthropicTokenizer(),
+  azure: () => new TiktokenTokenizer(),
   openai: () => new TiktokenTokenizer(),
   cerebras: () => new TiktokenTokenizer(),
   cohere: () => new TiktokenTokenizer(),

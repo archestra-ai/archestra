@@ -44,6 +44,7 @@ export function useToolsWithAssignments({
   filters?: {
     search?: string;
     origin?: string;
+    excludeArchestraTools?: boolean;
   };
 }) {
   return useQuery({
@@ -56,6 +57,7 @@ export function useToolsWithAssignments({
         sortDirection: sorting?.sortDirection,
         search: filters?.search,
         origin: filters?.origin,
+        excludeArchestraTools: filters?.excludeArchestraTools,
       },
     ],
     queryFn: async () => {
@@ -67,6 +69,7 @@ export function useToolsWithAssignments({
           sortDirection: sorting?.sortDirection,
           search: filters?.search,
           origin: filters?.origin,
+          excludeArchestraTools: filters?.excludeArchestraTools,
         },
       });
       return (

@@ -17,20 +17,6 @@ type AssignmentTarget = {
   dialogTitle: "Edit Agent" | "Edit MCP Gateway";
 };
 
-async function openAgentCatalogToolAssignment(params: {
-  page: Page;
-  agentName: string;
-  catalogItemName: string;
-}) {
-  return await openCatalogToolAssignment({
-    page: params.page,
-    targetName: params.agentName,
-    catalogItemName: params.catalogItemName,
-    pagePath: "/agents",
-    dialogTitle: "Edit Agent",
-  });
-}
-
 export async function openGatewayCatalogToolAssignment(params: {
   page: Page;
   gatewayName?: string;
@@ -145,6 +131,7 @@ async function openCatalogToolAssignment({
     )
     .toBe("enabled");
   await enabledCatalogItem.click();
+  await page.keyboard.press("Escape");
 
   const visibleTokenSelect = page.getByTestId(E2eTestId.TokenSelect).last();
   const pillButtonByTestId = page.getByTestId(
@@ -176,9 +163,9 @@ async function openCatalogToolAssignment({
       .not.toBe("missing");
 
     if (await pillButtonByTestId.isVisible().catch(() => false)) {
-      await pillButtonByTestId.click();
+      await pillButtonByTestId.click({ force: true });
     } else if (await pillButtonByRole.isVisible().catch(() => false)) {
-      await pillButtonByRole.click();
+      await pillButtonByRole.click({ force: true });
     }
 
     await expect(visibleTokenSelect).toBeVisible({ timeout: 10_000 });

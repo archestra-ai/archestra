@@ -23,10 +23,10 @@
           "supportedGenerationMethods": ["generateContent", "countTokens"]
         },
         {
-          "name": "models/text-embedding-004",
-          "displayName": "Text Embedding",
-          "description": "Text embedding model (should be filtered out)",
-          "supportedGenerationMethods": ["embedContent"]
+          "name": "models/gemini-embedding-001",
+          "displayName": "Gemini Embedding 001",
+          "description": "Gemini embedding model",
+          "supportedGenerationMethods": ["embedContent", "batchEmbedContents"]
         }
       ]
     }

@@ -38,7 +38,7 @@ export function PermissivePolicyOverlay({
                 </h3>
                 <p className="text-sm text-muted-foreground mb-4">
                   For now, all agent tool calls are allowed and all results are
-                  trusted. Individual policies are bypassed. <br />
+                  safe. Individual policies are bypassed. <br />
                   {userCanUpdateOrganization && (
                     <>
                       <br />

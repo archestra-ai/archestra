@@ -113,7 +113,7 @@ jobs:
 
       - name: Build Docker image
         id: build
-        uses: ./.github/actions/build-platform-docker-image
+        uses: ./.github/actions/build-docker-image
         with:
           context: ${{ inputs.image_directory }}
           dockerfile: ${{ inputs.dockerfile }}

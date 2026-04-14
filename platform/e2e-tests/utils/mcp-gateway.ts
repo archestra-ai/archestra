@@ -1,7 +1,6 @@
 import { type APIRequestContext, expect, type Page } from "@playwright/test";
 import { archestraApiSdk, getManageCredentialsButtonTestId } from "@shared";
 import {
-  API_BASE_URL,
   DEFAULT_TEAM_NAME,
   E2eTestId,
   ENGINEERING_TEAM_NAME,
@@ -120,16 +119,16 @@ export async function makeApiRequest(params: {
   ignoreStatusCheck?: boolean;
   timeoutMs?: number;
 }) {
-  const requestUrl = params.urlSuffix.startsWith("/api/")
-    ? getE2eRequestUrl(params.urlSuffix)
-    : `${API_BASE_URL}${params.urlSuffix}`;
-  const response = await params.request[params.method](requestUrl, {
-    headers: params.headers ?? {
-      "Content-Type": "application/json",
-      Origin: UI_BASE_URL,
+  const response = await params.request[params.method](
+    getE2eRequestUrl(params.urlSuffix),
+    {
+      headers: params.headers ?? {
+        "Content-Type": "application/json",
+        Origin: UI_BASE_URL,
+      },
+      data: params.data ?? null,
+      timeout: params.timeoutMs,
     },
-    data: params.data ?? null,
-    timeout: params.timeoutMs,
   });
 
   if (!params.ignoreStatusCheck && !response.ok()) {

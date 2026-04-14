@@ -383,6 +383,26 @@ async function deleteExistingProviderIfExists(
   }).toPass({ timeout: 60_000, intervals: [1000, 2000, 5000] });
 }
 
+async function waitForProviderDialogToClose(page: Page): Promise<void> {
+  await closeOpenDialogs(page, { timeoutMs: 15_000 });
+}
+
+async function expectProviderExistsViaApi(
+  page: Page,
+  providerName: string,
+): Promise<void> {
+  await expect(async () => {
+    const response = await page.request.get(
+      `${UI_BASE_URL}/api/identity-providers`,
+    );
+    await expectApiResponseOk(response, "list identity providers");
+    const providers = (await response.json()) as Array<{ providerId: string }>;
+    expect(
+      providers.some((provider) => provider.providerId === providerName),
+    ).toBe(true);
+  }).toPass({ timeout: 20_000, intervals: [1000, 2000, 5000] });
+}
+
 async function signInViaIdentityProvider(params: {
   browser: Browser;
   providerName: string;

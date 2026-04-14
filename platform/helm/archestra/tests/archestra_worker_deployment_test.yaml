@@ -43,7 +43,7 @@ tests:
     set:
       archestra.podAnnotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "9050"
+        prometheus.io/port: "9000"
         prometheus.io/path: "/custom"
     asserts:
       - equal:
@@ -51,7 +51,7 @@ tests:
           value: "true"
       - equal:
           path: spec.template.metadata.annotations["prometheus.io/port"]
-          value: "9000"
+          value: "9050"
       - equal:
           path: spec.template.metadata.annotations["prometheus.io/path"]
           value: "/metrics"
@@ -60,7 +60,7 @@ tests:
     set:
       archestra.worker.podAnnotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "9050"
+        prometheus.io/port: "9000"
         prometheus.io/path: "/custom"
     asserts:
       - equal:
@@ -68,7 +68,7 @@ tests:
           value: "true"
       - equal:
           path: spec.template.metadata.annotations["prometheus.io/port"]
-          value: "9000"
+          value: "9050"
       - equal:
           path: spec.template.metadata.annotations["prometheus.io/path"]
           value: "/metrics"

@@ -1002,10 +1002,14 @@ const startWorker = async () => {
     // localhost instead of requiring the platform service URL.
     await registerWorkerRoutes(healthServer);
 
-    await registerStandaloneMetricsEndpoint({
-      fastify: healthServer,
-      enableDefaultMetrics: true,
-    });
+    // Start dedicated metrics server on port 9050 (same architecture as platform pod).
+    // This server has its own Bearer token auth (addMetricsAuthenticationHook) and is
+    // not affected by fastifyAuthPlugin on healthServer.
+    await startMetricsServer();
+
+    // Enable route metrics on healthServer (populates http_request_duration_seconds
+    // in the shared prom-client registry, which the metrics server exposes).
+    await registerMetricsPlugin(healthServer, false);
 
     await healthServer.listen({ port: port, host });
     logger.info(
@@ -1026,6 +1030,9 @@ const startWorker = async () => {
       }, forceExitTimeoutMs);
 
       try {
+        if (metricsServerInstance) {
+          await metricsServerInstance.close();
+        }
         await healthServer.close();
         cacheManager.shutdown();
         await taskQueueService.stopWorker();

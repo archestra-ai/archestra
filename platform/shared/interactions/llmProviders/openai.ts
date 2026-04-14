@@ -57,11 +57,7 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
     const toolsRefused = new Set<string>();
     for (const message of this.request.messages) {
       if (message.role === "assistant") {
-        /**
-         * TODO: remove this as string assertion once we figure out the openapi/zod weirdness
-         * (ie. there shouldn't be | unknown in the codegen'd type here..)
-         */
-        const refusal = message.refusal as string;
+        const refusal = message.refusal;
         if (refusal && refusal.length > 0) {
           const toolName = parseArchestraToolRefusal(refusal).toolName;
           if (toolName) {
@@ -72,11 +68,7 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
     }
 
     for (const message of this.response.choices) {
-      /**
-       * TODO: remove this as string assertion once we figure out the openapi/zod weirdness
-       * (ie. there shouldn't be | unknown in the codegen'd type here..)
-       */
-      const refusal = message.message.refusal as string;
+      const refusal = message.message.refusal;
       if (refusal && refusal.length > 0) {
         const toolName = parseArchestraToolRefusal(refusal).toolName;
         if (toolName) {
@@ -121,34 +113,21 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
   }
 
   getLastAssistantResponse(): string {
-    /**
-     * TODO: remove this as string assertion once we figure out the openapi/zod weirdness
-     * (ie. there shouldn't be | unknown in the codegen'd type here..)
-     */
-    const content = this.response.choices[0]?.message?.content as string;
-    return content ?? "";
+    return this.response.choices[0]?.message?.content ?? "";
   }
 
   getToolRefusedCount(): number {
     let count = 0;
     for (const message of this.request.messages) {
       if (message.role === "assistant") {
-        /**
-         * TODO: remove this as string assertion once we figure out the openapi/zod weirdness
-         * (ie. there shouldn't be | unknown in the codegen'd type here..)
-         */
-        const refusal = message.refusal as string;
+        const refusal = message.refusal;
         if (refusal && refusal.length > 0) {
           count++;
         }
       }
     }
     for (const message of this.response.choices) {
-      /**
-       * TODO: remove this as string assertion once we figure out the openapi/zod weirdness
-       * (ie. there shouldn't be | unknown in the codegen'd type here..)
-       */
-      const refusal = message.message.refusal as string;
+      const refusal = message.message.refusal;
       if (refusal && refusal.length > 0) {
         count++;
       }

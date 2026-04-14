@@ -40,10 +40,12 @@ inputs:
   # Secrets must be passed as regular inputs in composite actions
   turbo-team:
     description: "Turborepo remote caching team"
-    required: true
+    required: false
+    default: ""
   turbo-token:
     description: "Turborepo remote caching token"
-    required: true
+    required: false
+    default: ""
   sentry-auth-token:
     description: "Sentry auth token for source map uploads (optional)"
     required: false

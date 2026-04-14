@@ -200,7 +200,7 @@ export type SharePointCheckpoint = z.infer<typeof SharePointCheckpointSchema>;
 
 export const LinearConfigSchema = z.object({
   type: LINEAR,
-  linearApiUrl: connectorUrlSchema,
+  linearApiUrl: connectorUrlSchema.optional().default("https://api.linear.app"),
   teamIds: z.array(z.string()).optional(),
   projectIds: z.array(z.string()).optional(),
   states: z.array(z.string()).optional(),

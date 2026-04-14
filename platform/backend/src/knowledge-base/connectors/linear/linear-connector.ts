@@ -260,7 +260,7 @@ export class LinearConnector extends BaseConnector {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          authorization: `Bearer ${params.credentials.apiToken}`,
+          authorization: `${params.credentials.apiToken}`,
         },
         body: JSON.stringify({
           query: "query Healthcheck { viewer { id } }",
@@ -778,7 +778,7 @@ export class LinearConnector extends BaseConnector {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        authorization: `Bearer ${params.apiToken}`,
+        authorization: `${params.apiToken}`,
       },
       body: JSON.stringify({
         query: params.query,

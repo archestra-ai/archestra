@@ -73,29 +73,14 @@ describe("LinearConnector", () => {
   });
 
   describe("estimateTotalItems", () => {
-    test("returns totalCount from issueSearch", async () => {
-      const fetchMock = vi.fn();
-      fetchMock.mockResolvedValueOnce(
-        mockJsonResponse({
-          data: {
-            issueSearch: { totalCount: 42 },
-          },
-        }),
-      );
-      vi.stubGlobal("fetch", fetchMock);
-
+    test("returns null when Linear count is unavailable", async () => {
       const c = new LinearConnector();
       const n = await c.estimateTotalItems({
         config: { teamIds: ["t1"] },
         credentials,
         checkpoint: null,
       });
-      expect(n).toBe(42);
-
-      const init = JSON.parse(
-        String((fetchMock.mock.calls[0][1] as RequestInit | undefined)?.body),
-      );
-      expect(init.variables.filter.team.id.in).toEqual(["t1"]);
+      expect(n).toBeNull();
     });
   });
 
@@ -151,6 +136,7 @@ describe("LinearConnector", () => {
       expect(batches[0].documents[0].title).toBe("ENG-1: Hello");
       expect(batches[0].documents[0].content).toContain("## Comments");
       expect(batches[0].documents[0].content).toContain("Sam");
+      expect(batches[0].documents[0].content).toContain("Project: Mobile");
       expect(
         (batches[0].checkpoint as { lastRawUpdatedAt?: string })
           .lastRawUpdatedAt,

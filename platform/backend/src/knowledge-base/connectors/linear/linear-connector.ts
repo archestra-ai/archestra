@@ -153,14 +153,6 @@ const CYCLES_QUERY = `
   }
 `;
 
-const ISSUE_COUNT_QUERY = `
-  query LinearIssueCount($filter: IssueFilter) {
-    issueSearch(filter: $filter, first: 1) {
-      totalCount
-    }
-  }
-`;
-
 type LinearSyncPhase = "issues" | "projects" | "cycles";
 type LinearPageInfo = { hasNextPage: boolean; endCursor: string | null };
 type LinearLabelNode = { name?: string };
@@ -311,37 +303,12 @@ export class LinearConnector extends BaseConnector {
   }): Promise<number | null> {
     const parsed = parseLinearConfig(params.config);
     if (!parsed) return null;
-
-    const prev = (params.checkpoint as LinearCheckpoint | null) ?? {
-      type: "linear" as const,
-    };
-
-    try {
-      const filter = buildIssueFilterForSweep({
-        config: parsed,
-        issueUpdatedAfter: resolveIssueSweepLowerBound(prev, undefined),
-        forEstimate: true,
-      });
-
-      const url = this.joinUrl(parsed.linearApiUrl, "/graphql");
-      const data = await this.linearGraphql<{
-        issueSearch?: { totalCount?: number };
-      }>({
-        url,
-        apiToken: params.credentials.apiToken,
-        query: ISSUE_COUNT_QUERY,
-        variables: filter ? { filter } : {},
-      });
-
-      const total = data.issueSearch?.totalCount;
-      return typeof total === "number" ? total : null;
-    } catch (error) {
-      this.log.warn(
-        { error: extractErrorMessage(error) },
-        "Failed to estimate Linear issue count",
-      );
-      return null;
-    }
+    // Linear GraphQL schemas differ across workspaces and may not expose a
+    // stable count field on issue connections/search. Returning null avoids
+    // noisy run-level warnings while sync continues normally.
+    void params.credentials;
+    void params.checkpoint;
+    return null;
   }
 
   async *sync(params: {
@@ -893,7 +860,18 @@ function buildIssueFilterForSweep(params: {
     filter.project = { id: { in: config.projectIds } };
   }
   if (config.states?.length) {
-    filter.state = { name: { in: config.states } };
+    const stateIds = config.states.filter(isLikelyLinearId);
+    const stateNames = config.states.filter((s) => !isLikelyLinearId(s));
+    if (stateIds.length > 0 && stateNames.length > 0) {
+      filter.or = [
+        { state: { id: { in: stateIds } } },
+        { state: { name: { in: stateNames } } },
+      ];
+    } else if (stateIds.length > 0) {
+      filter.state = { id: { in: stateIds } };
+    } else {
+      filter.state = { name: { in: stateNames } };
+    }
   }
 
   if (issueUpdatedAfter) {
@@ -954,6 +932,13 @@ function maxIsoString(
   return new Date(a) > new Date(b) ? a : b;
 }
 
+function isLikelyLinearId(value: string): boolean {
+  // Linear IDs are UUID-like; names like "In Progress" should route to name filter.
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
+
 function issueNodeToDocument(
   issue: LinearIssueNode,
   config: LinearConfig,
@@ -979,7 +964,16 @@ function issueNodeToDocument(
       ? `${issue.identifier}: ${issue.title}`
       : (issue.title ?? issue.identifier ?? issue.id);
 
-  const contentParts = [`# ${title}`, "", issue.description ?? ""];
+  const contentParts = [
+    `# ${title}`,
+    "",
+    `State: ${issue.state?.name ?? ""}`,
+    `Team: ${issue.team?.name ?? issue.team?.key ?? ""}`,
+    `Project: ${issue.project?.name ?? ""}`,
+    labels.length > 0 ? `Labels: ${labels.join(", ")}` : "Labels:",
+    "",
+    issue.description ?? "",
+  ];
 
   if (config.includeComments !== false && issue.comments?.nodes?.length) {
     contentParts.push("", "## Comments", "");

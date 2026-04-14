@@ -13,12 +13,12 @@ import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
 import { Cerebras, constructResponseSchema, UuidIdSchema } from "@/types";
-import { cerebrasAdapterFactory } from "../adapterV2";
+import { cerebrasAdapterFactory } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
-const cerebrasProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
+const cerebrasProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/cerebras`;
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 
@@ -106,4 +106,4 @@ const cerebrasProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
   );
 };
 
-export default cerebrasProxyRoutesV2;
+export default cerebrasProxyRoutes;

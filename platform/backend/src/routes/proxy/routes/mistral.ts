@@ -1,7 +1,10 @@
 /**
- * OpenRouter LLM Proxy Routes - OpenAI-compatible
+ * Mistral LLM Proxy Routes - OpenAI-compatible
  *
- * OpenRouter uses an OpenAI-compatible API at https://openrouter.ai/api/v1
+ * Mistral uses an OpenAI-compatible API at https://api.mistral.ai/v1
+ * This module registers proxy routes for Mistral chat completions.
+ *
+ * @see https://docs.mistral.ai/api
  */
 import fastifyHttpProxy from "@fastify/http-proxy";
 import { RouteId } from "@shared";
@@ -9,92 +12,98 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
-import { constructResponseSchema, Openrouter, UuidIdSchema } from "@/types";
-import { openrouterAdapterFactory } from "../adapterV2";
+import { constructResponseSchema, Mistral, UuidIdSchema } from "@/types";
+import { mistralAdapterFactory } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
-const openrouterProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
-  const API_PREFIX = `${PROXY_API_PREFIX}/openrouter`;
+const mistralProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  const API_PREFIX = `${PROXY_API_PREFIX}/mistral`;
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 
-  logger.info("[UnifiedProxy] Registering unified OpenRouter routes");
+  logger.info("[UnifiedProxy] Registering unified Mistral routes");
 
   await fastify.register(fastifyHttpProxy, {
-    upstream: config.llm.openrouter.baseUrl,
+    upstream: config.llm.mistral.baseUrl,
     prefix: API_PREFIX,
     rewritePrefix: "",
     preHandler: createProxyPreHandler({
       apiPrefix: API_PREFIX,
       endpointSuffix: CHAT_COMPLETIONS_SUFFIX,
-      upstream: config.llm.openrouter.baseUrl,
-      providerName: "OpenRouter",
+      upstream: config.llm.mistral.baseUrl,
+      providerName: "Mistral",
     }),
   });
 
+  /**
+   * Chat completions with default agent
+   */
   fastify.post(
     `${API_PREFIX}${CHAT_COMPLETIONS_SUFFIX}`,
     {
       bodyLimit: PROXY_BODY_LIMIT,
       schema: {
-        operationId: RouteId.OpenrouterChatCompletionsWithDefaultAgent,
+        operationId: RouteId.MistralChatCompletionsWithDefaultAgent,
         description:
-          "Create a chat completion with OpenRouter (uses default agent)",
+          "Create a chat completion with Mistral (uses default agent)",
         tags: ["LLM Proxy"],
-        body: Openrouter.API.ChatCompletionRequestSchema,
-        headers: Openrouter.API.ChatCompletionsHeadersSchema,
+        body: Mistral.API.ChatCompletionRequestSchema,
+        headers: Mistral.API.ChatCompletionsHeadersSchema,
         response: constructResponseSchema(
-          Openrouter.API.ChatCompletionResponseSchema,
+          Mistral.API.ChatCompletionResponseSchema,
         ),
       },
     },
     async (request, reply) => {
       logger.debug(
         { url: request.url },
-        "[UnifiedProxy] Handling OpenRouter request (default agent)",
+        "[UnifiedProxy] Handling Mistral request (default agent)",
       );
       return handleLLMProxy(
         request.body,
         request,
         reply,
-        openrouterAdapterFactory,
+        mistralAdapterFactory,
       );
     },
   );
 
+  /**
+   * Chat completions with specific agent
+   */
   fastify.post(
     `${API_PREFIX}/:agentId${CHAT_COMPLETIONS_SUFFIX}`,
     {
       bodyLimit: PROXY_BODY_LIMIT,
       schema: {
-        operationId: RouteId.OpenrouterChatCompletionsWithAgent,
+        operationId: RouteId.MistralChatCompletionsWithAgent,
         description:
-          "Create a chat completion with OpenRouter for a specific agent",
+          "Create a chat completion with Mistral for a specific agent",
         tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
         }),
-        body: Openrouter.API.ChatCompletionRequestSchema,
-        headers: Openrouter.API.ChatCompletionsHeadersSchema,
+        body: Mistral.API.ChatCompletionRequestSchema,
+        headers: Mistral.API.ChatCompletionsHeadersSchema,
         response: constructResponseSchema(
-          Openrouter.API.ChatCompletionResponseSchema,
+          Mistral.API.ChatCompletionResponseSchema,
         ),
       },
     },
     async (request, reply) => {
       logger.debug(
         { url: request.url, agentId: request.params.agentId },
-        "[UnifiedProxy] Handling OpenRouter request (with agent)",
+        "[UnifiedProxy] Handling Mistral request (with agent)",
       );
       return handleLLMProxy(
         request.body,
         request,
         reply,
-        openrouterAdapterFactory,
+        mistralAdapterFactory,
       );
     },
   );
 };
 
-export default openrouterProxyRoutesV2;
+export default mistralProxyRoutes;

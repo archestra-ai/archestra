@@ -14,7 +14,7 @@ import {
 import {
   type GeminiRequestWithModel,
   geminiAdapterFactory,
-} from "../adapterV2/gemini";
+} from "../adapters/gemini";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { validateVirtualApiKey } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
@@ -23,10 +23,10 @@ import { handleLLMProxy } from "../llm-proxy-handler";
  * NOTE: Gemini uses colon-literals in their routes. For fastify, double colon is used to escape the colon-literal in
  * the route
  */
-const geminiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
+const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/gemini`;
 
-  logger.info("[UnifiedProxy] Registering unified Gemini V2 routes");
+  logger.info("[UnifiedProxy] Registering unified Gemini routes");
 
   /**
    * Register HTTP proxy for all Gemini routes EXCEPT generateContent and streamGenerateContent
@@ -236,7 +236,7 @@ const geminiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
   );
 };
 
-export default geminiProxyRoutesV2;
+export default geminiProxyRoutes;
 
 function createGeminiProxyPreHandler() {
   return async (request: FastifyRequest, reply: FastifyReply) => {

@@ -1,5 +1,5 @@
 /**
- * Anthropic Proxy V2 Tests
+ * Anthropic Proxy Tests
  *
  * Tests for the unified Anthropic proxy routes covering:
  * - Cost tracking in database
@@ -9,14 +9,14 @@
  * - HTTP proxy routing (UUID stripping)
  *
  * KEY DIFFERENCES FROM V1 TESTS (../anthropic.test.ts):
- * TODO: Consider aligning V2 behavior with V1 for these cases:
+ * TODO: Consider aligning behavior with V1 for these cases:
  *
- * 1. Interrupted stream recording: V2 may not record interactions when stream
+ * 1. Interrupted stream recording: the route may not record interactions when stream
  *    is interrupted before receiving usage data. V1 always records interactions
  *    even without usage. Tests verify graceful handling rather than guaranteed
  *    recording.
  *
- * 2. Streaming headers: V2 uses reply.raw.write() directly. Headers are set
+ * 2. Streaming headers: the route uses reply.raw.write() directly. Headers are set
  *    via reply.header() but may not be captured by Fastify inject in the same
  *    way as V1.
  */
@@ -31,10 +31,10 @@ import { vi } from "vitest";
 import { ModelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createAnthropicTestClient } from "@/test/llm-provider-stubs";
-import { anthropicAdapterFactory } from "../adapterV2";
-import anthropicProxyRoutesV2 from "./anthropic";
+import { anthropicAdapterFactory } from "../adapters";
+import anthropicProxyRoutes from "./anthropic";
 
-describe("Anthropic V2 cost tracking", () => {
+describe("Anthropic cost tracking", () => {
   beforeEach(() => {
     vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
       () => createAnthropicTestClient() as never,
@@ -50,7 +50,7 @@ describe("Anthropic V2 cost tracking", () => {
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
 
-    await app.register(anthropicProxyRoutesV2);
+    await app.register(anthropicProxyRoutes);
 
     await ModelModel.upsert({
       externalId: "anthropic/claude-opus-4-20250514",
@@ -98,7 +98,7 @@ describe("Anthropic V2 cost tracking", () => {
   });
 });
 
-describe("Anthropic V2 streaming mode", () => {
+describe("Anthropic streaming mode", () => {
   let anthropicStubOptions: {
     includeToolUse?: boolean;
     interruptAtChunk?: number;
@@ -122,7 +122,7 @@ describe("Anthropic V2 streaming mode", () => {
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
 
-    await app.register(anthropicProxyRoutesV2);
+    await app.register(anthropicProxyRoutes);
 
     await ModelModel.upsert({
       externalId: "anthropic/claude-opus-4-20250514",
@@ -197,7 +197,7 @@ describe("Anthropic V2 streaming mode", () => {
     // Configure stub to interrupt at chunk 3.
     anthropicStubOptions.interruptAtChunk = 3;
 
-    await app.register(anthropicProxyRoutesV2);
+    await app.register(anthropicProxyRoutes);
 
     await ModelModel.upsert({
       externalId: "anthropic/claude-opus-4-20250514",
@@ -258,7 +258,7 @@ describe("Anthropic V2 streaming mode", () => {
   });
 });
 
-describe("Anthropic V2 tool call accumulation", () => {
+describe("Anthropic tool call accumulation", () => {
   let anthropicStubOptions: {
     includeToolUse?: boolean;
     interruptAtChunk?: number;
@@ -282,7 +282,7 @@ describe("Anthropic V2 tool call accumulation", () => {
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
 
-    await app.register(anthropicProxyRoutesV2);
+    await app.register(anthropicProxyRoutes);
 
     anthropicStubOptions.includeToolUse = true;
 
@@ -342,7 +342,7 @@ describe("Anthropic V2 tool call accumulation", () => {
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
 
-    await app.register(anthropicProxyRoutesV2);
+    await app.register(anthropicProxyRoutes);
 
     const agent = await makeAgent({ name: "Test Document Agent" });
 
@@ -387,7 +387,7 @@ describe("Anthropic V2 tool call accumulation", () => {
   });
 });
 
-describe("Anthropic V2 proxy routing", () => {
+describe("Anthropic proxy routing", () => {
   let app: FastifyInstance;
   let mockUpstream: FastifyInstance;
   let upstreamPort: number;

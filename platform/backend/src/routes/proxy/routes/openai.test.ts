@@ -1,5 +1,5 @@
 /**
- * OpenAI Proxy V2 Tests
+ * OpenAI Proxy Tests
  *
  * Tests for the unified OpenAI proxy routes covering:
  * - Streaming response format validation
@@ -9,16 +9,16 @@
  * - HTTP proxy routing (UUID stripping)
  *
  * KEY DIFFERENCES FROM V1 TESTS (../openai.test.ts):
- * TODO: Consider aligning V2 behavior with V1 for these cases:
+ * TODO: Consider aligning behavior with V1 for these cases:
  *
- * 1. Streaming headers: V2 uses reply.raw.write() which doesn't populate
+ * 1. Streaming headers: the route uses reply.raw.write() which doesn't populate
  *    response.headers in Fastify inject. Tests validate SSE body format instead.
  *
- * 2. Chunk filtering: V2 adapter only emits chunks with actual content
+ * 2. Chunk filtering:  adapter only emits chunks with actual content
  *    (delta.content non-empty). The first chunk with role="assistant" and
  *    empty content is not forwarded. V1 forwards all chunks including role-only.
  *
- * 3. Interrupted stream recording: V2 may not record interactions when stream
+ * 3. Interrupted stream recording: the route may not record interactions when stream
  *    is interrupted before receiving usage data. V1 always records interactions
  *    even without usage. Tests verify graceful handling rather than guaranteed
  *    recording.
@@ -36,10 +36,10 @@ import { ModelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createOpenAiTestClient } from "@/test/llm-provider-stubs";
 import type { OpenAi } from "@/types";
-import { openaiAdapterFactory } from "../adapterV2";
-import openAiProxyRoutesV2 from "./openai";
+import { openaiAdapterFactory } from "../adapters";
+import openAiProxyRoutes from "./openai";
 
-describe("OpenAI V2 proxy streaming", () => {
+describe("OpenAI proxy streaming", () => {
   let openAiStubOptions: { interruptAtChunk?: number };
 
   beforeEach(() => {
@@ -58,7 +58,7 @@ describe("OpenAI V2 proxy streaming", () => {
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
 
-    await app.register(openAiProxyRoutesV2);
+    await app.register(openAiProxyRoutes);
 
     const agent = await makeAgent({ name: "Test Streaming Agent" });
 
@@ -79,7 +79,7 @@ describe("OpenAI V2 proxy streaming", () => {
 
     expect(response.statusCode).toBe(200);
 
-    // V2 uses reply.raw.write() which produces SSE format
+    // The route uses reply.raw.write() which produces SSE format
     const body = response.body;
     expect(body).toContain("data: ");
     expect(body).toContain("data: [DONE]");
@@ -90,7 +90,7 @@ describe("OpenAI V2 proxy streaming", () => {
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
 
-    await app.register(openAiProxyRoutesV2);
+    await app.register(openAiProxyRoutes);
 
     const agent = await makeAgent({ name: "Test Streaming Agent" });
 
@@ -111,7 +111,7 @@ describe("OpenAI V2 proxy streaming", () => {
 
     expect(response.statusCode).toBe(200);
 
-    // V2 adapter only emits chunks with actual content
+    //  adapter only emits chunks with actual content
     const chunks = response.body
       .split("\n")
       .filter(
@@ -131,7 +131,7 @@ describe("OpenAI V2 proxy streaming", () => {
   });
 });
 
-describe("OpenAI V2 cost tracking", () => {
+describe("OpenAI cost tracking", () => {
   beforeEach(() => {
     vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
       () => createOpenAiTestClient() as never,
@@ -147,7 +147,7 @@ describe("OpenAI V2 cost tracking", () => {
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
 
-    await app.register(openAiProxyRoutesV2);
+    await app.register(openAiProxyRoutes);
 
     await ModelModel.upsert({
       externalId: "openai/gpt-4o",
@@ -193,7 +193,7 @@ describe("OpenAI V2 cost tracking", () => {
   });
 });
 
-describe("OpenAI V2 streaming mode", () => {
+describe("OpenAI streaming mode", () => {
   let openAiStubOptions: { interruptAtChunk?: number };
 
   beforeEach(() => {
@@ -214,7 +214,7 @@ describe("OpenAI V2 streaming mode", () => {
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
 
-    await app.register(openAiProxyRoutesV2);
+    await app.register(openAiProxyRoutes);
 
     await ModelModel.upsert({
       externalId: "openai/gpt-4o",
@@ -285,7 +285,7 @@ describe("OpenAI V2 streaming mode", () => {
     // Configure stub to interrupt at chunk 4 (after usage chunk but before stream completes)
     openAiStubOptions.interruptAtChunk = 4;
 
-    await app.register(openAiProxyRoutesV2);
+    await app.register(openAiProxyRoutes);
 
     await ModelModel.upsert({
       externalId: "openai/gpt-4o",
@@ -354,7 +354,7 @@ describe("OpenAI V2 streaming mode", () => {
     // Configure stub to interrupt at chunk 2 (before usage chunk)
     openAiStubOptions.interruptAtChunk = 2;
 
-    await app.register(openAiProxyRoutesV2);
+    await app.register(openAiProxyRoutes);
 
     await ModelModel.upsert({
       externalId: "openai/gpt-4o",
@@ -394,7 +394,7 @@ describe("OpenAI V2 streaming mode", () => {
   });
 });
 
-describe("OpenAI V2 proxy routing", () => {
+describe("OpenAI proxy routing", () => {
   let app: FastifyInstance;
   let mockUpstream: FastifyInstance;
   let upstreamPort: number;

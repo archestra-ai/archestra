@@ -1,5 +1,5 @@
 /**
- * Gemini Proxy V2 Tests
+ * Gemini Proxy Tests
  *
  * Tests for the unified Gemini proxy routes covering:
  * - Streaming response format validation
@@ -11,10 +11,10 @@
  * KEY DIFFERENCES FROM V1 (Gemini had no V1 tests - these are new):
  * TODO: Consider these behavioral notes when comparing with OpenAI/Anthropic V1:
  *
- * 1. Streaming headers: V2 uses reply.raw.write() which doesn't populate
+ * 1. Streaming headers: the route uses reply.raw.write() which doesn't populate
  *    response.headers in Fastify inject. Tests validate SSE body format instead.
  *
- * 2. Interrupted stream recording: V2 may not record interactions when stream
+ * 2. Interrupted stream recording: the route may not record interactions when stream
  *    is interrupted before receiving usage data. Tests verify graceful handling
  *    rather than guaranteed recording.
  */
@@ -29,10 +29,10 @@ import { vi } from "vitest";
 import { ModelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createGeminiTestClient } from "@/test/llm-provider-stubs";
-import { geminiAdapterFactory } from "../adapterV2/gemini";
-import geminiProxyRoutesV2 from "./gemini";
+import { geminiAdapterFactory } from "../adapters/gemini";
+import geminiProxyRoutes from "./gemini";
 
-describe("Gemini V2 streaming format", () => {
+describe("Gemini streaming format", () => {
   beforeEach(() => {
     vi.spyOn(geminiAdapterFactory, "createClient").mockImplementation(
       () => createGeminiTestClient() as never,
@@ -48,7 +48,7 @@ describe("Gemini V2 streaming format", () => {
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
 
-    await app.register(geminiProxyRoutesV2);
+    await app.register(geminiProxyRoutes);
 
     const agent = await makeAgent({ name: "Test Streaming Format Agent" });
 
@@ -71,14 +71,14 @@ describe("Gemini V2 streaming format", () => {
 
     expect(response.statusCode).toBe(200);
 
-    // V2 uses reply.raw.write() which produces SSE format
+    // The route uses reply.raw.write() which produces SSE format
     const body = response.body;
     expect(body).toContain("data: ");
     expect(body).toContain("data: [DONE]");
   });
 });
 
-describe("Gemini V2 cost tracking", () => {
+describe("Gemini cost tracking", () => {
   beforeEach(() => {
     vi.spyOn(geminiAdapterFactory, "createClient").mockImplementation(
       () => createGeminiTestClient() as never,
@@ -94,7 +94,7 @@ describe("Gemini V2 cost tracking", () => {
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
 
-    await app.register(geminiProxyRoutesV2);
+    await app.register(geminiProxyRoutes);
 
     await ModelModel.upsert({
       externalId: "gemini/gemini-2.5-pro",
@@ -142,7 +142,7 @@ describe("Gemini V2 cost tracking", () => {
   });
 });
 
-describe("Gemini V2 streaming mode", () => {
+describe("Gemini streaming mode", () => {
   let geminiStubOptions: { interruptAtChunk?: number };
 
   beforeEach(() => {
@@ -163,7 +163,7 @@ describe("Gemini V2 streaming mode", () => {
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
 
-    await app.register(geminiProxyRoutesV2);
+    await app.register(geminiProxyRoutes);
 
     await ModelModel.upsert({
       externalId: "gemini/gemini-2.5-pro",
@@ -236,7 +236,7 @@ describe("Gemini V2 streaming mode", () => {
     // Configure stub to interrupt at chunk 2 (before final usage chunk).
     geminiStubOptions.interruptAtChunk = 2;
 
-    await app.register(geminiProxyRoutesV2);
+    await app.register(geminiProxyRoutes);
 
     await ModelModel.upsert({
       externalId: "gemini/gemini-2.5-pro",
@@ -287,7 +287,7 @@ describe("Gemini V2 streaming mode", () => {
     // Configure stub to interrupt at chunk 1 (before any usage data).
     geminiStubOptions.interruptAtChunk = 1;
 
-    await app.register(geminiProxyRoutesV2);
+    await app.register(geminiProxyRoutes);
 
     await ModelModel.upsert({
       externalId: "gemini/gemini-2.5-pro",
@@ -329,7 +329,7 @@ describe("Gemini V2 streaming mode", () => {
   });
 });
 
-describe("Gemini V2 proxy routing", () => {
+describe("Gemini proxy routing", () => {
   let app: FastifyInstance;
   let mockUpstream: FastifyInstance;
   let upstreamPort: number;
@@ -455,7 +455,7 @@ describe("Gemini V2 proxy routing", () => {
   });
 });
 
-describe("Gemini V2 non-streaming mode", () => {
+describe("Gemini non-streaming mode", () => {
   beforeEach(() => {
     vi.spyOn(geminiAdapterFactory, "createClient").mockImplementation(
       () => createGeminiTestClient() as never,
@@ -473,7 +473,7 @@ describe("Gemini V2 non-streaming mode", () => {
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
 
-    await app.register(geminiProxyRoutesV2);
+    await app.register(geminiProxyRoutes);
 
     await ModelModel.upsert({
       externalId: "gemini/gemini-2.5-pro",

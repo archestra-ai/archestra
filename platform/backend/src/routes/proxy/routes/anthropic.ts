@@ -5,12 +5,12 @@ import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
 import { Anthropic, constructResponseSchema, UuidIdSchema } from "@/types";
-import { anthropicAdapterFactory } from "../adapterV2";
+import { anthropicAdapterFactory } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
-const anthropicProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
+const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const ANTHROPIC_PREFIX = `${PROXY_API_PREFIX}/anthropic`;
   const MESSAGES_SUFFIX = "/messages";
 
@@ -115,4 +115,4 @@ const anthropicProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
   );
 };
 
-export default anthropicProxyRoutesV2;
+export default anthropicProxyRoutes;

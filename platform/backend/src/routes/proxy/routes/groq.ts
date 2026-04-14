@@ -10,12 +10,12 @@ import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
 import { constructResponseSchema, Groq, UuidIdSchema } from "@/types";
-import { groqAdapterFactory } from "../adapterV2";
+import { groqAdapterFactory } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
-const groqProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
+const groqProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/groq`;
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 
@@ -85,4 +85,4 @@ const groqProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
   );
 };
 
-export default groqProxyRoutesV2;
+export default groqProxyRoutes;

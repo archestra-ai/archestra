@@ -11,12 +11,12 @@ import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
 import { Cohere, constructResponseSchema, UuidIdSchema } from "@/types";
-import { cohereAdapterFactory } from "../adapterV2";
+import { cohereAdapterFactory } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
-const cohereProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
+const cohereProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const COHERE_PREFIX = `${PROXY_API_PREFIX}/cohere`;
   // Public chat route should be provider-agnostic and not expose Cohere's internal path
   // e.g. POST /v1/cohere/:agentId/chat or POST /v1/cohere/chat
@@ -93,4 +93,4 @@ const cohereProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
   );
 };
 
-export default cohereProxyRoutesV2;
+export default cohereProxyRoutes;

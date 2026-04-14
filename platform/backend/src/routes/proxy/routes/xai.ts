@@ -10,12 +10,12 @@ import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
 import { constructResponseSchema, UuidIdSchema, Xai } from "@/types";
-import { xaiAdapterFactory } from "../adapterV2";
+import { xaiAdapterFactory } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
-const xaiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
+const xaiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/xai`;
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 
@@ -81,4 +81,4 @@ const xaiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
   );
 };
 
-export default xaiProxyRoutesV2;
+export default xaiProxyRoutes;

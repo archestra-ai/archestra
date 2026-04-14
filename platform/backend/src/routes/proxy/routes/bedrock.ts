@@ -3,11 +3,11 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import logger from "@/logging";
 import { Bedrock, constructResponseSchema, UuidIdSchema } from "@/types";
-import { bedrockAdapterFactory } from "../adapterV2";
+import { bedrockAdapterFactory } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
 
-const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
+const bedrockProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const BEDROCK_PREFIX = `${PROXY_API_PREFIX}/bedrock`;
   const CONVERSE_SUFFIX = "/converse";
   const CONVERSE_STREAM_SUFFIX = "/converse-stream";
@@ -264,4 +264,4 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
   );
 };
 
-export default bedrockProxyRoutesV2;
+export default bedrockProxyRoutes;

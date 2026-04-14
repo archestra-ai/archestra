@@ -11,7 +11,7 @@ import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
 import { constructResponseSchema, Ollama, UuidIdSchema } from "@/types";
-import { ollamaAdapterFactory } from "../adapterV2";
+import { ollamaAdapterFactory } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
 
@@ -51,7 +51,7 @@ export function rewriteOllamaProxyUrl(
   };
 }
 
-const ollamaProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
+const ollamaProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/ollama`;
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 
@@ -189,4 +189,4 @@ const ollamaProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
   );
 };
 
-export default ollamaProxyRoutesV2;
+export default ollamaProxyRoutes;

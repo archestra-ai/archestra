@@ -1,30 +1,35 @@
+/**
+ * OpenRouter LLM Proxy Routes - OpenAI-compatible
+ *
+ * OpenRouter uses an OpenAI-compatible API at https://openrouter.ai/api/v1
+ */
 import fastifyHttpProxy from "@fastify/http-proxy";
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
-import { constructResponseSchema, UuidIdSchema, Zhipuai } from "@/types";
-import { zhipuaiAdapterFactory } from "../adapterV2";
+import { constructResponseSchema, Openrouter, UuidIdSchema } from "@/types";
+import { openrouterAdapterFactory } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
-const zhipuaiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
-  const API_PREFIX = `${PROXY_API_PREFIX}/zhipuai`;
+const openrouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  const API_PREFIX = `${PROXY_API_PREFIX}/openrouter`;
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 
-  logger.info("[UnifiedProxy] Registering unified Zhipu AI routes");
+  logger.info("[UnifiedProxy] Registering unified OpenRouter routes");
 
   await fastify.register(fastifyHttpProxy, {
-    upstream: config.llm.zhipuai.baseUrl,
+    upstream: config.llm.openrouter.baseUrl,
     prefix: API_PREFIX,
     rewritePrefix: "",
     preHandler: createProxyPreHandler({
       apiPrefix: API_PREFIX,
       endpointSuffix: CHAT_COMPLETIONS_SUFFIX,
-      upstream: config.llm.zhipuai.baseUrl,
-      providerName: "Zhipu AI",
+      upstream: config.llm.openrouter.baseUrl,
+      providerName: "OpenRouter",
     }),
   });
 
@@ -33,27 +38,27 @@ const zhipuaiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
     {
       bodyLimit: PROXY_BODY_LIMIT,
       schema: {
-        operationId: RouteId.ZhipuaiChatCompletionsWithDefaultAgent,
+        operationId: RouteId.OpenrouterChatCompletionsWithDefaultAgent,
         description:
-          "Create a chat completion with Zhipu AI (uses default agent)",
+          "Create a chat completion with OpenRouter (uses default agent)",
         tags: ["LLM Proxy"],
-        body: Zhipuai.API.ChatCompletionRequestSchema,
-        headers: Zhipuai.API.ChatCompletionsHeadersSchema,
+        body: Openrouter.API.ChatCompletionRequestSchema,
+        headers: Openrouter.API.ChatCompletionsHeadersSchema,
         response: constructResponseSchema(
-          Zhipuai.API.ChatCompletionResponseSchema,
+          Openrouter.API.ChatCompletionResponseSchema,
         ),
       },
     },
     async (request, reply) => {
       logger.debug(
         { url: request.url },
-        "[UnifiedProxy] Handling Zhipu AI request (default agent)",
+        "[UnifiedProxy] Handling OpenRouter request (default agent)",
       );
       return handleLLMProxy(
         request.body,
         request,
         reply,
-        zhipuaiAdapterFactory,
+        openrouterAdapterFactory,
       );
     },
   );
@@ -63,33 +68,33 @@ const zhipuaiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
     {
       bodyLimit: PROXY_BODY_LIMIT,
       schema: {
-        operationId: RouteId.ZhipuaiChatCompletionsWithAgent,
+        operationId: RouteId.OpenrouterChatCompletionsWithAgent,
         description:
-          "Create a chat completion with Zhipu AI for a specific agent",
+          "Create a chat completion with OpenRouter for a specific agent",
         tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
         }),
-        body: Zhipuai.API.ChatCompletionRequestSchema,
-        headers: Zhipuai.API.ChatCompletionsHeadersSchema,
+        body: Openrouter.API.ChatCompletionRequestSchema,
+        headers: Openrouter.API.ChatCompletionsHeadersSchema,
         response: constructResponseSchema(
-          Zhipuai.API.ChatCompletionResponseSchema,
+          Openrouter.API.ChatCompletionResponseSchema,
         ),
       },
     },
     async (request, reply) => {
       logger.debug(
         { url: request.url, agentId: request.params.agentId },
-        "[UnifiedProxy] Handling Zhipu AI request (with agent)",
+        "[UnifiedProxy] Handling OpenRouter request (with agent)",
       );
       return handleLLMProxy(
         request.body,
         request,
         reply,
-        zhipuaiAdapterFactory,
+        openrouterAdapterFactory,
       );
     },
   );
 };
 
-export default zhipuaiProxyRoutesV2;
+export default openrouterProxyRoutes;

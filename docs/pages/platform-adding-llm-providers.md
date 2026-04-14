@@ -57,8 +57,8 @@ The adapter pattern provides a **provider-agnostic API** for business logic. LLM
 
 | File                                               | Description                                    |
 | -------------------------------------------------- | ---------------------------------------------- |
-| `backend/src/routes/proxy/adapterV2/{provider}.ts` | Implement all adapter classes                  |
-| `backend/src/routes/proxy/adapterV2/index.ts`      | Export the `{provider}AdapterFactory` function |
+| `backend/src/routes/proxy/adapters/{provider}.ts` | Implement all adapter classes                  |
+| `backend/src/routes/proxy/adapters/index.ts`      | Export the `{provider}AdapterFactory` function |
 
 **Adapters to Implement:**
 
@@ -74,8 +74,8 @@ HTTP endpoint that receives client requests and delegates to `handleLLMProxy()`.
 | File                                                    | Description                                                                                                                                                                                         |
 | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `shared/routes.ts`                                      | Add `RouteId` constants for the new provider (e.g., `{Provider}ChatCompletionsWithDefaultAgent`, `{Provider}ChatCompletionsWithAgent`)                                                              |
-| `backend/src/routes/proxy/routesv2/{provider}.ts`       | Fastify route that validates request and calls `handleLLMProxy(body, request, reply, adapterFactory)`. Agent ID, headers, and all context are extracted from the Fastify request object internally. |
-| `backend/src/routes/proxy/routesv2/proxy-prehandler.ts` | Shared `createProxyPreHandler()` utility — use this when registering `fastifyHttpProxy` to handle UUID stripping and endpoint exclusion (see example below)                                         |
+| `backend/src/routes/proxy/routes/{provider}.ts`       | Fastify route that validates request and calls `handleLLMProxy(body, request, reply, adapterFactory)`. Agent ID, headers, and all context are extracted from the Fastify request object internally. |
+| `backend/src/routes/proxy/routes/proxy-prehandler.ts` | Shared `createProxyPreHandler()` utility — use this when registering `fastifyHttpProxy` to handle UUID stripping and endpoint exclusion (see example below)                                         |
 | `backend/src/routes/index.ts`                           | Export the new route module                                                                                                                                                                         |
 | `backend/src/server.ts`                                 | Register the route with Fastify and add request/response schemas to the global Zod registry for OpenAPI generation                                                                                  |
 
@@ -153,7 +153,7 @@ TOON (Token-Oriented Object Notation) compression converts JSON tool results to 
 
 | File                                               | Description                                                                                                                       |
 | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `backend/src/routes/proxy/adapterV2/{provider}.ts` | Implement `convertToolResultsToToon()` function that traverses provider-specific message array and compresses tool result content |
+| `backend/src/routes/proxy/adapters/{provider}.ts` | Implement `convertToolResultsToToon()` function that traverses provider-specific message array and compresses tool result content |
 
 The function must:
 
@@ -174,7 +174,7 @@ For example: OpenAI and Anthropic SDKs accept a custom `fetch` function, so we i
 | File                                               | Description                                                                                               |
 | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | `backend/src/llm-metrics.ts`                       | Add entry to `fetchUsageExtractors` record mapping provider to its `getUsageTokens()` extraction function |
-| `backend/src/routes/proxy/adapterV2/{provider}.ts` | Export `getUsageTokens()` function for metrics token extraction                                           |
+| `backend/src/routes/proxy/adapters/{provider}.ts` | Export `getUsageTokens()` function for metrics token extraction                                           |
 
 ### Frontend: Logs UI
 
@@ -193,7 +193,7 @@ Provider onboarding uses backend Vitest for proxy behavior coverage and e2e test
 
 | File                                                  | Description                                                                                                                                 |
 | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `backend/src/routes/proxy/routesv2/provider-matrix.test.ts` | Primary conformance suite for provider onboarding. Add the provider config, request builders, route plugin, adapter factory, and any provider-specific stream assertions. |
+| `backend/src/routes/proxy/routes/provider-matrix.test.ts` | Primary conformance suite for provider onboarding. Add the provider config, request builders, route plugin, adapter factory, and any provider-specific stream assertions. |
 | `backend/src/test/llm-provider-stubs.ts` and route-local harnesses | Reuse or extend SDK-level stubs instead of adding WireMock mappings for proxy-only behavior.                                               |
 
 The backend matrix covers:
@@ -281,20 +281,20 @@ Existing provider implementations for reference:
 
 **Full implementations** (custom API formats):
 
-- OpenAI: `backend/src/routes/proxy/routesv2/openai.ts`, `backend/src/routes/proxy/adapterV2/openai.ts`
-- Anthropic: `backend/src/routes/proxy/routesv2/anthropic.ts`, `backend/src/routes/proxy/adapterV2/anthropic.ts`
-- Cohere: `backend/src/routes/proxy/routesv2/cohere.ts`, `backend/src/routes/proxy/adapterV2/cohere.ts`
-- Gemini: `backend/src/routes/proxy/routesv2/gemini.ts`, `backend/src/routes/proxy/adapterV2/gemini.ts`
-- Bedrock: `backend/src/routes/proxy/routesv2/bedrock.ts`, `backend/src/routes/proxy/adapterV2/bedrock.ts` (uses AWS Signature V4 auth and Converse API)
+- OpenAI: `backend/src/routes/proxy/routes/openai.ts`, `backend/src/routes/proxy/adapters/openai.ts`
+- Anthropic: `backend/src/routes/proxy/routes/anthropic.ts`, `backend/src/routes/proxy/adapters/anthropic.ts`
+- Cohere: `backend/src/routes/proxy/routes/cohere.ts`, `backend/src/routes/proxy/adapters/cohere.ts`
+- Gemini: `backend/src/routes/proxy/routes/gemini.ts`, `backend/src/routes/proxy/adapters/gemini.ts`
+- Bedrock: `backend/src/routes/proxy/routes/bedrock.ts`, `backend/src/routes/proxy/adapters/bedrock.ts` (uses AWS Signature V4 auth and Converse API)
 
 **OpenAI-compatible implementations** (reuse OpenAI types/adapters with minor modifications):
 
-- Groq: `backend/src/routes/proxy/routesv2/groq.ts`, `backend/src/routes/proxy/adapterV2/groq.ts` (best starting point — cleanest example of OpenAI reuse)
-- xAI: `backend/src/routes/proxy/routesv2/xai.ts`, `backend/src/routes/proxy/adapterV2/xai.ts`
-- Azure AI Foundry: `backend/src/routes/proxy/routesv2/azure.ts`, `backend/src/routes/proxy/adapterV2/azure.ts` (reference for providers requiring custom request mutation — injects `api-version` query param via a custom `fetch` wrapper in `llm-client.ts` for the built-in chat feature, since the Vercel AI SDK's `createOpenAI()` has no `defaultQuery` option)
-- vLLM: `backend/src/routes/proxy/routesv2/vllm.ts`, `backend/src/routes/proxy/adapterV2/vllm.ts`
-- Ollama: `backend/src/routes/proxy/routesv2/ollama.ts`, `backend/src/routes/proxy/adapterV2/ollama.ts`
-- ZhipuAI: `backend/src/routes/proxy/routesv2/zhipuai.ts`, `backend/src/routes/proxy/adapterV2/zhipuai.ts`
+- Groq: `backend/src/routes/proxy/routes/groq.ts`, `backend/src/routes/proxy/adapters/groq.ts` (best starting point — cleanest example of OpenAI reuse)
+- xAI: `backend/src/routes/proxy/routes/xai.ts`, `backend/src/routes/proxy/adapters/xai.ts`
+- Azure AI Foundry: `backend/src/routes/proxy/routes/azure.ts`, `backend/src/routes/proxy/adapters/azure.ts` (reference for providers requiring custom request mutation — injects `api-version` query param via a custom `fetch` wrapper in `llm-client.ts` for the built-in chat feature, since the Vercel AI SDK's `createOpenAI()` has no `defaultQuery` option)
+- vLLM: `backend/src/routes/proxy/routes/vllm.ts`, `backend/src/routes/proxy/adapters/vllm.ts`
+- Ollama: `backend/src/routes/proxy/routes/ollama.ts`, `backend/src/routes/proxy/adapters/ollama.ts`
+- ZhipuAI: `backend/src/routes/proxy/routes/zhipuai.ts`, `backend/src/routes/proxy/adapters/zhipuai.ts`
 
 > **Tip:** If adding support for an OpenAI-compatible provider (e.g., Together AI), use the Groq implementation as a starting point — it re-exports OpenAI's type definitions, message schemas, and tool schemas with minimal boilerplate. For providers that require custom query parameters on every request, see the Azure AI Foundry implementation for the `fetchWithVersion` pattern.
 

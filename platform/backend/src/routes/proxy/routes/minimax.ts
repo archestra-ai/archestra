@@ -5,12 +5,12 @@ import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
 import { constructResponseSchema, Minimax, UuidIdSchema } from "@/types";
-import { minimaxAdapterFactory } from "../adapterV2";
+import { minimaxAdapterFactory } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
-const minimaxProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
+const minimaxProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/minimax`;
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 
@@ -92,4 +92,4 @@ const minimaxProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
   );
 };
 
-export default minimaxProxyRoutesV2;
+export default minimaxProxyRoutes;

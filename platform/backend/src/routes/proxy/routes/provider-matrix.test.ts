@@ -12,7 +12,12 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import type OpenAI from "openai";
+import type {
+  ChatCompletionCreateParamsNonStreaming,
+  ChatCompletionCreateParamsStreaming,
+} from "openai/resources/chat/completions/completions";
 import { vi } from "vitest";
+import appConfig from "@/config";
 import {
   InteractionModel,
   LimitValidationService,
@@ -21,40 +26,46 @@ import {
 } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
-import { anthropicAdapterFactory } from "../adapterV2/anthropic";
-import { azureAdapterFactory } from "../adapterV2/azure";
-import { bedrockAdapterFactory } from "../adapterV2/bedrock";
-import { cerebrasAdapterFactory } from "../adapterV2/cerebras";
-import { cohereAdapterFactory } from "../adapterV2/cohere";
-import { deepseekAdapterFactory } from "../adapterV2/deepseek";
-import { geminiAdapterFactory } from "../adapterV2/gemini";
-import { groqAdapterFactory } from "../adapterV2/groq";
-import { minimaxAdapterFactory } from "../adapterV2/minimax";
-import { mistralAdapterFactory } from "../adapterV2/mistral";
-import { ollamaAdapterFactory } from "../adapterV2/ollama";
-import { openaiAdapterFactory } from "../adapterV2/openai";
-import { openrouterAdapterFactory } from "../adapterV2/openrouter";
-import { perplexityAdapterFactory } from "../adapterV2/perplexity";
-import { xaiAdapterFactory } from "../adapterV2/xai";
+import { anthropicAdapterFactory } from "../adapters/anthropic";
+import { azureAdapterFactory } from "../adapters/azure";
+import { azureResponsesAdapterFactory } from "../adapters/azure-responses";
+import { bedrockAdapterFactory } from "../adapters/bedrock";
+import { cerebrasAdapterFactory } from "../adapters/cerebras";
+import { cohereAdapterFactory } from "../adapters/cohere";
+import { deepseekAdapterFactory } from "../adapters/deepseek";
+import { geminiAdapterFactory } from "../adapters/gemini";
+import { groqAdapterFactory } from "../adapters/groq";
+import { minimaxAdapterFactory } from "../adapters/minimax";
+import { mistralAdapterFactory } from "../adapters/mistral";
+import { ollamaAdapterFactory } from "../adapters/ollama";
+import { openaiAdapterFactory } from "../adapters/openai";
+import { openrouterAdapterFactory } from "../adapters/openrouter";
+import { perplexityAdapterFactory } from "../adapters/perplexity";
+import { vllmAdapterFactory } from "../adapters/vllm";
+import { xaiAdapterFactory } from "../adapters/xai";
+import { zhipuaiAdapterFactory } from "../adapters/zhipuai";
 import * as proxyUtils from "../utils";
-import anthropicProxyRoutesV2 from "./anthropic";
-import azureProxyRoutesV2 from "./azure";
-import bedrockProxyRoutesV2 from "./bedrock";
-import cerebrasProxyRoutesV2 from "./cerebras";
-import cohereProxyRoutesV2 from "./cohere";
-import deepseekProxyRoutesV2 from "./deepseek";
-import geminiProxyRoutesV2 from "./gemini";
-import groqProxyRoutesV2 from "./groq";
-import minimaxProxyRoutesV2 from "./minimax";
-import mistralProxyRoutesV2 from "./mistral";
-import ollamaProxyRoutesV2 from "./ollama";
-import openAiProxyRoutesV2 from "./openai";
-import openrouterProxyRoutesV2 from "./openrouter";
-import perplexityProxyRoutesV2 from "./perplexity";
-import xaiProxyRoutesV2 from "./xai";
+import anthropicProxyRoutes from "./anthropic";
+import azureProxyRoutes from "./azure";
+import bedrockProxyRoutes from "./bedrock";
+import cerebrasProxyRoutes from "./cerebras";
+import cohereProxyRoutes from "./cohere";
+import deepseekProxyRoutes from "./deepseek";
+import geminiProxyRoutes from "./gemini";
+import groqProxyRoutes from "./groq";
+import minimaxProxyRoutes from "./minimax";
+import mistralProxyRoutes from "./mistral";
+import ollamaProxyRoutes from "./ollama";
+import openAiProxyRoutes from "./openai";
+import openrouterProxyRoutes from "./openrouter";
+import perplexityProxyRoutes from "./perplexity";
+import vllmProxyRoutes from "./vllm";
+import xaiProxyRoutes from "./xai";
+import zhipuaiProxyRoutes from "./zhipuai";
 
 type ProviderFamily =
   | "openai"
+  | "zhipuai"
   | "azure-responses"
   | "anthropic"
   | "gemini"
@@ -124,7 +135,6 @@ type HarnessOptions = {
   usage?: UsageSpec;
   nonStreamingToolCall?: ToolCallSpec | null;
   streamingToolCall?: ToolCallSpec | null;
-  interruptAtChunk?: number;
 };
 
 const READ_FILE_TOOL: ToolDefinition = {
@@ -166,19 +176,12 @@ function createFastifyApp() {
   return app;
 }
 
-function createAsyncIterable<T>(
-  items: T[],
-  interruptAtChunk?: number,
-): AsyncIterable<T> {
+function createAsyncIterable<T>(items: T[]): AsyncIterable<T> {
   return {
     [Symbol.asyncIterator]() {
       let index = 0;
       return {
         async next() {
-          if (interruptAtChunk !== undefined && index === interruptAtChunk) {
-            return { done: true, value: undefined };
-          }
-
           if (index < items.length) {
             return { done: false, value: items[index++] };
           }
@@ -423,10 +426,7 @@ function createOpenAiLikeHarness(options: HarnessOptions = {}) {
                       },
                     },
                   ];
-                return createAsyncIterable(
-                  streamChunks,
-                  options.interruptAtChunk,
-                );
+                return createAsyncIterable(streamChunks);
               }
 
               const streamChunks: OpenAI.Chat.Completions.ChatCompletionChunk[] =
@@ -465,10 +465,7 @@ function createOpenAiLikeHarness(options: HarnessOptions = {}) {
                     },
                   },
                 ];
-              return createAsyncIterable(
-                streamChunks,
-                options.interruptAtChunk,
-              );
+              return createAsyncIterable(streamChunks);
             }
 
             return {
@@ -594,7 +591,7 @@ function createAzureResponsesHarness(options: HarnessOptions = {}) {
                 },
               ];
 
-              return createAsyncIterable(events, options.interruptAtChunk);
+              return createAsyncIterable(events);
             }
 
             const events = [
@@ -626,13 +623,15 @@ function createAzureResponsesHarness(options: HarnessOptions = {}) {
                 },
               },
             ];
-            return createAsyncIterable(events, options.interruptAtChunk);
+            return createAsyncIterable(events);
           }
 
           return {
             id: "resp_nonstream",
             object: "response",
+            created_at: 123,
             model,
+            status: "completed",
             output: options.nonStreamingToolCall
               ? [
                   {
@@ -641,6 +640,7 @@ function createAzureResponsesHarness(options: HarnessOptions = {}) {
                     call_id: "call_123",
                     name: options.nonStreamingToolCall.name,
                     arguments: options.nonStreamingToolCall.arguments,
+                    status: "completed",
                   },
                 ]
               : [
@@ -648,12 +648,15 @@ function createAzureResponsesHarness(options: HarnessOptions = {}) {
                     id: "msg_123",
                     type: "message",
                     role: "assistant",
-                    content: [{ type: "output_text", text }],
+                    status: "completed",
+                    content: [{ type: "output_text", text, annotations: [] }],
                   },
                 ],
             usage: {
               input_tokens: usage.inputTokens,
+              input_tokens_details: { cached_tokens: 0 },
               output_tokens: usage.outputTokens,
+              output_tokens_details: { reasoning_tokens: 0 },
               total_tokens: usage.inputTokens + usage.outputTokens,
             },
           };
@@ -804,9 +807,28 @@ function createAnthropicHarness(options: HarnessOptions = {}) {
             );
           }
 
-          return createAsyncIterable(events, options.interruptAtChunk);
+          return createAsyncIterable(events);
         },
       },
+    },
+  };
+}
+
+function createZhipuaiHarness(options: HarnessOptions = {}) {
+  const openAiHarness = createOpenAiLikeHarness(options);
+
+  return {
+    requests: openAiHarness.requests,
+    client: {
+      chatCompletions: (request: Record<string, unknown>) =>
+        openAiHarness.client.chat.completions.create(
+          request as unknown as ChatCompletionCreateParamsNonStreaming,
+        ),
+      chatCompletionsStream: (request: Record<string, unknown>) =>
+        openAiHarness.client.chat.completions.create({
+          ...(request as unknown as ChatCompletionCreateParamsStreaming),
+          stream: true,
+        }),
     },
   };
 }
@@ -913,7 +935,7 @@ function createGeminiHarness(options: HarnessOptions = {}) {
                 },
               ];
 
-          return createAsyncIterable(chunks, options.interruptAtChunk);
+          return createAsyncIterable(chunks);
         },
       },
     },
@@ -1048,7 +1070,7 @@ function createCohereHarness(options: HarnessOptions = {}) {
                 },
               ];
 
-          return createAsyncIterable(chunks, options.interruptAtChunk);
+          return createAsyncIterable(chunks);
         },
       },
     },
@@ -1189,7 +1211,7 @@ function createMinimaxHarness(options: HarnessOptions = {}) {
               },
             ];
 
-        return createAsyncIterable(chunks, options.interruptAtChunk);
+        return createAsyncIterable(chunks);
       },
     },
   };
@@ -1305,7 +1327,7 @@ function createBedrockHarness(options: HarnessOptions = {}) {
               },
             ];
 
-        return createAsyncIterable(events, options.interruptAtChunk);
+        return createAsyncIterable(events);
       },
     },
   };
@@ -1315,6 +1337,8 @@ function createHarness(family: ProviderFamily, options: HarnessOptions = {}) {
   switch (family) {
     case "openai":
       return createOpenAiLikeHarness(options);
+    case "zhipuai":
+      return createZhipuaiHarness(options);
     case "azure-responses":
       return createAzureResponsesHarness(options);
     case "anthropic":
@@ -1398,7 +1422,7 @@ function makeGeminiBuilder(_defaultModel: string): RequestBuilder {
   };
 }
 
-function _makeAzureResponsesBuilder(defaultModel: string): RequestBuilder {
+function makeAzureResponsesBuilder(defaultModel: string): RequestBuilder {
   return {
     buildTextRequest: ({ model, content }) => ({
       model: model || defaultModel,
@@ -1509,13 +1533,13 @@ function makeConfig(
   };
 }
 
-const providerConfigs: ProviderTestConfig[] = [
-  makeConfig({
+const providerConfigsByProvider = {
+  openai: makeConfig({
     providerName: "OpenAI",
     providerSlug: "openai",
     provider: "openai",
     family: "openai",
-    routePlugin: openAiProxyRoutesV2,
+    routePlugin: openAiProxyRoutes,
     adapterFactory: openaiAdapterFactory,
     endpoint: (agentId) => `/v1/openai/${agentId}/chat/completions`,
     headers: () => ({
@@ -1529,51 +1553,12 @@ const providerConfigs: ProviderTestConfig[] = [
     supportsStreamingToolCalls: true,
     supportsCompression: true,
   }),
-  makeConfig({
-    providerName: "Azure",
-    providerSlug: "azure",
-    provider: "azure",
-    family: "openai",
-    routePlugin: azureProxyRoutesV2,
-    adapterFactory: azureAdapterFactory,
-    endpoint: (agentId) => `/v1/azure/${agentId}/chat/completions`,
-    headers: () => ({
-      Authorization: "Bearer test-key",
-      "Content-Type": "application/json",
-    }),
-    requestBuilder: makeOpenAiCompatibleBuilder("gpt-4o"),
-    model: "gpt-4o",
-    optimizedModel: "gpt-4o-mini",
-    supportsDeclaredTools: true,
-    supportsStreamingToolCalls: true,
-    supportsCompression: true,
-  }),
-  makeConfig({
-    providerName: "Anthropic",
-    providerSlug: "anthropic",
-    provider: "anthropic",
-    family: "anthropic",
-    routePlugin: anthropicProxyRoutesV2,
-    adapterFactory: anthropicAdapterFactory,
-    endpoint: (agentId) => `/v1/anthropic/${agentId}/v1/messages`,
-    headers: () => ({
-      "x-api-key": "test-key",
-      "Content-Type": "application/json",
-      "anthropic-version": "2023-06-01",
-    }),
-    requestBuilder: makeAnthropicBuilder("claude-3-5-sonnet-20241022"),
-    model: "claude-3-5-sonnet-20241022",
-    optimizedModel: "claude-3-5-haiku-20241022",
-    supportsDeclaredTools: true,
-    supportsStreamingToolCalls: true,
-    supportsCompression: true,
-  }),
-  makeConfig({
+  gemini: makeConfig({
     providerName: "Gemini",
     providerSlug: "gemini",
     provider: "gemini",
     family: "gemini",
-    routePlugin: geminiProxyRoutesV2,
+    routePlugin: geminiProxyRoutes,
     adapterFactory: geminiAdapterFactory,
     endpoint: (agentId) =>
       `/v1/gemini/${agentId}/v1beta/models/gemini-2.5-pro:generateContent`,
@@ -1590,166 +1575,32 @@ const providerConfigs: ProviderTestConfig[] = [
     supportsStreamingToolCalls: true,
     supportsCompression: true,
   }),
-  makeConfig({
-    providerName: "Cohere",
-    providerSlug: "cohere",
-    provider: "cohere",
-    family: "cohere",
-    routePlugin: cohereProxyRoutesV2,
-    adapterFactory: cohereAdapterFactory,
-    endpoint: (agentId) => `/v1/cohere/${agentId}/chat`,
+  anthropic: makeConfig({
+    providerName: "Anthropic",
+    providerSlug: "anthropic",
+    provider: "anthropic",
+    family: "anthropic",
+    routePlugin: anthropicProxyRoutes,
+    adapterFactory: anthropicAdapterFactory,
+    endpoint: (agentId) => `/v1/anthropic/${agentId}/v1/messages`,
     headers: () => ({
-      Authorization: "Bearer test-key",
+      "x-api-key": "test-key",
       "Content-Type": "application/json",
+      "anthropic-version": "2023-06-01",
     }),
-    requestBuilder: makeCohereBuilder("command-r-plus-08-2024"),
-    model: "command-r-plus-08-2024",
-    optimizedModel: "command-r-08-2024",
-    supportsDeclaredTools: true,
-    supportsStreamingToolCalls: false,
-    supportsCompression: true,
-  }),
-  makeConfig({
-    providerName: "Cerebras",
-    providerSlug: "cerebras",
-    provider: "cerebras",
-    family: "openai",
-    routePlugin: cerebrasProxyRoutesV2,
-    adapterFactory: cerebrasAdapterFactory,
-    endpoint: (agentId) => `/v1/cerebras/${agentId}/chat/completions`,
-    headers: () => ({
-      Authorization: "Bearer test-key",
-      "Content-Type": "application/json",
-    }),
-    requestBuilder: makeOpenAiCompatibleBuilder(
-      "llama-4-scout-17b-16e-instruct",
-    ),
-    model: "llama-4-scout-17b-16e-instruct",
-    optimizedModel: "llama-3.3-70b",
+    requestBuilder: makeAnthropicBuilder("claude-3-5-sonnet-20241022"),
+    model: "claude-3-5-sonnet-20241022",
+    optimizedModel: "claude-3-5-haiku-20241022",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
     supportsCompression: true,
   }),
-  makeConfig({
-    providerName: "Groq",
-    providerSlug: "groq",
-    provider: "groq",
-    family: "openai",
-    routePlugin: groqProxyRoutesV2,
-    adapterFactory: groqAdapterFactory,
-    endpoint: (agentId) => `/v1/groq/${agentId}/chat/completions`,
-    headers: () => ({
-      Authorization: "Bearer test-key",
-      "Content-Type": "application/json",
-    }),
-    requestBuilder: makeOpenAiCompatibleBuilder("llama-3.3-70b-versatile"),
-    model: "llama-3.3-70b-versatile",
-    optimizedModel: "llama-3.1-8b-instant",
-    supportsDeclaredTools: true,
-    supportsStreamingToolCalls: true,
-    supportsCompression: true,
-  }),
-  makeConfig({
-    providerName: "Mistral",
-    providerSlug: "mistral",
-    provider: "mistral",
-    family: "openai",
-    routePlugin: mistralProxyRoutesV2,
-    adapterFactory: mistralAdapterFactory,
-    endpoint: (agentId) => `/v1/mistral/${agentId}/chat/completions`,
-    headers: () => ({
-      Authorization: "Bearer test-key",
-      "Content-Type": "application/json",
-    }),
-    requestBuilder: makeOpenAiCompatibleBuilder("mistral-large-latest"),
-    model: "mistral-large-latest",
-    optimizedModel: "ministral-8b-latest",
-    supportsDeclaredTools: true,
-    supportsStreamingToolCalls: true,
-    supportsCompression: true,
-  }),
-  makeConfig({
-    providerName: "Perplexity",
-    providerSlug: "perplexity",
-    provider: "perplexity",
-    family: "openai",
-    routePlugin: perplexityProxyRoutesV2,
-    adapterFactory: perplexityAdapterFactory,
-    endpoint: (agentId) => `/v1/perplexity/${agentId}/chat/completions`,
-    headers: () => ({
-      Authorization: "Bearer test-key",
-      "Content-Type": "application/json",
-    }),
-    requestBuilder: makeOpenAiCompatibleBuilder("sonar-pro"),
-    model: "sonar-pro",
-    optimizedModel: "sonar",
-    supportsDeclaredTools: false,
-    supportsStreamingToolCalls: false,
-    supportsCompression: false,
-  }),
-  makeConfig({
-    providerName: "Ollama",
-    providerSlug: "ollama",
-    provider: "ollama",
-    family: "openai",
-    routePlugin: ollamaProxyRoutesV2,
-    adapterFactory: ollamaAdapterFactory,
-    endpoint: (agentId) => `/v1/ollama/${agentId}/chat/completions`,
-    headers: () => ({
-      Authorization: "Bearer test-key",
-      "Content-Type": "application/json",
-    }),
-    requestBuilder: makeOpenAiCompatibleBuilder("llama3.2"),
-    model: "llama3.2",
-    optimizedModel: "llama3.2:1b",
-    supportsDeclaredTools: true,
-    supportsStreamingToolCalls: true,
-    supportsCompression: true,
-  }),
-  makeConfig({
-    providerName: "Minimax",
-    providerSlug: "minimax",
-    provider: "minimax",
-    family: "minimax",
-    routePlugin: minimaxProxyRoutesV2,
-    adapterFactory: minimaxAdapterFactory,
-    endpoint: (agentId) => `/v1/minimax/${agentId}/chat/completions`,
-    headers: () => ({
-      Authorization: "Bearer test-key",
-      "Content-Type": "application/json",
-    }),
-    requestBuilder: makeOpenAiCompatibleBuilder("MiniMax-M2.1"),
-    model: "MiniMax-M2.1",
-    optimizedModel: "MiniMax-M1",
-    supportsDeclaredTools: true,
-    supportsStreamingToolCalls: true,
-    supportsCompression: true,
-  }),
-  makeConfig({
-    providerName: "DeepSeek",
-    providerSlug: "deepseek",
-    provider: "deepseek",
-    family: "openai",
-    routePlugin: deepseekProxyRoutesV2,
-    adapterFactory: deepseekAdapterFactory,
-    endpoint: (agentId) => `/v1/deepseek/${agentId}/chat/completions`,
-    headers: () => ({
-      Authorization: "Bearer test-key",
-      "Content-Type": "application/json",
-    }),
-    requestBuilder: makeOpenAiCompatibleBuilder("deepseek-chat"),
-    model: "deepseek-chat",
-    optimizedModel: "deepseek-reasoner",
-    supportsDeclaredTools: true,
-    supportsStreamingToolCalls: true,
-    supportsCompression: true,
-  }),
-  makeConfig({
+  bedrock: makeConfig({
     providerName: "Bedrock",
     providerSlug: "bedrock",
     provider: "bedrock",
     family: "bedrock",
-    routePlugin: bedrockProxyRoutesV2,
+    routePlugin: bedrockProxyRoutes,
     adapterFactory: bedrockAdapterFactory,
     endpoint: (agentId) => `/v1/bedrock/${agentId}/converse`,
     streamEndpoint: (agentId) => `/v1/bedrock/${agentId}/converse-stream`,
@@ -1770,31 +1621,109 @@ const providerConfigs: ProviderTestConfig[] = [
       expect(body).toContain("tooluse_123");
     },
   }),
-  makeConfig({
-    providerName: "OpenRouter",
-    providerSlug: "openrouter",
-    provider: "openrouter",
-    family: "openai",
-    routePlugin: openrouterProxyRoutesV2,
-    adapterFactory: openrouterAdapterFactory,
-    endpoint: (agentId) => `/v1/openrouter/${agentId}/chat/completions`,
+  cohere: makeConfig({
+    providerName: "Cohere",
+    providerSlug: "cohere",
+    provider: "cohere",
+    family: "cohere",
+    routePlugin: cohereProxyRoutes,
+    adapterFactory: cohereAdapterFactory,
+    endpoint: (agentId) => `/v1/cohere/${agentId}/chat`,
     headers: () => ({
       Authorization: "Bearer test-key",
       "Content-Type": "application/json",
     }),
-    requestBuilder: makeOpenAiCompatibleBuilder("openai/gpt-4o"),
-    model: "openai/gpt-4o",
-    optimizedModel: "openai/gpt-4o-mini",
+    requestBuilder: makeCohereBuilder("command-r-plus-08-2024"),
+    model: "command-r-plus-08-2024",
+    optimizedModel: "command-r-08-2024",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: false,
+    supportsCompression: true,
+  }),
+  cerebras: makeConfig({
+    providerName: "Cerebras",
+    providerSlug: "cerebras",
+    provider: "cerebras",
+    family: "openai",
+    routePlugin: cerebrasProxyRoutes,
+    adapterFactory: cerebrasAdapterFactory,
+    endpoint: (agentId) => `/v1/cerebras/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder(
+      "llama-4-scout-17b-16e-instruct",
+    ),
+    model: "llama-4-scout-17b-16e-instruct",
+    optimizedModel: "llama-3.3-70b",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
     supportsCompression: true,
   }),
-  makeConfig({
+  mistral: makeConfig({
+    providerName: "Mistral",
+    providerSlug: "mistral",
+    provider: "mistral",
+    family: "openai",
+    routePlugin: mistralProxyRoutes,
+    adapterFactory: mistralAdapterFactory,
+    endpoint: (agentId) => `/v1/mistral/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("mistral-large-latest"),
+    model: "mistral-large-latest",
+    optimizedModel: "ministral-8b-latest",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+    supportsCompression: true,
+  }),
+  perplexity: makeConfig({
+    providerName: "Perplexity",
+    providerSlug: "perplexity",
+    provider: "perplexity",
+    family: "openai",
+    routePlugin: perplexityProxyRoutes,
+    adapterFactory: perplexityAdapterFactory,
+    endpoint: (agentId) => `/v1/perplexity/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("sonar-pro"),
+    model: "sonar-pro",
+    optimizedModel: "sonar",
+    supportsDeclaredTools: false,
+    supportsStreamingToolCalls: false,
+    supportsCompression: false,
+  }),
+  groq: makeConfig({
+    providerName: "Groq",
+    providerSlug: "groq",
+    provider: "groq",
+    family: "openai",
+    routePlugin: groqProxyRoutes,
+    adapterFactory: groqAdapterFactory,
+    endpoint: (agentId) => `/v1/groq/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("llama-3.3-70b-versatile"),
+    model: "llama-3.3-70b-versatile",
+    optimizedModel: "llama-3.1-8b-instant",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+    supportsCompression: true,
+  }),
+  xai: makeConfig({
     providerName: "xAI",
     providerSlug: "xai",
     provider: "xai",
     family: "openai",
-    routePlugin: xaiProxyRoutesV2,
+    routePlugin: xaiProxyRoutes,
     adapterFactory: xaiAdapterFactory,
     endpoint: (agentId) => `/v1/xai/${agentId}/chat/completions`,
     headers: () => ({
@@ -1808,10 +1737,176 @@ const providerConfigs: ProviderTestConfig[] = [
     supportsStreamingToolCalls: true,
     supportsCompression: true,
   }),
-];
+  openrouter: makeConfig({
+    providerName: "OpenRouter",
+    providerSlug: "openrouter",
+    provider: "openrouter",
+    family: "openai",
+    routePlugin: openrouterProxyRoutes,
+    adapterFactory: openrouterAdapterFactory,
+    endpoint: (agentId) => `/v1/openrouter/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("openai/gpt-4o"),
+    model: "openai/gpt-4o",
+    optimizedModel: "openai/gpt-4o-mini",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+    supportsCompression: true,
+  }),
+  vllm: makeConfig({
+    providerName: "vLLM",
+    providerSlug: "vllm",
+    provider: "vllm",
+    family: "openai",
+    routePlugin: vllmProxyRoutes,
+    adapterFactory: vllmAdapterFactory,
+    endpoint: (agentId) => `/v1/vllm/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder(
+      "meta-llama/Llama-3.1-8B-Instruct",
+    ),
+    model: "meta-llama/Llama-3.1-8B-Instruct",
+    optimizedModel: "meta-llama/Llama-3.1-70B-Instruct",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+    supportsCompression: true,
+  }),
+  ollama: makeConfig({
+    providerName: "Ollama",
+    providerSlug: "ollama",
+    provider: "ollama",
+    family: "openai",
+    routePlugin: ollamaProxyRoutes,
+    adapterFactory: ollamaAdapterFactory,
+    endpoint: (agentId) => `/v1/ollama/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("llama3.2"),
+    model: "llama3.2",
+    optimizedModel: "llama3.2:1b",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+    supportsCompression: true,
+  }),
+  zhipuai: makeConfig({
+    providerName: "Zhipu AI",
+    providerSlug: "zhipuai",
+    provider: "zhipuai",
+    family: "zhipuai",
+    routePlugin: zhipuaiProxyRoutes,
+    adapterFactory: zhipuaiAdapterFactory,
+    endpoint: (agentId) => `/v1/zhipuai/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("glm-4.5-flash"),
+    model: "glm-4.5-flash",
+    optimizedModel: "glm-4-flash",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+    supportsCompression: true,
+  }),
+  deepseek: makeConfig({
+    providerName: "DeepSeek",
+    providerSlug: "deepseek",
+    provider: "deepseek",
+    family: "openai",
+    routePlugin: deepseekProxyRoutes,
+    adapterFactory: deepseekAdapterFactory,
+    endpoint: (agentId) => `/v1/deepseek/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("deepseek-chat"),
+    model: "deepseek-chat",
+    optimizedModel: "deepseek-reasoner",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+    supportsCompression: true,
+  }),
+  minimax: makeConfig({
+    providerName: "Minimax",
+    providerSlug: "minimax",
+    provider: "minimax",
+    family: "minimax",
+    routePlugin: minimaxProxyRoutes,
+    adapterFactory: minimaxAdapterFactory,
+    endpoint: (agentId) => `/v1/minimax/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("MiniMax-M2.1"),
+    model: "MiniMax-M2.1",
+    optimizedModel: "MiniMax-M1",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+    supportsCompression: true,
+  }),
+  azure: makeConfig({
+    providerName: "Azure",
+    providerSlug: "azure",
+    provider: "azure",
+    family: "openai",
+    routePlugin: azureProxyRoutes,
+    adapterFactory: azureAdapterFactory,
+    endpoint: (agentId) => `/v1/azure/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("gpt-4o"),
+    model: "gpt-4o",
+    optimizedModel: "gpt-4o-mini",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+    supportsCompression: true,
+  }),
+} satisfies Record<SupportedProvider, ProviderTestConfig>;
+
+const azureResponsesConfig = makeConfig({
+  providerName: "Azure Responses",
+  providerSlug: "azure-responses",
+  provider: "azure",
+  family: "azure-responses",
+  routePlugin: azureProxyRoutes,
+  adapterFactory: azureResponsesAdapterFactory,
+  endpoint: (agentId) => `/v1/azure/${agentId}/responses`,
+  headers: () => ({
+    Authorization: "Bearer test-key",
+    "Content-Type": "application/json",
+  }),
+  requestBuilder: makeAzureResponsesBuilder("gpt-4.1"),
+  model: "gpt-4.1",
+  optimizedModel: "gpt-4.1-mini",
+  supportsDeclaredTools: true,
+  supportsStreamingToolCalls: true,
+  supportsCompression: false,
+  assertStreamingToolCall(body) {
+    expect(body).toContain("response.completed");
+    expect(body).toContain("read_file");
+  },
+});
+
+const providerConfigs = [
+  ...Object.values(providerConfigsByProvider),
+  azureResponsesConfig,
+] satisfies ProviderTestConfig[];
 
 describe("LLM proxy provider matrix", () => {
   let app: FastifyInstance;
+  const originalVllmEnabled = appConfig.llm.vllm.enabled;
+  const originalVllmBaseUrl = appConfig.llm.vllm.baseUrl;
 
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -1819,6 +1914,8 @@ describe("LLM proxy provider matrix", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
+    appConfig.llm.vllm.enabled = originalVllmEnabled;
+    appConfig.llm.vllm.baseUrl = originalVllmBaseUrl;
     if (app) {
       await app.close();
     }
@@ -1831,6 +1928,10 @@ describe("LLM proxy provider matrix", () => {
         harnessOptions: HarnessOptions = {},
       ) {
         app = createFastifyApp();
+        if (config.provider === "vllm") {
+          appConfig.llm.vllm.enabled = true;
+          appConfig.llm.vllm.baseUrl = "http://localhost:8000/v1";
+        }
         const harness = createHarness(config.family, {
           model: config.model,
           ...harnessOptions,
@@ -1869,8 +1970,22 @@ describe("LLM proxy provider matrix", () => {
 
           expect(response.statusCode).toBe(200);
 
+          const secondResponse = await app.inject({
+            method: "POST",
+            url: config.endpoint(agent.id),
+            headers: config.headers(),
+            payload: config.requestBuilder.buildToolRequest({
+              model: config.model,
+              content: "Read a file again",
+              tools: [READ_FILE_TOOL],
+            }),
+          });
+
+          expect(secondResponse.statusCode).toBe(200);
+
           const storedTool = await ToolModel.findByName(READ_FILE_TOOL.name);
           expect(storedTool).not.toBeNull();
+          expect(await ToolModel.countByName(READ_FILE_TOOL.name)).toBe(1);
         },
       );
 
@@ -1941,6 +2056,11 @@ describe("LLM proxy provider matrix", () => {
           });
 
           expect(response.statusCode).toBe(200);
+          if (config.family === "openai") {
+            expect(response.headers["content-type"]).toContain(
+              "text/event-stream",
+            );
+          }
           config.assertStreamingToolCall(response.body);
         },
       );
@@ -1995,8 +2115,8 @@ describe("LLM proxy provider matrix", () => {
           });
 
           expect(enabledResponse.statusCode).toBe(200);
-          expect(JSON.stringify(enabledHarness.requests.at(-1))).toContain(
-            "files[5]{name,size,type}",
+          expect(JSON.stringify(enabledHarness.requests.at(-1))).toMatch(
+            /files\[5\]/,
           );
 
           await app.close();

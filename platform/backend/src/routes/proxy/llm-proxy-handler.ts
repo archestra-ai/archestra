@@ -1075,7 +1075,7 @@ async function handleNonStreaming<
 
   logger.debug(
     { model: actualModel },
-    `[${providerName}ProxyV2] Starting non-streaming request`,
+    `[${providerName}Proxy] Starting non-streaming request`,
   );
 
   // Execute request with tracing

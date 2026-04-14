@@ -29,6 +29,16 @@ interface OAuthDiscoveryOverrides {
   wellKnownUrl?: string;
 }
 
+interface OAuthScopeConfig {
+  server_url: string;
+  supports_resource_metadata?: boolean;
+  scopes?: string[];
+  default_scopes?: string[];
+  auth_server_url?: string;
+  resource_metadata_url?: string;
+  well_known_url?: string;
+}
+
 /**
  * Discover OAuth resource metadata (for MCP servers)
  * Sends MCP-Protocol-Version header for MCP-aware servers
@@ -119,6 +129,38 @@ export async function discoverScopes(
 
   // Fall back to default scopes
   return defaultScopes;
+}
+
+export async function resolveOAuthScopesForAuthorization(params: {
+  oauthConfig: OAuthScopeConfig;
+}): Promise<{
+  configuredScopes: string[];
+  discoveredScopes: string[];
+  scopesToUse: string[];
+}> {
+  const configuredScopes = params.oauthConfig.scopes ?? [];
+  const fallbackScopes =
+    configuredScopes.length > 0
+      ? configuredScopes
+      : (params.oauthConfig.default_scopes ?? []);
+
+  const discoveredScopes = await discoverScopes(
+    params.oauthConfig.server_url,
+    params.oauthConfig.supports_resource_metadata || false,
+    fallbackScopes,
+    {
+      authServerUrl: params.oauthConfig.auth_server_url,
+      resourceMetadataUrl: params.oauthConfig.resource_metadata_url,
+      wellKnownUrl: params.oauthConfig.well_known_url,
+    },
+  );
+
+  return {
+    configuredScopes,
+    discoveredScopes,
+    scopesToUse:
+      configuredScopes.length > 0 ? configuredScopes : discoveredScopes,
+  };
 }
 
 /**
@@ -675,33 +717,9 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       // Discover actual scopes from the OAuth server (like desktop app does)
-      const discoveredScopes = await discoverScopes(
-        oauthConfig.server_url,
-        oauthConfig.supports_resource_metadata || false,
-        oauthConfig.default_scopes || oauthConfig.scopes,
-        {
-          authServerUrl: oauthConfig.auth_server_url,
-          resourceMetadataUrl: oauthConfig.resource_metadata_url,
-          wellKnownUrl: oauthConfig.well_known_url,
-        },
-      );
-
-      // Use discovered scopes if different from configured
-      const scopesToUse =
-        JSON.stringify(discoveredScopes.sort()) !==
-        JSON.stringify(oauthConfig.scopes.sort())
-          ? discoveredScopes
-          : oauthConfig.scopes;
-
-      if (scopesToUse !== oauthConfig.scopes) {
-        fastify.log.info(
-          {
-            configured: oauthConfig.scopes,
-            discovered: scopesToUse,
-          },
-          "Using discovered scopes instead of configured scopes",
-        );
-      }
+      const { scopesToUse } = await resolveOAuthScopesForAuthorization({
+        oauthConfig,
+      });
 
       // Check if dynamic registration is needed
       if (!clientId) {

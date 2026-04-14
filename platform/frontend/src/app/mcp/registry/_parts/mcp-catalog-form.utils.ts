@@ -76,9 +76,10 @@ export function transformFormToApiData(
       .map((uri) => uri.trim())
       .filter((uri) => uri.length > 0);
 
-    // Default to ["read", "write"] if scopes not provided or empty
-    const scopesList = values.oauthConfig.scopes?.trim()
-      ? values.oauthConfig.scopes
+    const explicitScopes = values.oauthConfig.scopes?.trim() ?? "";
+    const hasExplicitScopes = explicitScopes.length > 0;
+    const scopesList = hasExplicitScopes
+      ? explicitScopes
           .split(",")
           .map((scope) => scope.trim())
           .filter((scope) => scope.length > 0)
@@ -107,7 +108,7 @@ export function transformFormToApiData(
         : values.oauthConfig.client_secret || undefined,
       redirect_uris: redirectUrisList,
       scopes: scopesList,
-      default_scopes: ["read", "write"],
+      default_scopes: hasExplicitScopes ? scopesList : ["read", "write"],
       supports_resource_metadata: values.oauthConfig.supports_resource_metadata,
     };
 

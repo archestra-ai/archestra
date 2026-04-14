@@ -311,7 +311,7 @@ describe("OAuth helper functions", () => {
 
       expect(result).toEqual({
         configuredScopes: ["READ"],
-        discoveredScopes: ["READ"],
+        discoveredScopes: [],
         scopesToUse: ["READ"],
       });
       expect(fetchMock).not.toHaveBeenCalled();

@@ -142,7 +142,7 @@ export async function resolveOAuthScopesForAuthorization(params: {
   if (configuredScopes.length > 0) {
     return {
       configuredScopes,
-      discoveredScopes: configuredScopes,
+      discoveredScopes: [],
       scopesToUse: configuredScopes,
     };
   }
@@ -163,8 +163,7 @@ export async function resolveOAuthScopesForAuthorization(params: {
   return {
     configuredScopes,
     discoveredScopes,
-    scopesToUse:
-      configuredScopes.length > 0 ? configuredScopes : discoveredScopes,
+    scopesToUse: discoveredScopes,
   };
 }
 

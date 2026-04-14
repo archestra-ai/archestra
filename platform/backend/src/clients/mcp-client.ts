@@ -175,6 +175,7 @@ class ConnectionLimiter {
 type TransportKind = "stdio" | "http";
 
 const HTTP_CONCURRENCY_LIMIT = 4;
+const OAUTH_TOKEN_REFRESH_BUFFER_MS = 5 * TimeInMs.Minute;
 // Idle TTL for shared MCP active connections. These clients can retain HTTP
 // session affinity, tool-name caches, and browser-backed remote state, so we
 // want them to age out after inactivity instead of accumulating forever.
@@ -404,6 +405,37 @@ class McpClient {
       isRetry = false,
     ): Promise<CommonToolResult> => {
       try {
+        const hasRefreshToken = !!(currentSecrets as { refresh_token?: string })
+          .refresh_token;
+        const shouldRefreshBeforeCall =
+          !isRetry &&
+          !!catalogItem.oauthConfig &&
+          !!secretId &&
+          hasRefreshToken &&
+          shouldProactivelyRefreshOAuthToken(currentSecrets);
+
+        if (shouldRefreshBeforeCall) {
+          const retryToolCallResult = await this.attemptTokenRefreshAndRetry({
+            secretId,
+            catalogId: catalogItem.id,
+            connectionKey,
+            toolCall,
+            agentId,
+            mcpServerName,
+            catalogItem,
+            targetMcpServerId,
+            tokenAuth,
+            toolCatalogId: tool.catalogId,
+            toolCatalogName: tool.catalogName,
+            executeRetry: (nextGetTransport, secrets) =>
+              executeToolCall(nextGetTransport, secrets, true),
+          });
+
+          if (retryToolCallResult) {
+            return retryToolCallResult;
+          }
+        }
+
         // Get the appropriate transport
         const transport = await getTransport();
 
@@ -442,6 +474,55 @@ class McpClient {
           name: targetToolName,
           arguments: toolCall.arguments,
         });
+
+        const isOAuthServer = !!catalogItem.oauthConfig;
+        const toolResultAuthError = isAuthRelatedToolResult(result);
+        if (
+          toolResultAuthError &&
+          isOAuthServer &&
+          secretId &&
+          hasRefreshToken &&
+          !isRetry
+        ) {
+          const retryToolCallResult = await this.attemptTokenRefreshAndRetry({
+            secretId,
+            catalogId: catalogItem.id,
+            connectionKey,
+            toolCall,
+            agentId,
+            mcpServerName,
+            catalogItem,
+            targetMcpServerId,
+            tokenAuth,
+            toolCatalogId: tool.catalogId,
+            toolCatalogName: tool.catalogName,
+            executeRetry: (nextGetTransport, secrets) =>
+              executeToolCall(nextGetTransport, secrets, true),
+          });
+
+          if (retryToolCallResult) {
+            return retryToolCallResult;
+          }
+        }
+
+        if (toolResultAuthError && tool.catalogId && targetMcpServerId) {
+          const catalogDisplayName = tool.catalogName || tool.catalogId;
+          const authError = this.buildExpiredAuthMessage(
+            catalogDisplayName,
+            tool.catalogId,
+            targetMcpServerId,
+            tokenAuth,
+          );
+          return await this.createErrorResult(
+            toolCall,
+            agentId,
+            authError.message,
+            mcpServerName,
+            authInfo,
+            authError,
+          );
+        }
+
         // Apply template and return
         return await this.createSuccessResult({
           toolCall,
@@ -1626,6 +1707,11 @@ class McpClient {
         return null;
       }
 
+      this.secretsCache.set(targetMcpServerId, {
+        secrets: updatedSecret.secret,
+        secretId,
+      });
+
       // Create new transport with updated secrets
       const getUpdatedTransport = () =>
         this.getTransport(catalogItem, targetMcpServerId, updatedSecret.secret);
@@ -2481,6 +2567,39 @@ function isAuthRelatedError(errorMessage: string): boolean {
     lower.includes("invalid credentials") ||
     lower.includes("credentials expired")
   );
+}
+
+function isAuthRelatedToolResult(result: {
+  isError?: boolean;
+  content?: Array<{ type?: string; text?: string }>;
+  structuredContent?: Record<string, unknown>;
+  _meta?: Record<string, unknown>;
+}): boolean {
+  if (!result.isError) {
+    return false;
+  }
+
+  const contentText = (result.content ?? [])
+    .filter((block) => block.type === "text" && typeof block.text === "string")
+    .map((block) => block.text)
+    .join("\n");
+  const structuredText = result.structuredContent
+    ? JSON.stringify(result.structuredContent)
+    : "";
+  const metaText = result._meta ? JSON.stringify(result._meta) : "";
+
+  return isAuthRelatedError(`${contentText}\n${structuredText}\n${metaText}`);
+}
+
+function shouldProactivelyRefreshOAuthToken(
+  secrets: Record<string, unknown>,
+): boolean {
+  const expiresAt = secrets.expires_at;
+  if (typeof expiresAt !== "number") {
+    return false;
+  }
+
+  return expiresAt <= Date.now() + OAUTH_TOKEN_REFRESH_BUFFER_MS;
 }
 
 function isHighFrequencyBrowserTool(toolName: string): boolean {

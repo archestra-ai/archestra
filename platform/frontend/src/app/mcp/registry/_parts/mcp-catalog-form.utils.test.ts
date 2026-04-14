@@ -157,6 +157,46 @@ describe("transformFormToApiData", () => {
     });
   });
 
+  it('treats comma-only scopes input as blank and falls back to ["read", "write"]', () => {
+    const values: McpCatalogFormValues = {
+      name: "Comma Scope OAuth MCP",
+      description: "",
+      icon: null,
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com",
+      authMethod: "oauth",
+      oauthConfig: {
+        client_id: "client-id",
+        client_secret: "client-secret",
+        redirect_uris: "https://app.example.com/oauth-callback",
+        scopes: " , ",
+        supports_resource_metadata: false,
+        oauthServerUrl: "",
+        authServerUrl: "",
+        authorizationEndpoint: "",
+        wellKnownUrl: "",
+        resourceMetadataUrl: "",
+        tokenEndpoint: "",
+      },
+      enterpriseManagedConfig: null,
+      localConfig: undefined,
+      deploymentSpecYaml: "",
+      originalDeploymentSpecYaml: "",
+      oauthClientSecretVaultPath: "",
+      oauthClientSecretVaultKey: "",
+      localConfigVaultPath: "",
+      localConfigVaultKey: "",
+      labels: [],
+      scope: "personal",
+      teams: [],
+    };
+
+    expect(transformFormToApiData(values).oauthConfig).toMatchObject({
+      scopes: ["read", "write"],
+      default_scopes: ["read", "write"],
+    });
+  });
+
   it("hydrates explicit OAuth endpoints from internal catalog items", () => {
     const values = transformCatalogItemToFormValues({
       id: "catalog-1",

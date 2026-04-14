@@ -77,13 +77,12 @@ export function transformFormToApiData(
       .filter((uri) => uri.length > 0);
 
     const explicitScopes = values.oauthConfig.scopes?.trim() ?? "";
-    const hasExplicitScopes = explicitScopes.length > 0;
-    const scopesList = hasExplicitScopes
-      ? explicitScopes
-          .split(",")
-          .map((scope) => scope.trim())
-          .filter((scope) => scope.length > 0)
-      : ["read", "write"];
+    const parsedScopes = explicitScopes
+      .split(",")
+      .map((scope) => scope.trim())
+      .filter((scope) => scope.length > 0);
+    const hasExplicitScopes = parsedScopes.length > 0;
+    const scopesList = hasExplicitScopes ? parsedScopes : ["read", "write"];
 
     // For local servers, use oauthServerUrl; for remote servers, use serverUrl
     const oauthServerUrl =
@@ -108,6 +107,8 @@ export function transformFormToApiData(
         : values.oauthConfig.client_secret || undefined,
       redirect_uris: redirectUrisList,
       scopes: scopesList,
+      // Keep fallback scopes aligned with explicit scopes because the backend
+      // skips discovery entirely when scopes are configured.
       default_scopes: hasExplicitScopes ? scopesList : ["read", "write"],
       supports_resource_metadata: values.oauthConfig.supports_resource_metadata,
     };

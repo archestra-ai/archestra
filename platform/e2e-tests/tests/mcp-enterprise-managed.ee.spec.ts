@@ -21,6 +21,7 @@ import {
   initializeMcpSession,
   listMcpTools,
   makeApiRequest,
+  waitForGatewayIdentityProviderReady,
 } from "../utils/mcp-gateway";
 import { expect, test } from "./api-fixtures";
 
@@ -494,6 +495,12 @@ async function createProfile(params: {
   });
 
   const profile = (await response.json()) as { id: string };
+  await waitForGatewayIdentityProviderReady({
+    request: params.request,
+    profileId: profile.id,
+    identityProviderId: params.identityProviderId,
+    agentType: params.agentType,
+  });
   return profile.id;
 }
 

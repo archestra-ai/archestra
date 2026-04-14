@@ -19,6 +19,7 @@ import {
 import {
   clickButton,
   clickTeamActionButton,
+  closeOpenDialogs,
   createTeam,
   deleteTeamByName,
   expectAuthenticated,
@@ -290,6 +291,21 @@ async function waitForIdentityProviderDialogToClose(page: Page): Promise<void> {
       { timeout: 10_000, intervals: [250, 500, 1000] },
     )
     .toBe("closed");
+}
+
+async function settleIdentityProviderDialog(page: Page): Promise<void> {
+  const createVisible = await page
+    .getByTestId(E2eTestId.IdentityProviderCreateButton)
+    .isVisible()
+    .catch(() => false);
+  const updateVisible = await page
+    .getByTestId(E2eTestId.IdentityProviderUpdateButton)
+    .isVisible()
+    .catch(() => false);
+
+  if (createVisible || updateVisible) {
+    await closeOpenDialogs(page, { timeoutMs: 10_000 });
+  }
 }
 
 async function expectIdentityProviderToExistViaApi(
@@ -640,8 +656,8 @@ test.describe("Identity Provider OIDC E2E Flow with Keycloak", () => {
     await fillOidcProviderForm(page, providerName);
     await page.getByTestId(E2eTestId.IdentityProviderCreateButton).click();
 
-    await waitForIdentityProviderDialogToClose(page);
     await expectIdentityProviderToExistViaApi(page, providerName);
+    await settleIdentityProviderDialog(page);
 
     // Verify the provider is now shown as "Enabled"
     await page.reload();
@@ -674,8 +690,8 @@ test.describe("Identity Provider OIDC E2E Flow with Keycloak", () => {
 
     // Save changes
     await page.getByTestId(E2eTestId.IdentityProviderUpdateButton).click();
-    await waitForIdentityProviderDialogToClose(page);
     await expectIdentityProviderToExistViaApi(page, providerName);
+    await settleIdentityProviderDialog(page);
 
     // STEP 6: Delete the provider
     await openIdentityProviderDialog(page, "Generic OIDC");

@@ -17,6 +17,7 @@ import {
   listMcpTools,
   makeApiRequest,
   makeMcpGatewayRequestHeaders,
+  waitForGatewayIdentityProviderReady,
 } from "../utils/mcp-gateway";
 import { expect, test } from "./api-fixtures";
 
@@ -64,6 +65,11 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
         method: "put",
         urlSuffix: `/api/agents/${pid}`,
         data: { identityProviderId },
+      });
+      await waitForGatewayIdentityProviderReady({
+        request,
+        profileId: pid,
+        identityProviderId,
       });
 
       // STEP 4: Assign Archestra tools to the profile
@@ -153,6 +159,11 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
         method: "put",
         urlSuffix: `/api/agents/${profileId}`,
         data: { identityProviderId },
+      });
+      await waitForGatewayIdentityProviderReady({
+        request,
+        profileId,
+        identityProviderId,
       });
 
       // Try to call MCP Gateway with an invalid JWT

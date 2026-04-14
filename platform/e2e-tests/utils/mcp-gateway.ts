@@ -193,6 +193,30 @@ export async function initializeMcpSession(
   });
 }
 
+export async function waitForGatewayIdentityProviderReady(params: {
+  request: APIRequestContext;
+  profileId: string;
+  identityProviderId: string;
+  agentType?: "agent" | "mcp_gateway";
+}): Promise<void> {
+  await expect(async () => {
+    const response = await makeApiRequest({
+      request: params.request,
+      method: "get",
+      urlSuffix: `/api/agents/${params.profileId}`,
+    });
+    const agent = (await response.json()) as {
+      identityProviderId?: string | null;
+      agentType?: "agent" | "mcp_gateway" | "profile" | "llm_proxy";
+    };
+
+    expect(agent.identityProviderId).toBe(params.identityProviderId);
+    if (params.agentType) {
+      expect(agent.agentType).toBe(params.agentType);
+    }
+  }).toPass({ timeout: 30_000, intervals: [500, 1000, 2000, 4000] });
+}
+
 export async function callMcpTool(
   request: APIRequestContext,
   options: {

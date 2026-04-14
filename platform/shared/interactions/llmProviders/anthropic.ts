@@ -272,8 +272,7 @@ class AnthropicMessagesInteraction implements InteractionUtils {
                   );
 
                   const existingInput =
-                    existingIdx !== -1 &&
-                    "input" in toolCallParts[existingIdx]
+                    existingIdx !== -1 && "input" in toolCallParts[existingIdx]
                       ? toolCallParts[existingIdx].input
                       : {};
 

@@ -17,6 +17,7 @@ export function transformConfigArrayFields(
     "states",
     "assignmentGroups",
     "driveIds",
+    "fileTypes",
   ];
   for (const key of stringArrayFields) {
     if (typeof result[key] === "string") {

@@ -20,6 +20,7 @@ const CONNECTOR_ICON_MAP: Partial<Record<ConnectorType, ConnectorIcon>> = {
   servicenow: { kind: "img", src: "/icons/servicenow.png" },
   notion: { kind: "img", src: "/icons/notion.png" },
   sharepoint: { kind: "img", src: "/icons/sharepoint.png" },
+  gdrive: { kind: "img", src: "/icons/gdrive.png" },
   linear: { kind: "img", src: "/icons/linear.png" },
 };
 

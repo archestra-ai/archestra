@@ -49566,6 +49566,18 @@
         }
       }
     },
+    "/api/auth/sign-in/sso": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
     "/api/auth/{*}": {
       "get": {
         "tags": [
@@ -155398,6 +155410,9 @@
                           "enableRpInitiatedLogout": {
                             "type": "boolean"
                           },
+                          "hd": {
+                            "type": "string"
+                          },
                           "clientId": {
                             "type": "string"
                           },
@@ -156021,6 +156036,9 @@
                       "enableRpInitiatedLogout": {
                         "type": "boolean"
                       },
+                      "hd": {
+                        "type": "string"
+                      },
                       "clientId": {
                         "type": "string"
                       },
@@ -156402,6 +156420,9 @@
                         },
                         "enableRpInitiatedLogout": {
                           "type": "boolean"
+                        },
+                        "hd": {
+                          "type": "string"
                         },
                         "clientId": {
                           "type": "string"
@@ -157287,6 +157308,9 @@
                         "enableRpInitiatedLogout": {
                           "type": "boolean"
                         },
+                        "hd": {
+                          "type": "string"
+                        },
                         "clientId": {
                           "type": "string"
                         },
@@ -157909,6 +157933,9 @@
                       "enableRpInitiatedLogout": {
                         "type": "boolean"
                       },
+                      "hd": {
+                        "type": "string"
+                      },
                       "clientId": {
                         "type": "string"
                       },
@@ -158291,6 +158318,9 @@
                         },
                         "enableRpInitiatedLogout": {
                           "type": "boolean"
+                        },
+                        "hd": {
+                          "type": "string"
                         },
                         "clientId": {
                           "type": "string"

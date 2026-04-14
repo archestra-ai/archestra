@@ -37306,6 +37306,7 @@ export type RunScheduleTriggerNowResponses = {
         startedAt: string | null;
         completedAt: string | null;
         error: string | null;
+        artifact: string | null;
         createdAt: string;
     };
 };
@@ -37400,6 +37401,7 @@ export type GetScheduleTriggerRunsResponses = {
             startedAt: string | null;
             completedAt: string | null;
             error: string | null;
+            artifact: string | null;
             createdAt: string;
         }>;
         pagination: {
@@ -37499,6 +37501,7 @@ export type GetScheduleTriggerRunResponses = {
         startedAt: string | null;
         completedAt: string | null;
         error: string | null;
+        artifact: string | null;
         createdAt: string;
     };
 };

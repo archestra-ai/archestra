@@ -16,8 +16,6 @@ This is a development guide for adding new LLM providers to Archestra.
 
 This guide covers how to add a new LLM provider to Archestra Platform. Each provider requires:
 
-![LLM provider development flow in the platform shell](/assets/automated_screenshots/platform-adding-llm-providers_platform-shell.png)
-
 1. **[LLM Proxy](/docs/platform-llm-proxy)** - The proxy that sits between clients and LLM providers. Handles security policies, tool invocation controls, metrics, and observability. Clients send requests to the proxy, which forwards them to the provider. It must handle both streaming and non-streaming provider responses.
 
 2. **[Chat](/docs/platform-chat)** - The built-in chat interface.
@@ -189,7 +187,7 @@ Interaction handlers parse stored request/response data for display in the LLM P
 
 ### Testing
 
-New provider work should add backend proxy coverage first, then only add WireMock e2e coverage where transport-level smoke coverage is still needed.
+Provider onboarding uses backend Vitest for proxy behavior coverage and e2e tests for the current running-stack checks.
 
 #### Backend Proxy Matrix
 
@@ -198,7 +196,7 @@ New provider work should add backend proxy coverage first, then only add WireMoc
 | `backend/src/routes/proxy/routesv2/provider-matrix.test.ts` | Primary conformance suite for provider onboarding. Add the provider config, request builders, route plugin, adapter factory, and any provider-specific stream assertions. |
 | `backend/src/test/llm-provider-stubs.ts` and route-local harnesses | Reuse or extend SDK-level stubs instead of adding WireMock mappings for proxy-only behavior.                                               |
 
-The backend matrix covers the proxy behaviors that used to require dedicated e2e suites:
+The backend matrix covers:
 
 - declared tool persistence
 - execution ID persistence
@@ -209,18 +207,18 @@ The backend matrix covers the proxy behaviors that used to require dedicated e2e
 
 The preferred test seam is the provider client created by `adapterFactory.createClient()`. Return a fake SDK-shaped client from the test and let the real route, handler, policy, persistence, and metrics code run around it.
 
-#### Remaining E2E Coverage
+#### Proxy E2E Tests
 
-| File                                               | Description                                                                                                                            |
-| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `e2e-tests/tests/llm-proxy/tool-invocation.spec.ts` | Keep provider entries here for end-to-end policy enforcement against the running stack.                                                |
-| `e2e-tests/tests/llm-proxy/jwks-auth.spec.ts`       | Keep this as transport and auth smoke coverage.                                                                                        |
-| `e2e-tests/tests/llm-proxy/virtual-api-keys.spec.ts` | Keep this for virtual key routing and custom base URL behavior.                                                                        |
-| `e2e-tests/tests/ui/chat.spec.ts`                   | Add provider entries for built-in chat model selection and response rendering.                                                         |
-| `helm/e2e-tests/mappings/{provider}-chat-ui-e2e-test.json` | Add WireMock chat stubs only when the provider needs chat UI e2e coverage.                                                            |
-| `.github/values-ci.yaml`                            | Add provider base URL overrides only if a remaining e2e test still needs WireMock for that provider.                                   |
+The current proxy e2e files are:
 
-Do not add a full set of `helm/e2e-tests/mappings/{provider}-*.json` files by default. Most new provider proxy behavior should be covered in backend Vitest.
+| File | Description |
+| ---- | ----------- |
+| `e2e-tests/tests/llm-proxy/tool-invocation.spec.ts` | End-to-end policy enforcement against the running stack. |
+| `e2e-tests/tests/llm-proxy/jwks-auth.spec.ts` | Auth and JWKS smoke coverage. |
+| `e2e-tests/tests/llm-proxy/virtual-api-keys.spec.ts` | Virtual key routing and custom base URL behavior. |
+| `.github/values-ci.yaml` | Add provider base URL overrides when the remaining e2e coverage needs WireMock for that provider. |
+
+For built-in chat coverage, add provider entries to `e2e-tests/tests/chat.spec.ts`.
 
 ## Chat Support
 

@@ -13869,6 +13869,20 @@ export type PostApiAuthOauth2RegisterResponses = {
     200: unknown;
 };
 
+export type PostApiAuthSignInSsoData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/sign-in/sso';
+};
+
+export type PostApiAuthSignInSsoResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
 export type GetApiAuthBy__Data = {
     body?: never;
     path: {
@@ -36577,6 +36591,7 @@ export type GetScheduleTriggersData = {
         enabled?: boolean;
         name?: string;
         actorUserIds?: string;
+        agentIds?: string;
         showAll?: boolean;
     };
     url: '/api/schedule-triggers';
@@ -41377,6 +41392,7 @@ export type GetIdentityProvidersResponses = {
             skipDiscovery?: boolean;
             pkce: boolean;
             enableRpInitiatedLogout?: boolean;
+            hd?: string;
             clientId: string;
             clientSecret: string;
             authorizationEndpoint?: string;
@@ -41505,6 +41521,7 @@ export type CreateIdentityProviderData = {
             skipDiscovery?: boolean;
             pkce: boolean;
             enableRpInitiatedLogout?: boolean;
+            hd?: string;
             clientId: string;
             clientSecret: string;
             authorizationEndpoint?: string;
@@ -41696,6 +41713,7 @@ export type CreateIdentityProviderResponses = {
             skipDiscovery?: boolean;
             pkce: boolean;
             enableRpInitiatedLogout?: boolean;
+            hd?: string;
             clientId: string;
             clientSecret: string;
             authorizationEndpoint?: string;
@@ -42052,6 +42070,7 @@ export type GetIdentityProviderResponses = {
             skipDiscovery?: boolean;
             pkce: boolean;
             enableRpInitiatedLogout?: boolean;
+            hd?: string;
             clientId: string;
             clientSecret: string;
             authorizationEndpoint?: string;
@@ -42180,6 +42199,7 @@ export type UpdateIdentityProviderData = {
             skipDiscovery?: boolean;
             pkce: boolean;
             enableRpInitiatedLogout?: boolean;
+            hd?: string;
             clientId: string;
             clientSecret: string;
             authorizationEndpoint?: string;
@@ -42372,6 +42392,7 @@ export type UpdateIdentityProviderResponses = {
             skipDiscovery?: boolean;
             pkce: boolean;
             enableRpInitiatedLogout?: boolean;
+            hd?: string;
             clientId: string;
             clientSecret: string;
             authorizationEndpoint?: string;

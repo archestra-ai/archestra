@@ -1,5 +1,7 @@
 "use client";
 
+import { archestraApiSdk } from "@shared";
+import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Cron } from "croner";
 import {
@@ -15,9 +17,9 @@ import {
   XCircle,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import type React from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { SearchInput } from "@/components/search-input";
@@ -85,6 +87,8 @@ import {
 
 export function ScheduleTriggersIndexPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const agentIdParam = searchParams.get("agentId");
   const { data: isScheduledTaskAdmin = false } = useHasPermissions({
     scheduledTask: ["admin"],
   });
@@ -93,6 +97,9 @@ export function ScheduleTriggersIndexPage() {
   const [showOtherUsers, setShowOtherUsers] = useState(false);
   const [selectedAuthorIds, setSelectedAuthorIds] = useState<string[]>([]);
   const [searchName, setSearchName] = useState("");
+  const [filterAgentId, setFilterAgentId] = useState<string | null>(
+    agentIdParam,
+  );
   const [pageSize, setPageSize] = useState(10);
   const [pageIndex, setPageIndex] = useState(0);
   const { data: members } = useOrganizationMembers(
@@ -113,6 +120,7 @@ export function ScheduleTriggersIndexPage() {
     offset: pageIndex * pageSize,
     name: searchName || undefined,
     showAll: showOtherUsers,
+    agentIds: filterAgentId ? [filterAgentId] : undefined,
     actorUserIds:
       showOtherUsers && selectedAuthorIds.length > 0
         ? selectedAuthorIds
@@ -133,6 +141,21 @@ export function ScheduleTriggersIndexPage() {
     useState<ScheduleTriggerFormState>(DEFAULT_FORM_STATE);
   const [deletingTrigger, setDeletingTrigger] =
     useState<ScheduleTrigger | null>(null);
+
+  const agentFilterOptions = useMemo(
+    () =>
+      agents.map((agent) => ({
+        value: agent.id,
+        label: agent.name || "Untitled agent",
+        content: (
+          <span className="flex items-center gap-2">
+            <AgentIcon icon={agent.icon} size={16} />
+            {agent.name || "Untitled agent"}
+          </span>
+        ),
+      })),
+    [agents],
+  );
 
   const agentOptions = useMemo(
     () =>
@@ -178,6 +201,26 @@ export function ScheduleTriggersIndexPage() {
     setFormState((current) => ({ ...current, agentId: preferredAgentId }));
   }, [createFormOpen, editingTrigger, formState.agentId, preferredAgentId]);
 
+  const handledAgentIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      !agentIdParam ||
+      !triggersResponse ||
+      isLoading ||
+      handledAgentIdRef.current === agentIdParam
+    )
+      return;
+    handledAgentIdRef.current = agentIdParam;
+    if (triggersResponse.data.length === 0) {
+      setEditingTrigger(null);
+      setFormState({
+        ...DEFAULT_FORM_STATE(),
+        agentId: agentIdParam,
+      });
+      setCreateFormOpen(true);
+    }
+  }, [agentIdParam, triggersResponse, isLoading]);
+
   const openCreateComposer = () => {
     setEditingTrigger(null);
     setFormState({
@@ -203,6 +246,9 @@ export function ScheduleTriggersIndexPage() {
     setEditingTrigger(null);
     setCreateFormOpen(false);
     setFormState(DEFAULT_FORM_STATE());
+    if (agentIdParam) {
+      router.replace("/scheduled-tasks");
+    }
   };
 
   const submitForm = async () => {
@@ -333,6 +379,25 @@ export function ScheduleTriggersIndexPage() {
             setPageIndex(0);
           }}
         />
+        <Select
+          value={filterAgentId ?? "all"}
+          onValueChange={(value) => {
+            setFilterAgentId(value === "all" ? null : value);
+            setPageIndex(0);
+          }}
+        >
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder="All agents" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All agents</SelectItem>
+            {agentFilterOptions.map((agent) => (
+              <SelectItem key={agent.value} value={agent.value}>
+                {agent.content}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         {isScheduledTaskAdmin && (
           <Select
             value={showOtherUsers ? "others" : "mine"}
@@ -470,6 +535,25 @@ export function ScheduleTriggerDetailPage({
   const { data: canUpdateTrigger = false } = useHasPermissions({
     scheduledTask: ["update"],
   });
+  const { data: isAgentAdmin = false } = useHasPermissions({
+    agent: ["admin"],
+  });
+  const { data: isAgentTeamAdmin = false } = useHasPermissions({
+    agent: ["team-admin"],
+  });
+  const { data: userTeams = [] } = useQuery({
+    queryKey: ["teams"],
+    queryFn: async () => {
+      const response = await archestraApiSdk.getTeams({
+        query: { limit: 100, offset: 0 },
+      });
+      return response.data?.data ?? [];
+    },
+  });
+  const userTeamIdSet = useMemo(
+    () => new Set(userTeams.map((t) => t.id)),
+    [userTeams],
+  );
   const { data: trigger, isLoading } = useScheduleTrigger(triggerId, {
     refetchInterval: 5_000,
   });
@@ -618,6 +702,24 @@ export function ScheduleTriggerDetailPage({
   }
 
   const matchedAgent = agents.find((a) => a.id === trigger.agentId);
+  const canModifyAgent = (() => {
+    if (!matchedAgent) return false;
+    if (isAgentAdmin) return true;
+    if (
+      matchedAgent.scope === "team" &&
+      isAgentTeamAdmin &&
+      matchedAgent.teams?.some((t) => userTeamIdSet.has(t.id))
+    )
+      return true;
+    if (
+      matchedAgent.scope === "personal" &&
+      !!currentUserId &&
+      matchedAgent.authorId === currentUserId
+    )
+      return true;
+    return false;
+  })();
+  const agentLinkParam = canModifyAgent ? "edit" : "view";
 
   return (
     <div className="mr-auto flex w-full flex-col gap-6">
@@ -714,14 +816,20 @@ export function ScheduleTriggerDetailPage({
 
       {/* Detail cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <DetailCard label="Agent">
+        <Link
+          href={`/agents?${agentLinkParam}=${trigger.agentId}`}
+          className="rounded-xl border border-border/60 bg-card px-4 py-3.5 transition-colors hover:bg-accent"
+        >
+          <p className="mb-2 text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
+            Agent
+          </p>
           <div className="flex items-center gap-2">
             <AgentIcon icon={matchedAgent?.icon ?? null} size={20} />
             <span className="text-sm text-foreground">
               {trigger.agent?.name ?? trigger.agentId}
             </span>
           </div>
-        </DetailCard>
+        </Link>
         <DetailCard label="Task prompt">
           <p className="text-sm text-foreground line-clamp-3">
             {trigger.messageTemplate}

@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.11"
+    "version": "1.2.12"
   },
   "components": {
     "schemas": {
@@ -49559,6 +49559,18 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/auth/sign-in/sso": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
         "responses": {
           "200": {
             "description": "Default Response"
@@ -139266,6 +139278,14 @@
           },
           {
             "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "agentIds",
+            "required": false
+          },
+          {
+            "schema": {
               "type": "boolean"
             },
             "in": "query",
@@ -155712,6 +155732,9 @@
                           "enableRpInitiatedLogout": {
                             "type": "boolean"
                           },
+                          "hd": {
+                            "type": "string"
+                          },
                           "clientId": {
                             "type": "string"
                           },
@@ -156335,6 +156358,9 @@
                       "enableRpInitiatedLogout": {
                         "type": "boolean"
                       },
+                      "hd": {
+                        "type": "string"
+                      },
                       "clientId": {
                         "type": "string"
                       },
@@ -156716,6 +156742,9 @@
                         },
                         "enableRpInitiatedLogout": {
                           "type": "boolean"
+                        },
+                        "hd": {
+                          "type": "string"
                         },
                         "clientId": {
                           "type": "string"
@@ -157601,6 +157630,9 @@
                         "enableRpInitiatedLogout": {
                           "type": "boolean"
                         },
+                        "hd": {
+                          "type": "string"
+                        },
                         "clientId": {
                           "type": "string"
                         },
@@ -158223,6 +158255,9 @@
                       "enableRpInitiatedLogout": {
                         "type": "boolean"
                       },
+                      "hd": {
+                        "type": "string"
+                      },
                       "clientId": {
                         "type": "string"
                       },
@@ -158605,6 +158640,9 @@
                         },
                         "enableRpInitiatedLogout": {
                           "type": "boolean"
+                        },
+                        "hd": {
+                          "type": "string"
                         },
                         "clientId": {
                           "type": "string"

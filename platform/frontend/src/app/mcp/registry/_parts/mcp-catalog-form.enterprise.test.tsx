@@ -78,4 +78,49 @@ describe("McpCatalogForm enterprise gating", () => {
       screen.getByText("Enterprise-managed credentials"),
     ).toBeInTheDocument();
   });
+
+  it("disables browser autofill for MCP config forms and secret fields", () => {
+    const { container } = render(
+      <McpCatalogForm
+        mode="edit"
+        onSubmit={vi.fn()}
+        initialValues={
+          {
+            id: "catalog-1",
+            name: "Remote MCP",
+            description: "",
+            icon: null,
+            serverType: "remote",
+            serverUrl: "https://mcp.example.com",
+            oauthConfig: {
+              name: "Remote MCP",
+              server_url: "https://mcp.example.com",
+              client_id: "client-id",
+              client_secret: "client-secret",
+              redirect_uris: ["https://app.example.com/oauth-callback"],
+              scopes: ["read"],
+              default_scopes: ["read"],
+              supports_resource_metadata: true,
+            },
+            userConfig: {},
+            enterpriseManagedConfig: null,
+            localConfig: null,
+            deploymentSpecYaml: null,
+            scope: "personal",
+            teams: [],
+            labels: [],
+          } as never
+        }
+      />,
+    );
+
+    expect(container.querySelector("form")).toHaveAttribute(
+      "autocomplete",
+      "off",
+    );
+    expect(screen.getByLabelText("Client Secret")).toHaveAttribute(
+      "autocomplete",
+      "new-password",
+    );
+  });
 });

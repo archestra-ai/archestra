@@ -261,16 +261,37 @@ class AnthropicMessagesInteraction implements InteractionUtils {
                     output = toolResultBlock.content;
                   }
 
-                  // Add tool result part (preserve actual tool name for citation extraction)
-                  toolCallParts.push({
-                    type: "dynamic-tool",
+                  // Replace the input-available part with output-available to avoid
+                  // duplicate toolCallIds (which providers reject)
+                  const existingIdx = toolCallParts.findIndex(
+                    (p) =>
+                      "toolCallId" in p &&
+                      p.toolCallId === block.id &&
+                      "state" in p &&
+                      p.state === "input-available",
+                  );
+
+                  const existingInput =
+                    existingIdx !== -1 &&
+                    "input" in toolCallParts[existingIdx]
+                      ? toolCallParts[existingIdx].input
+                      : {};
+
+                  const outputPart = {
+                    type: "dynamic-tool" as const,
                     toolName:
                       "name" in block ? (block.name as string) : "tool-result",
                     toolCallId: block.id,
-                    state: "output-available",
-                    input: {},
+                    state: "output-available" as const,
+                    input: existingInput,
                     output,
-                  });
+                  };
+
+                  if (existingIdx !== -1) {
+                    toolCallParts[existingIdx] = outputPart;
+                  } else {
+                    toolCallParts.push(outputPart);
+                  }
 
                   // Check for dual LLM result
                   const dualLlmResultForTool = dualLlmAnalyses?.find(

@@ -5,6 +5,7 @@ import {
   DEFAULT_TEAM_NAME,
   E2eTestId,
   ENGINEERING_TEAM_NAME,
+  getE2eRequestUrl,
   MARKETING_TEAM_NAME,
   MCP_GATEWAY_URL_SUFFIX,
   UI_BASE_URL,
@@ -119,17 +120,17 @@ export async function makeApiRequest(params: {
   ignoreStatusCheck?: boolean;
   timeoutMs?: number;
 }) {
-  const response = await params.request[params.method](
-    `${API_BASE_URL}${params.urlSuffix}`,
-    {
-      headers: params.headers ?? {
-        "Content-Type": "application/json",
-        Origin: UI_BASE_URL,
-      },
-      data: params.data ?? null,
-      timeout: params.timeoutMs,
+  const requestUrl = params.urlSuffix.startsWith("/api/")
+    ? getE2eRequestUrl(params.urlSuffix)
+    : `${API_BASE_URL}${params.urlSuffix}`;
+  const response = await params.request[params.method](requestUrl, {
+    headers: params.headers ?? {
+      "Content-Type": "application/json",
+      Origin: UI_BASE_URL,
     },
-  );
+    data: params.data ?? null,
+    timeout: params.timeoutMs,
+  });
 
   if (!params.ignoreStatusCheck && !response.ok()) {
     throw new Error(

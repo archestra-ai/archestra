@@ -100807,6 +100807,12 @@
                                       "enum": [
                                         "sharepoint"
                                       ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "linear"
+                                      ]
                                     }
                                   ]
                                 }
@@ -102620,6 +102626,12 @@
                   "enum": [
                     "sharepoint"
                   ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "linear"
+                  ]
                 }
               ]
             },
@@ -102711,6 +102723,12 @@
                                 "type": "string",
                                 "enum": [
                                   "sharepoint"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "linear"
                                 ]
                               }
                             ]
@@ -103000,6 +103018,53 @@
                                   "type",
                                   "tenantId",
                                   "siteUrl"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "linear"
+                                    ]
+                                  },
+                                  "linearApiUrl": {},
+                                  "teamIds": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "projectIds": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "states": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "includeComments": {
+                                    "type": "boolean"
+                                  },
+                                  "includeProjects": {
+                                    "type": "boolean"
+                                  },
+                                  "includeCycles": {
+                                    "type": "boolean"
+                                  },
+                                  "batchSize": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "linearApiUrl"
                                 ],
                                 "additionalProperties": false
                               }
@@ -103470,6 +103535,12 @@
                         "enum": [
                           "sharepoint"
                         ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "linear"
+                        ]
                       }
                     ]
                   },
@@ -103765,6 +103836,54 @@
                           "tenantId",
                           "siteUrl"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "linear"
+                            ]
+                          },
+                          "linearApiUrl": {
+                            "type": "string"
+                          },
+                          "teamIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "projectIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "states": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "includeComments": {
+                            "type": "boolean"
+                          },
+                          "includeProjects": {
+                            "type": "boolean"
+                          },
+                          "includeCycles": {
+                            "type": "boolean"
+                          },
+                          "batchSize": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "linearApiUrl"
+                        ]
                       }
                     ]
                   },
@@ -103883,6 +104002,12 @@
                           "type": "string",
                           "enum": [
                             "sharepoint"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "linear"
                           ]
                         }
                       ]
@@ -104172,6 +104297,53 @@
                             "type",
                             "tenantId",
                             "siteUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "linear"
+                              ]
+                            },
+                            "linearApiUrl": {},
+                            "teamIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "projectIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "states": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "includeComments": {
+                              "type": "boolean"
+                            },
+                            "includeProjects": {
+                              "type": "boolean"
+                            },
+                            "includeCycles": {
+                              "type": "boolean"
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "linearApiUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -104590,6 +104762,12 @@
                           "enum": [
                             "sharepoint"
                           ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "linear"
+                          ]
                         }
                       ]
                     },
@@ -104878,6 +105056,53 @@
                             "type",
                             "tenantId",
                             "siteUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "linear"
+                              ]
+                            },
+                            "linearApiUrl": {},
+                            "teamIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "projectIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "states": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "includeComments": {
+                              "type": "boolean"
+                            },
+                            "includeProjects": {
+                              "type": "boolean"
+                            },
+                            "includeCycles": {
+                              "type": "boolean"
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "linearApiUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -105529,6 +105754,54 @@
                           "tenantId",
                           "siteUrl"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "linear"
+                            ]
+                          },
+                          "linearApiUrl": {
+                            "type": "string"
+                          },
+                          "teamIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "projectIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "states": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "includeComments": {
+                            "type": "boolean"
+                          },
+                          "includeProjects": {
+                            "type": "boolean"
+                          },
+                          "includeCycles": {
+                            "type": "boolean"
+                          },
+                          "batchSize": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "linearApiUrl"
+                        ]
                       }
                     ]
                   },
@@ -105645,6 +105918,12 @@
                           "type": "string",
                           "enum": [
                             "sharepoint"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "linear"
                           ]
                         }
                       ]
@@ -105934,6 +106213,53 @@
                             "type",
                             "tenantId",
                             "siteUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "linear"
+                              ]
+                            },
+                            "linearApiUrl": {},
+                            "teamIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "projectIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "states": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "includeComments": {
+                              "type": "boolean"
+                            },
+                            "includeProjects": {
+                              "type": "boolean"
+                            },
+                            "includeCycles": {
+                              "type": "boolean"
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "linearApiUrl"
                           ],
                           "additionalProperties": false
                         }

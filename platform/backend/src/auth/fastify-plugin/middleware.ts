@@ -9,6 +9,7 @@ import { UserModel } from "@/models";
 import {
   HEALTH_PATH,
   INCOMING_EMAIL_WEBHOOK_PREFIX,
+  METRICS_PATH,
   ORGANIZATION_APPEARANCE_SETTINGS_PATH,
   PUBLIC_CONFIG_PATH,
   READY_PATH,
@@ -109,6 +110,7 @@ export class Authnz {
       url === "/openapi.json" ||
       url === HEALTH_PATH ||
       url === READY_PATH ||
+      url === METRICS_PATH ||
       url === "/test" ||
       url.startsWith(config.mcpGateway.endpoint) ||
       // A2A routes use token auth handled in route, similar to MCP Gateway

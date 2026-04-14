@@ -1,9 +1,10 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect } from "react";
-import { toast } from "sonner";
+import { Suspense, useEffect, useState } from "react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -34,6 +35,10 @@ import {
   useReauthenticateMcpServer,
 } from "@/lib/mcp/mcp-server.query";
 import { replaceBrowserUrl } from "@/lib/utils/browser-redirect";
+import {
+  getOAuthCallbackErrorState,
+  type OAuthCallbackErrorState,
+} from "./oauth-callback.utils";
 
 function OAuthCallbackContent() {
   const searchParams = useSearchParams();
@@ -41,22 +46,29 @@ function OAuthCallbackContent() {
   const installMutation = useInstallMcpServer();
   const reauthMutation = useReauthenticateMcpServer();
   const callbackMutation = useHandleOAuthCallback();
+  const [callbackError, setCallbackError] =
+    useState<OAuthCallbackErrorState | null>(null);
 
   useEffect(() => {
     const handleOAuthCallback = async () => {
       const code = searchParams.get("code");
       const error = searchParams.get("error");
+      const errorDescription = searchParams.get("error_description");
       const state = searchParams.get("state");
 
+      const initialError = getOAuthCallbackErrorState({
+        code,
+        error,
+        errorDescription,
+        state,
+      });
+
+      if (initialError) {
+        setCallbackError(initialError);
+        return;
+      }
+
       if (!code || !state) {
-        toast.error(
-          error
-            ? `OAuth error: ${error}`
-            : !code
-              ? "No authorization code received"
-              : "Missing OAuth state",
-        );
-        router.push("/mcp/registry");
         return;
       }
 
@@ -143,9 +155,33 @@ function OAuthCallbackContent() {
     router.push,
   ]);
 
-  // This component always redirects on success or error, so just show loading state
+  if (callbackError) {
+    return (
+      <OAuthCallbackLayout>
+        <Card>
+          <CardHeader>
+            <CardTitle>OAuth Authentication</CardTitle>
+            <CardDescription>
+              Authentication could not be completed.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>{callbackError.title}</AlertTitle>
+              <AlertDescription>{callbackError.description}</AlertDescription>
+            </Alert>
+            <Button onClick={() => router.push("/mcp/registry")}>
+              Return to MCP Registry
+            </Button>
+          </CardContent>
+        </Card>
+      </OAuthCallbackLayout>
+    );
+  }
+
   return (
-    <div className="container mx-auto p-6 max-w-2xl">
+    <OAuthCallbackLayout>
       <Card>
         <CardHeader>
           <CardTitle>OAuth Authentication</CardTitle>
@@ -160,13 +196,13 @@ function OAuthCallbackContent() {
           </div>
         </CardContent>
       </Card>
-    </div>
+    </OAuthCallbackLayout>
   );
 }
 
 function LoadingFallback() {
   return (
-    <div className="container mx-auto p-6 max-w-2xl">
+    <OAuthCallbackLayout>
       <Card>
         <CardHeader>
           <CardTitle>OAuth Authentication</CardTitle>
@@ -181,6 +217,14 @@ function LoadingFallback() {
           </div>
         </CardContent>
       </Card>
+    </OAuthCallbackLayout>
+  );
+}
+
+function OAuthCallbackLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mx-auto flex min-h-[calc(100vh-8rem)] w-full max-w-2xl items-center justify-center p-6">
+      <div className="w-full">{children}</div>
     </div>
   );
 }

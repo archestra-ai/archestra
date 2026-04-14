@@ -103,6 +103,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .optional(),
           name: z.string().optional(),
           actorUserIds: z.string().optional(),
+          agentIds: z.string().optional(),
           showAll: z
             .preprocess(
               (value) =>
@@ -126,6 +127,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           enabled,
           name,
           actorUserIds: actorUserIdsParam,
+          agentIds: agentIdsParam,
           showAll,
         },
         user,
@@ -156,12 +158,17 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      const agentIds = agentIdsParam
+        ? agentIdsParam.split(",").filter(Boolean)
+        : undefined;
+
       const [data, total] = await Promise.all([
         ScheduleTriggerModel.listByOrganization({
           organizationId,
           limit,
           offset,
           enabled,
+          agentIds,
           actorUserId,
           actorUserIds,
           excludeActorUserId,
@@ -170,6 +177,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ScheduleTriggerModel.countByOrganization({
           organizationId,
           enabled,
+          agentIds,
           actorUserId,
           actorUserIds,
           excludeActorUserId,
@@ -677,6 +685,18 @@ async function ensureRunConversation(params: {
       organizationId,
     });
     if (existing) {
+      // Sync run artifact into conversation if missing
+      if (run.artifact && !existing.artifact) {
+        const updated = await ConversationModel.update(
+          existing.id,
+          userId,
+          organizationId,
+          { artifact: run.artifact },
+        );
+        if (updated) {
+          return updated;
+        }
+      }
       return existing;
     }
   }
@@ -707,6 +727,7 @@ async function ensureRunConversation(params: {
     selectedModel: llmSelection.selectedModel,
     selectedProvider: llmSelection.selectedProvider,
     chatApiKeyId: llmSelection.chatApiKeyId,
+    artifact: run.artifact ?? undefined,
   });
 
   const createdAt = Date.now();

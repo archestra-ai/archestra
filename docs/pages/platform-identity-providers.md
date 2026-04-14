@@ -122,6 +122,7 @@ Google OAuth allows users to sign in with their Google accounts.
 
 - Users must have a Google Workspace or personal Google account
 - The discovery endpoint is automatically configured
+- Optional: set **Hosted Domain Hint** to pass Google's `hd` parameter and prefer or restrict account selection to a specific Google Workspace domain (for example `example.com`)
 
 ### GitHub
 

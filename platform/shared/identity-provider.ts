@@ -27,6 +27,7 @@ export const IdentityProviderOidcConfigSchema = z
     skipDiscovery: z.boolean().optional(),
     pkce: z.boolean(),
     enableRpInitiatedLogout: z.boolean().optional(),
+    hd: z.string().optional(),
     clientId: z.string(),
     clientSecret: z.string(),
     authorizationEndpoint: z.string().optional(),

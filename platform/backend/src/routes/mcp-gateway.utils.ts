@@ -328,6 +328,7 @@ export async function createAgentServer(
               const result = await executeArchestraTool(name, args, {
                 agent: { id: agent.id, name: agent.name },
                 agentId: agent.id,
+                userId: tokenAuth?.userId,
                 organizationId: tokenAuth?.organizationId,
                 tokenAuth,
               });

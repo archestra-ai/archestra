@@ -62,23 +62,23 @@ export type OpenAiChatCompletionRequestInput = {
         role: 'assistant';
         audio?: {
             id: string;
-        } | unknown;
+        } | null;
         content?: string | Array<{
             type: 'text';
             text: string;
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | unknown;
+        }> | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
          */
         function_call?: {
             arguments: string;
             name: string;
-        } | unknown;
+        } | null;
         name?: string;
-        refusal?: string | unknown;
+        refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
          */
@@ -121,7 +121,7 @@ export type OpenAiChatCompletionRequestInput = {
         tool_call_id: string;
     } | {
         role: 'function';
-        content: string | unknown;
+        content: string | null;
         name: string;
     }>;
     /**
@@ -154,7 +154,7 @@ export type OpenAiChatCompletionRequestInput = {
             parameters?: {
                 [key: string]: unknown;
             };
-            strict?: boolean | unknown;
+            strict?: boolean | null;
         };
     } | {
         type: 'custom';
@@ -240,7 +240,7 @@ export type OpenAiChatCompletionRequestInput = {
                         parameters?: {
                             [key: string]: unknown;
                         };
-                        strict?: boolean | unknown;
+                        strict?: boolean | null;
                     };
                 };
             }>;
@@ -287,9 +287,9 @@ export type OpenAiChatCompletionRequestInput = {
             };
         };
     };
-    temperature?: number | unknown;
-    max_tokens?: number | unknown;
-    stream?: boolean | unknown;
+    temperature?: number | null;
+    max_tokens?: number | null;
+    stream?: boolean | null;
 };
 
 export type OpenAiChatCompletionResponseInput = {
@@ -302,8 +302,8 @@ export type OpenAiChatCompletionResponseInput = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
         message: {
-            content: string | unknown;
-            refusal?: string | unknown;
+            content: string | null;
+            refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown>;
             audio?: unknown;
@@ -313,7 +313,7 @@ export type OpenAiChatCompletionResponseInput = {
             function_call?: {
                 arguments: string;
                 name: string;
-            } | unknown;
+            } | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -334,14 +334,14 @@ export type OpenAiChatCompletionResponseInput = {
                     input: string;
                     name: string;
                 };
-            }> | unknown;
+            }> | null;
         };
     }>;
     created: number;
     model: string;
     object: 'chat.completion';
     server_tier?: string;
-    system_fingerprint?: string | unknown;
+    system_fingerprint?: string | null;
     /**
      * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113
      */
@@ -1250,7 +1250,7 @@ export type AnthropicMessagesRequestInput = {
             text: string;
             type: 'text';
             cache_control?: unknown;
-            citations?: Array<unknown> | unknown;
+            citations?: Array<unknown> | null;
         } | {
             type: 'image';
             source: {
@@ -1278,7 +1278,7 @@ export type AnthropicMessagesRequestInput = {
                     text: string;
                     type: 'text';
                     cache_control?: unknown;
-                    citations?: Array<unknown> | unknown;
+                    citations?: Array<unknown> | null;
                 } | {
                     type: 'image';
                     source: {
@@ -1289,11 +1289,11 @@ export type AnthropicMessagesRequestInput = {
                     cache_control?: unknown;
                 }>;
             };
-            title?: string | unknown;
-            context?: string | unknown;
+            title?: string | null;
+            context?: string | null;
             citations?: {
                 enabled: boolean;
-            } | unknown;
+            } | null;
             cache_control?: unknown;
         } | {
             id: string;
@@ -1309,7 +1309,7 @@ export type AnthropicMessagesRequestInput = {
                 text: string;
                 type: 'text';
                 cache_control?: unknown;
-                citations?: Array<unknown> | unknown;
+                citations?: Array<unknown> | null;
             } | {
                 type: 'image';
                 source: {
@@ -1337,7 +1337,7 @@ export type AnthropicMessagesRequestInput = {
                         text: string;
                         type: 'text';
                         cache_control?: unknown;
-                        citations?: Array<unknown> | unknown;
+                        citations?: Array<unknown> | null;
                     } | {
                         type: 'image';
                         source: {
@@ -1348,11 +1348,11 @@ export type AnthropicMessagesRequestInput = {
                         cache_control?: unknown;
                     }>;
                 };
-                title?: string | unknown;
-                context?: string | unknown;
+                title?: string | null;
+                context?: string | null;
                 citations?: {
                     enabled: boolean;
-                } | unknown;
+                } | null;
                 cache_control?: unknown;
             }>;
             is_error?: boolean;
@@ -1360,13 +1360,13 @@ export type AnthropicMessagesRequestInput = {
         role: 'user' | 'assistant';
     }>;
     max_tokens: number;
-    container?: string | unknown;
+    container?: string | null;
     context_management?: {
         [key: string]: unknown;
-    } | unknown;
+    } | null;
     mcp_servers?: Array<unknown>;
     metadata?: {
-        user_id: string | unknown;
+        user_id: string | null;
     };
     service_tier?: unknown;
     stop_sequences?: Array<string>;
@@ -1375,12 +1375,12 @@ export type AnthropicMessagesRequestInput = {
         type: 'text';
         text: string;
         cache_control?: unknown;
-        citations?: Array<unknown> | unknown;
+        citations?: Array<unknown> | null;
     } | Array<{
         type: 'text';
         text: string;
         cache_control?: unknown;
-        citations?: Array<unknown> | unknown;
+        citations?: Array<unknown> | null;
     }>;
     temperature?: number;
     tool_choice?: {
@@ -1398,7 +1398,7 @@ export type AnthropicMessagesRequestInput = {
     };
     tools?: Array<{
         name: string;
-        type?: 'custom' | unknown;
+        type?: 'custom';
         cache_control?: unknown;
         input_schema: {
             [key: string]: unknown;
@@ -1420,14 +1420,14 @@ export type AnthropicMessagesRequestInput = {
         name: 'str_replace_based_edit_tool';
         type: 'text_editor_20250728';
         cache_control?: unknown;
-        max_characters?: number | unknown;
+        max_characters?: number | null;
     } | {
         name: 'web_search';
         type: 'web_search_20250305';
-        allowed_domains?: Array<string> | unknown;
-        blocked_domains?: Array<string> | unknown;
+        allowed_domains?: Array<string> | null;
+        blocked_domains?: Array<string> | null;
         cache_control?: unknown;
-        max_uses?: number | unknown;
+        max_uses?: number | null;
         user_location?: unknown;
     }>;
     top_k?: number;
@@ -1437,7 +1437,7 @@ export type AnthropicMessagesRequestInput = {
 export type AnthropicMessagesResponseInput = {
     id: string;
     content: Array<{
-        citations: Array<unknown> | unknown;
+        citations: Array<unknown> | null;
         text: string;
         type: 'text';
     } | {
@@ -1449,7 +1449,7 @@ export type AnthropicMessagesResponseInput = {
     model: string;
     role: 'assistant';
     stop_reason: unknown;
-    stop_sequence: string | unknown;
+    stop_sequence: string | null;
     type: 'message';
     usage: {
         input_tokens: number;
@@ -1515,23 +1515,23 @@ export type CerebrasChatCompletionRequestInput = {
         role: 'assistant';
         audio?: {
             id: string;
-        } | unknown;
+        } | null;
         content?: string | Array<{
             type: 'text';
             text: string;
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | unknown;
+        }> | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
          */
         function_call?: {
             arguments: string;
             name: string;
-        } | unknown;
+        } | null;
         name?: string;
-        refusal?: string | unknown;
+        refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
          */
@@ -1574,7 +1574,7 @@ export type CerebrasChatCompletionRequestInput = {
         tool_call_id: string;
     } | {
         role: 'function';
-        content: string | unknown;
+        content: string | null;
         name: string;
     }>;
     /**
@@ -1607,7 +1607,7 @@ export type CerebrasChatCompletionRequestInput = {
             parameters?: {
                 [key: string]: unknown;
             };
-            strict?: boolean | unknown;
+            strict?: boolean | null;
         };
     } | {
         type: 'custom';
@@ -1693,7 +1693,7 @@ export type CerebrasChatCompletionRequestInput = {
                         parameters?: {
                             [key: string]: unknown;
                         };
-                        strict?: boolean | unknown;
+                        strict?: boolean | null;
                     };
                 };
             }>;
@@ -1740,9 +1740,9 @@ export type CerebrasChatCompletionRequestInput = {
             };
         };
     };
-    temperature?: number | unknown;
-    max_tokens?: number | unknown;
-    stream?: boolean | unknown;
+    temperature?: number | null;
+    max_tokens?: number | null;
+    stream?: boolean | null;
 };
 
 export type CerebrasChatCompletionResponseInput = {
@@ -1755,15 +1755,15 @@ export type CerebrasChatCompletionResponseInput = {
          * https://github.com/Cerebras/cerebras-cloud-sdk-node/blob/main/src/resources/chat/completions.ts
          */
         message: {
-            content?: string | unknown;
-            refusal?: string | unknown;
+            content?: string | null;
+            refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown>;
             audio?: unknown;
             function_call?: {
                 arguments: string;
                 name: string;
-            } | unknown;
+            } | null;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
              */
@@ -1794,7 +1794,7 @@ export type CerebrasChatCompletionResponseInput = {
     model: string;
     object: 'chat.completion';
     server_tier?: string;
-    system_fingerprint?: string | unknown;
+    system_fingerprint?: string | null;
     /**
      * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113
      */
@@ -1816,38 +1816,38 @@ export type CerebrasChatCompletionResponseInput = {
 export type CohereChatRequestInput = {
     model: string;
     messages: Array<{
-        role: string;
+        role: 'user';
         content: string | Array<{
-            type: string;
+            type: 'text';
             text: string;
         } | {
-            type: string;
+            type: 'tool_result';
             tool_call_id: string;
             content: string;
         }>;
     } | {
-        role: string;
+        role: 'assistant';
         content?: string | Array<{
-            type: string;
+            type: 'text';
             text: string;
         } | {
-            type: string;
+            type: 'tool_result';
             tool_call_id: string;
             content: string;
         }>;
         tool_calls?: Array<{
             id: string;
-            type: string;
+            type: 'function';
             function: {
                 name: string;
                 arguments: string;
             };
         }>;
     } | {
-        role: string;
+        role: 'system';
         content: string;
     } | {
-        role: string;
+        role: 'tool';
         tool_call_id: string;
         content: string;
     }>;
@@ -1855,7 +1855,7 @@ export type CohereChatRequestInput = {
     temperature?: number;
     max_tokens?: number;
     tools?: Array<{
-        type: string;
+        type: 'function';
         function: {
             name: string;
             description?: string;
@@ -1889,18 +1889,18 @@ export type CohereChatRequestInput = {
 export type CohereChatResponseInput = {
     id: string;
     message: {
-        role: string;
+        role: 'assistant';
         content?: Array<{
-            type: string;
+            type: 'text';
             text: string;
         } | {
-            type: string;
+            type: 'tool_result';
             tool_call_id: string;
             content: string;
         }>;
         tool_calls?: Array<{
             id: string;
-            type: string;
+            type: 'function';
             function: {
                 name: string;
                 arguments: string;
@@ -1978,23 +1978,23 @@ export type MistralChatCompletionRequestInput = {
         role: 'assistant';
         audio?: {
             id: string;
-        } | unknown;
+        } | null;
         content?: string | Array<{
             type: 'text';
             text: string;
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | unknown;
+        }> | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
          */
         function_call?: {
             arguments: string;
             name: string;
-        } | unknown;
+        } | null;
         name?: string;
-        refusal?: string | unknown;
+        refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
          */
@@ -2037,7 +2037,7 @@ export type MistralChatCompletionRequestInput = {
         tool_call_id: string;
     } | {
         role: 'function';
-        content: string | unknown;
+        content: string | null;
         name: string;
     }>;
     /**
@@ -2070,7 +2070,7 @@ export type MistralChatCompletionRequestInput = {
             parameters?: {
                 [key: string]: unknown;
             };
-            strict?: boolean | unknown;
+            strict?: boolean | null;
         };
     } | {
         type: 'custom';
@@ -2156,7 +2156,7 @@ export type MistralChatCompletionRequestInput = {
                         parameters?: {
                             [key: string]: unknown;
                         };
-                        strict?: boolean | unknown;
+                        strict?: boolean | null;
                     };
                 };
             }>;
@@ -2203,9 +2203,9 @@ export type MistralChatCompletionRequestInput = {
             };
         };
     };
-    temperature?: number | unknown;
-    max_tokens?: number | unknown;
-    stream?: boolean | unknown;
+    temperature?: number | null;
+    max_tokens?: number | null;
+    stream?: boolean | null;
 };
 
 export type MistralChatCompletionResponseInput = {
@@ -2218,8 +2218,8 @@ export type MistralChatCompletionResponseInput = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
         message: {
-            content: string | unknown;
-            refusal?: string | unknown;
+            content: string | null;
+            refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown>;
             audio?: unknown;
@@ -2229,7 +2229,7 @@ export type MistralChatCompletionResponseInput = {
             function_call?: {
                 arguments: string;
                 name: string;
-            } | unknown;
+            } | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -2250,14 +2250,14 @@ export type MistralChatCompletionResponseInput = {
                     input: string;
                     name: string;
                 };
-            }> | unknown;
+            }> | null;
         };
     }>;
     created: number;
     model: string;
     object: 'chat.completion';
     server_tier?: string;
-    system_fingerprint?: string | unknown;
+    system_fingerprint?: string | null;
     /**
      * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113
      */
@@ -2335,23 +2335,23 @@ export type PerplexityChatCompletionRequestInput = {
         role: 'assistant';
         audio?: {
             id: string;
-        } | unknown;
+        } | null;
         content?: string | Array<{
             type: 'text';
             text: string;
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | unknown;
+        }> | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
          */
         function_call?: {
             arguments: string;
             name: string;
-        } | unknown;
+        } | null;
         name?: string;
-        refusal?: string | unknown;
+        refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
          */
@@ -2394,7 +2394,7 @@ export type PerplexityChatCompletionRequestInput = {
         tool_call_id: string;
     } | {
         role: 'function';
-        content: string | unknown;
+        content: string | null;
         name: string;
     }>;
     /**
@@ -2427,7 +2427,7 @@ export type PerplexityChatCompletionRequestInput = {
             parameters?: {
                 [key: string]: unknown;
             };
-            strict?: boolean | unknown;
+            strict?: boolean | null;
         };
     } | {
         type: 'custom';
@@ -2513,7 +2513,7 @@ export type PerplexityChatCompletionRequestInput = {
                         parameters?: {
                             [key: string]: unknown;
                         };
-                        strict?: boolean | unknown;
+                        strict?: boolean | null;
                     };
                 };
             }>;
@@ -2560,9 +2560,9 @@ export type PerplexityChatCompletionRequestInput = {
             };
         };
     };
-    temperature?: number | unknown;
-    max_tokens?: number | unknown;
-    stream?: boolean | unknown;
+    temperature?: number | null;
+    max_tokens?: number | null;
+    stream?: boolean | null;
 };
 
 export type PerplexityChatCompletionResponseInput = {
@@ -2575,8 +2575,8 @@ export type PerplexityChatCompletionResponseInput = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
         message: {
-            content: string | unknown;
-            refusal?: string | unknown;
+            content: string | null;
+            refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown>;
             audio?: unknown;
@@ -2586,7 +2586,7 @@ export type PerplexityChatCompletionResponseInput = {
             function_call?: {
                 arguments: string;
                 name: string;
-            } | unknown;
+            } | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -2607,14 +2607,14 @@ export type PerplexityChatCompletionResponseInput = {
                     input: string;
                     name: string;
                 };
-            }> | unknown;
+            }> | null;
         };
     }>;
     created: number;
     model: string;
     object: 'chat.completion';
     server_tier?: string;
-    system_fingerprint?: string | unknown;
+    system_fingerprint?: string | null;
     /**
      * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113
      */
@@ -2692,23 +2692,23 @@ export type GroqChatCompletionRequestInput = {
         role: 'assistant';
         audio?: {
             id: string;
-        } | unknown;
+        } | null;
         content?: string | Array<{
             type: 'text';
             text: string;
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | unknown;
+        }> | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
          */
         function_call?: {
             arguments: string;
             name: string;
-        } | unknown;
+        } | null;
         name?: string;
-        refusal?: string | unknown;
+        refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
          */
@@ -2751,7 +2751,7 @@ export type GroqChatCompletionRequestInput = {
         tool_call_id: string;
     } | {
         role: 'function';
-        content: string | unknown;
+        content: string | null;
         name: string;
     }>;
     /**
@@ -2784,7 +2784,7 @@ export type GroqChatCompletionRequestInput = {
             parameters?: {
                 [key: string]: unknown;
             };
-            strict?: boolean | unknown;
+            strict?: boolean | null;
         };
     } | {
         type: 'custom';
@@ -2870,7 +2870,7 @@ export type GroqChatCompletionRequestInput = {
                         parameters?: {
                             [key: string]: unknown;
                         };
-                        strict?: boolean | unknown;
+                        strict?: boolean | null;
                     };
                 };
             }>;
@@ -2917,9 +2917,9 @@ export type GroqChatCompletionRequestInput = {
             };
         };
     };
-    temperature?: number | unknown;
-    max_tokens?: number | unknown;
-    stream?: boolean | unknown;
+    temperature?: number | null;
+    max_tokens?: number | null;
+    stream?: boolean | null;
 };
 
 export type GroqChatCompletionResponseInput = {
@@ -2932,8 +2932,8 @@ export type GroqChatCompletionResponseInput = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
         message: {
-            content: string | unknown;
-            refusal?: string | unknown;
+            content: string | null;
+            refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown>;
             audio?: unknown;
@@ -2943,7 +2943,7 @@ export type GroqChatCompletionResponseInput = {
             function_call?: {
                 arguments: string;
                 name: string;
-            } | unknown;
+            } | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -2964,14 +2964,14 @@ export type GroqChatCompletionResponseInput = {
                     input: string;
                     name: string;
                 };
-            }> | unknown;
+            }> | null;
         };
     }>;
     created: number;
     model: string;
     object: 'chat.completion';
     server_tier?: string;
-    system_fingerprint?: string | unknown;
+    system_fingerprint?: string | null;
     /**
      * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113
      */
@@ -3049,23 +3049,23 @@ export type OpenrouterChatCompletionRequestInput = {
         role: 'assistant';
         audio?: {
             id: string;
-        } | unknown;
+        } | null;
         content?: string | Array<{
             type: 'text';
             text: string;
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | unknown;
+        }> | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
          */
         function_call?: {
             arguments: string;
             name: string;
-        } | unknown;
+        } | null;
         name?: string;
-        refusal?: string | unknown;
+        refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
          */
@@ -3108,7 +3108,7 @@ export type OpenrouterChatCompletionRequestInput = {
         tool_call_id: string;
     } | {
         role: 'function';
-        content: string | unknown;
+        content: string | null;
         name: string;
     }>;
     /**
@@ -3141,7 +3141,7 @@ export type OpenrouterChatCompletionRequestInput = {
             parameters?: {
                 [key: string]: unknown;
             };
-            strict?: boolean | unknown;
+            strict?: boolean | null;
         };
     } | {
         type: 'custom';
@@ -3227,7 +3227,7 @@ export type OpenrouterChatCompletionRequestInput = {
                         parameters?: {
                             [key: string]: unknown;
                         };
-                        strict?: boolean | unknown;
+                        strict?: boolean | null;
                     };
                 };
             }>;
@@ -3274,9 +3274,9 @@ export type OpenrouterChatCompletionRequestInput = {
             };
         };
     };
-    temperature?: number | unknown;
-    max_tokens?: number | unknown;
-    stream?: boolean | unknown;
+    temperature?: number | null;
+    max_tokens?: number | null;
+    stream?: boolean | null;
 };
 
 export type OpenrouterChatCompletionResponseInput = {
@@ -3289,8 +3289,8 @@ export type OpenrouterChatCompletionResponseInput = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
         message: {
-            content: string | unknown;
-            refusal?: string | unknown;
+            content: string | null;
+            refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown>;
             audio?: unknown;
@@ -3300,7 +3300,7 @@ export type OpenrouterChatCompletionResponseInput = {
             function_call?: {
                 arguments: string;
                 name: string;
-            } | unknown;
+            } | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -3321,14 +3321,14 @@ export type OpenrouterChatCompletionResponseInput = {
                     input: string;
                     name: string;
                 };
-            }> | unknown;
+            }> | null;
         };
     }>;
     created: number;
     model: string;
     object: 'chat.completion';
     server_tier?: string;
-    system_fingerprint?: string | unknown;
+    system_fingerprint?: string | null;
     /**
      * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113
      */
@@ -3406,20 +3406,20 @@ export type VllmChatCompletionRequestInput = {
         role: 'assistant';
         audio?: {
             id: string;
-        } | unknown;
+        } | null;
         content?: string | Array<{
             type: 'text';
             text: string;
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | unknown;
+        }> | null;
         function_call?: {
             arguments: string;
             name: string;
-        } | unknown;
+        } | null;
         name?: string;
-        refusal?: string | unknown;
+        refusal?: string | null;
         /**
          * A tool call in the assistant message
          */
@@ -3444,7 +3444,7 @@ export type VllmChatCompletionRequestInput = {
                 name: string;
             };
         }>;
-        reasoning?: string | unknown;
+        reasoning?: string | null;
     } | {
         role: 'tool';
         content: string | Array<{
@@ -3463,7 +3463,7 @@ export type VllmChatCompletionRequestInput = {
         tool_call_id: string;
     } | {
         role: 'function';
-        content: string | unknown;
+        content: string | null;
         name: string;
     }>;
     /**
@@ -3486,7 +3486,7 @@ export type VllmChatCompletionRequestInput = {
             parameters?: {
                 [key: string]: unknown;
             };
-            strict?: boolean | unknown;
+            strict?: boolean | null;
         };
     } | {
         type: 'custom';
@@ -3557,7 +3557,7 @@ export type VllmChatCompletionRequestInput = {
                         parameters?: {
                             [key: string]: unknown;
                         };
-                        strict?: boolean | unknown;
+                        strict?: boolean | null;
                     };
                 };
             }>;
@@ -3601,20 +3601,20 @@ export type VllmChatCompletionRequestInput = {
             };
         };
     };
-    temperature?: number | unknown;
-    max_tokens?: number | unknown;
-    stream?: boolean | unknown;
-    top_p?: number | unknown;
-    top_k?: number | unknown;
-    frequency_penalty?: number | unknown;
-    presence_penalty?: number | unknown;
-    repetition_penalty?: number | unknown;
+    temperature?: number | null;
+    max_tokens?: number | null;
+    stream?: boolean | null;
+    top_p?: number | null;
+    top_k?: number | null;
+    frequency_penalty?: number | null;
+    presence_penalty?: number | null;
+    repetition_penalty?: number | null;
     stop?: string | Array<string>;
-    seed?: number | unknown;
-    n?: number | unknown;
-    best_of?: number | unknown;
-    logprobs?: boolean | unknown;
-    top_logprobs?: number | unknown;
+    seed?: number | null;
+    n?: number | null;
+    best_of?: number | null;
+    logprobs?: boolean | null;
+    top_logprobs?: number | null;
 };
 
 export type VllmChatCompletionResponseInput = {
@@ -3627,15 +3627,15 @@ export type VllmChatCompletionResponseInput = {
          * The assistant message in the response
          */
         message: {
-            content: string | unknown;
-            refusal?: string | unknown;
+            content: string | null;
+            refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown>;
             audio?: unknown;
             function_call?: {
                 arguments: string;
                 name: string;
-            } | unknown;
+            } | null;
             /**
              * A tool call in the assistant message
              */
@@ -3660,13 +3660,13 @@ export type VllmChatCompletionResponseInput = {
                     name: string;
                 };
             }>;
-            reasoning?: string | unknown;
+            reasoning?: string | null;
         };
     }>;
     created: number;
     model: string;
     object: 'chat.completion';
-    system_fingerprint?: string | unknown;
+    system_fingerprint?: string | null;
     /**
      * Token usage statistics for the completion
      */
@@ -3737,20 +3737,20 @@ export type OllamaChatCompletionRequestInput = {
         role: 'assistant';
         audio?: {
             id: string;
-        } | unknown;
+        } | null;
         content?: string | Array<{
             type: 'text';
             text: string;
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | unknown;
+        }> | null;
         function_call?: {
             arguments: string;
             name: string;
-        } | unknown;
+        } | null;
         name?: string;
-        refusal?: string | unknown;
+        refusal?: string | null;
         /**
          * A tool call in the assistant message
          */
@@ -3793,7 +3793,7 @@ export type OllamaChatCompletionRequestInput = {
         tool_call_id: string;
     } | {
         role: 'function';
-        content: string | unknown;
+        content: string | null;
         name: string;
     }>;
     /**
@@ -3816,7 +3816,7 @@ export type OllamaChatCompletionRequestInput = {
             parameters?: {
                 [key: string]: unknown;
             };
-            strict?: boolean | unknown;
+            strict?: boolean | null;
         };
     } | {
         type: 'custom';
@@ -3887,7 +3887,7 @@ export type OllamaChatCompletionRequestInput = {
                         parameters?: {
                             [key: string]: unknown;
                         };
-                        strict?: boolean | unknown;
+                        strict?: boolean | null;
                     };
                 };
             }>;
@@ -3931,15 +3931,15 @@ export type OllamaChatCompletionRequestInput = {
             };
         };
     };
-    temperature?: number | unknown;
-    max_tokens?: number | unknown;
-    stream?: boolean | unknown;
-    top_p?: number | unknown;
-    frequency_penalty?: number | unknown;
-    presence_penalty?: number | unknown;
+    temperature?: number | null;
+    max_tokens?: number | null;
+    stream?: boolean | null;
+    top_p?: number | null;
+    frequency_penalty?: number | null;
+    presence_penalty?: number | null;
     stop?: string | Array<string>;
-    seed?: number | unknown;
-    n?: number | unknown;
+    seed?: number | null;
+    n?: number | null;
 };
 
 export type OllamaChatCompletionResponseInput = {
@@ -3952,15 +3952,15 @@ export type OllamaChatCompletionResponseInput = {
          * The assistant message in the response
          */
         message: {
-            content: string | unknown;
-            refusal?: string | unknown;
+            content: string | null;
+            refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown>;
             audio?: unknown;
             function_call?: {
                 arguments: string;
                 name: string;
-            } | unknown;
+            } | null;
             /**
              * A tool call in the assistant message
              */
@@ -3990,7 +3990,7 @@ export type OllamaChatCompletionResponseInput = {
     created: number;
     model: string;
     object: 'chat.completion';
-    system_fingerprint?: string | unknown;
+    system_fingerprint?: string | null;
     /**
      * Token usage statistics for the completion
      */
@@ -4030,7 +4030,7 @@ export type ZhipuaiChatCompletionRequestInput = {
         name?: string;
     } | {
         role: 'assistant';
-        content?: string | unknown;
+        content?: string | null;
         name?: string;
         tool_calls?: Array<{
             id: string;
@@ -4078,7 +4078,7 @@ export type ZhipuaiChatCompletionRequestInput = {
             parameters?: {
                 [key: string]: unknown;
             };
-            strict?: boolean | unknown;
+            strict?: boolean | null;
         };
     }>;
     /**
@@ -4097,9 +4097,9 @@ export type ZhipuaiChatCompletionRequestInput = {
         type: 'enabled' | 'disabled';
         clear_thinking?: boolean;
     };
-    temperature?: number | unknown;
-    top_p?: number | unknown;
-    max_tokens?: number | unknown;
+    temperature?: number | null;
+    top_p?: number | null;
+    max_tokens?: number | null;
     tool_stream?: boolean;
     stop?: Array<string>;
     response_format?: {
@@ -4119,7 +4119,7 @@ export type ZhipuaiChatCompletionResponseInput = {
          * https://docs.z.ai/api-reference/llm/chat-completion#response
          */
         message: {
-            content: string | unknown;
+            content: string | null;
             role: 'assistant';
             reasoning_content?: string;
             tool_calls?: Array<{
@@ -4136,13 +4136,13 @@ export type ZhipuaiChatCompletionResponseInput = {
             function_call?: {
                 arguments: string;
                 name: string;
-            } | unknown;
+            } | null;
         };
     }>;
     created: number;
     model: string;
     object: 'chat.completion';
-    system_fingerprint?: string | unknown;
+    system_fingerprint?: string | null;
     /**
      * https://docs.z.ai/api-reference/llm/chat-completion#response
      */
@@ -4229,23 +4229,23 @@ export type DeepSeekChatCompletionRequestInput = {
         role: 'assistant';
         audio?: {
             id: string;
-        } | unknown;
+        } | null;
         content?: string | Array<{
             type: 'text';
             text: string;
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | unknown;
+        }> | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
          */
         function_call?: {
             arguments: string;
             name: string;
-        } | unknown;
+        } | null;
         name?: string;
-        refusal?: string | unknown;
+        refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
          */
@@ -4288,7 +4288,7 @@ export type DeepSeekChatCompletionRequestInput = {
         tool_call_id: string;
     } | {
         role: 'function';
-        content: string | unknown;
+        content: string | null;
         name: string;
     }>;
     /**
@@ -4321,7 +4321,7 @@ export type DeepSeekChatCompletionRequestInput = {
             parameters?: {
                 [key: string]: unknown;
             };
-            strict?: boolean | unknown;
+            strict?: boolean | null;
         };
     } | {
         type: 'custom';
@@ -4407,7 +4407,7 @@ export type DeepSeekChatCompletionRequestInput = {
                         parameters?: {
                             [key: string]: unknown;
                         };
-                        strict?: boolean | unknown;
+                        strict?: boolean | null;
                     };
                 };
             }>;
@@ -4454,9 +4454,9 @@ export type DeepSeekChatCompletionRequestInput = {
             };
         };
     };
-    temperature?: number | unknown;
-    max_tokens?: number | unknown;
-    stream?: boolean | unknown;
+    temperature?: number | null;
+    max_tokens?: number | null;
+    stream?: boolean | null;
     [key: string]: unknown;
 };
 
@@ -4470,8 +4470,8 @@ export type DeepSeekChatCompletionResponseInput = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
         message: {
-            content: string | unknown;
-            refusal?: string | unknown;
+            content: string | null;
+            refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown>;
             audio?: unknown;
@@ -4481,7 +4481,7 @@ export type DeepSeekChatCompletionResponseInput = {
             function_call?: {
                 arguments: string;
                 name: string;
-            } | unknown;
+            } | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -4502,14 +4502,14 @@ export type DeepSeekChatCompletionResponseInput = {
                     input: string;
                     name: string;
                 };
-            }> | unknown;
+            }> | null;
         };
     }>;
     created: number;
     model: string;
     object: 'chat.completion';
     server_tier?: string;
-    system_fingerprint?: string | unknown;
+    system_fingerprint?: string | null;
     /**
      * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113
      */
@@ -4587,23 +4587,23 @@ export type MinimaxChatCompletionRequestInput = {
         role: 'assistant';
         audio?: {
             id: string;
-        } | unknown;
+        } | null;
         content?: string | Array<{
             type: 'text';
             text: string;
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | unknown;
+        }> | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
          */
         function_call?: {
             arguments: string;
             name: string;
-        } | unknown;
+        } | null;
         name?: string;
-        refusal?: string | unknown;
+        refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
          */
@@ -4646,7 +4646,7 @@ export type MinimaxChatCompletionRequestInput = {
         tool_call_id: string;
     } | {
         role: 'function';
-        content: string | unknown;
+        content: string | null;
         name: string;
     }>;
     /**
@@ -4679,7 +4679,7 @@ export type MinimaxChatCompletionRequestInput = {
             parameters?: {
                 [key: string]: unknown;
             };
-            strict?: boolean | unknown;
+            strict?: boolean | null;
         };
     } | {
         type: 'custom';
@@ -4765,7 +4765,7 @@ export type MinimaxChatCompletionRequestInput = {
                         parameters?: {
                             [key: string]: unknown;
                         };
-                        strict?: boolean | unknown;
+                        strict?: boolean | null;
                     };
                 };
             }>;
@@ -4813,10 +4813,10 @@ export type MinimaxChatCompletionRequestInput = {
         };
     };
     stream?: boolean;
-    temperature?: number | unknown;
-    top_p?: number | unknown;
-    max_tokens?: number | unknown;
-    n?: number;
+    temperature?: number | null;
+    top_p?: number | null;
+    max_tokens?: number | null;
+    n?: 1;
     stop?: string | Array<string>;
     response_format?: {
         type: 'text' | 'json_object';
@@ -4837,7 +4837,7 @@ export type MinimaxChatCompletionResponseInput = {
          * https://platform.minimax.io/docs/api-reference/text-openai-api#response
          */
         message: {
-            content: string | unknown;
+            content: string | null;
             role: 'assistant';
             reasoning_details?: Array<{
                 text: string;
@@ -4871,7 +4871,7 @@ export type MinimaxChatCompletionResponseInput = {
     created: number;
     model: string;
     object: 'chat.completion';
-    system_fingerprint?: string | unknown;
+    system_fingerprint?: string | null;
     /**
      * https://platform.minimax.io/docs/api-reference/text-openai-api#usage
      */
@@ -4943,23 +4943,23 @@ export type XaiChatCompletionRequestInput = {
         role: 'assistant';
         audio?: {
             id: string;
-        } | unknown;
+        } | null;
         content?: string | Array<{
             type: 'text';
             text: string;
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | unknown;
+        }> | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
          */
         function_call?: {
             arguments: string;
             name: string;
-        } | unknown;
+        } | null;
         name?: string;
-        refusal?: string | unknown;
+        refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
          */
@@ -5002,7 +5002,7 @@ export type XaiChatCompletionRequestInput = {
         tool_call_id: string;
     } | {
         role: 'function';
-        content: string | unknown;
+        content: string | null;
         name: string;
     }>;
     /**
@@ -5035,7 +5035,7 @@ export type XaiChatCompletionRequestInput = {
             parameters?: {
                 [key: string]: unknown;
             };
-            strict?: boolean | unknown;
+            strict?: boolean | null;
         };
     } | {
         type: 'custom';
@@ -5121,7 +5121,7 @@ export type XaiChatCompletionRequestInput = {
                         parameters?: {
                             [key: string]: unknown;
                         };
-                        strict?: boolean | unknown;
+                        strict?: boolean | null;
                     };
                 };
             }>;
@@ -5168,9 +5168,9 @@ export type XaiChatCompletionRequestInput = {
             };
         };
     };
-    temperature?: number | unknown;
-    max_tokens?: number | unknown;
-    stream?: boolean | unknown;
+    temperature?: number | null;
+    max_tokens?: number | null;
+    stream?: boolean | null;
 };
 
 export type XaiChatCompletionResponseInput = {
@@ -5183,8 +5183,8 @@ export type XaiChatCompletionResponseInput = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
         message: {
-            content: string | unknown;
-            refusal?: string | unknown;
+            content: string | null;
+            refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown>;
             audio?: unknown;
@@ -5194,7 +5194,7 @@ export type XaiChatCompletionResponseInput = {
             function_call?: {
                 arguments: string;
                 name: string;
-            } | unknown;
+            } | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -5215,14 +5215,14 @@ export type XaiChatCompletionResponseInput = {
                     input: string;
                     name: string;
                 };
-            }> | unknown;
+            }> | null;
         };
     }>;
     created: number;
     model: string;
     object: 'chat.completion';
     server_tier?: string;
-    system_fingerprint?: string | unknown;
+    system_fingerprint?: string | null;
     /**
      * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113
      */
@@ -5300,23 +5300,23 @@ export type OpenAiChatCompletionRequest = {
         role: 'assistant';
         audio?: {
             id: string;
-        } | unknown;
+        } | null;
         content?: string | Array<{
             type: 'text';
             text: string;
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | unknown;
+        }> | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
          */
         function_call?: {
             arguments: string;
             name: string;
-        } | unknown;
+        } | null;
         name?: string;
-        refusal?: string | unknown;
+        refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
          */
@@ -5359,7 +5359,7 @@ export type OpenAiChatCompletionRequest = {
         tool_call_id: string;
     } | {
         role: 'function';
-        content: string | unknown;
+        content: string | null;
         name: string;
     }>;
     /**
@@ -5392,7 +5392,7 @@ export type OpenAiChatCompletionRequest = {
             parameters?: {
                 [key: string]: unknown;
             };
-            strict?: boolean | unknown;
+            strict?: boolean | null;
         };
     } | {
         type: 'custom';
@@ -5478,7 +5478,7 @@ export type OpenAiChatCompletionRequest = {
                         parameters?: {
                             [key: string]: unknown;
                         };
-                        strict?: boolean | unknown;
+                        strict?: boolean | null;
                     };
                 };
             }>;
@@ -5525,9 +5525,9 @@ export type OpenAiChatCompletionRequest = {
             };
         };
     };
-    temperature?: number | unknown;
-    max_tokens?: number | unknown;
-    stream?: boolean | unknown;
+    temperature?: number | null;
+    max_tokens?: number | null;
+    stream?: boolean | null;
 };
 
 export type OpenAiChatCompletionResponse = {
@@ -5540,8 +5540,8 @@ export type OpenAiChatCompletionResponse = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
         message: {
-            content: string | unknown;
-            refusal?: string | unknown;
+            content: string | null;
+            refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown>;
             audio?: unknown;
@@ -5551,7 +5551,7 @@ export type OpenAiChatCompletionResponse = {
             function_call?: {
                 arguments: string;
                 name: string;
-            } | unknown;
+            } | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -5572,14 +5572,14 @@ export type OpenAiChatCompletionResponse = {
                     input: string;
                     name: string;
                 };
-            }> | unknown;
+            }> | null;
         };
     }>;
     created: number;
     model: string;
     object: 'chat.completion';
     server_tier?: string;
-    system_fingerprint?: string | unknown;
+    system_fingerprint?: string | null;
     /**
      * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113
      */
@@ -6488,7 +6488,7 @@ export type AnthropicMessagesRequest = {
             text: string;
             type: 'text';
             cache_control?: unknown;
-            citations?: Array<unknown> | unknown;
+            citations?: Array<unknown> | null;
         } | {
             type: 'image';
             source: {
@@ -6516,7 +6516,7 @@ export type AnthropicMessagesRequest = {
                     text: string;
                     type: 'text';
                     cache_control?: unknown;
-                    citations?: Array<unknown> | unknown;
+                    citations?: Array<unknown> | null;
                 } | {
                     type: 'image';
                     source: {
@@ -6527,11 +6527,11 @@ export type AnthropicMessagesRequest = {
                     cache_control?: unknown;
                 }>;
             };
-            title?: string | unknown;
-            context?: string | unknown;
+            title?: string | null;
+            context?: string | null;
             citations?: {
                 enabled: boolean;
-            } | unknown;
+            } | null;
             cache_control?: unknown;
         } | {
             id: string;
@@ -6547,7 +6547,7 @@ export type AnthropicMessagesRequest = {
                 text: string;
                 type: 'text';
                 cache_control?: unknown;
-                citations?: Array<unknown> | unknown;
+                citations?: Array<unknown> | null;
             } | {
                 type: 'image';
                 source: {
@@ -6575,7 +6575,7 @@ export type AnthropicMessagesRequest = {
                         text: string;
                         type: 'text';
                         cache_control?: unknown;
-                        citations?: Array<unknown> | unknown;
+                        citations?: Array<unknown> | null;
                     } | {
                         type: 'image';
                         source: {
@@ -6586,11 +6586,11 @@ export type AnthropicMessagesRequest = {
                         cache_control?: unknown;
                     }>;
                 };
-                title?: string | unknown;
-                context?: string | unknown;
+                title?: string | null;
+                context?: string | null;
                 citations?: {
                     enabled: boolean;
-                } | unknown;
+                } | null;
                 cache_control?: unknown;
             }>;
             is_error?: boolean;
@@ -6598,13 +6598,13 @@ export type AnthropicMessagesRequest = {
         role: 'user' | 'assistant';
     }>;
     max_tokens: number;
-    container?: string | unknown;
+    container?: string | null;
     context_management?: {
         [key: string]: never;
-    } | unknown;
+    } | null;
     mcp_servers?: Array<unknown>;
     metadata?: {
-        user_id: string | unknown;
+        user_id: string | null;
     };
     service_tier?: unknown;
     stop_sequences?: Array<string>;
@@ -6613,12 +6613,12 @@ export type AnthropicMessagesRequest = {
         type: 'text';
         text: string;
         cache_control?: unknown;
-        citations?: Array<unknown> | unknown;
+        citations?: Array<unknown> | null;
     } | Array<{
         type: 'text';
         text: string;
         cache_control?: unknown;
-        citations?: Array<unknown> | unknown;
+        citations?: Array<unknown> | null;
     }>;
     temperature?: number;
     tool_choice?: {
@@ -6636,7 +6636,7 @@ export type AnthropicMessagesRequest = {
     };
     tools?: Array<{
         name: string;
-        type?: 'custom' | unknown;
+        type?: 'custom';
         cache_control?: unknown;
         input_schema: {
             [key: string]: unknown;
@@ -6658,14 +6658,14 @@ export type AnthropicMessagesRequest = {
         name: 'str_replace_based_edit_tool';
         type: 'text_editor_20250728';
         cache_control?: unknown;
-        max_characters?: number | unknown;
+        max_characters?: number | null;
     } | {
         name: 'web_search';
         type: 'web_search_20250305';
-        allowed_domains?: Array<string> | unknown;
-        blocked_domains?: Array<string> | unknown;
+        allowed_domains?: Array<string> | null;
+        blocked_domains?: Array<string> | null;
         cache_control?: unknown;
-        max_uses?: number | unknown;
+        max_uses?: number | null;
         user_location?: unknown;
     }>;
     top_k?: number;
@@ -6675,7 +6675,7 @@ export type AnthropicMessagesRequest = {
 export type AnthropicMessagesResponse = {
     id: string;
     content: Array<{
-        citations: Array<unknown> | unknown;
+        citations: Array<unknown> | null;
         text: string;
         type: 'text';
     } | {
@@ -6687,7 +6687,7 @@ export type AnthropicMessagesResponse = {
     model: string;
     role: 'assistant';
     stop_reason: unknown;
-    stop_sequence: string | unknown;
+    stop_sequence: string | null;
     type: 'message';
     usage: {
         input_tokens: number;
@@ -6753,23 +6753,23 @@ export type CerebrasChatCompletionRequest = {
         role: 'assistant';
         audio?: {
             id: string;
-        } | unknown;
+        } | null;
         content?: string | Array<{
             type: 'text';
             text: string;
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | unknown;
+        }> | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
          */
         function_call?: {
             arguments: string;
             name: string;
-        } | unknown;
+        } | null;
         name?: string;
-        refusal?: string | unknown;
+        refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
          */
@@ -6812,7 +6812,7 @@ export type CerebrasChatCompletionRequest = {
         tool_call_id: string;
     } | {
         role: 'function';
-        content: string | unknown;
+        content: string | null;
         name: string;
     }>;
     /**
@@ -6845,7 +6845,7 @@ export type CerebrasChatCompletionRequest = {
             parameters?: {
                 [key: string]: unknown;
             };
-            strict?: boolean | unknown;
+            strict?: boolean | null;
         };
     } | {
         type: 'custom';
@@ -6931,7 +6931,7 @@ export type CerebrasChatCompletionRequest = {
                         parameters?: {
                             [key: string]: unknown;
                         };
-                        strict?: boolean | unknown;
+                        strict?: boolean | null;
                     };
                 };
             }>;
@@ -6978,9 +6978,9 @@ export type CerebrasChatCompletionRequest = {
             };
         };
     };
-    temperature?: number | unknown;
-    max_tokens?: number | unknown;
-    stream?: boolean | unknown;
+    temperature?: number | null;
+    max_tokens?: number | null;
+    stream?: boolean | null;
 };
 
 export type CerebrasChatCompletionResponse = {
@@ -6993,15 +6993,15 @@ export type CerebrasChatCompletionResponse = {
          * https://github.com/Cerebras/cerebras-cloud-sdk-node/blob/main/src/resources/chat/completions.ts
          */
         message: {
-            content?: string | unknown;
-            refusal?: string | unknown;
+            content?: string | null;
+            refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown>;
             audio?: unknown;
             function_call?: {
                 arguments: string;
                 name: string;
-            } | unknown;
+            } | null;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
              */
@@ -7032,7 +7032,7 @@ export type CerebrasChatCompletionResponse = {
     model: string;
     object: 'chat.completion';
     server_tier?: string;
-    system_fingerprint?: string | unknown;
+    system_fingerprint?: string | null;
     /**
      * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113
      */
@@ -7054,38 +7054,38 @@ export type CerebrasChatCompletionResponse = {
 export type CohereChatRequest = {
     model: string;
     messages: Array<{
-        role: string;
+        role: 'user';
         content: string | Array<{
-            type: string;
+            type: 'text';
             text: string;
         } | {
-            type: string;
+            type: 'tool_result';
             tool_call_id: string;
             content: string;
         }>;
     } | {
-        role: string;
+        role: 'assistant';
         content?: string | Array<{
-            type: string;
+            type: 'text';
             text: string;
         } | {
-            type: string;
+            type: 'tool_result';
             tool_call_id: string;
             content: string;
         }>;
         tool_calls?: Array<{
             id: string;
-            type: string;
+            type: 'function';
             function: {
                 name: string;
                 arguments: string;
             };
         }>;
     } | {
-        role: string;
+        role: 'system';
         content: string;
     } | {
-        role: string;
+        role: 'tool';
         tool_call_id: string;
         content: string;
     }>;
@@ -7093,7 +7093,7 @@ export type CohereChatRequest = {
     temperature?: number;
     max_tokens?: number;
     tools?: Array<{
-        type: string;
+        type: 'function';
         function: {
             name: string;
             description?: string;
@@ -7127,18 +7127,18 @@ export type CohereChatRequest = {
 export type CohereChatResponse = {
     id: string;
     message: {
-        role: string;
+        role: 'assistant';
         content?: Array<{
-            type: string;
+            type: 'text';
             text: string;
         } | {
-            type: string;
+            type: 'tool_result';
             tool_call_id: string;
             content: string;
         }>;
         tool_calls?: Array<{
             id: string;
-            type: string;
+            type: 'function';
             function: {
                 name: string;
                 arguments: string;
@@ -7216,23 +7216,23 @@ export type MistralChatCompletionRequest = {
         role: 'assistant';
         audio?: {
             id: string;
-        } | unknown;
+        } | null;
         content?: string | Array<{
             type: 'text';
             text: string;
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | unknown;
+        }> | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
          */
         function_call?: {
             arguments: string;
             name: string;
-        } | unknown;
+        } | null;
         name?: string;
-        refusal?: string | unknown;
+        refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
          */
@@ -7275,7 +7275,7 @@ export type MistralChatCompletionRequest = {
         tool_call_id: string;
     } | {
         role: 'function';
-        content: string | unknown;
+        content: string | null;
         name: string;
     }>;
     /**
@@ -7308,7 +7308,7 @@ export type MistralChatCompletionRequest = {
             parameters?: {
                 [key: string]: unknown;
             };
-            strict?: boolean | unknown;
+            strict?: boolean | null;
         };
     } | {
         type: 'custom';
@@ -7394,7 +7394,7 @@ export type MistralChatCompletionRequest = {
                         parameters?: {
                             [key: string]: unknown;
                         };
-                        strict?: boolean | unknown;
+                        strict?: boolean | null;
                     };
                 };
             }>;
@@ -7441,9 +7441,9 @@ export type MistralChatCompletionRequest = {
             };
         };
     };
-    temperature?: number | unknown;
-    max_tokens?: number | unknown;
-    stream?: boolean | unknown;
+    temperature?: number | null;
+    max_tokens?: number | null;
+    stream?: boolean | null;
 };
 
 export type MistralChatCompletionResponse = {
@@ -7456,8 +7456,8 @@ export type MistralChatCompletionResponse = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
         message: {
-            content: string | unknown;
-            refusal?: string | unknown;
+            content: string | null;
+            refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown>;
             audio?: unknown;
@@ -7467,7 +7467,7 @@ export type MistralChatCompletionResponse = {
             function_call?: {
                 arguments: string;
                 name: string;
-            } | unknown;
+            } | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -7488,14 +7488,14 @@ export type MistralChatCompletionResponse = {
                     input: string;
                     name: string;
                 };
-            }> | unknown;
+            }> | null;
         };
     }>;
     created: number;
     model: string;
     object: 'chat.completion';
     server_tier?: string;
-    system_fingerprint?: string | unknown;
+    system_fingerprint?: string | null;
     /**
      * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113
      */
@@ -7573,23 +7573,23 @@ export type PerplexityChatCompletionRequest = {
         role: 'assistant';
         audio?: {
             id: string;
-        } | unknown;
+        } | null;
         content?: string | Array<{
             type: 'text';
             text: string;
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | unknown;
+        }> | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
          */
         function_call?: {
             arguments: string;
             name: string;
-        } | unknown;
+        } | null;
         name?: string;
-        refusal?: string | unknown;
+        refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
          */
@@ -7632,7 +7632,7 @@ export type PerplexityChatCompletionRequest = {
         tool_call_id: string;
     } | {
         role: 'function';
-        content: string | unknown;
+        content: string | null;
         name: string;
     }>;
     /**
@@ -7665,7 +7665,7 @@ export type PerplexityChatCompletionRequest = {
             parameters?: {
                 [key: string]: unknown;
             };
-            strict?: boolean | unknown;
+            strict?: boolean | null;
         };
     } | {
         type: 'custom';
@@ -7751,7 +7751,7 @@ export type PerplexityChatCompletionRequest = {
                         parameters?: {
                             [key: string]: unknown;
                         };
-                        strict?: boolean | unknown;
+                        strict?: boolean | null;
                     };
                 };
             }>;
@@ -7798,9 +7798,9 @@ export type PerplexityChatCompletionRequest = {
             };
         };
     };
-    temperature?: number | unknown;
-    max_tokens?: number | unknown;
-    stream?: boolean | unknown;
+    temperature?: number | null;
+    max_tokens?: number | null;
+    stream?: boolean | null;
 };
 
 export type PerplexityChatCompletionResponse = {
@@ -7813,8 +7813,8 @@ export type PerplexityChatCompletionResponse = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
         message: {
-            content: string | unknown;
-            refusal?: string | unknown;
+            content: string | null;
+            refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown>;
             audio?: unknown;
@@ -7824,7 +7824,7 @@ export type PerplexityChatCompletionResponse = {
             function_call?: {
                 arguments: string;
                 name: string;
-            } | unknown;
+            } | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -7845,14 +7845,14 @@ export type PerplexityChatCompletionResponse = {
                     input: string;
                     name: string;
                 };
-            }> | unknown;
+            }> | null;
         };
     }>;
     created: number;
     model: string;
     object: 'chat.completion';
     server_tier?: string;
-    system_fingerprint?: string | unknown;
+    system_fingerprint?: string | null;
     /**
      * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113
      */
@@ -7930,23 +7930,23 @@ export type GroqChatCompletionRequest = {
         role: 'assistant';
         audio?: {
             id: string;
-        } | unknown;
+        } | null;
         content?: string | Array<{
             type: 'text';
             text: string;
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | unknown;
+        }> | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
          */
         function_call?: {
             arguments: string;
             name: string;
-        } | unknown;
+        } | null;
         name?: string;
-        refusal?: string | unknown;
+        refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
          */
@@ -7989,7 +7989,7 @@ export type GroqChatCompletionRequest = {
         tool_call_id: string;
     } | {
         role: 'function';
-        content: string | unknown;
+        content: string | null;
         name: string;
     }>;
     /**
@@ -8022,7 +8022,7 @@ export type GroqChatCompletionRequest = {
             parameters?: {
                 [key: string]: unknown;
             };
-            strict?: boolean | unknown;
+            strict?: boolean | null;
         };
     } | {
         type: 'custom';
@@ -8108,7 +8108,7 @@ export type GroqChatCompletionRequest = {
                         parameters?: {
                             [key: string]: unknown;
                         };
-                        strict?: boolean | unknown;
+                        strict?: boolean | null;
                     };
                 };
             }>;
@@ -8155,9 +8155,9 @@ export type GroqChatCompletionRequest = {
             };
         };
     };
-    temperature?: number | unknown;
-    max_tokens?: number | unknown;
-    stream?: boolean | unknown;
+    temperature?: number | null;
+    max_tokens?: number | null;
+    stream?: boolean | null;
 };
 
 export type GroqChatCompletionResponse = {
@@ -8170,8 +8170,8 @@ export type GroqChatCompletionResponse = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
         message: {
-            content: string | unknown;
-            refusal?: string | unknown;
+            content: string | null;
+            refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown>;
             audio?: unknown;
@@ -8181,7 +8181,7 @@ export type GroqChatCompletionResponse = {
             function_call?: {
                 arguments: string;
                 name: string;
-            } | unknown;
+            } | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -8202,14 +8202,14 @@ export type GroqChatCompletionResponse = {
                     input: string;
                     name: string;
                 };
-            }> | unknown;
+            }> | null;
         };
     }>;
     created: number;
     model: string;
     object: 'chat.completion';
     server_tier?: string;
-    system_fingerprint?: string | unknown;
+    system_fingerprint?: string | null;
     /**
      * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113
      */
@@ -8287,23 +8287,23 @@ export type OpenrouterChatCompletionRequest = {
         role: 'assistant';
         audio?: {
             id: string;
-        } | unknown;
+        } | null;
         content?: string | Array<{
             type: 'text';
             text: string;
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | unknown;
+        }> | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
          */
         function_call?: {
             arguments: string;
             name: string;
-        } | unknown;
+        } | null;
         name?: string;
-        refusal?: string | unknown;
+        refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
          */
@@ -8346,7 +8346,7 @@ export type OpenrouterChatCompletionRequest = {
         tool_call_id: string;
     } | {
         role: 'function';
-        content: string | unknown;
+        content: string | null;
         name: string;
     }>;
     /**
@@ -8379,7 +8379,7 @@ export type OpenrouterChatCompletionRequest = {
             parameters?: {
                 [key: string]: unknown;
             };
-            strict?: boolean | unknown;
+            strict?: boolean | null;
         };
     } | {
         type: 'custom';
@@ -8465,7 +8465,7 @@ export type OpenrouterChatCompletionRequest = {
                         parameters?: {
                             [key: string]: unknown;
                         };
-                        strict?: boolean | unknown;
+                        strict?: boolean | null;
                     };
                 };
             }>;
@@ -8512,9 +8512,9 @@ export type OpenrouterChatCompletionRequest = {
             };
         };
     };
-    temperature?: number | unknown;
-    max_tokens?: number | unknown;
-    stream?: boolean | unknown;
+    temperature?: number | null;
+    max_tokens?: number | null;
+    stream?: boolean | null;
 };
 
 export type OpenrouterChatCompletionResponse = {
@@ -8527,8 +8527,8 @@ export type OpenrouterChatCompletionResponse = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
         message: {
-            content: string | unknown;
-            refusal?: string | unknown;
+            content: string | null;
+            refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown>;
             audio?: unknown;
@@ -8538,7 +8538,7 @@ export type OpenrouterChatCompletionResponse = {
             function_call?: {
                 arguments: string;
                 name: string;
-            } | unknown;
+            } | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -8559,14 +8559,14 @@ export type OpenrouterChatCompletionResponse = {
                     input: string;
                     name: string;
                 };
-            }> | unknown;
+            }> | null;
         };
     }>;
     created: number;
     model: string;
     object: 'chat.completion';
     server_tier?: string;
-    system_fingerprint?: string | unknown;
+    system_fingerprint?: string | null;
     /**
      * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113
      */
@@ -8644,20 +8644,20 @@ export type VllmChatCompletionRequest = {
         role: 'assistant';
         audio?: {
             id: string;
-        } | unknown;
+        } | null;
         content?: string | Array<{
             type: 'text';
             text: string;
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | unknown;
+        }> | null;
         function_call?: {
             arguments: string;
             name: string;
-        } | unknown;
+        } | null;
         name?: string;
-        refusal?: string | unknown;
+        refusal?: string | null;
         /**
          * A tool call in the assistant message
          */
@@ -8682,7 +8682,7 @@ export type VllmChatCompletionRequest = {
                 name: string;
             };
         }>;
-        reasoning?: string | unknown;
+        reasoning?: string | null;
     } | {
         role: 'tool';
         content: string | Array<{
@@ -8701,7 +8701,7 @@ export type VllmChatCompletionRequest = {
         tool_call_id: string;
     } | {
         role: 'function';
-        content: string | unknown;
+        content: string | null;
         name: string;
     }>;
     /**
@@ -8724,7 +8724,7 @@ export type VllmChatCompletionRequest = {
             parameters?: {
                 [key: string]: unknown;
             };
-            strict?: boolean | unknown;
+            strict?: boolean | null;
         };
     } | {
         type: 'custom';
@@ -8795,7 +8795,7 @@ export type VllmChatCompletionRequest = {
                         parameters?: {
                             [key: string]: unknown;
                         };
-                        strict?: boolean | unknown;
+                        strict?: boolean | null;
                     };
                 };
             }>;
@@ -8839,20 +8839,20 @@ export type VllmChatCompletionRequest = {
             };
         };
     };
-    temperature?: number | unknown;
-    max_tokens?: number | unknown;
-    stream?: boolean | unknown;
-    top_p?: number | unknown;
-    top_k?: number | unknown;
-    frequency_penalty?: number | unknown;
-    presence_penalty?: number | unknown;
-    repetition_penalty?: number | unknown;
+    temperature?: number | null;
+    max_tokens?: number | null;
+    stream?: boolean | null;
+    top_p?: number | null;
+    top_k?: number | null;
+    frequency_penalty?: number | null;
+    presence_penalty?: number | null;
+    repetition_penalty?: number | null;
     stop?: string | Array<string>;
-    seed?: number | unknown;
-    n?: number | unknown;
-    best_of?: number | unknown;
-    logprobs?: boolean | unknown;
-    top_logprobs?: number | unknown;
+    seed?: number | null;
+    n?: number | null;
+    best_of?: number | null;
+    logprobs?: boolean | null;
+    top_logprobs?: number | null;
 };
 
 export type VllmChatCompletionResponse = {
@@ -8865,15 +8865,15 @@ export type VllmChatCompletionResponse = {
          * The assistant message in the response
          */
         message: {
-            content: string | unknown;
-            refusal?: string | unknown;
+            content: string | null;
+            refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown>;
             audio?: unknown;
             function_call?: {
                 arguments: string;
                 name: string;
-            } | unknown;
+            } | null;
             /**
              * A tool call in the assistant message
              */
@@ -8898,13 +8898,13 @@ export type VllmChatCompletionResponse = {
                     name: string;
                 };
             }>;
-            reasoning?: string | unknown;
+            reasoning?: string | null;
         };
     }>;
     created: number;
     model: string;
     object: 'chat.completion';
-    system_fingerprint?: string | unknown;
+    system_fingerprint?: string | null;
     /**
      * Token usage statistics for the completion
      */
@@ -8975,20 +8975,20 @@ export type OllamaChatCompletionRequest = {
         role: 'assistant';
         audio?: {
             id: string;
-        } | unknown;
+        } | null;
         content?: string | Array<{
             type: 'text';
             text: string;
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | unknown;
+        }> | null;
         function_call?: {
             arguments: string;
             name: string;
-        } | unknown;
+        } | null;
         name?: string;
-        refusal?: string | unknown;
+        refusal?: string | null;
         /**
          * A tool call in the assistant message
          */
@@ -9031,7 +9031,7 @@ export type OllamaChatCompletionRequest = {
         tool_call_id: string;
     } | {
         role: 'function';
-        content: string | unknown;
+        content: string | null;
         name: string;
     }>;
     /**
@@ -9054,7 +9054,7 @@ export type OllamaChatCompletionRequest = {
             parameters?: {
                 [key: string]: unknown;
             };
-            strict?: boolean | unknown;
+            strict?: boolean | null;
         };
     } | {
         type: 'custom';
@@ -9125,7 +9125,7 @@ export type OllamaChatCompletionRequest = {
                         parameters?: {
                             [key: string]: unknown;
                         };
-                        strict?: boolean | unknown;
+                        strict?: boolean | null;
                     };
                 };
             }>;
@@ -9169,15 +9169,15 @@ export type OllamaChatCompletionRequest = {
             };
         };
     };
-    temperature?: number | unknown;
-    max_tokens?: number | unknown;
-    stream?: boolean | unknown;
-    top_p?: number | unknown;
-    frequency_penalty?: number | unknown;
-    presence_penalty?: number | unknown;
+    temperature?: number | null;
+    max_tokens?: number | null;
+    stream?: boolean | null;
+    top_p?: number | null;
+    frequency_penalty?: number | null;
+    presence_penalty?: number | null;
     stop?: string | Array<string>;
-    seed?: number | unknown;
-    n?: number | unknown;
+    seed?: number | null;
+    n?: number | null;
 };
 
 export type OllamaChatCompletionResponse = {
@@ -9190,15 +9190,15 @@ export type OllamaChatCompletionResponse = {
          * The assistant message in the response
          */
         message: {
-            content: string | unknown;
-            refusal?: string | unknown;
+            content: string | null;
+            refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown>;
             audio?: unknown;
             function_call?: {
                 arguments: string;
                 name: string;
-            } | unknown;
+            } | null;
             /**
              * A tool call in the assistant message
              */
@@ -9228,7 +9228,7 @@ export type OllamaChatCompletionResponse = {
     created: number;
     model: string;
     object: 'chat.completion';
-    system_fingerprint?: string | unknown;
+    system_fingerprint?: string | null;
     /**
      * Token usage statistics for the completion
      */
@@ -9268,7 +9268,7 @@ export type ZhipuaiChatCompletionRequest = {
         name?: string;
     } | {
         role: 'assistant';
-        content?: string | unknown;
+        content?: string | null;
         name?: string;
         tool_calls?: Array<{
             id: string;
@@ -9316,7 +9316,7 @@ export type ZhipuaiChatCompletionRequest = {
             parameters?: {
                 [key: string]: unknown;
             };
-            strict?: boolean | unknown;
+            strict?: boolean | null;
         };
     }>;
     /**
@@ -9335,9 +9335,9 @@ export type ZhipuaiChatCompletionRequest = {
         type: 'enabled' | 'disabled';
         clear_thinking?: boolean;
     };
-    temperature?: number | unknown;
-    top_p?: number | unknown;
-    max_tokens?: number | unknown;
+    temperature?: number | null;
+    top_p?: number | null;
+    max_tokens?: number | null;
     tool_stream?: boolean;
     stop?: Array<string>;
     response_format?: {
@@ -9357,7 +9357,7 @@ export type ZhipuaiChatCompletionResponse = {
          * https://docs.z.ai/api-reference/llm/chat-completion#response
          */
         message: {
-            content: string | unknown;
+            content: string | null;
             role: 'assistant';
             reasoning_content?: string;
             tool_calls?: Array<{
@@ -9374,13 +9374,13 @@ export type ZhipuaiChatCompletionResponse = {
             function_call?: {
                 arguments: string;
                 name: string;
-            } | unknown;
+            } | null;
         };
     }>;
     created: number;
     model: string;
     object: 'chat.completion';
-    system_fingerprint?: string | unknown;
+    system_fingerprint?: string | null;
     /**
      * https://docs.z.ai/api-reference/llm/chat-completion#response
      */
@@ -9467,23 +9467,23 @@ export type DeepSeekChatCompletionRequest = {
         role: 'assistant';
         audio?: {
             id: string;
-        } | unknown;
+        } | null;
         content?: string | Array<{
             type: 'text';
             text: string;
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | unknown;
+        }> | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
          */
         function_call?: {
             arguments: string;
             name: string;
-        } | unknown;
+        } | null;
         name?: string;
-        refusal?: string | unknown;
+        refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
          */
@@ -9526,7 +9526,7 @@ export type DeepSeekChatCompletionRequest = {
         tool_call_id: string;
     } | {
         role: 'function';
-        content: string | unknown;
+        content: string | null;
         name: string;
     }>;
     /**
@@ -9559,7 +9559,7 @@ export type DeepSeekChatCompletionRequest = {
             parameters?: {
                 [key: string]: unknown;
             };
-            strict?: boolean | unknown;
+            strict?: boolean | null;
         };
     } | {
         type: 'custom';
@@ -9645,7 +9645,7 @@ export type DeepSeekChatCompletionRequest = {
                         parameters?: {
                             [key: string]: unknown;
                         };
-                        strict?: boolean | unknown;
+                        strict?: boolean | null;
                     };
                 };
             }>;
@@ -9692,9 +9692,9 @@ export type DeepSeekChatCompletionRequest = {
             };
         };
     };
-    temperature?: number | unknown;
-    max_tokens?: number | unknown;
-    stream?: boolean | unknown;
+    temperature?: number | null;
+    max_tokens?: number | null;
+    stream?: boolean | null;
     [key: string]: unknown;
 };
 
@@ -9708,8 +9708,8 @@ export type DeepSeekChatCompletionResponse = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
         message: {
-            content: string | unknown;
-            refusal?: string | unknown;
+            content: string | null;
+            refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown>;
             audio?: unknown;
@@ -9719,7 +9719,7 @@ export type DeepSeekChatCompletionResponse = {
             function_call?: {
                 arguments: string;
                 name: string;
-            } | unknown;
+            } | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -9740,14 +9740,14 @@ export type DeepSeekChatCompletionResponse = {
                     input: string;
                     name: string;
                 };
-            }> | unknown;
+            }> | null;
         };
     }>;
     created: number;
     model: string;
     object: 'chat.completion';
     server_tier?: string;
-    system_fingerprint?: string | unknown;
+    system_fingerprint?: string | null;
     /**
      * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113
      */
@@ -9825,23 +9825,23 @@ export type MinimaxChatCompletionRequest = {
         role: 'assistant';
         audio?: {
             id: string;
-        } | unknown;
+        } | null;
         content?: string | Array<{
             type: 'text';
             text: string;
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | unknown;
+        }> | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
          */
         function_call?: {
             arguments: string;
             name: string;
-        } | unknown;
+        } | null;
         name?: string;
-        refusal?: string | unknown;
+        refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
          */
@@ -9884,7 +9884,7 @@ export type MinimaxChatCompletionRequest = {
         tool_call_id: string;
     } | {
         role: 'function';
-        content: string | unknown;
+        content: string | null;
         name: string;
     }>;
     /**
@@ -9917,7 +9917,7 @@ export type MinimaxChatCompletionRequest = {
             parameters?: {
                 [key: string]: unknown;
             };
-            strict?: boolean | unknown;
+            strict?: boolean | null;
         };
     } | {
         type: 'custom';
@@ -10003,7 +10003,7 @@ export type MinimaxChatCompletionRequest = {
                         parameters?: {
                             [key: string]: unknown;
                         };
-                        strict?: boolean | unknown;
+                        strict?: boolean | null;
                     };
                 };
             }>;
@@ -10051,10 +10051,10 @@ export type MinimaxChatCompletionRequest = {
         };
     };
     stream?: boolean;
-    temperature?: number | unknown;
-    top_p?: number | unknown;
-    max_tokens?: number | unknown;
-    n?: number;
+    temperature?: number | null;
+    top_p?: number | null;
+    max_tokens?: number | null;
+    n?: 1;
     stop?: string | Array<string>;
     response_format?: {
         type: 'text' | 'json_object';
@@ -10075,7 +10075,7 @@ export type MinimaxChatCompletionResponse = {
          * https://platform.minimax.io/docs/api-reference/text-openai-api#response
          */
         message: {
-            content: string | unknown;
+            content: string | null;
             role: 'assistant';
             reasoning_details?: Array<{
                 text: string;
@@ -10109,7 +10109,7 @@ export type MinimaxChatCompletionResponse = {
     created: number;
     model: string;
     object: 'chat.completion';
-    system_fingerprint?: string | unknown;
+    system_fingerprint?: string | null;
     /**
      * https://platform.minimax.io/docs/api-reference/text-openai-api#usage
      */
@@ -10181,23 +10181,23 @@ export type XaiChatCompletionRequest = {
         role: 'assistant';
         audio?: {
             id: string;
-        } | unknown;
+        } | null;
         content?: string | Array<{
             type: 'text';
             text: string;
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | unknown;
+        }> | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
          */
         function_call?: {
             arguments: string;
             name: string;
-        } | unknown;
+        } | null;
         name?: string;
-        refusal?: string | unknown;
+        refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
          */
@@ -10240,7 +10240,7 @@ export type XaiChatCompletionRequest = {
         tool_call_id: string;
     } | {
         role: 'function';
-        content: string | unknown;
+        content: string | null;
         name: string;
     }>;
     /**
@@ -10273,7 +10273,7 @@ export type XaiChatCompletionRequest = {
             parameters?: {
                 [key: string]: unknown;
             };
-            strict?: boolean | unknown;
+            strict?: boolean | null;
         };
     } | {
         type: 'custom';
@@ -10359,7 +10359,7 @@ export type XaiChatCompletionRequest = {
                         parameters?: {
                             [key: string]: unknown;
                         };
-                        strict?: boolean | unknown;
+                        strict?: boolean | null;
                     };
                 };
             }>;
@@ -10406,9 +10406,9 @@ export type XaiChatCompletionRequest = {
             };
         };
     };
-    temperature?: number | unknown;
-    max_tokens?: number | unknown;
-    stream?: boolean | unknown;
+    temperature?: number | null;
+    max_tokens?: number | null;
+    stream?: boolean | null;
 };
 
 export type XaiChatCompletionResponse = {
@@ -10421,8 +10421,8 @@ export type XaiChatCompletionResponse = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
         message: {
-            content: string | unknown;
-            refusal?: string | unknown;
+            content: string | null;
+            refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown>;
             audio?: unknown;
@@ -10432,7 +10432,7 @@ export type XaiChatCompletionResponse = {
             function_call?: {
                 arguments: string;
                 name: string;
-            } | unknown;
+            } | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -10453,14 +10453,14 @@ export type XaiChatCompletionResponse = {
                     input: string;
                     name: string;
                 };
-            }> | unknown;
+            }> | null;
         };
     }>;
     created: number;
     model: string;
     object: 'chat.completion';
     server_tier?: string;
-    system_fingerprint?: string | unknown;
+    system_fingerprint?: string | null;
     /**
      * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113
      */

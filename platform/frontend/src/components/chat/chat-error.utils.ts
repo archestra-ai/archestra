@@ -6,6 +6,9 @@ import {
   RetryableErrorCodes,
 } from "@shared";
 
+/**
+ * AI SDK internal error type names that aren't useful to show users
+ */
 export const AI_SDK_INTERNAL_TYPES = [
   "AI_APICallError",
   "AI_RetryError",
@@ -28,6 +31,9 @@ export function parseErrorResponse(error: Error): ChatErrorResponse | null {
   return null;
 }
 
+/**
+ * Recursively parse nested JSON strings to produce a clean object
+ */
 export function deepParseJson(value: unknown): unknown {
   if (typeof value === "string") {
     try {
@@ -50,6 +56,9 @@ export function deepParseJson(value: unknown): unknown {
   return value;
 }
 
+/**
+ * Format the original error details for display
+ */
 export function formatOriginalError(
   originalError: ChatErrorResponse["originalError"],
 ): string {
@@ -63,6 +72,7 @@ export function formatOriginalError(
   if (originalError.status) {
     parts.push(`Status: ${originalError.status}`);
   }
+  // Skip AI SDK internal type names - not useful for users
   if (
     originalError.type &&
     !AI_SDK_INTERNAL_TYPES.includes(originalError.type)
@@ -74,10 +84,11 @@ export function formatOriginalError(
   }
   if (originalError.raw) {
     try {
+      // Deep parse the raw error to unwrap nested JSON strings
       const parsed = deepParseJson(originalError.raw);
       parts.push(`\nRaw Error:\n${JSON.stringify(parsed, null, 2)}`);
     } catch {
-      parts.push("\nRaw Error: [Unable to stringify]");
+      parts.push(`\nRaw Error: [Unable to stringify]`);
     }
   }
 

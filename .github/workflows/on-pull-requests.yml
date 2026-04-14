@@ -182,6 +182,9 @@ jobs:
     defaults:
       run:
         working-directory: ./platform
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
     steps:
       - name: Check if this is a release-please PR
         id: check-release-please

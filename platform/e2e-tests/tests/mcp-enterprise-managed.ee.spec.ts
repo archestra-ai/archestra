@@ -632,7 +632,11 @@ async function waitForGatewayTool(params: {
 }): Promise<void> {
   let lastError: unknown;
 
-  for (let attempt = 0; attempt < 20; attempt += 1) {
+  for (const delayMs of [0, 500, 1000, 2000, 4000, 4000, 4000, 4000, 4000]) {
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+
     try {
       await initializeMcpSession(params.request, {
         profileId: params.profileId,
@@ -648,7 +652,6 @@ async function waitForGatewayTool(params: {
     } catch (error) {
       lastError = error;
     }
-    await new Promise((resolve) => setTimeout(resolve, 1500));
   }
 
   throw (

@@ -16,6 +16,7 @@ import {
 import { expect, goToPage, test } from "../fixtures";
 import {
   addCustomSelfHostedCatalogItem,
+  assignCatalogCredentialToGateway,
   clickButton,
   expandTablePagination,
   goToMcpRegistry,

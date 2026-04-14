@@ -25,10 +25,10 @@ import * as Sentry from "@sentry/node";
 import Fastify from "fastify";
 import metricsPlugin from "fastify-metrics";
 import {
+  createJsonSchemaTransformObject,
   hasZodFastifySchemaValidationErrors,
   isResponseSerializationError,
   jsonSchemaTransform,
-  jsonSchemaTransformObject,
   serializerCompiler,
   validatorCompiler,
   type ZodTypeProvider,
@@ -227,7 +227,9 @@ export async function registerSwaggerPlugin(fastify: FastifyInstanceWithZod) {
     },
     hideUntagged: true,
     transform: jsonSchemaTransform,
-    transformObject: jsonSchemaTransformObject,
+    transformObject: createJsonSchemaTransformObject({
+      zodToJsonConfig: { target: "openapi-3.0" },
+    }),
   });
 }
 

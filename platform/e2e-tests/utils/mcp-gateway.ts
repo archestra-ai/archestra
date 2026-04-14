@@ -1,7 +1,11 @@
-import { type APIRequestContext, expect, type Page } from "@playwright/test";
+import {
+  type APIRequestContext,
+  type APIResponse,
+  expect,
+  type Page,
+} from "@playwright/test";
 import { archestraApiSdk, getManageCredentialsButtonTestId } from "@shared";
 import {
-  API_BASE_URL,
   DEFAULT_TEAM_NAME,
   E2eTestId,
   ENGINEERING_TEAM_NAME,
@@ -120,17 +124,34 @@ export async function makeApiRequest(params: {
   ignoreStatusCheck?: boolean;
   timeoutMs?: number;
 }) {
-  const requestUrl = params.urlSuffix.startsWith("/api/")
-    ? getE2eRequestUrl(params.urlSuffix)
-    : `${API_BASE_URL}${params.urlSuffix}`;
-  const response = await params.request[params.method](requestUrl, {
+  const requestUrl = getE2eRequestUrl(params.urlSuffix);
+  const requestOptions = {
     headers: params.headers ?? {
       "Content-Type": "application/json",
       Origin: UI_BASE_URL,
     },
     data: params.data ?? null,
     timeout: params.timeoutMs,
-  });
+  };
+  let response: APIResponse;
+
+  switch (params.method) {
+    case "get":
+      response = await params.request.get(requestUrl, requestOptions);
+      break;
+    case "post":
+      response = await params.request.post(requestUrl, requestOptions);
+      break;
+    case "put":
+      response = await params.request.put(requestUrl, requestOptions);
+      break;
+    case "patch":
+      response = await params.request.patch(requestUrl, requestOptions);
+      break;
+    case "delete":
+      response = await params.request.delete(requestUrl, requestOptions);
+      break;
+  }
 
   if (!params.ignoreStatusCheck && !response.ok()) {
     throw new Error(

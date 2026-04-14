@@ -175,6 +175,7 @@ class ConnectionLimiter {
 type TransportKind = "stdio" | "http";
 
 const HTTP_CONCURRENCY_LIMIT = 4;
+const OAUTH_TOKEN_REFRESH_BUFFER_MS = 5 * TimeInMs.Minute;
 // Idle TTL for shared MCP active connections. These clients can retain HTTP
 // session affinity, tool-name caches, and browser-backed remote state, so we
 // want them to age out after inactivity instead of accumulating forever.
@@ -226,6 +227,15 @@ class McpClient {
   // calls (e.g. browser stream ticks) detect a stale session simultaneously.
   // Only the first caller performs cleanup + retry; others wait and reuse.
   private sessionRecoveryLocks = new Map<string, Promise<void>>();
+  // Per-secretId lock to prevent concurrent OAuth refresh attempts from
+  // thrashing rotating refresh tokens when multiple tool calls arrive at once.
+  private oauthRefreshLocks = new Map<
+    string,
+    Promise<{
+      refreshed: boolean;
+      updatedSecret: Record<string, unknown> | null;
+    }>
+  >();
   // Session affinity metadata discovered during transport creation.
   // Used when persisting fresh session IDs after connect().
   private pendingHttpSessionMetadata = new Map<
@@ -404,6 +414,42 @@ class McpClient {
       isRetry = false,
     ): Promise<CommonToolResult> => {
       try {
+        const hasRefreshToken = !!(currentSecrets as { refresh_token?: string })
+          .refresh_token;
+        const shouldRefreshBeforeCall =
+          !isRetry &&
+          !!catalogItem.oauthConfig &&
+          !!secretId &&
+          hasRefreshToken &&
+          shouldProactivelyRefreshOAuthToken(currentSecrets);
+
+        if (shouldRefreshBeforeCall) {
+          const retryToolCallResult = await this.attemptTokenRefreshAndRetry({
+            secretId,
+            catalogId: catalogItem.id,
+            connectionKey,
+            toolCall,
+            agentId,
+            mcpServerName,
+            catalogItem,
+            targetMcpServerId,
+            tokenAuth,
+            toolCatalogId: tool.catalogId,
+            toolCatalogName: tool.catalogName,
+            executeRetry: (nextGetTransport, secrets) =>
+              executeToolCall(nextGetTransport, secrets, true),
+          });
+
+          if (retryToolCallResult) {
+            return retryToolCallResult;
+          }
+
+          logger.warn(
+            { toolName: toolCall.name, secretId, catalogId: catalogItem.id },
+            "Proactive OAuth refresh failed, falling back to existing token",
+          );
+        }
+
         // Get the appropriate transport
         const transport = await getTransport();
 
@@ -442,6 +488,55 @@ class McpClient {
           name: targetToolName,
           arguments: toolCall.arguments,
         });
+
+        const isOAuthServer = !!catalogItem.oauthConfig;
+        const toolResultAuthError = isAuthRelatedToolResult(result);
+        if (
+          toolResultAuthError &&
+          isOAuthServer &&
+          secretId &&
+          hasRefreshToken &&
+          !isRetry
+        ) {
+          const retryToolCallResult = await this.attemptTokenRefreshAndRetry({
+            secretId,
+            catalogId: catalogItem.id,
+            connectionKey,
+            toolCall,
+            agentId,
+            mcpServerName,
+            catalogItem,
+            targetMcpServerId,
+            tokenAuth,
+            toolCatalogId: tool.catalogId,
+            toolCatalogName: tool.catalogName,
+            executeRetry: (nextGetTransport, secrets) =>
+              executeToolCall(nextGetTransport, secrets, true),
+          });
+
+          if (retryToolCallResult) {
+            return retryToolCallResult;
+          }
+        }
+
+        if (toolResultAuthError && tool.catalogId && targetMcpServerId) {
+          const catalogDisplayName = tool.catalogName || tool.catalogId;
+          const authError = this.buildExpiredAuthMessage(
+            catalogDisplayName,
+            tool.catalogId,
+            targetMcpServerId,
+            tokenAuth,
+          );
+          return await this.createErrorResult(
+            toolCall,
+            agentId,
+            authError.message,
+            mcpServerName,
+            authInfo,
+            authError,
+          );
+        }
+
         // Apply template and return
         return await this.createSuccessResult({
           toolCall,
@@ -1574,22 +1669,16 @@ class McpClient {
       "attemptTokenRefreshAndRetry: authentication error detected, attempting token refresh and retry",
     );
 
-    // Invalidate existing client since token is going to be changed
-    const existingClient = this.activeConnections.get(connectionKey);
-    if (existingClient) {
-      try {
-        await existingClient.close();
-      } catch {
-        // Ignore close errors
-      }
-      this.activeConnections.delete(connectionKey);
-      this.pendingHttpSessionMetadata.delete(connectionKey);
-    }
+    // Attempt refresh, deduplicated per secret so concurrent callers do not
+    // race a rotating refresh token or thrash connection teardown state.
+    const refreshResult = await this.refreshOAuthTokenWithLock({
+      secretId,
+      catalogId,
+      connectionKey,
+      targetMcpServerId,
+    });
 
-    // Attempt refresh
-    const refreshResult = await refreshOAuthToken(secretId, catalogId);
-
-    if (!refreshResult) {
+    if (!refreshResult.refreshed) {
       logger.warn(
         { toolName: toolCall.name, secretId },
         "attemptTokenRefreshAndRetry: token refresh failed",
@@ -1617,8 +1706,8 @@ class McpClient {
 
     try {
       // Re-fetch updated secrets and retry once
-      const updatedSecret = await secretManager().getSecret(secretId);
-      if (!updatedSecret?.secret) {
+      const updatedSecret = refreshResult.updatedSecret;
+      if (!updatedSecret) {
         logger.warn(
           { toolName: toolCall.name, secretId },
           "attemptTokenRefreshAndRetry: failed to fetch updated secret after refresh",
@@ -1628,9 +1717,9 @@ class McpClient {
 
       // Create new transport with updated secrets
       const getUpdatedTransport = () =>
-        this.getTransport(catalogItem, targetMcpServerId, updatedSecret.secret);
+        this.getTransport(catalogItem, targetMcpServerId, updatedSecret);
 
-      return await executeRetry(getUpdatedTransport, updatedSecret.secret);
+      return await executeRetry(getUpdatedTransport, updatedSecret);
     } catch (retryError) {
       const retryErrorMsg =
         retryError instanceof Error ? retryError.message : String(retryError);
@@ -1671,6 +1760,73 @@ class McpClient {
         mcpServerName,
       );
     }
+  }
+
+  private async refreshOAuthTokenWithLock(params: {
+    secretId: string;
+    catalogId: string;
+    connectionKey: string;
+    targetMcpServerId: string;
+  }): Promise<{
+    refreshed: boolean;
+    updatedSecret: Record<string, unknown> | null;
+  }> {
+    const { secretId, catalogId, connectionKey, targetMcpServerId } = params;
+    const existingRefresh = this.oauthRefreshLocks.get(secretId);
+    if (existingRefresh) {
+      logger.info(
+        { secretId, catalogId },
+        "Waiting for concurrent OAuth token refresh",
+      );
+      return existingRefresh;
+    }
+
+    const refreshPromise = (async () => {
+      const existingClient = this.activeConnections.get(connectionKey);
+      if (existingClient) {
+        try {
+          await existingClient.close();
+        } catch {
+          // Ignore close errors during refresh teardown.
+        }
+        this.activeConnections.delete(connectionKey);
+        this.pendingHttpSessionMetadata.delete(connectionKey);
+      }
+
+      const refreshed = await refreshOAuthToken(secretId, catalogId);
+      if (!refreshed) {
+        return { refreshed: false, updatedSecret: null };
+      }
+
+      const updatedSecret = await secretManager().getSecret(secretId);
+      if (!updatedSecret?.secret) {
+        logger.warn(
+          { secretId, catalogId },
+          "OAuth token refresh succeeded but updated secret could not be loaded",
+        );
+        return { refreshed: false, updatedSecret: null };
+      }
+
+      this.secretsCache.set(targetMcpServerId, {
+        secrets: updatedSecret.secret,
+        secretId,
+      });
+
+      return { refreshed: true, updatedSecret: updatedSecret.secret };
+    })()
+      .catch((error) => {
+        logger.error(
+          { secretId, catalogId, error },
+          "OAuth token refresh lock encountered an unexpected error",
+        );
+        return { refreshed: false, updatedSecret: null };
+      })
+      .finally(() => {
+        this.oauthRefreshLocks.delete(secretId);
+      });
+
+    this.oauthRefreshLocks.set(secretId, refreshPromise);
+    return refreshPromise;
   }
 
   /**
@@ -2480,6 +2636,58 @@ function isAuthRelatedError(errorMessage: string): boolean {
     lower.includes("access denied") ||
     lower.includes("invalid credentials") ||
     lower.includes("credentials expired")
+  );
+}
+
+function isAuthRelatedToolResult(result: {
+  isError?: boolean;
+  content?: Array<{ type?: string; text?: string }>;
+  structuredContent?: Record<string, unknown>;
+  _meta?: Record<string, unknown>;
+}): boolean {
+  if (!result.isError) {
+    return false;
+  }
+
+  const contentText = (result.content ?? [])
+    .filter((block) => block.type === "text" && typeof block.text === "string")
+    .map((block) => block.text)
+    .join("\n");
+  const structuredText = result.structuredContent
+    ? JSON.stringify(result.structuredContent)
+    : "";
+  const metaText = result._meta ? JSON.stringify(result._meta) : "";
+
+  return isOAuthTokenFailureText(
+    `${contentText}\n${structuredText}\n${metaText}`,
+  );
+}
+
+function shouldProactivelyRefreshOAuthToken(
+  secrets: Record<string, unknown>,
+): boolean {
+  const expiresAt = secrets.expires_at;
+  if (typeof expiresAt !== "number") {
+    return false;
+  }
+
+  return expiresAt <= Date.now() + OAUTH_TOKEN_REFRESH_BUFFER_MS;
+}
+
+function isOAuthTokenFailureText(errorText: string): boolean {
+  const lower = errorText.toLowerCase();
+  return (
+    lower.includes("invalid_token") ||
+    lower.includes("invalid token") ||
+    lower.includes("invalid bearer token") ||
+    lower.includes("token_expired") ||
+    lower.includes("token expired") ||
+    lower.includes("expired token") ||
+    lower.includes("access token expired") ||
+    lower.includes("refresh token expired") ||
+    lower.includes("invalid bearer") ||
+    lower.includes('bearer realm="') ||
+    (lower.includes("www-authenticate") && lower.includes("bearer"))
   );
 }
 

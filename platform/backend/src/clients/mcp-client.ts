@@ -227,6 +227,9 @@ class McpClient {
   // calls (e.g. browser stream ticks) detect a stale session simultaneously.
   // Only the first caller performs cleanup + retry; others wait and reuse.
   private sessionRecoveryLocks = new Map<string, Promise<void>>();
+  // Per-secretId lock to prevent concurrent OAuth refresh attempts from
+  // thrashing rotating refresh tokens when multiple tool calls arrive at once.
+  private oauthRefreshLocks = new Map<string, Promise<boolean>>();
   // Session affinity metadata discovered during transport creation.
   // Used when persisting fresh session IDs after connect().
   private pendingHttpSessionMetadata = new Map<
@@ -433,6 +436,24 @@ class McpClient {
 
           if (retryToolCallResult) {
             return retryToolCallResult;
+          }
+
+          if (tool.catalogId) {
+            const catalogDisplayName = tool.catalogName || tool.catalogId;
+            const authError = this.buildExpiredAuthMessage(
+              catalogDisplayName,
+              tool.catalogId,
+              targetMcpServerId,
+              tokenAuth,
+            );
+            return await this.createErrorResult(
+              toolCall,
+              agentId,
+              authError.message,
+              mcpServerName,
+              authInfo,
+              authError,
+            );
           }
         }
 
@@ -1667,8 +1688,12 @@ class McpClient {
       this.pendingHttpSessionMetadata.delete(connectionKey);
     }
 
-    // Attempt refresh
-    const refreshResult = await refreshOAuthToken(secretId, catalogId);
+    // Attempt refresh, deduplicated per secret so concurrent callers do not
+    // race a rotating refresh token and incorrectly flag the server as broken.
+    const refreshResult = await this.refreshOAuthTokenWithLock(
+      secretId,
+      catalogId,
+    );
 
     if (!refreshResult) {
       logger.warn(
@@ -1757,6 +1782,35 @@ class McpClient {
         mcpServerName,
       );
     }
+  }
+
+  private async refreshOAuthTokenWithLock(
+    secretId: string,
+    catalogId: string,
+  ): Promise<boolean> {
+    const existingRefresh = this.oauthRefreshLocks.get(secretId);
+    if (existingRefresh) {
+      logger.info(
+        { secretId, catalogId },
+        "Waiting for concurrent OAuth token refresh",
+      );
+      return existingRefresh;
+    }
+
+    const refreshPromise = refreshOAuthToken(secretId, catalogId)
+      .catch((error) => {
+        logger.error(
+          { secretId, catalogId, error },
+          "OAuth token refresh lock encountered an unexpected error",
+        );
+        return false;
+      })
+      .finally(() => {
+        this.oauthRefreshLocks.delete(secretId);
+      });
+
+    this.oauthRefreshLocks.set(secretId, refreshPromise);
+    return refreshPromise;
   }
 
   /**

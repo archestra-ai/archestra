@@ -1525,7 +1525,7 @@ describe("McpClient", () => {
           {
             access_token: "expired-token",
             refresh_token: "refresh-token",
-            expires_at: Date.now() + 3_600_000,
+            expires_at: Date.now() + 24 * 3_600_000,
           },
           "jira-oauth-refresh-secret",
         );
@@ -1689,6 +1689,120 @@ describe("McpClient", () => {
           isError: false,
           content: [{ type: "text", text: "Issue fetched proactively" }],
         });
+
+        refreshSpy.mockRestore();
+      });
+
+      test("deduplicates concurrent proactive refresh attempts for the same OAuth secret", async ({
+        makeUser,
+      }) => {
+        const testUser = await makeUser({
+          email: "oauth-concurrent-refresh@example.com",
+        });
+
+        const oauthCatalog = await InternalMcpCatalogModel.create({
+          name: "jira-concurrent-server",
+          serverType: "remote",
+          serverUrl: "https://mcp.atlassian.example.com/mcp/",
+          oauthConfig: {
+            name: "Jira",
+            server_url: "https://mcp.atlassian.example.com/mcp/",
+            client_id: "test-client-id",
+            redirect_uris: ["http://localhost:3000/callback"],
+            scopes: ["read:jira-work"],
+            default_scopes: ["read:jira-work"],
+            supports_resource_metadata: false,
+          },
+        });
+
+        const secret = await secretManager().createSecret(
+          {
+            access_token: "soon-expiring-token",
+            refresh_token: "refresh-token",
+            expires_at: Date.now() + 30_000,
+          },
+          "jira-oauth-concurrent-secret",
+        );
+
+        const mcpServer = await McpServerModel.create({
+          name: "jira-concurrent-server",
+          catalogId: oauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: testUser.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "jira-concurrent-server__get_issue",
+          description: "Get issue",
+          parameters: {},
+          catalogId: oauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: mcpServer.id,
+        });
+
+        const refreshSpy = vi
+          .spyOn(oauthRoutes, "refreshOAuthToken")
+          .mockImplementation(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 25));
+            await secretManager().updateSecret(secret.id, {
+              access_token: "concurrently-refreshed-token",
+              refresh_token: "rotated-refresh-token",
+              expires_at: Date.now() + 3_600_000,
+            });
+            return true;
+          });
+
+        mockConnect.mockResolvedValue(undefined);
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Issue fetched concurrently" }],
+          isError: false,
+        });
+
+        const toolCall = {
+          id: "call_oauth_concurrent_refresh",
+          name: "jira-concurrent-server__get_issue",
+          arguments: { issue_key: "CTAZ-1015" },
+        };
+
+        const results = await Promise.all([
+          mcpClient.executeToolCall(toolCall, agentId, {
+            tokenId: "test-token-1",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: testUser.id,
+          }),
+          mcpClient.executeToolCall(
+            { ...toolCall, id: "call_oauth_concurrent_refresh_2" },
+            agentId,
+            {
+              tokenId: "test-token-2",
+              teamId: null,
+              isOrganizationToken: false,
+              userId: testUser.id,
+            },
+          ),
+          mcpClient.executeToolCall(
+            { ...toolCall, id: "call_oauth_concurrent_refresh_3" },
+            agentId,
+            {
+              tokenId: "test-token-3",
+              teamId: null,
+              isOrganizationToken: false,
+              userId: testUser.id,
+            },
+          ),
+        ]);
+
+        expect(refreshSpy).toHaveBeenCalledTimes(1);
+        for (const result of results) {
+          expect(result).toMatchObject({
+            isError: false,
+            content: [{ type: "text", text: "Issue fetched concurrently" }],
+          });
+        }
 
         refreshSpy.mockRestore();
       });

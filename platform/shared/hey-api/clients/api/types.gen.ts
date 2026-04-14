@@ -24948,6 +24948,7 @@ export type CreateInternalMcpCatalogItemData = {
                 sensitive?: boolean;
                 min?: number;
                 max?: number;
+                headerName?: string;
             };
         } | null;
         oauthConfig?: {
@@ -25552,6 +25553,7 @@ export type UpdateInternalMcpCatalogItemData = {
                 sensitive?: boolean;
                 min?: number;
                 max?: number;
+                headerName?: string;
             };
         } | null;
         oauthConfig?: {

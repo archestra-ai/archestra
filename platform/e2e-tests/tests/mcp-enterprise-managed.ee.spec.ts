@@ -21,6 +21,7 @@ import {
   initializeMcpSession,
   listMcpTools,
   makeApiRequest,
+  waitForGatewayIdentityProviderReady,
 } from "../utils/mcp-gateway";
 import { expect, test } from "./api-fixtures";
 
@@ -494,6 +495,12 @@ async function createProfile(params: {
   });
 
   const profile = (await response.json()) as { id: string };
+  await waitForGatewayIdentityProviderReady({
+    request: params.request,
+    profileId: profile.id,
+    identityProviderId: params.identityProviderId,
+    agentType: params.agentType,
+  });
   return profile.id;
 }
 
@@ -625,7 +632,11 @@ async function waitForGatewayTool(params: {
 }): Promise<void> {
   let lastError: unknown;
 
-  for (let attempt = 0; attempt < 20; attempt += 1) {
+  for (const delayMs of [0, 500, 1000, 2000, 4000, 4000, 4000, 4000, 4000]) {
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+
     try {
       await initializeMcpSession(params.request, {
         profileId: params.profileId,
@@ -641,7 +652,6 @@ async function waitForGatewayTool(params: {
     } catch (error) {
       lastError = error;
     }
-    await new Promise((resolve) => setTimeout(resolve, 1500));
   }
 
   throw (

@@ -1,5 +1,6 @@
 import type { Connector, ConnectorType } from "@/types";
 import { ConfluenceConnector } from "./confluence/confluence-connector";
+import { GoogleDriveConnector } from "./gdrive/gdrive-connector";
 import { GithubConnector } from "./github/github-connector";
 import { GitlabConnector } from "./gitlab/gitlab-connector";
 import { JiraConnector } from "./jira/jira-connector";
@@ -15,6 +16,7 @@ const connectorRegistry: Record<ConnectorType, () => Connector> = {
   servicenow: () => new ServiceNowConnector(),
   notion: () => new NotionConnector(),
   sharepoint: () => new SharePointConnector(),
+  gdrive: () => new GoogleDriveConnector(),
 };
 
 export function getConnector(type: string): Connector {

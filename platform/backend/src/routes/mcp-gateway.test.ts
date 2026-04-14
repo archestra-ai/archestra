@@ -10,7 +10,7 @@ import {
 } from "fastify-type-provider-zod";
 import { TeamTokenModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import { mcpGatewayRoutes } from "./mcp-gateway";
+import mcpGatewayRoutes from "./mcp-gateway";
 
 /**
  * Helper to create MCP gateway request headers

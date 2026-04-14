@@ -1,7 +1,7 @@
 {{- if .Values.archestra.worker.enabled }}
 {{- $workerPodAnnotations := mergeOverwrite (dict) (.Values.archestra.podAnnotations | default dict) (.Values.archestra.worker.podAnnotations | default dict) }}
 {{- if hasKey $workerPodAnnotations "prometheus.io/scrape" }}
-{{- $workerPodAnnotations = mergeOverwrite $workerPodAnnotations (dict "prometheus.io/port" "9050" "prometheus.io/path" "/metrics") }}
+{{- $workerPodAnnotations = mergeOverwrite $workerPodAnnotations (dict "prometheus.io/port" "9000" "prometheus.io/path" "/metrics") }}
 {{- end }}
 apiVersion: apps/v1
 kind: Deployment
@@ -44,9 +44,6 @@ spec:
           ports:
             - name: backend
               containerPort: 9000
-              protocol: TCP
-            - name: metrics
-              containerPort: 9050
               protocol: TCP
           env:
             {{- include "archestra-platform.env" . | nindent 12 }}

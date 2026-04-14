@@ -26619,7 +26619,7 @@ export type GetKnowledgeBasesResponses = {
             connectors: Array<{
                 id: string;
                 name: string;
-                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint';
+                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive';
             }>;
             totalDocsIndexed: number;
             assignedAgents: Array<{
@@ -27067,7 +27067,7 @@ export type GetConnectorsData = {
         offset?: number;
         knowledgeBaseId?: string;
         search?: string;
-        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint';
+        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive';
     };
     url: '/api/connectors';
 };
@@ -27143,7 +27143,7 @@ export type GetConnectorsResponses = {
             description: string | null;
             visibility: 'org-wide' | 'team-scoped';
             teamIds: Array<string>;
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive';
             config: {
                 type: 'jira';
                 jiraBaseUrl: unknown;
@@ -27204,6 +27204,15 @@ export type GetConnectorsResponses = {
                 folderPath?: string;
                 includePages?: boolean;
                 batchSize?: number;
+            } | {
+                type: 'gdrive';
+                driveId?: string;
+                driveIds?: Array<string>;
+                folderId?: string;
+                recursive?: boolean;
+                maxDepth?: number;
+                fileTypes?: Array<string>;
+                batchSize?: number;
             };
             secretId: string | null;
             schedule: string;
@@ -27241,7 +27250,7 @@ export type CreateConnectorData = {
         description?: string | null;
         visibility?: 'org-wide' | 'team-scoped';
         teamIds?: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive';
         config: {
             type: 'jira';
             jiraBaseUrl: string;
@@ -27301,6 +27310,15 @@ export type CreateConnectorData = {
             driveIds?: Array<string>;
             folderPath?: string;
             includePages?: boolean;
+            batchSize?: number;
+        } | {
+            type: 'gdrive';
+            driveId?: string;
+            driveIds?: Array<string>;
+            folderId?: string;
+            recursive?: boolean;
+            maxDepth?: number;
+            fileTypes?: Array<string>;
             batchSize?: number;
         };
         credentials: {
@@ -27386,7 +27404,7 @@ export type CreateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -27446,6 +27464,15 @@ export type CreateConnectorResponses = {
             driveIds?: Array<string>;
             folderPath?: string;
             includePages?: boolean;
+            batchSize?: number;
+        } | {
+            type: 'gdrive';
+            driveId?: string;
+            driveIds?: Array<string>;
+            folderId?: string;
+            recursive?: boolean;
+            maxDepth?: number;
+            fileTypes?: Array<string>;
             batchSize?: number;
         };
         secretId: string | null;
@@ -27622,7 +27649,7 @@ export type GetConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -27682,6 +27709,15 @@ export type GetConnectorResponses = {
             driveIds?: Array<string>;
             folderPath?: string;
             includePages?: boolean;
+            batchSize?: number;
+        } | {
+            type: 'gdrive';
+            driveId?: string;
+            driveIds?: Array<string>;
+            folderId?: string;
+            recursive?: boolean;
+            maxDepth?: number;
+            fileTypes?: Array<string>;
             batchSize?: number;
         };
         secretId: string | null;
@@ -27766,6 +27802,15 @@ export type UpdateConnectorData = {
             driveIds?: Array<string>;
             folderPath?: string;
             includePages?: boolean;
+            batchSize?: number;
+        } | {
+            type: 'gdrive';
+            driveId?: string;
+            driveIds?: Array<string>;
+            folderId?: string;
+            recursive?: boolean;
+            maxDepth?: number;
+            fileTypes?: Array<string>;
             batchSize?: number;
         };
         credentials?: {
@@ -27852,7 +27897,7 @@ export type UpdateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -27912,6 +27957,15 @@ export type UpdateConnectorResponses = {
             driveIds?: Array<string>;
             folderPath?: string;
             includePages?: boolean;
+            batchSize?: number;
+        } | {
+            type: 'gdrive';
+            driveId?: string;
+            driveIds?: Array<string>;
+            folderId?: string;
+            recursive?: boolean;
+            maxDepth?: number;
+            fileTypes?: Array<string>;
             batchSize?: number;
         };
         secretId: string | null;

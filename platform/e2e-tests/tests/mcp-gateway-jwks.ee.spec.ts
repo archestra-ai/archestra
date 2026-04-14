@@ -17,6 +17,7 @@ import {
   listMcpTools,
   makeApiRequest,
   makeMcpGatewayRequestHeaders,
+  waitForGatewayIdentityProviderReady,
 } from "../utils/mcp-gateway";
 import { expect, test } from "./api-fixtures";
 
@@ -27,7 +28,6 @@ import { expect, test } from "./api-fixtures";
 test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
   test("should authenticate with external IdP JWT, call tools, and log external identity", async ({
     request,
-    createAgent,
     deleteAgent,
     createIdentityProvider,
     deleteIdentityProvider,
@@ -48,22 +48,30 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
 
     let profileId: string | undefined;
     try {
-      // STEP 3: Create an MCP Gateway profile linked to the IdP
-      const agentResponse = await createAgent(
+      // STEP 3: Create an MCP Gateway profile with the IdP linked directly.
+      // This matches the more reliable llm-proxy JWKS flow and avoids a
+      // separate update race in CI.
+      const agentResponse = await makeApiRequest({
         request,
-        `JWKS E2E Test ${Date.now()}`,
-        "personal",
-      );
-      const agent = await agentResponse.json();
+        method: "post",
+        urlSuffix: "/api/agents",
+        data: {
+          name: `JWKS E2E Test ${Date.now()}`,
+          teams: [],
+          scope: "org",
+          agentType: "mcp_gateway",
+          identityProviderId,
+        },
+      });
+      const agent = (await agentResponse.json()) as { id: string };
       profileId = agent.id;
-      const pid = profileId as string;
+      const pid = profileId;
 
-      // Link the IdP to the profile
-      await makeApiRequest({
+      await waitForGatewayIdentityProviderReady({
         request,
-        method: "put",
-        urlSuffix: `/api/agents/${pid}`,
-        data: { identityProviderId },
+        profileId: pid,
+        identityProviderId,
+        agentType: "mcp_gateway",
       });
 
       // STEP 4: Assign Archestra tools to the profile
@@ -125,7 +133,6 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
 
   test("should reject invalid JWT with 401", async ({
     request,
-    createAgent,
     deleteAgent,
     createIdentityProvider,
     deleteIdentityProvider,
@@ -139,20 +146,25 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
 
     let profileId: string | undefined;
     try {
-      const agentResponse = await createAgent(
+      const agentResponse = await makeApiRequest({
         request,
-        `JWKS Reject Test ${Date.now()}`,
-        "personal",
-      );
-      const agent = await agentResponse.json();
+        method: "post",
+        urlSuffix: "/api/agents",
+        data: {
+          name: `JWKS Reject Test ${Date.now()}`,
+          teams: [],
+          scope: "org",
+          agentType: "mcp_gateway",
+          identityProviderId,
+        },
+      });
+      const agent = (await agentResponse.json()) as { id: string };
       profileId = agent.id;
-
-      // Link the IdP to the profile
-      await makeApiRequest({
+      await waitForGatewayIdentityProviderReady({
         request,
-        method: "put",
-        urlSuffix: `/api/agents/${profileId}`,
-        data: { identityProviderId },
+        profileId,
+        identityProviderId,
+        agentType: "mcp_gateway",
       });
 
       // Try to call MCP Gateway with an invalid JWT

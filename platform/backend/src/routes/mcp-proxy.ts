@@ -19,7 +19,7 @@ import {
  * MCP Proxy routes for frontend AppRenderer
  * Provides session-based auth access to MCP Gateway endpoints
  */
-export const mcpProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
+const mcpProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // Clear caches on server shutdown to release held MCP connections
   fastify.addHook("onClose", () => {
     agentAccessCache.clear();
@@ -283,3 +283,5 @@ class McpServerCache {
 }
 
 const mcpServerCache = new McpServerCache();
+
+export default mcpProxyRoutes;

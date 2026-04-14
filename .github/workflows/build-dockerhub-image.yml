@@ -41,6 +41,9 @@ concurrency:
 jobs:
   build-dockerhub-image:
     name: Build Docker Hub image
+    permissions:
+      contents: read # Required to checkout the repository and build the image.
+      id-token: write # Required for Workload Identity Federation when pushing images.
     uses: ./.github/workflows/build-native-multi-arch-image.yml
     with:
       image_directory: ${{ inputs.image_directory }}

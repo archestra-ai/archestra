@@ -8,20 +8,11 @@
  * - Interrupted stream handling
  * - HTTP proxy routing (UUID stripping)
  *
- * KEY DIFFERENCES FROM V1 TESTS (../openai.test.ts):
- * TODO: Consider aligning behavior with V1 for these cases:
- *
- * 1. Streaming headers: the route uses reply.raw.write() which doesn't populate
- *    response.headers in Fastify inject. Tests validate SSE body format instead.
- *
- * 2. Chunk filtering:  adapter only emits chunks with actual content
- *    (delta.content non-empty). The first chunk with role="assistant" and
- *    empty content is not forwarded. V1 forwards all chunks including role-only.
- *
- * 3. Interrupted stream recording: the route may not record interactions when stream
- *    is interrupted before receiving usage data. V1 always records interactions
- *    even without usage. Tests verify graceful handling rather than guaranteed
- *    recording.
+ * Current behavior notes:
+ * - Streaming headers are written alongside SSE chunks sent through
+ *   reply.raw.write(), so inject-based assertions focus on the body format.
+ * - The adapter forwards only chunks with actual delta content.
+ * - Interrupted streams may not record interactions before usage data arrives.
  */
 
 import Fastify, { type FastifyInstance } from "fastify";

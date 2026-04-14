@@ -8,17 +8,10 @@
  * - Tool call accumulation (no [object Object] bug)
  * - HTTP proxy routing (UUID stripping)
  *
- * KEY DIFFERENCES FROM V1 TESTS (../anthropic.test.ts):
- * TODO: Consider aligning behavior with V1 for these cases:
- *
- * 1. Interrupted stream recording: the route may not record interactions when stream
- *    is interrupted before receiving usage data. V1 always records interactions
- *    even without usage. Tests verify graceful handling rather than guaranteed
- *    recording.
- *
- * 2. Streaming headers: the route uses reply.raw.write() directly. Headers are set
- *    via reply.header() but may not be captured by Fastify inject in the same
- *    way as V1.
+ * Current behavior notes:
+ * - Interrupted streams may not record interactions before usage data arrives.
+ * - Streaming headers are set via reply.header(), while the body is written
+ *   directly through reply.raw.write().
  */
 
 import Fastify, { type FastifyInstance } from "fastify";

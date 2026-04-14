@@ -1,5 +1,5 @@
 /**
- * LLM Proxy Handler  Tests
+ * LLM Proxy Handler Tests
  *
  * Tests that verify:
  * 1. Prometheus metrics are correctly incremented for all LLM providers
@@ -84,7 +84,7 @@ import anthropicProxyRoutes from "./routes/anthropic";
 import geminiProxyRoutes from "./routes/gemini";
 import openAiProxyRoutes from "./routes/openai";
 
-describe("LLM Proxy Handler  Prometheus Metrics", () => {
+describe("LLM Proxy Handler Prometheus Metrics", () => {
   let app: FastifyInstance;
   let testAgent: Agent;
   let openAiStubOptions: { interruptAtChunk?: number };

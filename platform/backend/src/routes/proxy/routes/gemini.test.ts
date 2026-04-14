@@ -8,15 +8,10 @@
  * - Interrupted stream handling
  * - HTTP proxy routing
  *
- * KEY DIFFERENCES FROM V1 (Gemini had no V1 tests - these are new):
- * TODO: Consider these behavioral notes when comparing with OpenAI/Anthropic V1:
- *
- * 1. Streaming headers: the route uses reply.raw.write() which doesn't populate
- *    response.headers in Fastify inject. Tests validate SSE body format instead.
- *
- * 2. Interrupted stream recording: the route may not record interactions when stream
- *    is interrupted before receiving usage data. Tests verify graceful handling
- *    rather than guaranteed recording.
+ * Current behavior notes:
+ * - Streaming headers are written alongside SSE chunks sent through
+ *   reply.raw.write(), so inject-based assertions focus on the body format.
+ * - Interrupted streams may not record interactions before usage data arrives.
  */
 
 import Fastify, { type FastifyInstance } from "fastify";

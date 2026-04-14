@@ -176,12 +176,15 @@ jobs:
   # or on-demand via the "run-e2e" PR label.
   platform-lint-and-unit-tests:
     name: Platform Lint and Unit Tests
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     permissions:
       contents: write # Required to push generated code updates back to release-please PRs.
     defaults:
       run:
         working-directory: ./platform
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
     steps:
       - name: Check if this is a release-please PR
         id: check-release-please
@@ -345,7 +348,7 @@ jobs:
 
       - name: Build Platform image
         if: ${{ matrix.use-build-action }}
-        uses: ./.github/actions/build-platform-docker-image
+        uses: ./.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
           dockerfile: ${{ matrix.dockerfile }}

@@ -857,24 +857,9 @@ export function InternalMCPCatalog({
         setReinstallServerTeamId(installedServer.teamId ?? null);
         openDialog("local-install");
       } else {
-        // No prompted env vars - reinstall directly
-        // Set installing state for immediate UI feedback (progress bar)
-        setInstallingItemId(catalogItem.id);
-        setInstallingServerIds((prev) => new Set(prev).add(installedServer.id));
-        try {
-          await reinstallMutation.mutateAsync({
-            id: installedServer.id,
-            name: catalogItem.name,
-          });
-        } finally {
-          // Clear installing state whether success or error
-          setInstallingItemId(null);
-          setInstallingServerIds((prev) => {
-            const newSet = new Set(prev);
-            newSet.delete(installedServer.id);
-            return newSet;
-          });
-        }
+        // No prompted env vars - still confirm before reinstalling
+        setCatalogItemForReinstall(catalogItem);
+        openDialog("reinstall");
       }
     } else {
       // Remote server - show confirmation dialog (may need OAuth re-auth)
@@ -886,10 +871,16 @@ export function InternalMCPCatalog({
   const handleReinstallConfirm = async () => {
     if (!catalogItemForReinstall) return;
 
-    // Find the installed server for this remote catalog item
-    const installedServer = installedServers?.find(
-      (server) => server.catalogId === catalogItemForReinstall.id,
-    );
+    const installedServer =
+      catalogItemForReinstall.serverType === "local" && currentUserId
+        ? installedServers?.find(
+            (server) =>
+              server.catalogId === catalogItemForReinstall.id &&
+              server.ownerId === currentUserId,
+          )
+        : installedServers?.find(
+            (server) => server.catalogId === catalogItemForReinstall.id,
+          );
 
     if (!installedServer) {
       toast.error("Server not found, cannot reinstall");
@@ -900,8 +891,7 @@ export function InternalMCPCatalog({
 
     closeDialog("reinstall");
 
-    // Remote server - reinstall directly
-    // Set installing state for immediate UI feedback (progress bar)
+    // Reinstall directly after explicit confirmation
     setInstallingItemId(catalogItemForReinstall.id);
     setInstallingServerIds((prev) => new Set(prev).add(installedServer.id));
     try {

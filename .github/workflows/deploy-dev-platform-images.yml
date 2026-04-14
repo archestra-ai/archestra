@@ -79,7 +79,7 @@ jobs:
         with:
           context: ./platform
           push: "true"
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           version: ${{ inputs.version || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
           previous-image: ${{ steps.previous-platform-image.outputs.previous-image }}
           tags: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${{ inputs.version || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}

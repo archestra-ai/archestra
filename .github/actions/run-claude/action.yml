@@ -53,12 +53,16 @@ inputs:
     description: Extra claude_args lines appended after model and allowed tools
     required: false
     default: ""
+  show_full_output:
+    description: Show full Claude output for debugging workflow failures
+    required: false
+    default: "false"
 
 runs:
   using: composite
   steps:
     - name: Run Claude
-      uses: anthropics/claude-code-action@1b8ee3b94104046d71fde52ec3557651ad8c0d71 # v1.0.29
+      uses: anthropics/claude-code-action@1c8b699d43e9bfed42b48ef15da85d89bab70960 # v1.0.94
       with:
         prompt: ${{ inputs.prompt }}
         anthropic_api_key: ${{ inputs.anthropic_api_key }}
@@ -67,6 +71,7 @@ runs:
         allowed_non_write_users: ${{ inputs.allowed_non_write_users }}
         use_sticky_comment: ${{ inputs.use_sticky_comment }}
         track_progress: ${{ inputs.track_progress }}
+        show_full_output: ${{ inputs.show_full_output }}
         additional_permissions: ${{ inputs.additional_permissions }}
         assignee_trigger: ${{ inputs.assignee_trigger }}
         claude_args: |

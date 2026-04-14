@@ -1,5 +1,5 @@
-name: Build Platform Docker Image
-description: Build the Archestra platform Docker image using Blacksmith builder
+name: Build Docker Image
+description: Build a Docker image using the Blacksmith builder
 
 inputs:
   context:
@@ -34,16 +34,18 @@ inputs:
     required: false
     default: ""
   previous-image:
-    description: "Optional previously published platform image to extract static assets from before building"
+    description: "Optional previously published image to extract static assets from before building"
     required: false
     default: ""
   # Secrets must be passed as regular inputs in composite actions
   turbo-team:
     description: "Turborepo remote caching team"
-    required: true
+    required: false
+    default: ""
   turbo-token:
     description: "Turborepo remote caching token"
-    required: true
+    required: false
+    default: ""
   sentry-auth-token:
     description: "Sentry auth token for source map uploads (optional)"
     required: false

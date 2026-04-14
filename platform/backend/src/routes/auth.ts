@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { IncomingHttpHeaders } from "node:http";
-import { DEFAULT_ADMIN_EMAIL, RouteId } from "@shared";
+import { DEFAULT_ADMIN_EMAIL, IDENTITY_PROVIDER_ID, RouteId } from "@shared";
 import { verifyPassword } from "better-auth/crypto";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -513,6 +513,39 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   });
 
+  fastify.route({
+    method: "POST",
+    url: "/api/auth/sign-in/sso",
+    schema: {
+      tags: ["Auth"],
+    },
+    async handler(request, reply) {
+      const url = new URL(request.url, `http://${request.headers.host}`);
+      const headers = new Headers();
+
+      Object.entries(request.headers).forEach(([key, value]) => {
+        if (value) headers.append(key, value.toString());
+      });
+
+      const req = new Request(url.toString(), {
+        method: request.method,
+        headers,
+        body: request.body ? JSON.stringify(request.body) : undefined,
+      });
+
+      const response = await rewriteGoogleSsoResponseWithHostedDomainHint({
+        response: await betterAuth.handler(req),
+        requestBody: request.body as Record<string, unknown> | undefined,
+      });
+
+      reply.status(response.status);
+      response.headers.forEach((value: string, key: string) => {
+        reply.header(key, value);
+      });
+      reply.send(response.body ? await response.text() : null);
+    },
+  });
+
   // Existing auth handler for all other auth routes
   fastify.route({
     method: ["GET", "POST"],
@@ -597,6 +630,79 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default authRoutes;
+
+async function rewriteGoogleSsoResponseWithHostedDomainHint(params: {
+  requestBody?: Record<string, unknown>;
+  response: Response;
+}): Promise<Response> {
+  const providerId = params.requestBody?.providerId;
+  if (providerId !== IDENTITY_PROVIDER_ID.GOOGLE) {
+    return params.response;
+  }
+
+  const hostedDomainHint = await getGoogleHostedDomainHint();
+  if (!hostedDomainHint) {
+    return params.response;
+  }
+
+  const responseText = params.response.body
+    ? await params.response.text()
+    : undefined;
+  if (!responseText) {
+    return params.response;
+  }
+
+  let payload: Record<string, unknown>;
+  try {
+    payload = JSON.parse(responseText) as Record<string, unknown>;
+  } catch {
+    return new Response(responseText, {
+      status: params.response.status,
+      statusText: params.response.statusText,
+      headers: params.response.headers,
+    });
+  }
+
+  const headers = new Headers(params.response.headers);
+  headers.delete("content-length");
+
+  const location = headers.get("location");
+  if (location) {
+    headers.set("location", appendHostedDomainHint(location, hostedDomainHint));
+  }
+
+  if (typeof payload.url === "string") {
+    payload.url = appendHostedDomainHint(payload.url, hostedDomainHint);
+  }
+
+  return new Response(JSON.stringify(payload), {
+    status: params.response.status,
+    statusText: params.response.statusText,
+    headers,
+  });
+}
+
+async function getGoogleHostedDomainHint(): Promise<string | undefined> {
+  if (!config.enterpriseFeatures.core) {
+    return undefined;
+  }
+
+  const { default: IdentityProviderModel } = await import(
+    // biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
+    "@/models/identity-provider.ee"
+  );
+  const provider = await IdentityProviderModel.findByProviderId(
+    IDENTITY_PROVIDER_ID.GOOGLE,
+  );
+
+  return provider?.oidcConfig?.hd?.trim() || undefined;
+}
+
+function appendHostedDomainHint(urlString: string, hostedDomainHint: string) {
+  const url = new URL(urlString);
+  url.searchParams.set("hd", hostedDomainHint);
+  return url.toString();
+}
 
 function extractOAuthClientCredentials(params: {
   authorizationHeader: string | string[] | undefined;

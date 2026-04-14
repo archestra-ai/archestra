@@ -11,6 +11,7 @@ const {
   connectAndGetToolsMock,
   exchangeEnterpriseManagedCredentialMock,
   hasPermissionMock,
+  invalidateConnectionsForServerMock,
   inspectServerMock,
   MockMcpServerConnectionTimeoutError,
   MockMcpServerNotReadyError,
@@ -18,6 +19,7 @@ const {
   connectAndGetToolsMock: vi.fn(),
   exchangeEnterpriseManagedCredentialMock: vi.fn(),
   hasPermissionMock: vi.fn(),
+  invalidateConnectionsForServerMock: vi.fn(),
   inspectServerMock: vi.fn(),
   MockMcpServerNotReadyError: class MockMcpServerNotReadyError extends Error {},
   MockMcpServerConnectionTimeoutError: class MockMcpServerConnectionTimeoutError extends Error {},
@@ -28,6 +30,7 @@ vi.mock("@/clients/mcp-client", () => ({
   McpServerConnectionTimeoutError: MockMcpServerConnectionTimeoutError,
   default: {
     connectAndGetTools: connectAndGetToolsMock,
+    invalidateConnectionsForServer: invalidateConnectionsForServerMock,
     inspectServer: inspectServerMock,
   },
 }));
@@ -62,6 +65,7 @@ describe("mcp server inspect route", () => {
     connectAndGetToolsMock.mockReset();
     exchangeEnterpriseManagedCredentialMock.mockReset();
     hasPermissionMock.mockReset();
+    invalidateConnectionsForServerMock.mockReset();
     inspectServerMock.mockReset();
     global.fetch = originalFetch;
     await app.close();

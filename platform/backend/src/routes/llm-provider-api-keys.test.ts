@@ -120,7 +120,9 @@ async function createApp(orgId: string, currentUser: User) {
   const { default: llmProviderApiKeyRoutes } = await import(
     "./llm-provider-api-keys"
   );
+  const { default: organizationRoutes } = await import("./organization");
   await app.register(llmProviderApiKeyRoutes);
+  await app.register(organizationRoutes);
   return app;
 }
 
@@ -535,6 +537,76 @@ describe("LLM Provider API Keys Team Scope", () => {
     });
 
     expect(response.statusCode).toBe(400);
+  });
+
+  test("prevents deleting an API key used for embedding", async () => {
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Embedding Delete Protection Key",
+        provider: "openai",
+        apiKey: "sk-openai-embedding-delete-protection-test",
+        scope: "org",
+      },
+    });
+    expect(createResponse.statusCode).toBe(200);
+    const createdKey = createResponse.json();
+
+    const knowledgeResponse = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/knowledge-settings",
+      payload: {
+        embeddingChatApiKeyId: createdKey.id,
+      },
+    });
+    expect(knowledgeResponse.statusCode).toBe(200);
+
+    const deleteResponse = await app.inject({
+      method: "DELETE",
+      url: `/api/llm-provider-api-keys/${createdKey.id}`,
+    });
+
+    expect(deleteResponse.statusCode).toBe(400);
+    expect(deleteResponse.json().error.message).toContain("embedding");
+    expect(deleteResponse.json().error.message).toContain(
+      "Remove it from Settings > Knowledge before deleting",
+    );
+  });
+
+  test("prevents deleting an API key used for reranking", async () => {
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Reranker Delete Protection Key",
+        provider: "openai",
+        apiKey: "sk-openai-reranker-delete-protection-test",
+        scope: "org",
+      },
+    });
+    expect(createResponse.statusCode).toBe(200);
+    const createdKey = createResponse.json();
+
+    const knowledgeResponse = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/knowledge-settings",
+      payload: {
+        rerankerChatApiKeyId: createdKey.id,
+      },
+    });
+    expect(knowledgeResponse.statusCode).toBe(200);
+
+    const deleteResponse = await app.inject({
+      method: "DELETE",
+      url: `/api/llm-provider-api-keys/${createdKey.id}`,
+    });
+
+    expect(deleteResponse.statusCode).toBe(400);
+    expect(deleteResponse.json().error.message).toContain("reranking");
+    expect(deleteResponse.json().error.message).toContain(
+      "Remove it from Settings > Knowledge before deleting",
+    );
   });
 });
 

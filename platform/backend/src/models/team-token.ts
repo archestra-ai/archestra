@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { ARCHESTRA_TOKEN_PREFIX } from "@shared";
+import { ARCHESTRA_TOKEN_PREFIX, hasArchestraTokenPrefix } from "@shared";
 import { desc, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import SecretModel from "@/models/secret";
@@ -38,8 +38,7 @@ const TOKEN_RANDOM_LENGTH = 16;
 const TOKEN_START_LENGTH = 14;
 
 /**
- * Generate a secure random token with archestra_ prefix
- * Format: archestra_<32 hex characters>
+ * Generate a secure random token with the current platform token prefix.
  * Total length: 42 characters
  */
 function generateToken(): string {
@@ -55,10 +54,10 @@ function getTokenStart(token: string): string {
 }
 
 /**
- * Check if a value looks like a team token (starts with archestra_)
+ * Check if a value looks like a platform-managed team token.
  */
 export function isArchestraPrefixedToken(value: string): boolean {
-  return value.startsWith(ARCHESTRA_TOKEN_PREFIX);
+  return hasArchestraTokenPrefix(value);
 }
 
 class TeamTokenModel {

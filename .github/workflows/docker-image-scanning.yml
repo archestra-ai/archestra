@@ -70,7 +70,7 @@ jobs:
 
       - name: Build Platform image
         if: ${{ matrix.use-build-action }}
-        uses: ./.github/actions/build-platform-docker-image
+        uses: ./.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
           dockerfile: ${{ matrix.dockerfile }}

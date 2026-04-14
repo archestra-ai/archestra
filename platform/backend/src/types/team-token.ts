@@ -1,4 +1,4 @@
-import { ARCHESTRA_TOKEN_PREFIX } from "@shared";
+import { hasArchestraTokenPrefix } from "@shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -83,7 +83,7 @@ export const TokensListResponseSchema = z.object({
 
 export type TokensListResponse = z.infer<typeof TokensListResponseSchema>;
 
-// Helper function to check if a token has the archestra prefix
+// Helper function to check if a token has a platform-managed prefix
 export function isArchestraPrefixedToken(value: string): boolean {
-  return value.startsWith(ARCHESTRA_TOKEN_PREFIX);
+  return hasArchestraTokenPrefix(value);
 }

@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
+import { IDENTITY_PROVIDER_ID } from "@shared";
 import { vi } from "vitest";
 import { betterAuth } from "@/auth";
+import config from "@/config";
 import OAuthAccessTokenModel from "@/models/oauth-access-token";
 import OrganizationModel from "@/models/organization";
 import type { FastifyInstanceWithZod } from "@/server";
@@ -289,5 +291,84 @@ describe("auth routes", () => {
     expect(storedToken?.expiresAt).toEqual(
       new Date((issuedAtSeconds + 300) * 1000),
     );
+  });
+
+  test("adds the configured Google hosted domain hint to SSO sign-in URLs", async ({
+    makeIdentityProvider,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const originalEnterpriseValue = config.enterpriseFeatures.core;
+    Object.defineProperty(config.enterpriseFeatures, "core", {
+      value: true,
+      writable: true,
+      configurable: true,
+    });
+
+    const organization = await makeOrganization();
+    const admin = await makeUser();
+
+    try {
+      await makeIdentityProvider(organization.id, {
+        userId: admin.id,
+        providerId: IDENTITY_PROVIDER_ID.GOOGLE,
+        issuer: "https://accounts.google.com",
+        oidcConfig: {
+          issuer: "https://accounts.google.com",
+          pkce: true,
+          clientId: "google-client-id",
+          clientSecret: "google-client-secret",
+          discoveryEndpoint:
+            "https://accounts.google.com/.well-known/openid-configuration",
+          authorizationEndpoint: "https://accounts.google.com/o/oauth2/v2/auth",
+          tokenEndpoint: "https://oauth2.googleapis.com/token",
+          jwksEndpoint: "https://www.googleapis.com/oauth2/v3/certs",
+          userInfoEndpoint: "https://openidconnect.googleapis.com/v1/userinfo",
+          hd: "example.com",
+          mapping: { id: "sub", email: "email", name: "name" },
+        },
+      });
+
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            url: "https://accounts.google.com/o/oauth2/v2/auth?client_id=google-client-id",
+            redirect: true,
+          }),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json",
+              location:
+                "https://accounts.google.com/o/oauth2/v2/auth?client_id=google-client-id",
+            },
+          },
+        ),
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/auth/sign-in/sso",
+        payload: {
+          providerId: IDENTITY_PROVIDER_ID.GOOGLE,
+          callbackURL: "http://localhost:3000/",
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        url: "https://accounts.google.com/o/oauth2/v2/auth?client_id=google-client-id&hd=example.com",
+        redirect: true,
+      });
+      expect(response.headers.location).toBe(
+        "https://accounts.google.com/o/oauth2/v2/auth?client_id=google-client-id&hd=example.com",
+      );
+    } finally {
+      Object.defineProperty(config.enterpriseFeatures, "core", {
+        value: originalEnterpriseValue,
+        writable: true,
+        configurable: true,
+      });
+    }
   });
 });

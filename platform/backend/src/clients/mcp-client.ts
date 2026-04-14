@@ -2008,6 +2008,52 @@ class McpClient {
     this.pendingHttpSessionMetadata.clear();
   }
 
+  async invalidateConnectionsForServer(
+    targetMcpServerId: string,
+  ): Promise<void> {
+    const matchingConnectionKeys = Array.from(
+      this.activeConnections.keys(),
+    ).filter((connectionKey) => {
+      const parts = connectionKey.split(":");
+      return parts[1] === targetMcpServerId;
+    });
+
+    await Promise.all(
+      matchingConnectionKeys.map(async (connectionKey) => {
+        const client = this.activeConnections.get(connectionKey);
+        if (client) {
+          try {
+            await client.close();
+          } catch (error) {
+            logger.warn(
+              { connectionKey, targetMcpServerId, error },
+              "Error closing active MCP connection during server invalidation",
+            );
+          }
+        }
+
+        this.activeConnections.delete(connectionKey);
+        this.toolNameCache.delete(connectionKey);
+        this.pendingHttpSessionMetadata.delete(connectionKey);
+        await McpHttpSessionModel.deleteStaleSession(connectionKey).catch(
+          (error) => {
+            logger.warn(
+              { connectionKey, targetMcpServerId, error },
+              "Failed to delete stale MCP HTTP session during server invalidation",
+            );
+          },
+        );
+      }),
+    );
+
+    const matchingSecretKeys = Array.from(this.secretsCache.keys()).filter(
+      (cacheKey) => cacheKey === targetMcpServerId,
+    );
+    for (const cacheKey of matchingSecretKeys) {
+      this.secretsCache.delete(cacheKey);
+    }
+  }
+
   /**
    * Read a resource from its assigned MCP server
    */

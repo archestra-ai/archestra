@@ -103100,7 +103100,9 @@
                                       "linear"
                                     ]
                                   },
-                                  "linearApiUrl": {},
+                                  "linearApiUrl": {
+                                    "default": "https://api.linear.app"
+                                  },
                                   "teamIds": {
                                     "type": "array",
                                     "items": {
@@ -103951,8 +103953,7 @@
                           }
                         },
                         "required": [
-                          "type",
-                          "linearApiUrl"
+                          "type"
                         ]
                       }
                     ]
@@ -104379,7 +104380,9 @@
                                 "linear"
                               ]
                             },
-                            "linearApiUrl": {},
+                            "linearApiUrl": {
+                              "default": "https://api.linear.app"
+                            },
                             "teamIds": {
                               "type": "array",
                               "items": {
@@ -105138,7 +105141,9 @@
                                 "linear"
                               ]
                             },
-                            "linearApiUrl": {},
+                            "linearApiUrl": {
+                              "default": "https://api.linear.app"
+                            },
                             "teamIds": {
                               "type": "array",
                               "items": {
@@ -105869,8 +105874,7 @@
                           }
                         },
                         "required": [
-                          "type",
-                          "linearApiUrl"
+                          "type"
                         ]
                       }
                     ]
@@ -106295,7 +106299,9 @@
                                 "linear"
                               ]
                             },
-                            "linearApiUrl": {},
+                            "linearApiUrl": {
+                              "default": "https://api.linear.app"
+                            },
                             "teamIds": {
                               "type": "array",
                               "items": {

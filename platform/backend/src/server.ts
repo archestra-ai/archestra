@@ -422,12 +422,12 @@ export const addMetricsAuthenticationHook = (
     return;
   }
 
+  const metricsPath = observability.metrics.endpoint;
+
   fastify.addHook("preHandler", async (request, reply) => {
     if (
-      request.url === HEALTH_PATH ||
-      request.url === READY_PATH ||
-      request.url.startsWith(`${HEALTH_PATH}?`) ||
-      request.url.startsWith(`${READY_PATH}?`)
+      request.url !== metricsPath &&
+      !request.url.startsWith(`${metricsPath}?`)
     ) {
       return;
     }

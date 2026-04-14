@@ -142,10 +142,7 @@ class ScheduleTriggerRunModel {
       .where(eq(schema.scheduleTriggerRunsTable.id, runId));
   }
 
-  static async setArtifact(
-    runId: string,
-    artifact: string,
-  ): Promise<boolean> {
+  static async setArtifact(runId: string, artifact: string): Promise<boolean> {
     const [updated] = await db
       .update(schema.scheduleTriggerRunsTable)
       .set({ artifact })

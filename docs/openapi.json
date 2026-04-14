@@ -141511,6 +141511,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "artifact": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -141527,6 +141531,7 @@
                     "startedAt",
                     "completedAt",
                     "error",
+                    "artifact",
                     "createdAt"
                   ],
                   "additionalProperties": false
@@ -141872,6 +141877,10 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "artifact": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -141888,6 +141897,7 @@
                           "startedAt",
                           "completedAt",
                           "error",
+                          "artifact",
                           "createdAt"
                         ],
                         "additionalProperties": false
@@ -142251,6 +142261,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "artifact": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -142267,6 +142281,7 @@
                     "startedAt",
                     "completedAt",
                     "error",
+                    "artifact",
                     "createdAt"
                   ],
                   "additionalProperties": false

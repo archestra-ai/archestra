@@ -198,10 +198,7 @@ export function ScheduleTriggersIndexPage() {
   const isComposerOpen = editingTrigger !== null || createFormOpen;
 
   const getDefaultName = useCallback(
-    (agentId: string) => {
-      const agent = agentOptions.find((a) => a.value === agentId);
-      return agent ? `Scheduled ${agent.label}` : "";
-    },
+    (agentId: string) => getDefaultTriggerName(agentId, agentOptions),
     [agentOptions],
   );
 
@@ -610,6 +607,9 @@ export function ScheduleTriggerDetailPage({
 
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [trackedRunId, setTrackedRunId] = useState<string | null>(null);
+  const [activeArtifactRunId, setActiveArtifactRunId] = useState<string | null>(
+    null,
+  );
   const [artifactContent, setArtifactContent] = useState<string | null>(null);
   const [formState, setFormState] =
     useState<ScheduleTriggerFormState>(DEFAULT_FORM_STATE);
@@ -654,10 +654,7 @@ export function ScheduleTriggerDetailPage({
     [agents, currentUserId],
   );
   const getDetailDefaultName = useCallback(
-    (agentId: string) => {
-      const agent = agentOptions.find((a) => a.value === agentId);
-      return agent ? `Scheduled ${agent.label}` : "";
-    },
+    (agentId: string) => getDefaultTriggerName(agentId, agentOptions),
     [agentOptions],
   );
   const formPayload = buildScheduleTriggerPayload(formState);
@@ -774,205 +771,219 @@ export function ScheduleTriggerDetailPage({
 
   return (
     <div className="flex w-full gap-0">
-    <div className="mr-auto flex min-w-0 flex-1 flex-col gap-6">
-      {/* Back link */}
-      <Button
-        variant="ghost"
-        size="sm"
-        asChild
-        className="h-8 -ml-2 px-2 text-muted-foreground self-start"
-      >
-        <Link href="/scheduled-tasks">
-          <ArrowLeft className="mr-1 h-4 w-4" />
-          Back to Scheduled Tasks
-        </Link>
-      </Button>
-
-      {/* Title row */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">
-            {trigger.name}
-          </h1>
-          <div className="flex items-center gap-2">
-            <Switch
-              checked={trigger.enabled}
-              onCheckedChange={toggleScheduleEnabled}
-              disabled={isTogglePending || !canUpdateTrigger}
-              aria-label="Toggle schedule enabled"
-            />
-            <span className="text-sm text-muted-foreground">
-              {trigger.enabled ? "Enabled" : "Disabled"}
-            </span>
-          </div>
-        </div>
-        {canUpdateTrigger && (
-          <div className="flex items-center gap-1">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <PermissionButton
-                  permissions={{ scheduledTask: ["update"] }}
-                  variant="outline"
-                  size="icon-sm"
-                  onClick={() => {
-                    void handleRunNow();
-                  }}
-                  disabled={runNowState.isButtonSpinning}
-                  aria-label="Run now"
-                >
-                  {runNowState.isButtonSpinning ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Play className="h-4 w-4" />
-                  )}
-                </PermissionButton>
-              </TooltipTrigger>
-              <TooltipContent>Run now</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <PermissionButton
-                  permissions={{ scheduledTask: ["update"] }}
-                  variant="outline"
-                  size="icon-sm"
-                  onClick={openEditDialog}
-                  aria-label="Edit"
-                >
-                  <Pencil className="h-4 w-4" />
-                </PermissionButton>
-              </TooltipTrigger>
-              <TooltipContent>Edit</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <PermissionButton
-                  permissions={{ scheduledTask: ["delete"] }}
-                  variant="outline"
-                  size="icon-sm"
-                  onClick={() => setDeleteDialogOpen(true)}
-                  disabled={deleteMutation.isPending}
-                  aria-label="Delete"
-                >
-                  {deleteMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="h-4 w-4" />
-                  )}
-                </PermissionButton>
-              </TooltipTrigger>
-              <TooltipContent>Delete</TooltipContent>
-            </Tooltip>
-          </div>
-        )}
-      </div>
-
-      {/* Detail cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <Link
-          href={`/agents?${agentLinkParam}=${trigger.agentId}`}
-          className="rounded-xl border border-border/60 bg-card px-4 py-3.5 transition-colors hover:bg-accent"
+      <div className="mr-auto flex min-w-0 flex-1 flex-col gap-6">
+        {/* Back link */}
+        <Button
+          variant="ghost"
+          size="sm"
+          asChild
+          className="h-8 -ml-2 px-2 text-muted-foreground self-start"
         >
-          <p className="mb-2 text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
-            Agent
-          </p>
-          <div className="flex items-center gap-2">
-            <AgentIcon icon={matchedAgent?.icon ?? null} size={20} />
-            <span className="text-sm text-foreground">
-              {trigger.agent?.name ?? trigger.agentId}
-            </span>
+          <Link href="/scheduled-tasks">
+            <ArrowLeft className="mr-1 h-4 w-4" />
+            Back to Scheduled Tasks
+          </Link>
+        </Button>
+
+        {/* Title row */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-semibold tracking-tight">
+              {trigger.name}
+            </h1>
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={trigger.enabled}
+                onCheckedChange={toggleScheduleEnabled}
+                disabled={isTogglePending || !canUpdateTrigger}
+                aria-label="Toggle schedule enabled"
+              />
+              <span className="text-sm text-muted-foreground">
+                {trigger.enabled ? "Enabled" : "Disabled"}
+              </span>
+            </div>
           </div>
-        </Link>
-        <DetailCard label="Task prompt">
-          <p className="text-sm text-foreground line-clamp-3">
-            {trigger.messageTemplate}
-          </p>
-        </DetailCard>
-        <DetailCard label="Schedule">
-          <p className="text-sm font-medium text-foreground">
-            {formatCronSchedule(trigger.cronExpression)}
-          </p>
-          <NextRunCell
-            cronExpression={trigger.cronExpression}
-            timezone={trigger.timezone}
-            enabled={trigger.enabled}
-          />
-        </DetailCard>
+          {canUpdateTrigger && (
+            <div className="flex items-center gap-1">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <PermissionButton
+                    permissions={{ scheduledTask: ["update"] }}
+                    variant="outline"
+                    size="icon-sm"
+                    onClick={() => {
+                      void handleRunNow();
+                    }}
+                    disabled={runNowState.isButtonSpinning}
+                    aria-label="Run now"
+                  >
+                    {runNowState.isButtonSpinning ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Play className="h-4 w-4" />
+                    )}
+                  </PermissionButton>
+                </TooltipTrigger>
+                <TooltipContent>Run now</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <PermissionButton
+                    permissions={{ scheduledTask: ["update"] }}
+                    variant="outline"
+                    size="icon-sm"
+                    onClick={openEditDialog}
+                    aria-label="Edit"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </PermissionButton>
+                </TooltipTrigger>
+                <TooltipContent>Edit</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <PermissionButton
+                    permissions={{ scheduledTask: ["delete"] }}
+                    variant="outline"
+                    size="icon-sm"
+                    onClick={() => setDeleteDialogOpen(true)}
+                    disabled={deleteMutation.isPending}
+                    aria-label="Delete"
+                  >
+                    {deleteMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
+                  </PermissionButton>
+                </TooltipTrigger>
+                <TooltipContent>Delete</TooltipContent>
+              </Tooltip>
+            </div>
+          )}
+        </div>
+
+        {/* Detail cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <Link
+            href={`/agents?${agentLinkParam}=${trigger.agentId}`}
+            className="rounded-xl border border-border/60 bg-card px-4 py-3.5 transition-colors hover:bg-accent"
+          >
+            <p className="mb-2 text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
+              Agent
+            </p>
+            <div className="flex items-center gap-2">
+              <AgentIcon icon={matchedAgent?.icon ?? null} size={20} />
+              <span className="text-sm text-foreground">
+                {trigger.agent?.name ?? trigger.agentId}
+              </span>
+            </div>
+          </Link>
+          <DetailCard label="Task prompt">
+            <p className="text-sm text-foreground line-clamp-3">
+              {trigger.messageTemplate}
+            </p>
+          </DetailCard>
+          <DetailCard label="Schedule">
+            <p className="text-sm font-medium text-foreground">
+              {formatCronSchedule(trigger.cronExpression)}
+            </p>
+            <NextRunCell
+              cronExpression={trigger.cronExpression}
+              timezone={trigger.timezone}
+              enabled={trigger.enabled}
+            />
+          </DetailCard>
+        </div>
+
+        {/* Runs table */}
+        <h2 className="text-lg font-semibold">History</h2>
+        <ScheduleTriggerRunsTable
+          trigger={trigger}
+          trackedRunId={trackedRunId}
+          activeMutationTriggerId={getActiveMutationVariable(runNowMutation)}
+          onTrackedRunSettled={(runId) => {
+            if (trackedRunId === runId) {
+              setTrackedRunId(null);
+            }
+          }}
+          onArtifactToggle={(runId, artifact) => {
+            setActiveArtifactRunId(runId);
+            setArtifactContent(runId ? artifact : null);
+          }}
+          activeArtifactRunId={activeArtifactRunId}
+        />
+
+        <ScheduleTriggerFormDialog
+          open={editDialogOpen}
+          onOpenChange={(open) => {
+            if (!open) {
+              setEditDialogOpen(false);
+            }
+          }}
+          formState={formState}
+          agentOptions={agentOptions}
+          agentsLoading={agentsLoading}
+          hasAgents={agents.length > 0}
+          isSaving={isSaving}
+          isFormValid={formPayload !== null}
+          isEditing
+          onSubmit={() => {
+            void submitForm();
+          }}
+          onNameChange={(name) => {
+            detailNameTouchedRef.current = true;
+            setFormState((current) => ({ ...current, name }));
+          }}
+          onAgentChange={(agentId) => {
+            setFormState((current) => ({
+              ...current,
+              agentId,
+              name: detailNameTouchedRef.current
+                ? current.name
+                : getDetailDefaultName(agentId),
+            }));
+          }}
+          onCronExpressionChange={(cronExpression) =>
+            setFormState((current) => ({ ...current, cronExpression }))
+          }
+          onMessageTemplateChange={(messageTemplate) =>
+            setFormState((current) => ({ ...current, messageTemplate }))
+          }
+        />
+
+        <DeleteConfirmDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          title="Delete scheduled task"
+          description={`Delete "${trigger.name}"? This action cannot be undone.`}
+          isPending={deleteMutation.isPending}
+          onConfirm={handleDelete}
+          confirmLabel="Delete"
+          pendingLabel="Deleting..."
+        />
       </div>
 
-      {/* Runs table */}
-      <h2 className="text-lg font-semibold">History</h2>
-      <ScheduleTriggerRunsTable
-        trigger={trigger}
-        trackedRunId={trackedRunId}
-        activeMutationTriggerId={getActiveMutationVariable(runNowMutation)}
-        onTrackedRunSettled={(runId) => {
-          if (trackedRunId === runId) {
-            setTrackedRunId(null);
-          }
-        }}
-        onArtifactToggle={setArtifactContent}
-        activeArtifactContent={artifactContent}
-      />
-
-      <ScheduleTriggerFormDialog
-        open={editDialogOpen}
-        onOpenChange={(open) => {
-          if (!open) {
-            setEditDialogOpen(false);
-          }
-        }}
-        formState={formState}
-        agentOptions={agentOptions}
-        agentsLoading={agentsLoading}
-        hasAgents={agents.length > 0}
-        isSaving={isSaving}
-        isFormValid={formPayload !== null}
-        isEditing
-        onSubmit={() => {
-          void submitForm();
-        }}
-        onNameChange={(name) => {
-          detailNameTouchedRef.current = true;
-          setFormState((current) => ({ ...current, name }));
-        }}
-        onAgentChange={(agentId) => {
-          setFormState((current) => ({
-            ...current,
-            agentId,
-            name: detailNameTouchedRef.current
-              ? current.name
-              : getDetailDefaultName(agentId),
-          }));
-        }}
-        onCronExpressionChange={(cronExpression) =>
-          setFormState((current) => ({ ...current, cronExpression }))
-        }
-        onMessageTemplateChange={(messageTemplate) =>
-          setFormState((current) => ({ ...current, messageTemplate }))
-        }
-      />
-
-      <DeleteConfirmDialog
-        open={deleteDialogOpen}
-        onOpenChange={setDeleteDialogOpen}
-        title="Delete scheduled task"
-        description={`Delete "${trigger.name}"? This action cannot be undone.`}
-        isPending={deleteMutation.isPending}
-        onConfirm={handleDelete}
-        confirmLabel="Delete"
-        pendingLabel="Deleting..."
-      />
-    </div>
-
-    {artifactContent && (
-      <ConversationArtifactPanel
-        artifact={artifactContent}
-        isOpen
-        onToggle={() => setArtifactContent(null)}
-      />
-    )}
+      {activeArtifactRunId && artifactContent && (
+        <ConversationArtifactPanel
+          artifact={artifactContent}
+          isOpen
+          onToggle={() => {
+            setActiveArtifactRunId(null);
+            setArtifactContent(null);
+          }}
+        />
+      )}
     </div>
   );
+}
+
+function getDefaultTriggerName(
+  agentId: string,
+  agentOptions: { value: string; label: string }[],
+): string {
+  const agent = agentOptions.find((a) => a.value === agentId);
+  return agent ? `Scheduled ${agent.label}` : "";
 }
 
 function formatRunTimestamp(dateString: string): string {
@@ -1418,14 +1429,14 @@ function ScheduleTriggerRunsTable({
   activeMutationTriggerId,
   onTrackedRunSettled,
   onArtifactToggle,
-  activeArtifactContent,
+  activeArtifactRunId,
 }: {
   trigger: ScheduleTrigger;
   trackedRunId: string | null;
   activeMutationTriggerId: string | null;
   onTrackedRunSettled: (runId: string) => void;
-  onArtifactToggle: (artifact: string | null) => void;
-  activeArtifactContent: string | null;
+  onArtifactToggle: (runId: string | null, artifact: string | null) => void;
+  activeArtifactRunId: string | null;
 }) {
   const router = useRouter();
   const ensureConversationMutation = useCreateScheduleTriggerRunConversation();
@@ -1500,26 +1511,21 @@ function ScheduleTriggerRunsTable({
         header: "",
         cell: ({ row }) => {
           const run = row.original;
-          const isComplete = run.status === "success" || run.status === "failed";
+          const isComplete =
+            run.status === "success" || run.status === "failed";
           return (
-            <div
-              className="flex items-center justify-end gap-1.5 pr-2"
-              onClick={(e) => e.stopPropagation()}
-            >
+            <div className="flex items-center justify-end gap-1.5 pr-2">
               {isComplete && run.artifact && (
                 <Button
                   variant={
-                    activeArtifactContent === run.artifact
-                      ? "secondary"
-                      : "ghost"
+                    activeArtifactRunId === run.id ? "secondary" : "ghost"
                   }
                   size="sm"
                   className="h-7 px-2 text-xs"
                   onClick={() =>
                     onArtifactToggle(
-                      activeArtifactContent === run.artifact
-                        ? null
-                        : run.artifact,
+                      activeArtifactRunId === run.id ? null : run.id,
+                      activeArtifactRunId === run.id ? null : run.artifact,
                     )
                   }
                 >
@@ -1544,7 +1550,7 @@ function ScheduleTriggerRunsTable({
         },
       },
     ],
-    [navigateToRunChat, activeArtifactContent, onArtifactToggle],
+    [navigateToRunChat, activeArtifactRunId, onArtifactToggle],
   );
 
   return (
@@ -1565,7 +1571,6 @@ function ScheduleTriggerRunsTable({
         hideSelectedCount
         compactPagination
       />
-
     </section>
   );
 }

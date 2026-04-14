@@ -57,6 +57,9 @@ jobs:
     name: Build MCP Server Base Image
     needs:
       - python-mcp-lockfile-check
+    permissions:
+      contents: read # Required to checkout the repository and build the image.
+      id-token: write # Required for Workload Identity Federation when pushing images.
     uses: ./.github/workflows/build-native-multi-arch-image.yml
     with:
       image_directory: ./platform/mcp_server_docker_image

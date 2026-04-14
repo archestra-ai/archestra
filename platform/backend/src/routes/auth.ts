@@ -224,6 +224,18 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const query = request.query as Record<string, string>;
       const clientId = query.client_id;
 
+      logger.info(
+        {
+          clientId,
+          scope: query.scope,
+          responseType: query.response_type,
+          codeChallengeMethod: query.code_challenge_method,
+          redirectUri: query.redirect_uri,
+          resource: query.resource,
+        },
+        "[auth:oauth2/authorize] Authorization request received",
+      );
+
       if (clientId && isCimdClientId(clientId)) {
         try {
           await ensureCimdClientRegistered(clientId);
@@ -262,6 +274,30 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Forward to better-auth
       const url = new URL(request.url, `http://${request.headers.host}`);
+
+      // Per OAuth 2.1, scopes must be declared as supported both during Dynamic Client
+      // Registration (DCR) and at the token exchange. Some clients (e.g. Cursor) omit
+      // offline_access from the authorization request despite registering it during DCR,
+      // which would prevent refresh token issuance. To handle this, we inject offline_access
+      // into the authorization request if the client registered it during DCR.
+      // We only inject it when the client's DCR registration includes offline_access,
+      // because clients that did not advertise it during DCR (e.g. MCP Inspector) will
+      // reject the authorization response containing an unexpected scope.
+      const currentScopes = url.searchParams.get("scope") ?? "";
+      if (clientId && !currentScopes.split(" ").includes("offline_access")) {
+        const client = await OAuthClientModel.findByClientId(clientId);
+        if (client?.scopes?.includes("offline_access")) {
+          const augmentedScopes = currentScopes
+            ? `${currentScopes} offline_access`
+            : "offline_access";
+          url.searchParams.set("scope", augmentedScopes);
+          logger.debug(
+            { originalScope: currentScopes, augmentedScope: augmentedScopes },
+            "[auth:oauth2/authorize] Injected offline_access scope",
+          );
+        }
+      }
+
       const headers = new Headers();
       Object.entries(request.headers).forEach(([key, value]) => {
         if (!value || shouldSkipForwardedAuthHeader(key)) {
@@ -305,6 +341,29 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async handler(request, reply) {
       const body = request.body as Record<string, unknown> | undefined;
       const resource = body?.resource;
+
+      if (body?.grant_type === "refresh_token") {
+        logger.info(
+          {
+            clientId: body?.client_id,
+            scope: body?.scope,
+            resource,
+          },
+          "[auth:oauth2/token] Refresh token grant request received",
+        );
+      } else {
+        logger.info(
+          {
+            grantType: body?.grant_type,
+            clientId: body?.client_id,
+            scope: body?.scope,
+            resource,
+            hasCode: !!body?.code,
+            hasCodeVerifier: !!body?.code_verifier,
+          },
+          "[auth:oauth2/token] Token request received",
+        );
+      }
 
       // CIMD: auto-register client if client_id is a URL
       const clientId = body?.client_id as string | undefined;
@@ -377,6 +436,37 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         resource,
         tokenEndpointOrigin,
       });
+
+      if (response.ok && responseBody) {
+        try {
+          const tokenResponse = JSON.parse(responseBody);
+          const isRefreshGrant = body?.grant_type === "refresh_token";
+          logger.info(
+            {
+              grantType: body?.grant_type,
+              clientId: body?.client_id,
+              scope: tokenResponse.scope,
+              hasAccessToken: !!tokenResponse.access_token,
+              hasRefreshToken: !!tokenResponse.refresh_token,
+              expiresIn: tokenResponse.expires_in,
+            },
+            isRefreshGrant
+              ? "[auth:oauth2/token] Refresh token grant successful — new access token issued"
+              : "[auth:oauth2/token] Token response issued",
+          );
+        } catch {
+          // not JSON, skip logging
+        }
+      } else if (!response.ok) {
+        logger.warn(
+          {
+            grantType: body?.grant_type,
+            clientId: body?.client_id,
+            status: response.status,
+          },
+          "[auth:oauth2/token] Token request failed",
+        );
+      }
 
       reply.status(response.status);
       response.headers.forEach((value: string, key: string) => {
@@ -488,6 +578,19 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async handler(request, reply) {
       const body = request.body;
+
+      logger.info(
+        {
+          clientName: body.client_name,
+          redirectUris: body.redirect_uris,
+          grantTypes: body.grant_types,
+          responseTypes: body.response_types,
+          scope: body.scope,
+          tokenEndpointAuthMethod: body.token_endpoint_auth_method,
+        },
+        "[auth:oauth2/register] Dynamic client registration request received",
+      );
+
       // Override any client-provided value — see route comment above
       body.token_endpoint_auth_method = "none";
 
@@ -504,6 +607,31 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       const response = await betterAuth.handler(req);
+
+      if (response.ok && response.body) {
+        const responseText = await response.text();
+        try {
+          const registrationResponse = JSON.parse(responseText);
+          logger.info(
+            {
+              clientId: registrationResponse.client_id,
+              clientName: registrationResponse.client_name,
+              grantTypes: registrationResponse.grant_types,
+              scope: registrationResponse.scope,
+            },
+            "[auth:oauth2/register] Dynamic client registration successful",
+          );
+        } catch {
+          // not JSON, skip logging
+        }
+
+        reply.status(response.status);
+        response.headers.forEach((value: string, key: string) => {
+          reply.header(key, value);
+        });
+        reply.send(responseText);
+        return;
+      }
 
       reply.status(response.status);
       response.headers.forEach((value: string, key: string) => {

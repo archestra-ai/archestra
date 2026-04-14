@@ -1693,6 +1693,98 @@ describe("McpClient", () => {
         refreshSpy.mockRestore();
       });
 
+      test("does not refresh when a tool error only mentions bearer auth guidance", async ({
+        makeUser,
+      }) => {
+        const testUser = await makeUser({
+          email: "oauth-tool-error-bearer-guidance@example.com",
+        });
+
+        const oauthCatalog = await InternalMcpCatalogModel.create({
+          name: "jira-oauth-bearer-guidance-server",
+          serverType: "remote",
+          serverUrl: "https://mcp.atlassian.example.com/mcp/",
+          oauthConfig: {
+            name: "Jira",
+            server_url: "https://mcp.atlassian.example.com/mcp/",
+            client_id: "test-client-id",
+            redirect_uris: ["http://localhost:3000/callback"],
+            scopes: ["read:jira-work"],
+            default_scopes: ["read:jira-work"],
+            supports_resource_metadata: false,
+          },
+        });
+
+        const secret = await secretManager().createSecret(
+          {
+            access_token: "valid-token",
+            refresh_token: "refresh-token",
+            expires_at: Date.now() + 24 * 3_600_000,
+          },
+          "jira-oauth-bearer-guidance-secret",
+        );
+
+        const mcpServer = await McpServerModel.create({
+          name: "jira-oauth-bearer-guidance-server",
+          catalogId: oauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: testUser.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "jira-oauth-bearer-guidance-server__get_issue",
+          description: "Get issue",
+          parameters: {},
+          catalogId: oauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: mcpServer.id,
+        });
+
+        const refreshSpy = vi.spyOn(oauthRoutes, "refreshOAuthToken");
+
+        mockConnect.mockResolvedValue(undefined);
+        mockCallTool.mockResolvedValue({
+          content: [
+            {
+              type: "text",
+              text: "This endpoint requires Bearer token authentication. See docs for setup steps.",
+            },
+          ],
+          isError: true,
+        });
+
+        const result = await mcpClient.executeToolCall(
+          {
+            id: "call_oauth_tool_error_bearer_guidance",
+            name: "jira-oauth-bearer-guidance-server__get_issue",
+            arguments: { issue_key: "CTAZ-1015" },
+          },
+          agentId,
+          {
+            tokenId: "test-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: testUser.id,
+          },
+        );
+
+        expect(refreshSpy).not.toHaveBeenCalled();
+        expect(result).toMatchObject({
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: "This endpoint requires Bearer token authentication. See docs for setup steps.",
+            },
+          ],
+        });
+
+        refreshSpy.mockRestore();
+      });
+
       test("proactively refreshes an OAuth token shortly before expiry", async ({
         makeUser,
       }) => {
@@ -1780,6 +1872,95 @@ describe("McpClient", () => {
         expect(result).toMatchObject({
           isError: false,
           content: [{ type: "text", text: "Issue fetched proactively" }],
+        });
+
+        refreshSpy.mockRestore();
+      });
+
+      test("falls back to the existing token when proactive refresh fails transiently", async ({
+        makeUser,
+      }) => {
+        const testUser = await makeUser({
+          email: "oauth-proactive-refresh-fallback@example.com",
+        });
+
+        const oauthCatalog = await InternalMcpCatalogModel.create({
+          name: "jira-proactive-fallback-server",
+          serverType: "remote",
+          serverUrl: "https://mcp.atlassian.example.com/mcp/",
+          oauthConfig: {
+            name: "Jira",
+            server_url: "https://mcp.atlassian.example.com/mcp/",
+            client_id: "test-client-id",
+            redirect_uris: ["http://localhost:3000/callback"],
+            scopes: ["read:jira-work"],
+            default_scopes: ["read:jira-work"],
+            supports_resource_metadata: false,
+          },
+        });
+
+        const secret = await secretManager().createSecret(
+          {
+            access_token: "still-valid-token",
+            refresh_token: "refresh-token",
+            expires_at: Date.now() + 30_000,
+          },
+          "jira-oauth-proactive-fallback-secret",
+        );
+
+        const mcpServer = await McpServerModel.create({
+          name: "jira-proactive-fallback-server",
+          catalogId: oauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: testUser.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "jira-proactive-fallback-server__get_issue",
+          description: "Get issue",
+          parameters: {},
+          catalogId: oauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: mcpServer.id,
+        });
+
+        const refreshSpy = vi
+          .spyOn(oauthRoutes, "refreshOAuthToken")
+          .mockResolvedValue(false);
+
+        mockConnect.mockResolvedValue(undefined);
+        mockCallTool.mockResolvedValue({
+          content: [
+            { type: "text", text: "Issue fetched with existing token" },
+          ],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCall(
+          {
+            id: "call_oauth_proactive_refresh_fallback",
+            name: "jira-proactive-fallback-server__get_issue",
+            arguments: { issue_key: "CTAZ-1015" },
+          },
+          agentId,
+          {
+            tokenId: "test-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: testUser.id,
+          },
+        );
+
+        expect(refreshSpy).toHaveBeenCalledWith(secret.id, oauthCatalog.id);
+        expect(mockCallTool).toHaveBeenCalledTimes(1);
+        expect(result).toMatchObject({
+          isError: false,
+          content: [
+            { type: "text", text: "Issue fetched with existing token" },
+          ],
         });
 
         refreshSpy.mockRestore();

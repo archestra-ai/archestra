@@ -444,23 +444,10 @@ class McpClient {
             return retryToolCallResult;
           }
 
-          if (tool.catalogId) {
-            const catalogDisplayName = tool.catalogName || tool.catalogId;
-            const authError = this.buildExpiredAuthMessage(
-              catalogDisplayName,
-              tool.catalogId,
-              targetMcpServerId,
-              tokenAuth,
-            );
-            return await this.createErrorResult(
-              toolCall,
-              agentId,
-              authError.message,
-              mcpServerName,
-              authInfo,
-              authError,
-            );
-          }
+          logger.warn(
+            { toolName: toolCall.name, secretId, catalogId: catalogItem.id },
+            "Proactive OAuth refresh failed, falling back to existing token",
+          );
         }
 
         // Get the appropriate transport
@@ -2698,8 +2685,9 @@ function isOAuthTokenFailureText(errorText: string): boolean {
     lower.includes("expired token") ||
     lower.includes("access token expired") ||
     lower.includes("refresh token expired") ||
-    lower.includes("bearer") ||
-    lower.includes("www-authenticate")
+    lower.includes("invalid bearer") ||
+    lower.includes('bearer realm="') ||
+    (lower.includes("www-authenticate") && lower.includes("bearer"))
   );
 }
 

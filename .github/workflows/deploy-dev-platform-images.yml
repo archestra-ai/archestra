@@ -35,8 +35,8 @@ jobs:
     if: ${{ github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.label.name == 'deploy-dev-platform-images' && github.event.pull_request.head.repo.fork != true) }}
     runs-on: blacksmith-16vcpu-ubuntu-2404
     permissions:
-      contents: read
-      id-token: write
+      contents: read # Required to resolve the currently deployed platform image from staging.
+      id-token: write # Required for Workload Identity Federation and GKE credential retrieval.
     outputs:
       previous_image: ${{ steps.previous-platform-image.outputs.previous-image }}
     steps:

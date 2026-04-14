@@ -62,7 +62,7 @@ runs:
   using: composite
   steps:
     - name: Run Claude
-      uses: anthropics/claude-code-action@f6527d30e7b14dcbbeebcd4270e0dcfca4d6a65c # v1.0.94
+      uses: anthropics/claude-code-action@1c8b699d43e9bfed42b48ef15da85d89bab70960 # v1.0.94
       with:
         prompt: ${{ inputs.prompt }}
         anthropic_api_key: ${{ inputs.anthropic_api_key }}

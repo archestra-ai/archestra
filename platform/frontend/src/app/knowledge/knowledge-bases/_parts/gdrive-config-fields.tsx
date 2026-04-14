@@ -125,7 +125,7 @@ export function GoogleDriveConfigFields({
             </div>
             <FormControl>
               <Switch
-                checked={field.value ?? false}
+                checked={field.value ?? true}
                 onCheckedChange={field.onChange}
               />
             </FormControl>

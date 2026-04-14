@@ -144,27 +144,37 @@ export class GoogleDriveConnector extends BaseConnector {
         : undefined;
 
       const drive = this.getDriveClient(params.credentials);
-      const query = buildFileQuery(parsed, safetyBufferedSyncFrom);
       let total = 0;
-      let pageToken: string | undefined;
 
-      do {
-        await this.rateLimit();
-        const res = (await drive.files.list({
-          q: query,
-          pageSize: 1000,
-          pageToken,
-          fields: "nextPageToken,files(id)",
-          includeItemsFromAllDrives: parsed.includeSharedDrives ?? false,
-          supportsAllDrives: parsed.includeSharedDrives ?? false,
-          ...(parsed.driveId
-            ? { driveId: parsed.driveId, corpora: "drive" as const }
-            : {}),
-        })) as FileListResponse;
+      const targetDriveIds =
+        parsed.driveIds && parsed.driveIds.length > 0
+          ? parsed.driveIds
+          : parsed.driveId
+            ? [parsed.driveId]
+            : [undefined];
 
-        total += res.data.files?.length ?? 0;
-        pageToken = res.data.nextPageToken ?? undefined;
-      } while (pageToken);
+      for (const currentDriveId of targetDriveIds) {
+        const query = buildFileQuery(parsed, safetyBufferedSyncFrom);
+        let pageToken: string | undefined;
+
+        do {
+          await this.rateLimit();
+          const res = (await drive.files.list({
+            q: query,
+            pageSize: 1000,
+            pageToken,
+            fields: "nextPageToken,files(id)",
+            includeItemsFromAllDrives: parsed.includeSharedDrives ?? false,
+            supportsAllDrives: parsed.includeSharedDrives ?? false,
+            ...(currentDriveId
+              ? { driveId: currentDriveId, corpora: "drive" as const }
+              : {}),
+          })) as FileListResponse;
+
+          total += res.data.files?.length ?? 0;
+          pageToken = res.data.nextPageToken ?? undefined;
+        } while (pageToken);
+      }
 
       return total;
     } catch (error) {
@@ -237,14 +247,23 @@ export class GoogleDriveConnector extends BaseConnector {
       });
     } else {
       // Drive listing mode
-      yield* this.syncDriveFiles({
-        drive,
-        config: parsed,
-        progress,
-        syncFrom: safetyBufferedSyncFrom,
-        batchSize,
-        supportsImages,
-      });
+      const targetDriveIds =
+        parsed.driveIds && parsed.driveIds.length > 0
+          ? parsed.driveIds
+          : parsed.driveId
+            ? [parsed.driveId]
+            : [undefined];
+
+      for (const currentDriveId of targetDriveIds) {
+        yield* this.syncDriveFiles({
+          drive,
+          config: { ...parsed, driveId: currentDriveId },
+          progress,
+          syncFrom: safetyBufferedSyncFrom,
+          batchSize,
+          supportsImages,
+        });
+      }
     }
   }
 

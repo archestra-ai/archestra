@@ -158,7 +158,7 @@ export function CreateConnectorDialog({
       servicenow: { type, syncDataForLastMonths: 6 },
       notion: { type },
       sharepoint: { type, includePages: true },
-      gdrive: { type },
+      gdrive: { type, recursive: true },
     };
     form.setValue("config", defaultConfigs[type]);
     setStep("configure");

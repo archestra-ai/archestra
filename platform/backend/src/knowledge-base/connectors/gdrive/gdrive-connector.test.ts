@@ -1167,6 +1167,92 @@ describe("GoogleDriveConnector", () => {
     });
   });
 
+  describe("sync — multiple driveIds", () => {
+    it("iterates over each driveId and syncs files from each", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+
+      // Drive A files
+      mockFilesList.mockResolvedValueOnce({
+        data: {
+          files: [makeDriveFile("fA", "driveA-file.txt")],
+          nextPageToken: undefined,
+        },
+      });
+      // Drive B files
+      mockFilesList.mockResolvedValueOnce({
+        data: {
+          files: [makeDriveFile("fB", "driveB-file.txt")],
+          nextPageToken: undefined,
+        },
+      });
+
+      mockFilesGet
+        .mockResolvedValueOnce({ data: Buffer.from("Drive A content").buffer })
+        .mockResolvedValueOnce({ data: Buffer.from("Drive B content").buffer });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {
+          driveIds: ["shared-drive-A", "shared-drive-B"],
+          includeSharedDrives: true,
+        },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      const allDocs = batches.flatMap((b) => b.documents);
+      expect(allDocs).toHaveLength(2);
+      expect(allDocs.map((d) => d.title).sort()).toEqual([
+        "driveA-file.txt",
+        "driveB-file.txt",
+      ]);
+
+      // Verify each call used the correct driveId + corpora
+      const callA = mockFilesList.mock.calls[0][0] as Record<string, unknown>;
+      expect(callA.driveId).toBe("shared-drive-A");
+      expect(callA.corpora).toBe("drive");
+
+      const callB = mockFilesList.mock.calls[1][0] as Record<string, unknown>;
+      expect(callB.driveId).toBe("shared-drive-B");
+      expect(callB.corpora).toBe("drive");
+    });
+
+    it("falls back to My Drive when driveIds is empty", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+
+      mockFilesList.mockResolvedValueOnce({
+        data: {
+          files: [makeDriveFile("f1", "my-drive-file.txt")],
+          nextPageToken: undefined,
+        },
+      });
+
+      mockFilesGet.mockResolvedValueOnce({
+        data: Buffer.from("My Drive content").buffer,
+      });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: { driveIds: [] },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches.flatMap((b) => b.documents)).toHaveLength(1);
+
+      // No driveId/corpora should be set (My Drive mode)
+      const call = mockFilesList.mock.calls[0][0] as Record<string, unknown>;
+      expect(call.driveId).toBeUndefined();
+      expect(call.corpora).toBeUndefined();
+    });
+  });
+
   describe("estimateTotalItems", () => {
     it("returns count of files from Drive API", async () => {
       resetMocks();
@@ -1190,6 +1276,38 @@ describe("GoogleDriveConnector", () => {
       });
 
       expect(result).toBe(3);
+    });
+
+    it("sums counts across multiple driveIds", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+
+      // Drive A: 2 files
+      mockFilesList.mockResolvedValueOnce({
+        data: {
+          files: [makeDriveFile("f1", "a.txt"), makeDriveFile("f2", "b.txt")],
+          nextPageToken: undefined,
+        },
+      });
+      // Drive B: 1 file
+      mockFilesList.mockResolvedValueOnce({
+        data: {
+          files: [makeDriveFile("f3", "c.txt")],
+          nextPageToken: undefined,
+        },
+      });
+
+      const result = await connector.estimateTotalItems({
+        config: {
+          driveIds: ["drive-A", "drive-B"],
+          includeSharedDrives: true,
+        },
+        credentials,
+        checkpoint: null,
+      });
+
+      expect(result).toBe(3);
+      expect(mockFilesList).toHaveBeenCalledTimes(2);
     });
 
     it("returns null when query fails", async () => {

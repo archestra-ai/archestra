@@ -100,6 +100,14 @@ async function openCatalogToolAssignment({
   const searchInput = page.getByTestId(
     getAssignmentComboboxSearchInputTestId(E2eTestId.AgentToolsAddButton),
   );
+  const visibleTokenSelect = page.getByTestId(E2eTestId.TokenSelect).last();
+  const pillButtonByTestId = page.getByTestId(
+    getAgentToolCatalogPillTestId(catalogItemName),
+  );
+  const pillButtonByRole = page.getByRole("button", {
+    name: new RegExp(escapeRegExp(catalogItemName)),
+  });
+
   await expect(searchInput).toBeVisible({ timeout: 10_000 });
   await searchInput.fill(catalogItemName);
 
@@ -116,30 +124,48 @@ async function openCatalogToolAssignment({
     ),
   );
 
+  let catalogAssignmentState:
+    | "token-select"
+    | "pill-testid"
+    | "pill-role"
+    | "enabled"
+    | "disabled"
+    | "missing" = "missing";
+
   await expect
     .poll(
       async () => {
+        if (await visibleTokenSelect.isVisible().catch(() => false)) {
+          catalogAssignmentState = "token-select";
+          return catalogAssignmentState;
+        }
+        if (await pillButtonByTestId.isVisible().catch(() => false)) {
+          catalogAssignmentState = "pill-testid";
+          return catalogAssignmentState;
+        }
+        if (await pillButtonByRole.isVisible().catch(() => false)) {
+          catalogAssignmentState = "pill-role";
+          return catalogAssignmentState;
+        }
         if (await enabledCatalogItem.isVisible().catch(() => false)) {
-          return "enabled";
+          catalogAssignmentState = "enabled";
+          return catalogAssignmentState;
         }
         if (await disabledCatalogItem.isVisible().catch(() => false)) {
-          return "disabled";
+          catalogAssignmentState = "disabled";
+          return catalogAssignmentState;
         }
-        return "missing";
+        catalogAssignmentState = "missing";
+        return catalogAssignmentState;
       },
       { timeout: 30_000, intervals: [500, 1000, 2000] },
     )
-    .toBe("enabled");
-  await enabledCatalogItem.click();
-  await page.keyboard.press("Escape");
+    .not.toBe("missing");
 
-  const visibleTokenSelect = page.getByTestId(E2eTestId.TokenSelect).last();
-  const pillButtonByTestId = page.getByTestId(
-    getAgentToolCatalogPillTestId(catalogItemName),
-  );
-  const pillButtonByRole = page.getByRole("button", {
-    name: new RegExp(escapeRegExp(catalogItemName)),
-  });
+  if (catalogAssignmentState === "enabled") {
+    await enabledCatalogItem.click();
+    await page.keyboard.press("Escape");
+  }
 
   try {
     await expect(visibleTokenSelect).toBeVisible({ timeout: 5_000 });

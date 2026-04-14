@@ -396,11 +396,11 @@ describe("IdentityProviderModel", () => {
           issuer: body.issuer,
           domain: body.domain,
           organizationId: org.id,
-          oidcConfig: body.oidcConfig
-            ? JSON.stringify(body.oidcConfig)
-            : undefined,
           userId: user.id,
           domainVerified: true,
+          oidcConfig: JSON.stringify(
+            body.oidcConfig,
+          ) as unknown as typeof schema.identityProvidersTable.$inferInsert.oidcConfig,
         });
       });
       const fetchSpy = vi.fn(async () => {

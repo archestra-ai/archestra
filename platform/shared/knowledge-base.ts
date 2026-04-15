@@ -63,7 +63,7 @@ const CONNECTOR_PLACEHOLDER_DEPARTMENTS = [
 export function getConnectorNamePlaceholder(connectorType: string): string {
   const department =
     CONNECTOR_PLACEHOLDER_DEPARTMENTS[
-    Math.floor(Math.random() * CONNECTOR_PLACEHOLDER_DEPARTMENTS.length)
+      Math.floor(Math.random() * CONNECTOR_PLACEHOLDER_DEPARTMENTS.length)
     ];
   const label = CONNECTOR_TYPE_LABELS[connectorType] ?? connectorType;
   return `${department} ${label} Connector`;

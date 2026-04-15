@@ -45,9 +45,9 @@ describe("InlineChatError", () => {
     expect(
       screen.getByText("Contact support@example.com and include these IDs."),
     ).toBeInTheDocument();
-    expect(screen.getByText("session-")).toBeInTheDocument();
-    expect(screen.getByText("trace-12")).toBeInTheDocument();
-    expect(screen.getByText("span-123")).toBeInTheDocument();
+    expect(screen.getByText("session-12345678")).toBeInTheDocument();
+    expect(screen.getByText("trace-12345678")).toBeInTheDocument();
+    expect(screen.getByText("span-12345678")).toBeInTheDocument();
     expect(screen.queryByText("openai")).not.toBeInTheDocument();
     expect(
       screen.queryByText("secret provider detail"),
@@ -81,6 +81,9 @@ describe("InlineChatError", () => {
     );
 
     expect(screen.getByText("The provider failed")).toBeInTheDocument();
+    expect(screen.getByText("session-12345678")).toBeInTheDocument();
+    expect(screen.getByText("trace-12345678")).toBeInTheDocument();
+    expect(screen.getByText("span-12345678")).toBeInTheDocument();
     expect(screen.queryByText("openai")).not.toBeInTheDocument();
     expect(
       screen.queryByText("secret provider detail"),
@@ -137,7 +140,7 @@ describe("InlineChatError", () => {
     );
 
     expect(screen.getByText("Something went wrong")).toBeInTheDocument();
-    expect(screen.getByText("conversa")).toBeInTheDocument();
+    expect(screen.getByText("conversation-12345678")).toBeInTheDocument();
     expect(screen.getByText("Session")).toBeInTheDocument();
   });
 });

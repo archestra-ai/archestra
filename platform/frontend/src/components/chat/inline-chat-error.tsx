@@ -105,7 +105,7 @@ export function InlineChatError({
                       className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono"
                     >
                       <span className="opacity-60">{entry.label}</span>
-                      <span>{entry.value.slice(0, 8)}</span>
+                      <span>{entry.value}</span>
                     </span>
                   ))}
                   <Button
@@ -168,7 +168,7 @@ export function InlineChatError({
                   className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono"
                 >
                   <span className="opacity-60">{entry.label}</span>
-                  <span>{entry.value.slice(0, 8)}</span>
+                  <span>{entry.value}</span>
                 </span>
               ))}
               <Button

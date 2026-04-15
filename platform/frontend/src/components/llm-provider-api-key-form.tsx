@@ -276,6 +276,9 @@ export function LlmProviderApiKeyForm({
   const hasApiKeyChanged =
     apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER && apiKey !== "";
   const providerConfig = PROVIDER_CONFIG[provider];
+  const isBaseUrlRequired =
+    providerConfig.baseUrlRequired && !providerBaseUrls?.[provider];
+
   const allowedProviderSet = useMemo(
     () =>
       new Set<CreateLlmProviderApiKeyBody["provider"]>(
@@ -613,7 +616,7 @@ export function LlmProviderApiKeyForm({
         <div className="space-y-2">
           <Label htmlFor="llm-provider-api-key-base-url">
             Base URL{" "}
-            {!providerConfig.baseUrlRequired && (
+            {!isBaseUrlRequired && (
               <span className="font-normal text-muted-foreground">
                 (optional)
               </span>
@@ -635,7 +638,7 @@ export function LlmProviderApiKeyForm({
             {...form.register("baseUrl", {
               validate: (value) => {
                 if (!value) {
-                  if (providerConfig.baseUrlRequired) {
+                  if (isBaseUrlRequired) {
                     return "Base URL is required for this provider";
                   }
                   return true;

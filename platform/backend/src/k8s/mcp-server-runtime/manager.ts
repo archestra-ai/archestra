@@ -253,16 +253,6 @@ export class McpServerRuntimeManager {
       // must propagate to all installed servers on restart.
       if (catalogItem?.localConfig?.environment) {
         for (const envDef of catalogItem.localConfig.environment) {
-          logger.info(
-            {
-              mcpServerId: id,
-              key: envDef.key,
-              type: envDef.type,
-              promptOnInstallation: envDef.promptOnInstallation,
-              hasValue: !!envDef.value,
-            },
-            "DEBUG: checking catalog env var for non-prompted secret merge",
-          );
           if (
             envDef.type === "secret" &&
             !envDef.promptOnInstallation &&

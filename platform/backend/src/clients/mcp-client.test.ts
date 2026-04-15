@@ -340,7 +340,9 @@ describe("McpClient", () => {
           { access_token: "fresh-github-token-456" },
           "rotatedmcptoken",
         );
-        await McpServerModel.update(mcpServerId, { secretId: rotatedSecret.id });
+        await McpServerModel.update(mcpServerId, {
+          secretId: rotatedSecret.id,
+        });
 
         const secondResult = await mcpClient.executeToolCall(toolCall, agentId);
         expect(secondResult.isError).toBe(false);

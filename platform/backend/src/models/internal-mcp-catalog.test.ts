@@ -131,6 +131,43 @@ describe("InternalMcpCatalogModel", () => {
       expect(foundCatalog?.oauthConfig?.client_secret).toBeUndefined();
       expect(foundCatalog?.localConfig?.environment?.[0].value).toBeUndefined();
     });
+
+    test("marks static header values without returning the plaintext secret", async ({
+      makeSecret,
+    }) => {
+      const staticHeaderSecret = await makeSecret({
+        name: "static-header-secret",
+        secret: {
+          header_x_api_key: "catalog-api-key",
+        },
+      });
+
+      const catalog = await InternalMcpCatalogModel.create({
+        name: "catalog-with-static-header",
+        serverType: "remote",
+        localConfigSecretId: staticHeaderSecret.id,
+        userConfig: {
+          header_x_api_key: {
+            type: "string",
+            title: "x-api-key",
+            description: "Static API key",
+            promptOnInstallation: false,
+            sensitive: true,
+            headerName: "x-api-key",
+          },
+        },
+      });
+
+      const foundCatalog = await InternalMcpCatalogModel.findById(catalog.id);
+
+      expect(foundCatalog?.userConfig?.header_x_api_key).toMatchObject({
+        headerName: "x-api-key",
+        hasStaticValue: true,
+      });
+      expect(
+        foundCatalog?.userConfig?.header_x_api_key?.default,
+      ).toBeUndefined();
+    });
   });
 
   describe("getByIds", () => {

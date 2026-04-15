@@ -3266,9 +3266,7 @@ describe("McpClient", () => {
           .calls;
         const lastCall = transportCalls[transportCalls.length - 1];
         const headers = lastCall[1]?.requestInit?.headers as Headers;
-        expect(headers.get("authorization")).toBe(
-          "Bearer legacy-bearer-token",
-        );
+        expect(headers.get("authorization")).toBe("Bearer legacy-bearer-token");
       });
 
       test("sends additional static headers alongside the auth header", async () => {
@@ -3343,7 +3341,7 @@ describe("McpClient", () => {
           .calls;
         const lastCall = transportCalls[transportCalls.length - 1];
         const headers = lastCall[1]?.requestInit?.headers as Headers;
-        expect(headers.get("x-api-key")).toBe("Bearer header-secret-token");
+        expect(headers.get("x-api-key")).toBe("header-secret-token");
         expect(headers.get("x-tenant-id")).toBe("tenant-42");
       });
 

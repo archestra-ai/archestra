@@ -24818,6 +24818,7 @@ export type GetInternalMcpCatalogResponses = {
                 min?: number;
                 max?: number;
                 headerName?: string;
+                hasStaticValue?: boolean;
             };
         } | null;
         oauthConfig: {
@@ -24952,6 +24953,7 @@ export type CreateInternalMcpCatalogItemData = {
                 min?: number;
                 max?: number;
                 headerName?: string;
+                hasStaticValue?: boolean;
             };
         } | null;
         oauthConfig?: {
@@ -25145,6 +25147,7 @@ export type CreateInternalMcpCatalogItemResponses = {
                 min?: number;
                 max?: number;
                 headerName?: string;
+                hasStaticValue?: boolean;
             };
         } | null;
         oauthConfig: {
@@ -25429,6 +25432,7 @@ export type GetInternalMcpCatalogItemResponses = {
                 min?: number;
                 max?: number;
                 headerName?: string;
+                hasStaticValue?: boolean;
             };
         } | null;
         oauthConfig: {
@@ -25562,6 +25566,7 @@ export type UpdateInternalMcpCatalogItemData = {
                 min?: number;
                 max?: number;
                 headerName?: string;
+                hasStaticValue?: boolean;
             };
         } | null;
         oauthConfig?: {
@@ -25757,6 +25762,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
                 min?: number;
                 max?: number;
                 headerName?: string;
+                hasStaticValue?: boolean;
             };
         } | null;
         oauthConfig: {

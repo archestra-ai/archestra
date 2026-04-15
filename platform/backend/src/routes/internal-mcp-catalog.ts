@@ -106,6 +106,8 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         localConfigVaultKey,
         ...restBodyInput
       } = body;
+      // Downstream secret extraction removes plaintext values from the payload
+      // before persistence, so work on a cloned object instead of the request body.
       const restBody = structuredClone(restBodyInput);
 
       // Enforce scope restrictions
@@ -375,6 +377,8 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         localConfigVaultKey,
         ...restBodyInput
       } = body;
+      // Downstream secret extraction removes plaintext values from the payload
+      // before persistence, so work on a cloned object instead of the request body.
       const restBody = structuredClone(restBodyInput);
 
       // Get the original catalog item to check if name or serverUrl changed
@@ -1066,6 +1070,7 @@ function extractStaticUserConfigSecretValues(
       fieldConfig.default.length > 0
     ) {
       secretValues[fieldName] = fieldConfig.default;
+      delete fieldConfig.default;
       continue;
     }
 

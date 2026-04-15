@@ -424,7 +424,7 @@ class InternalMcpCatalogModel {
             ) {
               const value = secret.secret[fieldName];
               if (value) {
-                fieldConfig.default = String(value);
+                fieldConfig.hasStaticValue = true;
               }
             }
           }
@@ -498,7 +498,7 @@ class InternalMcpCatalogModel {
             ) {
               const value = secret.secret[fieldName];
               if (value) {
-                fieldConfig.default = String(value);
+                fieldConfig.hasStaticValue = true;
               }
             }
           }

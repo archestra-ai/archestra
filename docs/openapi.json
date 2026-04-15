@@ -90909,6 +90909,9 @@
                             "description": {
                               "type": "string"
                             },
+                            "promptOnInstallation": {
+                              "type": "boolean"
+                            },
                             "required": {
                               "type": "boolean"
                             },
@@ -90945,6 +90948,9 @@
                             },
                             "headerName": {
                               "type": "string"
+                            },
+                            "hasStaticValue": {
+                              "type": "boolean"
                             }
                           },
                           "required": [
@@ -91762,6 +91768,9 @@
                         "description": {
                           "type": "string"
                         },
+                        "promptOnInstallation": {
+                          "type": "boolean"
+                        },
                         "required": {
                           "type": "boolean"
                         },
@@ -91798,6 +91807,9 @@
                         },
                         "headerName": {
                           "type": "string"
+                        },
+                        "hasStaticValue": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -92346,6 +92358,9 @@
                           "description": {
                             "type": "string"
                           },
+                          "promptOnInstallation": {
+                            "type": "boolean"
+                          },
                           "required": {
                             "type": "boolean"
                           },
@@ -92382,6 +92397,9 @@
                           },
                           "headerName": {
                             "type": "string"
+                          },
+                          "hasStaticValue": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -93222,6 +93240,9 @@
                           "description": {
                             "type": "string"
                           },
+                          "promptOnInstallation": {
+                            "type": "boolean"
+                          },
                           "required": {
                             "type": "boolean"
                           },
@@ -93258,6 +93279,9 @@
                           },
                           "headerName": {
                             "type": "string"
+                          },
+                          "hasStaticValue": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -94069,6 +94093,9 @@
                         "description": {
                           "type": "string"
                         },
+                        "promptOnInstallation": {
+                          "type": "boolean"
+                        },
                         "required": {
                           "type": "boolean"
                         },
@@ -94105,6 +94132,9 @@
                         },
                         "headerName": {
                           "type": "string"
+                        },
+                        "hasStaticValue": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -94661,6 +94691,9 @@
                           "description": {
                             "type": "string"
                           },
+                          "promptOnInstallation": {
+                            "type": "boolean"
+                          },
                           "required": {
                             "type": "boolean"
                           },
@@ -94697,6 +94730,9 @@
                           },
                           "headerName": {
                             "type": "string"
+                          },
+                          "hasStaticValue": {
+                            "type": "boolean"
                           }
                         },
                         "required": [

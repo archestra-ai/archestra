@@ -341,6 +341,75 @@ describe("mcp server inspect route", () => {
     });
   });
 
+  test("installs a remote MCP server with mixed static and prompted headers", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Mixed Header Remote",
+      serverType: "remote",
+      serverUrl: "http://localhost:30082/mcp",
+      userConfig: {
+        header_x_api_key: {
+          type: "string",
+          title: "x-api-key",
+          description: "Static API key",
+          promptOnInstallation: false,
+          required: false,
+          sensitive: true,
+          headerName: "x-api-key",
+          default: "catalog-api-key",
+        },
+        tenant_id: {
+          type: "string",
+          title: "Tenant ID",
+          description: "Prompted tenant ID",
+          promptOnInstallation: true,
+          required: true,
+          sensitive: true,
+          headerName: "x-tenant-id",
+        },
+      },
+    });
+
+    connectAndGetToolsMock
+      .mockResolvedValueOnce([
+        {
+          name: "get-server-info",
+          description: "Returns server details",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          name: "get-server-info",
+          description: "Returns server details",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ]);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: "Mixed Header Remote",
+        catalogId: catalog.id,
+        userConfigValues: {
+          tenant_id: "tenant-42",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(connectAndGetToolsMock).toHaveBeenCalledTimes(2);
+    expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
+      catalogItem: expect.objectContaining({ id: catalog.id }),
+      secrets: {
+        header_x_api_key: "catalog-api-key",
+        tenant_id: "tenant-42",
+      },
+    });
+  });
+
   test("automatically retries protected remote MCP server installation with an exchanged enterprise-managed credential", async ({
     makeAccount,
     makeIdentityProvider,

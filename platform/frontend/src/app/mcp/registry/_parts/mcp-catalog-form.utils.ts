@@ -359,7 +359,7 @@ export function transformCatalogItemToFormValues(
     authMethod,
     authHeaderName:
       authHeaderConfig?.headerName &&
-      authHeaderConfig.headerName !== "Authorization"
+      !isDefaultAuthorizationHeader(authHeaderConfig.headerName)
         ? authHeaderConfig.headerName
         : "",
     additionalHeaders,
@@ -421,10 +421,10 @@ export function transformExternalCatalogToFormValues(
   const authHeaderConfig =
     staticHeaderFields.access_token ?? staticHeaderFields.raw_access_token;
 
-  // Detect bearer/raw_token auth from user_config (e.g. GitHub with requires_proxy: true)
-  if (server.user_config?.raw_access_token) {
+  // Detect bearer/raw_token auth from header-mapped user_config entries.
+  if (authHeaderConfig?.fieldName === "raw_access_token") {
     authMethod = "raw_token";
-  } else if (server.user_config?.access_token) {
+  } else if (authHeaderConfig?.fieldName === "access_token") {
     authMethod = "bearer";
   }
 
@@ -592,7 +592,7 @@ export function transformExternalCatalogToFormValues(
     authMethod,
     authHeaderName:
       authHeaderConfig?.headerName &&
-      authHeaderConfig.headerName !== "Authorization"
+      !isDefaultAuthorizationHeader(authHeaderConfig.headerName)
         ? authHeaderConfig.headerName
         : "",
     additionalHeaders: Object.entries(staticHeaderFields)
@@ -717,6 +717,7 @@ function getHeaderMappedUserConfigEntries(
 ): Record<
   string,
   {
+    fieldName: string;
     headerName: string;
     promptOnInstallation?: boolean;
     default?: string | number | boolean | Array<string>;
@@ -739,6 +740,7 @@ function getHeaderMappedUserConfigEntries(
         return [
           fieldName,
           {
+            fieldName,
             headerName: userConfigField.headerName,
             promptOnInstallation: userConfigField.promptOnInstallation,
             default: userConfigField.default,
@@ -746,6 +748,10 @@ function getHeaderMappedUserConfigEntries(
         ];
       }),
   );
+}
+
+function isDefaultAuthorizationHeader(headerName: string): boolean {
+  return headerName.toLowerCase() === "authorization";
 }
 
 function getOptionalStringProperty(

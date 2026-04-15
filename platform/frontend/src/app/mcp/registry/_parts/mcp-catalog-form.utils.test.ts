@@ -357,7 +357,7 @@ describe("transformFormToApiData", () => {
           required: false,
           sensitive: true,
           headerName: "x-tenant-id",
-          default: "tenant-42",
+          hasStaticValue: true,
         },
       },
       scope: "personal",
@@ -372,8 +372,39 @@ describe("transformFormToApiData", () => {
         fieldName: "header_x_tenant_id",
         headerName: "x-tenant-id",
         promptOnInstallation: false,
-        value: "tenant-42",
+        value: undefined,
       },
     ]);
+  });
+
+  it("treats authorization header names case-insensitively when hydrating form values", () => {
+    const values = transformCatalogItemToFormValues({
+      id: "catalog-auth-header",
+      name: "Header MCP",
+      description: "",
+      icon: null,
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com",
+      oauthConfig: null,
+      enterpriseManagedConfig: null,
+      localConfig: null,
+      deploymentSpecYaml: null,
+      userConfig: {
+        access_token: {
+          type: "string",
+          title: "Access Token",
+          description: "Bearer token",
+          required: true,
+          sensitive: true,
+          headerName: "authorization",
+        },
+      },
+      scope: "personal",
+      teams: [],
+      labels: [],
+    } as never);
+
+    expect(values.authMethod).toBe("bearer");
+    expect(values.authHeaderName).toBe("");
   });
 });

@@ -42,6 +42,7 @@ const UserConfigFieldSchema = z.object({
   min: z.number().optional(),
   max: z.number().optional(),
   headerName: z.string().optional(),
+  hasStaticValue: z.boolean().optional(),
 });
 
 // Define a version of LocalConfigSchema for SELECT operations

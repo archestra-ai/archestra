@@ -353,24 +353,22 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           createdSecretId = secret.id;
         }
 
-        if (
-          !secretId &&
-          Object.keys(catalogStaticUserConfigValues).length > 0
-        ) {
-          const secret = await secretManager().createSecret(
-            catalogStaticUserConfigValues,
-            `${serverData.name}-secret`,
-          );
-          secretId = secret.id;
-          createdSecretId = secret.id;
-        }
-
         if (installUserConfigValues && !secretId) {
           const secret = await secretManager().createSecret(
             {
               ...catalogStaticUserConfigValues,
               ...installUserConfigValues,
             } as Record<string, unknown>,
+            `${serverData.name}-secret`,
+          );
+          secretId = secret.id;
+          createdSecretId = secret.id;
+        } else if (
+          !secretId &&
+          Object.keys(catalogStaticUserConfigValues).length > 0
+        ) {
+          const secret = await secretManager().createSecret(
+            catalogStaticUserConfigValues,
             `${serverData.name}-secret`,
           );
           secretId = secret.id;

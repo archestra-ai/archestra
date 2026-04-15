@@ -62,6 +62,8 @@ describe("transformFormToApiData", () => {
       resource_metadata_url:
         "https://mcp.example.com/.well-known/oauth-protected-resource/mcp",
       token_endpoint: "https://legacy-idp.example.com/oauth/token",
+      scopes: ["read:jira-work"],
+      default_scopes: ["read:jira-work"],
     });
   });
 
@@ -110,6 +112,88 @@ describe("transformFormToApiData", () => {
       resource_metadata_url:
         "https://mcp.example.com/.well-known/oauth-protected-resource/mcp",
       token_endpoint: "https://legacy-idp.example.com/oauth/token",
+      scopes: ["read:jira-work"],
+      default_scopes: ["read:jira-work"],
+    });
+  });
+
+  it('uses ["read", "write"] as defaults only when the scopes field is blank', () => {
+    const values: McpCatalogFormValues = {
+      name: "Default Scope OAuth MCP",
+      description: "",
+      icon: null,
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com",
+      authMethod: "oauth",
+      oauthConfig: {
+        client_id: "client-id",
+        client_secret: "client-secret",
+        redirect_uris: "https://app.example.com/oauth-callback",
+        scopes: "",
+        supports_resource_metadata: false,
+        oauthServerUrl: "",
+        authServerUrl: "",
+        authorizationEndpoint: "",
+        wellKnownUrl: "",
+        resourceMetadataUrl: "",
+        tokenEndpoint: "",
+      },
+      enterpriseManagedConfig: null,
+      localConfig: undefined,
+      deploymentSpecYaml: "",
+      originalDeploymentSpecYaml: "",
+      oauthClientSecretVaultPath: "",
+      oauthClientSecretVaultKey: "",
+      localConfigVaultPath: "",
+      localConfigVaultKey: "",
+      labels: [],
+      scope: "personal",
+      teams: [],
+    };
+
+    expect(transformFormToApiData(values).oauthConfig).toMatchObject({
+      scopes: ["read", "write"],
+      default_scopes: ["read", "write"],
+    });
+  });
+
+  it('treats comma-only scopes input as blank and falls back to ["read", "write"]', () => {
+    const values: McpCatalogFormValues = {
+      name: "Comma Scope OAuth MCP",
+      description: "",
+      icon: null,
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com",
+      authMethod: "oauth",
+      oauthConfig: {
+        client_id: "client-id",
+        client_secret: "client-secret",
+        redirect_uris: "https://app.example.com/oauth-callback",
+        scopes: " , ",
+        supports_resource_metadata: false,
+        oauthServerUrl: "",
+        authServerUrl: "",
+        authorizationEndpoint: "",
+        wellKnownUrl: "",
+        resourceMetadataUrl: "",
+        tokenEndpoint: "",
+      },
+      enterpriseManagedConfig: null,
+      localConfig: undefined,
+      deploymentSpecYaml: "",
+      originalDeploymentSpecYaml: "",
+      oauthClientSecretVaultPath: "",
+      oauthClientSecretVaultKey: "",
+      localConfigVaultPath: "",
+      localConfigVaultKey: "",
+      labels: [],
+      scope: "personal",
+      teams: [],
+    };
+
+    expect(transformFormToApiData(values).oauthConfig).toMatchObject({
+      scopes: ["read", "write"],
+      default_scopes: ["read", "write"],
     });
   });
 

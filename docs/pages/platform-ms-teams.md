@@ -23,7 +23,7 @@ Archestra can connect directly to Microsoft Teams channels. When users mention t
 
 The setup wizard in Archestra guides you through the entire MS Teams configuration. Navigate to **Agent Triggers** → **MS Teams** → **Setup MS Teams** and follow the step-by-step instructions.
 
-![MS Teams Setup Wizard](/docs/setup-msteams.png)
+![MS Teams Setup Wizard](/docs/setup-msteams.webp)
 
 The wizard will walk you through creating an Azure Bot, configuring the Teams app manifest, and installing it to your workspace. All required credentials are collected and saved automatically.
 
@@ -55,7 +55,7 @@ Each Teams channel requires a **default agent** to be assigned to it. This agent
 
 You can manage the default agent for each channel from the **Agent Triggers** → **MS Teams** page in Archestra.
 
-![MS Teams Agent Selection](/docs/select-agent-msteams.png)
+![MS Teams Agent Selection](/docs/select-agent-msteams.webp)
 
 Once set, the default agent processes all subsequent messages in that channel. You can also use the `/select-agent` command directly in Teams to change the default agent.
 
@@ -97,7 +97,7 @@ When a user interacts with the bot but hasn't signed up in Archestra yet, they a
 
 Admins can view autoprovisioned users on the **Settings → Members** page — from there they can copy the invitation link or delete the user.
 
-![Autoprovisioned MS Teams Users](/docs/autoprovisioned-users-msteams.png)
+![Autoprovisioned MS Teams Users](/docs/autoprovisioned-users-msteams.webp)
 
 ## Attachments
 

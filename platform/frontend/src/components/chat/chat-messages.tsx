@@ -1133,6 +1133,7 @@ export function ChatMessages({
               error={error}
               conversationId={conversationId}
               supportMessage={organization?.chatErrorSupportMessage}
+              slimChatErrorUi={organization?.slimChatErrorUi ?? false}
               agentName={agentName}
               selectedModel={selectedModel}
               modelSource={modelSource}

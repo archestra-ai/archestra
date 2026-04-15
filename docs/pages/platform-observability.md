@@ -12,7 +12,7 @@ This document is human-built, shouldn't be updated with AI. Don't change anythin
 
 # Observability
 
-![Archestra Logs Viewer](/docs/automated_screenshots/platform_logs_viewer.png)
+![Archestra Logs Viewer](/docs/observability.webp)
 
 Archestra exposes Prometheus metrics and OpenTelemetry traces for monitoring system health, tracking HTTP requests, and analyzing LLM API performance.
 

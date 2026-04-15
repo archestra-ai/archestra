@@ -12,12 +12,12 @@ import type { GoogleGenAI } from "@google/genai";
 import type { InteractionSource, SupportedProvider } from "@shared";
 import client from "prom-client";
 import logger from "@/logging";
-import { getUsageTokens as getAnthropicUsage } from "@/routes/proxy/adapterV2/anthropic";
-import { getUsageTokens as getCohereUsage } from "@/routes/proxy/adapterV2/cohere";
-import { getUsageTokens as getGeminiUsage } from "@/routes/proxy/adapterV2/gemini";
-import { getUsageTokens as getMinimaxUsage } from "@/routes/proxy/adapterV2/minimax";
-import { getUsageTokens as getOpenAIUsage } from "@/routes/proxy/adapterV2/openai";
-import { getUsageTokens as getZhipuaiUsage } from "@/routes/proxy/adapterV2/zhipuai";
+import { getUsageTokens as getAnthropicUsage } from "@/routes/proxy/adapters/anthropic";
+import { getUsageTokens as getCohereUsage } from "@/routes/proxy/adapters/cohere";
+import { getUsageTokens as getGeminiUsage } from "@/routes/proxy/adapters/gemini";
+import { getUsageTokens as getMinimaxUsage } from "@/routes/proxy/adapters/minimax";
+import { getUsageTokens as getOpenAIUsage } from "@/routes/proxy/adapters/openai";
+import { getUsageTokens as getZhipuaiUsage } from "@/routes/proxy/adapters/zhipuai";
 import type { Agent } from "@/types";
 import { getExemplarLabels, sanitizeLabelKey } from "./utils";
 

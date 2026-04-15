@@ -143,6 +143,38 @@ Known limitation:
 
 Incremental sync uses the `lastModifiedDateTime` field to fetch only items modified since the last run.
 
+## Google Drive
+
+Ingests files from Google Drive (My Drive and Shared Drives) via the Google Drive API. Text is extracted from `.txt`, `.md`, `.csv`, `.json`, `.xml`, `.html`, `.htm`, `.yaml`, `.log` files, as well as `.docx`, `.pdf`, and `.pptx` documents. Google Workspace files (Docs, Sheets, Slides) are exported as plain text. When a multimodal embedding model is configured, image files (`.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`) are also ingested and embedded directly.
+
+| Field                 | Description                                                                                        |
+| --------------------- | -------------------------------------------------------------------------------------------------- |
+| Drive IDs             | Comma-separated shared drive IDs to sync (optional -- providing Drive IDs automatically enables shared-drive API access; leave blank to sync from My Drive) |
+| Folder ID             | Restrict sync to a specific folder (optional -- find the ID in the folder's Google Drive URL)      |
+| File Types            | Comma-separated file extensions to include, e.g. `.pdf, .docx` (optional -- leave blank for all)  |
+| Recursive Traversal   | Sync files from all nested subfolders when a Folder ID is set (default: on)                        |
+
+Authentication supports two modes via the **Service Account Key / OAuth Token** field:
+
+1. **Service account JSON key** (recommended for production): Create a service account in the [Google Cloud Console](https://console.cloud.google.com/), enable the Google Drive API, download the JSON key file, and paste its entire contents into the token field. Share the target folders/drives with the service account email address.
+2. **OAuth2 access token**: Paste a short-lived OAuth2 access token with the `drive.readonly` scope. Useful for quick testing but tokens expire after ~1 hour.
+
+To configure the connector:
+
+- Enable the **Google Drive API** in your Google Cloud project
+- Create a **Service account** and download its JSON key
+- **Share** the target Drive folders with the service account email (as Viewer)
+- Paste the full JSON key contents into the token field
+- Optionally set a **Folder ID** to scope the sync to a specific folder
+
+Known limitations:
+
+- Google Workspace files (Docs, Sheets, Slides) are exported as plain text, which may lose formatting.
+- File size limit for text extraction is 10 MB.
+- Recursive traversal is bounded to a depth of 50 levels by default (configurable via the `maxDepth` API field, range 1--100).
+
+Incremental sync uses the `modifiedTime` field with a 5-minute safety buffer to fetch only files modified since the last run.
+
 ## Managing Connectors
 
 Connectors can be managed from either the **Connectors** page or a knowledge base's detail page. After creation you can:

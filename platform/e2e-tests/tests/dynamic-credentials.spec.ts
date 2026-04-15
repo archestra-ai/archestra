@@ -7,7 +7,6 @@ import {
 import { test } from "../fixtures";
 import {
   addCustomSelfHostedCatalogItem,
-  assignCatalogCredentialToGateway,
   assignEngineeringTeamToDefaultProfileViaApi,
   goToMcpRegistry,
   installLocalCatalogItem,
@@ -110,12 +109,46 @@ test("Verify tool calling using dynamic credentials", async ({
     await install(config);
   }
 
-  // Assign tool to profiles using dynamic credential
-  await assignCatalogCredentialToGateway({
-    page: adminPage,
-    catalogItemName: CATALOG_ITEM_NAME,
-    credentialName: "Resolve at call time",
+  const defaultGatewayResponse = await archestraApiSdk.getDefaultMcpGateway({
+    headers: { Cookie: cookieHeaders },
   });
+  if (defaultGatewayResponse.error || !defaultGatewayResponse.data) {
+    throw new Error(
+      `Failed to get default MCP gateway: ${JSON.stringify(defaultGatewayResponse.error)}`,
+    );
+  }
+
+  const toolsResponse = await archestraApiSdk.getTools({
+    headers: { Cookie: cookieHeaders },
+  });
+  const toolIds =
+    toolsResponse.data
+      ?.filter((tool) => tool.name.startsWith(`${CATALOG_ITEM_NAME}__`))
+      .map((tool) => tool.id) ?? [];
+  if (toolIds.length === 0) {
+    throw new Error(
+      `No discovered tools found for dynamic-credentials catalog ${CATALOG_ITEM_NAME}`,
+    );
+  }
+
+  for (const toolId of toolIds) {
+    const assignResponse = await archestraApiSdk.assignToolToAgent({
+      headers: { Cookie: cookieHeaders },
+      path: {
+        agentId: defaultGatewayResponse.data.id,
+        toolId,
+      },
+      body: {
+        resolveAtCallTime: true,
+        credentialResolutionMode: "dynamic",
+      },
+    });
+    if (assignResponse.error) {
+      throw new Error(
+        `Failed to assign dynamic credential tool ${toolId}: ${JSON.stringify(assignResponse.error)}`,
+      );
+    }
+  }
 
   /**
    * Credentials we have:

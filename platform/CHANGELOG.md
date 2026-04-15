@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.2.13](https://github.com/archestra-ai/archestra/compare/platform-v1.2.12...platform-v1.2.13) (2026-04-14)
+
+
+### Features
+
+* add google drive knowledge connector ([#3698](https://github.com/archestra-ai/archestra/issues/3698)) ([07f26c1](https://github.com/archestra-ai/archestra/commit/07f26c16971d6462240bb9d79e2cee52ec0bc1e5))
+* **auth:** add hosted domain hint to google sso ([#3758](https://github.com/archestra-ai/archestra/issues/3758)) ([efbf5e9](https://github.com/archestra-ai/archestra/commit/efbf5e980fb7388c1077a723b9d13996c248f085))
+
+
+### Bug Fixes
+
+* bring back worker metrics ([#3768](https://github.com/archestra-ai/archestra/issues/3768)) ([388fc92](https://github.com/archestra-ai/archestra/commit/388fc92759d73ecd18f9e70c383c8d0e484e20a7))
+* deduplicate tool_use IDs in scheduled task conversations ([#3773](https://github.com/archestra-ai/archestra/issues/3773)) ([e8e1eb7](https://github.com/archestra-ai/archestra/commit/e8e1eb720ae49053aa88bea3f172f21f65b4382d))
+* improve oauth callback UX and clean up CI workflows ([#3741](https://github.com/archestra-ai/archestra/issues/3741)) ([aa454c9](https://github.com/archestra-ai/archestra/commit/aa454c99df28769d313936c198c1ac6282f362b9))
+* MCP OAuth discovery rewrite ([#3755](https://github.com/archestra-ai/archestra/issues/3755)) ([e3f73d0](https://github.com/archestra-ai/archestra/commit/e3f73d049787f5f9d63e38fa050ee3a327a387c8))
+* MCP reinstall prompts and config autofill ([#3759](https://github.com/archestra-ai/archestra/issues/3759)) ([881c176](https://github.com/archestra-ai/archestra/commit/881c1760f80bf491a42aee7a0b201584cf2e237c))
+* scope metrics auth hook to /metrics endpoint only ([#3772](https://github.com/archestra-ai/archestra/issues/3772)) ([e4d5918](https://github.com/archestra-ai/archestra/commit/e4d591835089f7054f4b7ee124da6a0a7cd9310b))
+
+
+### Miscellaneous Chores
+
+* fix worker metrics ([#3771](https://github.com/archestra-ai/archestra/issues/3771)) ([a477c3c](https://github.com/archestra-ai/archestra/commit/a477c3c7295d9862a52fb02ff18d65992ab99def))
+* make sure cursor supports oauth refresh token ([#3736](https://github.com/archestra-ai/archestra/issues/3736)) ([584bf83](https://github.com/archestra-ai/archestra/commit/584bf83154323c2f428c638273eb7692d486ff9e))
+* move llm proxy coverage into backend vitest ([#3761](https://github.com/archestra-ai/archestra/issues/3761)) ([49e8afe](https://github.com/archestra-ai/archestra/commit/49e8afefd0f9199c118155c58f0f12a7692effdc))
+* remove artifact quick access from the scheduled run ([#3767](https://github.com/archestra-ai/archestra/issues/3767)) ([b7eb7f1](https://github.com/archestra-ai/archestra/commit/b7eb7f10a9cc8b57484cc4bc59a243483df70782))
+* scheduled task improvements ([#3757](https://github.com/archestra-ai/archestra/issues/3757)) ([01ec4d5](https://github.com/archestra-ai/archestra/commit/01ec4d5a0438c281bbdb19eb978bf2d66c85277e))
+
 ## [1.2.12](https://github.com/archestra-ai/archestra/compare/platform-v1.2.11...platform-v1.2.12) (2026-04-13)
 
 

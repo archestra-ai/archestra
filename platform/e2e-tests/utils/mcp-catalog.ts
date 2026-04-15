@@ -1,7 +1,7 @@
 import { type APIRequestContext, expect, type Page } from "@playwright/test";
 import { archestraApiSdk } from "@shared";
 import { testMcpServerCommand } from "@shared/test-mcp-server";
-import { API_BASE_URL, E2eTestId, UI_BASE_URL } from "../consts";
+import { E2eTestId, getE2eRequestUrl, UI_BASE_URL } from "../consts";
 import { goToPage } from "../fixtures";
 
 export async function addCustomSelfHostedCatalogItem({
@@ -153,7 +153,7 @@ export async function findCatalogItem(
   name: string,
 ): Promise<{ id: string; name: string } | undefined> {
   const response = await request.get(
-    `${API_BASE_URL}/api/internal_mcp_catalog`,
+    getE2eRequestUrl("/api/internal_mcp_catalog"),
     {
       headers: { Origin: UI_BASE_URL },
     },
@@ -182,7 +182,7 @@ export async function findInstalledServer(
   catalogId: string,
   teamId?: string,
 ): Promise<{ id: string; catalogId: string; teamId?: string } | undefined> {
-  const response = await request.get(`${API_BASE_URL}/api/mcp_server`, {
+  const response = await request.get(getE2eRequestUrl("/api/mcp_server"), {
     headers: { Origin: UI_BASE_URL },
   });
   const serversData = await response.json();
@@ -204,7 +204,7 @@ export async function waitForServerInstallation(
 }> {
   for (let index = 0; index < maxAttempts; index += 1) {
     const response = await request.get(
-      `${API_BASE_URL}/api/mcp_server/${serverId}`,
+      getE2eRequestUrl(`/api/mcp_server/${serverId}`),
       {
         headers: { Origin: UI_BASE_URL },
       },

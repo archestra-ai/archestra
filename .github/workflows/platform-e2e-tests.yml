@@ -332,13 +332,13 @@ jobs:
           helm-values-path: .github/values-ci.yaml
           deploy-e2e-dependencies: "true"
           e2e-dependencies-install-mode: "foreground"
-          e2e-dependencies-extra-helm-set: "vault.k8sAuth.enabled=true,vault.k8sAuth.boundServiceAccountName=archestra-platform,vault.k8sAuth.boundServiceAccountNamespace=default"
+          e2e-dependencies-extra-helm-set: "vault.k8sAuth.enabled=true,vault.k8sAuth.boundServiceAccountName=archestra-platform,vault.k8sAuth.boundServiceAccountNamespace=default,vault.secrets[0].path=secret/data/archestra/config,vault.secrets[0].data.dburl=postgresql://archestra:vault_e2e_custom_pw@archestra-platform-postgresql:5432/archestra_dev,vault.secrets[0].data.dummy_var=hello-from-vault"
           e2e-dependencies-wait-for-vault: "true"
           build-platform-image: "false"
           platform-image-tag: ${{ steps.load-platform-image.outputs.image-tag }}
           platform-context: ./platform
           mcp-server-base-image-tag: ${{ steps.load-mcp-server-base-image.outputs.image-tag }}
-          extra-helm-set: "archestra.env.ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT,archestra.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION=2"
+          extra-helm-set: "archestra.env.ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT,archestra.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION=2,archestra.initContainers.vaultSecrets.secrets[0].path=secret/data/archestra/config,archestra.initContainers.vaultSecrets.secrets[1].path=secret/data/archestra/config"
 
       - name: Run readonly-vault E2E tests
         id: e2e

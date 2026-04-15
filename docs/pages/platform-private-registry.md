@@ -15,7 +15,7 @@ Check ../docs_writer_prompt.md before changing this file.
 
 <br />
 
-![MCP Registry](/docs/automated_screenshots/platform_mcp_registry.png)
+![MCP Registry](/docs/automated_screenshots/platform_mcp_registry.webp)
 
 The Private MCP Registry is Archestra's centralized repository for managing MCP servers within your organization. It provides **governance and control over AI tool access**, allowing administrators to curate, configure, and control which MCP servers are available to teams, ensuring security, compliance, and standardization across your AI infrastructure.
 

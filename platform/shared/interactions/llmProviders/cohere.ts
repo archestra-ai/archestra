@@ -102,10 +102,7 @@ class CohereChatInteraction implements InteractionUtils {
 
       if (Array.isArray(message.content)) {
         return message.content
-          .filter(
-            (block): block is { type: string; text: string } =>
-              block.type === "text" && "text" in block,
-          )
+          .filter((block) => block.type === "text")
           .map((block) => block.text)
           .join("");
       }
@@ -118,10 +115,7 @@ class CohereChatInteraction implements InteractionUtils {
     // Check response content first
     if (this.response?.message?.content) {
       return this.response.message.content
-        .filter(
-          (block): block is { type: string; text: string } =>
-            block.type === "text" && "text" in block,
-        )
+        .filter((block) => block.type === "text")
         .map((block) => block.text)
         .join("");
     }
@@ -140,10 +134,7 @@ class CohereChatInteraction implements InteractionUtils {
 
         if (Array.isArray(message.content)) {
           return message.content
-            .filter(
-              (block): block is { type: string; text: string } =>
-                block.type === "text" && "text" in block,
-            )
+            .filter((block) => block.type === "text")
             .map((block) => block.text)
             .join("");
         }
@@ -167,10 +158,7 @@ class CohereChatInteraction implements InteractionUtils {
           content = message.content;
         } else if (Array.isArray(message.content)) {
           content = message.content
-            .filter(
-              (block): block is { type: string; text: string } =>
-                block.type === "text" && "text" in block,
-            )
+            .filter((block) => block.type === "text")
             .map((block) => block.text)
             .join("");
         }

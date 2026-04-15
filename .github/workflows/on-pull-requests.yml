@@ -139,6 +139,21 @@ jobs:
       - name: Enforce image pinning and download verification policy
         run: python3 .github/scripts/check-supply-chain-policy.py
 
+  docs-image-policy:
+    name: Docs Image Policy
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Enforce docs asset format and size policy
+        run: python3 .github/scripts/check-docs-image-policy.py
+
   dependency-review:
     name: Dependency Review
     if: ${{ github.event_name == 'pull_request' }}

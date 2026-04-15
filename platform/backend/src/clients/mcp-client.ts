@@ -194,6 +194,11 @@ type CachedResource = {
   ttl: number;
 };
 
+type CachedServerState = {
+  secretId: string | null;
+  updatedAtMs: number;
+};
+
 class McpClient {
   private static readonly TOOL_NAME_CACHE_MAX_ENTRIES = 1_000;
   private static readonly SECRETS_CACHE_MAX_ENTRIES = 1_000;
@@ -213,10 +218,12 @@ class McpClient {
           "Error closing evicted active MCP connection",
         );
       });
+      this.activeConnectionServerState.delete(key);
       this.toolNameCache.delete(key);
       this.pendingHttpSessionMetadata.delete(key);
     },
   });
+  private activeConnectionServerState = new Map<string, CachedServerState>();
   private connectionLimiter = new ConnectionLimiter();
   // Cache of actual tool names per connection key: lowercased name -> original cased name
   private toolNameCache = new LRUCacheManager<Map<string, string>>({
@@ -285,6 +292,7 @@ class McpClient {
         );
       }
       this.activeConnections.delete(connectionKey);
+      this.activeConnectionServerState.delete(connectionKey);
       this.toolNameCache.delete(connectionKey);
       this.pendingHttpSessionMetadata.delete(connectionKey);
       logger.info({ connectionKey }, "Closed cached MCP session");
@@ -391,7 +399,7 @@ class McpClient {
     if ("error" in secretsResult) {
       return secretsResult.error;
     }
-    const { secrets, secretId } = secretsResult;
+    const { secrets, secretId, serverState } = secretsResult;
 
     // Build connection cache key using the resolved target server ID.
     // When conversationId is provided, each (agent, conversation) gets its own connection
@@ -454,7 +462,12 @@ class McpClient {
         const transport = await getTransport();
 
         // Get or create client
-        const client = await this.getOrCreateClient(connectionKey, transport);
+        const client = await this.getOrCreateClient(
+          connectionKey,
+          transport,
+          targetMcpServerId,
+          serverState,
+        );
 
         // Determine the actual tool name by stripping the server/catalog prefix.
         // We prioritize the `catalogName` prefix, which is standard for local MCP servers.
@@ -611,6 +624,7 @@ class McpClient {
               }
             }
             this.activeConnections.delete(connectionKey);
+            this.activeConnectionServerState.delete(connectionKey);
             this.toolNameCache.delete(connectionKey);
             this.pendingHttpSessionMetadata.delete(connectionKey);
             return await executeToolCall(getTransport, currentSecrets, true);
@@ -777,19 +791,54 @@ class McpClient {
   private async getOrCreateClient(
     connectionKey: string,
     transport: Transport,
+    targetMcpServerId: string,
+    currentServerState: CachedServerState,
   ): Promise<Client> {
     // Check if we already have an active connection
     const existingClient = this.activeConnections.get(connectionKey);
     if (existingClient) {
+      const cachedServerState =
+        this.activeConnectionServerState.get(connectionKey);
+      if (
+        !cachedServerState ||
+        !this.hasMatchingServerState(cachedServerState, currentServerState)
+      ) {
+        logger.info(
+          {
+            connectionKey,
+            targetMcpServerId,
+            cachedSecretId: cachedServerState?.secretId ?? null,
+            currentSecretId: currentServerState.secretId,
+          },
+          "Discarding cached MCP client after server credentials changed",
+        );
+        try {
+          await existingClient.close();
+        } catch (error) {
+          logger.warn(
+            { connectionKey, targetMcpServerId, error },
+            "Error closing stale cached MCP client after credential change",
+          );
+        }
+        this.activeConnections.delete(connectionKey);
+        this.activeConnectionServerState.delete(connectionKey);
+        this.toolNameCache.delete(connectionKey);
+        this.pendingHttpSessionMetadata.delete(connectionKey);
+      }
+    }
+
+    const reusableClient = this.activeConnections.get(connectionKey);
+    if (reusableClient) {
       // Health check: ping the client to verify connection is still alive
       try {
-        await existingClient.ping();
+        await reusableClient.ping();
         logger.debug(
           { connectionKey },
           "Client ping successful, reusing cached client",
         );
-        this.activeConnections.set(connectionKey, existingClient);
-        return existingClient;
+        this.activeConnections.set(connectionKey, reusableClient);
+        this.activeConnectionServerState.set(connectionKey, currentServerState);
+        return reusableClient;
       } catch (error) {
         // Connection is dead, invalidate cache and create fresh client
         logger.warn(
@@ -800,6 +849,7 @@ class McpClient {
           "Client ping failed, creating fresh client",
         );
         this.activeConnections.delete(connectionKey);
+        this.activeConnectionServerState.delete(connectionKey);
         this.toolNameCache.delete(connectionKey);
         this.pendingHttpSessionMetadata.delete(connectionKey);
         // If the transport carries a stored session ID the session is likely
@@ -879,6 +929,7 @@ class McpClient {
     // This prevents a race where a second request creates a duplicate connection
     // while the upsert is in flight.
     this.activeConnections.set(connectionKey, client);
+    this.activeConnectionServerState.set(connectionKey, currentServerState);
 
     // Persist the MCP session ID so other backend pods can reuse it.
     // With --isolated, each Mcp-Session-Id maps to a separate browser context;
@@ -999,34 +1050,11 @@ class McpClient {
     toolCall: CommonToolCall;
     agentId: string;
   }): Promise<
-    | { secrets: Record<string, unknown>; secretId?: string }
-    | { error: CommonToolResult }
-  > {
-    const cached = this.secretsCache.get(targetMcpServerId);
-    if (cached) {
-      return cached;
-    }
-
-    const result = await this.fetchSecretsForMcpServer(
-      targetMcpServerId,
-      toolCall,
-      agentId,
-    );
-
-    // Only cache successful results (not errors) so transient failures can be retried
-    if (!("error" in result)) {
-      this.secretsCache.set(targetMcpServerId, result);
-    }
-
-    return result;
-  }
-
-  private async fetchSecretsForMcpServer(
-    targetMcpServerId: string,
-    toolCall: CommonToolCall,
-    agentId: string,
-  ): Promise<
-    | { secrets: Record<string, unknown>; secretId?: string }
+    | {
+        secrets: Record<string, unknown>;
+        secretId?: string;
+        serverState: CachedServerState;
+      }
     | { error: CommonToolResult }
   > {
     const mcpServer = await McpServerModel.findById(targetMcpServerId);
@@ -1040,20 +1068,75 @@ class McpClient {
         ),
       };
     }
+
+    const currentServerState = this.toCachedServerState(mcpServer);
+    const cached = this.secretsCache.get(targetMcpServerId);
+    if (cached?.secretId === currentServerState.secretId) {
+      return { ...cached, serverState: currentServerState };
+    }
+
+    if (cached) {
+      this.secretsCache.delete(targetMcpServerId);
+    }
+
+    const result = await this.fetchSecretsForLoadedMcpServer(
+      mcpServer,
+      toolCall,
+      agentId,
+    );
+
+    // Only cache successful results (not errors) so transient failures can be retried
+    if (!("error" in result)) {
+      this.secretsCache.set(targetMcpServerId, {
+        secrets: result.secrets,
+        secretId: result.secretId,
+      });
+    }
+
+    return result;
+  }
+
+  private async fetchSecretsForLoadedMcpServer(
+    mcpServer: Awaited<ReturnType<typeof McpServerModel.findById>>,
+    toolCall: CommonToolCall,
+    agentId: string,
+  ): Promise<
+    | {
+        secrets: Record<string, unknown>;
+        secretId?: string;
+        serverState: CachedServerState;
+      }
+    | { error: CommonToolResult }
+  > {
+    if (!mcpServer) {
+      return {
+        error: await this.createErrorResult(
+          toolCall,
+          agentId,
+          "MCP server not found when getting secrets for MCP server",
+          "unknown",
+        ),
+      };
+    }
+    const serverState = this.toCachedServerState(mcpServer);
     if (mcpServer.secretId) {
       const secret = await secretManager().getSecret(mcpServer.secretId);
       if (secret?.secret) {
         logger.info(
           {
-            targetMcpServerId,
+            targetMcpServerId: mcpServer.id,
             secretId: mcpServer.secretId,
           },
-          `Found secrets for MCP server ${targetMcpServerId}`,
+          `Found secrets for MCP server ${mcpServer.id}`,
         );
-        return { secrets: secret.secret, secretId: mcpServer.secretId };
+        return {
+          secrets: secret.secret,
+          secretId: mcpServer.secretId,
+          serverState,
+        };
       }
     }
-    return { secrets: {} };
+    return { secrets: {}, serverState };
   }
 
   // Determines the target MCP server ID for a local catalog item
@@ -1790,6 +1873,7 @@ class McpClient {
           // Ignore close errors during refresh teardown.
         }
         this.activeConnections.delete(connectionKey);
+        this.activeConnectionServerState.delete(connectionKey);
         this.pendingHttpSessionMetadata.delete(connectionKey);
       }
 
@@ -2161,6 +2245,7 @@ class McpClient {
 
     await Promise.all([...disconnectPromises, ...activeDisconnectPromises]);
     this.activeConnections.clear();
+    this.activeConnectionServerState.clear();
     this.pendingHttpSessionMetadata.clear();
   }
 
@@ -2189,6 +2274,7 @@ class McpClient {
         }
 
         this.activeConnections.delete(connectionKey);
+        this.activeConnectionServerState.delete(connectionKey);
         this.toolNameCache.delete(connectionKey);
         this.pendingHttpSessionMetadata.delete(connectionKey);
         await McpHttpSessionModel.deleteStaleSession(connectionKey).catch(
@@ -2365,7 +2451,12 @@ class McpClient {
       tokenAuth,
     );
     const connectionKey = `${catalogItem.id}:${server.id}:${agentId}`;
-    const client = await this.getOrCreateClient(connectionKey, transport);
+    const client = await this.getOrCreateClient(
+      connectionKey,
+      transport,
+      server.id,
+      secretResult.serverState,
+    );
 
     const result = await client.readResource({ uri });
     return result;
@@ -2448,7 +2539,12 @@ class McpClient {
           secretResult.secrets,
         );
         const connectionKey = `${catalogItem.id}:${server.id}`;
-        const client = await this.getOrCreateClient(connectionKey, transport);
+        const client = await this.getOrCreateClient(
+          connectionKey,
+          transport,
+          server.id,
+          secretResult.serverState,
+        );
         clients.push(client);
       } catch (error) {
         logger.warn(
@@ -2610,6 +2706,24 @@ class McpClient {
     }
 
     return McpClient.ENTERPRISE_CREDENTIAL_CACHE_FALLBACK_TTL_MS;
+  }
+
+  private hasMatchingServerState(
+    left: CachedServerState,
+    right: CachedServerState,
+  ): boolean {
+    return (
+      left.secretId === right.secretId && left.updatedAtMs === right.updatedAtMs
+    );
+  }
+
+  private toCachedServerState(
+    mcpServer: NonNullable<Awaited<ReturnType<typeof McpServerModel.findById>>>,
+  ): CachedServerState {
+    return {
+      secretId: mcpServer.secretId ?? null,
+      updatedAtMs: mcpServer.updatedAt.getTime(),
+    };
   }
 }
 

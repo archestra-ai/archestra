@@ -48,6 +48,7 @@ export function InlineChatError({
     organizationSettings: ["read"],
   });
   const chatError = parseErrorResponse(error) ?? mapClientError(error);
+  // Conversation IDs double as chat session IDs for the end-user chat flow.
   const sessionId = chatError.sessionId ?? conversationId;
 
   const refEntries: { label: string; value: string }[] = [];
@@ -97,29 +98,27 @@ export function InlineChatError({
                 {supportMessage ? supportMessage : chatError.message}
               </p>
 
-              {refEntries.length > 0 && (
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  {refEntries.map((entry) => (
-                    <span
-                      key={entry.label}
-                      className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono"
-                    >
-                      <span className="opacity-60">{entry.label}</span>
-                      <span>{entry.value}</span>
-                    </span>
-                  ))}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-5 w-5 p-0 text-muted-foreground hover:text-foreground"
-                    onClick={copyDebugInfo}
-                    aria-label="Copy error details"
-                    title="Copy error details"
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {refEntries.map((entry) => (
+                  <span
+                    key={entry.label}
+                    className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono"
                   >
-                    <Copy className="h-3 w-3" />
-                  </Button>
-                </div>
-              )}
+                    <span className="opacity-60">{entry.label}</span>
+                    <span>{entry.value}</span>
+                  </span>
+                ))}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-5 w-5 p-0 text-muted-foreground hover:text-foreground"
+                  onClick={copyDebugInfo}
+                  aria-label="Copy error details"
+                  title="Copy error details"
+                >
+                  <Copy className="h-3 w-3" />
+                </Button>
+              </div>
             </div>
           </div>
         </MessageContent>

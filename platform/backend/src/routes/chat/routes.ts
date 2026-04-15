@@ -101,6 +101,19 @@ function getCorrelationLogFields(traceContext: {
   };
 }
 
+function getMinimalFrontendError(errorForFrontend: ChatErrorResponse) {
+  return {
+    code: errorForFrontend.code,
+    message: errorForFrontend.message,
+    isRetryable: errorForFrontend.isRetryable,
+    ...(errorForFrontend.sessionId
+      ? { sessionId: errorForFrontend.sessionId }
+      : {}),
+    ...(errorForFrontend.traceId ? { traceId: errorForFrontend.traceId } : {}),
+    ...(errorForFrontend.spanId ? { spanId: errorForFrontend.spanId } : {}),
+  };
+}
+
 const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     "/api/chat",
@@ -191,13 +204,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = agentId;
 
       // Fetch enabled tool IDs and custom selection status in parallel
-      const [enabledToolIds, hasCustomSelection, organization] =
+      const [enabledToolIds, hasCustomSelection, slimChatErrorUi] =
         await Promise.all([
           ConversationEnabledToolModel.findByConversation(conversationId),
           ConversationEnabledToolModel.hasCustomSelection(conversationId),
-          OrganizationModel.getById(organizationId),
+          OrganizationModel.getSlimChatErrorUi(organizationId),
         ]);
-      const useSlimChatErrorUi = organization?.slimChatErrorUi ?? false;
 
       // Fetch MCP tools with enabled tool filtering
       // Pass undefined if no custom selection (use all tools)
@@ -434,7 +446,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 const correlationLogFields =
                   getCorrelationLogFields(traceContext);
                 const fullError = { ...mapped, ...traceContext };
-                const errorForFrontend = useSlimChatErrorUi
+                const errorForFrontend = slimChatErrorUi
                   ? sanitizeChatErrorForFrontend(fullError)
                   : fullError;
 
@@ -458,12 +470,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     },
                     "Failed to stringify mapped pre-stream error, returning minimal error",
                   );
-                  return JSON.stringify({
-                    code: mapped.code,
-                    message: mapped.message,
-                    isRetryable: mapped.isRetryable,
-                    ...traceContext,
-                  });
+                  return JSON.stringify(
+                    getMinimalFrontendError(errorForFrontend),
+                  );
                 }
               },
               execute: async ({ writer }) => {
@@ -693,7 +702,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           ? error.chatErrorResponse
                           : mapProviderError(error, provider);
                       const fullError = { ...mappedError, ...traceContext };
-                      const errorForFrontend = useSlimChatErrorUi
+                      const errorForFrontend = slimChatErrorUi
                         ? sanitizeChatErrorForFrontend(fullError)
                         : fullError;
 
@@ -720,13 +729,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           },
                           "Failed to stringify mapped error, returning minimal error",
                         );
-                        // Return a minimal error response without the raw error
-                        return JSON.stringify({
-                          code: mappedError.code,
-                          message: mappedError.message,
-                          isRetryable: mappedError.isRetryable,
-                          ...traceContext,
-                        });
+                        return JSON.stringify(
+                          getMinimalFrontendError(errorForFrontend),
+                        );
                       }
                     },
                     onFinish: async ({ messages: finalMessages }) => {

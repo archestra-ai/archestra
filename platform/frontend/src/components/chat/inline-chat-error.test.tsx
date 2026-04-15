@@ -90,6 +90,14 @@ describe("InlineChatError", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("still shows a copy button in slim mode when no IDs are available", () => {
+    render(<InlineChatError error={new Error("Failed to fetch")} slimChatErrorUi />);
+
+    expect(
+      screen.getByRole("button", { name: "Copy error details" }),
+    ).toBeInTheDocument();
+  });
+
   it("keeps the detailed error UI by default", () => {
     render(
       <InlineChatError

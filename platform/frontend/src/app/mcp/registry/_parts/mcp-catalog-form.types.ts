@@ -17,7 +17,9 @@ const additionalHeaderSchema = z.object({
   fieldName: z.string().optional(),
   headerName: headerNameSchema,
   promptOnInstallation: z.boolean(),
+  required: z.boolean(),
   value: z.string().optional(),
+  description: z.string().optional().or(z.literal("")),
 });
 
 // Simplified OAuth config schema

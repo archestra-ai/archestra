@@ -121,7 +121,9 @@ describe("formSchema", () => {
           {
             headerName: "X-Api-Key",
             promptOnInstallation: true,
+            required: false,
             value: "",
+            description: "",
           },
         ],
         localConfig: undefined,
@@ -141,7 +143,9 @@ describe("formSchema", () => {
           {
             headerName: "x api key",
             promptOnInstallation: true,
+            required: false,
             value: "",
+            description: "",
           },
         ],
         localConfig: undefined,

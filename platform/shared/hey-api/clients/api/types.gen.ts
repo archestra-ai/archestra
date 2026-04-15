@@ -32439,6 +32439,9 @@ export type ReinstallMcpServerData = {
         environmentValues?: {
             [key: string]: string;
         };
+        userConfigValues?: {
+            [key: string]: string;
+        };
         isByosVault?: boolean;
         serviceAccount?: string;
     };

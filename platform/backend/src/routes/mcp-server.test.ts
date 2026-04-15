@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
 import McpServerUserModel from "@/models/mcp-server-user";
+import { secretManager } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -13,6 +14,10 @@ const {
   hasPermissionMock,
   invalidateConnectionsForServerMock,
   inspectServerMock,
+  k8sGetOrLoadDeploymentMock,
+  k8sRestartServerMock,
+  k8sStartServerMock,
+  k8sStopServerMock,
   MockMcpServerConnectionTimeoutError,
   MockMcpServerNotReadyError,
 } = vi.hoisted(() => ({
@@ -21,6 +26,10 @@ const {
   hasPermissionMock: vi.fn(),
   invalidateConnectionsForServerMock: vi.fn(),
   inspectServerMock: vi.fn(),
+  k8sGetOrLoadDeploymentMock: vi.fn(),
+  k8sRestartServerMock: vi.fn(),
+  k8sStartServerMock: vi.fn(),
+  k8sStopServerMock: vi.fn(),
   MockMcpServerNotReadyError: class MockMcpServerNotReadyError extends Error {},
   MockMcpServerConnectionTimeoutError: class MockMcpServerConnectionTimeoutError extends Error {},
 }));
@@ -43,6 +52,16 @@ vi.mock("@/auth/utils", () => ({
   hasPermission: hasPermissionMock,
 }));
 
+vi.mock("@/k8s/mcp-server-runtime", () => ({
+  McpServerRuntimeManager: {
+    isEnabled: true,
+    startServer: k8sStartServerMock,
+    restartServer: k8sRestartServerMock,
+    stopServer: k8sStopServerMock,
+    getOrLoadDeployment: k8sGetOrLoadDeploymentMock,
+  },
+}));
+
 describe("mcp server inspect route", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
@@ -51,6 +70,12 @@ describe("mcp server inspect route", () => {
   beforeEach(async ({ makeUser }) => {
     user = await makeUser();
     hasPermissionMock.mockResolvedValue({ success: true });
+    k8sStartServerMock.mockResolvedValue(undefined);
+    k8sRestartServerMock.mockResolvedValue(undefined);
+    k8sStopServerMock.mockResolvedValue(undefined);
+    k8sGetOrLoadDeploymentMock.mockResolvedValue({
+      waitForDeploymentReady: vi.fn().mockResolvedValue(undefined),
+    });
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -67,6 +92,10 @@ describe("mcp server inspect route", () => {
     hasPermissionMock.mockReset();
     invalidateConnectionsForServerMock.mockReset();
     inspectServerMock.mockReset();
+    k8sGetOrLoadDeploymentMock.mockReset();
+    k8sRestartServerMock.mockReset();
+    k8sStartServerMock.mockReset();
+    k8sStopServerMock.mockReset();
     global.fetch = originalFetch;
     await app.close();
   });
@@ -296,7 +325,7 @@ describe("mcp server inspect route", () => {
           description: "Static API key",
           promptOnInstallation: false,
           required: false,
-          sensitive: true,
+          sensitive: false,
           headerName: "x-api-key",
           default: "catalog-api-key",
         },
@@ -355,7 +384,7 @@ describe("mcp server inspect route", () => {
           description: "Static API key",
           promptOnInstallation: false,
           required: false,
-          sensitive: true,
+          sensitive: false,
           headerName: "x-api-key",
           default: "catalog-api-key",
         },
@@ -365,7 +394,7 @@ describe("mcp server inspect route", () => {
           description: "Prompted tenant ID",
           promptOnInstallation: true,
           required: true,
-          sensitive: true,
+          sensitive: false,
           headerName: "x-tenant-id",
         },
       },
@@ -407,6 +436,113 @@ describe("mcp server inspect route", () => {
         header_x_api_key: "catalog-api-key",
         tenant_id: "tenant-42",
       },
+    });
+  });
+
+  test("installs a local MCP server with prompted header user config", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Local Header Server",
+      serverType: "local",
+      userConfig: {
+        header_x_api_key: {
+          type: "string",
+          title: "x-api-key",
+          description: "Prompted header",
+          promptOnInstallation: true,
+          required: true,
+          sensitive: false,
+          headerName: "x-api-key",
+        },
+      },
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [],
+        transportType: "streamable-http",
+        httpPort: 8080,
+        httpPath: "/mcp",
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: "Local Header Server",
+        catalogId: catalog.id,
+        userConfigValues: {
+          header_x_api_key: "header-value",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(k8sStartServerMock).toHaveBeenCalledTimes(1);
+    expect(k8sStartServerMock.mock.calls[0]?.[1]).toEqual({
+      header_x_api_key: "header-value",
+    });
+  });
+
+  test("reinstalls a local MCP server with prompted header user config", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Local Header Reinstall",
+      serverType: "local",
+      userConfig: {
+        header_x_api_key: {
+          type: "string",
+          title: "x-api-key",
+          description: "Prompted header",
+          promptOnInstallation: true,
+          required: true,
+          sensitive: false,
+          headerName: "x-api-key",
+        },
+      },
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [],
+        transportType: "streamable-http",
+        httpPort: 8080,
+        httpPath: "/mcp",
+      },
+    });
+    const mcpServer = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${mcpServer.id}/reinstall`,
+      payload: {
+        userConfigValues: {
+          header_x_api_key: "header-value",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const updatedServer = await db.query.mcpServersTable.findFirst({
+      where: eq(schema.mcpServersTable.id, mcpServer.id),
+    });
+
+    expect(updatedServer?.secretId).toBeTruthy();
+    if (!updatedServer?.secretId) {
+      throw new Error("Expected reinstall to persist a secretId");
+    }
+
+    const storedSecret = await secretManager().getSecret(
+      updatedServer.secretId,
+    );
+    expect(storedSecret?.secret).toMatchObject({
+      header_x_api_key: "header-value",
     });
   });
 
@@ -1000,7 +1136,7 @@ describe("mcp server inspect route", () => {
           description: "Static API key",
           promptOnInstallation: false,
           required: false,
-          sensitive: true,
+          sensitive: false,
           headerName: "x-api-key",
           default: "catalog-api-key",
         },
@@ -1010,7 +1146,7 @@ describe("mcp server inspect route", () => {
           description: "Prompted tenant ID",
           promptOnInstallation: true,
           required: true,
-          sensitive: true,
+          sensitive: false,
           headerName: "x-tenant-id",
         },
       },

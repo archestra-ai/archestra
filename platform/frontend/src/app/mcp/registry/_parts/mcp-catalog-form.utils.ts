@@ -347,7 +347,9 @@ export function transformCatalogItemToFormValues(
       fieldName,
       headerName: config.headerName,
       promptOnInstallation: config.promptOnInstallation ?? true,
+      required: config.required ?? false,
       value: typeof config.default === "string" ? config.default : undefined,
+      description: config.description ?? "",
     }));
 
   return {
@@ -603,7 +605,9 @@ export function transformExternalCatalogToFormValues(
         fieldName,
         headerName: config.headerName,
         promptOnInstallation: config.promptOnInstallation ?? true,
+        required: config.required ?? false,
         value: typeof config.default === "string" ? config.default : undefined,
+        description: config.description ?? "",
       })),
     oauthConfig: oauthConfig ?? {
       client_id: "",
@@ -670,12 +674,13 @@ function buildStaticHeaderUserConfig(
     userConfig[fieldName] = {
       type: "string",
       title: header.headerName,
-      description: `Additional header sent as ${header.headerName}`,
       promptOnInstallation: header.promptOnInstallation,
-      required: header.promptOnInstallation,
+      required: header.promptOnInstallation ? header.required : false,
       default:
         !header.promptOnInstallation && header.value ? header.value : undefined,
-      sensitive: true,
+      description:
+        header.description || `Additional header sent as ${header.headerName}`,
+      sensitive: false,
       headerName: header.headerName,
     };
   }
@@ -720,7 +725,9 @@ function getHeaderMappedUserConfigEntries(
     fieldName: string;
     headerName: string;
     promptOnInstallation?: boolean;
+    required?: boolean;
     default?: string | number | boolean | Array<string>;
+    description?: string;
   }
 > {
   return Object.fromEntries(
@@ -735,7 +742,9 @@ function getHeaderMappedUserConfigEntries(
         const userConfigField = config as {
           headerName: string;
           promptOnInstallation?: boolean;
+          required?: boolean;
           default?: string | number | boolean | Array<string>;
+          description?: string;
         };
         return [
           fieldName,
@@ -743,7 +752,9 @@ function getHeaderMappedUserConfigEntries(
             fieldName,
             headerName: userConfigField.headerName,
             promptOnInstallation: userConfigField.promptOnInstallation,
+            required: userConfigField.required,
             default: userConfigField.default,
+            description: userConfigField.description,
           },
         ];
       }),

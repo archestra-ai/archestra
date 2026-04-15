@@ -120968,6 +120968,12 @@
                       "type": "string"
                     }
                   },
+                  "userConfigValues": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
                   "isByosVault": {
                     "type": "boolean"
                   },

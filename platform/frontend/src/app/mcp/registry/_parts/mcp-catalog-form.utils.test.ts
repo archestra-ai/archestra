@@ -19,7 +19,9 @@ describe("transformFormToApiData", () => {
         {
           headerName: "x-tenant-id",
           promptOnInstallation: false,
+          required: false,
           value: "tenant-42",
+          description: "Tenant header",
         },
       ],
       oauthConfig: undefined,
@@ -43,7 +45,10 @@ describe("transformFormToApiData", () => {
       header_x_tenant_id: expect.objectContaining({
         headerName: "x-tenant-id",
         promptOnInstallation: false,
+        required: false,
         default: "tenant-42",
+        description: "Tenant header",
+        sensitive: false,
       }),
     });
   });
@@ -355,9 +360,9 @@ describe("transformFormToApiData", () => {
           description: "Tenant ID",
           promptOnInstallation: false,
           required: false,
-          sensitive: true,
+          sensitive: false,
           headerName: "x-tenant-id",
-          hasStaticValue: true,
+          default: "tenant-42",
         },
       },
       scope: "personal",
@@ -372,7 +377,9 @@ describe("transformFormToApiData", () => {
         fieldName: "header_x_tenant_id",
         headerName: "x-tenant-id",
         promptOnInstallation: false,
-        value: undefined,
+        required: false,
+        value: "tenant-42",
+        description: "Tenant ID",
       },
     ]);
   });

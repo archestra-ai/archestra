@@ -65,7 +65,7 @@ describe("McpCatalogForm enterprise gating", () => {
     render(<McpCatalogForm mode="create" onSubmit={vi.fn()} />);
 
     expect(
-      screen.queryByText("Enterprise-managed credentials"),
+      screen.queryByText("Identity Assertion JWT Authorization Grant (ID-JAG)"),
     ).not.toBeInTheDocument();
   });
 
@@ -75,7 +75,7 @@ describe("McpCatalogForm enterprise gating", () => {
     render(<McpCatalogForm mode="create" onSubmit={vi.fn()} />);
 
     expect(
-      screen.getByText("Enterprise-managed credentials"),
+      screen.getByText("Identity Assertion JWT Authorization Grant (ID-JAG)"),
     ).toBeInTheDocument();
   });
 

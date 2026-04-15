@@ -1051,6 +1051,7 @@ function extractStaticUserConfigSecretValues(
         {
           headerName?: string;
           promptOnInstallation?: boolean;
+          sensitive?: boolean;
           default?: string | number | boolean | Array<string>;
         }
       >
@@ -1061,7 +1062,11 @@ function extractStaticUserConfigSecretValues(
   const secretValues: Record<string, string> = {};
 
   for (const [fieldName, fieldConfig] of Object.entries(userConfig ?? {})) {
-    if (!fieldConfig.headerName || fieldConfig.promptOnInstallation !== false) {
+    if (
+      !fieldConfig.headerName ||
+      fieldConfig.promptOnInstallation !== false ||
+      fieldConfig.sensitive !== true
+    ) {
       continue;
     }
 

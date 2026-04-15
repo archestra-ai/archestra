@@ -27,6 +27,7 @@ import {
 } from "@/components/enterprise-managed-credential-fields";
 import { EnvironmentVariablesFormField } from "@/components/environment-variables-form-field";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { InstallConfigFieldsTable } from "@/components/install-config-fields-table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -121,10 +122,12 @@ export function McpCatalogForm({
   const defaultImageDocsUrl = getVisibleDocsUrl(
     `${GITHUB_REPO_URL}/tree/main/platform/mcp_server_docker_image`,
   );
-  // Fetch local config secret if it exists
-  const { data: localConfigSecret } = useGetSecret(
-    initialValues?.localConfigSecretId ?? null,
-  );
+  const localConfigSecretId =
+    initialValues?.serverType === "local"
+      ? initialValues.localConfigSecretId
+      : null;
+  // Fetch local config secrets only for local MCP catalog items.
+  const { data: localConfigSecret } = useGetSecret(localConfigSecretId);
 
   // Get MCP server base image from backend features endpoint
   const mcpServerBaseImage = useFeature("mcpServerBaseImage") ?? "";
@@ -191,6 +194,7 @@ export function McpCatalogForm({
 
   const authMethod = form.watch("authMethod");
   const currentServerType = form.watch("serverType");
+  const currentTransportType = form.watch("localConfig.transportType");
 
   useEffect(() => {
     if (!isEnterpriseCoreEnabled && authMethod === "enterprise_managed") {
@@ -931,9 +935,11 @@ export function McpCatalogForm({
           {(currentServerType === "remote" ||
             currentServerType === "local") && (
             <div className="border rounded-lg p-5 space-y-4">
-              <h3 className="font-semibold text-sm">
-                Multitenant Authorization
-              </h3>
+              <div className="space-y-1">
+                <h3 className="font-semibold text-sm">
+                  Multitenant Authorization
+                </h3>
+              </div>
               <FormField
                 control={form.control}
                 name="authMethod"
@@ -999,7 +1005,8 @@ export function McpCatalogForm({
                               htmlFor="auth-enterprise-managed"
                               className="font-normal cursor-pointer"
                             >
-                              Enterprise-managed credentials
+                              Identity Assertion JWT Authorization Grant
+                              (ID-JAG)
                             </FormLabel>
                           </div>
                         )}
@@ -1025,6 +1032,12 @@ export function McpCatalogForm({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Auth Header Name</FormLabel>
+                        <FormDescription className="text-xs">
+                          Defaults to <code>Authorization</code>. Set a custom
+                          header such as <code>x-api-key</code> when the
+                          upstream server expects the token outside the standard
+                          authorization header.
+                        </FormDescription>
                         <FormControl>
                           <Input
                             placeholder="Authorization"
@@ -1032,12 +1045,6 @@ export function McpCatalogForm({
                             {...field}
                           />
                         </FormControl>
-                        <FormDescription>
-                          Defaults to <code>Authorization</code>. Set a custom
-                          header such as <code>x-api-key</code> when the
-                          upstream server expects the token outside the standard
-                          authorization header.
-                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -1361,15 +1368,16 @@ export function McpCatalogForm({
           )}
 
           {(currentServerType === "remote" ||
-            currentServerType === "local") && (
+            (currentServerType === "local" &&
+              currentTransportType === "streamable-http")) && (
             <div className="border rounded-lg p-5 space-y-4">
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-1">
                   <h3 className="font-semibold text-sm">Additional Headers</h3>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     Prompt users for extra headers to send with every MCP
-                    request. Use this for API keys, tenant IDs, or other
-                    upstream requirements beyond the primary auth header.
+                    request. Use this for tenant IDs or other upstream
+                    requirements beyond the primary auth header.
                   </p>
                 </div>
                 <Button
@@ -1381,7 +1389,9 @@ export function McpCatalogForm({
                       fieldName: undefined,
                       headerName: "",
                       promptOnInstallation: true,
+                      required: false,
                       value: "",
+                      description: "",
                     })
                   }
                 >
@@ -1395,111 +1405,18 @@ export function McpCatalogForm({
                   No additional headers configured.
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {additionalHeaderFields.map((field, index) => (
-                    <div
-                      key={field.id}
-                      className="rounded-lg border p-4 space-y-3"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium">
-                            Header {index + 1}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            Configure whether this header should be provided at
-                            install time or stored once in the catalog.
-                          </p>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeAdditionalHeader(index)}
-                          aria-label={`Remove header ${index + 1}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-
-                      <FormField
-                        control={form.control}
-                        name={`additionalHeaders.${index}.headerName`}
-                        render={({ field: headerField }) => (
-                          <FormItem>
-                            <FormLabel>Header Name</FormLabel>
-                            <FormControl>
-                              <Input
-                                placeholder="x-api-key"
-                                autoComplete={MCP_CONFIG_AUTOCOMPLETE}
-                                {...headerField}
-                              />
-                            </FormControl>
-                            <FormDescription>
-                              Header names are case-insensitive and may contain
-                              letters, numbers, and hyphens.
-                            </FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name={`additionalHeaders.${index}.promptOnInstallation`}
-                        render={({ field: promptField }) => (
-                          <FormItem className="flex flex-row items-start space-x-2 space-y-0">
-                            <FormControl>
-                              <Checkbox
-                                checked={promptField.value}
-                                onCheckedChange={(checked) =>
-                                  promptField.onChange(Boolean(checked))
-                                }
-                                className="mt-1"
-                              />
-                            </FormControl>
-                            <div className="space-y-1 leading-none">
-                              <FormLabel className="font-normal cursor-pointer">
-                                Prompt on each installation
-                              </FormLabel>
-                              <FormDescription>
-                                Disable this to store one static value in the
-                                catalog and reuse it for every installation.
-                              </FormDescription>
-                            </div>
-                          </FormItem>
-                        )}
-                      />
-
-                      {!form.watch(
-                        `additionalHeaders.${index}.promptOnInstallation`,
-                      ) && (
-                        <FormField
-                          control={form.control}
-                          name={`additionalHeaders.${index}.value`}
-                          render={({ field: valueField }) => (
-                            <FormItem>
-                              <FormLabel>Static Value</FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="password"
-                                  placeholder="header value"
-                                  autoComplete={MCP_SECRET_AUTOCOMPLETE}
-                                  {...valueField}
-                                />
-                              </FormControl>
-                              <FormDescription>
-                                Stored once and injected into every request for
-                                this header.
-                              </FormDescription>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      )}
-                    </div>
-                  ))}
-                </div>
+                <InstallConfigFieldsTable
+                  control={form.control}
+                  form={form}
+                  fields={additionalHeaderFields}
+                  remove={removeAdditionalHeader}
+                  fieldNamePrefix="additionalHeaders"
+                  keyFieldName="headerName"
+                  keyLabel="Header Name"
+                  keyPlaceholder="x-api-key"
+                  typeFieldName={null}
+                  valuePlaceholder="header value"
+                />
               )}
             </div>
           )}

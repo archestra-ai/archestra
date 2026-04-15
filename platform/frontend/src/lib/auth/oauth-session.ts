@@ -22,6 +22,7 @@ const OAUTH_INSTALLATION_COMPLETE_CATALOG_ID =
   "oauth_installation_complete_catalog_id";
 const OAUTH_SERVER_TYPE = "oauth_server_type";
 const OAUTH_ENVIRONMENT_VALUES = "oauth_environment_values";
+const OAUTH_USER_CONFIG_VALUES = "oauth_user_config_values";
 const OAUTH_PENDING_AFTER_ENV_VARS = "oauth_pending_after_env_vars";
 const OAUTH_RETURN_URL = "oauth_return_url";
 const OAUTH_REAUTH_CHAT_RESUME = "oauth_reauth_chat_resume";
@@ -83,6 +84,11 @@ export function setOAuthEnvironmentValues(values: Record<string, string>) {
   sessionStorage.setItem(OAUTH_ENVIRONMENT_VALUES, JSON.stringify(values));
 }
 
+/** Store promptable user-config values collected before OAuth redirect. */
+export function setOAuthUserConfigValues(values: Record<string, string>) {
+  sessionStorage.setItem(OAUTH_USER_CONFIG_VALUES, JSON.stringify(values));
+}
+
 /** Flag that OAuth is pending after env vars collection. */
 export function setOAuthPendingAfterEnvVars(pending: boolean) {
   if (pending) {
@@ -126,6 +132,16 @@ export function getOAuthServerType(): string | null {
 
 export function getOAuthEnvironmentValues(): Record<string, string> | null {
   const json = sessionStorage.getItem(OAUTH_ENVIRONMENT_VALUES);
+  if (!json) return null;
+  try {
+    return JSON.parse(json) as Record<string, string>;
+  } catch {
+    return null;
+  }
+}
+
+export function getOAuthUserConfigValues(): Record<string, string> | null {
+  const json = sessionStorage.getItem(OAUTH_USER_CONFIG_VALUES);
   if (!json) return null;
   try {
     return JSON.parse(json) as Record<string, string>;
@@ -227,6 +243,7 @@ export function clearInstallContext() {
   sessionStorage.removeItem(OAUTH_IS_FIRST_INSTALLATION);
   sessionStorage.removeItem(OAUTH_SERVER_TYPE);
   sessionStorage.removeItem(OAUTH_ENVIRONMENT_VALUES);
+  sessionStorage.removeItem(OAUTH_USER_CONFIG_VALUES);
 }
 
 /** Remove the assignments-dialog flag. */

@@ -1,6 +1,23 @@
 import { LocalConfigFormSchema } from "@shared";
 import { z } from "zod";
 
+const HEADER_NAME_REGEX = /^[A-Za-z0-9-]+$/;
+
+const headerNameSchema = z
+  .string()
+  .trim()
+  .min(1, "Header name is required")
+  .max(128, "Header name is too long")
+  .regex(
+    HEADER_NAME_REGEX,
+    "Header name must contain only alphanumeric characters and hyphens",
+  );
+
+const additionalHeaderSchema = z.object({
+  fieldName: z.string().optional(),
+  headerName: headerNameSchema,
+});
+
 // Simplified OAuth config schema
 export const oauthConfigSchema = z
   .object({
@@ -137,6 +154,8 @@ export const formSchema = z
       "oauth",
       "enterprise_managed",
     ]),
+    authHeaderName: headerNameSchema.optional().or(z.literal("")),
+    additionalHeaders: z.array(additionalHeaderSchema).optional(),
     oauthConfig: oauthConfigSchema.optional(),
     enterpriseManagedConfig: enterpriseManagedConfigSchema
       .nullable()
@@ -162,6 +181,30 @@ export const formSchema = z
     scope: z.enum(["personal", "team", "org"]).optional(),
     // Team IDs for team-scoped items
     teams: z.array(z.string()).optional(),
+  })
+  .superRefine((data, ctx) => {
+    const normalizedHeaders = new Set<string>();
+    const authHeaderName = data.authHeaderName?.trim();
+
+    if (
+      (data.authMethod === "bearer" || data.authMethod === "raw_token") &&
+      authHeaderName
+    ) {
+      normalizedHeaders.add(authHeaderName.toLowerCase());
+    }
+
+    for (const [index, header] of (data.additionalHeaders ?? []).entries()) {
+      const normalizedHeaderName = header.headerName.toLowerCase();
+      if (normalizedHeaders.has(normalizedHeaderName)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Header names must be unique",
+          path: ["additionalHeaders", index, "headerName"],
+        });
+        continue;
+      }
+      normalizedHeaders.add(normalizedHeaderName);
+    }
   })
   .refine(
     (data) => {

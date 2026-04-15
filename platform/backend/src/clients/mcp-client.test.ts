@@ -3141,6 +3141,147 @@ describe("McpClient", () => {
         );
       });
 
+      test("uses a custom header name for static bearer credentials", async () => {
+        const customHeaderCatalog = await InternalMcpCatalogModel.create({
+          name: "custom-header-server",
+          serverType: "remote",
+          serverUrl: "https://custom-header.example.com/mcp",
+          userConfig: {
+            access_token: {
+              type: "string",
+              title: "Access Token",
+              description: "Bearer token",
+              required: true,
+              sensitive: true,
+              headerName: "x-api-key",
+            },
+          },
+        });
+
+        const customHeaderSecret = await secretManager().createSecret(
+          { access_token: "header-secret-token" },
+          "custom-header-secret",
+        );
+
+        const customHeaderServer = await McpServerModel.create({
+          name: "custom-header-server",
+          secretId: customHeaderSecret.id,
+          catalogId: customHeaderCatalog.id,
+          serverType: "remote",
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "custom-header-server__list_items",
+          description: "List items with custom header auth",
+          parameters: {},
+          catalogId: customHeaderCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: customHeaderServer.id,
+        });
+
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "Custom header response" }],
+          isError: false,
+        });
+
+        await mcpClient.executeToolCall(
+          {
+            id: "call_custom_header_auth",
+            name: "custom-header-server__list_items",
+            arguments: {},
+          },
+          agentId,
+        );
+
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        const transportCalls = vi.mocked(StreamableHTTPClientTransport).mock
+          .calls;
+        const lastCall = transportCalls[transportCalls.length - 1];
+        const headers = lastCall[1]?.requestInit?.headers as Headers;
+        expect(headers.get("x-api-key")).toBe("Bearer header-secret-token");
+        expect(headers.get("authorization")).toBeNull();
+      });
+
+      test("sends additional static headers alongside the auth header", async () => {
+        const multiHeaderCatalog = await InternalMcpCatalogModel.create({
+          name: "multi-header-server",
+          serverType: "remote",
+          serverUrl: "https://multi-header.example.com/mcp",
+          userConfig: {
+            access_token: {
+              type: "string",
+              title: "Access Token",
+              description: "Bearer token",
+              required: true,
+              sensitive: true,
+              headerName: "x-api-key",
+            },
+            header_x_tenant_id: {
+              type: "string",
+              title: "x-tenant-id",
+              description: "Tenant ID",
+              required: true,
+              sensitive: true,
+              headerName: "x-tenant-id",
+            },
+          },
+        });
+
+        const multiHeaderSecret = await secretManager().createSecret(
+          {
+            access_token: "header-secret-token",
+            header_x_tenant_id: "tenant-42",
+          },
+          "multi-header-secret",
+        );
+
+        const multiHeaderServer = await McpServerModel.create({
+          name: "multi-header-server",
+          secretId: multiHeaderSecret.id,
+          catalogId: multiHeaderCatalog.id,
+          serverType: "remote",
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "multi-header-server__get_info",
+          description: "Get info with multiple headers",
+          parameters: {},
+          catalogId: multiHeaderCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: multiHeaderServer.id,
+        });
+
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "Multi header response" }],
+          isError: false,
+        });
+
+        await mcpClient.executeToolCall(
+          {
+            id: "call_multi_header_auth",
+            name: "multi-header-server__get_info",
+            arguments: {},
+          },
+          agentId,
+        );
+
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        const transportCalls = vi.mocked(StreamableHTTPClientTransport).mock
+          .calls;
+        const lastCall = transportCalls[transportCalls.length - 1];
+        const headers = lastCall[1]?.requestInit?.headers as Headers;
+        expect(headers.get("x-api-key")).toBe("Bearer header-secret-token");
+        expect(headers.get("x-tenant-id")).toBe("tenant-42");
+      });
+
       test("non-JWKS auth (OAuth/Bearer) still uses upstream credentials", async () => {
         const tool = await ToolModel.createToolIfNotExists({
           name: "github-mcp-server__oauth_cred_test",

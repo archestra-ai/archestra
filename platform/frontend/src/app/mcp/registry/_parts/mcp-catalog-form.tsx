@@ -144,6 +144,8 @@ export function McpCatalogForm({
           serverType: "remote",
           serverUrl: "",
           authMethod: "none",
+          authHeaderName: "",
+          additionalHeaders: [],
           enterpriseManagedConfig: null,
           oauthConfig: {
             client_id: "",
@@ -296,6 +298,15 @@ export function McpCatalogForm({
   } = useFieldArray({
     control: form.control,
     name: "localConfig.imagePullSecrets",
+  });
+
+  const {
+    fields: additionalHeaderFields,
+    append: appendAdditionalHeader,
+    remove: removeAdditionalHeader,
+  } = useFieldArray({
+    control: form.control,
+    name: "additionalHeaders",
   });
 
   // Fetch available k8s docker-registry secrets for the "existing" dropdown
@@ -1000,11 +1011,37 @@ export function McpCatalogForm({
               />
 
               {(authMethod === "bearer" || authMethod === "raw_token") && (
-                <div className="bg-muted p-4 rounded-lg">
-                  <p className="text-sm text-muted-foreground">
-                    Users will be prompted to provide their access token when
-                    installing this server.
-                  </p>
+                <div className="space-y-4">
+                  <div className="bg-muted p-4 rounded-lg">
+                    <p className="text-sm text-muted-foreground">
+                      Users will be prompted to provide their access token when
+                      installing this server.
+                    </p>
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="authHeaderName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Auth Header Name</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Authorization"
+                            autoComplete={MCP_CONFIG_AUTOCOMPLETE}
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Defaults to <code>Authorization</code>. Set a custom
+                          header such as <code>x-api-key</code> when the
+                          upstream server expects the token outside the standard
+                          authorization header.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
               )}
 
@@ -1320,6 +1357,94 @@ export function McpCatalogForm({
                     />
                   </div>
                 )}
+            </div>
+          )}
+
+          {(currentServerType === "remote" ||
+            currentServerType === "local") && (
+            <div className="border rounded-lg p-5 space-y-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <h3 className="font-semibold text-sm">Additional Headers</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Prompt users for extra headers to send with every MCP
+                    request. Use this for API keys, tenant IDs, or other
+                    upstream requirements beyond the primary auth header.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    appendAdditionalHeader({
+                      fieldName: undefined,
+                      headerName: "",
+                    })
+                  }
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add Header
+                </Button>
+              </div>
+
+              {additionalHeaderFields.length === 0 ? (
+                <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                  No additional headers configured.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {additionalHeaderFields.map((field, index) => (
+                    <div
+                      key={field.id}
+                      className="rounded-lg border p-4 space-y-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium">
+                            Header {index + 1}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Users will be asked to provide a value for this
+                            header during installation.
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeAdditionalHeader(index)}
+                          aria-label={`Remove header ${index + 1}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+
+                      <FormField
+                        control={form.control}
+                        name={`additionalHeaders.${index}.headerName`}
+                        render={({ field: headerField }) => (
+                          <FormItem>
+                            <FormLabel>Header Name</FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder="x-api-key"
+                                autoComplete={MCP_CONFIG_AUTOCOMPLETE}
+                                {...headerField}
+                              />
+                            </FormControl>
+                            <FormDescription>
+                              Header names are case-insensitive and may contain
+                              letters, numbers, and hyphens.
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

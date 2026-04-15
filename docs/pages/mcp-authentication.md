@@ -3,7 +3,7 @@ title: "Authentication"
 category: MCP
 order: 4
 description: "How authentication works for MCP clients and upstream MCP servers"
-lastUpdated: 2026-04-11
+lastUpdated: 2026-04-15
 ---
 
 <!--
@@ -320,6 +320,8 @@ For servers that need a shared API key or service token:
 3. Archestra securely stores the credentials and passes them to the server at runtime
 
 All tool calls through the gateway use the same credential.
+
+Static credentials are not limited to `Authorization`. A catalog entry can map the primary install-time token to a custom header such as `x-api-key`, and it can also require one or more additional headers that Archestra injects on every downstream MCP request.
 
 ### OAuth 2.1
 

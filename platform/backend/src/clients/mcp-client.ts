@@ -1372,18 +1372,18 @@ class McpClient {
           });
         }
 
-        const localHeaders: Record<string, string> = {};
+        const localHeaders = buildStaticCredentialHeaders({
+          catalogItem,
+          secrets,
+        });
         if (enterpriseTransportCredential) {
           localHeaders[enterpriseTransportCredential.headerName] =
             enterpriseTransportCredential.headerValue;
-        } else if (secrets.access_token) {
-          // Prefer upstream server credentials when available (e.g. GitHub PAT, OAuth token).
-          // This enables JWKS-authenticated users to access servers with their own credentials
-          // rather than propagating the IdP JWT which the upstream server wouldn't understand.
-          localHeaders.Authorization = `Bearer ${secrets.access_token}`;
-        } else if (secrets.raw_access_token) {
-          localHeaders.Authorization = String(secrets.raw_access_token);
-        } else if (tokenAuth?.isExternalIdp && tokenAuth.rawToken) {
+        } else if (
+          !hasStaticAuthorizationCredential(catalogItem, secrets) &&
+          tokenAuth?.isExternalIdp &&
+          tokenAuth.rawToken
+        ) {
           // Fallback: propagate external IdP JWT for end-to-end JWKS pattern
           // (upstream server validates the same JWT against the IdP's JWKS)
           localHeaders.Authorization = `Bearer ${tokenAuth.rawToken}`;
@@ -1402,18 +1402,18 @@ class McpClient {
           throw new Error("Remote server missing serverUrl");
         }
 
-        const headers: Record<string, string> = {};
+        const headers = buildStaticCredentialHeaders({
+          catalogItem,
+          secrets,
+        });
         if (enterpriseTransportCredential) {
           headers[enterpriseTransportCredential.headerName] =
             enterpriseTransportCredential.headerValue;
-        } else if (secrets.access_token) {
-          // Prefer upstream server credentials when available (e.g. GitHub PAT, OAuth token).
-          // This enables JWKS-authenticated users to access servers with their own credentials
-          // rather than propagating the IdP JWT which the upstream server wouldn't understand.
-          headers.Authorization = `Bearer ${secrets.access_token}`;
-        } else if (secrets.raw_access_token) {
-          headers.Authorization = String(secrets.raw_access_token);
-        } else if (tokenAuth?.isExternalIdp && tokenAuth.rawToken) {
+        } else if (
+          !hasStaticAuthorizationCredential(catalogItem, secrets) &&
+          tokenAuth?.isExternalIdp &&
+          tokenAuth.rawToken
+        ) {
           // Fallback: propagate external IdP JWT for end-to-end JWKS pattern
           // (upstream server validates the same JWT against the IdP's JWKS)
           headers.Authorization = `Bearer ${tokenAuth.rawToken}`;
@@ -2756,4 +2756,101 @@ function mergePassthroughHeaders(
       target[name] = value;
     }
   }
+}
+
+function buildStaticCredentialHeaders(params: {
+  catalogItem: InternalMcpCatalog;
+  secrets: Record<string, unknown>;
+}): Record<string, string> {
+  const { catalogItem, secrets } = params;
+  const headers: Record<string, string> = {};
+  const hasConfiguredStaticAuthField = Boolean(
+    catalogItem.userConfig?.access_token ||
+      catalogItem.userConfig?.raw_access_token,
+  );
+
+  if (!catalogItem.userConfig) {
+    return buildDefaultAuthorizationHeaders(headers, secrets);
+  }
+
+  for (const [fieldName, config] of Object.entries(catalogItem.userConfig)) {
+    if (!config.headerName) {
+      continue;
+    }
+
+    const secretValue = secrets[fieldName];
+    if (typeof secretValue !== "string" || secretValue.length === 0) {
+      continue;
+    }
+
+    headers[config.headerName] = getStaticCredentialHeaderValue({
+      fieldName,
+      secretValue,
+    });
+  }
+
+  if (!hasConfiguredStaticAuthField) {
+    return buildDefaultAuthorizationHeaders(headers, secrets);
+  }
+
+  return headers;
+}
+
+function hasStaticAuthorizationCredential(
+  catalogItem: InternalMcpCatalog,
+  secrets: Record<string, unknown>,
+): boolean {
+  if (
+    typeof secrets.access_token === "string" &&
+    secrets.access_token.length > 0
+  ) {
+    return true;
+  }
+
+  if (
+    typeof secrets.raw_access_token === "string" &&
+    secrets.raw_access_token.length > 0
+  ) {
+    return true;
+  }
+
+  if (!catalogItem.userConfig) {
+    return false;
+  }
+
+  return Object.entries(catalogItem.userConfig).some(([fieldName, _config]) => {
+    if (fieldName !== "access_token" && fieldName !== "raw_access_token") {
+      return false;
+    }
+
+    const secretValue = secrets[fieldName];
+    return typeof secretValue === "string" && secretValue.length > 0;
+  });
+}
+
+function getStaticCredentialHeaderValue(params: {
+  fieldName: string;
+  secretValue: string;
+}): string {
+  if (params.fieldName === "access_token") {
+    return `Bearer ${params.secretValue}`;
+  }
+
+  return params.secretValue;
+}
+
+function buildDefaultAuthorizationHeaders(
+  headers: Record<string, string>,
+  secrets: Record<string, unknown>,
+): Record<string, string> {
+  if (typeof secrets.access_token === "string" && !headers.Authorization) {
+    headers.Authorization = `Bearer ${secrets.access_token}`;
+  } else if (
+    typeof secrets.raw_access_token === "string" &&
+    !headers.Authorization
+  ) {
+    headers.Authorization = String(secrets.raw_access_token);
+  }
+
+  return headers;
 }

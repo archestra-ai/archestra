@@ -6,6 +6,40 @@ import {
 } from "./mcp-catalog-form.utils";
 
 describe("transformFormToApiData", () => {
+  it("maps custom auth and additional headers into userConfig", () => {
+    const values: McpCatalogFormValues = {
+      name: "Header MCP",
+      description: "",
+      icon: null,
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com",
+      authMethod: "bearer",
+      authHeaderName: "x-api-key",
+      additionalHeaders: [{ headerName: "x-tenant-id" }],
+      oauthConfig: undefined,
+      enterpriseManagedConfig: null,
+      localConfig: undefined,
+      deploymentSpecYaml: "",
+      originalDeploymentSpecYaml: "",
+      oauthClientSecretVaultPath: "",
+      oauthClientSecretVaultKey: "",
+      localConfigVaultPath: "",
+      localConfigVaultKey: "",
+      labels: [],
+      scope: "personal",
+      teams: [],
+    };
+
+    expect(transformFormToApiData(values).userConfig).toEqual({
+      access_token: expect.objectContaining({
+        headerName: "x-api-key",
+      }),
+      header_x_tenant_id: expect.objectContaining({
+        headerName: "x-tenant-id",
+      }),
+    });
+  });
+
   it("includes OAuth discovery overrides in the API payload", () => {
     const values: McpCatalogFormValues = {
       name: "Direct OAuth MCP",
@@ -14,6 +48,8 @@ describe("transformFormToApiData", () => {
       serverType: "local",
       serverUrl: "",
       authMethod: "oauth",
+      authHeaderName: "",
+      additionalHeaders: [],
       oauthConfig: {
         client_id: "client-id",
         client_secret: "client-secret",
@@ -75,6 +111,8 @@ describe("transformFormToApiData", () => {
       serverType: "remote",
       serverUrl: "https://mcp.example.com",
       authMethod: "oauth",
+      authHeaderName: "",
+      additionalHeaders: [],
       oauthConfig: {
         client_id: "client-id",
         client_secret: "client-secret",
@@ -125,6 +163,8 @@ describe("transformFormToApiData", () => {
       serverType: "remote",
       serverUrl: "https://mcp.example.com",
       authMethod: "oauth",
+      authHeaderName: "",
+      additionalHeaders: [],
       oauthConfig: {
         client_id: "client-id",
         client_secret: "client-secret",
@@ -165,6 +205,8 @@ describe("transformFormToApiData", () => {
       serverType: "remote",
       serverUrl: "https://mcp.example.com",
       authMethod: "oauth",
+      authHeaderName: "",
+      additionalHeaders: [],
       oauthConfig: {
         client_id: "client-id",
         client_secret: "client-secret",
@@ -276,5 +318,50 @@ describe("transformFormToApiData", () => {
     expect(values.oauthConfig?.tokenEndpoint).toBe(
       "https://legacy-idp.example.com/oauth/token",
     );
+  });
+
+  it("hydrates custom auth and additional headers from internal catalog items", () => {
+    const values = transformCatalogItemToFormValues({
+      id: "catalog-headers",
+      name: "Header MCP",
+      description: "",
+      icon: null,
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com",
+      oauthConfig: null,
+      enterpriseManagedConfig: null,
+      localConfig: null,
+      deploymentSpecYaml: null,
+      userConfig: {
+        access_token: {
+          type: "string",
+          title: "Access Token",
+          description: "Bearer token",
+          required: true,
+          sensitive: true,
+          headerName: "x-api-key",
+        },
+        header_x_tenant_id: {
+          type: "string",
+          title: "x-tenant-id",
+          description: "Tenant ID",
+          required: true,
+          sensitive: true,
+          headerName: "x-tenant-id",
+        },
+      },
+      scope: "personal",
+      teams: [],
+      labels: [],
+    } as never);
+
+    expect(values.authMethod).toBe("bearer");
+    expect(values.authHeaderName).toBe("x-api-key");
+    expect(values.additionalHeaders).toEqual([
+      {
+        fieldName: "header_x_tenant_id",
+        headerName: "x-tenant-id",
+      },
+    ]);
   });
 });

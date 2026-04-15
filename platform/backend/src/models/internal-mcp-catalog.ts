@@ -313,11 +313,12 @@ class InternalMcpCatalogModel {
     }
 
     // Then delete the catalog entry itself
-    const result = await db
+    const deletedRows = await db
       .delete(schema.internalMcpCatalogTable)
-      .where(eq(schema.internalMcpCatalogTable.id, id));
+      .where(eq(schema.internalMcpCatalogTable.id, id))
+      .returning({ id: schema.internalMcpCatalogTable.id });
 
-    return result.rowCount !== null && result.rowCount > 0;
+    return deletedRows.length > 0;
   }
 
   // ===== Private methods =====

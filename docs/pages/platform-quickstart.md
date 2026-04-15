@@ -51,7 +51,7 @@ Once it's up, follow http://localhost:3000
 4. While editing the agent, make sure to enable all `microsoft__playwright-mcp` tools for it.
 5. Go to **Settings -> LLM API Keys** and add your preferred provider. You can connect commercial providers like OpenAI, Anthropic, or Google Gemini. For a free option, use [Cerebras](https://cerebras.ai/) or a local [Ollama](https://ollama.com/) instance.
 6. Go to **Chat**, choose the "Archestra Docs Reader Agent" and ask "How could I deploy Archestra?"
-   ![Archestra Chat UI calling the agent](/docs/quickstart-agent-chat.png)
+   ![Archestra Chat UI calling the agent](/docs/quickstart-agent-chat.webp)
 7. Enjoy Archestra navigating the website for you!
 
 ## Connect to Your Agent via MCP Gateway `Advanced`

@@ -15,7 +15,13 @@ describe("transformFormToApiData", () => {
       serverUrl: "https://mcp.example.com",
       authMethod: "bearer",
       authHeaderName: "x-api-key",
-      additionalHeaders: [{ headerName: "x-tenant-id" }],
+      additionalHeaders: [
+        {
+          headerName: "x-tenant-id",
+          promptOnInstallation: false,
+          value: "tenant-42",
+        },
+      ],
       oauthConfig: undefined,
       enterpriseManagedConfig: null,
       localConfig: undefined,
@@ -36,6 +42,8 @@ describe("transformFormToApiData", () => {
       }),
       header_x_tenant_id: expect.objectContaining({
         headerName: "x-tenant-id",
+        promptOnInstallation: false,
+        default: "tenant-42",
       }),
     });
   });
@@ -345,9 +353,11 @@ describe("transformFormToApiData", () => {
           type: "string",
           title: "x-tenant-id",
           description: "Tenant ID",
-          required: true,
+          promptOnInstallation: false,
+          required: false,
           sensitive: true,
           headerName: "x-tenant-id",
+          default: "tenant-42",
         },
       },
       scope: "personal",
@@ -361,6 +371,8 @@ describe("transformFormToApiData", () => {
       {
         fieldName: "header_x_tenant_id",
         headerName: "x-tenant-id",
+        promptOnInstallation: false,
+        value: "tenant-42",
       },
     ]);
   });

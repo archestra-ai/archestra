@@ -117,7 +117,13 @@ describe("formSchema", () => {
         serverUrl: "https://api.example.com/mcp",
         authMethod: "bearer" as const,
         authHeaderName: "x-api-key",
-        additionalHeaders: [{ headerName: "X-Api-Key" }],
+        additionalHeaders: [
+          {
+            headerName: "X-Api-Key",
+            promptOnInstallation: true,
+            value: "",
+          },
+        ],
         localConfig: undefined,
       };
 
@@ -131,7 +137,13 @@ describe("formSchema", () => {
         ...baseValidData,
         serverType: "remote" as const,
         serverUrl: "https://api.example.com/mcp",
-        additionalHeaders: [{ headerName: "x api key" }],
+        additionalHeaders: [
+          {
+            headerName: "x api key",
+            promptOnInstallation: true,
+            value: "",
+          },
+        ],
         localConfig: undefined,
       };
 

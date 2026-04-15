@@ -323,6 +323,10 @@ All tool calls through the gateway use the same credential.
 
 Static credentials are not limited to `Authorization`. A catalog entry can map the primary install-time token to a custom header such as `x-api-key`, and it can also require one or more additional headers that Archestra injects on every downstream MCP request.
 
+If an upstream MCP server expects authentication in a non-`Authorization` header, use **Additional Headers** for that header instead of forcing everything through the standard auth header flow.
+
+You can also use **Additional Headers** for other upstream requirements such as tenant IDs, API version headers, or companion secrets. Each header can either be prompted on every installation or stored once as a static catalog value.
+
 ### OAuth 2.1
 
 For servers that connect to a SaaS API where each user has their own account (GitHub, Salesforce, etc.).

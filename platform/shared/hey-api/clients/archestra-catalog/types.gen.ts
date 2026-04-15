@@ -44,6 +44,7 @@ export type ArchestraMcpServerManifest = {
             type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
             title: string;
             description: string;
+            promptOnInstallation?: boolean;
             required?: boolean;
             default?: string | number | boolean | Array<string>;
             multiple?: boolean;

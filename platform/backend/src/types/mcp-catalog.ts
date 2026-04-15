@@ -32,6 +32,7 @@ const UserConfigFieldSchema = z.object({
   type: z.enum(["string", "number", "boolean", "directory", "file"]),
   title: z.string(),
   description: z.string(),
+  promptOnInstallation: z.boolean().optional(),
   required: z.boolean().optional(),
   default: z
     .union([z.string(), z.number(), z.boolean(), z.array(z.string())])

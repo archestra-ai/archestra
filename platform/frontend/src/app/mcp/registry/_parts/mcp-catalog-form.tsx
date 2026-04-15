@@ -1380,6 +1380,8 @@ export function McpCatalogForm({
                     appendAdditionalHeader({
                       fieldName: undefined,
                       headerName: "",
+                      promptOnInstallation: true,
+                      value: "",
                     })
                   }
                 >
@@ -1405,8 +1407,8 @@ export function McpCatalogForm({
                             Header {index + 1}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            Users will be asked to provide a value for this
-                            header during installation.
+                            Configure whether this header should be provided at
+                            install time or stored once in the catalog.
                           </p>
                         </div>
                         <Button
@@ -1441,6 +1443,60 @@ export function McpCatalogForm({
                           </FormItem>
                         )}
                       />
+
+                      <FormField
+                        control={form.control}
+                        name={`additionalHeaders.${index}.promptOnInstallation`}
+                        render={({ field: promptField }) => (
+                          <FormItem className="flex flex-row items-start space-x-2 space-y-0">
+                            <FormControl>
+                              <Checkbox
+                                checked={promptField.value}
+                                onCheckedChange={(checked) =>
+                                  promptField.onChange(Boolean(checked))
+                                }
+                                className="mt-1"
+                              />
+                            </FormControl>
+                            <div className="space-y-1 leading-none">
+                              <FormLabel className="font-normal cursor-pointer">
+                                Prompt on each installation
+                              </FormLabel>
+                              <FormDescription>
+                                Disable this to store one static value in the
+                                catalog and reuse it for every installation.
+                              </FormDescription>
+                            </div>
+                          </FormItem>
+                        )}
+                      />
+
+                      {!form.watch(
+                        `additionalHeaders.${index}.promptOnInstallation`,
+                      ) && (
+                        <FormField
+                          control={form.control}
+                          name={`additionalHeaders.${index}.value`}
+                          render={({ field: valueField }) => (
+                            <FormItem>
+                              <FormLabel>Static Value</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="password"
+                                  placeholder="header value"
+                                  autoComplete={MCP_SECRET_AUTOCOMPLETE}
+                                  {...valueField}
+                                />
+                              </FormControl>
+                              <FormDescription>
+                                Stored once and injected into every request for
+                                this header.
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      )}
                     </div>
                   ))}
                 </div>

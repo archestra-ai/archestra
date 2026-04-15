@@ -282,6 +282,62 @@ describe("mcp server inspect route", () => {
     });
   });
 
+  test("installs a remote MCP server with static additional headers from the catalog", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Static Header Remote",
+      serverType: "remote",
+      serverUrl: "http://localhost:30082/mcp",
+      userConfig: {
+        header_x_api_key: {
+          type: "string",
+          title: "x-api-key",
+          description: "Static API key",
+          promptOnInstallation: false,
+          required: false,
+          sensitive: true,
+          headerName: "x-api-key",
+          default: "catalog-api-key",
+        },
+      },
+    });
+
+    connectAndGetToolsMock
+      .mockResolvedValueOnce([
+        {
+          name: "get-server-info",
+          description: "Returns server details",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          name: "get-server-info",
+          description: "Returns server details",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ]);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: "Static Header Remote",
+        catalogId: catalog.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(connectAndGetToolsMock).toHaveBeenCalledTimes(2);
+    expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
+      catalogItem: expect.objectContaining({ id: catalog.id }),
+      secrets: {
+        header_x_api_key: "catalog-api-key",
+      },
+    });
+  });
+
   test("automatically retries protected remote MCP server installation with an exchanged enterprise-managed credential", async ({
     makeAccount,
     makeIdentityProvider,

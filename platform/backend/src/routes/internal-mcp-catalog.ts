@@ -206,12 +206,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       } else if (
         restBody.localConfig?.environment ||
-        restBody.localConfig?.imagePullSecrets
+        restBody.localConfig?.imagePullSecrets ||
+        restBody.userConfig
       ) {
+        const localConfig = restBody.localConfig;
         // Extract secret env vars from localConfig.environment
         const secretEnvVars: Record<string, string> = {};
-        if (restBody.localConfig.environment) {
-          for (const envVar of restBody.localConfig.environment) {
+        if (localConfig?.environment) {
+          for (const envVar of localConfig.environment) {
             if (
               envVar.type === "secret" &&
               envVar.value &&
@@ -225,8 +227,8 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Extract image pull secret passwords from credentials entries
         // Keyed by server:username (stable across reorder, unique per account)
-        if (restBody.localConfig.imagePullSecrets) {
-          for (const entry of restBody.localConfig.imagePullSecrets) {
+        if (localConfig?.imagePullSecrets) {
+          for (const entry of localConfig.imagePullSecrets) {
             if (entry.source === "credentials" && entry.password) {
               secretEnvVars[
                 `__regcred_password:${entry.server}:${entry.username}`
@@ -235,6 +237,11 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }
           }
         }
+
+        Object.assign(
+          secretEnvVars,
+          extractStaticUserConfigSecretValues(restBody.userConfig),
+        );
 
         // Store secret env vars if any exist
         if (Object.keys(secretEnvVars).length > 0) {
@@ -504,8 +511,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       } else if (
         restBody.localConfig?.environment ||
-        restBody.localConfig?.imagePullSecrets
+        restBody.localConfig?.imagePullSecrets ||
+        restBody.userConfig
       ) {
+        const localConfig = restBody.localConfig;
         // Get existing secret values to preserve keys that are still in the request
         const existingSecretValues: Record<string, string> = {};
         if (localConfigSecretId) {
@@ -522,7 +531,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Preserve existing values for keys that are in the request but have no new value
         const secretEnvVars: Record<string, string> = {};
 
-        for (const envVar of restBody.localConfig.environment ?? []) {
+        for (const envVar of localConfig?.environment ?? []) {
           if (envVar.type === "secret" && !envVar.promptOnInstallation) {
             if (envVar.value) {
               // New value provided - use it
@@ -539,8 +548,8 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Extract image pull secret passwords from credentials entries
         // Keyed by server:username (stable across reorder, unique per account)
         // Preserve existing passwords for entries that don't provide a new one
-        if (restBody.localConfig.imagePullSecrets) {
-          for (const entry of restBody.localConfig.imagePullSecrets) {
+        if (localConfig?.imagePullSecrets) {
+          for (const entry of localConfig.imagePullSecrets) {
             if (entry.source === "credentials") {
               const regcredKey = `__regcred_password:${entry.server}:${entry.username}`;
               if (entry.password) {
@@ -556,6 +565,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
         // Orphaned __regcred_password:* keys (from removed entries) are implicitly
         // dropped since they won't be in secretEnvVars when the secret is updated
+
+        Object.assign(
+          secretEnvVars,
+          extractStaticUserConfigSecretValues(
+            restBody.userConfig,
+            existingSecretValues,
+          ),
+        );
 
         // Store secret env vars if any exist
         if (Object.keys(secretEnvVars).length > 0) {
@@ -1020,3 +1037,41 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default internalMcpCatalogRoutes;
+
+function extractStaticUserConfigSecretValues(
+  userConfig:
+    | Record<
+        string,
+        {
+          headerName?: string;
+          promptOnInstallation?: boolean;
+          default?: string | number | boolean | Array<string>;
+        }
+      >
+    | null
+    | undefined,
+  existingSecretValues?: Record<string, string>,
+): Record<string, string> {
+  const secretValues: Record<string, string> = {};
+
+  for (const [fieldName, fieldConfig] of Object.entries(userConfig ?? {})) {
+    if (!fieldConfig.headerName || fieldConfig.promptOnInstallation !== false) {
+      continue;
+    }
+
+    if (
+      typeof fieldConfig.default === "string" &&
+      fieldConfig.default.length > 0
+    ) {
+      secretValues[fieldName] = fieldConfig.default;
+      delete fieldConfig.default;
+      continue;
+    }
+
+    if (existingSecretValues?.[fieldName]) {
+      secretValues[fieldName] = existingSecretValues[fieldName];
+    }
+  }
+
+  return secretValues;
+}

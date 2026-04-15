@@ -302,6 +302,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // For REMOTE servers: create secrets and validate connection
       if (catalogItem?.serverType === "remote") {
+        const catalogStaticUserConfigValues = getCatalogStaticUserConfigValues(
+          catalogItem.userConfig,
+        );
+
         // If isByosVault flag is set, use vault references from userConfigValues
         if (isByosVault && userConfigValues && !secretId) {
           if (!isByosEnabled()) {
@@ -314,7 +318,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           // userConfigValues already contains vault references in "path#key" format
           const secret = await secretManager().createSecret(
-            userConfigValues as Record<string, unknown>,
+            {
+              ...catalogStaticUserConfigValues,
+              ...userConfigValues,
+            } as Record<string, unknown>,
             `${serverData.name}-vault-secret`,
           );
           secretId = secret.id;
@@ -335,8 +342,32 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
           }
           const secret = await secretManager().createSecret(
-            { access_token: accessToken },
+            { ...catalogStaticUserConfigValues, access_token: accessToken },
             `${serverData.name}-token`,
+          );
+          secretId = secret.id;
+          createdSecretId = secret.id;
+        }
+
+        if (
+          !secretId &&
+          Object.keys(catalogStaticUserConfigValues).length > 0
+        ) {
+          const secret = await secretManager().createSecret(
+            catalogStaticUserConfigValues,
+            `${serverData.name}-secret`,
+          );
+          secretId = secret.id;
+          createdSecretId = secret.id;
+        }
+
+        if (userConfigValues && !secretId) {
+          const secret = await secretManager().createSecret(
+            {
+              ...catalogStaticUserConfigValues,
+              ...userConfigValues,
+            } as Record<string, unknown>,
+            `${serverData.name}-secret`,
           );
           secretId = secret.id;
           createdSecretId = secret.id;
@@ -881,6 +912,9 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const catalogItem = mcpServer.catalogId
           ? await InternalMcpCatalogModel.findById(mcpServer.catalogId)
           : null;
+        const catalogStaticUserConfigValues = getCatalogStaticUserConfigValues(
+          catalogItem?.userConfig,
+        );
 
         if (accessToken) {
           // PAT token flow
@@ -891,7 +925,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
           }
           const secret = await secretManager().createSecret(
-            { access_token: accessToken },
+            { ...catalogStaticUserConfigValues, access_token: accessToken },
             `${mcpServer.name}-token`,
           );
           newSecretId = secret.id;
@@ -906,7 +940,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }
           }
           const secret = await secretManager().createSecret(
-            userConfigValues as Record<string, unknown>,
+            {
+              ...catalogStaticUserConfigValues,
+              ...userConfigValues,
+            } as Record<string, unknown>,
             isByosVault
               ? `${mcpServer.name}-vault-secret`
               : `${mcpServer.name}-secret`,
@@ -938,6 +975,15 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               );
             }
           }
+        } else if (
+          catalogItem?.serverType === "remote" &&
+          Object.keys(catalogStaticUserConfigValues).length > 0
+        ) {
+          const secret = await secretManager().createSecret(
+            catalogStaticUserConfigValues,
+            `${mcpServer.name}-secret`,
+          );
+          newSecretId = secret.id;
         } else if (environmentValues) {
           // Local server environment variables
           if (isByosVault) {
@@ -1814,4 +1860,31 @@ function extractInstallDiscoveryCredentialValue(params: {
   }
 
   return extractedValue;
+}
+
+function getCatalogStaticUserConfigValues(
+  userConfig:
+    | Record<
+        string,
+        {
+          headerName?: string;
+          promptOnInstallation?: boolean;
+          default?: string | number | boolean | Array<string>;
+        }
+      >
+    | null
+    | undefined,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(userConfig ?? {})
+      .filter(([_fieldName, fieldConfig]) => {
+        return (
+          fieldConfig.headerName &&
+          fieldConfig.promptOnInstallation === false &&
+          typeof fieldConfig.default === "string" &&
+          fieldConfig.default.length > 0
+        );
+      })
+      .map(([fieldName, fieldConfig]) => [fieldName, fieldConfig.default]),
+  );
 }

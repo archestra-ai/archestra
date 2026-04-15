@@ -24810,6 +24810,7 @@ export type GetInternalMcpCatalogResponses = {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
                 title: string;
                 description: string;
+                promptOnInstallation?: boolean;
                 required?: boolean;
                 default?: string | number | boolean | Array<string>;
                 multiple?: boolean;
@@ -24943,6 +24944,7 @@ export type CreateInternalMcpCatalogItemData = {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
                 title: string;
                 description: string;
+                promptOnInstallation?: boolean;
                 required?: boolean;
                 default?: string | number | boolean | Array<string>;
                 multiple?: boolean;
@@ -25135,6 +25137,7 @@ export type CreateInternalMcpCatalogItemResponses = {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
                 title: string;
                 description: string;
+                promptOnInstallation?: boolean;
                 required?: boolean;
                 default?: string | number | boolean | Array<string>;
                 multiple?: boolean;
@@ -25418,6 +25421,7 @@ export type GetInternalMcpCatalogItemResponses = {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
                 title: string;
                 description: string;
+                promptOnInstallation?: boolean;
                 required?: boolean;
                 default?: string | number | boolean | Array<string>;
                 multiple?: boolean;
@@ -25550,6 +25554,7 @@ export type UpdateInternalMcpCatalogItemData = {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
                 title: string;
                 description: string;
+                promptOnInstallation?: boolean;
                 required?: boolean;
                 default?: string | number | boolean | Array<string>;
                 multiple?: boolean;
@@ -25744,6 +25749,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
                 title: string;
                 description: string;
+                promptOnInstallation?: boolean;
                 required?: boolean;
                 default?: string | number | boolean | Array<string>;
                 multiple?: boolean;

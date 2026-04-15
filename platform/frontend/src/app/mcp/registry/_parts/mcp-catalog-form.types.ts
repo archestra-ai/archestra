@@ -16,6 +16,8 @@ const headerNameSchema = z
 const additionalHeaderSchema = z.object({
   fieldName: z.string().optional(),
   headerName: headerNameSchema,
+  promptOnInstallation: z.boolean(),
+  value: z.string().optional(),
 });
 
 // Simplified OAuth config schema

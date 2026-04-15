@@ -346,6 +346,8 @@ export function transformCatalogItemToFormValues(
     .map(([fieldName, config]) => ({
       fieldName,
       headerName: config.headerName,
+      promptOnInstallation: config.promptOnInstallation ?? true,
+      value: typeof config.default === "string" ? config.default : undefined,
     }));
 
   return {
@@ -600,6 +602,8 @@ export function transformExternalCatalogToFormValues(
       .map(([fieldName, config]) => ({
         fieldName,
         headerName: config.headerName,
+        promptOnInstallation: config.promptOnInstallation ?? true,
+        value: typeof config.default === "string" ? config.default : undefined,
       })),
     oauthConfig: oauthConfig ?? {
       client_id: "",
@@ -667,7 +671,10 @@ function buildStaticHeaderUserConfig(
       type: "string",
       title: header.headerName,
       description: `Additional header sent as ${header.headerName}`,
-      required: true,
+      promptOnInstallation: header.promptOnInstallation,
+      required: header.promptOnInstallation,
+      default:
+        !header.promptOnInstallation && header.value ? header.value : undefined,
       sensitive: true,
       headerName: header.headerName,
     };
@@ -707,7 +714,14 @@ function getHeaderMappedUserConfigEntries(
     | archestraCatalogTypes.ArchestraMcpServerManifest["user_config"]
     | null
     | undefined,
-): Record<string, { headerName: string }> {
+): Record<
+  string,
+  {
+    headerName: string;
+    promptOnInstallation?: boolean;
+    default?: string | number | boolean | Array<string>;
+  }
+> {
   return Object.fromEntries(
     Object.entries(userConfig ?? {})
       .filter((entry) => {
@@ -717,9 +731,18 @@ function getHeaderMappedUserConfigEntries(
         );
       })
       .map(([fieldName, config]) => {
+        const userConfigField = config as {
+          headerName: string;
+          promptOnInstallation?: boolean;
+          default?: string | number | boolean | Array<string>;
+        };
         return [
           fieldName,
-          { headerName: (config as { headerName: string }).headerName },
+          {
+            headerName: userConfigField.headerName,
+            promptOnInstallation: userConfigField.promptOnInstallation,
+            default: userConfigField.default,
+          },
         ];
       }),
   );

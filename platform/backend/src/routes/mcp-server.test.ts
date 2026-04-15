@@ -439,6 +439,72 @@ describe("mcp server inspect route", () => {
     });
   });
 
+  test("ignores unknown install user config keys when creating the secret payload", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Known Header Remote",
+      serverType: "remote",
+      serverUrl: "http://localhost:30082/mcp",
+      userConfig: {
+        tenant_id: {
+          type: "string",
+          title: "Tenant ID",
+          description: "Prompted tenant ID",
+          promptOnInstallation: true,
+          required: true,
+          sensitive: false,
+          headerName: "x-tenant-id",
+        },
+      },
+    });
+
+    connectAndGetToolsMock
+      .mockResolvedValueOnce([
+        {
+          name: "get-server-info",
+          description: "Returns server details",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          name: "get-server-info",
+          description: "Returns server details",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ]);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: "Known Header Remote",
+        catalogId: catalog.id,
+        userConfigValues: {
+          tenant_id: "tenant-42",
+          unknown_key: "should-be-dropped",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(connectAndGetToolsMock).toHaveBeenCalledTimes(2);
+    expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
+      catalogItem: expect.objectContaining({ id: catalog.id }),
+      secrets: {
+        tenant_id: "tenant-42",
+      },
+    });
+    expect(
+      (
+        connectAndGetToolsMock.mock.calls[0]?.[0] as {
+          secrets?: Record<string, unknown>;
+        }
+      ).secrets,
+    ).not.toHaveProperty("unknown_key");
+  });
+
   test("installs a local MCP server with prompted header user config", async ({
     makeInternalMcpCatalog,
   }) => {
@@ -1207,6 +1273,16 @@ describe("mcp server inspect route", () => {
       name: "Remote Reauth Server",
       serverType: "remote",
       serverUrl: "http://localhost:30082/mcp",
+      userConfig: {
+        api_key: {
+          type: "string",
+          title: "API Key",
+          description: "Prompted API key",
+          promptOnInstallation: true,
+          required: true,
+          sensitive: true,
+        },
+      },
     });
     const mcpServer = await makeMcpServer({
       ownerId: user.id,

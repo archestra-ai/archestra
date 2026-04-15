@@ -2002,15 +2002,19 @@ function filterInstallUserConfigValues(params: {
     | undefined;
   userConfigValues: Record<string, unknown> | undefined;
 }): Record<string, unknown> | undefined {
-  if (!params.userConfigValues) {
+  if (!params.userConfigValues || !params.userConfig) {
     return undefined;
   }
 
   const filteredEntries = Object.entries(params.userConfigValues).filter(
     ([fieldName]) => {
       const fieldConfig = params.userConfig?.[fieldName];
+      if (!fieldConfig) {
+        return false;
+      }
+
       return !(
-        fieldConfig?.headerName && fieldConfig.promptOnInstallation === false
+        fieldConfig.headerName && fieldConfig.promptOnInstallation === false
       );
     },
   );

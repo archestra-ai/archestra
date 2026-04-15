@@ -31,7 +31,7 @@ Choose the mode in the setup wizard (**Agent Triggers** → **Slack** → **Setu
 
 The setup wizard in Archestra guides you through the entire Slack configuration. Navigate to **Agent Triggers** → **Slack** → **Setup Slack** and follow the step-by-step instructions.
 
-![Slack Setup Wizard](/docs/setup-slack.png)
+![Slack Setup Wizard](/docs/setup-slack.webp)
 
 The wizard will walk you through creating a Slack app, installing it to your workspace, and configuring the connection mode. All required credentials are collected and saved automatically.
 
@@ -65,7 +65,7 @@ Each Slack channel requires a **default agent** to be assigned to it. This agent
 
 You can manage the default agent for each channel from the **Agent Triggers** → **Slack** page in Archestra.
 
-![Slack Agent Selection](/docs/select-agent-slack.png)
+![Slack Agent Selection](/docs/select-agent-slack.webp)
 
 Once set, the default agent processes all subsequent messages in that channel. You can also use the `/archestra-select-agent` command directly in Slack to change the default agent.
 
@@ -105,7 +105,7 @@ When a user interacts with the bot but hasn't signed up in Archestra yet, they a
 
 Admins can view autoprovisioned users on the **Settings → Members** page — from there they can copy the invitation link or delete the user.
 
-![Autoprovisioned Slack Users](/docs/autoprovisioned-users-slack.png)
+![Autoprovisioned Slack Users](/docs/autoprovisioned-users-slack.webp)
 
 ## Attachments
 

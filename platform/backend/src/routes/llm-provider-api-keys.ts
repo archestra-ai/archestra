@@ -496,18 +496,20 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             apiKeyFromDB.secretId,
           );
         }
-        if (!apiKeyValue) {
+        if (apiKeyValue) {
+          await testApiKeyOrThrow(
+            apiKeyFromDB.provider,
+            apiKeyValue,
+            body.baseUrl,
+          );
+        } else if (
+          !PROVIDERS_WITH_OPTIONAL_API_KEY.has(apiKeyFromDB.provider)
+        ) {
           throw new ApiError(
             400,
             "Cannot update Base URL without existing API key",
           );
         }
-
-        await testApiKeyOrThrow(
-          apiKeyFromDB.provider,
-          apiKeyValue,
-          body.baseUrl,
-        );
       }
 
       // Build update object

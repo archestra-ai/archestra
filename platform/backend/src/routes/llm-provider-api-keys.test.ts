@@ -418,7 +418,6 @@ describe("LLM Provider API Keys CRUD", () => {
         provider: "bedrock",
         apiKey: "sk-bedrock-create-empty-base-url-test",
         scope: "personal",
-        baseUrl: null,
       },
     });
     expect(createResponse.statusCode).toBe(400);
@@ -453,6 +452,38 @@ describe("LLM Provider API Keys CRUD", () => {
     expect(updateResponse.json().error.message).toContain(
       "base URL not configured",
     );
+  });
+
+  test("should allow to set base URL for providers with optional API key", async () => {
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Original Name",
+        provider: "ollama",
+        scope: "personal",
+      },
+    });
+    expect(createResponse.statusCode).toBe(200);
+    const createdKey = createResponse.json();
+
+    const updateResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${createdKey.id}`,
+      payload: {
+        baseUrl: null,
+      },
+    });
+    expect(updateResponse.statusCode).toBe(200);
+
+    const updateResponse2 = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${createdKey.id}`,
+      payload: {
+        baseUrl: "http://localhost:11434/v1",
+      },
+    });
+    expect(updateResponse2.statusCode).toBe(200);
   });
 });
 

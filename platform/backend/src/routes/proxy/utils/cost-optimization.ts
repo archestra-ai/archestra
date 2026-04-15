@@ -6,7 +6,11 @@ import {
   OptimizationRuleModel,
   TeamModel,
 } from "@/models";
-import { getTokenizer, type ProviderMessage, type Tokenizer } from "@/tokenizers";
+import {
+  getTokenizer,
+  type ProviderMessage,
+  type Tokenizer,
+} from "@/tokenizers";
 import type {
   Agent,
   Anthropic,
@@ -61,7 +65,10 @@ export function estimateToolTokens(
       return text;
     })
     .join(" ");
-  return tokenizer.countTokens({ role: "user", content: serialized } as ProviderMessage);
+  return tokenizer.countTokens({
+    role: "user",
+    content: serialized,
+  } as ProviderMessage);
 }
 
 /**

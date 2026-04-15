@@ -401,6 +401,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // For LOCAL servers: validate env vars and create secrets (no connection validation, since deployment will be started later)
       if (catalogItem?.serverType === "local") {
+        const catalogStaticUserConfigValues = getCatalogStaticUserConfigValues(
+          catalogItem.userConfig,
+        );
+
         // Validate required environment variables
         if (catalogItem.localConfig?.environment) {
           const requiredEnvVars = catalogItem.localConfig.environment.filter(
@@ -462,7 +466,9 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
 
           // Collect secret env vars with vault references from environmentValues
-          const secretEnvVars: Record<string, string> = {};
+          const secretEnvVars: Record<string, string> = {
+            ...catalogStaticUserConfigValues,
+          };
           for (const envDef of catalogItem.localConfig.environment) {
             if (envDef.type === "secret") {
               const value = envDef.promptOnInstallation
@@ -491,26 +497,18 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "Created Readonly Vault secret with per-field references for local server",
             );
           }
-        } else if (
-          userConfigValues &&
-          Object.keys(userConfigValues).length > 0
-        ) {
-          const secret = await secretManager().createSecret(
-            userConfigValues,
-            `${serverData.name}-secret`,
-          );
-          secretId = secret.id;
-          createdSecretId = secret.id;
-        }
-        // Collect and store secret-type env vars
-        // When Readonly Vault is enabled, only static (non-prompted) secrets are allowed to be stored in DB
-        // User-prompted secrets must use Vault references via the isByosVault flow above
-        else if (!secretId && catalogItem.localConfig?.environment) {
-          const secretEnvVars: Record<string, string> = {};
+        } else if (!secretId) {
+          // Collect and store static catalog headers, prompted header values, and secret-type env vars.
+          // When Readonly Vault is enabled, only static (non-prompted) secrets are allowed to be stored in DB.
+          // User-prompted secrets must use Vault references via the isByosVault flow above.
+          const secretEnvVars: Record<string, string> = {
+            ...catalogStaticUserConfigValues,
+            ...(userConfigValues ?? {}),
+          };
           let hasPromptedSecrets = false;
 
-          // Collect all secret-type env vars (both static and prompted)
-          for (const envDef of catalogItem.localConfig.environment) {
+          // Collect all secret-type env vars (both static and prompted).
+          for (const envDef of catalogItem.localConfig?.environment ?? []) {
             if (envDef.type === "secret") {
               let value: string | undefined;
               // Get value based on whether it's prompted or static
@@ -1971,18 +1969,23 @@ function getCatalogStaticUserConfigValues(
       >
     | null
     | undefined,
-): Record<string, unknown> {
+): Record<string, string> {
   return Object.fromEntries(
     Object.entries(userConfig ?? {})
       .filter(([_fieldName, fieldConfig]) => {
         return (
           fieldConfig.headerName &&
           fieldConfig.promptOnInstallation === false &&
-          typeof fieldConfig.default === "string" &&
-          fieldConfig.default.length > 0
+          (typeof fieldConfig.default === "string" ||
+            typeof fieldConfig.default === "number" ||
+            typeof fieldConfig.default === "boolean") &&
+          String(fieldConfig.default).length > 0
         );
       })
-      .map(([fieldName, fieldConfig]) => [fieldName, fieldConfig.default]),
+      .map(([fieldName, fieldConfig]) => [
+        fieldName,
+        String(fieldConfig.default),
+      ]),
   );
 }
 

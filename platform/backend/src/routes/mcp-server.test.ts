@@ -485,6 +485,128 @@ describe("mcp server inspect route", () => {
     });
   });
 
+  test("installs a local MCP server with both secret env vars and prompted header user config", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Local Mixed Secret Server",
+      serverType: "local",
+      userConfig: {
+        tenant_id: {
+          type: "string",
+          title: "Tenant ID",
+          description: "Prompted header",
+          promptOnInstallation: true,
+          required: true,
+          sensitive: false,
+          headerName: "x-tenant-id",
+        },
+      },
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [
+          {
+            key: "API_KEY",
+            type: "secret",
+            promptOnInstallation: false,
+            value: "catalog-secret",
+          },
+        ],
+        transportType: "streamable-http",
+        httpPort: 8080,
+        httpPath: "/mcp",
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: "Local Mixed Secret Server",
+        catalogId: catalog.id,
+        userConfigValues: {
+          tenant_id: "tenant-42",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const [installedServer] = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.catalogId, catalog.id));
+
+    expect(installedServer?.secretId).toBeTruthy();
+    if (!installedServer?.secretId) {
+      throw new Error("Expected local install to persist a secretId");
+    }
+
+    const storedSecret = await secretManager().getSecret(
+      installedServer.secretId,
+    );
+    expect(storedSecret?.secret).toMatchObject({
+      API_KEY: "catalog-secret",
+      tenant_id: "tenant-42",
+    });
+  });
+
+  test("installs a local streamable-http MCP server with static additional headers from the catalog", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Local Static Header Server",
+      serverType: "local",
+      userConfig: {
+        header_x_api_key: {
+          type: "string",
+          title: "x-api-key",
+          description: "Static API key",
+          promptOnInstallation: false,
+          required: false,
+          sensitive: false,
+          headerName: "x-api-key",
+          default: "catalog-api-key",
+        },
+      },
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [],
+        transportType: "streamable-http",
+        httpPort: 8080,
+        httpPath: "/mcp",
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: "Local Static Header Server",
+        catalogId: catalog.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const [installedServer] = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.catalogId, catalog.id));
+
+    expect(installedServer?.secretId).toBeTruthy();
+    if (!installedServer?.secretId) {
+      throw new Error("Expected local install to persist a secretId");
+    }
+
+    const storedSecret = await secretManager().getSecret(
+      installedServer.secretId,
+    );
+    expect(storedSecret?.secret).toMatchObject({
+      header_x_api_key: "catalog-api-key",
+    });
+  });
+
   test("reinstalls a local MCP server with prompted header user config", async ({
     makeInternalMcpCatalog,
     makeMcpServer,
@@ -516,6 +638,7 @@ describe("mcp server inspect route", () => {
       ownerId: user.id,
       catalogId: catalog.id,
     });
+    await McpServerUserModel.assignUserToMcpServer(mcpServer.id, user.id);
 
     const response = await app.inject({
       method: "POST",
@@ -529,9 +652,10 @@ describe("mcp server inspect route", () => {
 
     expect(response.statusCode).toBe(200);
 
-    const updatedServer = await db.query.mcpServersTable.findFirst({
-      where: eq(schema.mcpServersTable.id, mcpServer.id),
-    });
+    const [updatedServer] = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.id, mcpServer.id));
 
     expect(updatedServer?.secretId).toBeTruthy();
     if (!updatedServer?.secretId) {

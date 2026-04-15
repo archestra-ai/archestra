@@ -16,6 +16,7 @@ Agents in Archestra provide a comprehensive no-code solution for building autono
 
 - Archestra Chat UI
 - A2A (Agent-to-Agent) protocol
+- [Scheduled Tasks](/docs/platform-agent-triggers-schedule)
 - [Incoming Email](/docs/platform-agent-triggers-email)
 - [Slack](/docs/platform-slack)
 - [MS Teams](/docs/platform-ms-teams)

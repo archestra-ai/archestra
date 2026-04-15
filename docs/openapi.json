@@ -129213,6 +129213,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     },
@@ -129256,6 +129259,7 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
+                    "slimChatErrorUi",
                     "showTwoFactor",
                     "mcpOauthAccessTokenLifetimeSeconds"
                   ],
@@ -129595,6 +129599,9 @@
                     "type": "string",
                     "maxLength": 500
                   },
+                  "slimChatErrorUi": {
+                    "type": "boolean"
+                  },
                   "chatPlaceholders": {
                     "nullable": true,
                     "maxItems": 20,
@@ -129842,6 +129849,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     },
@@ -129885,6 +129895,7 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
+                    "slimChatErrorUi",
                     "showTwoFactor",
                     "mcpOauthAccessTokenLifetimeSeconds"
                   ],
@@ -130220,6 +130231,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
                     "animateChatPlaceholders": {
                       "type": "boolean"
                     }
@@ -130236,6 +130250,7 @@
                     "footerText",
                     "chatLinks",
                     "chatErrorSupportMessage",
+                    "slimChatErrorUi",
                     "animateChatPlaceholders"
                   ],
                   "additionalProperties": false
@@ -130717,6 +130732,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     },
@@ -130760,6 +130778,7 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
+                    "slimChatErrorUi",
                     "showTwoFactor",
                     "mcpOauthAccessTokenLifetimeSeconds"
                   ],
@@ -131254,6 +131273,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     },
@@ -131297,6 +131319,7 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
+                    "slimChatErrorUi",
                     "showTwoFactor",
                     "mcpOauthAccessTokenLifetimeSeconds"
                   ],
@@ -131809,6 +131832,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     },
@@ -131852,6 +131878,7 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
+                    "slimChatErrorUi",
                     "showTwoFactor",
                     "mcpOauthAccessTokenLifetimeSeconds"
                   ],
@@ -132330,6 +132357,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     },
@@ -132373,6 +132403,7 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
+                    "slimChatErrorUi",
                     "showTwoFactor",
                     "mcpOauthAccessTokenLifetimeSeconds"
                   ],
@@ -132867,6 +132898,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     },
@@ -132910,6 +132944,7 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
+                    "slimChatErrorUi",
                     "showTwoFactor",
                     "mcpOauthAccessTokenLifetimeSeconds"
                   ],
@@ -133371,6 +133406,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     },
@@ -133414,6 +133452,7 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
+                    "slimChatErrorUi",
                     "showTwoFactor",
                     "mcpOauthAccessTokenLifetimeSeconds"
                   ],
@@ -134170,6 +134209,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     },
@@ -134213,6 +134255,7 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
+                    "slimChatErrorUi",
                     "showTwoFactor",
                     "mcpOauthAccessTokenLifetimeSeconds"
                   ],

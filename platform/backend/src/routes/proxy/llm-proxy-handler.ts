@@ -355,6 +355,7 @@ export async function handleLLMProxy<
     // Cost optimization - potentially switch to cheaper model
     const baselineModel = requestAdapter.getModel();
     const hasTools = requestAdapter.hasTools();
+    const tools = requestAdapter.getTools();
     // Cast messages since getOptimizedModel expects specific provider types
     // but our generic adapter provides the correct type at runtime
     const optimizedModel = await utils.costOptimization.getOptimizedModel(
@@ -366,6 +367,7 @@ export async function handleLLMProxy<
         typeof utils.costOptimization.getOptimizedModel
       >[2],
       hasTools,
+      tools,
     );
 
     if (optimizedModel) {

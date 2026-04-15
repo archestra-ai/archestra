@@ -188,7 +188,7 @@ const PROVIDER_CONFIG: Record<
   bedrock: {
     name: "AWS Bedrock",
     icon: "/icons/bedrock.png",
-    placeholder: "Bearer token...",
+    placeholder: "Bedrock API key (bedrock-api-key-... / ABSK...)",
     enabled: true,
     consoleUrl: "https://console.aws.amazon.com/bedrock",
     consoleName: "AWS Console",

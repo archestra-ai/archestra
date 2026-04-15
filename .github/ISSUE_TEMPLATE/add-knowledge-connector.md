@@ -32,34 +32,13 @@ Include clear instructions on how reviewers can create or obtain test credential
 - [ ] Authentication flow is documented
 - [ ] Incremental sync strategy is documented
 
-### 3. Implementation Completeness
+### 3. Implementation Guide
+Follow the [Adding Knowledge Connectors documentation](/docs/platform-adding-knowledge-connectors) for the implementation details, required wiring, testing expectations, and documentation updates.
 
-**Backend:**
-- Connector config and checkpoint Zod schemas
-- Connector implementation (`validateConfig`, `testConnection`, `sync`)
-- Registry wiring
-- Official SDK is used when one is available, or the PR explains why not
+### 4. Demo Evidence
+Please include a short demo video showing the connector being created, connection-tested if applicable, and successfully synced.
 
-**Frontend:**
-- Connector type is selectable in the create connector dialog
-- Connector-specific config fields are implemented
-- Validation and error handling work correctly
-
-### 4. Testing
-- [ ] Connector tests cover `validateConfig`
-- [ ] Connector tests cover `testConnection`
-- [ ] Connector tests cover `sync`, including pagination or incremental sync behavior where relevant
-
-If the connector relies on an external SDK, mock the SDK in tests rather than making live API calls.
-
-### 5. Documentation
-- [ ] Update [Adding Knowledge Connectors](/docs/platform-adding-knowledge-connectors) if the developer workflow changes
-- [ ] Update [Knowledge Connectors](https://archestra.ai/docs/platform-knowledge-connectors) with user-facing setup instructions for the new connector
-
-### 6. Demo Evidence
-Please include screenshots or a short demo video showing the connector being created, connection-tested if applicable, and successfully synced.
-
-**Acceptance Criteria:** We expect the connector to be fully wired through the backend and frontend, covered by tests, documented for users, and to prefer an official SDK over a custom client when the upstream system provides one.
+**Acceptance Criteria:** We expect the connector to follow the [Adding Knowledge Connectors documentation](/docs/platform-adding-knowledge-connectors), include a short demo video, and to prefer an official SDK over a custom client when the upstream system provides one.
 
 ## Additional Context
 

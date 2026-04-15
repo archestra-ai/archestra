@@ -50,7 +50,6 @@ export type ArchestraMcpServerManifest = {
             sensitive?: boolean;
             min?: number;
             max?: number;
-            headerName?: string;
             mounted?: boolean;
         };
     };

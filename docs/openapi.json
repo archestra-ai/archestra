@@ -90942,6 +90942,9 @@
                             },
                             "max": {
                               "type": "number"
+                            },
+                            "headerName": {
+                              "type": "string"
                             }
                           },
                           "required": [
@@ -91792,6 +91795,9 @@
                         },
                         "max": {
                           "type": "number"
+                        },
+                        "headerName": {
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -92373,6 +92379,9 @@
                           },
                           "max": {
                             "type": "number"
+                          },
+                          "headerName": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -93246,6 +93255,9 @@
                           },
                           "max": {
                             "type": "number"
+                          },
+                          "headerName": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -94090,6 +94102,9 @@
                         },
                         "max": {
                           "type": "number"
+                        },
+                        "headerName": {
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -94679,6 +94694,9 @@
                           },
                           "max": {
                             "type": "number"
+                          },
+                          "headerName": {
+                            "type": "string"
                           }
                         },
                         "required": [

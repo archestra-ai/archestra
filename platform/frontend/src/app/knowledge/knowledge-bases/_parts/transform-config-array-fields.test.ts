@@ -43,8 +43,9 @@ describe("transformConfigArrayFields", () => {
     expect(result.assignmentGroups).toEqual(["group1", "group2"]);
   });
 
-  it("converts projectIds to number array", () => {
+  it("converts GitLab projectIds to number array", () => {
     const config = {
+      type: "gitlab",
       projectIds: "1, 2, 3",
     };
 
@@ -53,8 +54,9 @@ describe("transformConfigArrayFields", () => {
     expect(result.projectIds).toEqual([1, 2, 3]);
   });
 
-  it("filters out NaN values from projectIds", () => {
+  it("filters out NaN values from GitLab projectIds", () => {
     const config = {
+      type: "gitlab",
       projectIds: "1, abc, 3",
     };
 

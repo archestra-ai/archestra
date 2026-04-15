@@ -13,7 +13,6 @@ export function transformConfigArrayFields(
     "databaseIds",
     "labelsToSkip",
     "commentEmailBlacklist",
-    "projectIds",
     "states",
     "assignmentGroups",
     "driveIds",
@@ -29,13 +28,20 @@ export function transformConfigArrayFields(
     }
   }
 
-  // Number array fields: split, trim, parse, filter NaN
-  if (result.type === "gitlab" && typeof result.projectIds === "string") {
+  if (typeof result.projectIds === "string") {
     const value = result.projectIds as string;
-    result.projectIds = value
-      .split(",")
-      .map((s) => Number(s.trim()))
-      .filter((n) => !Number.isNaN(n));
+
+    if (result.type === "gitlab") {
+      result.projectIds = value
+        .split(",")
+        .map((s) => Number(s.trim()))
+        .filter((n) => !Number.isNaN(n));
+    } else {
+      result.projectIds = value
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
   }
 
   return result;

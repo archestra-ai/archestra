@@ -87,13 +87,13 @@ To connect a team to a Vault folder at `kv/platform/ee/archestra`:
 1. Navigate to **Settings** → **Teams**
 2. Find your team and click the **Configure Vault Folder** button
 
-![Teams page with Configure Vault Folder button](/docs/automated_screenshots/teams-configure-vault-folder-button.png)
+![Teams page with Configure Vault Folder button](/docs/automated_screenshots/teams-configure-vault-folder-button.webp)
 
 3. Enter the path: `kv/platform/ee/archestra`
 4. Click **Test Connection** to verify access
 5. Click **Save Path**
 
-![Team Vault Folder Configuration Dialog](/docs/automated_screenshots/vault-folder-dialog-filled.png)
+![Team Vault Folder Configuration Dialog](/docs/automated_screenshots/vault-folder-dialog-filled.webp)
 
 ### Using Vault Secrets with MCP Servers
 
@@ -113,7 +113,7 @@ This example shows how to install a remote GitHub MCP server using a personal ac
 
 The MCP server will now use the secret value from your Vault at runtime.
 
-![MCP Server Installation with Vault Secrets](/docs/automated_screenshots/mcp-server-install-vault-complete.png)
+![MCP Server Installation with Vault Secrets](/docs/automated_screenshots/mcp-server-install-vault-complete.webp)
 
 ### Required Vault Permissions
 

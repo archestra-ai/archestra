@@ -1,7 +1,7 @@
 import { vi } from "vitest";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
 const TEST_TRACE_CONTEXT = {
@@ -100,18 +100,12 @@ describe("POST /api/chat slim error payload", () => {
       mockGetChatMcpToolUiResourceUris.mockResolvedValue({});
       mockExtractAndIngestDocuments.mockResolvedValue(undefined);
       mockStartActiveChatSpan.mockImplementation(
-        async ({
-          callback,
-        }: {
-          callback: () => Promise<Response>;
-        }) => callback(),
+        async ({ callback }: { callback: () => Promise<Response> }) =>
+          callback(),
       );
       mockCreateUIMessageStream.mockImplementation(
-        ({
-          onError,
-        }: {
-          onError: (error: Error) => string;
-        }) => onError(new Error("Failed to fetch")),
+        ({ onError }: { onError: (error: Error) => string }) =>
+          onError(new Error("Failed to fetch")),
       );
       mockCreateUIMessageStreamResponse.mockImplementation(
         ({ stream }: { stream: string }) =>
@@ -141,7 +135,9 @@ describe("POST /api/chat slim error payload", () => {
   });
 
   test("returns only mapped message and correlation ids when slim mode is enabled", async () => {
-    const { default: OrganizationModel } = await import("@/models/organization");
+    const { default: OrganizationModel } = await import(
+      "@/models/organization"
+    );
     await OrganizationModel.patch(organizationId, {
       slimChatErrorUi: true,
       chatErrorSupportMessage: "Contact support",

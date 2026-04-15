@@ -29,6 +29,16 @@ interface OAuthDiscoveryOverrides {
   wellKnownUrl?: string;
 }
 
+interface OAuthScopeConfig {
+  server_url: string;
+  supports_resource_metadata?: boolean;
+  scopes?: string[];
+  default_scopes?: string[];
+  auth_server_url?: string;
+  resource_metadata_url?: string;
+  well_known_url?: string;
+}
+
 /**
  * Discover OAuth resource metadata (for MCP servers)
  * Sends MCP-Protocol-Version header for MCP-aware servers
@@ -119,6 +129,42 @@ export async function discoverScopes(
 
   // Fall back to default scopes
   return defaultScopes;
+}
+
+export async function resolveOAuthScopesForAuthorization(params: {
+  oauthConfig: OAuthScopeConfig;
+}): Promise<{
+  configuredScopes: string[];
+  discoveredScopes: string[];
+  scopesToUse: string[];
+}> {
+  const configuredScopes = params.oauthConfig.scopes ?? [];
+  if (configuredScopes.length > 0) {
+    return {
+      configuredScopes,
+      discoveredScopes: [],
+      scopesToUse: configuredScopes,
+    };
+  }
+
+  const fallbackScopes = params.oauthConfig.default_scopes ?? [];
+
+  const discoveredScopes = await discoverScopes(
+    params.oauthConfig.server_url,
+    params.oauthConfig.supports_resource_metadata || false,
+    fallbackScopes,
+    {
+      authServerUrl: params.oauthConfig.auth_server_url,
+      resourceMetadataUrl: params.oauthConfig.resource_metadata_url,
+      wellKnownUrl: params.oauthConfig.well_known_url,
+    },
+  );
+
+  return {
+    configuredScopes,
+    discoveredScopes,
+    scopesToUse: discoveredScopes,
+  };
 }
 
 /**
@@ -221,6 +267,11 @@ interface DiscoveredEndpoints {
   registrationEndpoint?: string;
 }
 
+interface ExplicitOAuthEndpoints {
+  authorizationEndpoint?: string;
+  tokenEndpoint?: string;
+}
+
 /**
  * Discover OAuth endpoints via resource metadata → auth server metadata chain.
  * Shared by the initiate, callback, and refresh flows to avoid duplicated discovery logic.
@@ -230,14 +281,17 @@ export async function discoverOAuthEndpoints(
     server_url: string;
     supports_resource_metadata: boolean;
     auth_server_url?: string;
+    authorization_endpoint?: string;
     resource_metadata_url?: string;
     well_known_url?: string;
+    token_endpoint?: string;
   },
   log?: {
     info: (...args: unknown[]) => void;
     warn: (...args: unknown[]) => void;
   },
 ): Promise<DiscoveredEndpoints> {
+  const explicitEndpoints = getExplicitOAuthEndpoints(oauthConfig);
   let discoveryServerUrl =
     oauthConfig.auth_server_url || oauthConfig.server_url;
   const shouldDiscoverResourceMetadata =
@@ -276,28 +330,72 @@ export async function discoverOAuthEndpoints(
     }
   }
 
-  const metadata = await discoverAuthorizationServerMetadataWithOverrides(
-    discoveryServerUrl,
-    {
-      authServerUrl: oauthConfig.auth_server_url,
-      resourceMetadataUrl: oauthConfig.resource_metadata_url,
-      wellKnownUrl: oauthConfig.well_known_url,
-    },
-  );
-  log?.info(
-    {
-      authorizationEndpoint: metadata.authorization_endpoint,
-      tokenEndpoint: metadata.token_endpoint,
-      registrationEndpoint: metadata.registration_endpoint,
-    },
-    "Discovery successful",
-  );
+  try {
+    const metadata = await discoverAuthorizationServerMetadataWithOverrides(
+      discoveryServerUrl,
+      {
+        authServerUrl: oauthConfig.auth_server_url,
+        resourceMetadataUrl: oauthConfig.resource_metadata_url,
+        wellKnownUrl: oauthConfig.well_known_url,
+      },
+    );
+    if (
+      (explicitEndpoints.authorizationEndpoint &&
+        explicitEndpoints.authorizationEndpoint !==
+          metadata.authorization_endpoint) ||
+      (explicitEndpoints.tokenEndpoint &&
+        explicitEndpoints.tokenEndpoint !== metadata.token_endpoint)
+    ) {
+      log?.warn(
+        {
+          discoveredAuthorizationEndpoint: metadata.authorization_endpoint,
+          discoveredTokenEndpoint: metadata.token_endpoint,
+          authorizationEndpoint: explicitEndpoints.authorizationEndpoint,
+          tokenEndpoint: explicitEndpoints.tokenEndpoint,
+        },
+        "Using explicitly configured OAuth endpoint overrides instead of discovered metadata",
+      );
+    }
+    log?.info(
+      {
+        authorizationEndpoint:
+          explicitEndpoints.authorizationEndpoint ??
+          metadata.authorization_endpoint,
+        tokenEndpoint:
+          explicitEndpoints.tokenEndpoint ?? metadata.token_endpoint,
+        registrationEndpoint: metadata.registration_endpoint,
+      },
+      "Discovery successful",
+    );
 
-  return {
-    authorizationEndpoint: metadata.authorization_endpoint,
-    tokenEndpoint: metadata.token_endpoint,
-    registrationEndpoint: metadata.registration_endpoint,
-  };
+    return {
+      authorizationEndpoint:
+        explicitEndpoints.authorizationEndpoint ??
+        metadata.authorization_endpoint,
+      tokenEndpoint: explicitEndpoints.tokenEndpoint ?? metadata.token_endpoint,
+      registrationEndpoint: metadata.registration_endpoint,
+    };
+  } catch (error) {
+    if (
+      explicitEndpoints.authorizationEndpoint &&
+      explicitEndpoints.tokenEndpoint
+    ) {
+      log?.warn(
+        {
+          error,
+          authorizationEndpoint: explicitEndpoints.authorizationEndpoint,
+          tokenEndpoint: explicitEndpoints.tokenEndpoint,
+        },
+        "Authorization server discovery failed; using explicitly configured OAuth endpoints",
+      );
+      return {
+        authorizationEndpoint: explicitEndpoints.authorizationEndpoint,
+        tokenEndpoint: explicitEndpoints.tokenEndpoint,
+      };
+    }
+
+    throw error;
+  }
 }
 
 /**
@@ -623,33 +721,19 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       // Discover actual scopes from the OAuth server (like desktop app does)
-      const discoveredScopes = await discoverScopes(
-        oauthConfig.server_url,
-        oauthConfig.supports_resource_metadata || false,
-        oauthConfig.default_scopes || oauthConfig.scopes,
+      const { configuredScopes, discoveredScopes, scopesToUse } =
+        await resolveOAuthScopesForAuthorization({
+          oauthConfig,
+        });
+
+      fastify.log.info(
         {
-          authServerUrl: oauthConfig.auth_server_url,
-          resourceMetadataUrl: oauthConfig.resource_metadata_url,
-          wellKnownUrl: oauthConfig.well_known_url,
+          configured: configuredScopes,
+          discovered: discoveredScopes,
+          used: scopesToUse,
         },
+        "Resolved OAuth scopes",
       );
-
-      // Use discovered scopes if different from configured
-      const scopesToUse =
-        JSON.stringify(discoveredScopes.sort()) !==
-        JSON.stringify(oauthConfig.scopes.sort())
-          ? discoveredScopes
-          : oauthConfig.scopes;
-
-      if (scopesToUse !== oauthConfig.scopes) {
-        fastify.log.info(
-          {
-            configured: oauthConfig.scopes,
-            discovered: scopesToUse,
-          },
-          "Using discovered scopes instead of configured scopes",
-        );
-      }
 
       // Check if dynamic registration is needed
       if (!clientId) {
@@ -990,5 +1074,15 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 };
+
+function getExplicitOAuthEndpoints(oauthConfig: {
+  authorization_endpoint?: string;
+  token_endpoint?: string;
+}): ExplicitOAuthEndpoints {
+  return {
+    authorizationEndpoint: oauthConfig.authorization_endpoint,
+    tokenEndpoint: oauthConfig.token_endpoint,
+  };
+}
 
 export default oauthRoutes;

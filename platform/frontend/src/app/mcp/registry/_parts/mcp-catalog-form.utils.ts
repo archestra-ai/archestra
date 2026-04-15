@@ -76,13 +76,13 @@ export function transformFormToApiData(
       .map((uri) => uri.trim())
       .filter((uri) => uri.length > 0);
 
-    // Default to ["read", "write"] if scopes not provided or empty
-    const scopesList = values.oauthConfig.scopes?.trim()
-      ? values.oauthConfig.scopes
-          .split(",")
-          .map((scope) => scope.trim())
-          .filter((scope) => scope.length > 0)
-      : ["read", "write"];
+    const explicitScopes = values.oauthConfig.scopes?.trim() ?? "";
+    const parsedScopes = explicitScopes
+      .split(",")
+      .map((scope) => scope.trim())
+      .filter((scope) => scope.length > 0);
+    const hasExplicitScopes = parsedScopes.length > 0;
+    const scopesList = hasExplicitScopes ? parsedScopes : ["read", "write"];
 
     // For local servers, use oauthServerUrl; for remote servers, use serverUrl
     const oauthServerUrl =
@@ -94,9 +94,12 @@ export function transformFormToApiData(
       name: values.name, // Use name as OAuth provider name
       server_url: oauthServerUrl, // OAuth server URL for discovery/authorization
       auth_server_url: values.oauthConfig.authServerUrl || undefined,
+      authorization_endpoint:
+        values.oauthConfig.authorizationEndpoint || undefined,
       well_known_url: values.oauthConfig.wellKnownUrl || undefined,
       resource_metadata_url:
         values.oauthConfig.resourceMetadataUrl || undefined,
+      token_endpoint: values.oauthConfig.tokenEndpoint || undefined,
       client_id: values.oauthConfig.client_id || "",
       // Only include client_secret if no BYOS vault path is set
       client_secret: values.oauthClientSecretVaultPath
@@ -104,7 +107,9 @@ export function transformFormToApiData(
         : values.oauthConfig.client_secret || undefined,
       redirect_uris: redirectUrisList,
       scopes: scopesList,
-      default_scopes: ["read", "write"],
+      // Keep fallback scopes aligned with explicit scopes because the backend
+      // skips discovery entirely when scopes are configured.
+      default_scopes: hasExplicitScopes ? scopesList : ["read", "write"],
       supports_resource_metadata: values.oauthConfig.supports_resource_metadata,
     };
 
@@ -225,8 +230,10 @@ export function transformCatalogItemToFormValues(
         scopes: string;
         supports_resource_metadata: boolean;
         authServerUrl?: string;
+        authorizationEndpoint?: string;
         wellKnownUrl?: string;
         resourceMetadataUrl?: string;
+        tokenEndpoint?: string;
         oauthServerUrl?: string;
       }
     | undefined;
@@ -242,8 +249,10 @@ export function transformCatalogItemToFormValues(
       supports_resource_metadata:
         item.oauthConfig.supports_resource_metadata ?? true,
       authServerUrl: item.oauthConfig.auth_server_url || "",
+      authorizationEndpoint: item.oauthConfig.authorization_endpoint || "",
       wellKnownUrl: item.oauthConfig.well_known_url || "",
       resourceMetadataUrl: item.oauthConfig.resource_metadata_url || "",
+      tokenEndpoint: item.oauthConfig.token_endpoint || "",
       // For local servers, populate oauthServerUrl from server_url
       oauthServerUrl:
         item.serverType === "local"
@@ -431,8 +440,14 @@ export function transformExternalCatalogToFormValues(
       supports_resource_metadata:
         server.oauth_config.supports_resource_metadata ?? true,
       authServerUrl: server.oauth_config.auth_server_url || "",
+      authorizationEndpoint:
+        getOptionalStringProperty(
+          server.oauth_config,
+          "authorization_endpoint",
+        ) || "",
       wellKnownUrl: server.oauth_config.well_known_url || "",
       resourceMetadataUrl: server.oauth_config.resource_metadata_url || "",
+      tokenEndpoint: server.oauth_config.token_endpoint || "",
       oauthServerUrl:
         server.server.type === "local"
           ? server.oauth_config.server_url || ""
@@ -573,8 +588,10 @@ export function transformExternalCatalogToFormValues(
       scopes: "read, write",
       supports_resource_metadata: true,
       authServerUrl: "",
+      authorizationEndpoint: "",
       wellKnownUrl: "",
       resourceMetadataUrl: "",
+      tokenEndpoint: "",
     },
     localConfig: localConfig ?? {
       command: "",
@@ -591,6 +608,18 @@ export function transformExternalCatalogToFormValues(
     scope: "personal",
     teams: [],
   } as McpCatalogFormValues;
+}
+
+function getOptionalStringProperty(
+  value: unknown,
+  key: string,
+): string | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const propertyValue = (value as Record<string, unknown>)[key];
+  return typeof propertyValue === "string" ? propertyValue : undefined;
 }
 
 /**

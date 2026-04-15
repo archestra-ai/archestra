@@ -7,6 +7,7 @@ describe("IdentityProviderOidcConfigSchema", () => {
       issuer: "http://id-jag.example.com/demo-idp",
       skipDiscovery: true,
       pkce: true,
+      hd: "example.com",
       clientId: "gateway-client",
       clientSecret: "gateway-secret",
       authorizationEndpoint: "http://id-jag.example.com/demo-idp/authorize",
@@ -17,6 +18,7 @@ describe("IdentityProviderOidcConfigSchema", () => {
     });
 
     expect(result.skipDiscovery).toBe(true);
+    expect(result.hd).toBe("example.com");
     expect(result.tokenEndpoint).toBe("http://id-jag.example.com/token");
   });
 });

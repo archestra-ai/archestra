@@ -18,7 +18,7 @@ This document covers Identity Provider configuration for Archestra Platform. Inc
 - Limitations and requirements
 -->
 
-![Identity Providers Overview](/docs/automated_screenshots/platform-identity-providers_sso-providers-overview.png)
+![Identity Providers Overview](/docs/automated_screenshots/platform-identity-providers_sso-providers-overview.webp)
 
 Archestra supports Identity Provider (IdP) configuration for three purposes:
 
@@ -37,7 +37,7 @@ Archestra supports Identity Provider (IdP) configuration for three purposes:
 3. Users click the SSO button and authenticate with their identity provider
 4. After successful authentication, users are automatically provisioned and logged in
 
-![Sign-in with SSO](/docs/automated_screenshots/platform-identity-providers_sign-in-with-sso.png)
+![Sign-in with SSO](/docs/automated_screenshots/platform-identity-providers_sign-in-with-sso.webp)
 
 ## Disabling Basic Authentication
 
@@ -122,6 +122,7 @@ Google OAuth allows users to sign in with their Google accounts.
 
 - Users must have a Google Workspace or personal Google account
 - The discovery endpoint is automatically configured
+- Optional: set **Hosted Domain Hint** to pass Google's `hd` parameter and prefer or restrict account selection to a specific Google Workspace domain (for example `example.com`)
 
 ### GitHub
 

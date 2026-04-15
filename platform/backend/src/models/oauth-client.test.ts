@@ -185,4 +185,102 @@ describe("OAuthClientModel", () => {
       expect(name).toBe("Second");
     });
   });
+
+  describe("addRedirectUri", () => {
+    test("should add a new redirect URI to existing client", async () => {
+      const clientId = `https://example.com/${crypto.randomUUID()}/client.json`;
+
+      await OAuthClientModel.upsertFromCimd({
+        id: crypto.randomUUID(),
+        clientId,
+        name: "Loopback Client",
+        redirectUris: ["http://127.0.0.1:3000/callback"],
+        grantTypes: ["authorization_code"],
+        responseTypes: ["code"],
+        tokenEndpointAuthMethod: "none",
+        isPublic: true,
+        metadata: { cimd: true },
+      });
+
+      await OAuthClientModel.addRedirectUri(
+        clientId,
+        "http://127.0.0.1:54321/callback",
+      );
+
+      const found = await OAuthClientModel.findByClientId(clientId);
+      expect(found?.redirectUris).toEqual([
+        "http://127.0.0.1:3000/callback",
+        "http://127.0.0.1:54321/callback",
+      ]);
+    });
+
+    test("should not duplicate an existing redirect URI", async () => {
+      const clientId = `https://example.com/${crypto.randomUUID()}/client.json`;
+
+      await OAuthClientModel.upsertFromCimd({
+        id: crypto.randomUUID(),
+        clientId,
+        name: "No Dup Client",
+        redirectUris: ["http://127.0.0.1:3000/callback"],
+        grantTypes: ["authorization_code"],
+        responseTypes: ["code"],
+        tokenEndpointAuthMethod: "none",
+        isPublic: true,
+        metadata: { cimd: true },
+      });
+
+      await OAuthClientModel.addRedirectUri(
+        clientId,
+        "http://127.0.0.1:3000/callback",
+      );
+
+      const found = await OAuthClientModel.findByClientId(clientId);
+      expect(found?.redirectUris).toEqual(["http://127.0.0.1:3000/callback"]);
+    });
+
+    test("should preserve both redirect URIs across concurrent additions", async () => {
+      const clientId = `https://example.com/${crypto.randomUUID()}/client.json`;
+
+      await OAuthClientModel.upsertFromCimd({
+        id: crypto.randomUUID(),
+        clientId,
+        name: "Concurrent Loopback Client",
+        redirectUris: ["http://127.0.0.1:3000/callback"],
+        grantTypes: ["authorization_code"],
+        responseTypes: ["code"],
+        tokenEndpointAuthMethod: "none",
+        isPublic: true,
+        metadata: { cimd: true },
+      });
+
+      await Promise.all([
+        OAuthClientModel.addRedirectUri(
+          clientId,
+          "http://127.0.0.1:54321/callback",
+        ),
+        OAuthClientModel.addRedirectUri(
+          clientId,
+          "http://127.0.0.1:54322/callback",
+        ),
+      ]);
+
+      const found = await OAuthClientModel.findByClientId(clientId);
+      expect(found?.redirectUris).toEqual(
+        expect.arrayContaining([
+          "http://127.0.0.1:3000/callback",
+          "http://127.0.0.1:54321/callback",
+          "http://127.0.0.1:54322/callback",
+        ]),
+      );
+      expect(found?.redirectUris).toHaveLength(3);
+    });
+
+    test("should do nothing for non-existent client", async () => {
+      await OAuthClientModel.addRedirectUri(
+        "non-existent-client",
+        "http://127.0.0.1:54321/callback",
+      );
+      // Should not throw
+    });
+  });
 });

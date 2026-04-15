@@ -2,10 +2,14 @@
 
 import {
   type archestraApiTypes,
+  type BlockedToolPart,
+  type DualLlmPart,
+  type PartialUIMessage,
+  type PolicyDeniedPart,
   TOOL_SWAP_AGENT_SHORT_NAME,
   TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME,
 } from "@shared";
-import type { ChatStatus, UIMessage } from "ai";
+import type { ChatStatus } from "ai";
 import {
   Check,
   Paperclip,
@@ -733,46 +737,11 @@ const MessageThread = ({
   );
 };
 
-export type BlockedToolPart = {
-  type: "blocked-tool";
-  toolName: string;
-  toolArguments?: string;
-  reason: string;
-  fullRefusal?: string;
-};
-
-export type PolicyDeniedPart = {
-  type: string; // "tool-<toolName>"
-  toolCallId: string;
-  state: "output-denied";
-  input: Record<string, unknown>;
-  errorText: string;
-  unsafeContextActiveAtRequestStart?: boolean;
-};
-
-export type DualLlmPart = {
-  type: "dual-llm-analysis";
-  toolCallId: string;
-  safeResult: string;
-  conversations: Array<{
-    role: "user" | "assistant";
-    content: string | unknown;
-  }>;
-};
-
-export type PartialUIMessage = Partial<UIMessage> & {
-  role: UIMessage["role"];
-  parts: (
-    | UIMessage["parts"][number]
-    | BlockedToolPart
-    | DualLlmPart
-    | PolicyDeniedPart
-  )[];
-  metadata?: {
-    trusted?: boolean;
-    blocked?: boolean;
-    reason?: string;
-  };
+export type {
+  BlockedToolPart,
+  DualLlmPart,
+  PolicyDeniedPart,
+  PartialUIMessage,
 };
 
 // Type guard for tool-* prefixed parts (persisted tool calls from DB)

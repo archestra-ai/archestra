@@ -243,7 +243,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         Object.assign(
           secretEnvVars,
-          extractStaticUserConfigSecretValues(restBody.userConfig),
+          stripAndCollectStaticUserConfigSecrets(restBody.userConfig),
         );
 
         // Store secret env vars if any exist
@@ -574,7 +574,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         Object.assign(
           secretEnvVars,
-          extractStaticUserConfigSecretValues(
+          stripAndCollectStaticUserConfigSecrets(
             restBody.userConfig,
             existingSecretValues,
           ),
@@ -1044,7 +1044,12 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
 export default internalMcpCatalogRoutes;
 
-function extractStaticUserConfigSecretValues(
+/**
+ * Mutates `userConfig` in place by removing any extracted static secret
+ * defaults while returning the values that should be persisted in the backing
+ * secret payload instead of the catalog row.
+ */
+function stripAndCollectStaticUserConfigSecrets(
   userConfig:
     | Record<
         string,

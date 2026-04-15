@@ -623,7 +623,11 @@ export function InternalMCPCatalog({
         installResult.userConfigValues &&
         Object.keys(installResult.userConfigValues).length > 0
       ) {
-        setOAuthUserConfigValues(installResult.userConfigValues);
+        setOAuthUserConfigValues({
+          values: installResult.userConfigValues,
+          userConfig: localServerCatalogItem.userConfig,
+          isByosVault: installResult.isByosVault,
+        });
       }
       closeDialog("local-install");
       // Now initiate OAuth flow

@@ -84,9 +84,40 @@ export function setOAuthEnvironmentValues(values: Record<string, string>) {
   sessionStorage.setItem(OAUTH_ENVIRONMENT_VALUES, JSON.stringify(values));
 }
 
-/** Store promptable user-config values collected before OAuth redirect. */
-export function setOAuthUserConfigValues(values: Record<string, string>) {
-  sessionStorage.setItem(OAUTH_USER_CONFIG_VALUES, JSON.stringify(values));
+type OAuthUserConfigField = {
+  sensitive?: boolean;
+};
+
+/**
+ * Store promptable user-config values collected before OAuth redirect.
+ *
+ * In non-BYOS mode we only persist non-sensitive values across the redirect.
+ * Sensitive values must not be written into sessionStorage; they are handled
+ * server-side or re-prompted after the callback. In BYOS mode, values are
+ * vault references rather than raw secrets, so they are safe to persist.
+ */
+export function setOAuthUserConfigValues(params: {
+  values: Record<string, string>;
+  userConfig: Record<string, OAuthUserConfigField> | null | undefined;
+  isByosVault?: boolean;
+}) {
+  const valuesToPersist = params.isByosVault
+    ? params.values
+    : Object.fromEntries(
+        Object.entries(params.values).filter(([fieldName]) => {
+          return params.userConfig?.[fieldName]?.sensitive !== true;
+        }),
+      );
+
+  if (Object.keys(valuesToPersist).length === 0) {
+    sessionStorage.removeItem(OAUTH_USER_CONFIG_VALUES);
+    return;
+  }
+
+  sessionStorage.setItem(
+    OAUTH_USER_CONFIG_VALUES,
+    JSON.stringify(valuesToPersist),
+  );
 }
 
 /** Flag that OAuth is pending after env vars collection. */

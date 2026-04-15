@@ -275,10 +275,8 @@ export default function OrganizationSettingsPage() {
                   maxLength={500}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Shown on chat error cards when configured. In simplified mode,
-                  users will see this message plus correlation IDs; in detailed
-                  mode, it replaces the default error text while keeping the
-                  additional debug details visible.
+                  Shown alongside errors in chat. Use this to direct users to
+                  your support team.
                 </p>
               </div>
               <div className="flex items-start justify-between gap-4">

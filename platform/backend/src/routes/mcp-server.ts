@@ -305,9 +305,13 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const catalogStaticUserConfigValues = getCatalogStaticUserConfigValues(
           catalogItem.userConfig,
         );
+        const installUserConfigValues = filterInstallUserConfigValues({
+          userConfig: catalogItem.userConfig,
+          userConfigValues,
+        });
 
         // If isByosVault flag is set, use vault references from userConfigValues
-        if (isByosVault && userConfigValues && !secretId) {
+        if (isByosVault && installUserConfigValues && !secretId) {
           if (!isByosEnabled()) {
             throw new ApiError(
               400,
@@ -320,14 +324,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const secret = await secretManager().createSecret(
             {
               ...catalogStaticUserConfigValues,
-              ...userConfigValues,
+              ...installUserConfigValues,
             } as Record<string, unknown>,
             `${serverData.name}-vault-secret`,
           );
           secretId = secret.id;
           createdSecretId = secret.id;
           logger.info(
-            { keyCount: Object.keys(userConfigValues).length },
+            { keyCount: Object.keys(installUserConfigValues).length },
             "Created Readonly Vault secret with per-field references for remote server",
           );
         }
@@ -361,11 +365,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           createdSecretId = secret.id;
         }
 
-        if (userConfigValues && !secretId) {
+        if (installUserConfigValues && !secretId) {
           const secret = await secretManager().createSecret(
             {
               ...catalogStaticUserConfigValues,
-              ...userConfigValues,
+              ...installUserConfigValues,
             } as Record<string, unknown>,
             `${serverData.name}-secret`,
           );
@@ -915,6 +919,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const catalogStaticUserConfigValues = getCatalogStaticUserConfigValues(
           catalogItem?.userConfig,
         );
+        const installUserConfigValues = filterInstallUserConfigValues({
+          userConfig: catalogItem?.userConfig,
+          userConfigValues,
+        });
 
         if (accessToken) {
           // PAT token flow
@@ -929,7 +937,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             `${mcpServer.name}-token`,
           );
           newSecretId = secret.id;
-        } else if (userConfigValues) {
+        } else if (installUserConfigValues) {
           // Remote server user config fields
           if (isByosVault) {
             if (!isByosEnabled()) {
@@ -942,7 +950,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const secret = await secretManager().createSecret(
             {
               ...catalogStaticUserConfigValues,
-              ...userConfigValues,
+              ...installUserConfigValues,
             } as Record<string, unknown>,
             isByosVault
               ? `${mcpServer.name}-vault-secret`
@@ -1887,4 +1895,37 @@ function getCatalogStaticUserConfigValues(
       })
       .map(([fieldName, fieldConfig]) => [fieldName, fieldConfig.default]),
   );
+}
+
+function filterInstallUserConfigValues(params: {
+  userConfig:
+    | Record<
+        string,
+        {
+          headerName?: string;
+          promptOnInstallation?: boolean;
+        }
+      >
+    | null
+    | undefined;
+  userConfigValues: Record<string, unknown> | undefined;
+}): Record<string, unknown> | undefined {
+  if (!params.userConfigValues) {
+    return undefined;
+  }
+
+  const filteredEntries = Object.entries(params.userConfigValues).filter(
+    ([fieldName]) => {
+      const fieldConfig = params.userConfig?.[fieldName];
+      return !(
+        fieldConfig?.headerName && fieldConfig.promptOnInstallation === false
+      );
+    },
+  );
+
+  if (filteredEntries.length === 0) {
+    return undefined;
+  }
+
+  return Object.fromEntries(filteredEntries);
 }

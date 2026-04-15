@@ -3202,8 +3202,73 @@ describe("McpClient", () => {
           .calls;
         const lastCall = transportCalls[transportCalls.length - 1];
         const headers = lastCall[1]?.requestInit?.headers as Headers;
-        expect(headers.get("x-api-key")).toBe("Bearer header-secret-token");
+        expect(headers.get("x-api-key")).toBe("header-secret-token");
         expect(headers.get("authorization")).toBeNull();
+      });
+
+      test("falls back to Authorization header for legacy bearer credentials without headerName", async () => {
+        const legacyBearerCatalog = await InternalMcpCatalogModel.create({
+          name: "legacy-bearer-server",
+          serverType: "remote",
+          serverUrl: "https://legacy-bearer.example.com/mcp",
+          userConfig: {
+            access_token: {
+              type: "string",
+              title: "Access Token",
+              description: "Bearer token",
+              required: true,
+              sensitive: true,
+            },
+          },
+        });
+
+        const legacyBearerSecret = await secretManager().createSecret(
+          { access_token: "legacy-bearer-token" },
+          "legacy-bearer-secret",
+        );
+
+        const legacyBearerServer = await McpServerModel.create({
+          name: "legacy-bearer-server",
+          secretId: legacyBearerSecret.id,
+          catalogId: legacyBearerCatalog.id,
+          serverType: "remote",
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "legacy-bearer-server__list_items",
+          description: "List items with legacy bearer auth",
+          parameters: {},
+          catalogId: legacyBearerCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: legacyBearerServer.id,
+        });
+
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "Legacy bearer response" }],
+          isError: false,
+        });
+
+        await mcpClient.executeToolCall(
+          {
+            id: "call_legacy_bearer_auth",
+            name: "legacy-bearer-server__list_items",
+            arguments: {},
+          },
+          agentId,
+        );
+
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        const transportCalls = vi.mocked(StreamableHTTPClientTransport).mock
+          .calls;
+        const lastCall = transportCalls[transportCalls.length - 1];
+        const headers = lastCall[1]?.requestInit?.headers as Headers;
+        expect(headers.get("authorization")).toBe(
+          "Bearer legacy-bearer-token",
+        );
       });
 
       test("sends additional static headers alongside the auth header", async () => {

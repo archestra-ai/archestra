@@ -325,6 +325,9 @@ describe("mcp server inspect route", () => {
       payload: {
         name: "Static Header Remote",
         catalogId: catalog.id,
+        userConfigValues: {
+          header_x_api_key: "installer-override",
+        },
       },
     });
 
@@ -910,6 +913,73 @@ describe("mcp server inspect route", () => {
       id: mcpServer.id,
       oauthRefreshError: null,
       oauthRefreshFailedAt: null,
+    });
+  });
+
+  test("re-authentication ignores installer overrides for catalog static headers", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Remote Static Header Reauth Server",
+      serverType: "remote",
+      serverUrl: "http://localhost:30082/mcp",
+      userConfig: {
+        header_x_api_key: {
+          type: "string",
+          title: "x-api-key",
+          description: "Static API key",
+          promptOnInstallation: false,
+          required: false,
+          sensitive: true,
+          headerName: "x-api-key",
+          default: "catalog-api-key",
+        },
+        tenant_id: {
+          type: "string",
+          title: "Tenant ID",
+          description: "Prompted tenant ID",
+          promptOnInstallation: true,
+          required: true,
+          sensitive: true,
+          headerName: "x-tenant-id",
+        },
+      },
+    });
+    const mcpServer = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+    await McpServerUserModel.assignUserToMcpServer(mcpServer.id, user.id);
+
+    connectAndGetToolsMock.mockResolvedValueOnce([
+      {
+        name: "get-server-info",
+        description: "Returns server details",
+        inputSchema: { type: "object", properties: {} },
+      },
+    ]);
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/mcp_server/${mcpServer.id}/reauthenticate`,
+      payload: {
+        userConfigValues: {
+          header_x_api_key: "installer-override",
+          tenant_id: "tenant-42",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(connectAndGetToolsMock).toHaveBeenCalledTimes(1);
+    expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
+      catalogItem: expect.objectContaining({ id: catalog.id }),
+      mcpServerId: "validation",
+      secrets: {
+        header_x_api_key: "catalog-api-key",
+        tenant_id: "tenant-42",
+      },
     });
   });
 

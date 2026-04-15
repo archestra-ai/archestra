@@ -104,8 +104,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         oauthClientSecretVaultKey,
         localConfigVaultPath,
         localConfigVaultKey,
-        ...restBody
+        ...restBodyInput
       } = body;
+      const restBody = structuredClone(restBodyInput);
 
       // Enforce scope restrictions
       const { success: isAdmin } = await hasPermission(
@@ -372,8 +373,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         oauthClientSecretVaultKey,
         localConfigVaultPath,
         localConfigVaultKey,
-        ...restBody
+        ...restBodyInput
       } = body;
+      const restBody = structuredClone(restBodyInput);
 
       // Get the original catalog item to check if name or serverUrl changed
       const originalCatalogItem = await InternalMcpCatalogModel.findById(id);
@@ -1064,7 +1066,6 @@ function extractStaticUserConfigSecretValues(
       fieldConfig.default.length > 0
     ) {
       secretValues[fieldName] = fieldConfig.default;
-      delete fieldConfig.default;
       continue;
     }
 

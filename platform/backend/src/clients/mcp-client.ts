@@ -2764,9 +2764,9 @@ function buildStaticCredentialHeaders(params: {
 }): Record<string, string> {
   const { catalogItem, secrets } = params;
   const headers: Record<string, string> = {};
-  const hasConfiguredStaticAuthField = Boolean(
-    catalogItem.userConfig?.access_token ||
-      catalogItem.userConfig?.raw_access_token,
+  const tokenFieldUsesExplicitHeader = Boolean(
+    catalogItem.userConfig?.access_token?.headerName ||
+      catalogItem.userConfig?.raw_access_token?.headerName,
   );
 
   if (!catalogItem.userConfig) {
@@ -2785,15 +2785,16 @@ function buildStaticCredentialHeaders(params: {
 
     headers[config.headerName] = getStaticCredentialHeaderValue({
       fieldName,
+      headerName: config.headerName,
       secretValue,
     });
   }
 
-  if (!hasConfiguredStaticAuthField) {
-    return buildDefaultAuthorizationHeaders(headers, secrets);
+  if (tokenFieldUsesExplicitHeader) {
+    return headers;
   }
 
-  return headers;
+  return buildDefaultAuthorizationHeaders(headers, secrets);
 }
 
 function hasStaticAuthorizationCredential(
@@ -2830,9 +2831,13 @@ function hasStaticAuthorizationCredential(
 
 function getStaticCredentialHeaderValue(params: {
   fieldName: string;
+  headerName: string;
   secretValue: string;
 }): string {
-  if (params.fieldName === "access_token") {
+  if (
+    params.fieldName === "access_token" &&
+    params.headerName.toLowerCase() === "authorization"
+  ) {
     return `Bearer ${params.secretValue}`;
   }
 

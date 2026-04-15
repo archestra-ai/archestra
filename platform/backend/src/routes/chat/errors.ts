@@ -1546,6 +1546,10 @@ export function getActiveTraceContext(): {
   };
 }
 
+/**
+ * Strip provider/internal error details from the frontend payload while
+ * preserving the user-safe message and correlation IDs for log lookup.
+ */
 export function sanitizeChatErrorForFrontend(
   error: ChatErrorResponse,
 ): ChatErrorResponse {

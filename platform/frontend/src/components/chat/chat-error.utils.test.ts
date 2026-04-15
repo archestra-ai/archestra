@@ -88,6 +88,20 @@ describe("chat-error.utils", () => {
       });
     });
 
+    it("handles deeply nested JSON beyond two levels", () => {
+      const level3 = JSON.stringify({ deepValue: "found" });
+      const level2 = JSON.stringify({ level3 });
+      const level1 = JSON.stringify({ level2 });
+
+      expect(deepParseJson(level1)).toEqual({
+        level2: {
+          level3: {
+            deepValue: "found",
+          },
+        },
+      });
+    });
+
     it("handles arrays and objects with nested JSON strings", () => {
       const nestedValue = JSON.stringify({ inner: "data" });
 
@@ -106,6 +120,41 @@ describe("chat-error.utils", () => {
         key1: { inner: "data" },
         key2: "plain string",
         key3: 42,
+      });
+    });
+
+    it("handles the nested Gemini error structure", () => {
+      const innerError = JSON.stringify({
+        error: {
+          code: 400,
+          message: "API key not valid",
+          status: "INVALID_ARGUMENT",
+        },
+      });
+      const middleError = JSON.stringify({
+        error: { message: innerError, code: 400, status: "Bad Request" },
+      });
+      const outerError = JSON.stringify({
+        error: { message: middleError, type: "api_validation_error" },
+      });
+
+      expect(deepParseJson(outerError)).toEqual({
+        error: {
+          message: {
+            error: {
+              message: {
+                error: {
+                  code: 400,
+                  message: "API key not valid",
+                  status: "INVALID_ARGUMENT",
+                },
+              },
+              code: 400,
+              status: "Bad Request",
+            },
+          },
+          type: "api_validation_error",
+        },
       });
     });
   });

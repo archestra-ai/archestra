@@ -57,6 +57,36 @@ describe("InlineChatError", () => {
     ).toBeInTheDocument();
   });
 
+  it("falls back to the mapped error message in slim mode without a support message", () => {
+    render(
+      <InlineChatError
+        error={
+          new Error(
+            JSON.stringify({
+              code: "server_error",
+              message: "The provider failed",
+              isRetryable: true,
+              sessionId: "session-12345678",
+              traceId: "trace-12345678",
+              spanId: "span-12345678",
+              originalError: {
+                provider: "openai",
+                message: "secret provider detail",
+              },
+            }),
+          )
+        }
+        slimChatErrorUi
+      />,
+    );
+
+    expect(screen.getByText("The provider failed")).toBeInTheDocument();
+    expect(screen.queryByText("openai")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("secret provider detail"),
+    ).not.toBeInTheDocument();
+  });
+
   it("keeps the detailed error UI by default", () => {
     render(
       <InlineChatError

@@ -418,12 +418,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 });
 
                 const mapped = mapProviderError(error, provider);
+                const traceContext = getActiveTraceContext();
+                const fullError = { ...mapped, ...traceContext };
                 const errorForFrontend = useSlimChatErrorUi
-                  ? sanitizeChatErrorForFrontend({
-                      ...mapped,
-                      ...getActiveTraceContext(),
-                    })
-                  : { ...mapped, ...getActiveTraceContext() };
+                  ? sanitizeChatErrorForFrontend(fullError)
+                  : fullError;
                 try {
                   return JSON.stringify(errorForFrontend);
                 } catch {
@@ -431,7 +430,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     code: mapped.code,
                     message: mapped.message,
                     isRetryable: mapped.isRetryable,
-                    ...getActiveTraceContext(),
+                    ...traceContext,
                   });
                 }
               },
@@ -657,16 +656,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         error instanceof ProviderError
                           ? error.chatErrorResponse
                           : mapProviderError(error, provider);
+                      const traceContext = getActiveTraceContext();
+                      const fullError = { ...mappedError, ...traceContext };
                       const errorForFrontend = useSlimChatErrorUi
-                        ? sanitizeChatErrorForFrontend({
-                            ...mappedError,
-                            ...getActiveTraceContext(),
-                          })
-                        : { ...mappedError, ...getActiveTraceContext() };
+                        ? sanitizeChatErrorForFrontend(fullError)
+                        : fullError;
 
                       logger.info(
                         {
-                          errorForFrontend,
+                          mappedError: fullError,
                           originalErrorType:
                             error instanceof Error ? error.name : typeof error,
                           willBeSentToFrontend: true,
@@ -687,7 +685,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           code: mappedError.code,
                           message: mappedError.message,
                           isRetryable: mappedError.isRetryable,
-                          ...getActiveTraceContext(),
+                          ...traceContext,
                         });
                       }
                     },

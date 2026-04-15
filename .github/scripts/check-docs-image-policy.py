@@ -7,11 +7,6 @@ import sys
 
 KB = 1024
 MAX_WEBP_BYTES = 500 * KB
-MAX_ALLOWED_PNG_BYTES = 100 * KB
-ALLOWED_PNGS = {
-    "color.png",
-    "outline.png",
-}
 ALLOWED_VECTOR_EXTENSIONS = {".svg"}
 ASSETS_DIR = Path("docs/assets")
 
@@ -35,13 +30,6 @@ def main() -> int:
             if size_bytes > MAX_WEBP_BYTES:
                 violations.append(
                     f"{relative_path}: {format_bytes(size_bytes)} exceeds the {format_bytes(MAX_WEBP_BYTES)} WebP budget."
-                )
-            continue
-
-        if relative_path in ALLOWED_PNGS and extension == ".png":
-            if size_bytes > MAX_ALLOWED_PNG_BYTES:
-                violations.append(
-                    f"{relative_path}: {format_bytes(size_bytes)} exceeds the {format_bytes(MAX_ALLOWED_PNG_BYTES)} PNG budget."
                 )
             continue
 

@@ -89,6 +89,18 @@ import {
 } from "./errors";
 import { normalizeChatMessages } from "./normalization/normalize-chat-messages";
 
+function getCorrelationLogFields(traceContext: {
+  sessionId?: string;
+  traceId?: string;
+  spanId?: string;
+}) {
+  return {
+    ...(traceContext.sessionId ? { session_id: traceContext.sessionId } : {}),
+    ...(traceContext.traceId ? { trace_id: traceContext.traceId } : {}),
+    ...(traceContext.spanId ? { span_id: traceContext.spanId } : {}),
+  };
+}
+
 const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     "/api/chat",
@@ -419,13 +431,33 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
                 const mapped = mapProviderError(error, provider);
                 const traceContext = getActiveTraceContext();
+                const correlationLogFields =
+                  getCorrelationLogFields(traceContext);
                 const fullError = { ...mapped, ...traceContext };
                 const errorForFrontend = useSlimChatErrorUi
                   ? sanitizeChatErrorForFrontend(fullError)
                   : fullError;
+
+                logger.info(
+                  {
+                    mappedError: fullError,
+                    originalErrorType:
+                      error instanceof Error ? error.name : typeof error,
+                    willBeSentToFrontend: true,
+                    ...correlationLogFields,
+                  },
+                  "Returning mapped error to frontend before stream starts",
+                );
                 try {
                   return JSON.stringify(errorForFrontend);
                 } catch {
+                  logger.error(
+                    {
+                      errorCode: mapped.code,
+                      ...correlationLogFields,
+                    },
+                    "Failed to stringify mapped pre-stream error, returning minimal error",
+                  );
                   return JSON.stringify({
                     code: mapped.code,
                     message: mapped.message,
@@ -615,6 +647,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       if (shouldPersist) {
                         messagesPersisted = true;
                       }
+                      const traceContext = getActiveTraceContext();
+                      const correlationLogFields =
+                        getCorrelationLogFields(traceContext);
 
                       (async () => {
                         logger.error(
@@ -622,6 +657,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                             error,
                             conversationId,
                             agentId,
+                            ...correlationLogFields,
                           },
                           "Chat stream error occurred",
                         );
@@ -656,7 +692,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         error instanceof ProviderError
                           ? error.chatErrorResponse
                           : mapProviderError(error, provider);
-                      const traceContext = getActiveTraceContext();
                       const fullError = { ...mappedError, ...traceContext };
                       const errorForFrontend = useSlimChatErrorUi
                         ? sanitizeChatErrorForFrontend(fullError)
@@ -668,6 +703,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           originalErrorType:
                             error instanceof Error ? error.name : typeof error,
                           willBeSentToFrontend: true,
+                          ...correlationLogFields,
                         },
                         "Returning mapped error to frontend via stream",
                       );
@@ -677,7 +713,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         return JSON.stringify(errorForFrontend);
                       } catch (stringifyError) {
                         logger.error(
-                          { stringifyError, errorCode: mappedError.code },
+                          {
+                            stringifyError,
+                            errorCode: mappedError.code,
+                            ...correlationLogFields,
+                          },
                           "Failed to stringify mapped error, returning minimal error",
                         );
                         // Return a minimal error response without the raw error

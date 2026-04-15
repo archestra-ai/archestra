@@ -70,9 +70,9 @@ Once OpenWebUI is running:
 
    **Optional:** To use a specific profile, include the profile ID in the URL: `http://localhost:9000/v1/openai/{profile-id}`. You can create and manage profiles at [http://localhost:3000/profiles](http://localhost:3000/profiles)
 
-   ![openwebui](/docs/platfrom/openwebui-image1.png)
+   ![openwebui](/docs/platfrom/openwebui-image1.webp)
 
-   ![openwebui](/docs/platfrom/openwebui-image2.png)
+   ![openwebui](/docs/platfrom/openwebui-image2.webp)
 
 5. Now you can **Create a New Chat** and start chatting with the models
 
@@ -98,7 +98,7 @@ Also you can start using MCP servers
    https://dmcp-server.deno.dev/mcp
    ```
 
-   ![](/docs/platfrom/openwebui-image3.png)
+   ![](/docs/platfrom/openwebui-image3.webp)
 
 5. Click Save
 6. Now you can use this tool in Chat Input by enabling it with “+”, try prompting “Roll 2d4+1”
@@ -120,17 +120,17 @@ Also by default, if your context was exposed to untrusted information, any subse
 
 This rule might be quite limiting for the agent, but you can additional rules to validate the input (the arguments for the tool calls) and allow the tool call even if the conext is untrusted
 
-![](/docs/platfrom/openwebui-image4.png)
+![](/docs/platfrom/openwebui-image4.webp)
 
 I.e. we can always allow `fetch` to open `[google.com](http://google.com)`, even if the context _might_ have a prompt injection and is untrusted
 
 Also we can add a rule to what to consider as untrusted content. E.g. in Tool Result Policies, if we know that we queried our corporate website, we know that we the result will be trusted, and therefore, tool calling would still be allowed:
 
-![](/docs/platfrom/openwebui-image5.png)
+![](/docs/platfrom/openwebui-image5.webp)
 
 The decision tree for archestra would be:
 
-![](/docs/platfrom/openwebui-image6.png)
+![](/docs/platfrom/openwebui-image6.webp)
 
 ## All Set
 

@@ -1642,20 +1642,19 @@ function EnterpriseAuthRadioOption(params: {
   disabledReason: string | null;
 }) {
   const content = (
-    <div className="space-y-1">
-      <div className="grid grid-cols-[1rem_1fr] items-center gap-x-2">
-        <RadioGroupItem
-          value={params.value}
-          id={params.id}
-          disabled={params.isDisabled}
-        />
-        <FormLabel
-          htmlFor={params.id}
-          className={`font-normal ${params.isDisabled ? "cursor-not-allowed text-muted-foreground" : "cursor-pointer"}`}
-        >
-          {params.label}
-        </FormLabel>
-      </div>
+    <div className="grid grid-cols-[1rem_1fr] gap-x-2 gap-y-1">
+      <RadioGroupItem
+        value={params.value}
+        id={params.id}
+        disabled={params.isDisabled}
+        className="row-start-1"
+      />
+      <FormLabel
+        htmlFor={params.id}
+        className={`row-start-1 font-normal ${params.isDisabled ? "cursor-not-allowed text-muted-foreground" : "cursor-pointer"}`}
+      >
+        {params.label}
+      </FormLabel>
       {params.isDisabled && params.disabledReason ? (
         <p className="col-start-2 text-xs text-muted-foreground">
           {params.disabledReason}

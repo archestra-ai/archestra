@@ -69,6 +69,7 @@ describe("formSchema", () => {
   const baseValidData = {
     name: "Test MCP Server",
     authMethod: "none" as const,
+    includeBearerPrefix: true,
     authHeaderName: "",
     additionalHeaders: [],
     oauthConfig: undefined,
@@ -116,6 +117,7 @@ describe("formSchema", () => {
         serverType: "remote" as const,
         serverUrl: "https://api.example.com/mcp",
         authMethod: "bearer" as const,
+        includeBearerPrefix: true,
         authHeaderName: "x-api-key",
         additionalHeaders: [
           {

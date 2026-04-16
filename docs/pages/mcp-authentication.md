@@ -3,14 +3,19 @@ title: "Authentication"
 category: MCP
 order: 4
 description: "How authentication works for MCP clients and upstream MCP servers"
-lastUpdated: 2026-04-15
+lastUpdated: 2026-04-16
 ---
 
 <!--
 Check ../docs_writer_prompt.md before changing this file.
 -->
 
-Archestra's MCP Gateway handles authentication at two layers: it authenticates clients connecting to the gateway, and it separately manages credentials for the upstream MCP servers it orchestrates. Clients never see or handle upstream credentials directly.
+Archestra's MCP Gateway handles authentication at two separate layers:
+
+- **Gateway authentication**: how a client proves it can call `POST /v1/mcp/<gateway-id>`
+- **Upstream MCP server authentication**: how Archestra authenticates to the MCP server or external system behind that gateway when a tool actually runs
+
+Clients only send the gateway-facing token. Archestra resolves the upstream MCP server authentication separately at execution time.
 
 ## Gateway Authentication
 
@@ -27,13 +32,13 @@ MCP-native clients such as Claude Desktop, Cursor, and Open WebUI authenticate a
 The gateway supports the following OAuth flows and client registration methods:
 
 - **Authorization Code + PKCE**: The standard browser-based authorization flow. The user is redirected to a login and consent screen, and the client receives tokens upon approval.
-- **DCR (RFC 7591)**: Clients can register dynamically at runtime by posting their metadata to `POST /api/auth/oauth2/register`. The gateway returns a `client_id` for subsequent authorization requests.
+- **DCR ([RFC 7591](https://datatracker.ietf.org/doc/html/rfc7591))**: Clients can register dynamically at runtime by posting their metadata to `POST /api/auth/oauth2/register`. The gateway returns a `client_id` for subsequent authorization requests.
 - **CIMD**: Clients can use an HTTPS URL as their `client_id`. The gateway fetches the client's metadata document from that URL, eliminating the need for a separate registration step.
 
 Endpoint discovery is automatic. The gateway exposes standard well-known endpoints so clients can find the authorization and token URLs without any hardcoded configuration:
 
-- `/.well-known/oauth-protected-resource` (RFC 9728)
-- `/.well-known/oauth-authorization-server` (RFC 8414)
+- `/.well-known/oauth-protected-resource` ([RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728))
+- `/.well-known/oauth-authorization-server` ([RFC 8414](https://datatracker.ietf.org/doc/html/rfc8414))
 
 #### Token lifetime
 
@@ -49,12 +54,12 @@ Bearer tokens authenticate the client to Archestra. They are not enterprise asse
 
 For per-user access to downstream systems like GitHub or Jira, bearer tokens should usually be **personal user tokens**. Team and organization tokens can authenticate to the gateway, but they do not identify a specific user strongly enough for Archestra to broker per-user downstream credentials on their own.
 
-### Enterprise-Managed Authorization (Identity Assertion JWT Authorization Grant, ID-JAG)
+### Identity Assertion JWT Authorization Grant (ID-JAG)
 
-This option implements the MCP [Enterprise-Managed Authorization](https://modelcontextprotocol.io/extensions/auth/enterprise-managed-authorization) profile using an [Identity Assertion JWT Authorization Grant (ID-JAG)](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant). It is designed for organizations that already use a corporate IdP to sign users into MCP clients. The identity provider must be able to:
+This option implements the MCP [Enterprise-Managed Authorization](https://modelcontextprotocol.io/extensions/auth/enterprise-managed-authorization) extension using an [Identity Assertion JWT Authorization Grant (ID-JAG)](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant). It is designed for organizations that already use a corporate IdP to sign users into MCP clients. The identity provider must be able to:
 
 - authenticate the user to the MCP client
-- perform RFC 8693 token exchange to issue an ID-JAG
+- perform [RFC 8693](https://datatracker.ietf.org/doc/html/rfc8693) token exchange to issue an ID-JAG
 - sign that ID-JAG as a JWT that Archestra can validate through OIDC discovery or a JWKS endpoint
 
 In this flow, the MCP client does not send the user's enterprise JWT directly to the gateway. Instead:
@@ -83,52 +88,15 @@ Archestra supports the second leg of the flow generically at `POST /api/auth/oau
 
 Archestra binds the access token it issues to the specific MCP Gateway in the `resource` claim, so that token cannot be replayed against a different gateway.
 
-### Enterprise Gateway Auth
+See [How Enterprise-Managed Authorization Will Secure Remote MCP Servers in the Enterprise](https://archestra.ai/blog/enterprise-managed-authorization-mcp) for a longer walkthrough of the pattern.
 
-For gateways linked to an OIDC identity provider, Archestra supports two enterprise auth paths in addition to standard OAuth and static bearer tokens:
-
-- **ID-JAG**: the client sends an ID-JAG to `POST /api/auth/oauth2/token`, receives an Archestra-issued OAuth access token, then uses that token on `POST /v1/mcp/<gateway-id>`
-- **JWKS**: the client sends an external IdP JWT directly to `POST /v1/mcp/<gateway-id>`, and Archestra validates it against the linked identity provider's JWKS
-
-### MCP Gateway Example: Cursor with GitHub and Jira
-
-Consider a gateway that exposes GitHub and Jira tools to Cursor.
-
-- **Token A** authenticates Cursor to the Archestra MCP Gateway
-- **Token B** authenticates Archestra to GitHub or Jira when the tool runs
-
-Cursor can reach the gateway through four supported auth paths:
-
-- **OAuth 2.1**: Cursor completes the standard MCP Authorization flow, receives an Archestra-issued access token, then calls the gateway with that token
-- **ID-JAG**: Cursor sends an ID-JAG to Archestra's token endpoint, receives an Archestra-issued access token, then calls the gateway with that token
-- **JWKS**: Cursor calls the gateway directly with an external IdP JWT, and Archestra validates it against the linked IdP JWKS
-- **Bearer token**: Cursor calls the gateway directly with a static platform-managed token issued by Archestra
-
-For downstream enterprise-managed credentials, these modes are not equivalent:
-
-- **ID-JAG** and **JWKS** are the clearest enterprise patterns because they give Archestra a user-specific enterprise assertion during authentication
-- **OAuth 2.1** also works when the authenticated Archestra user has a linked session with the same IdP
-- **Bearer token** only works for enterprise-managed downstream credentials when it resolves to a specific user who already has a linked IdP session in Archestra
-
-In practice, that means a **personal user token** can work with enterprise-managed downstream credentials, but a pure **team** or **organization** token does not carry enough user identity on its own to broker per-user GitHub or Jira credentials.
-
-When a tool runs, Archestra still resolves **Token B** separately. For example:
-
-1. Cursor authenticates to Archestra using OAuth, ID-JAG, JWKS, or a personal Archestra bearer token
-2. Archestra identifies the user behind the request
-3. Archestra asks the configured IdP or broker for a GitHub credential for that user
-4. Archestra asks the same IdP or broker for a Jira credential for that user
-5. Archestra injects the correct credential into each upstream MCP request
-
-This is why a single gateway can front multiple upstream systems. Gateway authentication and upstream credential resolution are related, but they are separate steps.
-
-### External IdP JWKS
+### Identity Provider JWKS
 
 Identity Providers (IdPs) configured in Archestra can also be used to authenticate external MCP clients. When an IdP is linked to an Archestra MCP Gateway, the gateway validates incoming JWT bearer tokens against the IdP's JWKS (JSON Web Key Set) endpoint and matches the caller to an Archestra user account. The same team-based access control that applies to Bearer tokens and OAuth also applies here — the JWT's email claim must correspond to an Archestra user who has permission to access the gateway.
 
 After authentication, the gateway resolves credentials for the upstream MCP server. If the upstream server has its own credentials configured (e.g., a GitHub PAT or OAuth token), those are used. If no upstream credentials are configured, the gateway propagates the original JWT as an `Authorization: Bearer` header, enabling end-to-end identity propagation where the upstream server validates the same JWT against the IdP's JWKS. See [End-to-End JWKS](#end-to-end-jwks-without-gateway) below for how to build servers that consume propagated JWTs.
 
-This credential resolution enables a powerful workflow: an admin installs upstream MCP servers (GitHub, Jira, etc.) with service credentials once, and any user who authenticates via their org's IdP can access those tools seamlessly — the gateway resolves the appropriate upstream token automatically. Both [static and per-user credentials](#upstream-credentials) work with JWKS authentication.
+This credential resolution enables a powerful workflow: an admin installs upstream MCP servers (GitHub, Jira, etc.) with service credentials once, and any user who authenticates via their org's IdP can access those tools seamlessly — the gateway resolves the appropriate upstream token automatically. Both [static and per-user credentials](#upstream-mcp-server-authentication) work with JWKS authentication.
 
 #### How It Works
 
@@ -150,14 +118,14 @@ This credential resolution enables a powerful workflow: an admin installs upstre
 - The JWT must contain an `email` claim that matches an existing Archestra user
 - The user must have `profile:admin` permission or be a member of at least one team associated with the gateway they are trying to use
 
-## Upstream Credentials
+## Upstream MCP Server Authentication
 
 MCP servers that connect to external services like GitHub, Atlassian, or ServiceNow need their own credentials. Archestra manages this with a two-token model:
 
-- **Token A** authenticates the client to the gateway using an Archestra OAuth access token, an external IdP JWT via JWKS, or a platform-managed bearer token such as `arch_<token>` (legacy `archestra_<token>` values also work).
-- **Token B** authenticates the gateway to the upstream MCP server. This token is resolved and injected by Archestra at runtime.
+- **Gateway Token** authenticates the client to the gateway using an Archestra OAuth access token, an external IdP JWT via JWKS, or a platform-managed bearer token such as `arch_<token>` (legacy `archestra_<token>` values also work).
+- **Upstream MCP Server Token** authenticates the gateway to the upstream MCP server. This token is resolved and injected by Archestra at runtime.
 
-The client only ever sends Token A. Archestra resolves Token B behind the scenes.
+The client only ever sends the Gateway Token. Archestra resolves the Upstream MCP Server Token behind the scenes.
 
 ```mermaid
 graph LR
@@ -184,12 +152,12 @@ graph LR
         H2["Internal Tool"]
     end
 
-    C1 -- "Token A" --> GW
-    C2 -- "Token A" --> GW
-    C3 -- "Token A" --> GW
-    CR -- "Token B" --> U1
-    CR -- "Token B" --> U2
-    CR -- "Token B" --> U3
+    C1 -- "Gateway Token" --> GW
+    C2 -- "Gateway Token" --> GW
+    C3 -- "Gateway Token" --> GW
+    CR -- "Upstream MCP Server Token" --> U1
+    CR -- "Upstream MCP Server Token" --> U2
+    CR -- "Upstream MCP Server Token" --> U3
     CR -- "stdio" --> H1
     CR -- "stdio" --> H2
 
@@ -197,17 +165,18 @@ graph LR
     style CR fill:#fff,stroke:#0066cc,stroke-width:1px
 ```
 
-Credentials are configured when you install a server from the [MCP Catalog](/docs/platform-private-registry). There are two types of upstream credentials:
+Credentials are configured when you install a server from the [MCP Catalog](/docs/platform-private-registry). There are four types of upstream credentials:
 
 - **Static secrets**: API keys or personal access tokens that are set once at install time and used for all requests.
 - **OAuth tokens**: Obtained by running an OAuth flow against the upstream provider during installation. Archestra stores both the access token and refresh token.
-- **Enterprise-managed credentials**: Retrieved at tool-call time from an attached enterprise IdP when the IdP can mint or broker a downstream credential for the requested resource.
+- **Upstream ID-JAG**: Retrieved at tool-call time by exchanging the caller's enterprise assertion for the downstream credential the MCP server needs.
+- **Upstream Identity Provider JWT / JWKS**: Retrieved at tool-call time by forwarding the caller's IdP JWT to the upstream MCP server for direct JWKS-based validation.
 
 How credentials are delivered to the upstream server depends on the server type. For **passthrough** (remote) servers, Archestra sends the credential over HTTP. The primary auth header defaults to `Authorization`, but you can configure a different header name such as `x-api-key` when the upstream server expects the token outside the standard authorization header. Additional headers are available for tenant IDs and other non-auth upstream requirements, and non-sensitive static values are stored directly in the catalog item. For **hosted** (local) servers running in Kubernetes, the gateway connects via stdio transport within the cluster and no auth headers are needed.
 
 Auth credentials are stored in the secrets backend, which uses the database by default. For enterprise deployments, you can configure an [external secrets manager](/docs/platform-secrets-management).
 
-### Per-User Credentials
+### Dynamic Credential Resolution
 
 By default, each MCP server installation has a single credential that is shared by all callers.
 
@@ -215,7 +184,7 @@ When you enable "Resolve at call time" on a server, Archestra resolves the crede
 
 ```mermaid
 flowchart TD
-    A["Tool call arrives<br/>with Token A"] --> B{Dynamic credentials<br/>enabled?}
+    A["Tool call arrives<br/>with Gateway Token"] --> B{Dynamic credentials<br/>enabled?}
     B -- No --> C["Use server's<br/>pre-configured credential"]
     B -- Yes --> D{Caller has<br/>personal credential?}
     D -- Yes --> E["Use caller's credential"]
@@ -244,25 +213,17 @@ When you pin a tool to a specific installed MCP server connection instead of usi
 
 This means a team-shared connection is governed by the team it is shared with, not by the individual who originally installed it. Personal connections still follow the connection owner's access boundary.
 
-### Enterprise-Managed Credentials
+Archestra also supports two enterprise-managed dynamic credential resolution modes. Instead of storing downstream credentials inside Archestra, Archestra asks the configured identity provider for a credential at tool-call time and injects it into the MCP request.
 
-Enterprise-managed credentials are an upstream credential strategy. Instead of storing downstream credentials inside Archestra, Archestra asks the configured identity provider for a credential at tool-call time and injects it into the MCP request.
-
-This is different from both gateway JWKS and ID-JAG:
-
-- **JWKS** authenticates the caller to Archestra
-- **ID-JAG** exchanges an enterprise assertion for an Archestra-issued MCP access token
-- **Enterprise-managed credentials** obtain the credential used for the downstream MCP tool call itself
-
-Configuration is split across three places:
+These modes are configured across three places:
 
 - **Identity Provider**: how Archestra authenticates to the IdP for credential exchange
-- **MCP catalog item**: what downstream resource should be requested and how the returned credential should be injected
+- **MCP catalog item**: whether Archestra should exchange a downstream credential or pass through the caller's IdP JWT, plus how the resulting credential should be injected
 - **Tool assignment**: choose `Resolve at call time`
 
 This model works best for remote MCP servers and local MCP servers using HTTP transport. Local stdio servers do not support per-request enterprise-managed credential injection.
 
-For MCP Gateways, enterprise-managed credentials use the caller identity that was established at the gateway:
+For MCP Gateways, enterprise-managed upstream credential resolution uses the caller identity that was established at the gateway:
 
 - **JWKS**: Archestra can use the incoming external IdP JWT directly
 - **ID-JAG**: Archestra uses the enterprise assertion path associated with the gateway's Identity Provider
@@ -270,6 +231,28 @@ For MCP Gateways, enterprise-managed credentials use the caller identity that wa
 - **Bearer token**: Archestra can only broker downstream enterprise-managed credentials if the token maps to a specific user with a linked IdP session
 
 For external MCP clients such as Cursor, **ID-JAG** and **JWKS** are usually the clearest options when you want per-user access to upstream systems like GitHub or Jira.
+
+### Upstream ID-JAG
+
+With upstream **ID-JAG**, Archestra resolves the caller's enterprise assertion and exchanges it for the downstream credential the MCP server needs.
+
+Use this mode when the upstream system or credential broker expects Archestra to exchange the caller's enterprise identity for a different downstream token.
+
+This is different from using ID-JAG to authenticate to the MCP Gateway:
+
+- **ID-JAG at the MCP Gateway** exchanges an enterprise assertion for an Archestra-issued MCP access token
+- **Upstream ID-JAG** obtains the credential used for the downstream MCP tool call itself
+
+### Upstream Identity Provider JWT / JWKS
+
+With upstream **Identity Provider JWT / JWKS**, Archestra resolves the caller's enterprise assertion and forwards that JWT to the upstream MCP server as `Authorization: Bearer <jwt>`, so the upstream server can validate it against the IdP's JWKS directly.
+
+Use this mode when the upstream MCP server already understands the enterprise IdP's JWTs and should make its own authorization decisions from those claims.
+
+This is different from using JWKS to authenticate to the MCP Gateway:
+
+- **JWKS at the MCP Gateway** authenticates the caller to Archestra
+- **Upstream Identity Provider JWT / JWKS** provides the credential used for the downstream MCP tool call itself
 
 ### Missing Credentials
 
@@ -285,27 +268,85 @@ The user follows the link, installs the server with their credentials, and retri
 
 For upstream servers that use OAuth, Archestra handles the token lifecycle automatically. When the upstream server returns a 401, Archestra uses the stored refresh token to obtain a new access token and retries the request without any user intervention. Refresh failures are tracked per server and are visible in the MCP server status page.
 
+## MCP Gateway Example: Cursor with GitHub and Jira
+
+Consider a gateway that exposes GitHub and Jira tools to Cursor.
+
+- **Gateway Token** authenticates Cursor to the Archestra MCP Gateway
+- **Upstream MCP Server Token** authenticates Archestra to GitHub or Jira when the tool runs
+
+Cursor can reach the gateway through four supported auth paths:
+
+- **OAuth 2.1**: Cursor completes the standard MCP Authorization flow, receives an Archestra-issued access token, then calls the gateway with that token
+- **ID-JAG**: Cursor sends an ID-JAG to Archestra's token endpoint, receives an Archestra-issued access token, then calls the gateway with that token
+- **JWKS**: Cursor calls the gateway directly with an external IdP JWT, and Archestra validates it against the linked IdP JWKS
+- **Bearer token**: Cursor calls the gateway directly with a static platform-managed token issued by Archestra
+
+For downstream enterprise-managed credentials, these modes are not equivalent:
+
+- **ID-JAG** and **JWKS** are the clearest enterprise patterns because they give Archestra a user-specific enterprise assertion during authentication
+- **OAuth 2.1** also works when the authenticated Archestra user has a linked session with the same IdP
+- **Bearer token** only works for enterprise-managed downstream credentials when it resolves to a specific user who already has a linked IdP session in Archestra
+
+In practice, that means a **personal user token** can work with enterprise-managed downstream credentials, but a pure **team** or **organization** token does not carry enough user identity on its own to broker per-user GitHub or Jira credentials.
+
+When a tool runs, Archestra still resolves the **Upstream MCP Server Token** separately. For example:
+
+1. Cursor authenticates to Archestra using OAuth, ID-JAG, JWKS, or a personal Archestra bearer token
+2. Archestra identifies the user behind the request
+3. Archestra asks the configured IdP or broker for a GitHub credential for that user
+4. Archestra asks the same IdP or broker for a Jira credential for that user
+5. Archestra injects the correct credential into each upstream MCP request
+
+This is why a single gateway can front multiple upstream systems. Gateway authentication and upstream credential resolution are related, but they are separate steps.
+
 ## Custom Header Passthrough
+
+Archestra supports custom header forwarding in two different places:
+
+- **MCP Gateways** can forward selected client request headers through the gateway
+- **Upstream MCP Servers** can receive additional static headers configured on the server installation or catalog item
+
+These solve different problems. Gateway passthrough preserves request-specific context from the MCP client. Upstream MCP server headers attach server-specific values that Archestra should send on every downstream request.
+
+### MCP Gateways
 
 MCP Gateways can pass through client request headers to downstream MCP servers. This is useful for passing correlation IDs, tenant identifiers, or other application-specific headers through the gateway.
 
 Configure the allowlist in the MCP Gateway's **Advanced** section under **Custom Header Passthrough**. Only headers whose names appear in the allowlist are forwarded; all others are dropped. Header names are case-insensitive and stored in lowercase.
 
-Hop-by-hop headers (`Connection`, `Transfer-Encoding`, `Upgrade`, etc.) and protocol-level headers (`Host`, `Content-Length`) cannot be added to the allowlist. Application-level headers like `Authorization` and `Cookie` are allowed — adding them to the allowlist is an explicit opt-in.
+Hop-by-hop headers (`Connection`, `Transfer-Encoding`, `Upgrade`, etc.) and protocol-level headers (`Host`, `Content-Length`) cannot be added to the allowlist. Application-level headers like `Authorization` and `Cookie` are allowed, but forwarding them is an explicit opt-in.
 
-Passthrough headers do not override credentials already set by Archestra's upstream credential resolution. If a header name conflicts with an existing credential header (e.g., `Authorization`), the credential takes precedence.
+Gateway passthrough headers do not override credentials already set by Archestra's upstream credential resolution. If a header name conflicts with an existing credential header such as `Authorization`, the credential takes precedence.
 
-Passthrough headers only apply to HTTP-based transports (streamable-http and remote servers). Stdio-based servers do not support HTTP headers.
+Gateway passthrough only applies to HTTP-based transports (streamable-http and remote servers). Stdio-based servers do not support HTTP headers.
 
-## Building MCP Servers
+### Upstream MCP Servers
 
-There are three authentication patterns available for MCP servers deployed through Archestra, depending on whether the server needs external credentials and whether those credentials differ per user.
+Archestra can also send arbitrary additional headers to upstream MCP servers themselves. This is useful when an upstream server expects companion headers such as tenant IDs, API version headers, feature flags, or other non-auth request metadata on every call.
 
-| Pattern            | When to use                                      | How it works                                                                 |
-| ------------------ | ------------------------------------------------ | ---------------------------------------------------------------------------- |
-| No auth            | Internal tools with no external API dependencies | Hosted in K8s, gateway connects via stdio or streamable-http                 |
-| Static credentials | Shared API key or service account                | User provides credentials at install time, Archestra stores and injects them |
-| OAuth 2.1          | Per-user access to a SaaS API                    | Full OAuth flow at install, automatic token refresh by Archestra             |
+These headers are configured on the MCP server installation or catalog item as **Additional Headers**. Each header can either be:
+
+- prompted for during installation
+- stored once as a static catalog value
+
+Upstream MCP server headers are attached by Archestra to downstream requests. Unlike gateway passthrough, they do not depend on the incoming MCP client's request headers.
+
+If an additional header conflicts with a credential header that Archestra manages through upstream credential resolution, the managed credential still takes precedence.
+
+Upstream MCP server headers are supported for remote MCP servers and local MCP servers using streamable-http transport. Local stdio MCP servers do not support downstream HTTP headers.
+
+## MCP Server Authentication Patterns
+
+This section summarizes the authentication patterns Archestra supports for MCP servers. It is about how your server receives credentials, not about the general mechanics of packaging or deploying a server.
+
+| Pattern                               | When to use                                                    | How it works                                                                                   |
+| ------------------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| No auth                               | Internal tools with no external API dependencies               | Hosted in K8s, gateway connects via stdio or streamable-http                                  |
+| Static credentials                    | Shared API key, PAT, or service account                        | User provides credentials at install time, Archestra stores and injects them                  |
+| OAuth 2.1                             | Per-user access to a SaaS API                                  | Full OAuth flow at install, automatic token refresh by Archestra                              |
+| Upstream Identity Provider JWT / JWKS | The upstream server should validate the caller's enterprise JWT | Archestra forwards the caller's IdP JWT and the upstream server validates it against the JWKS |
+| Upstream ID-JAG                       | Archestra should exchange enterprise identity for a downstream token | Archestra resolves the caller's enterprise assertion and exchanges it for the downstream credential |
 
 ### No Auth (Hosted)
 
@@ -344,7 +385,7 @@ Your server receives an `Authorization: Bearer <access_token>` header with each 
 
 ### End-to-End JWKS (Without Gateway)
 
-When an MCP Gateway is configured with an [External IdP](#external-idp-jwks), the gateway propagates the caller's JWT to upstream MCP servers. Your MCP server receives the JWT as an `Authorization: Bearer` header and can validate it directly against the IdP's JWKS endpoint — statelessly, without any Archestra-specific integration.
+When an MCP Gateway is configured with [Identity Provider JWKS](#identity-provider-jwks), the gateway propagates the caller's JWT to upstream MCP servers. Your MCP server receives the JWT as an `Authorization: Bearer` header and can validate it directly against the IdP's JWKS endpoint — statelessly, without any Archestra-specific integration.
 
 This pattern is useful when your MCP server needs to enforce its own access control based on IdP claims (roles, groups, etc.), or when the server is also deployed outside of Archestra and needs to authenticate users independently.
 
@@ -352,7 +393,12 @@ See [Building Enterprise-Ready MCP Servers with JWKS and Identity Providers](htt
 
 ## ID-JAG vs JWKS
 
-Enterprise-Managed Authorization and JWKS-based authentication both rely on enterprise-issued JWTs, but they solve different problems.
+ID-JAG and JWKS both rely on enterprise-issued JWTs, but they solve different problems.
+
+In the product UI, these choices appear in two different places:
+
+- **MCP Gateway dialog**: choose the Identity Provider the gateway trusts for enterprise client authentication
+- **MCP catalog item > Multitenant Authorization**: choose whether the upstream MCP server should receive an exchanged credential (**ID-JAG**) or the caller's original IdP JWT (**Identity Provider JWT / JWKS**)
 
 **ID-JAG** is a token exchange pattern. The MCP client first obtains an enterprise-issued identity assertion, exchanges it for an ID-JAG, and then exchanges that ID-JAG with Archestra for an MCP access token. Archestra validates the ID-JAG and issues a new gateway token scoped to the target MCP Gateway.
 
@@ -360,7 +406,7 @@ Enterprise-Managed Authorization and JWKS-based authentication both rely on ente
 
 Use **ID-JAG** when:
 
-- your MCP client participates in enterprise-managed authorization
+- your MCP client uses the ID-JAG token exchange flow
 - you want Archestra to mint its own MCP access token for the gateway
 - you want the resulting gateway token bound to a specific MCP resource
 

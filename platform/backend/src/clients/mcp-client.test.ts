@@ -2496,7 +2496,7 @@ describe("McpClient", () => {
         );
       });
 
-      test("returns expired-auth message with team context", async ({
+      test("returns config error when a team token hits a personal static assignment", async ({
         makeUser,
         makeTeam,
         makeOrganization,
@@ -2568,11 +2568,10 @@ describe("McpClient", () => {
 
         expect(result).toMatchObject({ isError: true });
         expect(result?.error).toContain(
-          `Expired or invalid authentication for "github-team-oauth-server"`,
+          `Credential assignment unavailable for "github-team-oauth-server"`,
         );
-        expect(result?.error).toContain(`team: ${team.id}`);
         expect(result?.error).toContain(
-          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${oauthCatalog.id}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${mcpServer.id}`,
+          'This tool is pinned to a personal "github-team-oauth-server" connection that your account cannot access.',
         );
       });
     });

@@ -158,6 +158,7 @@ export function McpServerSettingsDialog({
 
   const defaultPage = initialPage ?? navItems[0]?.id ?? "configuration";
   const [activePage, setActivePage] = useState<SettingsPage>(defaultPage);
+  const [clickedServerId, setClickedServerId] = useState<string | null>(null);
 
   // Reset to initial page when dialog opens with a specific page
   const [lastInitialPage, setLastInitialPage] = useState(initialPage);
@@ -365,7 +366,8 @@ export function McpServerSettingsDialog({
                   variant={variant}
                   onOpenPodLogs={
                     showDebug
-                      ? () => {
+                      ? (podServerId: string) => {
+                          setClickedServerId(podServerId);
                           setActivePage("debug-logs");
                         }
                       : undefined
@@ -386,7 +388,7 @@ export function McpServerSettingsDialog({
                       hideTabBar
                       controlledTab={DEBUG_TAB_MAP[validPage]}
                       onReinstall={() => onReinstall()}
-                      initialServerId={logsInitialServerId}
+                      initialServerId={clickedServerId ?? logsInitialServerId}
                     />
                   </div>
                 ) : (

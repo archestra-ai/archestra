@@ -121,10 +121,10 @@ export function transformFormToApiData(
 
     // Clear userConfig when using OAuth
     data.userConfig = {};
-    data.enterpriseManagedConfig = undefined;
+    data.enterpriseManagedConfig = null;
   } else if (values.authMethod === "enterprise_managed") {
     data.userConfig = {};
-    data.oauthConfig = undefined;
+    data.oauthConfig = null;
     data.enterpriseManagedConfig = values.enterpriseManagedConfig
       ? {
           ...values.enterpriseManagedConfig,
@@ -133,7 +133,7 @@ export function transformFormToApiData(
       : null;
   } else if (values.authMethod === "idp_jwt") {
     data.userConfig = {};
-    data.oauthConfig = undefined;
+    data.oauthConfig = null;
     data.enterpriseManagedConfig = values.enterpriseManagedConfig
       ? {
           identityProviderId: values.enterpriseManagedConfig.identityProviderId,
@@ -154,13 +154,12 @@ export function transformFormToApiData(
         ? "Bearer token for authentication"
         : "Token for authentication (sent without Bearer prefix)",
     });
-    // Clear oauthConfig when using access token auth
-    data.oauthConfig = undefined;
-    data.enterpriseManagedConfig = undefined;
+    data.oauthConfig = null;
+    data.enterpriseManagedConfig = null;
   } else {
     data.userConfig = buildStaticHeaderUserConfig(values);
-    data.oauthConfig = undefined;
-    data.enterpriseManagedConfig = undefined;
+    data.oauthConfig = null;
+    data.enterpriseManagedConfig = null;
   }
 
   // Handle labels

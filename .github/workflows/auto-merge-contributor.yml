@@ -6,19 +6,29 @@ on:
     paths:
       - 'EXTERNAL_CONTRIBUTORS.md'
 
+# No top-level permissions; grant only at job level where needed.
+permissions: {}
+
+concurrency:
+  group: auto-merge-contributor-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
 jobs:
   validate-and-merge:
+    name: Validate and merge contributor PR
     runs-on: ubuntu-latest
     if: >-
       github.event.pull_request.user.login == 'archestra-contributor-pr-bot[bot]'
       && startsWith(github.head_ref, 'contributor/')
+    # contents: write to fetch PR refs; pull-requests: write for approve/merge via app token
     permissions:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Validate PR
         env:
@@ -58,17 +68,19 @@ jobs:
 
       - name: Generate token
         id: generate-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
         with:
           app-id: ${{ secrets.ARCHESTRA_CONTRIBUTOR_BOT_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_CONTRIBUTOR_BOT_GITHUB_APP_PRIVATE_KEY }}
 
       - name: Approve PR
-        run: gh pr review ${{ github.event.pull_request.number }} --approve
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: gh pr review "$PR_NUMBER" --approve
 
       - name: Merge PR
-        run: gh pr merge ${{ github.event.pull_request.number }} --squash --delete-branch --admin
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: gh pr merge "$PR_NUMBER" --squash --delete-branch --admin

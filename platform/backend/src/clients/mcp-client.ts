@@ -1096,6 +1096,28 @@ class McpClient {
         };
       }
       const mcpServer = await McpServerModel.findById(tool.mcpServerId);
+      if (
+        mcpServer?.ownerId &&
+        !mcpServer.teamId &&
+        tokenAuth?.userId !== mcpServer.ownerId
+      ) {
+        const authError = this.buildAuthRequiredMessage(
+          tool.catalogName || fallbackName,
+          tool.catalogId ?? "",
+          tokenAuth,
+          `This tool is pinned to another user's personal connection. Set up your own credentials to continue using "${tool.catalogName || fallbackName}".`,
+        );
+        return {
+          error: await this.createErrorResult(
+            toolCall,
+            agentId,
+            authError.message,
+            fallbackName,
+            undefined,
+            authError,
+          ),
+        };
+      }
       logger.info(
         {
           toolName: toolCall.name,
@@ -1837,6 +1859,7 @@ class McpClient {
     catalogDisplayName: string,
     catalogId: string,
     tokenAuth?: TokenAuthContext,
+    detailOverride?: string,
   ): AuthRequiredMcpToolError {
     const context = this.formatAuthContext(tokenAuth);
     const installUrl = `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_INSTALL_QUERY_PARAM}=${catalogId}`;
@@ -1844,7 +1867,9 @@ class McpClient {
       type: "auth_required",
       message: formatActionableAuthError({
         title: `Authentication required for "${catalogDisplayName}"`,
-        detail: `No credentials were found for your account (${context}).`,
+        detail:
+          detailOverride ??
+          `No credentials were found for your account (${context}).`,
         actionLabel: "set up your credentials",
         url: installUrl,
         postAction:

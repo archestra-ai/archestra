@@ -1069,6 +1069,79 @@ describe("McpClient", () => {
           { type: "text", text: result?.error },
         ]);
       });
+
+      test("returns install URL when a static personal connection belongs to another user", async ({
+        makeUser,
+      }) => {
+        const connectionOwner = await makeUser({
+          email: "static-owner@example.com",
+        });
+        const invokingUser = await makeUser({
+          email: "static-invoker@example.com",
+        });
+
+        const staticCatalog = await InternalMcpCatalogModel.create({
+          name: "githubcopilot__remote-mcp",
+          serverType: "remote",
+          serverUrl: "https://api.githubcopilot.com/mcp/",
+        });
+
+        const ownerSecret = await secretManager().createSecret(
+          { access_token: "owner-token" },
+          "static-owner-secret",
+        );
+
+        const personalServer = await McpServerModel.create({
+          name: "githubcopilot__remote-mcp",
+          catalogId: staticCatalog.id,
+          secretId: ownerSecret.id,
+          serverType: "remote",
+          ownerId: connectionOwner.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "githubcopilot__remote-mcp__issue_write",
+          description: "Create an issue",
+          parameters: {},
+          catalogId: staticCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: personalServer.id,
+        });
+
+        const toolCall = {
+          id: "call_static_foreign_personal",
+          name: "githubcopilot__remote-mcp__issue_write",
+          arguments: { title: "Test issue" },
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId, {
+          tokenId: "invoker-token",
+          teamId: null,
+          isOrganizationToken: false,
+          userId: invokingUser.id,
+        });
+
+        expect(result).toMatchObject({ isError: true });
+        expect(result?.error).toContain(
+          'Authentication required for "githubcopilot__remote-mcp"',
+        );
+        expect(result?.error).toContain(
+          "This tool is pinned to another user's personal connection.",
+        );
+        expect(result?.error).toContain(
+          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?install=${staticCatalog.id}`,
+        );
+        expect(result?._meta).toMatchObject({
+          archestraError: {
+            type: "auth_required",
+            catalogId: staticCatalog.id,
+            catalogName: "githubcopilot__remote-mcp",
+            installUrl: `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?install=${staticCatalog.id}`,
+          },
+        });
+      });
     });
 
     describe("Enterprise-managed credentials", () => {

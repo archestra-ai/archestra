@@ -179,6 +179,7 @@ export function McpCatalogForm({
           serverType: "remote",
           serverUrl: "",
           authMethod: "none",
+          includeBearerPrefix: true,
           authHeaderName: "",
           additionalHeaders: [],
           enterpriseManagedConfig: null,
@@ -1079,30 +1080,15 @@ export function McpCatalogForm({
                           </FormLabel>
                         </div>
                         {currentServerType === "remote" && (
-                          <>
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="bearer" id="auth-bearer" />
-                              <FormLabel
-                                htmlFor="auth-bearer"
-                                className="font-normal cursor-pointer"
-                              >
-                                "Authorization: Bearer &lt;your token&gt;"
-                                header
-                              </FormLabel>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem
-                                value="raw_token"
-                                id="auth-raw-token"
-                              />
-                              <FormLabel
-                                htmlFor="auth-raw-token"
-                                className="font-normal cursor-pointer"
-                              >
-                                "Authorization: &lt;your token&gt;" header
-                              </FormLabel>
-                            </div>
-                          </>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="bearer" id="auth-bearer" />
+                            <FormLabel
+                              htmlFor="auth-bearer"
+                              className="font-normal cursor-pointer"
+                            >
+                              Access token header
+                            </FormLabel>
+                          </div>
                         )}
                         <div className="flex items-center space-x-2">
                           <RadioGroupItem value="oauth" id="auth-oauth" />
@@ -1187,7 +1173,7 @@ export function McpCatalogForm({
                 </div>
               )}
 
-              {(authMethod === "bearer" || authMethod === "raw_token") && (
+              {authMethod === "bearer" && (
                 <div className="space-y-4">
                   <div className="bg-muted p-4 rounded-lg">
                     <p className="text-sm text-muted-foreground">
@@ -1196,29 +1182,55 @@ export function McpCatalogForm({
                     </p>
                   </div>
 
-                  <FormField
-                    control={form.control}
-                    name="authHeaderName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Auth Header Name</FormLabel>
-                        <FormDescription className="text-xs">
-                          Defaults to <code>Authorization</code>. Set a custom
-                          header such as <code>x-api-key</code> when the
-                          upstream server expects the token outside the standard
-                          authorization header.
-                        </FormDescription>
-                        <FormControl>
-                          <Input
-                            placeholder="Authorization"
-                            autoComplete={MCP_CONFIG_AUTOCOMPLETE}
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                    <FormField
+                      control={form.control}
+                      name="authHeaderName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Auth Header Name</FormLabel>
+                          <FormDescription className="text-xs">
+                            Defaults to <code>Authorization</code>. Set a custom
+                            header such as <code>x-api-key</code> when the
+                            upstream server expects the token outside the
+                            standard authorization header.
+                          </FormDescription>
+                          <FormControl>
+                            <Input
+                              placeholder="Authorization"
+                              autoComplete={MCP_CONFIG_AUTOCOMPLETE}
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="includeBearerPrefix"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center gap-2 rounded-md border px-3 py-2 md:mb-0">
+                          <FormControl>
+                            <Checkbox
+                              checked={field.value}
+                              onCheckedChange={(checked) =>
+                                field.onChange(Boolean(checked))
+                              }
+                              id="include-bearer-prefix"
+                            />
+                          </FormControl>
+                          <FormLabel
+                            htmlFor="include-bearer-prefix"
+                            className="cursor-pointer font-normal"
+                          >
+                            Include Bearer Prefix
+                          </FormLabel>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
                 </div>
               )}
 

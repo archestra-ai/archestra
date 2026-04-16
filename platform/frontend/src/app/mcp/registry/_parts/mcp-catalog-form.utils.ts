@@ -147,18 +147,14 @@ export function transformFormToApiData(
       : null;
   } else if (values.authMethod === "bearer") {
     data.userConfig = buildStaticHeaderUserConfig(values, {
-      authFieldName: "access_token",
-      authDescription: "Bearer token for authentication",
+      authFieldName: values.includeBearerPrefix
+        ? "access_token"
+        : "raw_access_token",
+      authDescription: values.includeBearerPrefix
+        ? "Bearer token for authentication"
+        : "Token for authentication (sent without Bearer prefix)",
     });
-    // Clear oauthConfig when using Bearer Token
-    data.oauthConfig = undefined;
-    data.enterpriseManagedConfig = undefined;
-  } else if (values.authMethod === "raw_token") {
-    data.userConfig = buildStaticHeaderUserConfig(values, {
-      authFieldName: "raw_access_token",
-      authDescription: "Token for authentication (sent without Bearer prefix)",
-    });
-    // Clear oauthConfig when using Token
+    // Clear oauthConfig when using access token auth
     data.oauthConfig = undefined;
     data.enterpriseManagedConfig = undefined;
   } else {
@@ -198,10 +194,10 @@ export function transformCatalogItemToFormValues(
   let authMethod:
     | "none"
     | "bearer"
-    | "raw_token"
     | "oauth"
     | "enterprise_managed"
     | "idp_jwt" = "none";
+  let includeBearerPrefix = true;
   if (item.enterpriseManagedConfig) {
     authMethod =
       item.enterpriseManagedConfig.assertionMode === "passthrough"
@@ -210,7 +206,8 @@ export function transformCatalogItemToFormValues(
   } else if (item.oauthConfig) {
     authMethod = "oauth";
   } else if (item.userConfig?.raw_access_token) {
-    authMethod = "raw_token";
+    authMethod = "bearer";
+    includeBearerPrefix = false;
   } else if (item.userConfig?.access_token) {
     authMethod = "bearer";
   } else if (
@@ -382,6 +379,7 @@ export function transformCatalogItemToFormValues(
     serverType: item.serverType as "remote" | "local",
     serverUrl: item.serverUrl || "",
     authMethod,
+    includeBearerPrefix,
     authHeaderName:
       authHeaderConfig?.headerName &&
       !isDefaultAuthorizationHeader(authHeaderConfig.headerName)
@@ -443,7 +441,8 @@ export function transformExternalCatalogToFormValues(
   };
 
   // Determine auth method
-  let authMethod: "none" | "bearer" | "raw_token" | "oauth" = "none";
+  let authMethod: "none" | "bearer" | "oauth" = "none";
+  let includeBearerPrefix = true;
   const staticHeaderFields = getHeaderMappedUserConfigEntries(
     server.user_config,
   );
@@ -452,7 +451,8 @@ export function transformExternalCatalogToFormValues(
 
   // Detect bearer/raw_token auth from header-mapped user_config entries.
   if (authHeaderConfig?.fieldName === "raw_access_token") {
-    authMethod = "raw_token";
+    authMethod = "bearer";
+    includeBearerPrefix = false;
   } else if (authHeaderConfig?.fieldName === "access_token") {
     authMethod = "bearer";
   }
@@ -619,6 +619,7 @@ export function transformExternalCatalogToFormValues(
     serverType: server.server.type as "remote" | "local",
     serverUrl: server.server.type === "remote" ? server.server.url : "",
     authMethod,
+    includeBearerPrefix,
     authHeaderName:
       authHeaderConfig?.headerName &&
       !isDefaultAuthorizationHeader(authHeaderConfig.headerName)

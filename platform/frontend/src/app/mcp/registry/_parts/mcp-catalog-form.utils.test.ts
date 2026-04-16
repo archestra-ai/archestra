@@ -14,6 +14,7 @@ describe("transformFormToApiData", () => {
       serverType: "remote",
       serverUrl: "https://mcp.example.com",
       authMethod: "bearer",
+      includeBearerPrefix: true,
       authHeaderName: "x-api-key",
       additionalHeaders: [
         {
@@ -61,6 +62,7 @@ describe("transformFormToApiData", () => {
       serverType: "local",
       serverUrl: "",
       authMethod: "oauth",
+      includeBearerPrefix: true,
       authHeaderName: "",
       additionalHeaders: [],
       oauthConfig: {
@@ -124,6 +126,7 @@ describe("transformFormToApiData", () => {
       serverType: "remote",
       serverUrl: "https://mcp.example.com",
       authMethod: "oauth",
+      includeBearerPrefix: true,
       authHeaderName: "",
       additionalHeaders: [],
       oauthConfig: {
@@ -176,6 +179,7 @@ describe("transformFormToApiData", () => {
       serverType: "remote",
       serverUrl: "https://mcp.example.com",
       authMethod: "oauth",
+      includeBearerPrefix: true,
       authHeaderName: "",
       additionalHeaders: [],
       oauthConfig: {
@@ -218,6 +222,7 @@ describe("transformFormToApiData", () => {
       serverType: "remote",
       serverUrl: "https://mcp.example.com",
       authMethod: "oauth",
+      includeBearerPrefix: true,
       authHeaderName: "",
       additionalHeaders: [],
       oauthConfig: {
@@ -371,6 +376,7 @@ describe("transformFormToApiData", () => {
     } as never);
 
     expect(values.authMethod).toBe("bearer");
+    expect(values.includeBearerPrefix).toBe(true);
     expect(values.authHeaderName).toBe("x-api-key");
     expect(values.additionalHeaders).toEqual([
       {
@@ -392,6 +398,7 @@ describe("transformFormToApiData", () => {
       serverType: "remote",
       serverUrl: "https://mcp.example.com",
       authMethod: "idp_jwt",
+      includeBearerPrefix: true,
       authHeaderName: "",
       additionalHeaders: [],
       oauthConfig: undefined,
@@ -446,6 +453,7 @@ describe("transformFormToApiData", () => {
     } as never);
 
     expect(values.authMethod).toBe("idp_jwt");
+    expect(values.includeBearerPrefix).toBe(true);
     expect(values.enterpriseManagedConfig?.identityProviderId).toBe("idp-1");
     expect(values.enterpriseManagedConfig?.assertionMode).toBe("passthrough");
   });
@@ -478,6 +486,39 @@ describe("transformFormToApiData", () => {
     } as never);
 
     expect(values.authMethod).toBe("bearer");
+    expect(values.includeBearerPrefix).toBe(true);
+    expect(values.authHeaderName).toBe("");
+  });
+
+  it("hydrates legacy raw token auth into bearer mode without the bearer prefix", () => {
+    const values = transformCatalogItemToFormValues({
+      id: "catalog-raw-token",
+      name: "Raw Token MCP",
+      description: "",
+      icon: null,
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com",
+      oauthConfig: null,
+      enterpriseManagedConfig: null,
+      localConfig: null,
+      deploymentSpecYaml: null,
+      userConfig: {
+        raw_access_token: {
+          type: "string",
+          title: "Access Token",
+          description: "Token without Bearer prefix",
+          required: true,
+          sensitive: true,
+          headerName: "Authorization",
+        },
+      },
+      scope: "personal",
+      teams: [],
+      labels: [],
+    } as never);
+
+    expect(values.authMethod).toBe("bearer");
+    expect(values.includeBearerPrefix).toBe(false);
     expect(values.authHeaderName).toBe("");
   });
 });

@@ -156,11 +156,11 @@ export const formSchema = z
     authMethod: z.enum([
       "none",
       "bearer",
-      "raw_token",
       "oauth",
       "enterprise_managed",
       "idp_jwt",
     ]),
+    includeBearerPrefix: z.boolean(),
     authHeaderName: headerNameSchema.optional().or(z.literal("")),
     additionalHeaders: z.array(additionalHeaderSchema).optional(),
     oauthConfig: oauthConfigSchema.optional(),
@@ -193,10 +193,7 @@ export const formSchema = z
     const normalizedHeaders = new Set<string>();
     const authHeaderName = data.authHeaderName?.trim();
 
-    if (
-      (data.authMethod === "bearer" || data.authMethod === "raw_token") &&
-      authHeaderName
-    ) {
+    if (data.authMethod === "bearer" && authHeaderName) {
       normalizedHeaders.add(authHeaderName.toLowerCase());
     }
 

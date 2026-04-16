@@ -302,8 +302,16 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // For REMOTE servers: create secrets and validate connection
       if (catalogItem?.serverType === "remote") {
+        const catalogStaticUserConfigValues = getCatalogStaticUserConfigValues(
+          catalogItem.userConfig,
+        );
+        const installUserConfigValues = filterInstallUserConfigValues({
+          userConfig: catalogItem.userConfig,
+          userConfigValues,
+        });
+
         // If isByosVault flag is set, use vault references from userConfigValues
-        if (isByosVault && userConfigValues && !secretId) {
+        if (isByosVault && installUserConfigValues && !secretId) {
           if (!isByosEnabled()) {
             throw new ApiError(
               400,
@@ -314,13 +322,16 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           // userConfigValues already contains vault references in "path#key" format
           const secret = await secretManager().createSecret(
-            userConfigValues as Record<string, unknown>,
+            {
+              ...catalogStaticUserConfigValues,
+              ...installUserConfigValues,
+            } as Record<string, unknown>,
             `${serverData.name}-vault-secret`,
           );
           secretId = secret.id;
           createdSecretId = secret.id;
           logger.info(
-            { keyCount: Object.keys(userConfigValues).length },
+            { keyCount: Object.keys(installUserConfigValues).length },
             "Created Readonly Vault secret with per-field references for remote server",
           );
         }
@@ -335,8 +346,30 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
           }
           const secret = await secretManager().createSecret(
-            { access_token: accessToken },
+            { ...catalogStaticUserConfigValues, access_token: accessToken },
             `${serverData.name}-token`,
+          );
+          secretId = secret.id;
+          createdSecretId = secret.id;
+        }
+
+        if (installUserConfigValues && !secretId) {
+          const secret = await secretManager().createSecret(
+            {
+              ...catalogStaticUserConfigValues,
+              ...installUserConfigValues,
+            } as Record<string, unknown>,
+            `${serverData.name}-secret`,
+          );
+          secretId = secret.id;
+          createdSecretId = secret.id;
+        } else if (
+          !secretId &&
+          Object.keys(catalogStaticUserConfigValues).length > 0
+        ) {
+          const secret = await secretManager().createSecret(
+            catalogStaticUserConfigValues,
+            `${serverData.name}-secret`,
           );
           secretId = secret.id;
           createdSecretId = secret.id;
@@ -368,6 +401,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // For LOCAL servers: validate env vars and create secrets (no connection validation, since deployment will be started later)
       if (catalogItem?.serverType === "local") {
+        const catalogStaticUserConfigValues = getCatalogStaticUserConfigValues(
+          catalogItem.userConfig,
+        );
+        const installUserConfigValues = filterInstallUserConfigValues({
+          userConfig: catalogItem.userConfig,
+          userConfigValues,
+        });
+
         // Validate required environment variables
         if (catalogItem.localConfig?.environment) {
           const requiredEnvVars = catalogItem.localConfig.environment.filter(
@@ -394,6 +435,30 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
+        if (catalogItem.userConfig) {
+          const requiredUserConfigFields = Object.entries(
+            catalogItem.userConfig,
+          ).filter(([_fieldName, fieldConfig]) => {
+            return fieldConfig.promptOnInstallation && fieldConfig.required;
+          });
+
+          const missingUserConfigFields = requiredUserConfigFields.filter(
+            ([fieldName]) => {
+              const value = userConfigValues?.[fieldName];
+              return !value?.trim();
+            },
+          );
+
+          if (missingUserConfigFields.length > 0) {
+            throw new ApiError(
+              400,
+              `Missing required connection settings: ${missingUserConfigFields
+                .map(([fieldName]) => fieldName)
+                .join(", ")}`,
+            );
+          }
+        }
+
         // If isByosVault flag is set, use vault references from environmentValues for secret env vars
         if (isByosVault && !secretId && catalogItem.localConfig?.environment) {
           if (!isByosEnabled()) {
@@ -405,7 +470,9 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
 
           // Collect secret env vars with vault references from environmentValues
-          const secretEnvVars: Record<string, string> = {};
+          const secretEnvVars: Record<string, string> = {
+            ...catalogStaticUserConfigValues,
+          };
           for (const envDef of catalogItem.localConfig.environment) {
             if (envDef.type === "secret") {
               const value = envDef.promptOnInstallation
@@ -416,6 +483,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 secretEnvVars[envDef.key] = value;
               }
             }
+          }
+
+          if (installUserConfigValues) {
+            Object.assign(secretEnvVars, installUserConfigValues);
           }
 
           if (Object.keys(secretEnvVars).length > 0) {
@@ -430,16 +501,18 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "Created Readonly Vault secret with per-field references for local server",
             );
           }
-        }
-        // Collect and store secret-type env vars
-        // When Readonly Vault is enabled, only static (non-prompted) secrets are allowed to be stored in DB
-        // User-prompted secrets must use Vault references via the isByosVault flow above
-        else if (!secretId && catalogItem.localConfig?.environment) {
-          const secretEnvVars: Record<string, string> = {};
+        } else if (!secretId) {
+          // Collect and store static catalog headers, prompted header values, and secret-type env vars.
+          // When Readonly Vault is enabled, only static (non-prompted) secrets are allowed to be stored in DB.
+          // User-prompted secrets must use Vault references via the isByosVault flow above.
+          const secretEnvVars: Record<string, string> = {
+            ...catalogStaticUserConfigValues,
+            ...(installUserConfigValues ?? {}),
+          };
           let hasPromptedSecrets = false;
 
-          // Collect all secret-type env vars (both static and prompted)
-          for (const envDef of catalogItem.localConfig.environment) {
+          // Collect all secret-type env vars (both static and prompted).
+          for (const envDef of catalogItem.localConfig?.environment ?? []) {
             if (envDef.type === "secret") {
               let value: string | undefined;
               // Get value based on whether it's prompted or static
@@ -881,6 +954,13 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const catalogItem = mcpServer.catalogId
           ? await InternalMcpCatalogModel.findById(mcpServer.catalogId)
           : null;
+        const catalogStaticUserConfigValues = getCatalogStaticUserConfigValues(
+          catalogItem?.userConfig,
+        );
+        const installUserConfigValues = filterInstallUserConfigValues({
+          userConfig: catalogItem?.userConfig,
+          userConfigValues,
+        });
 
         if (accessToken) {
           // PAT token flow
@@ -891,11 +971,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
           }
           const secret = await secretManager().createSecret(
-            { access_token: accessToken },
+            { ...catalogStaticUserConfigValues, access_token: accessToken },
             `${mcpServer.name}-token`,
           );
           newSecretId = secret.id;
-        } else if (userConfigValues) {
+        } else if (installUserConfigValues) {
           // Remote server user config fields
           if (isByosVault) {
             if (!isByosEnabled()) {
@@ -906,7 +986,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }
           }
           const secret = await secretManager().createSecret(
-            userConfigValues as Record<string, unknown>,
+            {
+              ...catalogStaticUserConfigValues,
+              ...installUserConfigValues,
+            } as Record<string, unknown>,
             isByosVault
               ? `${mcpServer.name}-vault-secret`
               : `${mcpServer.name}-secret`,
@@ -938,8 +1021,21 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               );
             }
           }
-        } else if (environmentValues) {
+        } else if (
+          catalogItem?.serverType === "remote" &&
+          Object.keys(catalogStaticUserConfigValues).length > 0
+        ) {
+          const secret = await secretManager().createSecret(
+            catalogStaticUserConfigValues,
+            `${mcpServer.name}-secret`,
+          );
+          newSecretId = secret.id;
+        } else if (environmentValues || userConfigValues) {
           // Local server environment variables
+          const localInstallUserConfigValues = filterInstallUserConfigValues({
+            userConfig: catalogItem?.userConfig,
+            userConfigValues,
+          });
           if (isByosVault) {
             if (!isByosEnabled()) {
               throw new ApiError(
@@ -949,22 +1045,31 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }
             // Vault references for secret env vars
             const secret = await secretManager().createSecret(
-              environmentValues,
+              {
+                ...catalogStaticUserConfigValues,
+                ...(environmentValues ?? {}),
+                ...(localInstallUserConfigValues ?? {}),
+              },
               `${mcpServer.name}-vault-secret`,
             );
             newSecretId = secret.id;
           } else if (catalogItem?.localConfig?.environment) {
             // Collect only secret-type env vars
-            const secretEnvVars: Record<string, string> = {};
+            const secretEnvVars: Record<string, string> = {
+              ...catalogStaticUserConfigValues,
+            };
             for (const envDef of catalogItem.localConfig.environment) {
               if (envDef.type === "secret") {
                 const value = envDef.promptOnInstallation
-                  ? environmentValues[envDef.key]
+                  ? environmentValues?.[envDef.key]
                   : (envDef.value as string | undefined);
                 if (value) {
                   secretEnvVars[envDef.key] = value;
                 }
               }
+            }
+            if (localInstallUserConfigValues) {
+              Object.assign(secretEnvVars, localInstallUserConfigValues);
             }
             if (Object.keys(secretEnvVars).length > 0) {
               const secret = await secretManager().createSecret(
@@ -973,6 +1078,18 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               );
               newSecretId = secret.id;
             }
+          } else if (
+            localInstallUserConfigValues &&
+            Object.keys(localInstallUserConfigValues).length > 0
+          ) {
+            const secret = await secretManager().createSecret(
+              {
+                ...catalogStaticUserConfigValues,
+                ...localInstallUserConfigValues,
+              },
+              `${mcpServer.name}-secret`,
+            );
+            newSecretId = secret.id;
           }
         }
       }
@@ -1345,6 +1462,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: z.object({
           // Environment values for local servers (when new prompted env vars were added)
           environmentValues: z.record(z.string(), z.string()).optional(),
+          userConfigValues: z.record(z.string(), z.string()).optional(),
           // Whether environmentValues contains vault references in path#key format
           isByosVault: z.boolean().optional(),
           // Kubernetes service account override
@@ -1354,7 +1472,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body, user, headers }, reply) => {
-      const { environmentValues, isByosVault, serviceAccount } = body;
+      const {
+        environmentValues,
+        userConfigValues,
+        isByosVault,
+        serviceAccount,
+      } = body;
 
       // Get the existing MCP server
       const mcpServer = await McpServerModel.findById(id, user.id);
@@ -1419,12 +1542,19 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Catalog item not found for this server");
       }
 
-      // For local servers with new environment values: update/create the secret
+      // For local servers with new environment values or user-config values: update/create the secret
       if (
         mcpServer.serverType === "local" &&
-        environmentValues &&
-        Object.keys(environmentValues).length > 0
+        ((environmentValues && Object.keys(environmentValues).length > 0) ||
+          (userConfigValues && Object.keys(userConfigValues).length > 0))
       ) {
+        const catalogStaticUserConfigValues = getCatalogStaticUserConfigValues(
+          catalogItem.userConfig,
+        );
+        const installUserConfigValues = filterInstallUserConfigValues({
+          userConfig: catalogItem.userConfig,
+          userConfigValues,
+        });
         // Validate required environment variables
         if (catalogItem.localConfig?.environment) {
           const requiredEnvVars = catalogItem.localConfig.environment.filter(
@@ -1432,7 +1562,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
 
           const missingEnvVars = requiredEnvVars.filter((env) => {
-            const value = environmentValues[env.key];
+            const value = environmentValues?.[env.key];
             if (env.type === "boolean") {
               return !value;
             }
@@ -1444,6 +1574,30 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               400,
               `Missing required environment variables: ${missingEnvVars
                 .map((env) => env.key)
+                .join(", ")}`,
+            );
+          }
+        }
+
+        if (catalogItem.userConfig) {
+          const requiredUserConfigFields = Object.entries(
+            catalogItem.userConfig,
+          ).filter(([_fieldName, fieldConfig]) => {
+            return fieldConfig.promptOnInstallation && fieldConfig.required;
+          });
+
+          const missingUserConfigFields = requiredUserConfigFields.filter(
+            ([fieldName]) => {
+              const value = userConfigValues?.[fieldName];
+              return !value?.trim();
+            },
+          );
+
+          if (missingUserConfigFields.length > 0) {
+            throw new ApiError(
+              400,
+              `Missing required connection settings: ${missingUserConfigFields
+                .map(([fieldName]) => fieldName)
                 .join(", ")}`,
             );
           }
@@ -1461,13 +1615,18 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
 
           if (mcpServer.secretId) {
-            await secretManager().updateSecret(
-              mcpServer.secretId,
-              environmentValues,
-            );
+            await secretManager().updateSecret(mcpServer.secretId, {
+              ...catalogStaticUserConfigValues,
+              ...(environmentValues ?? {}),
+              ...(installUserConfigValues ?? {}),
+            });
           } else {
             const secret = await secretManager().createSecret(
-              environmentValues,
+              {
+                ...catalogStaticUserConfigValues,
+                ...(environmentValues ?? {}),
+                ...(installUserConfigValues ?? {}),
+              },
               `${mcpServer.name}-vault-secret`,
             );
             await McpServerModel.update(id, { secretId: secret.id });
@@ -1481,7 +1640,9 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           const mergedSecrets = {
             ...existingSecrets,
-            ...environmentValues,
+            ...catalogStaticUserConfigValues,
+            ...(environmentValues ?? {}),
+            ...(installUserConfigValues ?? {}),
           };
 
           if (mcpServer.secretId) {
@@ -1499,7 +1660,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         logger.info(
-          { serverId: id, envVarCount: Object.keys(environmentValues).length },
+          {
+            serverId: id,
+            envVarCount: Object.keys(environmentValues ?? {}).length,
+            userConfigCount: Object.keys(installUserConfigValues ?? {}).length,
+          },
           "Updated MCP server secrets for reinstall",
         );
       }
@@ -1814,4 +1979,73 @@ function extractInstallDiscoveryCredentialValue(params: {
   }
 
   return extractedValue;
+}
+
+function getCatalogStaticUserConfigValues(
+  userConfig:
+    | Record<
+        string,
+        {
+          headerName?: string;
+          promptOnInstallation?: boolean;
+          default?: string | number | boolean | Array<string>;
+        }
+      >
+    | null
+    | undefined,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(userConfig ?? {})
+      .filter(([_fieldName, fieldConfig]) => {
+        return (
+          fieldConfig.headerName &&
+          fieldConfig.promptOnInstallation === false &&
+          (typeof fieldConfig.default === "string" ||
+            typeof fieldConfig.default === "number" ||
+            typeof fieldConfig.default === "boolean") &&
+          String(fieldConfig.default).length > 0
+        );
+      })
+      .map(([fieldName, fieldConfig]) => [
+        fieldName,
+        String(fieldConfig.default),
+      ]),
+  );
+}
+
+function filterInstallUserConfigValues(params: {
+  userConfig:
+    | Record<
+        string,
+        {
+          headerName?: string;
+          promptOnInstallation?: boolean;
+        }
+      >
+    | null
+    | undefined;
+  userConfigValues: Record<string, string> | undefined;
+}): Record<string, string> | undefined {
+  if (!params.userConfigValues || !params.userConfig) {
+    return undefined;
+  }
+
+  const filteredEntries = Object.entries(params.userConfigValues).filter(
+    ([fieldName]) => {
+      const fieldConfig = params.userConfig?.[fieldName];
+      if (!fieldConfig) {
+        return false;
+      }
+
+      return !(
+        fieldConfig.headerName && fieldConfig.promptOnInstallation === false
+      );
+    },
+  );
+
+  if (filteredEntries.length === 0) {
+    return undefined;
+  }
+
+  return Object.fromEntries(filteredEntries);
 }

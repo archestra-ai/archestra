@@ -90909,6 +90909,9 @@
                             "description": {
                               "type": "string"
                             },
+                            "promptOnInstallation": {
+                              "type": "boolean"
+                            },
                             "required": {
                               "type": "boolean"
                             },
@@ -90942,6 +90945,9 @@
                             },
                             "max": {
                               "type": "number"
+                            },
+                            "headerName": {
+                              "type": "string"
                             }
                           },
                           "required": [
@@ -91759,6 +91765,9 @@
                         "description": {
                           "type": "string"
                         },
+                        "promptOnInstallation": {
+                          "type": "boolean"
+                        },
                         "required": {
                           "type": "boolean"
                         },
@@ -91792,6 +91801,9 @@
                         },
                         "max": {
                           "type": "number"
+                        },
+                        "headerName": {
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -92340,6 +92352,9 @@
                           "description": {
                             "type": "string"
                           },
+                          "promptOnInstallation": {
+                            "type": "boolean"
+                          },
                           "required": {
                             "type": "boolean"
                           },
@@ -92373,6 +92388,9 @@
                           },
                           "max": {
                             "type": "number"
+                          },
+                          "headerName": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -93213,6 +93231,9 @@
                           "description": {
                             "type": "string"
                           },
+                          "promptOnInstallation": {
+                            "type": "boolean"
+                          },
                           "required": {
                             "type": "boolean"
                           },
@@ -93246,6 +93267,9 @@
                           },
                           "max": {
                             "type": "number"
+                          },
+                          "headerName": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -94057,6 +94081,9 @@
                         "description": {
                           "type": "string"
                         },
+                        "promptOnInstallation": {
+                          "type": "boolean"
+                        },
                         "required": {
                           "type": "boolean"
                         },
@@ -94090,6 +94117,9 @@
                         },
                         "max": {
                           "type": "number"
+                        },
+                        "headerName": {
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -94646,6 +94676,9 @@
                           "description": {
                             "type": "string"
                           },
+                          "promptOnInstallation": {
+                            "type": "boolean"
+                          },
                           "required": {
                             "type": "boolean"
                           },
@@ -94679,6 +94712,9 @@
                           },
                           "max": {
                             "type": "number"
+                          },
+                          "headerName": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -120909,6 +120945,12 @@
                 "type": "object",
                 "properties": {
                   "environmentValues": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "userConfigValues": {
                     "type": "object",
                     "additionalProperties": {
                       "type": "string"

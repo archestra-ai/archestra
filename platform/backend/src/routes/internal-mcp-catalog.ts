@@ -104,8 +104,11 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         oauthClientSecretVaultKey,
         localConfigVaultPath,
         localConfigVaultKey,
-        ...restBody
+        ...restBodyInput
       } = body;
+      // Downstream secret extraction removes plaintext values from the payload
+      // before persistence, so work on a cloned object instead of the request body.
+      const restBody = structuredClone(restBodyInput);
 
       // Enforce scope restrictions
       const { success: isAdmin } = await hasPermission(
@@ -206,12 +209,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       } else if (
         restBody.localConfig?.environment ||
-        restBody.localConfig?.imagePullSecrets
+        restBody.localConfig?.imagePullSecrets ||
+        restBody.userConfig
       ) {
+        const localConfig = restBody.localConfig;
         // Extract secret env vars from localConfig.environment
         const secretEnvVars: Record<string, string> = {};
-        if (restBody.localConfig.environment) {
-          for (const envVar of restBody.localConfig.environment) {
+        if (localConfig?.environment) {
+          for (const envVar of localConfig.environment) {
             if (
               envVar.type === "secret" &&
               envVar.value &&
@@ -225,8 +230,8 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Extract image pull secret passwords from credentials entries
         // Keyed by server:username (stable across reorder, unique per account)
-        if (restBody.localConfig.imagePullSecrets) {
-          for (const entry of restBody.localConfig.imagePullSecrets) {
+        if (localConfig?.imagePullSecrets) {
+          for (const entry of localConfig.imagePullSecrets) {
             if (entry.source === "credentials" && entry.password) {
               secretEnvVars[
                 `__regcred_password:${entry.server}:${entry.username}`
@@ -365,8 +370,11 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         oauthClientSecretVaultKey,
         localConfigVaultPath,
         localConfigVaultKey,
-        ...restBody
+        ...restBodyInput
       } = body;
+      // Downstream secret extraction removes plaintext values from the payload
+      // before persistence, so work on a cloned object instead of the request body.
+      const restBody = structuredClone(restBodyInput);
 
       // Get the original catalog item to check if name or serverUrl changed
       const originalCatalogItem = await InternalMcpCatalogModel.findById(id);
@@ -504,8 +512,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       } else if (
         restBody.localConfig?.environment ||
-        restBody.localConfig?.imagePullSecrets
+        restBody.localConfig?.imagePullSecrets ||
+        restBody.userConfig
       ) {
+        const localConfig = restBody.localConfig;
         // Get existing secret values to preserve keys that are still in the request
         const existingSecretValues: Record<string, string> = {};
         if (localConfigSecretId) {
@@ -522,7 +532,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Preserve existing values for keys that are in the request but have no new value
         const secretEnvVars: Record<string, string> = {};
 
-        for (const envVar of restBody.localConfig.environment ?? []) {
+        for (const envVar of localConfig?.environment ?? []) {
           if (envVar.type === "secret" && !envVar.promptOnInstallation) {
             if (envVar.value) {
               // New value provided - use it
@@ -539,8 +549,8 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Extract image pull secret passwords from credentials entries
         // Keyed by server:username (stable across reorder, unique per account)
         // Preserve existing passwords for entries that don't provide a new one
-        if (restBody.localConfig.imagePullSecrets) {
-          for (const entry of restBody.localConfig.imagePullSecrets) {
+        if (localConfig?.imagePullSecrets) {
+          for (const entry of localConfig.imagePullSecrets) {
             if (entry.source === "credentials") {
               const regcredKey = `__regcred_password:${entry.server}:${entry.username}`;
               if (entry.password) {

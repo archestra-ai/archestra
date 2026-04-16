@@ -24810,12 +24810,14 @@ export type GetInternalMcpCatalogResponses = {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
                 title: string;
                 description: string;
+                promptOnInstallation?: boolean;
                 required?: boolean;
                 default?: string | number | boolean | Array<string>;
                 multiple?: boolean;
                 sensitive?: boolean;
                 min?: number;
                 max?: number;
+                headerName?: string;
             };
         } | null;
         oauthConfig: {
@@ -24942,12 +24944,14 @@ export type CreateInternalMcpCatalogItemData = {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
                 title: string;
                 description: string;
+                promptOnInstallation?: boolean;
                 required?: boolean;
                 default?: string | number | boolean | Array<string>;
                 multiple?: boolean;
                 sensitive?: boolean;
                 min?: number;
                 max?: number;
+                headerName?: string;
             };
         } | null;
         oauthConfig?: {
@@ -25133,12 +25137,14 @@ export type CreateInternalMcpCatalogItemResponses = {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
                 title: string;
                 description: string;
+                promptOnInstallation?: boolean;
                 required?: boolean;
                 default?: string | number | boolean | Array<string>;
                 multiple?: boolean;
                 sensitive?: boolean;
                 min?: number;
                 max?: number;
+                headerName?: string;
             };
         } | null;
         oauthConfig: {
@@ -25415,12 +25421,14 @@ export type GetInternalMcpCatalogItemResponses = {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
                 title: string;
                 description: string;
+                promptOnInstallation?: boolean;
                 required?: boolean;
                 default?: string | number | boolean | Array<string>;
                 multiple?: boolean;
                 sensitive?: boolean;
                 min?: number;
                 max?: number;
+                headerName?: string;
             };
         } | null;
         oauthConfig: {
@@ -25546,12 +25554,14 @@ export type UpdateInternalMcpCatalogItemData = {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
                 title: string;
                 description: string;
+                promptOnInstallation?: boolean;
                 required?: boolean;
                 default?: string | number | boolean | Array<string>;
                 multiple?: boolean;
                 sensitive?: boolean;
                 min?: number;
                 max?: number;
+                headerName?: string;
             };
         } | null;
         oauthConfig?: {
@@ -25739,12 +25749,14 @@ export type UpdateInternalMcpCatalogItemResponses = {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
                 title: string;
                 description: string;
+                promptOnInstallation?: boolean;
                 required?: boolean;
                 default?: string | number | boolean | Array<string>;
                 multiple?: boolean;
                 sensitive?: boolean;
                 min?: number;
                 max?: number;
+                headerName?: string;
             };
         } | null;
         oauthConfig: {
@@ -32419,6 +32431,9 @@ export type InspectMcpServerResponse = InspectMcpServerResponses[keyof InspectMc
 export type ReinstallMcpServerData = {
     body: {
         environmentValues?: {
+            [key: string]: string;
+        };
+        userConfigValues?: {
             [key: string]: string;
         };
         isByosVault?: boolean;

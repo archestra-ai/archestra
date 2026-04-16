@@ -10,8 +10,8 @@ import {
 interface AuthErrorToolProps {
   title: string;
   description: ReactNode;
-  buttonText: string;
-  buttonUrl: string;
+  buttonText?: string;
+  buttonUrl?: string;
   /** When provided, renders an inline button instead of an external link */
   onAction?: () => void;
   actionTooltipText?: string;
@@ -33,7 +33,7 @@ export function AuthErrorTool({
           <span className="font-medium text-foreground">{title}:</span>{" "}
           <span>{description}</span>
         </div>
-        {onAction ? (
+        {onAction && buttonText ? (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="secondary" size="sm" onClick={onAction}>
@@ -44,14 +44,14 @@ export function AuthErrorTool({
               <TooltipContent>{actionTooltipText}</TooltipContent>
             ) : null}
           </Tooltip>
-        ) : (
+        ) : buttonText && buttonUrl ? (
           <Button variant="secondary" size="sm" asChild>
             <a href={buttonUrl} target="_blank" rel="noopener noreferrer">
               <ExternalLink className="size-3.5" />
               {buttonText}
             </a>
           </Button>
-        )}
+        ) : null}
       </div>
     </div>
   );

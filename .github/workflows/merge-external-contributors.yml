@@ -1,4 +1,4 @@
-name: Auto-merge contributor PRs
+name: Merge EXTERNAL_CONTRIBUTORS file
 
 on:
   pull_request:
@@ -10,12 +10,12 @@ on:
 permissions: {}
 
 concurrency:
-  group: auto-merge-contributor-${{ github.event.pull_request.number }}
+  group: merge-external-contributors-${{ github.event.pull_request.number }}
   cancel-in-progress: false
 
 jobs:
-  validate-and-merge:
-    name: Validate and merge contributor PR
+  merge-external-contributors:
+    name: Merge EXTERNAL_CONTRIBUTORS file
     runs-on: ubuntu-latest
     if: >-
       github.event.pull_request.user.login == 'archestra-contributor-pr-bot[bot]'
@@ -71,12 +71,6 @@ jobs:
         with:
           app-id: ${{ secrets.ARCHESTRA_CONTRIBUTOR_BOT_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_CONTRIBUTOR_BOT_GITHUB_APP_PRIVATE_KEY }}
-
-      - name: Approve PR
-        env:
-          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: gh pr review "$PR_NUMBER" --approve
 
       - name: Merge PR
         env:

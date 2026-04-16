@@ -46,7 +46,8 @@ describe("validateCredentialSource", () => {
     expect(result).toEqual({
       code: "validation_error",
       error: {
-        message: "Personal connections can only be assigned to personal agents",
+        message:
+          "The credential owner must be a member of a team that this resource is assigned to",
         type: "validation_error",
       },
     });
@@ -153,7 +154,7 @@ describe("validateCredentialSource", () => {
     });
   });
 
-  test("rejects a personal credential for an org-scoped resource even when the owner is in the organization", async ({
+  test("rejects a personal credential for an org-scoped resource when the owner is outside the organization", async ({
     makeAgent,
     makeInternalMcpCatalog,
     makeMcpServer,
@@ -163,11 +164,12 @@ describe("validateCredentialSource", () => {
     makeUser,
   }) => {
     const organization = await makeOrganization();
+    const otherOrganization = await makeOrganization();
     const owner = await makeUser();
     const author = await makeUser();
 
     await makeMember(author.id, organization.id, { role: "member" });
-    await makeMember(owner.id, organization.id, { role: "member" });
+    await makeMember(owner.id, otherOrganization.id, { role: "member" });
 
     const agent = await makeAgent({
       organizationId: organization.id,
@@ -190,13 +192,14 @@ describe("validateCredentialSource", () => {
     expect(result).toEqual({
       code: "validation_error",
       error: {
-        message: "Personal connections can only be assigned to personal agents",
+        message:
+          "The credential owner must be a member of a team that this resource is assigned to",
         type: "validation_error",
       },
     });
   });
 
-  test("rejects a personal credential for a team-scoped resource", async ({
+  test("accepts a personal credential for a team-scoped resource when the owner is a team member", async ({
     makeAgent,
     makeInternalMcpCatalog,
     makeMcpServer,
@@ -218,6 +221,7 @@ describe("validateCredentialSource", () => {
       name: "Shared Team",
     });
     await makeTeamMember(sharedTeam.id, author.id);
+    await makeTeamMember(sharedTeam.id, owner.id);
 
     const agent = await makeAgent({
       organizationId: organization.id,
@@ -238,13 +242,7 @@ describe("validateCredentialSource", () => {
       toolId: tool.id,
     });
 
-    expect(result).toEqual({
-      code: "validation_error",
-      error: {
-        message: "Personal connections can only be assigned to personal agents",
-        type: "validation_error",
-      },
-    });
+    expect(result).toBeNull();
   });
 });
 

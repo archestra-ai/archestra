@@ -32,13 +32,13 @@ MCP-native clients such as Claude Desktop, Cursor, and Open WebUI authenticate a
 The gateway supports the following OAuth flows and client registration methods:
 
 - **Authorization Code + PKCE**: The standard browser-based authorization flow. The user is redirected to a login and consent screen, and the client receives tokens upon approval.
-- **DCR (RFC 7591)**: Clients can register dynamically at runtime by posting their metadata to `POST /api/auth/oauth2/register`. The gateway returns a `client_id` for subsequent authorization requests.
+- **DCR ([RFC 7591](https://datatracker.ietf.org/doc/html/rfc7591))**: Clients can register dynamically at runtime by posting their metadata to `POST /api/auth/oauth2/register`. The gateway returns a `client_id` for subsequent authorization requests.
 - **CIMD**: Clients can use an HTTPS URL as their `client_id`. The gateway fetches the client's metadata document from that URL, eliminating the need for a separate registration step.
 
 Endpoint discovery is automatic. The gateway exposes standard well-known endpoints so clients can find the authorization and token URLs without any hardcoded configuration:
 
-- `/.well-known/oauth-protected-resource` (RFC 9728)
-- `/.well-known/oauth-authorization-server` (RFC 8414)
+- `/.well-known/oauth-protected-resource` ([RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728))
+- `/.well-known/oauth-authorization-server` ([RFC 8414](https://datatracker.ietf.org/doc/html/rfc8414))
 
 #### Token lifetime
 
@@ -59,7 +59,7 @@ For per-user access to downstream systems like GitHub or Jira, bearer tokens sho
 This option implements the MCP [Enterprise-Managed Authorization](https://modelcontextprotocol.io/extensions/auth/enterprise-managed-authorization) extension using an [Identity Assertion JWT Authorization Grant (ID-JAG)](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant). It is designed for organizations that already use a corporate IdP to sign users into MCP clients. The identity provider must be able to:
 
 - authenticate the user to the MCP client
-- perform RFC 8693 token exchange to issue an ID-JAG
+- perform [RFC 8693](https://datatracker.ietf.org/doc/html/rfc8693) token exchange to issue an ID-JAG
 - sign that ID-JAG as a JWT that Archestra can validate through OIDC discovery or a JWKS endpoint
 
 In this flow, the MCP client does not send the user's enterprise JWT directly to the gateway. Instead:

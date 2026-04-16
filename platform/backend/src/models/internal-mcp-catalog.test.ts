@@ -132,7 +132,7 @@ describe("InternalMcpCatalogModel", () => {
       expect(foundCatalog?.localConfig?.environment?.[0].value).toBeUndefined();
     });
 
-    test("marks static header values without returning the plaintext secret", async ({
+    test("does not hydrate plaintext secret-backed header values into userConfig", async ({
       makeSecret,
     }) => {
       const staticHeaderSecret = await makeSecret({
@@ -162,7 +162,6 @@ describe("InternalMcpCatalogModel", () => {
 
       expect(foundCatalog?.userConfig?.header_x_api_key).toMatchObject({
         headerName: "x-api-key",
-        hasStaticValue: true,
       });
       expect(
         foundCatalog?.userConfig?.header_x_api_key?.default,

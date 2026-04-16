@@ -241,11 +241,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
-        Object.assign(
-          secretEnvVars,
-          stripAndCollectStaticUserConfigSecrets(restBody.userConfig),
-        );
-
         // Store secret env vars if any exist
         if (Object.keys(secretEnvVars).length > 0) {
           const secret = await secretManager().createSecret(
@@ -571,14 +566,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
         // Orphaned __regcred_password:* keys (from removed entries) are implicitly
         // dropped since they won't be in secretEnvVars when the secret is updated
-
-        Object.assign(
-          secretEnvVars,
-          stripAndCollectStaticUserConfigSecrets(
-            restBody.userConfig,
-            existingSecretValues,
-          ),
-        );
 
         // Store secret env vars if any exist
         if (Object.keys(secretEnvVars).length > 0) {
@@ -1043,51 +1030,3 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default internalMcpCatalogRoutes;
-
-/**
- * Mutates `userConfig` in place by removing any extracted static secret
- * defaults while returning the values that should be persisted in the backing
- * secret payload instead of the catalog row.
- */
-function stripAndCollectStaticUserConfigSecrets(
-  userConfig:
-    | Record<
-        string,
-        {
-          headerName?: string;
-          promptOnInstallation?: boolean;
-          sensitive?: boolean;
-          default?: string | number | boolean | Array<string>;
-        }
-      >
-    | null
-    | undefined,
-  existingSecretValues?: Record<string, string>,
-): Record<string, string> {
-  const secretValues: Record<string, string> = {};
-
-  for (const [fieldName, fieldConfig] of Object.entries(userConfig ?? {})) {
-    if (
-      !fieldConfig.headerName ||
-      fieldConfig.promptOnInstallation !== false ||
-      fieldConfig.sensitive !== true
-    ) {
-      continue;
-    }
-
-    if (
-      typeof fieldConfig.default === "string" &&
-      fieldConfig.default.length > 0
-    ) {
-      secretValues[fieldName] = fieldConfig.default;
-      delete fieldConfig.default;
-      continue;
-    }
-
-    if (existingSecretValues?.[fieldName]) {
-      secretValues[fieldName] = existingSecretValues[fieldName];
-    }
-  }
-
-  return secretValues;
-}

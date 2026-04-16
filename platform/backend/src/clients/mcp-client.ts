@@ -2798,7 +2798,7 @@ function buildStaticCredentialHeaders(params: {
 }
 
 function hasStaticAuthorizationCredential(
-  catalogItem: InternalMcpCatalog,
+  _catalogItem: InternalMcpCatalog,
   secrets: Record<string, unknown>,
 ): boolean {
   if (
@@ -2815,18 +2815,7 @@ function hasStaticAuthorizationCredential(
     return true;
   }
 
-  if (!catalogItem.userConfig) {
-    return false;
-  }
-
-  return Object.entries(catalogItem.userConfig).some(([fieldName, _config]) => {
-    if (fieldName !== "access_token" && fieldName !== "raw_access_token") {
-      return false;
-    }
-
-    const secretValue = secrets[fieldName];
-    return typeof secretValue === "string" && secretValue.length > 0;
-  });
+  return false;
 }
 
 function getStaticCredentialHeaderValue(params: {

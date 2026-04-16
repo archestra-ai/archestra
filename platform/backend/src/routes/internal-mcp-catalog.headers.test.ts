@@ -228,32 +228,31 @@ describe("Internal MCP Catalog - Header User Config Routes", () => {
     });
   });
 
-  test("deletes the backing secret when deleting a catalog item with static header secrets", async ({
+  test("deletes the backing secret when deleting a catalog item with secret-backed local config", async ({
     makeSecret,
   }) => {
     const existingSecret = await makeSecret({
       name: "delete-header-secret",
       secret: {
-        access_token: "delete-me",
+        API_SECRET: "delete-me",
       },
     });
 
     const catalog = await InternalMcpCatalogModel.create(
       {
         name: "header-delete-route",
-        serverType: "remote",
-        serverUrl: "https://example.com/mcp",
+        serverType: "local",
         localConfigSecretId: existingSecret.id,
-        userConfig: {
-          access_token: {
-            type: "string",
-            title: "Access Token",
-            description: "Static auth token",
-            required: true,
-            sensitive: true,
-            headerName: "x-api-key",
-            promptOnInstallation: false,
-          },
+        localConfig: {
+          command: "node",
+          arguments: ["server.js"],
+          environment: [
+            {
+              key: "API_SECRET",
+              type: "secret",
+              promptOnInstallation: false,
+            },
+          ],
         },
       },
       { organizationId, authorId: user.id },

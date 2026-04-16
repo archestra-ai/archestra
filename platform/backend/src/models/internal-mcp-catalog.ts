@@ -407,30 +407,6 @@ class InternalMcpCatalogModel {
           }
         }
       }
-
-      if (catalogItem.localConfigSecretId && catalogItem.userConfig) {
-        const unresolvedSecret = unresolvedSecretMap.get(
-          catalogItem.localConfigSecretId,
-        );
-        const secret = unresolvedSecret?.isByosVault
-          ? unresolvedSecret
-          : resolvedSecretMap.get(catalogItem.localConfigSecretId);
-        if (secret) {
-          for (const [fieldName, fieldConfig] of Object.entries(
-            catalogItem.userConfig,
-          )) {
-            if (
-              fieldConfig.headerName &&
-              fieldConfig.promptOnInstallation === false
-            ) {
-              const value = secret.secret[fieldName];
-              if (value) {
-                fieldConfig.hasStaticValue = true;
-              }
-            }
-          }
-        }
-      }
     }
   }
 
@@ -482,25 +458,6 @@ class InternalMcpCatalogModel {
             const value = secret.secret[envVar.key];
             if (envVar.type === "secret" && value) {
               envVar.value = String(value);
-            }
-          }
-        }
-      }
-
-      if (catalogItem.localConfigSecretId && catalogItem.userConfig) {
-        const secret = secretMap.get(catalogItem.localConfigSecretId);
-        if (secret) {
-          for (const [fieldName, fieldConfig] of Object.entries(
-            catalogItem.userConfig,
-          )) {
-            if (
-              fieldConfig.headerName &&
-              fieldConfig.promptOnInstallation === false
-            ) {
-              const value = secret.secret[fieldName];
-              if (value) {
-                fieldConfig.hasStaticValue = true;
-              }
             }
           }
         }

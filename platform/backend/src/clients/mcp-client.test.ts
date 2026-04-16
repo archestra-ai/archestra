@@ -3206,6 +3206,76 @@ describe("McpClient", () => {
         expect(headers.get("authorization")).toBeNull();
       });
 
+      test("treats lowercase authorization header names as satisfying the auth fallback", async () => {
+        const lowercaseAuthorizationCatalog =
+          await InternalMcpCatalogModel.create({
+            name: "lowercase-authorization-server",
+            serverType: "remote",
+            serverUrl: "https://lowercase-authorization.example.com/mcp",
+            userConfig: {
+              access_token: {
+                type: "string",
+                title: "Access Token",
+                description: "Bearer token",
+                required: true,
+                sensitive: true,
+                headerName: "authorization",
+              },
+            },
+          });
+
+        const lowercaseAuthorizationSecret = await secretManager().createSecret(
+          { access_token: "lowercase-auth-token" },
+          "lowercase-authorization-secret",
+        );
+
+        const lowercaseAuthorizationServer = await McpServerModel.create({
+          name: "lowercase-authorization-server",
+          secretId: lowercaseAuthorizationSecret.id,
+          catalogId: lowercaseAuthorizationCatalog.id,
+          serverType: "remote",
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "lowercase-authorization-server__list_items",
+          description: "List items with lowercase authorization header",
+          parameters: {},
+          catalogId: lowercaseAuthorizationCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: lowercaseAuthorizationServer.id,
+        });
+
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "Lowercase authorization response" }],
+          isError: false,
+        });
+
+        await mcpClient.executeToolCall(
+          {
+            id: "call_lowercase_authorization",
+            name: "lowercase-authorization-server__list_items",
+            arguments: {},
+          },
+          agentId,
+        );
+
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        const transportCalls = vi.mocked(StreamableHTTPClientTransport).mock
+          .calls;
+        const lastCall = transportCalls[transportCalls.length - 1];
+        const headers = lastCall[1]?.requestInit?.headers as Headers;
+        expect(headers.get("authorization")).toBe(
+          "Bearer lowercase-auth-token",
+        );
+        expect(Array.from(headers.entries())).toEqual([
+          ["authorization", "Bearer lowercase-auth-token"],
+        ]);
+      });
+
       test("falls back to Authorization header for legacy bearer credentials without headerName", async () => {
         const legacyBearerCatalog = await InternalMcpCatalogModel.create({
           name: "legacy-bearer-server",

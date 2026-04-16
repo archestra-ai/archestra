@@ -2836,11 +2836,15 @@ function buildDefaultAuthorizationHeaders(
   headers: Record<string, string>,
   secrets: Record<string, unknown>,
 ): Record<string, string> {
-  if (typeof secrets.access_token === "string" && !headers.Authorization) {
+  const hasAuthorizationHeader = Object.keys(headers).some(
+    (headerName) => headerName.toLowerCase() === "authorization",
+  );
+
+  if (typeof secrets.access_token === "string" && !hasAuthorizationHeader) {
     headers.Authorization = `Bearer ${secrets.access_token}`;
   } else if (
     typeof secrets.raw_access_token === "string" &&
-    !headers.Authorization
+    !hasAuthorizationHeader
   ) {
     headers.Authorization = String(secrets.raw_access_token);
   }

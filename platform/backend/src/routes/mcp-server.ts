@@ -1032,8 +1032,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           newSecretId = secret.id;
         } else if (environmentValues || userConfigValues) {
           // Local server environment variables
-          const catalogStaticUserConfigValues =
-            getCatalogStaticUserConfigValues(catalogItem?.userConfig);
           const localInstallUserConfigValues = filterInstallUserConfigValues({
             userConfig: catalogItem?.userConfig,
             userConfigValues,

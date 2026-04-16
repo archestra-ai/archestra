@@ -82,7 +82,6 @@ export function McpConnectionInstructions({
   const { catalogName, serverName } = useArchestraMcpIdentity();
   const enterpriseGatewayAuthDocsUrl = getFrontendDocsUrl(
     DocsPage.McpAuthentication,
-    "enterprise-gateway-auth",
   );
   const { data: profiles = [] } = useProfiles({
     filters: { agentTypes: ["profile", "mcp_gateway"] },

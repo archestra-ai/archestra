@@ -1,10 +1,15 @@
 "use client";
 
 import { archestraApiSdk } from "@shared";
-import { ChevronDown, Loader2, Play } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronDown, CircuitBoard, Loader2, Play, Zap } from "lucide-react";
+import {
+  type PointerEvent as ReactPointerEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -53,6 +58,37 @@ export function McpInspector({ serverId, isActive }: McpInspectorProps) {
   const [showSchema, setShowSchema] = useState(false);
   const [requestLog, setRequestLog] = useState<RequestLogEntry[]>([]);
   const logIdRef = useRef(0);
+  const [logPanelRatio, setLogPanelRatio] = useState(0.4);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleDragStart = useCallback(
+    (e: ReactPointerEvent<HTMLElement>) => {
+      e.preventDefault();
+      const container = containerRef.current;
+      if (!container) return;
+      const startY = e.clientY;
+      const startRatio = logPanelRatio;
+      const containerHeight = container.getBoundingClientRect().height;
+
+      const onMove = (ev: globalThis.PointerEvent) => {
+        const delta = startY - ev.clientY;
+        const newRatio = Math.min(
+          0.8,
+          Math.max(0.15, startRatio + delta / containerHeight),
+        );
+        setLogPanelRatio(newRatio);
+      };
+
+      const onUp = () => {
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+      };
+
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+    },
+    [logPanelRatio],
+  );
 
   const addLogEntry = useCallback(
     (
@@ -185,9 +221,14 @@ export function McpInspector({ serverId, isActive }: McpInspectorProps) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center flex-1 min-h-0">
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          <span className="text-sm">Connecting to MCP server...</span>
+        <div className="flex flex-col items-center gap-3 text-muted-foreground">
+          <div className="relative flex items-center justify-center">
+            <span className="absolute inline-flex h-8 w-8 rounded-full bg-emerald-500/20 animate-ping" />
+            <Loader2 className="h-5 w-5 animate-spin text-emerald-500" />
+          </div>
+          <span className="font-mono text-[11px] tracking-[0.08em]">
+            establishing link
+          </span>
         </div>
       </div>
     );
@@ -195,8 +236,16 @@ export function McpInspector({ serverId, isActive }: McpInspectorProps) {
 
   if (loadError) {
     return (
-      <div className="flex flex-col items-center justify-center flex-1 min-h-0 gap-3">
-        <p className="text-sm text-destructive">{loadError}</p>
+      <div className="flex flex-col items-center justify-center flex-1 min-h-0 gap-4">
+        <div className="flex items-center gap-2 font-mono text-xs">
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-destructive" />
+          <span className="text-destructive tracking-[0.08em]">
+            connection failed
+          </span>
+        </div>
+        <p className="text-sm text-muted-foreground max-w-sm text-center">
+          {loadError}
+        </p>
         <Button variant="outline" size="sm" onClick={loadTools}>
           Retry
         </Button>
@@ -209,54 +258,109 @@ export function McpInspector({ serverId, isActive }: McpInspectorProps) {
 
   return (
     <div className="flex flex-col flex-1 min-h-0 gap-3">
-      <div className="flex items-center gap-2 flex-shrink-0">
-        <Badge variant="secondary">{tools.length} tools</Badge>
-        <Button variant="outline" size="sm" onClick={loadTools}>
+      <div className="flex items-center gap-3 flex-shrink-0">
+        <div className="flex items-center gap-2 font-mono text-[11px] tracking-[0.08em] text-muted-foreground">
+          <CircuitBoard className="h-3.5 w-3.5" />
+          <span>Tools</span>
+          <span className="text-foreground font-semibold tabular-nums">
+            {tools.length.toString().padStart(2, "0")}
+          </span>
+        </div>
+        <div className="h-3 w-px bg-border" />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={loadTools}
+          className="h-7 px-2.5 text-xs gap-1.5"
+        >
+          <Zap className="h-3 w-3" />
           List Tools
         </Button>
       </div>
 
-      <div className="flex flex-1 min-h-0 rounded-lg border overflow-hidden">
+      <div className="flex flex-1 min-h-0 rounded-md border bg-background overflow-hidden">
         {/* Tool list sidebar */}
-        <ScrollArea className="w-64 flex-shrink-0 border-r">
-          <div className="p-2">
-            {tools.map((tool) => (
-              <button
-                key={tool.name}
-                type="button"
-                onClick={() => handleSelectTool(tool)}
-                className={cn(
-                  "w-full text-left px-3 py-2.5 rounded-md transition-colors",
-                  selectedTool?.name === tool.name
-                    ? "bg-primary/10 border-l-2 border-primary"
-                    : "hover:bg-muted/50",
-                )}
-              >
-                <div className="text-sm font-medium truncate">{tool.name}</div>
-                {tool.description && (
-                  <div className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
-                    {tool.description}
-                  </div>
-                )}
-              </button>
-            ))}
-            {tools.length === 0 && (
-              <div className="px-3 py-4 text-sm text-muted-foreground text-center">
-                No tools found
-              </div>
-            )}
+        <div className="w-72 flex-shrink-0 border-r flex flex-col min-h-0 bg-muted/20">
+          <div className="px-3 py-2 border-b bg-muted/30 flex items-center justify-between flex-shrink-0">
+            <span className="font-mono text-[10px] tracking-[0.08em] text-muted-foreground">
+              Tools
+            </span>
+            <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+              {tools.length}
+            </span>
           </div>
-        </ScrollArea>
+          <ScrollArea className="flex-1 min-h-0">
+            <div className="p-1.5 space-y-0.5">
+              {tools.map((tool) => {
+                const isSelected = selectedTool?.name === tool.name;
+                return (
+                  <button
+                    key={tool.name}
+                    type="button"
+                    onClick={() => handleSelectTool(tool)}
+                    className={cn(
+                      "group relative w-full text-left px-3 py-2 rounded-sm transition-all duration-150",
+                      isSelected
+                        ? "bg-background shadow-sm"
+                        : "hover:bg-background/60",
+                    )}
+                  >
+                    {isSelected && (
+                      <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 bg-emerald-500 rounded-full" />
+                    )}
+                    <div
+                      className={cn(
+                        "font-mono text-xs truncate",
+                        isSelected
+                          ? "text-foreground font-semibold"
+                          : "text-foreground/80 group-hover:text-foreground",
+                      )}
+                    >
+                      {tool.name}
+                    </div>
+                    {tool.description && (
+                      <div className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5 leading-snug">
+                        {tool.description}
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+              {tools.length === 0 && (
+                <div className="px-3 py-8 text-xs text-muted-foreground text-center font-mono tracking-[0.08em]">
+                  No tools
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+        </div>
 
         {/* Tool details + request log */}
-        <div className="flex-1 min-w-0 flex flex-col min-h-0">
-          <ScrollArea className="flex-1 min-h-0">
+        <div
+          ref={containerRef}
+          className="flex-1 min-w-0 flex flex-col min-h-0"
+        >
+          <ScrollArea
+            className="min-h-0"
+            style={{
+              flex:
+                requestLog.length > 0
+                  ? `0 0 ${(1 - logPanelRatio) * 100}%`
+                  : "1 1 0%",
+            }}
+          >
             {selectedTool ? (
-              <div className="p-4 space-y-5">
-                <div>
-                  <h3 className="text-lg font-semibold">{selectedTool.name}</h3>
+              <div className="p-5 space-y-6">
+                <div className="pb-4 border-b">
+                  <div className="flex items-center gap-2 font-mono text-[10px] tracking-[0.08em] text-muted-foreground mb-1.5">
+                    <span className="inline-block h-1 w-1 rounded-full bg-emerald-500" />
+                    <span>Tool</span>
+                  </div>
+                  <h3 className="font-mono text-[15px] font-semibold tracking-tight">
+                    {selectedTool.name}
+                  </h3>
                   {selectedTool.description && (
-                    <p className="text-sm text-muted-foreground mt-1">
+                    <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
                       {selectedTool.description}
                     </p>
                   )}
@@ -265,35 +369,48 @@ export function McpInspector({ serverId, isActive }: McpInspectorProps) {
                 {/* Parameters */}
                 {Object.keys(properties).length > 0 && (
                   <div className="space-y-3">
-                    <h4 className="text-sm font-semibold">Parameters</h4>
-                    {Object.entries(properties).map(([name, prop]) => {
-                      const isRequired = requiredParams.includes(name);
-                      return (
-                        <div key={name} className="space-y-1.5">
-                          <Label className="text-sm">
-                            {name}
-                            {isRequired && (
-                              <span className="text-destructive ml-0.5">*</span>
-                            )}
-                            {prop.type && (
-                              <span className="text-muted-foreground font-normal ml-1.5">
-                                {prop.type}
+                    <div className="flex items-center gap-2 font-mono text-[10px] tracking-[0.08em] text-muted-foreground">
+                      <span>Parameters</span>
+                      <span className="flex-1 h-px bg-border" />
+                      <span className="tabular-nums">
+                        {Object.keys(properties).length}
+                      </span>
+                    </div>
+                    <div className="space-y-3">
+                      {Object.entries(properties).map(([name, prop]) => {
+                        const isRequired = requiredParams.includes(name);
+                        return (
+                          <div key={name} className="space-y-1.5">
+                            <Label className="flex items-baseline gap-2 text-xs">
+                              <span className="font-mono font-medium">
+                                {name}
                               </span>
-                            )}
-                          </Label>
-                          <Input
-                            placeholder={prop.description || `Enter ${name}`}
-                            value={paramValues[name] ?? ""}
-                            onChange={(e) =>
-                              setParamValues((prev) => ({
-                                ...prev,
-                                [name]: e.target.value,
-                              }))
-                            }
-                          />
-                        </div>
-                      );
-                    })}
+                              {prop.type && (
+                                <span className="font-mono text-[10px] tracking-wide text-muted-foreground">
+                                  {prop.type}
+                                </span>
+                              )}
+                              {isRequired && (
+                                <span className="font-mono text-[10px] tracking-wide text-amber-600 dark:text-amber-400">
+                                  required
+                                </span>
+                              )}
+                            </Label>
+                            <Input
+                              placeholder={prop.description || `Enter ${name}`}
+                              value={paramValues[name] ?? ""}
+                              onChange={(e) =>
+                                setParamValues((prev) => ({
+                                  ...prev,
+                                  [name]: e.target.value,
+                                }))
+                              }
+                              className="font-mono text-xs"
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
 
@@ -301,12 +418,12 @@ export function McpInspector({ serverId, isActive }: McpInspectorProps) {
                 <Button
                   onClick={handleCallTool}
                   disabled={isCallingTool}
-                  className="gap-2"
+                  className="gap-2 font-mono text-xs tracking-[0.08em] h-9 px-4"
                 >
                   {isCallingTool ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   ) : (
-                    <Play className="h-4 w-4" />
+                    <Play className="h-3.5 w-3.5 fill-current" />
                   )}
                   Call Tool
                 </Button>
@@ -314,9 +431,38 @@ export function McpInspector({ serverId, isActive }: McpInspectorProps) {
                 {/* Latest response for this tool */}
                 {latestToolCallResponse && (
                   <div className="space-y-2">
-                    <h4 className="text-sm font-semibold">Response</h4>
-                    <div className="rounded-md bg-slate-950 p-4 overflow-auto">
-                      <pre className="text-emerald-400 font-mono text-xs whitespace-pre-wrap">
+                    <div className="flex items-center gap-2 font-mono text-[10px] tracking-[0.08em] text-muted-foreground">
+                      <span
+                        className={cn(
+                          "inline-block h-1 w-1 rounded-full",
+                          latestToolCallResponse.error
+                            ? "bg-destructive"
+                            : "bg-emerald-500",
+                        )}
+                      />
+                      <span>Response</span>
+                      <span className="flex-1 h-px bg-border" />
+                      <span className="tabular-nums">
+                        {latestToolCallResponse.durationMs}
+                        <span className="text-muted-foreground/60 ml-0.5">
+                          ms
+                        </span>
+                      </span>
+                    </div>
+                    <div className="rounded-md bg-zinc-950 border border-zinc-800 overflow-hidden">
+                      <div className="px-3 py-1.5 border-b border-zinc-800 flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full bg-zinc-700" />
+                        <span className="h-2 w-2 rounded-full bg-zinc-700" />
+                        <span className="h-2 w-2 rounded-full bg-zinc-700" />
+                      </div>
+                      <pre
+                        className={cn(
+                          "font-mono text-xs leading-relaxed whitespace-pre-wrap p-3 overflow-auto",
+                          latestToolCallResponse.error
+                            ? "text-rose-400"
+                            : "text-emerald-400",
+                        )}
+                      >
                         {JSON.stringify(
                           latestToolCallResponse.error
                             ? { error: latestToolCallResponse.error }
@@ -335,19 +481,19 @@ export function McpInspector({ serverId, isActive }: McpInspectorProps) {
                     <button
                       type="button"
                       onClick={() => setShowSchema((v) => !v)}
-                      className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                      className="group flex items-center gap-1.5 font-mono text-[10px] tracking-[0.08em] text-muted-foreground hover:text-foreground transition-colors"
                     >
                       <ChevronDown
                         className={cn(
-                          "h-4 w-4 transition-transform",
+                          "h-3 w-3 transition-transform",
                           !showSchema && "-rotate-90",
                         )}
                       />
-                      View JSON Schema
+                      <span>Schema</span>
                     </button>
                     {showSchema && (
-                      <div className="rounded-md bg-slate-950 p-4 mt-2 overflow-auto">
-                        <pre className="text-slate-400 font-mono text-xs whitespace-pre-wrap">
+                      <div className="rounded-md bg-zinc-950 border border-zinc-800 p-3 mt-2 overflow-auto">
+                        <pre className="text-zinc-400 font-mono text-xs leading-relaxed whitespace-pre-wrap">
                           {JSON.stringify(selectedTool.inputSchema, null, 2)}
                         </pre>
                       </div>
@@ -356,22 +502,57 @@ export function McpInspector({ serverId, isActive }: McpInspectorProps) {
                 )}
               </div>
             ) : (
-              <div className="flex items-center justify-center h-full text-sm text-muted-foreground p-8">
-                Select a tool to inspect
+              <div className="flex flex-col items-center justify-center h-full gap-3 p-8">
+                <div className="relative">
+                  <div className="h-12 w-12 rounded-md border border-dashed border-muted-foreground/40 flex items-center justify-center">
+                    <CircuitBoard className="h-5 w-5 text-muted-foreground/60" />
+                  </div>
+                </div>
+                <span className="font-mono text-[10px] tracking-[0.08em] text-muted-foreground">
+                  Select a tool to inspect
+                </span>
               </div>
             )}
           </ScrollArea>
 
           {/* Request/Response log */}
           {requestLog.length > 0 && (
-            <div className="border-t flex-shrink-0 max-h-[40%] flex flex-col min-h-0">
-              <div className="px-4 py-2 text-xs font-semibold text-muted-foreground bg-muted/30 flex-shrink-0">
-                Request Log
+            <div
+              className="flex flex-col min-h-0 bg-muted/10"
+              style={{ flex: `0 0 ${logPanelRatio * 100}%` }}
+            >
+              {/* Drag handle — precision rails */}
+              <button
+                type="button"
+                onPointerDown={handleDragStart}
+                aria-label="Resize log panel"
+                className="group h-2 flex-shrink-0 cursor-row-resize border-t bg-muted/30 hover:bg-emerald-500/10 active:bg-emerald-500/20 transition-colors flex items-center justify-center relative"
+              >
+                <div className="flex flex-col gap-[3px]">
+                  <span className="block h-px w-10 bg-muted-foreground/30 group-hover:bg-emerald-500/60 transition-colors" />
+                  <span className="block h-px w-10 bg-muted-foreground/30 group-hover:bg-emerald-500/60 transition-colors" />
+                </div>
+              </button>
+
+              <div className="px-4 py-2 flex items-center gap-2 flex-shrink-0 border-b bg-background/50">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="font-mono text-[10px] tracking-[0.08em] text-muted-foreground">
+                  Request Log
+                </span>
+                <span className="flex-1" />
+                <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+                  {requestLog.length.toString().padStart(3, "0")}{" "}
+                  <span className="text-muted-foreground/60">entries</span>
+                </span>
               </div>
               <ScrollArea className="flex-1 min-h-0">
-                <div className="divide-y">
-                  {requestLog.map((entry) => (
-                    <RequestLogItem key={entry.id} entry={entry} />
+                <div className="divide-y divide-border/50">
+                  {requestLog.map((entry, idx) => (
+                    <RequestLogItem
+                      key={entry.id}
+                      entry={entry}
+                      index={requestLog.length - idx}
+                    />
                   ))}
                 </div>
               </ScrollArea>
@@ -383,57 +564,92 @@ export function McpInspector({ serverId, isActive }: McpInspectorProps) {
   );
 }
 
-function RequestLogItem({ entry }: { entry: RequestLogEntry }) {
+function RequestLogItem({
+  entry,
+  index,
+}: {
+  entry: RequestLogEntry;
+  index: number;
+}) {
   const [expanded, setExpanded] = useState(false);
   const isError = !!entry.error;
   const method = entry.request.body.method as string;
   const toolName = entry.request.body.toolName as string | undefined;
+  const timestamp = new Date(entry.timestamp).toLocaleTimeString([], {
+    hour12: false,
+  });
 
   return (
-    <div className="text-xs font-mono">
+    <div className="text-xs font-mono group">
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="w-full text-left px-4 py-2 hover:bg-muted/30 flex items-center gap-2"
+        className={cn(
+          "w-full text-left px-4 py-2 hover:bg-background/60 flex items-center gap-3 transition-colors relative",
+          expanded && "bg-background/40",
+        )}
       >
+        {isError && (
+          <span className="absolute left-0 top-0 bottom-0 w-[2px] bg-destructive" />
+        )}
+        <span className="font-mono text-[10px] tabular-nums text-muted-foreground/50 w-6 text-right flex-shrink-0">
+          {index.toString().padStart(3, "0")}
+        </span>
+        <span className="text-muted-foreground/60 tabular-nums flex-shrink-0 text-[10px]">
+          {timestamp}
+        </span>
         <ChevronDown
           className={cn(
-            "h-3 w-3 flex-shrink-0 transition-transform",
+            "h-3 w-3 flex-shrink-0 transition-transform text-muted-foreground",
             !expanded && "-rotate-90",
           )}
         />
         <span
           className={cn(
-            "font-semibold",
-            isError ? "text-destructive" : "text-emerald-600",
+            "font-semibold flex items-center gap-1.5 flex-shrink-0",
+            isError
+              ? "text-destructive"
+              : "text-emerald-600 dark:text-emerald-400",
           )}
         >
+          <span className="inline-block h-1 w-1 rounded-full bg-current" />
           {method}
         </span>
         {toolName && (
-          <span className="text-muted-foreground truncate">{toolName}</span>
+          <span className="text-foreground/80 truncate">{toolName}</span>
         )}
-        <span className="ml-auto text-muted-foreground flex-shrink-0">
-          {entry.durationMs}ms
+        <span className="ml-auto text-muted-foreground tabular-nums flex-shrink-0">
+          {entry.durationMs}
+          <span className="text-muted-foreground/50 ml-0.5">ms</span>
         </span>
       </button>
       {expanded && (
-        <div className="px-4 pb-3 space-y-2">
+        <div className="px-4 pb-3 pl-[4.25rem] space-y-2.5">
           <div>
-            <div className="text-muted-foreground mb-1">Request</div>
-            <div className="rounded bg-slate-950 p-2 overflow-auto">
-              <pre className="text-slate-300 whitespace-pre-wrap">
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="text-[10px] tracking-[0.08em] text-muted-foreground">
+                Request
+              </span>
+              <span className="flex-1 h-px bg-border/50" />
+            </div>
+            <div className="rounded bg-zinc-950 border border-zinc-800/60 p-2.5 overflow-auto">
+              <pre className="text-zinc-300 whitespace-pre-wrap leading-relaxed">
                 {JSON.stringify(entry.request.body, null, 2)}
               </pre>
             </div>
           </div>
           <div>
-            <div className="text-muted-foreground mb-1">Response</div>
-            <div className="rounded bg-slate-950 p-2 overflow-auto">
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="text-[10px] tracking-[0.08em] text-muted-foreground">
+                Response
+              </span>
+              <span className="flex-1 h-px bg-border/50" />
+            </div>
+            <div className="rounded bg-zinc-950 border border-zinc-800/60 p-2.5 overflow-auto">
               <pre
                 className={cn(
-                  "whitespace-pre-wrap",
-                  isError ? "text-red-400" : "text-emerald-400",
+                  "whitespace-pre-wrap leading-relaxed",
+                  isError ? "text-rose-400" : "text-emerald-400",
                 )}
               >
                 {entry.error

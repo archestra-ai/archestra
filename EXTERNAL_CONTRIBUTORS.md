@@ -8,3 +8,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @Bucha11
 - @ilyakorovin
 - @joeyorlando
+- @Konstantinov-Innokentii

@@ -1495,13 +1495,13 @@ export const bedrockAdapterFactory: LLMProvider<
 
   createClient(
     apiKey: string | undefined,
-    _options?: CreateClientOptions,
+    options?: CreateClientOptions,
   ): BedrockClient {
     logger.info(
       { hasApiKey: !!apiKey, apiKeyLength: apiKey?.length },
       "[BedrockAdapter] createClient called",
     );
-    const baseUrl = config.llm.bedrock.baseUrl;
+    const baseUrl = options?.baseUrl ?? config.llm.bedrock.baseUrl;
     const region = getBedrockRegion(baseUrl);
 
     logger.info({ region }, "[BedrockAdapter] region");

@@ -1919,7 +1919,6 @@ class McpClient {
     catalogDisplayName: string,
     catalogId: string,
     tokenAuth?: TokenAuthContext,
-    detailOverride?: string,
   ): AuthRequiredMcpToolError {
     const context = this.formatAuthContext(tokenAuth);
     const installUrl = `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_INSTALL_QUERY_PARAM}=${catalogId}`;
@@ -1927,9 +1926,7 @@ class McpClient {
       type: "auth_required",
       message: formatActionableAuthError({
         title: `Authentication required for "${catalogDisplayName}"`,
-        detail:
-          detailOverride ??
-          `No credentials were found for your account (${context}).`,
+        detail: `No credentials were found for your account (${context}).`,
         actionLabel: "set up your credentials",
         url: installUrl,
         postAction:

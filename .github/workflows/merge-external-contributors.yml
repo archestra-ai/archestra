@@ -69,8 +69,8 @@ jobs:
         id: generate-token
         uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
         with:
-          app-id: ${{ secrets.ARCHESTRA_CONTRIBUTOR_BOT_GITHUB_APP_ID }}
-          private-key: ${{ secrets.ARCHESTRA_CONTRIBUTOR_BOT_GITHUB_APP_PRIVATE_KEY }}
+          app-id: ${{ secrets.ARCHESTRA_MERGE_EXTERNAL_CONTRIBUTORS_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_MERGE_EXTERNAL_CONTRIBUTORS_GITHUB_APP_PRIVATE_KEY }}
 
       - name: Merge PR
         env:

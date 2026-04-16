@@ -1,5 +1,40 @@
 # Changelog
 
+## [1.2.14](https://github.com/archestra-ai/archestra/compare/platform-v1.2.13...platform-v1.2.14) (2026-04-16)
+
+
+### Features
+
+* add org toggle for slim chat error cards ([#3760](https://github.com/archestra-ai/archestra/issues/3760)) ([4e25e1c](https://github.com/archestra-ai/archestra/commit/4e25e1c306d043b0945b6b0e471a565fb99739f1))
+* refine mcp multitenant auth UX and docs ([#3815](https://github.com/archestra-ai/archestra/issues/3815)) ([ea94fd0](https://github.com/archestra-ai/archestra/commit/ea94fd0edcb783a6f8aae1a1bbc36fc0bc77ea2a))
+* support configurable MCP auth and additional headers ([#3794](https://github.com/archestra-ai/archestra/issues/3794)) ([2b9f30b](https://github.com/archestra-ai/archestra/commit/2b9f30bc1f4e9625bdee59d5accbdbdb526e8130))
+
+
+### Bug Fixes
+
+* Bedrock Provider UI/UX Improvements ([#3786](https://github.com/archestra-ai/archestra/issues/3786)) ([568aff6](https://github.com/archestra-ai/archestra/commit/568aff64d397bf058b5bfa2b2c841f47a8362123))
+* Bedrock/Gemini don't use custom base URL in chat ([#3814](https://github.com/archestra-ai/archestra/issues/3814)) ([faea874](https://github.com/archestra-ai/archestra/commit/faea874e7de845dc557172108544595f8efd51cf))
+* block personal MCP assignments on shared agents ([#3801](https://github.com/archestra-ai/archestra/issues/3801)) ([af11f5e](https://github.com/archestra-ai/archestra/commit/af11f5e26352bff280ef1a6115d456195c6ab1a4))
+* bug when switching auth methods ([#3800](https://github.com/archestra-ai/archestra/issues/3800)) ([68e7ddd](https://github.com/archestra-ai/archestra/commit/68e7ddd2d7c864e4689146aef7f99f7df5b326cc))
+* catalog mcp always has unsaved changes, improve inspector layout ([#3804](https://github.com/archestra-ai/archestra/issues/3804)) ([daff78c](https://github.com/archestra-ai/archestra/commit/daff78ce0d9aaa5fb556d6425a1c714d4ed724c4))
+* catalog secret edits not propagating to installed MCP servers ([#3799](https://github.com/archestra-ai/archestra/issues/3799)) ([caf54b1](https://github.com/archestra-ai/archestra/commit/caf54b15f2d04a506d38fcd96e4e8d4e5cd787c7))
+* chat access and role permission hints ([#3831](https://github.com/archestra-ai/archestra/issues/3831)) ([0348253](https://github.com/archestra-ai/archestra/commit/034825303691a9bbf6aca4ef28e8c187dd608171))
+* emit OpenAPI 3.0-compatible exclusiveMinimum in component schemas ([#3765](https://github.com/archestra-ai/archestra/issues/3765)) ([4029a90](https://github.com/archestra-ai/archestra/commit/4029a9010d8efdb8b9f6f82aa53c7f4e78188008))
+* GitHub MCP template auth header ([#3827](https://github.com/archestra-ai/archestra/issues/3827)) ([8849acc](https://github.com/archestra-ai/archestra/commit/8849acc870780ce56d426b67e3f4ccd8e9f7d5f5))
+* improve Jira OAuth and refresh MCP tokens ([#3774](https://github.com/archestra-ai/archestra/issues/3774)) ([59875c5](https://github.com/archestra-ai/archestra/commit/59875c5050987b15cad6765a99458c1545728e6d))
+* include tool definition tokens in cost optimization token count ([#3733](https://github.com/archestra-ai/archestra/issues/3733)) ([dda5784](https://github.com/archestra-ai/archestra/commit/dda5784c305f67365d64ff41d58c19b3ccd0b957))
+* MCP reauth cache invalidation ([#3795](https://github.com/archestra-ai/archestra/issues/3795)) ([fb273d3](https://github.com/archestra-ai/archestra/commit/fb273d30fc7f385acac455f7de0422ac176584de))
+* OAuth consent redirect through SSO sign-in ([#3818](https://github.com/archestra-ai/archestra/issues/3818)) ([da3f123](https://github.com/archestra-ai/archestra/commit/da3f123343c8cb7a8ef6307acef54ec4c4d74409))
+* restore personal MCP assignment for shared agents ([#3832](https://github.com/archestra-ai/archestra/issues/3832)) ([ddefb03](https://github.com/archestra-ai/archestra/commit/ddefb03d308f69f1856645bfd24cfe191a6908dc))
+* sanitize stale custom role permissions ([#3823](https://github.com/archestra-ai/archestra/issues/3823)) ([35a8167](https://github.com/archestra-ai/archestra/commit/35a8167903b9a63978a4d0540965e765829d04aa))
+* sync archestra branding in worker so builtin tools work in scheduled tasks ([#3777](https://github.com/archestra-ai/archestra/issues/3777)) ([f856cdf](https://github.com/archestra-ai/archestra/commit/f856cdf5a31b61845cfdef5fce03b9680081660c))
+
+
+### Miscellaneous Chores
+
+* **deps:** bump hono from 4.12.12 to 4.12.14 in /platform/e2e-tests/test-mcp-servers/mcp-server-id-jag ([#3802](https://github.com/archestra-ai/archestra/issues/3802)) ([500afab](https://github.com/archestra-ai/archestra/commit/500afab00bb81dc7cf225494aadc0ec99b5387bd))
+* **deps:** bump hono from 4.12.12 to 4.12.14 in /platform/e2e-tests/test-mcp-servers/mcp-server-jwks-keycloak ([#3803](https://github.com/archestra-ai/archestra/issues/3803)) ([4b7810e](https://github.com/archestra-ai/archestra/commit/4b7810ee934ebeb9afc258f795fb214f2ab5a87c))
+
 ## [1.2.13](https://github.com/archestra-ai/archestra/compare/platform-v1.2.12...platform-v1.2.13) (2026-04-14)
 
 

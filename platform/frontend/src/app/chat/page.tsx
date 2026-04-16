@@ -205,6 +205,12 @@ export function ChatPageContent({
   const { data: canReadLlmProvider } = useHasPermissions({
     llmProviderApiKey: ["read"],
   });
+  const { data: canReadLlmModels } = useHasPermissions({
+    llmModel: ["read"],
+  });
+  const { data: canSeeProviderSettings } = useHasPermissions({
+    chatProviderSettings: ["enable"],
+  });
   const { data: canReadTeams } = useHasPermissions({
     team: ["read"],
   });
@@ -227,7 +233,11 @@ export function ChatPageContent({
     return false;
   });
 
-  const hasChatAccess = canReadAgent !== false && canReadLlmProvider !== false;
+  const hasChatAccess = canReadAgent !== false;
+  const canUseProviderSettings =
+    canSeeProviderSettings === true &&
+    canReadLlmProvider === true &&
+    canReadLlmModels === true;
 
   // Fetch internal agents for dialog editing
   const { data: internalAgents = [], isPending: isLoadingAgents } =
@@ -236,9 +246,9 @@ export function ChatPageContent({
 
   // Fetch profiles and models for initial chat (no conversation)
   const { modelsByProvider, isPending: isModelsLoading } =
-    useLlmModelsByProvider();
+    useLlmModelsByProvider({ enabled: canUseProviderSettings });
   const { data: chatApiKeys = [], isLoading: isLoadingApiKeys } =
-    useLlmProviderApiKeys({ enabled: hasChatAccess });
+    useLlmProviderApiKeys({ enabled: hasChatAccess && canUseProviderSettings });
   const { data: organization, isPending: isOrgLoading } = useOrganization();
 
   // State for initial chat (when no conversation exists yet)
@@ -1265,7 +1275,6 @@ export function ChatPageContent({
       if (
         (!hasText && !hasFiles) ||
         !initialAgentId ||
-        !initialModel ||
         createConversationMutation.isPending
       ) {
         return;
@@ -1328,7 +1337,6 @@ export function ChatPageContent({
     [
       isPlaywrightSetupVisible,
       initialAgentId,
-      initialModel,
       createInitialConversation,
       updateEnabledToolsMutation,
       selectConversation,
@@ -1356,8 +1364,6 @@ export function ChatPageContent({
 
     // Wait for agent to be ready.
     if (!initialAgentId) return;
-    if (!initialModel) return;
-
     // Skip if mutation is already in progress
     if (createConversationMutation.isPending) return;
 
@@ -1374,7 +1380,6 @@ export function ChatPageContent({
     initialUserPrompt,
     conversationId,
     initialAgentId,
-    initialModel,
     createInitialConversation,
     selectConversation,
     createConversationMutation.isPending,
@@ -1403,16 +1408,9 @@ export function ChatPageContent({
   // Check if the conversation's agent was deleted
   const isAgentDeleted = conversationId && conversation && !conversation.agent;
 
-  // If user lacks permission to read agents or LLM providers, show access denied
+  // If user lacks permission to read agents, show access denied
   // Must check before loading state since disabled queries stay in pending state
-  if (
-    !conversationId &&
-    (canReadAgent === false || canReadLlmProvider === false)
-  ) {
-    const missingPermissions: string[] = [];
-    if (canReadAgent === false) missingPermissions.push("agent:read");
-    if (canReadLlmProvider === false)
-      missingPermissions.push("llmProviderApiKey:read");
+  if (!conversationId && canReadAgent === false) {
     return (
       <Empty className="h-full">
         <EmptyHeader>
@@ -1426,16 +1424,9 @@ export function ChatPageContent({
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
-          <div className="flex flex-col items-center gap-1">
-            {missingPermissions.map((p) => (
-              <code
-                key={p}
-                className="rounded bg-muted px-2 py-1 text-sm font-mono"
-              >
-                {p}
-              </code>
-            ))}
-          </div>
+          <code className="rounded bg-muted px-2 py-1 text-sm font-mono">
+            agent:read
+          </code>
         </EmptyContent>
       </Empty>
     );

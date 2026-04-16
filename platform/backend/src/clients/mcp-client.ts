@@ -703,6 +703,27 @@ class McpClient {
           const catalogDisplayName = tool.catalogName || tool.catalogId;
           // Credentials exist but failed → "expired/invalid" message with manage link
           if (targetMcpServerId) {
+            const targetServer =
+              await McpServerModel.findById(targetMcpServerId);
+            if (
+              targetServer?.ownerId &&
+              !targetServer.teamId &&
+              tokenAuth?.userId !== targetServer.ownerId
+            ) {
+              const assignmentError =
+                this.buildAssignedCredentialUnavailableMessage(
+                  catalogDisplayName,
+                  tool.catalogId,
+                );
+              return await this.createErrorResult(
+                toolCall,
+                agentId,
+                assignmentError.message,
+                mcpServerName,
+                authInfo,
+                assignmentError,
+              );
+            }
             const authError = this.buildExpiredAuthMessage(
               catalogDisplayName,
               tool.catalogId,
@@ -1157,26 +1178,6 @@ class McpClient {
         };
       }
       const mcpServer = await McpServerModel.findById(tool.mcpServerId);
-      if (
-        mcpServer?.ownerId &&
-        !mcpServer.teamId &&
-        tokenAuth?.userId !== mcpServer.ownerId
-      ) {
-        const assignmentError = this.buildAssignedCredentialUnavailableMessage(
-          tool.catalogName || fallbackName,
-          tool.catalogId ?? "",
-        );
-        return {
-          error: await this.createErrorResult(
-            toolCall,
-            agentId,
-            assignmentError.message,
-            fallbackName,
-            undefined,
-            assignmentError,
-          ),
-        };
-      }
       logger.info(
         {
           toolName: toolCall.name,
@@ -1976,10 +1977,9 @@ class McpClient {
     return {
       type: "assigned_credential_unavailable",
       message: [
-        `Credential assignment unavailable for "${catalogDisplayName}".`,
-        "",
-        `This tool is pinned to a personal "${catalogDisplayName}" connection that your account cannot access.`,
-        "Ask the agent owner or an admin to update the tool's credential assignment before retrying.",
+        `Expired / Invalid Authentication: credentials for "${catalogDisplayName}" have expired or are invalid.`,
+        "Re-authenticate to continue using this tool.",
+        "Ask the agent owner or an admin to re-authenticate.",
       ].join("\n"),
       catalogId,
       catalogName: catalogDisplayName,

@@ -667,7 +667,7 @@ describe("POST /api/agents/:agentId/tools/:toolId", () => {
     });
   });
 
-  test("rejects assigning a personal connection to an org-scoped agent", async ({
+  test("allows assigning a personal connection to an org-scoped agent when the owner is in the organization", async ({
     makeAgent,
     makeInternalMcpCatalog,
     makeMcpServer,
@@ -697,15 +697,11 @@ describe("POST /api/agents/:agentId/tools/:toolId", () => {
       payload: { mcpServerId: mcpServer.id },
     });
 
-    expect(response.statusCode).toBe(400);
-    expect(response.json()).toMatchObject({
-      error: {
-        message: "Personal connections can only be assigned to personal agents",
-      },
-    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ success: true });
   });
 
-  test("rejects assigning a personal connection to a team-scoped agent", async ({
+  test("allows assigning a personal connection to a team-scoped agent when the owner is in the team", async ({
     makeAgent,
     makeInternalMcpCatalog,
     makeMcpServer,
@@ -742,15 +738,11 @@ describe("POST /api/agents/:agentId/tools/:toolId", () => {
       payload: { mcpServerId: mcpServer.id },
     });
 
-    expect(response.statusCode).toBe(400);
-    expect(response.json()).toMatchObject({
-      error: {
-        message: "Personal connections can only be assigned to personal agents",
-      },
-    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ success: true });
   });
 
-  test("rejects assigning a personal connection to a team-scoped MCP gateway", async ({
+  test("allows assigning a personal connection to a team-scoped MCP gateway when the owner is in the team", async ({
     makeAgent,
     makeInternalMcpCatalog,
     makeMcpServer,
@@ -787,12 +779,8 @@ describe("POST /api/agents/:agentId/tools/:toolId", () => {
       payload: { mcpServerId: mcpServer.id },
     });
 
-    expect(response.statusCode).toBe(400);
-    expect(response.json()).toMatchObject({
-      error: {
-        message: "Personal connections can only be assigned to personal agents",
-      },
-    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ success: true });
   });
 });
 

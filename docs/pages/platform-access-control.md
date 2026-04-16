@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-04-10
+lastUpdated: 2026-04-16
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -256,6 +256,17 @@ Examples:
 - Organization-wide records require the resource-specific admin permission such as `llmProviderApiKey:admin` or `llmVirtualKey:admin`
 
 These resources do **not** use `:team-admin`.
+
+### Chat Access And Optional UI Controls
+
+Chat access is controlled separately from optional chat UI controls:
+
+- `chat:read` allows access to chat itself
+- `agent:read` is also required because chat is agent-backed and a user must be able to access at least one agent/profile context to start or use chat
+- `chatAgentPicker:enable` controls whether the agent picker is visible
+- `chatProviderSettings:enable` controls whether model and API key selectors are visible
+
+The selector visibility permissions are UI toggles. They should be treated independently from core chat access and should not be assumed to grant access to provider credentials or model catalogs on their own.
 
 ### MCP Registry And Installation Records
 

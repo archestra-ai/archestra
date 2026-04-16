@@ -3,8 +3,6 @@ import {
   AgentToolModel,
   InternalMcpCatalogModel,
   McpServerModel,
-  MemberModel,
-  TeamModel,
   ToolModel,
 } from "@/models";
 import type {
@@ -386,27 +384,27 @@ export async function isMcpServerAssignableToTarget(params: {
     return true;
   }
 
+  if (target.scope !== "personal") {
+    return false;
+  }
+
   if (target.scope === "personal") {
     return target.authorId === mcpServer.ownerId;
   }
 
-  if (target.scope === "org") {
-    const ownerMembership = await MemberModel.getByUserId(
-      mcpServer.ownerId,
-      target.organizationId,
-    );
-    return ownerMembership != null;
-  }
-
-  return TeamModel.isUserInAnyTeam(target.teamIds, mcpServer.ownerId);
+  return false;
 }
 
 function getAssignmentValidationMessage(
-  mcpServer: Pick<PrefetchedMcpServer, "teamId">,
+  mcpServer: Pick<PrefetchedMcpServer, "teamId" | "ownerId">,
 ) {
   if (mcpServer.teamId) {
     return "This team connection is not shared with the selected team";
   }
 
-  return "The credential owner must be a member of a team that this resource is assigned to";
+  if (mcpServer.ownerId) {
+    return "Personal connections can only be assigned to personal agents";
+  }
+
+  return "This MCP connection cannot be assigned to the selected agent";
 }

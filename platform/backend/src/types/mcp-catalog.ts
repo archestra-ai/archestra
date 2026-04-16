@@ -78,12 +78,10 @@ const LocalConfigSelectSchema = z.object({
       z.union([
         ImagePullSecretConfigSchema,
         // Legacy format: { name: string } → normalize to { source: "existing", name }
-        z
-          .object({ name: z.string() })
-          .transform((val) => ({
-            source: "existing" as const,
-            name: val.name,
-          })),
+        z.object({ name: z.string() }).transform((val) => ({
+          source: "existing" as const,
+          name: val.name,
+        })),
       ]),
     )
     .optional(),

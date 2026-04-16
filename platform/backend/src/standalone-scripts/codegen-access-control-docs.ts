@@ -148,7 +148,7 @@ These resources do **not** use \`:team-admin\`.
 Chat access is controlled separately from optional chat UI controls:
 
 - \`chat:read\` allows access to chat itself
-- \`agent:read\` is still required to use agents in chat
+- \`agent:read\` is also required because chat is agent-backed and a user must be able to access at least one agent/profile context to start or use chat
 - \`chatAgentPicker:enable\` controls whether the agent picker is visible
 - \`chatProviderSettings:enable\` controls whether model and API key selectors are visible
 

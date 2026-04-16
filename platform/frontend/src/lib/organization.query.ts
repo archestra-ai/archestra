@@ -338,6 +338,7 @@ export function useUpdateAppearanceSettings(
         footerText: updatedOrganization.footerText,
         chatLinks: updatedOrganization.chatLinks,
         chatErrorSupportMessage: updatedOrganization.chatErrorSupportMessage,
+        slimChatErrorUi: updatedOrganization.slimChatErrorUi,
         animateChatPlaceholders: updatedOrganization.animateChatPlaceholders,
       });
       toast.success(onSuccessMessage);

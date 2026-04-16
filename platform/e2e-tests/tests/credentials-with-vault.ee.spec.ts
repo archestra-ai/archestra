@@ -323,12 +323,56 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     await waitForMcpServerToolsDiscovered(adminPage, newCatalogItem.name);
     await settleRegistryAfterInstall(adminPage);
 
-    // Assign tool to profiles using default team credential
-    await assignCatalogCredentialToGateway({
-      page: adminPage,
-      catalogItemName: newCatalogItem.name,
-      credentialName: DEFAULT_TEAM_NAME,
+    const defaultGatewayResponse = await archestraApiSdk.getDefaultMcpGateway({
+      headers: { Cookie: cookieHeaders },
     });
+    if (defaultGatewayResponse.error || !defaultGatewayResponse.data) {
+      throw new Error(
+        `Failed to get default MCP gateway: ${JSON.stringify(defaultGatewayResponse.error)}`,
+      );
+    }
+
+    const toolsResponse = await archestraApiSdk.getTools({
+      headers: { Cookie: cookieHeaders },
+    });
+    const toolIds =
+      toolsResponse.data
+        ?.filter((tool) => tool.name.startsWith(`${newCatalogItem.name}__`))
+        .map((tool) => tool.id) ?? [];
+    if (toolIds.length === 0) {
+      throw new Error(
+        `No discovered tools found for readonly-vault catalog ${newCatalogItem.name}`,
+      );
+    }
+
+    const serversResponse = await archestraApiSdk.getMcpServers({
+      headers: { Cookie: cookieHeaders },
+      query: { catalogId: newCatalogItem.id },
+    });
+    const defaultTeamServer = serversResponse.data?.find(
+      (server) => server.teamId === defaultTeamId,
+    );
+    if (!defaultTeamServer) {
+      throw new Error(
+        `No team installation found for readonly-vault catalog ${newCatalogItem.name}`,
+      );
+    }
+
+    for (const toolId of toolIds) {
+      const assignResponse = await archestraApiSdk.assignToolToAgent({
+        headers: { Cookie: cookieHeaders },
+        path: {
+          agentId: defaultGatewayResponse.data.id,
+          toolId,
+        },
+        body: { mcpServerId: defaultTeamServer.id },
+      });
+      if (assignResponse.error) {
+        throw new Error(
+          `Failed to assign readonly-vault tool ${toolId}: ${JSON.stringify(assignResponse.error)}`,
+        );
+      }
+    }
 
     // Verify tool call result using default team credential
     await verifyToolCallResultViaApi({

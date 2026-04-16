@@ -153,12 +153,12 @@ describe("fetchBedrockModels", () => {
     }
   });
 
-  test("returns empty array when baseUrl is not configured", async () => {
+  test("throws error when baseUrl is not configured", async () => {
     config.llm.bedrock.baseUrl = "";
 
-    const models = await fetchBedrockModels("test-api-key");
-
-    expect(models).toEqual([]);
+    await expect(fetchBedrockModels("test-api-key")).rejects.toThrow(
+      "Bedrock base URL not configured",
+    );
     expect(mockFetch).not.toHaveBeenCalled();
   });
 

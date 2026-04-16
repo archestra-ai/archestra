@@ -303,6 +303,17 @@ describe("organization routes", () => {
       expect(response.json().showTwoFactor).toBe(true);
     });
 
+    test("updates slimChatErrorUi toggle", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/appearance-settings",
+        payload: { slimChatErrorUi: true },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().slimChatErrorUi).toBe(true);
+    });
+
     test("accepts favicon as valid PNG", async () => {
       const response = await app.inject({
         method: "PATCH",

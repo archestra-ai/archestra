@@ -69,7 +69,7 @@ This issue uses prompt injection to trick the agent into following embedded comm
 Resolve <link-to-the-issue>
 ```
 
-![Successful exploit](/docs/platfrom/mastra-attack-success.png)
+![Successful exploit](/docs/platfrom/mastra-attack-success.webp)
 
 The screenshot shows that the agent follows the malicious instructions, posting your private README contents in a public issue. This demonstrates how prompt injection can lead to data exfiltration, or theft.
 
@@ -102,10 +102,10 @@ Optionally, you can verify the proxy is being used by looking for the message "U
 Resolve <link-to-the-issue>
 ```
 
-![Exploit prevented](/docs/platfrom/mastra-attack-prevented.png)
+![Exploit prevented](/docs/platfrom/mastra-attack-prevented.webp)
 
 Here, Archestra's [AI tool guardrails](/docs/platform-ai-tool-guardrails) reduce the context trustworthiness and prevent the read from a private repository. You can check the details of the blocked tool call in the platform UI at http://localhost:3000/logs/:
 
-![Platform logs](/docs/platfrom/mastra-platform-logs.png)
+![Platform logs](/docs/platfrom/mastra-platform-logs.webp)
 
 If expanded, the logs show that the first tool call, `get_issue` was a success, but the second one `get_file_content`, was blocked.

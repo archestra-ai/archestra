@@ -666,6 +666,134 @@ describe("POST /api/agents/:agentId/tools/:toolId", () => {
       },
     });
   });
+
+  test("rejects assigning a personal connection to an org-scoped agent", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: adminUser.id,
+      agentType: "agent",
+      scope: "org",
+      teams: [],
+    });
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const tool = await makeTool({
+      catalogId: catalog.id,
+      name: "org-agent-tool",
+    });
+    const mcpServer = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: adminUser.id,
+      teamId: null,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${agent.id}/tools/${tool.id}`,
+      payload: { mcpServerId: mcpServer.id },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: {
+        message: "Personal connections can only be assigned to personal agents",
+      },
+    });
+  });
+
+  test("rejects assigning a personal connection to a team-scoped agent", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTeam,
+    makeTeamMember,
+    makeTool,
+  }) => {
+    const sharedTeam = await makeTeam(organizationId, adminUser.id, {
+      name: "Shared Team",
+    });
+    await makeTeamMember(sharedTeam.id, adminUser.id);
+
+    const agent = await makeAgent({
+      organizationId,
+      authorId: adminUser.id,
+      agentType: "agent",
+      scope: "team",
+      teams: [sharedTeam.id],
+    });
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const tool = await makeTool({
+      catalogId: catalog.id,
+      name: "team-agent-tool",
+    });
+    const mcpServer = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: adminUser.id,
+      teamId: null,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${agent.id}/tools/${tool.id}`,
+      payload: { mcpServerId: mcpServer.id },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: {
+        message: "Personal connections can only be assigned to personal agents",
+      },
+    });
+  });
+
+  test("rejects assigning a personal connection to a team-scoped MCP gateway", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTeam,
+    makeTeamMember,
+    makeTool,
+  }) => {
+    const sharedTeam = await makeTeam(organizationId, adminUser.id, {
+      name: "Shared Team",
+    });
+    await makeTeamMember(sharedTeam.id, adminUser.id);
+
+    const gateway = await makeAgent({
+      organizationId,
+      authorId: adminUser.id,
+      agentType: "mcp_gateway",
+      scope: "team",
+      teams: [sharedTeam.id],
+    });
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const tool = await makeTool({
+      catalogId: catalog.id,
+      name: "team-gateway-tool",
+    });
+    const mcpServer = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: adminUser.id,
+      teamId: null,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${gateway.id}/tools/${tool.id}`,
+      payload: { mcpServerId: mcpServer.id },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: {
+        message: "Personal connections can only be assigned to personal agents",
+      },
+    });
+  });
 });
 
 describe("GET /api/agents/:agentId/tools", () => {

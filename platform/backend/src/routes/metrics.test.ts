@@ -91,6 +91,33 @@ describe("metrics routes", () => {
     await metricsApp.close();
   });
 
+  test("metrics auth does not block non-metrics endpoints", async () => {
+    const metricsApp = createFastifyInstance();
+    metricsApp.get(HEALTH_PATH, () => ({ status: "ok" }));
+    metricsApp.get("/api/test", () => ({ data: "hello" }));
+    await registerStandaloneMetricsEndpoint({
+      fastify: metricsApp,
+      enableDefaultMetrics: false,
+    });
+
+    // Non-metrics endpoint should pass through without auth
+    const apiResponse = await metricsApp.inject({
+      method: "GET",
+      url: "/api/test",
+    });
+    expect(apiResponse.statusCode).toBe(200);
+    expect(apiResponse.json()).toEqual({ data: "hello" });
+
+    // /metrics with query params should still require auth
+    const metricsWithQueryResponse = await metricsApp.inject({
+      method: "GET",
+      url: `${METRICS_PATH}?format=json`,
+    });
+    expect(metricsWithQueryResponse.statusCode).toBe(401);
+
+    await metricsApp.close();
+  });
+
   test("main app metrics plugin does not expose /metrics on the main port", async () => {
     const app = createFastifyInstance();
     app.get("/openapi.json", () => ({ ok: true }));

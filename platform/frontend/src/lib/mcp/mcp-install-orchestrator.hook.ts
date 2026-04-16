@@ -18,6 +18,7 @@ import {
   setOAuthServerType,
   setOAuthState,
   setOAuthTeamId,
+  setOAuthUserConfigValues,
 } from "@/lib/auth/oauth-session";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
@@ -277,6 +278,7 @@ export function useMcpInstallOrchestrator() {
         id: reauthServerId,
         name: localServerCatalogItem.name,
         environmentValues: installResult.environmentValues,
+        userConfigValues: installResult.userConfigValues,
         isByosVault: installResult.isByosVault,
       });
 
@@ -309,6 +311,16 @@ export function useMcpInstallOrchestrator() {
           setOAuthEnvironmentValues(safeValues);
         }
       }
+      if (
+        installResult.userConfigValues &&
+        Object.keys(installResult.userConfigValues).length > 0
+      ) {
+        setOAuthUserConfigValues({
+          values: installResult.userConfigValues,
+          userConfig: localServerCatalogItem.userConfig,
+          isByosVault: installResult.isByosVault,
+        });
+      }
       closeDialog("local-install");
       setSelectedCatalogItem(localServerCatalogItem);
       setLocalServerCatalogItem(null);
@@ -320,6 +332,7 @@ export function useMcpInstallOrchestrator() {
       name: localServerCatalogItem.name,
       catalogId: localServerCatalogItem.id,
       environmentValues: installResult.environmentValues,
+      userConfigValues: installResult.userConfigValues,
       isByosVault: installResult.isByosVault,
       teamId: installResult.teamId ?? undefined,
       serviceAccount: installResult.serviceAccount,

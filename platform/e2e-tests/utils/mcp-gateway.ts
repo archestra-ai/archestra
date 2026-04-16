@@ -1,10 +1,15 @@
-import { type APIRequestContext, expect, type Page } from "@playwright/test";
+import {
+  type APIRequestContext,
+  type APIResponse,
+  expect,
+  type Page,
+} from "@playwright/test";
 import { archestraApiSdk, getManageCredentialsButtonTestId } from "@shared";
 import {
-  API_BASE_URL,
   DEFAULT_TEAM_NAME,
   E2eTestId,
   ENGINEERING_TEAM_NAME,
+  getE2eRequestUrl,
   MARKETING_TEAM_NAME,
   MCP_GATEWAY_URL_SUFFIX,
   UI_BASE_URL,
@@ -119,17 +124,34 @@ export async function makeApiRequest(params: {
   ignoreStatusCheck?: boolean;
   timeoutMs?: number;
 }) {
-  const response = await params.request[params.method](
-    `${API_BASE_URL}${params.urlSuffix}`,
-    {
-      headers: params.headers ?? {
-        "Content-Type": "application/json",
-        Origin: UI_BASE_URL,
-      },
-      data: params.data ?? null,
-      timeout: params.timeoutMs,
+  const requestUrl = getE2eRequestUrl(params.urlSuffix);
+  const requestOptions = {
+    headers: params.headers ?? {
+      "Content-Type": "application/json",
+      Origin: UI_BASE_URL,
     },
-  );
+    data: params.data ?? null,
+    timeout: params.timeoutMs,
+  };
+  let response: APIResponse;
+
+  switch (params.method) {
+    case "get":
+      response = await params.request.get(requestUrl, requestOptions);
+      break;
+    case "post":
+      response = await params.request.post(requestUrl, requestOptions);
+      break;
+    case "put":
+      response = await params.request.put(requestUrl, requestOptions);
+      break;
+    case "patch":
+      response = await params.request.patch(requestUrl, requestOptions);
+      break;
+    case "delete":
+      response = await params.request.delete(requestUrl, requestOptions);
+      break;
+  }
 
   if (!params.ignoreStatusCheck && !response.ok()) {
     throw new Error(
@@ -190,6 +212,30 @@ export async function initializeMcpSession(
       },
     },
   });
+}
+
+export async function waitForGatewayIdentityProviderReady(params: {
+  request: APIRequestContext;
+  profileId: string;
+  identityProviderId: string;
+  agentType?: "agent" | "mcp_gateway";
+}): Promise<void> {
+  await expect(async () => {
+    const response = await makeApiRequest({
+      request: params.request,
+      method: "get",
+      urlSuffix: `/api/agents/${params.profileId}`,
+    });
+    const agent = (await response.json()) as {
+      identityProviderId?: string | null;
+      agentType?: "agent" | "mcp_gateway" | "profile" | "llm_proxy";
+    };
+
+    expect(agent.identityProviderId).toBe(params.identityProviderId);
+    if (params.agentType) {
+      expect(agent.agentType).toBe(params.agentType);
+    }
+  }).toPass({ timeout: 30_000, intervals: [500, 1000, 2000, 4000] });
 }
 
 export async function callMcpTool(

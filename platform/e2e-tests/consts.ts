@@ -34,6 +34,15 @@ export const UI_BASE_URL =
   process.env.E2E_UI_BASE_URL || "http://localhost:3000";
 export const API_BASE_URL =
   process.env.E2E_API_BASE_URL || "http://localhost:9000";
+
+export function getE2eRequestUrl(urlSuffix: string): string {
+  const baseUrl =
+    urlSuffix === "/api" || urlSuffix.startsWith("/api/")
+      ? UI_BASE_URL
+      : API_BASE_URL;
+  return `${baseUrl}${urlSuffix}`;
+}
+
 export const WIREMOCK_BASE_URL =
   process.env.E2E_WIREMOCK_BASE_URL ||
   (IS_CI ? "http://127.0.0.1:8080" : "http://127.0.0.1:9092");

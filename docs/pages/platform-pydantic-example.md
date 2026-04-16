@@ -147,17 +147,17 @@ Also by default, if your context was exposed to untrusted information, any subse
 
 This rule might be quite limiting for the agent, but you can add additional rules to validate the input (the arguments for the tool calls) and allow the tool call even if the context is untrusted:
 
-![Add Tool Call Policy](/docs/platfrom/add-tool-call-policy.png)
+![Add Tool Call Policy](/docs/platfrom/add-tool-call-policy.webp)
 
 For example, we can always allow `get_github_issue` to fetch issues from trusted repositories, even if the context _might_ have a prompt injection.
 
 We can also add a rule to define what to consider as trusted content. In Tool Result Policies, if we know that we queried our corporate GitHub repository, we can mark the result as trusted, and therefore, subsequent tool calling would still be allowed:
 
-![Add Tool Result Policy](/docs/platfrom/add-tool-result-policy.png)
+![Add Tool Result Policy](/docs/platfrom/add-tool-result-policy.webp)
 
 The decision tree for Archestra would be:
 
-![Archestra Decision Tree](/docs/platfrom/archestra-decision-tree.png)
+![Archestra Decision Tree](/docs/platfrom/archestra-decision-tree.webp)
 
 ## All Set
 

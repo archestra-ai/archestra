@@ -381,6 +381,15 @@ class ToolModel {
     return tool;
   }
 
+  static async countByName(name: string): Promise<number> {
+    const [result] = await db
+      .select({ total: count() })
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.name, name));
+
+    return Number(result?.total ?? 0);
+  }
+
   /**
    * Find a tool by name, only if it is assigned to the given agent.
    * Used for authorization (verify a tool call targets an allowed tool)

@@ -1,5 +1,6 @@
 import { DEFAULT_THEME_ID, type OrganizationCustomFont } from "@shared";
 import { eq } from "drizzle-orm";
+import { CacheKey, cacheManager } from "@/cache-manager";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import type { AppearanceSettings, Organization } from "@/types";
@@ -85,6 +86,7 @@ class OrganizationModel {
       { id, updated: !!updatedOrganization },
       "OrganizationModel.patch: completed",
     );
+    await cacheManager.delete(getOrganizationSettingsCacheKey(id));
     return updatedOrganization || null;
   }
 
@@ -107,6 +109,34 @@ class OrganizationModel {
   }
 
   /**
+   * Get the slim chat error UI setting with a short-lived cache.
+   */
+  static async getSlimChatErrorUi(id: string): Promise<boolean> {
+    const cacheKey = getOrganizationSettingsCacheKey(id);
+    const cached = await cacheManager.get<boolean>(cacheKey);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const [organization] = await db
+      .select({
+        slimChatErrorUi: schema.organizationsTable.slimChatErrorUi,
+      })
+      .from(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.id, id))
+      .limit(1);
+
+    const slimChatErrorUi = organization?.slimChatErrorUi ?? false;
+    try {
+      await cacheManager.set(cacheKey, slimChatErrorUi);
+    } catch {
+      // Cache writes are best-effort here; tests and early startup may not
+      // have the distributed cache initialized yet.
+    }
+    return slimChatErrorUi;
+  }
+
+  /**
    * Get appearance settings
    * Returns default appearance settings if no organization exists.
    */
@@ -125,6 +155,7 @@ class OrganizationModel {
         chatLinks: schema.organizationsTable.chatLinks,
         chatErrorSupportMessage:
           schema.organizationsTable.chatErrorSupportMessage,
+        slimChatErrorUi: schema.organizationsTable.slimChatErrorUi,
         animateChatPlaceholders:
           schema.organizationsTable.animateChatPlaceholders,
       })
@@ -145,6 +176,7 @@ class OrganizationModel {
         footerText: null,
         chatLinks: null,
         chatErrorSupportMessage: null,
+        slimChatErrorUi: false,
         animateChatPlaceholders: true,
       };
     }
@@ -153,3 +185,7 @@ class OrganizationModel {
   }
 }
 export default OrganizationModel;
+
+function getOrganizationSettingsCacheKey(organizationId: string) {
+  return `${CacheKey.OrganizationSettings}-${organizationId}` as const;
+}

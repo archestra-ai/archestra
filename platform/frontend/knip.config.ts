@@ -3,7 +3,7 @@ import type { KnipConfig } from "knip";
 const config: KnipConfig = {
   entry: ["src/app/**/*.{ts,tsx}", "sentry.*.config.ts"],
   project: ["src/**/*.{ts,tsx}"],
-  ignore: ["src/**/*.test.{ts,tsx}", "src/**/*.spec.{ts,tsx}"],
+  ignore: [],
   ignoreDependencies: [
     // Workspace dependency - resolved by pnpm
     "@shared",

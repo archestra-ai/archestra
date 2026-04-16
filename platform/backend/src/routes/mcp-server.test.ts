@@ -1459,6 +1459,9 @@ describe("mcp server inspect route", () => {
 
     expect(response.statusCode).toBe(200);
     expect(connectAndGetToolsMock).toHaveBeenCalledTimes(1);
+    expect(invalidateConnectionsForServerMock).toHaveBeenCalledWith(
+      mcpServer.id,
+    );
     expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
       catalogItem: expect.objectContaining({ id: catalog.id }),
       mcpServerId: "validation",
@@ -1527,6 +1530,9 @@ describe("mcp server inspect route", () => {
 
     expect(response.statusCode).toBe(200);
     expect(connectAndGetToolsMock).toHaveBeenCalledTimes(1);
+    expect(invalidateConnectionsForServerMock).toHaveBeenCalledWith(
+      mcpServer.id,
+    );
     expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
       catalogItem: expect.objectContaining({ id: catalog.id }),
       mcpServerId: "validation",

@@ -90948,9 +90948,6 @@
                             },
                             "headerName": {
                               "type": "string"
-                            },
-                            "hasStaticValue": {
-                              "type": "boolean"
                             }
                           },
                           "required": [
@@ -91807,9 +91804,6 @@
                         },
                         "headerName": {
                           "type": "string"
-                        },
-                        "hasStaticValue": {
-                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -92397,9 +92391,6 @@
                           },
                           "headerName": {
                             "type": "string"
-                          },
-                          "hasStaticValue": {
-                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -93279,9 +93270,6 @@
                           },
                           "headerName": {
                             "type": "string"
-                          },
-                          "hasStaticValue": {
-                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -94132,9 +94120,6 @@
                         },
                         "headerName": {
                           "type": "string"
-                        },
-                        "hasStaticValue": {
-                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -94730,9 +94715,6 @@
                           },
                           "headerName": {
                             "type": "string"
-                          },
-                          "hasStaticValue": {
-                            "type": "boolean"
                           }
                         },
                         "required": [

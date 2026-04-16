@@ -42,7 +42,6 @@ const UserConfigFieldSchema = z.object({
   min: z.number().optional(),
   max: z.number().optional(),
   headerName: z.string().optional(),
-  hasStaticValue: z.boolean().optional(),
 });
 
 // Define a version of LocalConfigSchema for SELECT operations
@@ -79,10 +78,12 @@ const LocalConfigSelectSchema = z.object({
       z.union([
         ImagePullSecretConfigSchema,
         // Legacy format: { name: string } → normalize to { source: "existing", name }
-        z.object({ name: z.string() }).transform((val) => ({
-          source: "existing" as const,
-          name: val.name,
-        })),
+        z
+          .object({ name: z.string() })
+          .transform((val) => ({
+            source: "existing" as const,
+            name: val.name,
+          })),
       ]),
     )
     .optional(),

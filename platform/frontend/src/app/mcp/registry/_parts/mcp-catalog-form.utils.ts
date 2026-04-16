@@ -121,31 +121,29 @@ export function transformFormToApiData(
 
     // Clear userConfig when using OAuth
     data.userConfig = {};
-    data.enterpriseManagedConfig = undefined;
+    data.enterpriseManagedConfig = null;
   } else if (values.authMethod === "enterprise_managed") {
     data.userConfig = {};
-    data.oauthConfig = undefined;
+    data.oauthConfig = null;
     data.enterpriseManagedConfig = values.enterpriseManagedConfig ?? null;
   } else if (values.authMethod === "bearer") {
     data.userConfig = buildStaticHeaderUserConfig(values, {
       authFieldName: "access_token",
       authDescription: "Bearer token for authentication",
     });
-    // Clear oauthConfig when using Bearer Token
-    data.oauthConfig = undefined;
-    data.enterpriseManagedConfig = undefined;
+    data.oauthConfig = null;
+    data.enterpriseManagedConfig = null;
   } else if (values.authMethod === "raw_token") {
     data.userConfig = buildStaticHeaderUserConfig(values, {
       authFieldName: "raw_access_token",
       authDescription: "Token for authentication (sent without Bearer prefix)",
     });
-    // Clear oauthConfig when using Token
-    data.oauthConfig = undefined;
-    data.enterpriseManagedConfig = undefined;
+    data.oauthConfig = null;
+    data.enterpriseManagedConfig = null;
   } else {
     data.userConfig = buildStaticHeaderUserConfig(values);
-    data.oauthConfig = undefined;
-    data.enterpriseManagedConfig = undefined;
+    data.oauthConfig = null;
+    data.enterpriseManagedConfig = null;
   }
 
   // Handle labels

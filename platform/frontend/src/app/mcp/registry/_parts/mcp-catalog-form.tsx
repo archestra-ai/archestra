@@ -1039,9 +1039,7 @@ export function McpCatalogForm({
                 </h3>
                 <p className="text-xs text-muted-foreground">
                   Choose how Archestra authenticates each caller to the upstream
-                  MCP server. Use ID-JAG when Archestra should broker downstream
-                  credentials, or Identity Provider JWT / JWKS when the upstream
-                  server should validate the caller&apos;s IdP JWT directly.
+                  MCP server.
                   {mcpAuthDocsUrl ? (
                     <>
                       {" "}

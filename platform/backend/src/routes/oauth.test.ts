@@ -7,6 +7,7 @@ import {
   discoverScopes,
   generateCodeChallenge,
   generateCodeVerifier,
+  resolveOAuthScopesForAuthorization,
 } from "./oauth";
 
 describe("OAuth helper functions", () => {
@@ -283,6 +284,92 @@ describe("OAuth helper functions", () => {
         "https://auth.example.com/.well-known/openid-configuration",
         expect.anything(),
       );
+
+      globalThis.fetch = originalFetch;
+    });
+  });
+
+  describe("resolveOAuthScopesForAuthorization", () => {
+    const originalFetch = globalThis.fetch;
+
+    beforeEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    test("prefers explicitly configured scopes without running discovery", async () => {
+      const fetchMock = vi.fn().mockRejectedValue(new Error("Network error"));
+      globalThis.fetch = fetchMock;
+
+      const result = await resolveOAuthScopesForAuthorization({
+        oauthConfig: {
+          server_url: "https://example.com",
+          supports_resource_metadata: false,
+          scopes: ["READ"],
+          default_scopes: ["read", "write"],
+        },
+      });
+
+      expect(result).toEqual({
+        configuredScopes: ["READ"],
+        discoveredScopes: [],
+        scopesToUse: ["READ"],
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      globalThis.fetch = originalFetch;
+    });
+
+    test("uses discovered scopes when the catalog does not configure any", async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          authorization_endpoint: "https://example.com/authorize",
+          token_endpoint: "https://example.com/token",
+          scopes_supported: ["jira:read"],
+        }),
+      }) as Mock;
+
+      const result = await resolveOAuthScopesForAuthorization({
+        oauthConfig: {
+          server_url: "https://example.com",
+          supports_resource_metadata: false,
+          scopes: [],
+          default_scopes: ["read", "write"],
+        },
+      });
+
+      expect(result).toEqual({
+        configuredScopes: [],
+        discoveredScopes: ["jira:read"],
+        scopesToUse: ["jira:read"],
+      });
+
+      globalThis.fetch = originalFetch;
+    });
+
+    test("uses discovered scopes when the catalog leaves scopes undefined", async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          authorization_endpoint: "https://example.com/authorize",
+          token_endpoint: "https://example.com/token",
+          scopes_supported: ["jira:write"],
+        }),
+      }) as Mock;
+
+      const result = await resolveOAuthScopesForAuthorization({
+        oauthConfig: {
+          server_url: "https://example.com",
+          supports_resource_metadata: false,
+          default_scopes: ["read", "write"],
+        },
+      });
+
+      expect(result).toEqual({
+        configuredScopes: [],
+        discoveredScopes: ["jira:write"],
+        scopesToUse: ["jira:write"],
+      });
 
       globalThis.fetch = originalFetch;
     });

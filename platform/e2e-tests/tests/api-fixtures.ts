@@ -5,9 +5,9 @@
 import { type APIRequestContext, test as base } from "@playwright/test";
 import type { SupportedProvider } from "@shared";
 import {
-  API_BASE_URL,
   adminAuthFile,
   editorAuthFile,
+  getE2eRequestUrl,
   KEYCLOAK_OIDC,
   LLM_MODELS_ROUTE,
   LLM_PROVIDER_API_KEYS_AVAILABLE_ROUTE,
@@ -103,7 +103,7 @@ const makeApiRequest = async ({
   headers?: Record<string, string>;
   ignoreStatusCheck?: boolean;
 }) => {
-  const response = await request[method](`${API_BASE_URL}${urlSuffix}`, {
+  const response = await request[method](getE2eRequestUrl(urlSuffix), {
     headers,
     data,
   });

@@ -289,6 +289,8 @@ export interface ChatErrorResponse {
   message: string;
   /** Whether the operation can be retried */
   isRetryable: boolean;
+  /** Session ID for correlating the error with backend logs and traces */
+  sessionId?: string;
   /** OpenTelemetry trace ID for correlating with backend logs */
   traceId?: string;
   /** OpenTelemetry span ID for correlating with backend logs */

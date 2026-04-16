@@ -56,6 +56,34 @@ interface ToolInvocationTestConfig {
   ) => AnyResponse | undefined;
 }
 
+function extractRequestTextContent(value: unknown): string[] {
+  if (typeof value === "string") {
+    return [value];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => extractRequestTextContent(item));
+  }
+
+  if (!value || typeof value !== "object") {
+    return [];
+  }
+
+  const record = value as Record<string, unknown>;
+  return Object.values(record).flatMap((item) =>
+    extractRequestTextContent(item),
+  );
+}
+
+function interactionContainsContent(
+  interaction: AnyResponse,
+  content: string,
+): boolean {
+  return extractRequestTextContent(interaction.request).some((text) =>
+    text.includes(content),
+  );
+}
+
 // =============================================================================
 // Shared Tool Definition
 // =============================================================================
@@ -161,10 +189,8 @@ function makeOpenAiCompatibleToolConfig(params: {
     },
 
     findInteractionByContent: (interactions, content) =>
-      interactions.find((i) =>
-        i.request?.messages?.some((m: { content?: string }) =>
-          m.content?.includes(content),
-        ),
+      interactions.find((interaction) =>
+        interactionContainsContent(interaction, content),
       ),
   };
 }
@@ -262,10 +288,8 @@ const azureResponsesConfig: ToolInvocationTestConfig = {
   },
 
   findInteractionByContent: (interactions, content) =>
-    interactions.find((i) =>
-      i.request?.input?.some((item: { content?: Array<{ text?: string }> }) =>
-        item.content?.some((part) => part.text?.includes(content)),
-      ),
+    interactions.find((interaction) =>
+      interactionContainsContent(interaction, content),
     ),
 };
 
@@ -339,10 +363,8 @@ const groqConfig: ToolInvocationTestConfig = {
   },
 
   findInteractionByContent: (interactions, content) =>
-    interactions.find((i) =>
-      i.request?.messages?.some((m: { content?: string }) =>
-        m.content?.includes(content),
-      ),
+    interactions.find((interaction) =>
+      interactionContainsContent(interaction, content),
     ),
 };
 
@@ -424,10 +446,8 @@ const anthropicConfig: ToolInvocationTestConfig = {
   },
 
   findInteractionByContent: (interactions, content) =>
-    interactions.find((i) =>
-      i.request?.messages?.some((m: { content?: string }) =>
-        m.content?.includes(content),
-      ),
+    interactions.find((interaction) =>
+      interactionContainsContent(interaction, content),
     ),
 };
 
@@ -516,10 +536,8 @@ const geminiConfig: ToolInvocationTestConfig = {
   },
 
   findInteractionByContent: (interactions, content) =>
-    interactions.find((i) =>
-      i.request?.contents?.some((c: { parts?: Array<{ text?: string }> }) =>
-        c.parts?.some((p) => p.text?.includes(content)),
-      ),
+    interactions.find((interaction) =>
+      interactionContainsContent(interaction, content),
     ),
 };
 
@@ -588,10 +606,8 @@ const cohereConfig: ToolInvocationTestConfig = {
   },
 
   findInteractionByContent: (interactions, content) =>
-    interactions.find((i) =>
-      i.request?.messages?.some((m: { content?: Array<{ text?: string }> }) =>
-        m.content?.some((c) => c.text?.includes(content)),
-      ),
+    interactions.find((interaction) =>
+      interactionContainsContent(interaction, content),
     ),
 };
 
@@ -712,10 +728,8 @@ const bedrockConfig: ToolInvocationTestConfig = {
   },
 
   findInteractionByContent: (interactions, content) =>
-    interactions.find((i) =>
-      i.request?.messages?.some((m: { content?: Array<{ text?: string }> }) =>
-        m.content?.some((c) => c.text?.includes(content)),
-      ),
+    interactions.find((interaction) =>
+      interactionContainsContent(interaction, content),
     ),
 };
 

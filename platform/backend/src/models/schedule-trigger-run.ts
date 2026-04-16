@@ -141,6 +141,16 @@ class ScheduleTriggerRunModel {
       .set({ chatConversationId: conversationId })
       .where(eq(schema.scheduleTriggerRunsTable.id, runId));
   }
+
+  static async setArtifact(runId: string, artifact: string): Promise<boolean> {
+    const [updated] = await db
+      .update(schema.scheduleTriggerRunsTable)
+      .set({ artifact })
+      .where(eq(schema.scheduleTriggerRunsTable.id, runId))
+      .returning({ id: schema.scheduleTriggerRunsTable.id });
+
+    return !!updated;
+  }
 }
 
 export default ScheduleTriggerRunModel;

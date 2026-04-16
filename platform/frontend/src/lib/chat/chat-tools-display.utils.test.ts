@@ -264,6 +264,30 @@ describe("tool display helpers", () => {
     ).toBe(false);
   });
 
+  it("keeps assigned-credential-unavailable responses as full cards", () => {
+    expect(
+      isCompactEligible({
+        toolName: "githubcopilot__remote-mcp__issue_write",
+        part: {
+          type: "tool-githubcopilot__remote-mcp__issue_write",
+          state: "output-available",
+          output: {
+            isError: true,
+            _meta: {
+              archestraError: {
+                type: "assigned_credential_unavailable",
+                message: "Assigned credential unavailable",
+                catalogId: "cat_abc",
+                catalogName: "githubcopilot__remote-mcp",
+              },
+            },
+          },
+        } as never,
+        toolResultPart: null,
+      }),
+    ).toBe(false);
+  });
+
   it("keeps approval-requested tools as full cards", () => {
     expect(
       isCompactEligible({

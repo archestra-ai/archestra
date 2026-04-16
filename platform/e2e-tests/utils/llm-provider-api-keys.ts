@@ -1,7 +1,7 @@
 import type { APIRequestContext, Page } from "@playwright/test";
 import { E2eTestId } from "@shared";
 import {
-  API_BASE_URL,
+  getE2eRequestUrl,
   LLM_PROVIDER_API_KEYS_ROUTE,
   UI_BASE_URL,
 } from "../consts";
@@ -99,7 +99,9 @@ export async function deleteVisibleProviderKeys(
   provider: string,
 ): Promise<void> {
   const listResponse = await request.get(
-    `${API_BASE_URL}/api/llm-provider-api-keys?provider=${encodeURIComponent(provider)}`,
+    getE2eRequestUrl(
+      `/api/llm-provider-api-keys?provider=${encodeURIComponent(provider)}`,
+    ),
     {
       headers: {
         Origin: UI_BASE_URL,
@@ -116,7 +118,7 @@ export async function deleteVisibleProviderKeys(
   const keys = (await listResponse.json()) as Array<{ id: string }>;
   for (const key of keys) {
     const deleteResponse = await request.delete(
-      `${API_BASE_URL}/api/llm-provider-api-keys/${key.id}`,
+      getE2eRequestUrl(`/api/llm-provider-api-keys/${key.id}`),
       {
         headers: {
           Origin: UI_BASE_URL,

@@ -81,6 +81,7 @@ export default function OrganizationSettingsPage() {
   const [chatErrorSupportMessage, setChatErrorSupportMessage] = useState<
     string | null
   >(null);
+  const [slimChatErrorUi, setSlimChatErrorUi] = useState<boolean | null>(null);
   const [chatPlaceholders, setChatPlaceholders] = useState<string[] | null>(
     null,
   );
@@ -97,6 +98,8 @@ export default function OrganizationSettingsPage() {
   const effectiveChatLinks = chatLinks ?? organization?.chatLinks ?? [];
   const effectiveChatErrorSupportMessage =
     chatErrorSupportMessage ?? organization?.chatErrorSupportMessage ?? "";
+  const effectiveSlimChatErrorUi =
+    slimChatErrorUi ?? organization?.slimChatErrorUi ?? false;
   const effectiveChatPlaceholders =
     chatPlaceholders ?? organization?.chatPlaceholders ?? [];
   const effectiveAnimateChatPlaceholders =
@@ -125,6 +128,7 @@ export default function OrganizationSettingsPage() {
     footerText !== null ||
     chatLinks !== null ||
     chatErrorSupportMessage !== null ||
+    slimChatErrorUi !== null ||
     chatPlaceholders !== null ||
     animateChatPlaceholders !== null ||
     showTwoFactor !== null;
@@ -141,6 +145,9 @@ export default function OrganizationSettingsPage() {
     }
     if (chatErrorSupportMessage !== null) {
       data.chatErrorSupportMessage = chatErrorSupportMessage.trim() || null;
+    }
+    if (slimChatErrorUi !== null) {
+      data.slimChatErrorUi = slimChatErrorUi;
     }
     if (chatPlaceholders !== null)
       data.chatPlaceholders =
@@ -162,6 +169,7 @@ export default function OrganizationSettingsPage() {
     setChatLinks(null);
     setShowChatLinkValidationErrors(false);
     setChatErrorSupportMessage(null);
+    setSlimChatErrorUi(null);
     setChatPlaceholders(null);
     setAnimateChatPlaceholders(null);
     setShowTwoFactor(null);
@@ -270,6 +278,24 @@ export default function OrganizationSettingsPage() {
                   Shown alongside errors in chat. Use this to direct users to
                   your support team.
                 </p>
+              </div>
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="slimChatErrorUi">
+                    Simplified Chat Error Cards
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Hide provider, model, stack trace, and raw error details in
+                    chat. Users will only see the support message or default
+                    error text plus correlation IDs.
+                  </p>
+                </div>
+                <Switch
+                  id="slimChatErrorUi"
+                  className="mt-0.5"
+                  checked={effectiveSlimChatErrorUi}
+                  onCheckedChange={(checked) => setSlimChatErrorUi(checked)}
+                />
               </div>
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-2">

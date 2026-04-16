@@ -22,6 +22,12 @@ export type ToolAuthState =
       policyDenied: PolicyDeniedPart;
     }
   | {
+      kind: "assigned-credential-unavailable";
+      catalogName: string;
+      message: string;
+      catalogId: string | null;
+    }
+  | {
       kind: "auth-required";
       catalogName: string;
       installUrl: string;
@@ -150,6 +156,15 @@ export function resolveToolAuthState(params: {
     };
   }
 
+  if (structuredError?.type === "assigned_credential_unavailable") {
+    return {
+      kind: "assigned-credential-unavailable",
+      catalogName: structuredError.catalogName,
+      message: structuredError.message,
+      catalogId: structuredError.catalogId,
+    };
+  }
+
   if (params.errorText) {
     const policyDenied = parsePolicyDenied(params.errorText);
     if (policyDenied) {
@@ -232,6 +247,7 @@ export function hasToolPartsWithAuthErrors(
       rawOutput: part.output,
     });
     if (
+      authState?.kind === "assigned-credential-unavailable" ||
       authState?.kind === "auth-required" ||
       authState?.kind === "auth-expired"
     ) {
@@ -248,8 +264,10 @@ export function isAuthInstructionText(text: string): boolean {
   }
 
   return (
-    /(authentication|credentials)/i.test(text) &&
-    /(install=|reauth=|re-authenticate|set up your credentials|visiting this url|visit this url)/i.test(
+    /(authentication|credentials|credential assignment|personal connection)/i.test(
+      text,
+    ) &&
+    /(install=|reauth=|re-authenticate|set up your credentials|visiting this url|visit this url|agent owner|admin)/i.test(
       text,
     )
   );

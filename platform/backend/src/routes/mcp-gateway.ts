@@ -150,7 +150,7 @@ async function handleMcpPostRequest(
 // /v1/mcp/<profile_id>
 // Authorization header: Bearer <platform_token>
 // =============================================================================
-export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
+const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const { endpoint } = config.mcpGateway;
 
   // GET endpoint for server discovery with profile ID in URL
@@ -310,3 +310,5 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 };
+
+export default mcpGatewayRoutes;

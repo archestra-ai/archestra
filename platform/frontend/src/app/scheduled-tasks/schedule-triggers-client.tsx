@@ -141,6 +141,7 @@ export function ScheduleTriggersIndexPage() {
     useState<ScheduleTriggerFormState>(DEFAULT_FORM_STATE);
   const [deletingTrigger, setDeletingTrigger] =
     useState<ScheduleTrigger | null>(null);
+  const nameTouchedRef = useRef(false);
 
   const agentFilterOptions = useMemo(
     () =>
@@ -183,10 +184,20 @@ export function ScheduleTriggersIndexPage() {
 
   const allTriggers = triggersResponse?.data ?? [];
   const hasAgents = agentOptions.length > 0;
-  const preferredAgentId = agentOptions[0]?.value ?? "";
+  const preferredAgentId =
+    (filterAgentId &&
+      agentOptions.some((a) => a.value === filterAgentId) &&
+      filterAgentId) ||
+    agentOptions[0]?.value ||
+    "";
   const formPayload = buildScheduleTriggerPayload(formState);
   const isSaving = createMutation.isPending || updateMutation.isPending;
   const isComposerOpen = editingTrigger !== null || createFormOpen;
+
+  const getDefaultName = useCallback(
+    (agentId: string) => getDefaultTriggerName(agentId, agentOptions),
+    [agentOptions],
+  );
 
   useEffect(() => {
     if (
@@ -198,8 +209,20 @@ export function ScheduleTriggersIndexPage() {
       return;
     }
 
-    setFormState((current) => ({ ...current, agentId: preferredAgentId }));
-  }, [createFormOpen, editingTrigger, formState.agentId, preferredAgentId]);
+    setFormState((current) => ({
+      ...current,
+      agentId: preferredAgentId,
+      name: nameTouchedRef.current
+        ? current.name
+        : getDefaultName(preferredAgentId),
+    }));
+  }, [
+    createFormOpen,
+    editingTrigger,
+    formState.agentId,
+    preferredAgentId,
+    getDefaultName,
+  ]);
 
   const handledAgentIdRef = useRef<string | null>(null);
   useEffect(() => {
@@ -213,19 +236,23 @@ export function ScheduleTriggersIndexPage() {
     handledAgentIdRef.current = agentIdParam;
     if (triggersResponse.data.length === 0) {
       setEditingTrigger(null);
+      nameTouchedRef.current = false;
       setFormState({
         ...DEFAULT_FORM_STATE(),
         agentId: agentIdParam,
+        name: getDefaultName(agentIdParam),
       });
       setCreateFormOpen(true);
     }
-  }, [agentIdParam, triggersResponse, isLoading]);
+  }, [agentIdParam, triggersResponse, isLoading, getDefaultName]);
 
   const openCreateComposer = () => {
     setEditingTrigger(null);
+    nameTouchedRef.current = false;
     setFormState({
       ...DEFAULT_FORM_STATE(),
       agentId: preferredAgentId,
+      name: getDefaultName(preferredAgentId),
     });
     setCreateFormOpen(true);
   };
@@ -233,6 +260,7 @@ export function ScheduleTriggersIndexPage() {
   const openEditComposer = useCallback((trigger: ScheduleTrigger) => {
     setEditingTrigger(trigger);
     setCreateFormOpen(false);
+    nameTouchedRef.current = true;
     setFormState({
       name: trigger.name,
       agentId: trigger.agentId,
@@ -245,6 +273,7 @@ export function ScheduleTriggersIndexPage() {
   const closeComposer = () => {
     setEditingTrigger(null);
     setCreateFormOpen(false);
+    nameTouchedRef.current = false;
     setFormState(DEFAULT_FORM_STATE());
     if (agentIdParam) {
       router.replace("/scheduled-tasks");
@@ -467,12 +496,19 @@ export function ScheduleTriggersIndexPage() {
         onSubmit={() => {
           void submitForm();
         }}
-        onNameChange={(name) =>
-          setFormState((current) => ({ ...current, name }))
-        }
-        onAgentChange={(agentId) =>
-          setFormState((current) => ({ ...current, agentId }))
-        }
+        onNameChange={(name) => {
+          nameTouchedRef.current = true;
+          setFormState((current) => ({ ...current, name }));
+        }}
+        onAgentChange={(agentId) => {
+          setFormState((current) => ({
+            ...current,
+            agentId,
+            name: nameTouchedRef.current
+              ? current.name
+              : getDefaultName(agentId),
+          }));
+        }}
         onCronExpressionChange={(cronExpression) =>
           setFormState((current) => ({ ...current, cronExpression }))
         }
@@ -571,6 +607,7 @@ export function ScheduleTriggerDetailPage({
   const [formState, setFormState] =
     useState<ScheduleTriggerFormState>(DEFAULT_FORM_STATE);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const detailNameTouchedRef = useRef(true);
 
   useEffect(() => {
     if (!trigger) {
@@ -608,6 +645,10 @@ export function ScheduleTriggerDetailPage({
           ),
         })),
     [agents, currentUserId],
+  );
+  const getDetailDefaultName = useCallback(
+    (agentId: string) => getDefaultTriggerName(agentId, agentOptions),
+    [agentOptions],
   );
   const formPayload = buildScheduleTriggerPayload(formState);
   const isSaving = updateMutation.isPending;
@@ -877,12 +918,19 @@ export function ScheduleTriggerDetailPage({
         onSubmit={() => {
           void submitForm();
         }}
-        onNameChange={(name) =>
-          setFormState((current) => ({ ...current, name }))
-        }
-        onAgentChange={(agentId) =>
-          setFormState((current) => ({ ...current, agentId }))
-        }
+        onNameChange={(name) => {
+          detailNameTouchedRef.current = true;
+          setFormState((current) => ({ ...current, name }));
+        }}
+        onAgentChange={(agentId) => {
+          setFormState((current) => ({
+            ...current,
+            agentId,
+            name: detailNameTouchedRef.current
+              ? current.name
+              : getDetailDefaultName(agentId),
+          }));
+        }}
         onCronExpressionChange={(cronExpression) =>
           setFormState((current) => ({ ...current, cronExpression }))
         }
@@ -903,6 +951,14 @@ export function ScheduleTriggerDetailPage({
       />
     </div>
   );
+}
+
+function getDefaultTriggerName(
+  agentId: string,
+  agentOptions: { value: string; label: string }[],
+): string {
+  const agent = agentOptions.find((a) => a.value === agentId);
+  return agent ? `Scheduled ${agent.label}` : "";
 }
 
 function formatRunTimestamp(dateString: string): string {

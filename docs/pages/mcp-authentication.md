@@ -334,7 +334,7 @@ Upstream MCP server headers are attached by Archestra to downstream requests. Un
 
 If an additional header conflicts with a credential header that Archestra manages through upstream credential resolution, the managed credential still takes precedence.
 
-Upstream MCP server headers only apply to HTTP-based downstream transports. Local stdio servers do not receive HTTP headers unless they are using streamable-http transport.
+Upstream MCP server headers are supported for remote MCP servers and local MCP servers using streamable-http transport. Local stdio MCP servers do not support downstream HTTP headers.
 
 ## Building MCP Servers
 

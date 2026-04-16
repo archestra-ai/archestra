@@ -1070,7 +1070,7 @@ describe("McpClient", () => {
         ]);
       });
 
-      test("returns install URL when a static personal connection belongs to another user", async ({
+      test("returns a config error when a static personal connection belongs to another user", async ({
         makeUser,
       }) => {
         const connectionOwner = await makeUser({
@@ -1125,20 +1125,19 @@ describe("McpClient", () => {
 
         expect(result).toMatchObject({ isError: true });
         expect(result?.error).toContain(
-          'Authentication required for "githubcopilot__remote-mcp"',
+          'Credential assignment unavailable for "githubcopilot__remote-mcp"',
         );
         expect(result?.error).toContain(
-          "This tool is pinned to another user's personal connection.",
+          'This tool is pinned to a personal "githubcopilot__remote-mcp" connection that your account cannot access.',
         );
         expect(result?.error).toContain(
-          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?install=${staticCatalog.id}`,
+          "Ask the agent owner or an admin to update the tool's credential assignment before retrying.",
         );
         expect(result?._meta).toMatchObject({
           archestraError: {
-            type: "auth_required",
+            type: "assigned_credential_unavailable",
             catalogId: staticCatalog.id,
             catalogName: "githubcopilot__remote-mcp",
-            installUrl: `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?install=${staticCatalog.id}`,
           },
         });
       });

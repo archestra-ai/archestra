@@ -287,6 +287,26 @@ describe("resolveToolAuthState", () => {
     });
   });
 
+  it("resolves assigned-credential-unavailable structured errors", () => {
+    expect(
+      resolveToolAuthState({
+        rawOutput: {
+          archestraError: {
+            type: "assigned_credential_unavailable",
+            message: "Assigned credential unavailable",
+            catalogName: "githubcopilot__remote-mcp",
+            catalogId: "cat_123",
+          },
+        },
+      }),
+    ).toEqual({
+      kind: "assigned-credential-unavailable",
+      catalogName: "githubcopilot__remote-mcp",
+      message: "Assigned credential unavailable",
+      catalogId: "cat_123",
+    });
+  });
+
   it("parses policy-denied tool errors from errorText", () => {
     const authState = resolveToolAuthState({
       errorText:
@@ -338,6 +358,23 @@ describe("hasToolPartsWithAuthErrors", () => {
     ).toBe(true);
   });
 
+  it("detects assigned-credential-unavailable tool errors from structured output", () => {
+    expect(
+      hasToolPartsWithAuthErrors([
+        {
+          output: {
+            archestraError: {
+              type: "assigned_credential_unavailable",
+              message: "Assigned credential unavailable",
+              catalogName: "githubcopilot__remote-mcp",
+              catalogId: "cat_123",
+            },
+          },
+        },
+      ]),
+    ).toBe(true);
+  });
+
   it("ignores non-auth tool errors", () => {
     expect(
       hasToolPartsWithAuthErrors([
@@ -361,6 +398,14 @@ describe("isAuthInstructionText", () => {
 
   it("returns false for unrelated text", () => {
     expect(isAuthInstructionText("hello world")).toBe(false);
+  });
+
+  it("returns true for credential-assignment guidance", () => {
+    expect(
+      isAuthInstructionText(
+        'Credential assignment unavailable for "github". This tool is pinned to a personal connection that your account cannot access. Ask the agent owner or an admin to update the tool assignment.',
+      ),
+    ).toBe(true);
   });
 });
 

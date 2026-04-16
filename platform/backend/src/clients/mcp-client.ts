@@ -11,6 +11,7 @@ import type {
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import {
+  type AssignedCredentialUnavailableMcpToolError,
   type AuthExpiredMcpToolError,
   type AuthRequiredMcpToolError,
   MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
@@ -1101,20 +1102,18 @@ class McpClient {
         !mcpServer.teamId &&
         tokenAuth?.userId !== mcpServer.ownerId
       ) {
-        const authError = this.buildAuthRequiredMessage(
+        const assignmentError = this.buildAssignedCredentialUnavailableMessage(
           tool.catalogName || fallbackName,
           tool.catalogId ?? "",
-          tokenAuth,
-          `This tool is pinned to another user's personal connection. Set up your own credentials to continue using "${tool.catalogName || fallbackName}".`,
         );
         return {
           error: await this.createErrorResult(
             toolCall,
             agentId,
-            authError.message,
+            assignmentError.message,
             fallbackName,
             undefined,
-            authError,
+            assignmentError,
           ),
         };
       }
@@ -1909,6 +1908,23 @@ class McpClient {
       catalogName: catalogDisplayName,
       serverId: mcpServerId,
       reauthUrl,
+    };
+  }
+
+  private buildAssignedCredentialUnavailableMessage(
+    catalogDisplayName: string,
+    catalogId: string,
+  ): AssignedCredentialUnavailableMcpToolError {
+    return {
+      type: "assigned_credential_unavailable",
+      message: [
+        `Credential assignment unavailable for "${catalogDisplayName}".`,
+        "",
+        `This tool is pinned to a personal "${catalogDisplayName}" connection that your account cannot access.`,
+        "Ask the agent owner or an admin to update the tool's credential assignment before retrying.",
+      ].join("\n"),
+      catalogId,
+      catalogName: catalogDisplayName,
     };
   }
 

@@ -165,11 +165,12 @@ graph LR
     style CR fill:#fff,stroke:#0066cc,stroke-width:1px
 ```
 
-Credentials are configured when you install a server from the [MCP Catalog](/docs/platform-private-registry). There are three types of upstream credentials:
+Credentials are configured when you install a server from the [MCP Catalog](/docs/platform-private-registry). There are four types of upstream credentials:
 
 - **Static secrets**: API keys or personal access tokens that are set once at install time and used for all requests.
 - **OAuth tokens**: Obtained by running an OAuth flow against the upstream provider during installation. Archestra stores both the access token and refresh token.
-- **Enterprise-managed credentials**: Retrieved at tool-call time from an attached enterprise IdP when the IdP can mint or broker a downstream credential for the requested resource.
+- **Upstream ID-JAG**: Retrieved at tool-call time by exchanging the caller's enterprise assertion for the downstream credential the MCP server needs.
+- **Upstream Identity Provider JWT / JWKS**: Retrieved at tool-call time by forwarding the caller's IdP JWT to the upstream MCP server for direct JWKS-based validation.
 
 How credentials are delivered to the upstream server depends on the server type. For **passthrough** (remote) servers, Archestra sends the credential over HTTP. The primary auth header defaults to `Authorization`, but you can configure a different header name such as `x-api-key` when the upstream server expects the token outside the standard authorization header. Additional headers are available for tenant IDs and other non-auth upstream requirements, and non-sensitive static values are stored directly in the catalog item. For **hosted** (local) servers running in Kubernetes, the gateway connects via stdio transport within the cluster and no auth headers are needed.
 

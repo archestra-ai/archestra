@@ -1,5 +1,5 @@
 import type { Permissions } from "@shared";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -90,9 +90,11 @@ describe("RolePermissionBuilder", () => {
 
     const createCheckbox = screen.getByLabelText("Create");
     expect(createCheckbox).toBeDisabled();
+    const createRow = createCheckbox.closest("div");
+    expect(createRow).not.toBeNull();
 
     expect(
-      screen.getByText(
+      within(createRow as HTMLElement).getByText(
         "You can only grant permissions that you currently have yourself.",
       ),
     ).toBeInTheDocument();

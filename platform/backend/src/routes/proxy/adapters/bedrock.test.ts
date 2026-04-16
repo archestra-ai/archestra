@@ -285,3 +285,18 @@ describe("Bedrock tool name encoding", () => {
     });
   });
 });
+
+describe("Bedrock client creation", () => {
+  test("uses the custom base URL override", () => {
+    const customBaseUrl =
+      "https://bedrock-runtime.ap-southeast-1.amazonaws.com/custom-path";
+    const client = bedrockAdapterFactory.createClient("test-key", {
+      baseUrl: customBaseUrl,
+      source: "chat",
+    }) as unknown as {
+      config: { baseUrl: string };
+    };
+
+    expect(client.config.baseUrl).toBe(customBaseUrl);
+  });
+});

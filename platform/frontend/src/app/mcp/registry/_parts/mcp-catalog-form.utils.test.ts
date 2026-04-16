@@ -390,6 +390,58 @@ describe("transformFormToApiData", () => {
     ]);
   });
 
+  it("detects default bearer auth from external catalog manifests without an explicit headerName", () => {
+    const values = transformExternalCatalogToFormValues({
+      name: "github",
+      display_name: "GitHub",
+      description: "",
+      icon: null,
+      server: {
+        type: "remote",
+        url: "https://api.githubcopilot.com/mcp",
+      },
+      user_config: {
+        access_token: {
+          type: "string",
+          title: "Access Token",
+          description: "GitHub personal access token",
+          required: true,
+          sensitive: true,
+        },
+      },
+    } as never);
+
+    expect(values.authMethod).toBe("bearer");
+    expect(values.includeBearerPrefix).toBe(true);
+    expect(values.authHeaderName).toBe("");
+  });
+
+  it("detects default raw token auth from external catalog manifests without an explicit headerName", () => {
+    const values = transformExternalCatalogToFormValues({
+      name: "raw-token-server",
+      display_name: "Raw Token Server",
+      description: "",
+      icon: null,
+      server: {
+        type: "remote",
+        url: "https://mcp.example.com",
+      },
+      user_config: {
+        raw_access_token: {
+          type: "string",
+          title: "Raw Access Token",
+          description: "Token sent without the Bearer prefix",
+          required: true,
+          sensitive: true,
+        },
+      },
+    } as never);
+
+    expect(values.authMethod).toBe("bearer");
+    expect(values.includeBearerPrefix).toBe(false);
+    expect(values.authHeaderName).toBe("");
+  });
+
   it("persists IdP JWT / JWKS passthrough auth as enterprise-managed passthrough config", () => {
     const values: McpCatalogFormValues = {
       name: "JWT MCP",

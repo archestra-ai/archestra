@@ -1,4 +1,5 @@
 import {
+  type Action,
   ADMIN_ROLE_NAME,
   EDITOR_ROLE_NAME,
   MEMBER_ROLE_NAME,
@@ -8,7 +9,10 @@ import {
   type Resource,
   roleDescriptions,
 } from "@shared";
-import { predefinedPermissionsMap } from "@shared/access-control";
+import {
+  allAvailableActions,
+  predefinedPermissionsMap,
+} from "@shared/access-control";
 import { and, eq, getTableColumns, ilike, sql } from "drizzle-orm";
 import { LRUCacheManager } from "@/cache-manager";
 import db, { schema } from "@/database";
@@ -38,6 +42,34 @@ const generatePredefinedRole = (
 });
 
 class OrganizationRoleModel {
+  static sanitizePermissions(value: unknown): Permissions {
+    const parsedPermissions = parseRolePermissionsValue(value);
+    if (!parsedPermissions) {
+      return {};
+    }
+
+    const sanitizedPermissions: Permissions = {};
+
+    for (const [resource, actions] of Object.entries(parsedPermissions)) {
+      if (!(resource in allAvailableActions) || !Array.isArray(actions)) {
+        continue;
+      }
+
+      const allowedActions = allAvailableActions[resource as Resource];
+      const validActions = actions.filter(
+        (action): action is Action =>
+          typeof action === "string" &&
+          allowedActions.includes(action as Action),
+      );
+
+      if (validActions.length > 0) {
+        sanitizedPermissions[resource as Resource] = validActions;
+      }
+    }
+
+    return sanitizedPermissions;
+  }
+
   static invalidatePermissionsCacheForRole(
     organizationId: string,
     identifier: string,
@@ -270,7 +302,7 @@ class OrganizationRoleModel {
     );
     return {
       ...result,
-      permission: parseRolePermissions(result.permission),
+      permission: OrganizationRoleModel.sanitizePermissions(result.permission),
     };
   }
 
@@ -317,7 +349,7 @@ class OrganizationRoleModel {
     logger.debug({ roleId }, "OrganizationRoleModel.getById: completed");
     return {
       ...result,
-      permission: parseRolePermissions(result.permission),
+      permission: OrganizationRoleModel.sanitizePermissions(result.permission),
     };
   }
 
@@ -414,7 +446,9 @@ class OrganizationRoleModel {
         ...predefinedRoles,
         ...customRoles.map((role) => ({
           ...role,
-          permission: parseRolePermissions(role.permission),
+          permission: OrganizationRoleModel.sanitizePermissions(
+            role.permission,
+          ),
         })),
       ];
     } catch (_error) {
@@ -500,7 +534,9 @@ class OrganizationRoleModel {
         ...takeFromPredefined,
         ...customRoles.map((role) => ({
           ...role,
-          permission: parseRolePermissions(role.permission),
+          permission: OrganizationRoleModel.sanitizePermissions(
+            role.permission,
+          ),
         })),
       ],
       total,
@@ -547,14 +583,33 @@ class OrganizationRoleModel {
 
 export default OrganizationRoleModel;
 
-function parseRolePermissions(value: string): Permissions {
+function parseRolePermissionsValue(
+  value: unknown,
+): Record<string, unknown> | null {
+  if (typeof value !== "string") {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return null;
+    }
+
+    return value as Record<string, unknown>;
+  }
+
   try {
-    return JSON.parse(value) as Permissions;
+    const parsedValue = JSON.parse(value) as unknown;
+    if (
+      !parsedValue ||
+      typeof parsedValue !== "object" ||
+      Array.isArray(parsedValue)
+    ) {
+      return null;
+    }
+
+    return parsedValue as Record<string, unknown>;
   } catch (error) {
     logger.warn(
       { error, permission: value },
       "Failed to parse organization role permissions JSON",
     );
-    return {};
+    return null;
   }
 }

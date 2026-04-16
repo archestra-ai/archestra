@@ -422,6 +422,45 @@ describe("custom role routes", () => {
     expect(role.name).toBe("Analyst");
   });
 
+  test("GET /api/roles/:roleId strips stale invalid permissions from custom roles", async ({
+    makeCustomRole,
+  }) => {
+    const customRole = await makeCustomRole(organizationId, {
+      role: "legacy_analyst",
+      name: "Legacy Analyst",
+      permission: { log: ["read"] },
+    });
+
+    await db
+      .update(schema.organizationRolesTable)
+      .set({
+        permission: JSON.stringify({
+          log: ["read", "create", "update", "delete"],
+          optimizationRule: ["team-admin"],
+          unknownResource: ["read"],
+        }),
+      })
+      .where(
+        and(
+          eq(schema.organizationRolesTable.id, customRole.id),
+          eq(schema.organizationRolesTable.organizationId, organizationId),
+        ),
+      );
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/roles/${customRole.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      id: customRole.id,
+      permission: {
+        log: ["read"],
+      },
+    });
+  });
+
   test("GET /api/roles/:roleId returns 404 for non-existent role", async () => {
     const response = await app.inject({
       method: "GET",

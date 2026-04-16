@@ -10,7 +10,7 @@ global.ResizeObserver = class ResizeObserver {
 } as typeof ResizeObserver;
 
 vi.mock("@/components/ui/tooltip", () => ({
-  Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  Tooltip: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   TooltipTrigger: ({ children }: { children: React.ReactNode }) => (
     <>{children}</>
   ),

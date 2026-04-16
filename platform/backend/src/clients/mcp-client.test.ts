@@ -1236,6 +1236,12 @@ describe("McpClient", () => {
           mcpServerId: personalServer.id,
         });
 
+        const { UnauthorizedError } = await import(
+          "@modelcontextprotocol/sdk/client/auth.js"
+        );
+        mockCallTool.mockRejectedValueOnce(new UnauthorizedError());
+        mockConnect.mockResolvedValue(undefined);
+
         const toolCall = {
           id: "call_static_foreign_personal",
           name: "githubcopilot__remote-mcp__issue_write",
@@ -1251,13 +1257,13 @@ describe("McpClient", () => {
 
         expect(result).toMatchObject({ isError: true });
         expect(result?.error).toContain(
-          'Credential assignment unavailable for "githubcopilot__remote-mcp"',
+          'Expired / Invalid Authentication: credentials for "githubcopilot__remote-mcp" have expired or are invalid.',
         );
         expect(result?.error).toContain(
-          'This tool is pinned to a personal "githubcopilot__remote-mcp" connection that your account cannot access.',
+          "Re-authenticate to continue using this tool.",
         );
         expect(result?.error).toContain(
-          "Ask the agent owner or an admin to update the tool's credential assignment before retrying.",
+          "Ask the agent owner or an admin to re-authenticate.",
         );
         expect(result?._meta).toMatchObject({
           archestraError: {
@@ -2694,10 +2700,10 @@ describe("McpClient", () => {
 
         expect(result).toMatchObject({ isError: true });
         expect(result?.error).toContain(
-          `Credential assignment unavailable for "github-team-oauth-server"`,
+          'Expired / Invalid Authentication: credentials for "github-team-oauth-server" have expired or are invalid.',
         );
         expect(result?.error).toContain(
-          'This tool is pinned to a personal "github-team-oauth-server" connection that your account cannot access.',
+          "Re-authenticate to continue using this tool.",
         );
       });
     });

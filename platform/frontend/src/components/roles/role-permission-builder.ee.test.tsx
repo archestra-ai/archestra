@@ -55,4 +55,31 @@ describe("RolePermissionBuilder", () => {
       }),
     ).toHaveAttribute("data-state", "indeterminate");
   });
+
+  it("shows ungrantable permissions as disabled with an explanation", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <RolePermissionBuilder
+        permission={{}}
+        onChange={vi.fn()}
+        userPermissions={{
+          knowledgeSource: ["read"],
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Knowledge" }));
+
+    const createCheckbox = screen.getByLabelText("Create");
+    expect(createCheckbox).toBeDisabled();
+
+    await user.hover(createCheckbox);
+
+    expect(
+      await screen.findByText(
+        "You can only grant permissions that you currently have yourself.",
+      ),
+    ).toBeInTheDocument();
+  });
 });

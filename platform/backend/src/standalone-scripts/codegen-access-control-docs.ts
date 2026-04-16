@@ -143,6 +143,17 @@ Examples:
 
 These resources do **not** use \`:team-admin\`.
 
+### Chat Access And Optional UI Controls
+
+Chat access is controlled separately from optional chat UI controls:
+
+- \`chat:read\` allows access to chat itself
+- \`agent:read\` is still required to use agents in chat
+- \`chatAgentPicker:enable\` controls whether the agent picker is visible
+- \`chatProviderSettings:enable\` controls whether model and API key selectors are visible
+
+The selector visibility permissions are UI toggles. They should be treated independently from core chat access and should not be assumed to grant access to provider credentials or model catalogs on their own.
+
 ### MCP Registry And Installation Records
 
 Some MCP-related resources also apply runtime scope checks in addition to RBAC, but their rules differ from agents, MCP gateways, and LLM proxies:

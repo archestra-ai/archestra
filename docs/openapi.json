@@ -91054,6 +91054,13 @@
                           "identityProviderId": {
                             "type": "string"
                           },
+                          "assertionMode": {
+                            "type": "string",
+                            "enum": [
+                              "exchange",
+                              "passthrough"
+                            ]
+                          },
                           "resourceType": {
                             "type": "string",
                             "enum": [
@@ -91908,6 +91915,13 @@
                       "identityProviderId": {
                         "type": "string"
                       },
+                      "assertionMode": {
+                        "type": "string",
+                        "enum": [
+                          "exchange",
+                          "passthrough"
+                        ]
+                      },
                       "resourceType": {
                         "type": "string",
                         "enum": [
@@ -92496,6 +92510,13 @@
                       "properties": {
                         "identityProviderId": {
                           "type": "string"
+                        },
+                        "assertionMode": {
+                          "type": "string",
+                          "enum": [
+                            "exchange",
+                            "passthrough"
+                          ]
                         },
                         "resourceType": {
                           "type": "string",
@@ -93376,6 +93397,13 @@
                         "identityProviderId": {
                           "type": "string"
                         },
+                        "assertionMode": {
+                          "type": "string",
+                          "enum": [
+                            "exchange",
+                            "passthrough"
+                          ]
+                        },
                         "resourceType": {
                           "type": "string",
                           "enum": [
@@ -94224,6 +94252,13 @@
                       "identityProviderId": {
                         "type": "string"
                       },
+                      "assertionMode": {
+                        "type": "string",
+                        "enum": [
+                          "exchange",
+                          "passthrough"
+                        ]
+                      },
                       "resourceType": {
                         "type": "string",
                         "enum": [
@@ -94820,6 +94855,13 @@
                       "properties": {
                         "identityProviderId": {
                           "type": "string"
+                        },
+                        "assertionMode": {
+                          "type": "string",
+                          "enum": [
+                            "exchange",
+                            "passthrough"
+                          ]
                         },
                         "resourceType": {
                           "type": "string",

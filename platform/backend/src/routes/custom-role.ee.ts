@@ -306,19 +306,7 @@ function normalizeRoleResponse(roleData: {
 }
 
 function parsePermissions(value: unknown) {
-  if (typeof value === "string") {
-    try {
-      return JSON.parse(value);
-    } catch (error) {
-      logger.warn(
-        { error, permission: value },
-        "Failed to parse custom role permissions JSON",
-      );
-      return {};
-    }
-  }
-
-  return value;
+  return OrganizationRoleModel.sanitizePermissions(value);
 }
 
 function toDate(value: Date | string): Date {

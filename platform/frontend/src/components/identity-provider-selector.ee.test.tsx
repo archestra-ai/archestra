@@ -62,6 +62,27 @@ describe("IdentityProviderSelector", () => {
   });
 
   describe("callbackURL handling", () => {
+    it("should prefer an explicit callback URL override", async () => {
+      mockSearchParams.get.mockReturnValue(
+        encodeURIComponent("/oauth/consent?client_id=test"),
+      );
+      const user = userEvent.setup();
+
+      render(
+        <IdentityProviderSelector
+          callbackURL={`${mockOrigin}/oauth/consent?client_id=test&scope=mcp`}
+        />,
+      );
+
+      await user.click(screen.getByRole("button", { name: /sign in with/i }));
+
+      expect(authClient.signIn.sso).toHaveBeenCalledWith(
+        expect.objectContaining({
+          callbackURL: `${mockOrigin}/oauth/consent?client_id=test&scope=mcp`,
+        }),
+      );
+    });
+
     it("should use home URL when no redirectTo param is present", async () => {
       mockSearchParams.get.mockReturnValue(null);
       const user = userEvent.setup();

@@ -45,6 +45,13 @@ export async function resolveEnterpriseTransportCredential(params: {
     return null;
   }
 
+  if (config.assertionMode === "passthrough") {
+    return normalizeEnterprisePassthroughCredential({
+      config,
+      assertion: assertion.assertion,
+    });
+  }
+
   if (shouldExchangeIdJagAtProtectedResource(config)) {
     const credential = await exchangeIdJagAtProtectedResource({
       assertion: assertion.assertion,
@@ -291,6 +298,37 @@ function normalizeEnterpriseTransportCredential(params: {
         headerName: "Authorization",
         headerValue: `Bearer ${scalarValue}`,
         expiresInSeconds: credential.expiresInSeconds,
+      };
+  }
+}
+
+function normalizeEnterprisePassthroughCredential(params: {
+  config: EnterpriseManagedCredentialConfig;
+  assertion: string;
+}): ResolvedEnterpriseTransportCredential {
+  switch (params.config.tokenInjectionMode) {
+    case "header":
+      if (!params.config.headerName) {
+        throw new Error(
+          "Enterprise-managed credential injection mode 'header' requires headerName",
+        );
+      }
+      return {
+        headerName: params.config.headerName,
+        headerValue: params.assertion,
+        expiresInSeconds: null,
+      };
+    case "raw_authorization":
+      return {
+        headerName: "Authorization",
+        headerValue: params.assertion,
+        expiresInSeconds: null,
+      };
+    default:
+      return {
+        headerName: "Authorization",
+        headerValue: `Bearer ${params.assertion}`,
+        expiresInSeconds: null,
       };
   }
 }

@@ -331,7 +331,10 @@ export function AuthViewWithErrorHandling({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <IdentityProviderSelector showDivider={false} />
+            <IdentityProviderSelector
+              showDivider={false}
+              callbackURL={callbackURL}
+            />
           </CardContent>
         </Card>
       </div>
@@ -439,7 +442,10 @@ export function AuthViewWithErrorHandling({
           />
         )}
         {isSignInPage && config.enterpriseFeatures.core && (
-          <IdentityProviderSelector showDivider={!isBasicAuthDisabled} />
+          <IdentityProviderSelector
+            showDivider={!isBasicAuthDisabled}
+            callbackURL={callbackURL}
+          />
         )}
       </div>
     </>

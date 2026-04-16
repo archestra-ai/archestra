@@ -1,0 +1,74 @@
+name: Auto-merge contributor PRs
+
+on:
+  pull_request:
+    types: [opened]
+    paths:
+      - 'EXTERNAL_CONTRIBUTORS.md'
+
+jobs:
+  validate-and-merge:
+    runs-on: ubuntu-latest
+    if: >-
+      github.event.pull_request.user.login == 'archestra-contributor-pr-bot[bot]'
+      && startsWith(github.head_ref, 'contributor/')
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate PR
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          # Verify only EXTERNAL_CONTRIBUTORS.md is changed
+          CHANGED_FILES=$(git diff --name-only "origin/$BASE_REF...origin/$HEAD_REF")
+          if [ "$CHANGED_FILES" != "EXTERNAL_CONTRIBUTORS.md" ]; then
+            echo "::error::PR changes files other than EXTERNAL_CONTRIBUTORS.md: $CHANGED_FILES"
+            exit 1
+          fi
+
+          # Verify only one line was added and nothing removed
+          DIFF=$(git diff "origin/$BASE_REF...origin/$HEAD_REF" -- EXTERNAL_CONTRIBUTORS.md)
+          ADDED=$(echo "$DIFF" | grep -c '^+[^+]' || true)
+          REMOVED=$(echo "$DIFF" | grep -c '^-[^-]' || true)
+
+          if [ "$REMOVED" -ne 0 ]; then
+            echo "::error::PR removes lines from EXTERNAL_CONTRIBUTORS.md"
+            exit 1
+          fi
+
+          if [ "$ADDED" -ne 1 ]; then
+            echo "::error::PR must add exactly one line, found $ADDED"
+            exit 1
+          fi
+
+          # Verify the added line matches expected format: - @username
+          ADDED_LINE=$(echo "$DIFF" | grep '^+[^+]' | sed 's/^+//')
+          if ! echo "$ADDED_LINE" | grep -qE '^- @[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$'; then
+            echo "::error::Added line doesn't match expected format '- @username': $ADDED_LINE"
+            exit 1
+          fi
+
+          echo "Validation passed: adding $ADDED_LINE"
+
+      - name: Generate token
+        id: generate-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.ARCHESTRA_CONTRIBUTOR_BOT_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_CONTRIBUTOR_BOT_GITHUB_APP_PRIVATE_KEY }}
+
+      - name: Approve PR
+        run: gh pr review ${{ github.event.pull_request.number }} --approve
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+
+      - name: Merge PR
+        run: gh pr merge ${{ github.event.pull_request.number }} --squash --delete-branch --admin
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}

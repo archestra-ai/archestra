@@ -664,6 +664,58 @@ describe("OpenAIRequestAdapter", () => {
         { type: "text", text: "[Image omitted due to size]" },
       ]);
     });
+
+    test("sanitizes array tool schemas before forwarding to OpenAI", () => {
+      const request = createMockRequest([{ role: "user", content: "Search" }], {
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "redis_ctx__search_policy_by_content_embedding_similarity",
+              description: "Vector search",
+              parameters: {
+                type: "object",
+                properties: {
+                  vector: {
+                    type: "array",
+                    description: "The content_embedding vector to search for",
+                  },
+                  k: {
+                    type: "number",
+                  },
+                },
+                required: ["vector"],
+              },
+            },
+          },
+        ],
+      });
+
+      const adapter = openaiAdapterFactory.createRequestAdapter(request);
+      const result = adapter.toProviderRequest();
+
+      expect(result.tools?.[0]).toEqual({
+        type: "function",
+        function: {
+          name: "redis_ctx__search_policy_by_content_embedding_similarity",
+          description: "Vector search",
+          parameters: {
+            type: "object",
+            properties: {
+              vector: {
+                type: "array",
+                description: "The content_embedding vector to search for",
+                items: { type: "number" },
+              },
+              k: {
+                type: "number",
+              },
+            },
+            required: ["vector"],
+          },
+        },
+      });
+    });
   });
 });
 

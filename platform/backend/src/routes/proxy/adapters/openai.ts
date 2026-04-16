@@ -70,6 +70,91 @@ type OpenAiToolResultContentBlock =
 
 type OpenAiToolResultContent = string | OpenAiToolResultContentBlock[];
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function defaultArrayItemsSchema(
+  schema: Record<string, unknown>,
+  fieldName?: string,
+): Record<string, unknown> {
+  const description =
+    typeof schema.description === "string" ? schema.description : "";
+  const hint = `${fieldName ?? ""} ${description}`.toLowerCase();
+
+  if (hint.includes("vector") || hint.includes("embedding")) {
+    return { type: "number" };
+  }
+
+  return {};
+}
+
+function sanitizeJsonSchema(
+  schema: unknown,
+  fieldName?: string,
+): Record<string, unknown> {
+  if (!isRecord(schema)) {
+    return { type: "object", properties: {} };
+  }
+
+  const sanitized: Record<string, unknown> = { ...schema };
+
+  if (sanitized.type === "array") {
+    const items = sanitized.items;
+    sanitized.items = isRecord(items)
+      ? sanitizeJsonSchema(items)
+      : defaultArrayItemsSchema(sanitized, fieldName);
+  }
+
+  if (isRecord(sanitized.properties)) {
+    sanitized.properties = Object.fromEntries(
+      Object.entries(sanitized.properties).map(([name, value]) => [
+        name,
+        sanitizeJsonSchema(value, name),
+      ]),
+    );
+  }
+
+  if (isRecord(sanitized.additionalProperties)) {
+    sanitized.additionalProperties = sanitizeJsonSchema(
+      sanitized.additionalProperties,
+    );
+  }
+
+  for (const key of ["allOf", "anyOf", "oneOf", "prefixItems"] as const) {
+    const value = sanitized[key];
+    if (Array.isArray(value)) {
+      sanitized[key] = value.map((item) =>
+        isRecord(item) ? sanitizeJsonSchema(item) : item,
+      );
+    }
+  }
+
+  if (isRecord(sanitized.not)) {
+    sanitized.not = sanitizeJsonSchema(sanitized.not);
+  }
+
+  return sanitized;
+}
+
+function sanitizeOpenAiTools(
+  tools: OpenAiRequest["tools"],
+): OpenAiRequest["tools"] {
+  return tools?.map((tool) => {
+    if (tool.type !== "function") {
+      return tool;
+    }
+
+    return {
+      ...tool,
+      function: {
+        ...tool.function,
+        parameters: sanitizeJsonSchema(tool.function.parameters),
+      },
+    };
+  });
+}
+
 // =============================================================================
 // REQUEST ADAPTER
 // =============================================================================
@@ -386,6 +471,7 @@ export class OpenAIRequestAdapter
       ...this.request,
       model: this.getModel(),
       messages,
+      tools: sanitizeOpenAiTools(this.request.tools),
     };
   }
 

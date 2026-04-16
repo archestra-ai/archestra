@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: First time here? Register as a contributor
+    url: https://archestra.ai/contributor-onboard
+    about: To prevent AI spam, you must register as a contributor via GitHub OAuth before you can create issues or comment. It only takes 30 seconds.

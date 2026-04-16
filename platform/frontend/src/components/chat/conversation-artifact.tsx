@@ -7,6 +7,10 @@ import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
+import {
+  CodeBlock,
+  CodeBlockCopyButton,
+} from "@/components/ai-elements/code-block";
 import { MermaidDiagram } from "@/components/mermaid-diagram";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -80,6 +84,11 @@ export function ConversationArtifactPanel({
 
   // Custom components for ReactMarkdown to handle Mermaid diagrams
   const markdownComponents: Components = {
+    // ReactMarkdown wraps fenced code in <pre><code>, but CodeBlock renders
+    // its own <pre>. Dropping the outer <pre> prevents double-wrapping.
+    pre({ children }) {
+      return <>{children}</>;
+    },
     code({ node, className, children, ...props }) {
       const match = /language-(\w+)/.exec(className || "");
       const language = match ? match[1] : "";
@@ -93,7 +102,16 @@ export function ConversationArtifactPanel({
         );
       }
 
-      // Default code block rendering
+      if (language) {
+        const code = String(children).replace(/\n$/, "");
+        return (
+          <CodeBlock code={code} language={language}>
+            <CodeBlockCopyButton />
+          </CodeBlock>
+        );
+      }
+
+      // Inline code
       return (
         <code className={className} {...props}>
           {children}

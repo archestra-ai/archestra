@@ -3,6 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useEnterpriseFeature } from "@/lib/config/config.query";
 import { McpCatalogForm } from "./mcp-catalog-form";
 
+const { useIdentityProvidersMock } = vi.hoisted(() => ({
+  useIdentityProvidersMock: vi.fn(() => ({ data: [] })),
+}));
+
 vi.mock("@/lib/config/config.query", () => ({
   useFeature: vi.fn((feature: string) => {
     if (feature === "mcpServerBaseImage") return "";
@@ -13,8 +17,20 @@ vi.mock("@/lib/config/config.query", () => ({
   useEnterpriseFeature: vi.fn(() => false),
 }));
 
+vi.mock("@/lib/config/config", () => ({
+  default: {
+    enterpriseFeatures: {
+      core: true,
+    },
+  },
+}));
+
 vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: vi.fn(() => ({ data: true })),
+}));
+
+vi.mock("@/lib/auth/identity-provider.query.ee", () => ({
+  useIdentityProviders: useIdentityProvidersMock,
 }));
 
 vi.mock("@/lib/teams/team.query", () => ({
@@ -31,6 +47,7 @@ vi.mock("@/lib/secrets.query", () => ({
 
 vi.mock("@/lib/docs/docs", () => ({
   getVisibleDocsUrl: vi.fn(() => "https://docs.example.com"),
+  getFrontendDocsUrl: vi.fn(() => "https://docs.example.com/mcp-auth"),
 }));
 
 vi.mock("@/components/agent-icon-picker", () => ({
@@ -54,6 +71,7 @@ vi.mock("@/components/visibility-selector", () => ({
 describe("McpCatalogForm enterprise gating", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useIdentityProvidersMock.mockReturnValue({ data: [] });
     global.ResizeObserver = class ResizeObserver {
       observe() {}
       unobserve() {}
@@ -61,22 +79,59 @@ describe("McpCatalogForm enterprise gating", () => {
     };
   });
 
-  it("hides enterprise-managed credentials when the enterprise license is disabled", () => {
+  it("renders enterprise auth options as disabled when the enterprise license is disabled", () => {
     render(<McpCatalogForm mode="create" onSubmit={vi.fn()} />);
 
     expect(
-      screen.queryByText("Identity Assertion JWT Authorization Grant (ID-JAG)"),
-    ).not.toBeInTheDocument();
+      screen.getByRole("radio", {
+        name: "Identity Assertion JWT Authorization Grant (ID-JAG)",
+      }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("radio", {
+        name: "Identity Provider JWT / JWKS",
+      }),
+    ).toBeDisabled();
   });
 
   it("shows enterprise-managed credentials when the enterprise license is enabled", async () => {
     vi.mocked(useEnterpriseFeature).mockReturnValue(true);
+    useIdentityProvidersMock.mockReturnValue({
+      data: [
+        {
+          id: "idp-1",
+          providerId: "okta",
+          issuer: "https://idp.example.com",
+          oidcConfig: { clientId: "client-id" },
+        },
+      ] as never,
+    });
 
     render(<McpCatalogForm mode="create" onSubmit={vi.fn()} />);
 
     expect(
       screen.getByText("Identity Assertion JWT Authorization Grant (ID-JAG)"),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText("Identity Provider JWT / JWKS"),
+    ).toBeInTheDocument();
+  });
+
+  it("renders enterprise auth options as disabled when no OIDC identity providers are configured", () => {
+    vi.mocked(useEnterpriseFeature).mockReturnValue(true);
+
+    render(<McpCatalogForm mode="create" onSubmit={vi.fn()} />);
+
+    expect(
+      screen.getByRole("radio", {
+        name: "Identity Assertion JWT Authorization Grant (ID-JAG)",
+      }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("radio", {
+        name: "Identity Provider JWT / JWKS",
+      }),
+    ).toBeDisabled();
   });
 
   it("disables browser autofill for MCP config forms and secret fields", () => {

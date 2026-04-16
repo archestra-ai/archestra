@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { archestraApiTypes } from "@shared";
-import { GITHUB_REPO_URL } from "@shared";
+import { DocsPage, GITHUB_REPO_URL } from "@shared";
 import {
   ChevronRight,
   Globe,
@@ -69,8 +69,9 @@ import {
 } from "@/components/visibility-selector";
 import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import config from "@/lib/config/config";
 import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
-import { getVisibleDocsUrl } from "@/lib/docs/docs";
+import { getFrontendDocsUrl, getVisibleDocsUrl } from "@/lib/docs/docs";
 import { useK8sImagePullSecrets } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
   MCP_CONFIG_AUTOCOMPLETE,
@@ -83,6 +84,20 @@ import {
   type McpCatalogFormValues,
 } from "./mcp-catalog-form.types";
 import { transformCatalogItemToFormValues } from "./mcp-catalog-form.utils";
+
+const { useIdentityProviders } = config.enterpriseFeatures.core
+  ? // biome-ignore lint/style/noRestrictedImports: conditional EE query import for IdP selector
+    await import("@/lib/auth/identity-provider.query.ee")
+  : {
+      useIdentityProviders: (_params?: { enabled?: boolean }) => ({
+        data: [] as Array<{
+          id: string;
+          providerId: string;
+          issuer: string;
+          oidcConfig?: Record<string, unknown> | null;
+        }>,
+      }),
+    };
 
 const ExternalSecretSelector = lazy(
   () =>
@@ -134,6 +149,23 @@ export function McpCatalogForm({
 
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
   const isEnterpriseCoreEnabled = useEnterpriseFeature("core");
+  const mcpAuthDocsUrl = getFrontendDocsUrl(
+    DocsPage.McpAuthentication,
+    "enterprise-managed-credentials",
+  );
+  const { data: canReadIdentityProviders } = useHasPermissions({
+    identityProvider: ["read"],
+  });
+  const { data: identityProviders = [] } = useIdentityProviders({
+    enabled: isEnterpriseCoreEnabled && !!canReadIdentityProviders,
+  });
+  const oidcIdentityProviders = useMemo(
+    () => identityProviders.filter((provider) => provider.oidcConfig != null),
+    [identityProviders],
+  );
+  const hasOidcIdentityProviders = oidcIdentityProviders.length > 0;
+  const defaultIdentityProviderId =
+    oidcIdentityProviders.length === 1 ? oidcIdentityProviders[0]?.id : null;
 
   const form = useForm<McpCatalogFormValues>({
     // biome-ignore lint/suspicious/noExplicitAny: Version mismatch between @hookform/resolvers and Zod
@@ -195,13 +227,74 @@ export function McpCatalogForm({
   const authMethod = form.watch("authMethod");
   const currentServerType = form.watch("serverType");
   const currentTransportType = form.watch("localConfig.transportType");
+  const selectedIdentityProviderId = form.watch(
+    "enterpriseManagedConfig.identityProviderId",
+  );
+
+  const handleAuthMethodChange = (
+    nextAuthMethod: McpCatalogFormValues["authMethod"],
+  ) => {
+    form.setValue("authMethod", nextAuthMethod, { shouldDirty: true });
+
+    if (nextAuthMethod === "enterprise_managed") {
+      form.setValue(
+        "enterpriseManagedConfig",
+        {
+          ...(form.getValues("enterpriseManagedConfig") ?? {}),
+          identityProviderId:
+            form.getValues("enterpriseManagedConfig.identityProviderId") ??
+            defaultIdentityProviderId ??
+            undefined,
+          assertionMode: "exchange",
+        },
+        { shouldDirty: true },
+      );
+      return;
+    }
+
+    if (nextAuthMethod === "idp_jwt") {
+      form.setValue(
+        "enterpriseManagedConfig",
+        {
+          identityProviderId:
+            form.getValues("enterpriseManagedConfig.identityProviderId") ??
+            defaultIdentityProviderId ??
+            undefined,
+          assertionMode: "passthrough",
+          requestedCredentialType: "bearer_token",
+          tokenInjectionMode: "authorization_bearer",
+        },
+        { shouldDirty: true },
+      );
+      return;
+    }
+
+    form.setValue("enterpriseManagedConfig", null, { shouldDirty: true });
+  };
 
   useEffect(() => {
-    if (!isEnterpriseCoreEnabled && authMethod === "enterprise_managed") {
+    if (
+      (!isEnterpriseCoreEnabled || !hasOidcIdentityProviders) &&
+      (authMethod === "enterprise_managed" || authMethod === "idp_jwt")
+    ) {
       form.setValue("authMethod", "none", { shouldDirty: true });
       form.setValue("enterpriseManagedConfig", null, { shouldDirty: true });
     }
-  }, [authMethod, form, isEnterpriseCoreEnabled]);
+  }, [authMethod, form, hasOidcIdentityProviders, isEnterpriseCoreEnabled]);
+
+  useEffect(() => {
+    if (
+      defaultIdentityProviderId &&
+      (authMethod === "enterprise_managed" || authMethod === "idp_jwt") &&
+      !selectedIdentityProviderId
+    ) {
+      form.setValue(
+        "enterpriseManagedConfig.identityProviderId",
+        defaultIdentityProviderId,
+        { shouldDirty: true },
+      );
+    }
+  }, [authMethod, defaultIdentityProviderId, form, selectedIdentityProviderId]);
 
   // BYOS (Bring Your Own Secrets) state for OAuth
   const [oauthVaultTeamId, setOauthVaultTeamId] = useState<string | null>(null);
@@ -242,6 +335,11 @@ export function McpCatalogForm({
   });
   const { data: teams } = useTeams();
   const currentScope = form.watch("scope");
+  const enterpriseAuthDisabledReason = !isEnterpriseCoreEnabled
+    ? "Available with the Enterprise Core license."
+    : !hasOidcIdentityProviders
+      ? "Configure at least one OIDC identity provider in Settings before using this authorization mode."
+      : null;
   const visibilityOptions = useMemo<
     Array<VisibilityOption<"personal" | "team" | "org">>
   >(
@@ -939,6 +1037,24 @@ export function McpCatalogForm({
                 <h3 className="font-semibold text-sm">
                   Multitenant Authorization
                 </h3>
+                <p className="text-xs text-muted-foreground">
+                  Choose how Archestra authenticates each caller to the upstream
+                  MCP server. Use ID-JAG when Archestra should broker downstream
+                  credentials, or Identity Provider JWT / JWKS when the upstream
+                  server should validate the caller&apos;s IdP JWT directly.
+                  {mcpAuthDocsUrl ? (
+                    <>
+                      {" "}
+                      <ExternalDocsLink
+                        href={mcpAuthDocsUrl}
+                        className="underline"
+                        showIcon={false}
+                      >
+                        Learn more
+                      </ExternalDocsLink>
+                    </>
+                  ) : null}
+                </p>
               </div>
               <FormField
                 control={form.control}
@@ -947,7 +1063,11 @@ export function McpCatalogForm({
                   <FormItem>
                     <FormControl>
                       <RadioGroup
-                        onValueChange={field.onChange}
+                        onValueChange={(value) =>
+                          handleAuthMethodChange(
+                            value as McpCatalogFormValues["authMethod"],
+                          )
+                        }
                         value={field.value}
                         className="space-y-2"
                       >
@@ -995,27 +1115,79 @@ export function McpCatalogForm({
                             OAuth 2.0 (recommended)
                           </FormLabel>
                         </div>
-                        {isEnterpriseCoreEnabled && (
-                          <div className="flex items-center space-x-2">
-                            <RadioGroupItem
-                              value="enterprise_managed"
-                              id="auth-enterprise-managed"
-                            />
-                            <FormLabel
-                              htmlFor="auth-enterprise-managed"
-                              className="font-normal cursor-pointer"
-                            >
-                              Identity Assertion JWT Authorization Grant
-                              (ID-JAG)
-                            </FormLabel>
-                          </div>
-                        )}
+                        <EnterpriseAuthRadioOption
+                          value="enterprise_managed"
+                          id="auth-enterprise-managed"
+                          label="Identity Assertion JWT Authorization Grant (ID-JAG)"
+                          isDisabled={enterpriseAuthDisabledReason != null}
+                          disabledReason={enterpriseAuthDisabledReason}
+                        />
+                        <EnterpriseAuthRadioOption
+                          value="idp_jwt"
+                          id="auth-idp-jwt"
+                          label="Identity Provider JWT / JWKS"
+                          isDisabled={enterpriseAuthDisabledReason != null}
+                          disabledReason={enterpriseAuthDisabledReason}
+                        />
                       </RadioGroup>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
+              {(authMethod === "enterprise_managed" ||
+                authMethod === "idp_jwt") && (
+                <div className="space-y-4 pl-6 border-l-2">
+                  <FormField
+                    control={form.control}
+                    name="enterpriseManagedConfig.identityProviderId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>
+                          Identity Provider{" "}
+                          <span className="text-destructive">*</span>
+                        </FormLabel>
+                        <FormDescription>
+                          This must match the MCP Gateway&apos;s enterprise IdP
+                          when the tool is assigned with resolve-at-call-time or
+                          enterprise-managed credentials.
+                        </FormDescription>
+                        <Select
+                          value={field.value ?? ""}
+                          onValueChange={field.onChange}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select an OIDC identity provider" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {oidcIdentityProviders.map((provider) => (
+                              <SelectItem key={provider.id} value={provider.id}>
+                                {provider.providerId} ({provider.issuer})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {authMethod === "idp_jwt" && (
+                    <div className="bg-muted p-4 rounded-lg">
+                      <p className="text-sm text-muted-foreground">
+                        Archestra will pass through the caller&apos;s IdP JWT to
+                        the upstream MCP server as an{" "}
+                        <code>Authorization: Bearer</code> header. Use this when
+                        the upstream server validates the same JWT against the
+                        IdP&apos;s JWKS endpoint directly.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {(authMethod === "bearer" || authMethod === "raw_token") && (
                 <div className="space-y-4">
@@ -1325,45 +1497,44 @@ export function McpCatalogForm({
                 </div>
               )}
 
-              {isEnterpriseCoreEnabled &&
-                authMethod === "enterprise_managed" && (
-                  <div className="space-y-4 pl-6 border-l-2">
-                    <div className="bg-muted p-4 rounded-lg">
-                      <p className="text-sm text-muted-foreground">
-                        Archestra will request a downstream credential for this
-                        MCP server from the signed-in user&apos;s identity
-                        provider at tool-call time. Installations inherit these
-                        defaults automatically.
-                      </p>
-                    </div>
-
-                    <FormField
-                      control={form.control}
-                      name="enterpriseManagedConfig"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormControl>
-                            <EnterpriseManagedCredentialFields
-                              value={
-                                (field.value as
-                                  | EnterpriseManagedConfigInput
-                                  | null
-                                  | undefined) ?? null
-                              }
-                              onChange={field.onChange}
-                            />
-                          </FormControl>
-                          <FormDescription>
-                            Configure the managed resource identifier and how
-                            the returned credential should be injected into
-                            requests made to this MCP server.
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+              {authMethod === "enterprise_managed" && (
+                <div className="space-y-4 pl-6 border-l-2">
+                  <div className="bg-muted p-4 rounded-lg">
+                    <p className="text-sm text-muted-foreground">
+                      Archestra will request a downstream credential for this
+                      MCP server from the signed-in user&apos;s identity
+                      provider at tool-call time. Installations inherit these
+                      defaults automatically.
+                    </p>
                   </div>
-                )}
+
+                  <FormField
+                    control={form.control}
+                    name="enterpriseManagedConfig"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <EnterpriseManagedCredentialFields
+                            value={
+                              (field.value as
+                                | EnterpriseManagedConfigInput
+                                | null
+                                | undefined) ?? null
+                            }
+                            onChange={field.onChange}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Configure the managed resource identifier and how the
+                          returned credential should be injected into requests
+                          made to this MCP server.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              )}
             </div>
           )}
 
@@ -1460,5 +1631,42 @@ export function McpCatalogForm({
           : footer}
       </form>
     </Form>
+  );
+}
+
+function EnterpriseAuthRadioOption(params: {
+  value: "enterprise_managed" | "idp_jwt";
+  id: string;
+  label: string;
+  isDisabled: boolean;
+  disabledReason: string | null;
+}) {
+  const content = (
+    <div className="flex items-center space-x-2">
+      <RadioGroupItem
+        value={params.value}
+        id={params.id}
+        disabled={params.isDisabled}
+      />
+      <FormLabel
+        htmlFor={params.id}
+        className={`font-normal ${params.isDisabled ? "cursor-not-allowed text-muted-foreground" : "cursor-pointer"}`}
+      >
+        {params.label}
+      </FormLabel>
+    </div>
+  );
+
+  if (!params.isDisabled || !params.disabledReason) {
+    return content;
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div>{content}</div>
+      </TooltipTrigger>
+      <TooltipContent>{params.disabledReason}</TooltipContent>
+    </Tooltip>
   );
 }

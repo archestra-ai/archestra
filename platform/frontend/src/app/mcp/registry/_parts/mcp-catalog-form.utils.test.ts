@@ -384,6 +384,72 @@ describe("transformFormToApiData", () => {
     ]);
   });
 
+  it("persists IdP JWT / JWKS passthrough auth as enterprise-managed passthrough config", () => {
+    const values: McpCatalogFormValues = {
+      name: "JWT MCP",
+      description: "",
+      icon: null,
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com",
+      authMethod: "idp_jwt",
+      authHeaderName: "",
+      additionalHeaders: [],
+      oauthConfig: undefined,
+      enterpriseManagedConfig: {
+        identityProviderId: "idp-1",
+        assertionMode: "passthrough",
+        requestedCredentialType: "bearer_token",
+        tokenInjectionMode: "authorization_bearer",
+      },
+      localConfig: undefined,
+      deploymentSpecYaml: "",
+      originalDeploymentSpecYaml: "",
+      oauthClientSecretVaultPath: "",
+      oauthClientSecretVaultKey: "",
+      localConfigVaultPath: "",
+      localConfigVaultKey: "",
+      labels: [],
+      scope: "personal",
+      teams: [],
+    };
+
+    expect(transformFormToApiData(values).enterpriseManagedConfig).toEqual({
+      identityProviderId: "idp-1",
+      assertionMode: "passthrough",
+      requestedCredentialType: "bearer_token",
+      tokenInjectionMode: "authorization_bearer",
+      headerName: undefined,
+    });
+  });
+
+  it("hydrates IdP JWT / JWKS passthrough auth from internal catalog items", () => {
+    const values = transformCatalogItemToFormValues({
+      id: "catalog-jwt",
+      name: "JWT MCP",
+      description: "",
+      icon: null,
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com",
+      oauthConfig: null,
+      enterpriseManagedConfig: {
+        identityProviderId: "idp-1",
+        assertionMode: "passthrough",
+        requestedCredentialType: "bearer_token",
+        tokenInjectionMode: "authorization_bearer",
+      },
+      localConfig: null,
+      deploymentSpecYaml: null,
+      userConfig: {},
+      scope: "personal",
+      teams: [],
+      labels: [],
+    } as never);
+
+    expect(values.authMethod).toBe("idp_jwt");
+    expect(values.enterpriseManagedConfig?.identityProviderId).toBe("idp-1");
+    expect(values.enterpriseManagedConfig?.assertionMode).toBe("passthrough");
+  });
+
   it("treats authorization header names case-insensitively when hydrating form values", () => {
     const values = transformCatalogItemToFormValues({
       id: "catalog-auth-header",

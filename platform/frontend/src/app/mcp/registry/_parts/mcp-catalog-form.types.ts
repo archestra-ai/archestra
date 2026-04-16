@@ -116,6 +116,8 @@ export const oauthConfigSchema = z
   });
 
 const enterpriseManagedConfigSchema = z.object({
+  identityProviderId: z.string().optional(),
+  assertionMode: z.enum(["exchange", "passthrough"]).optional(),
   resourceIdentifier: z.string().optional(),
   requestedIssuer: z.string().optional(),
   requestedCredentialType: z
@@ -157,6 +159,7 @@ export const formSchema = z
       "raw_token",
       "oauth",
       "enterprise_managed",
+      "idp_jwt",
     ]),
     authHeaderName: headerNameSchema.optional().or(z.literal("")),
     additionalHeaders: z.array(additionalHeaderSchema).optional(),
@@ -268,7 +271,8 @@ export const formSchema = z
     (data) => {
       if (
         data.serverType !== "local" ||
-        data.authMethod !== "enterprise_managed"
+        (data.authMethod !== "enterprise_managed" &&
+          data.authMethod !== "idp_jwt")
       ) {
         return true;
       }
@@ -280,6 +284,19 @@ export const formSchema = z
         "Enterprise-managed credentials require streamable-http transport for self-hosted servers.",
       path: ["localConfig", "transportType"],
     },
-  );
+  )
+  .superRefine((data, ctx) => {
+    if (
+      (data.authMethod === "enterprise_managed" ||
+        data.authMethod === "idp_jwt") &&
+      !data.enterpriseManagedConfig?.identityProviderId
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Identity Provider is required for this authorization mode.",
+        path: ["enterpriseManagedConfig", "identityProviderId"],
+      });
+    }
+  });
 
 export type McpCatalogFormValues = z.infer<typeof formSchema>;

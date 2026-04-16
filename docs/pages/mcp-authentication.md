@@ -3,7 +3,7 @@ title: "Authentication"
 category: MCP
 order: 4
 description: "How authentication works for MCP clients and upstream MCP servers"
-lastUpdated: 2026-04-15
+lastUpdated: 2026-04-16
 ---
 
 <!--
@@ -248,6 +248,11 @@ This means a team-shared connection is governed by the team it is shared with, n
 
 Enterprise-managed credentials are an upstream credential strategy. Instead of storing downstream credentials inside Archestra, Archestra asks the configured identity provider for a credential at tool-call time and injects it into the MCP request.
 
+In the MCP catalog item's **Multitenant Authorization** section, Archestra exposes two enterprise upstream patterns when **Enterprise Core** is enabled and at least one **OIDC** identity provider is configured:
+
+- **ID-JAG**: Archestra resolves the caller's enterprise assertion and exchanges it for the downstream credential the MCP server needs
+- **Identity Provider JWT / JWKS**: Archestra resolves the caller's enterprise assertion and forwards that JWT to the upstream MCP server as `Authorization: Bearer <jwt>`, so the upstream server can validate it against the IdP's JWKS directly
+
 This is different from both gateway JWKS and ID-JAG:
 
 - **JWKS** authenticates the caller to Archestra
@@ -257,7 +262,7 @@ This is different from both gateway JWKS and ID-JAG:
 Configuration is split across three places:
 
 - **Identity Provider**: how Archestra authenticates to the IdP for credential exchange
-- **MCP catalog item**: what downstream resource should be requested and how the returned credential should be injected
+- **MCP catalog item**: whether Archestra should exchange a downstream credential or pass through the caller's IdP JWT, plus how the resulting credential should be injected
 - **Tool assignment**: choose `Resolve at call time`
 
 This model works best for remote MCP servers and local MCP servers using HTTP transport. Local stdio servers do not support per-request enterprise-managed credential injection.
@@ -353,6 +358,11 @@ See [Building Enterprise-Ready MCP Servers with JWKS and Identity Providers](htt
 ## ID-JAG vs JWKS
 
 Enterprise-Managed Authorization and JWKS-based authentication both rely on enterprise-issued JWTs, but they solve different problems.
+
+In the product UI, these choices appear in two different places:
+
+- **MCP Gateway dialog**: choose the Identity Provider the gateway trusts for enterprise client authentication
+- **MCP catalog item > Multitenant Authorization**: choose whether the upstream MCP server should receive an exchanged credential (**ID-JAG**) or the caller's original IdP JWT (**Identity Provider JWT / JWKS**)
 
 **ID-JAG** is a token exchange pattern. The MCP client first obtains an enterprise-issued identity assertion, exchanges it for an ID-JAG, and then exchanges that ID-JAG with Archestra for an MCP access token. Archestra validates the ID-JAG and issues a new gateway token scoped to the target MCP Gateway.
 

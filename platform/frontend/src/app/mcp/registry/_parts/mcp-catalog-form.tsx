@@ -151,7 +151,7 @@ export function McpCatalogForm({
   const isEnterpriseCoreEnabled = useEnterpriseFeature("core");
   const mcpAuthDocsUrl = getFrontendDocsUrl(
     DocsPage.McpAuthentication,
-    "enterprise-managed-credentials",
+    "gateway-authentication",
   );
   const { data: canReadIdentityProviders } = useHasPermissions({
     identityProvider: ["read"],

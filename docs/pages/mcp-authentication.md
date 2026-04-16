@@ -94,8 +94,8 @@ For gateways linked to an OIDC identity provider, Archestra supports two enterpr
 
 Consider a gateway that exposes GitHub and Jira tools to Cursor.
 
-- **Token A** authenticates Cursor to the Archestra MCP Gateway
-- **Token B** authenticates Archestra to GitHub or Jira when the tool runs
+- **Gateway Token** authenticates Cursor to the Archestra MCP Gateway
+- **Upstream MCP Server Token** authenticates Archestra to GitHub or Jira when the tool runs
 
 Cursor can reach the gateway through four supported auth paths:
 
@@ -112,7 +112,7 @@ For downstream enterprise-managed credentials, these modes are not equivalent:
 
 In practice, that means a **personal user token** can work with enterprise-managed downstream credentials, but a pure **team** or **organization** token does not carry enough user identity on its own to broker per-user GitHub or Jira credentials.
 
-When a tool runs, Archestra still resolves **Token B** separately. For example:
+When a tool runs, Archestra still resolves the **Upstream MCP Server Token** separately. For example:
 
 1. Cursor authenticates to Archestra using OAuth, ID-JAG, JWKS, or a personal Archestra bearer token
 2. Archestra identifies the user behind the request
@@ -154,10 +154,10 @@ This credential resolution enables a powerful workflow: an admin installs upstre
 
 MCP servers that connect to external services like GitHub, Atlassian, or ServiceNow need their own credentials. Archestra manages this with a two-token model:
 
-- **Token A** authenticates the client to the gateway using an Archestra OAuth access token, an external IdP JWT via JWKS, or a platform-managed bearer token such as `arch_<token>` (legacy `archestra_<token>` values also work).
-- **Token B** authenticates the gateway to the upstream MCP server. This token is resolved and injected by Archestra at runtime.
+- **Gateway Token** authenticates the client to the gateway using an Archestra OAuth access token, an external IdP JWT via JWKS, or a platform-managed bearer token such as `arch_<token>` (legacy `archestra_<token>` values also work).
+- **Upstream MCP Server Token** authenticates the gateway to the upstream MCP server. This token is resolved and injected by Archestra at runtime.
 
-The client only ever sends Token A. Archestra resolves Token B behind the scenes.
+The client only ever sends the Gateway Token. Archestra resolves the Upstream MCP Server Token behind the scenes.
 
 ```mermaid
 graph LR
@@ -184,12 +184,12 @@ graph LR
         H2["Internal Tool"]
     end
 
-    C1 -- "Token A" --> GW
-    C2 -- "Token A" --> GW
-    C3 -- "Token A" --> GW
-    CR -- "Token B" --> U1
-    CR -- "Token B" --> U2
-    CR -- "Token B" --> U3
+    C1 -- "Gateway Token" --> GW
+    C2 -- "Gateway Token" --> GW
+    C3 -- "Gateway Token" --> GW
+    CR -- "Upstream MCP Server Token" --> U1
+    CR -- "Upstream MCP Server Token" --> U2
+    CR -- "Upstream MCP Server Token" --> U3
     CR -- "stdio" --> H1
     CR -- "stdio" --> H2
 
@@ -215,7 +215,7 @@ When you enable "Resolve at call time" on a server, Archestra resolves the crede
 
 ```mermaid
 flowchart TD
-    A["Tool call arrives<br/>with Token A"] --> B{Dynamic credentials<br/>enabled?}
+    A["Tool call arrives<br/>with Gateway Token"] --> B{Dynamic credentials<br/>enabled?}
     B -- No --> C["Use server's<br/>pre-configured credential"]
     B -- Yes --> D{Caller has<br/>personal credential?}
     D -- Yes --> E["Use caller's credential"]

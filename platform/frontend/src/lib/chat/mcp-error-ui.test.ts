@@ -403,7 +403,7 @@ describe("isAuthInstructionText", () => {
   it("returns true for credential-assignment guidance", () => {
     expect(
       isAuthInstructionText(
-        'Credential assignment unavailable for "github". This tool is pinned to a personal connection that your account cannot access. Ask the agent owner or an admin to update the tool assignment.',
+        'Expired / Invalid Authentication: credentials for "github" have expired or are invalid. Re-authenticate to continue using this tool. Ask the agent owner or an admin to re-authenticate.',
       ),
     ).toBe(true);
   });

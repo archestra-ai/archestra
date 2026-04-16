@@ -116,6 +116,8 @@ export const oauthConfigSchema = z
   });
 
 const enterpriseManagedConfigSchema = z.object({
+  identityProviderId: z.string().optional(),
+  assertionMode: z.enum(["exchange", "passthrough"]).optional(),
   resourceIdentifier: z.string().optional(),
   requestedIssuer: z.string().optional(),
   requestedCredentialType: z
@@ -154,10 +156,11 @@ export const formSchema = z
     authMethod: z.enum([
       "none",
       "bearer",
-      "raw_token",
       "oauth",
       "enterprise_managed",
+      "idp_jwt",
     ]),
+    includeBearerPrefix: z.boolean(),
     authHeaderName: headerNameSchema.optional().or(z.literal("")),
     additionalHeaders: z.array(additionalHeaderSchema).optional(),
     oauthConfig: oauthConfigSchema.optional(),
@@ -190,10 +193,7 @@ export const formSchema = z
     const normalizedHeaders = new Set<string>();
     const authHeaderName = data.authHeaderName?.trim();
 
-    if (
-      (data.authMethod === "bearer" || data.authMethod === "raw_token") &&
-      authHeaderName
-    ) {
+    if (data.authMethod === "bearer" && authHeaderName) {
       normalizedHeaders.add(authHeaderName.toLowerCase());
     }
 
@@ -268,7 +268,8 @@ export const formSchema = z
     (data) => {
       if (
         data.serverType !== "local" ||
-        data.authMethod !== "enterprise_managed"
+        (data.authMethod !== "enterprise_managed" &&
+          data.authMethod !== "idp_jwt")
       ) {
         return true;
       }
@@ -280,6 +281,19 @@ export const formSchema = z
         "Enterprise-managed credentials require streamable-http transport for self-hosted servers.",
       path: ["localConfig", "transportType"],
     },
-  );
+  )
+  .superRefine((data, ctx) => {
+    if (
+      (data.authMethod === "enterprise_managed" ||
+        data.authMethod === "idp_jwt") &&
+      !data.enterpriseManagedConfig?.identityProviderId
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Identity Provider is required for this authorization mode.",
+        path: ["enterpriseManagedConfig", "identityProviderId"],
+      });
+    }
+  });
 
 export type McpCatalogFormValues = z.infer<typeof formSchema>;

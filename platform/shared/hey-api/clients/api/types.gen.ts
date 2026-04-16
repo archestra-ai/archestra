@@ -24845,6 +24845,7 @@ export type GetInternalMcpCatalogResponses = {
         } | null;
         enterpriseManagedConfig: {
             identityProviderId?: string;
+            assertionMode?: 'exchange' | 'passthrough';
             resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
             resourceIdentifier?: string;
             requestedIssuer?: string;
@@ -24979,6 +24980,7 @@ export type CreateInternalMcpCatalogItemData = {
         } | null;
         enterpriseManagedConfig?: {
             identityProviderId?: string;
+            assertionMode?: 'exchange' | 'passthrough';
             resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
             resourceIdentifier?: string;
             requestedIssuer?: string;
@@ -25172,6 +25174,7 @@ export type CreateInternalMcpCatalogItemResponses = {
         } | null;
         enterpriseManagedConfig: {
             identityProviderId?: string;
+            assertionMode?: 'exchange' | 'passthrough';
             resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
             resourceIdentifier?: string;
             requestedIssuer?: string;
@@ -25456,6 +25459,7 @@ export type GetInternalMcpCatalogItemResponses = {
         } | null;
         enterpriseManagedConfig: {
             identityProviderId?: string;
+            assertionMode?: 'exchange' | 'passthrough';
             resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
             resourceIdentifier?: string;
             requestedIssuer?: string;
@@ -25589,6 +25593,7 @@ export type UpdateInternalMcpCatalogItemData = {
         } | null;
         enterpriseManagedConfig?: {
             identityProviderId?: string;
+            assertionMode?: 'exchange' | 'passthrough';
             resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
             resourceIdentifier?: string;
             requestedIssuer?: string;
@@ -25784,6 +25789,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
         } | null;
         enterpriseManagedConfig: {
             identityProviderId?: string;
+            assertionMode?: 'exchange' | 'passthrough';
             resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
             resourceIdentifier?: string;
             requestedIssuer?: string;

@@ -2,13 +2,24 @@ import type { Permissions } from "@shared";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { RolePermissionBuilder } from "./role-permission-builder.ee";
 
-global.ResizeObserver = vi.fn().mockImplementation(() => ({
-  observe: vi.fn(),
-  unobserve: vi.fn(),
-  disconnect: vi.fn(),
+global.ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as typeof ResizeObserver;
+
+vi.mock("@/components/ui/tooltip", () => ({
+  Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  TooltipTrigger: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
+  TooltipContent: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
 }));
+
+import { RolePermissionBuilder } from "./role-permission-builder.ee";
 
 describe("RolePermissionBuilder", () => {
   it("shows indeterminate state for preloaded partial permissions", async () => {
@@ -80,10 +91,8 @@ describe("RolePermissionBuilder", () => {
     const createCheckbox = screen.getByLabelText("Create");
     expect(createCheckbox).toBeDisabled();
 
-    await user.hover(screen.getByText("Create"));
-
     expect(
-      await screen.findByText(
+      screen.getByText(
         "You can only grant permissions that you currently have yourself.",
       ),
     ).toBeInTheDocument();

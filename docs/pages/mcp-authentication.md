@@ -393,7 +393,7 @@ See [Building Enterprise-Ready MCP Servers with JWKS and Identity Providers](htt
 
 ## ID-JAG vs JWKS
 
-Enterprise-Managed Authorization and JWKS-based authentication both rely on enterprise-issued JWTs, but they solve different problems.
+ID-JAG and JWKS both rely on enterprise-issued JWTs, but they solve different problems.
 
 In the product UI, these choices appear in two different places:
 
@@ -406,7 +406,7 @@ In the product UI, these choices appear in two different places:
 
 Use **ID-JAG** when:
 
-- your MCP client participates in enterprise-managed authorization
+- your MCP client uses the ID-JAG token exchange flow
 - you want Archestra to mint its own MCP access token for the gateway
 - you want the resulting gateway token bound to a specific MCP resource
 

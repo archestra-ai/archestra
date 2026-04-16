@@ -4,6 +4,12 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { RolePermissionBuilder } from "./role-permission-builder.ee";
 
+global.ResizeObserver = vi.fn().mockImplementation(() => ({
+  observe: vi.fn(),
+  unobserve: vi.fn(),
+  disconnect: vi.fn(),
+}));
+
 describe("RolePermissionBuilder", () => {
   it("shows indeterminate state for preloaded partial permissions", async () => {
     const user = userEvent.setup();
@@ -74,7 +80,7 @@ describe("RolePermissionBuilder", () => {
     const createCheckbox = screen.getByLabelText("Create");
     expect(createCheckbox).toBeDisabled();
 
-    await user.hover(createCheckbox);
+    await user.hover(screen.getByText("Create"));
 
     expect(
       await screen.findByText(

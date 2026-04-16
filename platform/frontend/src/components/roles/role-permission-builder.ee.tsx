@@ -368,7 +368,8 @@ export function RolePermissionBuilder({
                           </div>
                           {selectedActions.length > 0 && (
                             <span className="text-xs text-muted-foreground">
-                              {selectedActions.length}/{allActions.length}
+                              {selectedActions.length}/
+                              {availableActions.length}
                             </span>
                           )}
                         </div>

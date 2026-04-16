@@ -1411,8 +1411,6 @@ export function ChatPageContent({
   // If user lacks permission to read agents, show access denied
   // Must check before loading state since disabled queries stay in pending state
   if (!conversationId && canReadAgent === false) {
-    const missingPermissions: string[] = [];
-    if (canReadAgent === false) missingPermissions.push("agent:read");
     return (
       <Empty className="h-full">
         <EmptyHeader>
@@ -1426,16 +1424,9 @@ export function ChatPageContent({
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
-          <div className="flex flex-col items-center gap-1">
-            {missingPermissions.map((p) => (
-              <code
-                key={p}
-                className="rounded bg-muted px-2 py-1 text-sm font-mono"
-              >
-                {p}
-              </code>
-            ))}
-          </div>
+          <code className="rounded bg-muted px-2 py-1 text-sm font-mono">
+            agent:read
+          </code>
         </EmptyContent>
       </Empty>
     );

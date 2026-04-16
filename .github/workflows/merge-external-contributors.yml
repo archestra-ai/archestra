@@ -76,4 +76,4 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: gh pr merge "$PR_NUMBER" --squash --delete-branch --admin
+        run: gh pr merge "$PR_NUMBER" --squash --admin

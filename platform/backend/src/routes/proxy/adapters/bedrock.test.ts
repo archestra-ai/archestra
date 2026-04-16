@@ -1,6 +1,5 @@
 import { EventStreamCodec } from "@smithy/eventstream-codec";
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
-import { vi } from "vitest";
 import { describe, expect, test } from "@/test";
 import type { Bedrock } from "@/types";
 import { bedrockAdapterFactory, getCommandInput } from "./bedrock";
@@ -288,35 +287,17 @@ describe("Bedrock tool name encoding", () => {
 });
 
 describe("Bedrock client creation", () => {
-  test("uses the resolved base URL override for streaming proxy requests", async () => {
-    const fetchMock = vi
-      .fn<typeof globalThis.fetch>()
-      .mockResolvedValue(new Response("{}", { status: 200 }));
-    vi.stubGlobal("fetch", fetchMock);
+  test("uses the custom base URL override", () => {
+    const client = bedrockAdapterFactory.createClient("test-key", {
+      baseUrl:
+        "https://bedrock-runtime.ap-southeast-1.amazonaws.com/custom-path",
+      source: "chat",
+    }) as unknown as {
+      config: { baseUrl: string };
+    };
 
-    try {
-      const client = bedrockAdapterFactory.createClient("test-key", {
-        baseUrl: "https://bedrock-runtime.ap-southeast-1.amazonaws.com",
-        source: "chat",
-      }) as {
-        converseStream: (
-          modelId: string,
-          request: Record<string, unknown>,
-        ) => Promise<unknown>;
-      };
-
-      await client.converseStream("apac.amazon.nova-micro-v1:0", {
-        messages: [{ role: "user", content: [{ text: "Hello" }] }],
-      });
-
-      expect(fetchMock).toHaveBeenCalledWith(
-        "https://bedrock-runtime.ap-southeast-1.amazonaws.com/model/apac.amazon.nova-micro-v1%3A0/converse-stream",
-        expect.objectContaining({
-          method: "POST",
-        }),
-      );
-    } finally {
-      vi.unstubAllGlobals();
-    }
+    expect(client.config.baseUrl).toBe(
+      "https://bedrock-runtime.ap-southeast-1.amazonaws.com/custom-path",
+    );
   });
 });

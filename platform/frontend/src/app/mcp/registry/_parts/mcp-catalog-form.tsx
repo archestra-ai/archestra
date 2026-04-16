@@ -73,6 +73,7 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
 import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl, getVisibleDocsUrl } from "@/lib/docs/docs";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { useK8sImagePullSecrets } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
   MCP_CONFIG_AUTOCOMPLETE,
@@ -150,6 +151,7 @@ export function McpCatalogForm({
 
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
   const isEnterpriseCoreEnabled = useEnterpriseFeature("core");
+  const appName = useAppName();
   const mcpAuthDocsUrl = getFrontendDocsUrl(
     DocsPage.McpAuthentication,
     "upstream-mcp-server-authentication",
@@ -1052,7 +1054,7 @@ export function McpCatalogForm({
                   Multitenant Authorization
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  Choose how Archestra authenticates each caller to the upstream
+                  Choose how {appName} authenticates each caller to the upstream
                   MCP server.
                   {mcpAuthDocsUrl ? (
                     <>
@@ -1478,54 +1480,14 @@ export function McpCatalogForm({
                           isSelected={authMethod === "enterprise_managed"}
                           configContent={
                             <div className="space-y-4 pl-6 border-l-2">
-                              <FormField
+                              <EnterpriseIdentityProviderField
                                 control={form.control}
-                                name="enterpriseManagedConfig.identityProviderId"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>
-                                      Identity Provider{" "}
-                                      <span className="text-destructive">
-                                        *
-                                      </span>
-                                    </FormLabel>
-                                    <FormDescription>
-                                      This must match the MCP Gateway&apos;s
-                                      enterprise IdP when the tool is assigned
-                                      with resolve-at-call-time or
-                                      enterprise-managed credentials.
-                                    </FormDescription>
-                                    <Select
-                                      value={field.value ?? ""}
-                                      onValueChange={field.onChange}
-                                    >
-                                      <FormControl>
-                                        <SelectTrigger>
-                                          <SelectValue placeholder="Select an OIDC identity provider" />
-                                        </SelectTrigger>
-                                      </FormControl>
-                                      <SelectContent>
-                                        {oidcIdentityProviders.map(
-                                          (provider) => (
-                                            <SelectItem
-                                              key={provider.id}
-                                              value={provider.id}
-                                            >
-                                              {provider.providerId} (
-                                              {provider.issuer})
-                                            </SelectItem>
-                                          ),
-                                        )}
-                                      </SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
+                                identityProviders={oidcIdentityProviders}
                               />
 
                               <div className="bg-muted p-4 rounded-lg">
                                 <p className="text-sm text-muted-foreground">
-                                  Archestra will request a downstream credential
+                                  {appName} will request a downstream credential
                                   for this MCP server from the signed-in
                                   user&apos;s identity provider at tool-call
                                   time. Installations inherit these defaults
@@ -1571,55 +1533,16 @@ export function McpCatalogForm({
                           isSelected={authMethod === "idp_jwt"}
                           configContent={
                             <div className="space-y-4 pl-6 border-l-2">
-                              <FormField
+                              <EnterpriseIdentityProviderField
                                 control={form.control}
-                                name="enterpriseManagedConfig.identityProviderId"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>
-                                      Identity Provider{" "}
-                                      <span className="text-destructive">
-                                        *
-                                      </span>
-                                    </FormLabel>
-                                    <FormDescription>
-                                      This must match the MCP Gateway&apos;s
-                                      enterprise IdP when the tool is assigned
-                                      with resolve-at-call-time or
-                                      enterprise-managed credentials.
-                                    </FormDescription>
-                                    <Select
-                                      value={field.value ?? ""}
-                                      onValueChange={field.onChange}
-                                    >
-                                      <FormControl>
-                                        <SelectTrigger>
-                                          <SelectValue placeholder="Select an OIDC identity provider" />
-                                        </SelectTrigger>
-                                      </FormControl>
-                                      <SelectContent>
-                                        {oidcIdentityProviders.map(
-                                          (provider) => (
-                                            <SelectItem
-                                              key={provider.id}
-                                              value={provider.id}
-                                            >
-                                              {provider.providerId} (
-                                              {provider.issuer})
-                                            </SelectItem>
-                                          ),
-                                        )}
-                                      </SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
+                                identityProviders={oidcIdentityProviders}
                               />
 
                               <div className="bg-muted p-4 rounded-lg">
                                 <p className="text-sm text-muted-foreground">
-                                  Archestra will pass through the caller&apos;s
-                                  IdP JWT to the upstream MCP server as an{" "}
+                                  {appName} will pass through the caller&apos;s
+                                  IdP JWT to the upstream MCP server. In the
+                                  current configuration this is sent as an{" "}
                                   <code>Authorization: Bearer</code> header. Use
                                   this when the upstream server validates the
                                   same JWT against the IdP&apos;s JWKS endpoint
@@ -1731,6 +1654,49 @@ export function McpCatalogForm({
           : footer}
       </form>
     </Form>
+  );
+}
+
+function EnterpriseIdentityProviderField(params: {
+  control: ReturnType<typeof useForm<McpCatalogFormValues>>["control"];
+  identityProviders: Array<{
+    id: string;
+    providerId: string;
+    issuer: string;
+  }>;
+}) {
+  return (
+    <FormField
+      control={params.control}
+      name="enterpriseManagedConfig.identityProviderId"
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>
+            Identity Provider <span className="text-destructive">*</span>
+          </FormLabel>
+          <FormDescription>
+            This must match the MCP Gateway&apos;s enterprise IdP when the tool
+            is assigned with resolve-at-call-time or enterprise-managed
+            credentials.
+          </FormDescription>
+          <Select value={field.value ?? ""} onValueChange={field.onChange}>
+            <FormControl>
+              <SelectTrigger>
+                <SelectValue placeholder="Select an OIDC identity provider" />
+              </SelectTrigger>
+            </FormControl>
+            <SelectContent>
+              {params.identityProviders.map((provider) => (
+                <SelectItem key={provider.id} value={provider.id}>
+                  {provider.providerId} ({provider.issuer})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
   );
 }
 

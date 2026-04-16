@@ -50,6 +50,10 @@ vi.mock("@/lib/docs/docs", () => ({
   getFrontendDocsUrl: vi.fn(() => "https://docs.example.com/mcp-auth"),
 }));
 
+vi.mock("@/lib/hooks/use-app-name", () => ({
+  useAppName: vi.fn(() => "Archestra"),
+}));
+
 vi.mock("@/components/agent-icon-picker", () => ({
   AgentIconPicker: () => <div data-testid="agent-icon-picker" />,
 }));
@@ -132,6 +136,72 @@ describe("McpCatalogForm enterprise gating", () => {
         name: "Identity Provider JWT / JWKS",
       }),
     ).toBeDisabled();
+  });
+
+  it("resets an existing enterprise auth selection to none when OIDC providers become unavailable", () => {
+    vi.mocked(useEnterpriseFeature).mockReturnValue(true);
+    useIdentityProvidersMock.mockReturnValue({
+      data: [
+        {
+          id: "idp-1",
+          providerId: "okta",
+          issuer: "https://idp.example.com",
+          oidcConfig: { clientId: "client-id" },
+        },
+      ] as never,
+    });
+
+    const initialValues = {
+      id: "catalog-1",
+      name: "Remote MCP",
+      description: "",
+      icon: null,
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com",
+      oauthConfig: null,
+      userConfig: {},
+      enterpriseManagedConfig: {
+        identityProviderId: "idp-1",
+        assertionMode: "exchange",
+        requestedCredentialType: "bearer_token",
+        tokenInjectionMode: "authorization_bearer",
+      },
+      localConfig: null,
+      deploymentSpecYaml: null,
+      scope: "personal",
+      teams: [],
+      labels: [],
+    } as never;
+
+    const { rerender } = render(
+      <McpCatalogForm
+        mode="edit"
+        onSubmit={vi.fn()}
+        initialValues={initialValues}
+      />,
+    );
+
+    expect(
+      screen.getByRole("radio", {
+        name: "Identity Assertion JWT Authorization Grant (ID-JAG)",
+      }),
+    ).toBeChecked();
+
+    useIdentityProvidersMock.mockReturnValue({ data: [] });
+
+    rerender(
+      <McpCatalogForm
+        mode="edit"
+        onSubmit={vi.fn()}
+        initialValues={initialValues}
+      />,
+    );
+
+    expect(
+      screen.getByRole("radio", {
+        name: /None \(e\.g\. static API key via environment variables\)/,
+      }),
+    ).toBeChecked();
   });
 
   it("disables browser autofill for MCP config forms and secret fields", () => {

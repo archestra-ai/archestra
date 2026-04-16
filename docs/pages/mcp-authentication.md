@@ -302,15 +302,39 @@ This is why a single gateway can front multiple upstream systems. Gateway authen
 
 ## Custom Header Passthrough
 
+Archestra supports custom header forwarding in two different places:
+
+- **MCP Gateways** can forward selected client request headers through the gateway
+- **Upstream MCP Servers** can receive additional static headers configured on the server installation or catalog item
+
+These solve different problems. Gateway passthrough preserves request-specific context from the MCP client. Upstream MCP server headers attach server-specific values that Archestra should send on every downstream request.
+
+### MCP Gateways
+
 MCP Gateways can pass through client request headers to downstream MCP servers. This is useful for passing correlation IDs, tenant identifiers, or other application-specific headers through the gateway.
 
 Configure the allowlist in the MCP Gateway's **Advanced** section under **Custom Header Passthrough**. Only headers whose names appear in the allowlist are forwarded; all others are dropped. Header names are case-insensitive and stored in lowercase.
 
-Hop-by-hop headers (`Connection`, `Transfer-Encoding`, `Upgrade`, etc.) and protocol-level headers (`Host`, `Content-Length`) cannot be added to the allowlist. Application-level headers like `Authorization` and `Cookie` are allowed — adding them to the allowlist is an explicit opt-in.
+Hop-by-hop headers (`Connection`, `Transfer-Encoding`, `Upgrade`, etc.) and protocol-level headers (`Host`, `Content-Length`) cannot be added to the allowlist. Application-level headers like `Authorization` and `Cookie` are allowed, but forwarding them is an explicit opt-in.
 
-Passthrough headers do not override credentials already set by Archestra's upstream credential resolution. If a header name conflicts with an existing credential header (e.g., `Authorization`), the credential takes precedence.
+Gateway passthrough headers do not override credentials already set by Archestra's upstream credential resolution. If a header name conflicts with an existing credential header such as `Authorization`, the credential takes precedence.
 
-Passthrough headers only apply to HTTP-based transports (streamable-http and remote servers). Stdio-based servers do not support HTTP headers.
+Gateway passthrough only applies to HTTP-based transports (streamable-http and remote servers). Stdio-based servers do not support HTTP headers.
+
+### Upstream MCP Servers
+
+Archestra can also send arbitrary additional headers to upstream MCP servers themselves. This is useful when an upstream server expects companion headers such as tenant IDs, API version headers, feature flags, or other non-auth request metadata on every call.
+
+These headers are configured on the MCP server installation or catalog item as **Additional Headers**. Each header can either be:
+
+- prompted for during installation
+- stored once as a static catalog value
+
+Upstream MCP server headers are attached by Archestra to downstream requests. Unlike gateway passthrough, they do not depend on the incoming MCP client's request headers.
+
+If an additional header conflicts with a credential header that Archestra manages through upstream credential resolution, the managed credential still takes precedence.
+
+Upstream MCP server headers only apply to HTTP-based downstream transports. Local stdio servers do not receive HTTP headers unless they are using streamable-http transport.
 
 ## Building MCP Servers
 

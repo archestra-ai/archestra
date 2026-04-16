@@ -806,6 +806,19 @@ describe("mcp server inspect route", () => {
     expect(storedSecret?.secret).toMatchObject({
       header_x_api_key: "header-value",
     });
+
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const [serverRow] = await db
+        .select()
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.id, mcpServer.id));
+
+      if (serverRow?.localInstallationStatus !== "pending") {
+        break;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
   });
 
   test("local reinstall ignores unknown keys and installer overrides for catalog static headers", async ({
@@ -883,6 +896,19 @@ describe("mcp server inspect route", () => {
       tenant_id: "tenant-42",
     });
     expect(storedSecret?.secret).not.toHaveProperty("unknown_key");
+
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const [serverRow] = await db
+        .select()
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.id, mcpServer.id));
+
+      if (serverRow?.localInstallationStatus !== "pending") {
+        break;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
   });
 
   test("automatically retries protected remote MCP server installation with an exchanged enterprise-managed credential", async ({

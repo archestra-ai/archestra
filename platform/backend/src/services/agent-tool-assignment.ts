@@ -388,11 +388,7 @@ export async function isMcpServerAssignableToTarget(params: {
     return false;
   }
 
-  if (target.scope === "personal") {
-    return target.authorId === mcpServer.ownerId;
-  }
-
-  return false;
+  return target.authorId === mcpServer.ownerId;
 }
 
 function getAssignmentValidationMessage(

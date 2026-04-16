@@ -79,6 +79,7 @@ import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpInstallOrchestrator } from "@/lib/mcp/mcp-install-orchestrator.hook";
 import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
+import { AssignedCredentialUnavailableTool } from "./assigned-credential-unavailable-tool";
 import { AuthRequiredTool } from "./auth-required-tool";
 import {
   extractFileAttachments,
@@ -2097,6 +2098,12 @@ function renderToolAuthPart(params: {
             : undefined
         }
       />
+    );
+  }
+
+  if (authState?.kind === "assigned-credential-unavailable") {
+    return (
+      <AssignedCredentialUnavailableTool catalogName={authState.catalogName} />
     );
   }
 

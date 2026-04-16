@@ -5,6 +5,7 @@ import { parseArchestraToolRefusal } from "./tool-refusal";
 export const McpToolErrorTypeSchema = z.enum([
   "auth_required",
   "auth_expired",
+  "assigned_credential_unavailable",
   "policy_denied",
   "generic",
 ]);
@@ -37,6 +38,15 @@ export const AuthExpiredMcpToolErrorSchema = z
   })
   .strict();
 
+export const AssignedCredentialUnavailableMcpToolErrorSchema = z
+  .object({
+    type: z.literal("assigned_credential_unavailable"),
+    message: z.string(),
+    catalogId: z.string(),
+    catalogName: z.string(),
+  })
+  .strict();
+
 export const PolicyDeniedReasonTypeSchema = z.enum([
   "sensitive_context",
   "generic",
@@ -57,6 +67,7 @@ export const McpToolErrorSchema = z.discriminatedUnion("type", [
   GenericMcpToolErrorSchema,
   AuthRequiredMcpToolErrorSchema,
   AuthExpiredMcpToolErrorSchema,
+  AssignedCredentialUnavailableMcpToolErrorSchema,
   PolicyDeniedMcpToolErrorSchema,
 ]);
 
@@ -66,6 +77,9 @@ export type AuthRequiredMcpToolError = z.infer<
 >;
 export type AuthExpiredMcpToolError = z.infer<
   typeof AuthExpiredMcpToolErrorSchema
+>;
+export type AssignedCredentialUnavailableMcpToolError = z.infer<
+  typeof AssignedCredentialUnavailableMcpToolErrorSchema
 >;
 export type PolicyDeniedMcpToolError = z.infer<
   typeof PolicyDeniedMcpToolErrorSchema

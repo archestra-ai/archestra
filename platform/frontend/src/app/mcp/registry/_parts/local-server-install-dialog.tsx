@@ -134,11 +134,16 @@ export function LocalServerInstallDialog({
   // Secret env vars can be loaded from vault, non-secret must be entered manually
   // Note: 'mounted' field is added in schema but types may not be regenerated yet
   const secretEnvVars = promptedEnvVars.filter(
-    (env) => env.type === "secret" && env.promptOnInstallation !== false && !(env as { mounted?: boolean }).mounted,
+    (env) =>
+      env.type === "secret" &&
+      env.promptOnInstallation !== false &&
+      !(env as { mounted?: boolean }).mounted,
   );
   const secretFileVars = promptedEnvVars.filter(
     (env) =>
-      env.type === "secret" && env.promptOnInstallation !== false && (env as { mounted?: boolean }).mounted === true,
+      env.type === "secret" &&
+      env.promptOnInstallation !== false &&
+      (env as { mounted?: boolean }).mounted === true,
   );
   const nonSecretEnvVars = promptedEnvVars.filter(
     (env) => env.type !== "secret",

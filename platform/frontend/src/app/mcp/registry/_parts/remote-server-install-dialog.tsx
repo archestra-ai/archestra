@@ -41,7 +41,6 @@ type UserConfigType = Record<
     default?: string | number | boolean | Array<string>;
     multiple?: boolean;
     sensitive?: boolean;
-    promptOnInstallation?: boolean;
     min?: number;
     max?: number;
   }
@@ -105,7 +104,7 @@ export function RemoteServerInstallDialog({
   const userConfig =
     (catalogItem?.userConfig as UserConfigType | null | undefined) || {};
   const hasPromptSensitiveFields = Object.values(userConfig).some(
-    (config) => config.sensitive && config.promptOnInstallation,
+    (config) => config.sensitive && config.promptOnInstallation !== false,
   );
 
   // Helper to update vault secret for a specific field
@@ -210,9 +209,6 @@ export function RemoteServerInstallDialog({
     return null;
   }
 
-  const hasConfig = Object.keys(userConfig).length > 0;
-  const userConfig =
-    (catalogItem.userConfig as UserConfigType | null | undefined) || {};
   const promptableUserConfig = Object.fromEntries(
     Object.entries(userConfig).filter(([_fieldName, fieldConfig]) => {
       return fieldConfig.promptOnInstallation !== false;

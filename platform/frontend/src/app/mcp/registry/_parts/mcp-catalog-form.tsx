@@ -149,7 +149,10 @@ export function McpCatalogForm({
 
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
   const isEnterpriseCoreEnabled = useEnterpriseFeature("core");
-  const mcpAuthDocsUrl = getFrontendDocsUrl(DocsPage.McpAuthentication);
+  const mcpAuthDocsUrl = getFrontendDocsUrl(
+    DocsPage.McpAuthentication,
+    "upstream-mcp-server-authentication",
+  );
   const { data: canReadIdentityProviders } = useHasPermissions({
     identityProvider: ["read"],
   });

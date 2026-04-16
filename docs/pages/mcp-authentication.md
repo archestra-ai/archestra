@@ -336,15 +336,17 @@ If an additional header conflicts with a credential header that Archestra manage
 
 Upstream MCP server headers are supported for remote MCP servers and local MCP servers using streamable-http transport. Local stdio MCP servers do not support downstream HTTP headers.
 
-## Building MCP Servers
+## MCP Server Authentication Patterns
 
-There are three authentication patterns available for MCP servers deployed through Archestra, depending on whether the server needs external credentials and whether those credentials differ per user.
+This section summarizes the authentication patterns Archestra supports for MCP servers. It is about how your server receives credentials, not about the general mechanics of packaging or deploying a server.
 
-| Pattern            | When to use                                      | How it works                                                                 |
-| ------------------ | ------------------------------------------------ | ---------------------------------------------------------------------------- |
-| No auth            | Internal tools with no external API dependencies | Hosted in K8s, gateway connects via stdio or streamable-http                 |
-| Static credentials | Shared API key or service account                | User provides credentials at install time, Archestra stores and injects them |
-| OAuth 2.1          | Per-user access to a SaaS API                    | Full OAuth flow at install, automatic token refresh by Archestra             |
+| Pattern                               | When to use                                                    | How it works                                                                                   |
+| ------------------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| No auth                               | Internal tools with no external API dependencies               | Hosted in K8s, gateway connects via stdio or streamable-http                                  |
+| Static credentials                    | Shared API key, PAT, or service account                        | User provides credentials at install time, Archestra stores and injects them                  |
+| OAuth 2.1                             | Per-user access to a SaaS API                                  | Full OAuth flow at install, automatic token refresh by Archestra                              |
+| Upstream Identity Provider JWT / JWKS | The upstream server should validate the caller's enterprise JWT | Archestra forwards the caller's IdP JWT and the upstream server validates it against the JWKS |
+| Upstream ID-JAG                       | Archestra should exchange enterprise identity for a downstream token | Archestra resolves the caller's enterprise assertion and exchanges it for the downstream credential |
 
 ### No Auth (Hosted)
 

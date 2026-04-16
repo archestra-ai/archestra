@@ -17,3 +17,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @AbhishekMauryaGEEK
 - @Pranjal6955
 - @prabhat-kumar96
+- @srujanpalled

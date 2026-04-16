@@ -1642,31 +1642,27 @@ function EnterpriseAuthRadioOption(params: {
   disabledReason: string | null;
 }) {
   const content = (
-    <div className="flex items-center space-x-2">
-      <RadioGroupItem
-        value={params.value}
-        id={params.id}
-        disabled={params.isDisabled}
-      />
-      <FormLabel
-        htmlFor={params.id}
-        className={`font-normal ${params.isDisabled ? "cursor-not-allowed text-muted-foreground" : "cursor-pointer"}`}
-      >
-        {params.label}
-      </FormLabel>
+    <div className="space-y-1">
+      <div className="grid grid-cols-[1rem_1fr] items-center gap-x-2">
+        <RadioGroupItem
+          value={params.value}
+          id={params.id}
+          disabled={params.isDisabled}
+        />
+        <FormLabel
+          htmlFor={params.id}
+          className={`font-normal ${params.isDisabled ? "cursor-not-allowed text-muted-foreground" : "cursor-pointer"}`}
+        >
+          {params.label}
+        </FormLabel>
+      </div>
+      {params.isDisabled && params.disabledReason ? (
+        <p className="col-start-2 text-xs text-muted-foreground">
+          {params.disabledReason}
+        </p>
+      ) : null}
     </div>
   );
 
-  if (!params.isDisabled || !params.disabledReason) {
-    return content;
-  }
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <div>{content}</div>
-      </TooltipTrigger>
-      <TooltipContent>{params.disabledReason}</TooltipContent>
-    </Tooltip>
-  );
+  return content;
 }

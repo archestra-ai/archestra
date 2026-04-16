@@ -238,9 +238,9 @@ With upstream **ID-JAG**, Archestra resolves the caller's enterprise assertion a
 
 Use this mode when the upstream system or credential broker expects Archestra to exchange the caller's enterprise identity for a different downstream token.
 
-This is different from gateway ID-JAG:
+This is different from using ID-JAG to authenticate to the MCP Gateway:
 
-- **Gateway ID-JAG** exchanges an enterprise assertion for an Archestra-issued MCP access token
+- **ID-JAG at the MCP Gateway** exchanges an enterprise assertion for an Archestra-issued MCP access token
 - **Upstream ID-JAG** obtains the credential used for the downstream MCP tool call itself
 
 ### Upstream Identity Provider JWT / JWKS
@@ -249,9 +249,9 @@ With upstream **Identity Provider JWT / JWKS**, Archestra resolves the caller's 
 
 Use this mode when the upstream MCP server already understands the enterprise IdP's JWTs and should make its own authorization decisions from those claims.
 
-This is different from gateway JWKS:
+This is different from using JWKS to authenticate to the MCP Gateway:
 
-- **Gateway JWKS** authenticates the caller to Archestra
+- **JWKS at the MCP Gateway** authenticates the caller to Archestra
 - **Upstream Identity Provider JWT / JWKS** provides the credential used for the downstream MCP tool call itself
 
 ### Missing Credentials

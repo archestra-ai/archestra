@@ -176,7 +176,7 @@ How credentials are delivered to the upstream server depends on the server type.
 
 Auth credentials are stored in the secrets backend, which uses the database by default. For enterprise deployments, you can configure an [external secrets manager](/docs/platform-secrets-management).
 
-### Per-User Credentials
+### Dynamic Credential Resolution
 
 By default, each MCP server installation has a single credential that is shared by all callers.
 
@@ -213,13 +213,9 @@ When you pin a tool to a specific installed MCP server connection instead of usi
 
 This means a team-shared connection is governed by the team it is shared with, not by the individual who originally installed it. Personal connections still follow the connection owner's access boundary.
 
-### Enterprise-Managed Upstream Authentication
+Archestra also supports two enterprise-managed dynamic credential resolution modes. Instead of storing downstream credentials inside Archestra, Archestra asks the configured identity provider for a credential at tool-call time and injects it into the MCP request.
 
-Enterprise-managed upstream authentication is an upstream credential strategy. Instead of storing downstream credentials inside Archestra, Archestra asks the configured identity provider for a credential at tool-call time and injects it into the MCP request.
-
-In the MCP catalog item's **Multitenant Authorization** section, Archestra exposes two enterprise upstream patterns when **Enterprise Core** is enabled and at least one **OIDC** identity provider is configured.
-
-Configuration is split across three places:
+These modes are configured across three places:
 
 - **Identity Provider**: how Archestra authenticates to the IdP for credential exchange
 - **MCP catalog item**: whether Archestra should exchange a downstream credential or pass through the caller's IdP JWT, plus how the resulting credential should be injected
@@ -227,7 +223,7 @@ Configuration is split across three places:
 
 This model works best for remote MCP servers and local MCP servers using HTTP transport. Local stdio servers do not support per-request enterprise-managed credential injection.
 
-For MCP Gateways, enterprise-managed upstream authentication uses the caller identity that was established at the gateway:
+For MCP Gateways, enterprise-managed upstream credential resolution uses the caller identity that was established at the gateway:
 
 - **JWKS**: Archestra can use the incoming external IdP JWT directly
 - **ID-JAG**: Archestra uses the enterprise assertion path associated with the gateway's Identity Provider
@@ -236,7 +232,7 @@ For MCP Gateways, enterprise-managed upstream authentication uses the caller ide
 
 For external MCP clients such as Cursor, **ID-JAG** and **JWKS** are usually the clearest options when you want per-user access to upstream systems like GitHub or Jira.
 
-#### Upstream ID-JAG
+### Upstream ID-JAG
 
 With upstream **ID-JAG**, Archestra resolves the caller's enterprise assertion and exchanges it for the downstream credential the MCP server needs.
 
@@ -247,7 +243,7 @@ This is different from gateway ID-JAG:
 - **Gateway ID-JAG** exchanges an enterprise assertion for an Archestra-issued MCP access token
 - **Upstream ID-JAG** obtains the credential used for the downstream MCP tool call itself
 
-#### Upstream Identity Provider JWT / JWKS
+### Upstream Identity Provider JWT / JWKS
 
 With upstream **Identity Provider JWT / JWKS**, Archestra resolves the caller's enterprise assertion and forwards that JWT to the upstream MCP server as `Authorization: Bearer <jwt>`, so the upstream server can validate it against the IdP's JWKS directly.
 

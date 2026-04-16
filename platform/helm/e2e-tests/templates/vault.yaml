@@ -18,6 +18,10 @@ apiVersion: v1
 kind: Service
 metadata:
   name: vault
+  labels:
+    app: vault
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/name: vault
 spec:
   type: {{ .Values.vault.service.type }}
   selector:
@@ -37,6 +41,8 @@ metadata:
   name: vault
   labels:
     app: vault
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/name: vault
 spec:
   {{- if .Values.vault.k8sAuth.enabled }}
   serviceAccountName: {{ .Values.vault.k8sAuth.serviceAccountName }}
@@ -52,6 +58,8 @@ spec:
           value: "0.0.0.0:8200"
         - name: VAULT_ADDR
           value: "http://127.0.0.1:8200"
+        - name: SKIP_SETCAP
+          value: "true"
       ports:
         - containerPort: 8200
           name: vault

@@ -815,26 +815,26 @@ describe("McpServerRuntimeManager", () => {
       cleanup();
     });
 
-    test("non-prompted catalog secret does not overwrite user-provided secret with same key", async () => {
+    test("non-prompted catalog secret overwrites stale per-server secret with same key", async () => {
       const { manager, mcpServer, cleanup } = await setupStartServerTest({
         vaultSecret: {
-          SHARED_KEY: "user-vault-value",
+          SHARED_KEY: "stale-per-server-value",
         },
         catalogEnvironment: [
           {
             key: "SHARED_KEY",
             type: "secret",
             promptOnInstallation: false,
-            value: "catalog-value",
+            value: "updated-catalog-value",
           },
         ],
       });
 
       await manager.startServer(mcpServer);
 
-      // User-provided value from vault should win over catalog value
+      // Catalog is the source of truth for non-prompted secrets
       expect(mockCreateK8sSecret).toHaveBeenCalledWith({
-        SHARED_KEY: "user-vault-value",
+        SHARED_KEY: "updated-catalog-value",
       });
 
       cleanup();

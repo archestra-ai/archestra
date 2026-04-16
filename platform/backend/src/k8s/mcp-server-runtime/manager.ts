@@ -248,9 +248,9 @@ export class McpServerRuntimeManager {
         }
       }
 
-      // Merge non-prompted secrets from catalog
-      // These come from catalog.localConfigSecretId via expandSecrets()
-      // Critical for restarts/reinstalls after catalog was updated with new secrets
+      // Non-prompted secrets are managed at the catalog level, not per-server.
+      // When an admin edits a secret value in the catalog form, that new value
+      // must propagate to all installed servers on restart.
       if (catalogItem?.localConfig?.environment) {
         for (const envDef of catalogItem.localConfig.environment) {
           if (
@@ -258,24 +258,15 @@ export class McpServerRuntimeManager {
             !envDef.promptOnInstallation &&
             envDef.value
           ) {
-            // Add non-prompted secret from catalog if not already in secretData
             if (!secretData) {
               secretData = {};
             }
-            if (!(envDef.key in secretData)) {
-              secretData[envDef.key] = envDef.value;
-              logger.info(
-                { mcpServerId: id, key: envDef.key },
-                "Adding non-prompted secret from catalog to secretData",
-              );
-            }
-            // Also add to effectiveEnvironmentValues for createContainerEnvFromConfig()
+            secretData[envDef.key] = envDef.value;
+
             if (!effectiveEnvironmentValues) {
               effectiveEnvironmentValues = {};
             }
-            if (!(envDef.key in effectiveEnvironmentValues)) {
-              effectiveEnvironmentValues[envDef.key] = envDef.value;
-            }
+            effectiveEnvironmentValues[envDef.key] = envDef.value;
           }
         }
       }

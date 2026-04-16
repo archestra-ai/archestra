@@ -443,12 +443,19 @@ export function transformExternalCatalogToFormValues(
   );
   const authHeaderConfig =
     staticHeaderFields.access_token ?? staticHeaderFields.raw_access_token;
+  const implicitAccessTokenConfig = server.user_config?.access_token;
+  const implicitRawAccessTokenConfig = server.user_config?.raw_access_token;
 
   // Detect bearer/raw_token auth from header-mapped user_config entries.
   if (authHeaderConfig?.fieldName === "raw_access_token") {
     authMethod = "bearer";
     includeBearerPrefix = false;
   } else if (authHeaderConfig?.fieldName === "access_token") {
+    authMethod = "bearer";
+  } else if (implicitRawAccessTokenConfig) {
+    authMethod = "bearer";
+    includeBearerPrefix = false;
+  } else if (implicitAccessTokenConfig) {
     authMethod = "bearer";
   }
 

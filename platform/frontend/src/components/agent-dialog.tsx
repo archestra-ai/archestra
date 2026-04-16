@@ -643,10 +643,7 @@ export function AgentDialog({
     identityProviderId === undefined
       ? inferredIdentityProviderId
       : identityProviderId;
-  const mcpAuthDocsUrl = getFrontendDocsUrl(
-    DocsPage.McpAuthentication,
-    "enterprise-managed-authorization",
-  );
+  const mcpAuthDocsUrl = getFrontendDocsUrl(DocsPage.McpAuthentication);
   const showPrimarySettingsCard =
     !isBuiltIn ||
     shouldShowDescriptionField({ agentType, isBuiltIn }) ||

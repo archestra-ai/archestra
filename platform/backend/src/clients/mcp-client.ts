@@ -1380,7 +1380,7 @@ class McpClient {
           localHeaders[enterpriseTransportCredential.headerName] =
             enterpriseTransportCredential.headerValue;
         } else if (
-          !hasStaticAuthorizationCredential(catalogItem, secrets) &&
+          !hasStaticAuthorizationCredential(secrets) &&
           tokenAuth?.isExternalIdp &&
           tokenAuth.rawToken
         ) {
@@ -1410,7 +1410,7 @@ class McpClient {
           headers[enterpriseTransportCredential.headerName] =
             enterpriseTransportCredential.headerValue;
         } else if (
-          !hasStaticAuthorizationCredential(catalogItem, secrets) &&
+          !hasStaticAuthorizationCredential(secrets) &&
           tokenAuth?.isExternalIdp &&
           tokenAuth.rawToken
         ) {
@@ -2798,7 +2798,6 @@ function buildStaticCredentialHeaders(params: {
 }
 
 function hasStaticAuthorizationCredential(
-  _catalogItem: InternalMcpCatalog,
   secrets: Record<string, unknown>,
 ): boolean {
   if (

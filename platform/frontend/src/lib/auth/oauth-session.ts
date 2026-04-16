@@ -101,13 +101,21 @@ export function setOAuthUserConfigValues(params: {
   userConfig: Record<string, OAuthUserConfigField> | null | undefined;
   isByosVault?: boolean;
 }) {
-  const valuesToPersist = params.isByosVault
-    ? params.values
-    : Object.fromEntries(
-        Object.entries(params.values).filter(([fieldName]) => {
-          return params.userConfig?.[fieldName]?.sensitive !== true;
-        }),
-      );
+  if (!params.userConfig) {
+    sessionStorage.removeItem(OAUTH_USER_CONFIG_VALUES);
+    return;
+  }
+
+  const valuesToPersist = Object.fromEntries(
+    Object.entries(params.values).filter(([fieldName]) => {
+      const fieldConfig = params.userConfig?.[fieldName];
+      if (!fieldConfig) {
+        return false;
+      }
+
+      return params.isByosVault ? true : fieldConfig.sensitive !== true;
+    }),
+  );
 
   if (Object.keys(valuesToPersist).length === 0) {
     sessionStorage.removeItem(OAUTH_USER_CONFIG_VALUES);

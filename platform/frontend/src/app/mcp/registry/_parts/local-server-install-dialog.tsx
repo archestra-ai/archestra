@@ -42,23 +42,7 @@ const InlineVaultSecretSelector = lazy(
 
 type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
-
-type UserConfigType = Record<
-  string,
-  {
-    type: "string" | "number" | "boolean" | "directory" | "file";
-    title: string;
-    description: string;
-    promptOnInstallation?: boolean;
-    required?: boolean;
-    default?: string | number | boolean | Array<string>;
-    multiple?: boolean;
-    sensitive?: boolean;
-    min?: number;
-    max?: number;
-    headerName?: string;
-  }
->;
+type UserConfigType = NonNullable<CatalogItem["userConfig"]>;
 
 // Shared markdown components for consistent styling
 const markdownComponents: Components = {

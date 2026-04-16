@@ -98,4 +98,16 @@ describe("oauth-session user config storage", () => {
 
     expect(getOAuthUserConfigValues()).toBeNull();
   });
+
+  it("fails closed when user config metadata is missing", () => {
+    setOAuthUserConfigValues({
+      values: {
+        tenant_id: "tenant-123",
+      },
+      userConfig: undefined,
+      isByosVault: false,
+    });
+
+    expect(getOAuthUserConfigValues()).toBeNull();
+  });
 });

@@ -306,6 +306,50 @@ describe("McpClient", () => {
 
         getSecretSpy.mockRestore();
       });
+
+      test("reloads cached secrets after server credentials are re-authenticated", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__rotated_secret",
+          description: "Rotated secret tool",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId,
+          credentialResolutionMode: "static",
+        });
+
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "ok" }],
+          isError: false,
+        });
+
+        const getSecretSpy = vi.spyOn(secretManager(), "getSecret");
+        const toolCall = {
+          id: "call_rotated_secret",
+          name: tool.name,
+          arguments: {},
+        };
+
+        const firstResult = await mcpClient.executeToolCall(toolCall, agentId);
+        expect(firstResult.isError).toBe(false);
+        expect(getSecretSpy).toHaveBeenCalledTimes(1);
+
+        const rotatedSecret = await secretManager().createSecret(
+          { access_token: "fresh-github-token-456" },
+          "rotatedmcptoken",
+        );
+        await McpServerModel.update(mcpServerId, {
+          secretId: rotatedSecret.id,
+        });
+
+        const secondResult = await mcpClient.executeToolCall(toolCall, agentId);
+        expect(secondResult.isError).toBe(false);
+        expect(getSecretSpy).toHaveBeenCalledTimes(2);
+
+        getSecretSpy.mockRestore();
+      });
     });
 
     test("expires idle active connections and recreates them on the next tool call", async () => {
@@ -351,6 +395,88 @@ describe("McpClient", () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+
+    test("recreates cached client after server credentials change", async () => {
+      const tool = await ToolModel.createToolIfNotExists({
+        name: "github-mcp-server__reauth_reconnect",
+        description: "Reconnect after reauth",
+        parameters: {},
+        catalogId,
+      });
+
+      await AgentToolModel.create(agentId, tool.id, {
+        mcpServerId,
+        credentialResolutionMode: "static",
+      });
+
+      mockConnect.mockResolvedValue(undefined);
+      mockPing.mockResolvedValue(undefined);
+      mockCallTool.mockResolvedValue({
+        content: [{ type: "text", text: "ok" }],
+        isError: false,
+      });
+
+      const toolCall = {
+        id: "call_reauth_reconnect",
+        name: tool.name,
+        arguments: {},
+      };
+
+      const firstResult = await mcpClient.executeToolCall(toolCall, agentId);
+      expect(firstResult.isError).toBe(false);
+      expect(mockConnect).toHaveBeenCalledTimes(1);
+
+      const rotatedSecret = await secretManager().createSecret(
+        { access_token: "fresh-github-token-789" },
+        "reauthreconnecttoken",
+      );
+      await McpServerModel.update(mcpServerId, { secretId: rotatedSecret.id });
+
+      const secondResult = await mcpClient.executeToolCall(toolCall, agentId);
+      expect(secondResult.isError).toBe(false);
+      expect(mockClose).toHaveBeenCalledTimes(1);
+      expect(mockConnect).toHaveBeenCalledTimes(2);
+    });
+
+    test("reuses cached client when MCP server row changes without secret rotation", async () => {
+      const tool = await ToolModel.createToolIfNotExists({
+        name: "github-mcp-server__metadata_update_reuse",
+        description: "Reuse after metadata update",
+        parameters: {},
+        catalogId,
+      });
+
+      await AgentToolModel.create(agentId, tool.id, {
+        mcpServerId,
+        credentialResolutionMode: "static",
+      });
+
+      mockConnect.mockResolvedValue(undefined);
+      mockPing.mockResolvedValue(undefined);
+      mockCallTool.mockResolvedValue({
+        content: [{ type: "text", text: "ok" }],
+        isError: false,
+      });
+
+      const toolCall = {
+        id: "call_metadata_update_reuse",
+        name: tool.name,
+        arguments: {},
+      };
+
+      const firstResult = await mcpClient.executeToolCall(toolCall, agentId);
+      expect(firstResult.isError).toBe(false);
+      expect(mockConnect).toHaveBeenCalledTimes(1);
+
+      await McpServerModel.update(mcpServerId, {
+        oauthRefreshError: "refresh_failed",
+      });
+
+      const secondResult = await mcpClient.executeToolCall(toolCall, agentId);
+      expect(secondResult.isError).toBe(false);
+      expect(mockClose).toHaveBeenCalledTimes(0);
+      expect(mockConnect).toHaveBeenCalledTimes(1);
     });
 
     describe("Concurrency limiter", () => {

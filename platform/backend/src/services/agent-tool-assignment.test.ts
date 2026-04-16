@@ -46,8 +46,7 @@ describe("validateCredentialSource", () => {
     expect(result).toEqual({
       code: "validation_error",
       error: {
-        message:
-          "The credential owner must be a member of a team that this resource is assigned to",
+        message: "Personal connections can only be assigned to personal agents",
         type: "validation_error",
       },
     });
@@ -192,8 +191,7 @@ describe("validateCredentialSource", () => {
     expect(result).toEqual({
       code: "validation_error",
       error: {
-        message:
-          "The credential owner must be a member of a team that this resource is assigned to",
+        message: "Personal connections can only be assigned to personal agents",
         type: "validation_error",
       },
     });

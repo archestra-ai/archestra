@@ -12,3 +12,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @Konstantinov-Innokentii
 - @Matvey-Kuk
 - @ildar-third
+- @codeserfer

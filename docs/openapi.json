@@ -90909,6 +90909,9 @@
                             "description": {
                               "type": "string"
                             },
+                            "promptOnInstallation": {
+                              "type": "boolean"
+                            },
                             "required": {
                               "type": "boolean"
                             },
@@ -90942,6 +90945,9 @@
                             },
                             "max": {
                               "type": "number"
+                            },
+                            "headerName": {
+                              "type": "string"
                             }
                           },
                           "required": [
@@ -91759,6 +91765,9 @@
                         "description": {
                           "type": "string"
                         },
+                        "promptOnInstallation": {
+                          "type": "boolean"
+                        },
                         "required": {
                           "type": "boolean"
                         },
@@ -91792,6 +91801,9 @@
                         },
                         "max": {
                           "type": "number"
+                        },
+                        "headerName": {
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -92340,6 +92352,9 @@
                           "description": {
                             "type": "string"
                           },
+                          "promptOnInstallation": {
+                            "type": "boolean"
+                          },
                           "required": {
                             "type": "boolean"
                           },
@@ -92373,6 +92388,9 @@
                           },
                           "max": {
                             "type": "number"
+                          },
+                          "headerName": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -93213,6 +93231,9 @@
                           "description": {
                             "type": "string"
                           },
+                          "promptOnInstallation": {
+                            "type": "boolean"
+                          },
                           "required": {
                             "type": "boolean"
                           },
@@ -93246,6 +93267,9 @@
                           },
                           "max": {
                             "type": "number"
+                          },
+                          "headerName": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -94057,6 +94081,9 @@
                         "description": {
                           "type": "string"
                         },
+                        "promptOnInstallation": {
+                          "type": "boolean"
+                        },
                         "required": {
                           "type": "boolean"
                         },
@@ -94090,6 +94117,9 @@
                         },
                         "max": {
                           "type": "number"
+                        },
+                        "headerName": {
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -94646,6 +94676,9 @@
                           "description": {
                             "type": "string"
                           },
+                          "promptOnInstallation": {
+                            "type": "boolean"
+                          },
                           "required": {
                             "type": "boolean"
                           },
@@ -94679,6 +94712,9 @@
                           },
                           "max": {
                             "type": "number"
+                          },
+                          "headerName": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -120914,6 +120950,12 @@
                       "type": "string"
                     }
                   },
+                  "userConfigValues": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
                   "isByosVault": {
                     "type": "boolean"
                   },
@@ -129213,6 +129255,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     },
@@ -129256,6 +129301,7 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
+                    "slimChatErrorUi",
                     "showTwoFactor",
                     "mcpOauthAccessTokenLifetimeSeconds"
                   ],
@@ -129595,6 +129641,9 @@
                     "type": "string",
                     "maxLength": 500
                   },
+                  "slimChatErrorUi": {
+                    "type": "boolean"
+                  },
                   "chatPlaceholders": {
                     "nullable": true,
                     "maxItems": 20,
@@ -129842,6 +129891,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     },
@@ -129885,6 +129937,7 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
+                    "slimChatErrorUi",
                     "showTwoFactor",
                     "mcpOauthAccessTokenLifetimeSeconds"
                   ],
@@ -130220,6 +130273,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
                     "animateChatPlaceholders": {
                       "type": "boolean"
                     }
@@ -130236,6 +130292,7 @@
                     "footerText",
                     "chatLinks",
                     "chatErrorSupportMessage",
+                    "slimChatErrorUi",
                     "animateChatPlaceholders"
                   ],
                   "additionalProperties": false
@@ -130717,6 +130774,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     },
@@ -130760,6 +130820,7 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
+                    "slimChatErrorUi",
                     "showTwoFactor",
                     "mcpOauthAccessTokenLifetimeSeconds"
                   ],
@@ -131254,6 +131315,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     },
@@ -131297,6 +131361,7 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
+                    "slimChatErrorUi",
                     "showTwoFactor",
                     "mcpOauthAccessTokenLifetimeSeconds"
                   ],
@@ -131809,6 +131874,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     },
@@ -131852,6 +131920,7 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
+                    "slimChatErrorUi",
                     "showTwoFactor",
                     "mcpOauthAccessTokenLifetimeSeconds"
                   ],
@@ -132330,6 +132399,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     },
@@ -132373,6 +132445,7 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
+                    "slimChatErrorUi",
                     "showTwoFactor",
                     "mcpOauthAccessTokenLifetimeSeconds"
                   ],
@@ -132867,6 +132940,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     },
@@ -132910,6 +132986,7 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
+                    "slimChatErrorUi",
                     "showTwoFactor",
                     "mcpOauthAccessTokenLifetimeSeconds"
                   ],
@@ -133371,6 +133448,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     },
@@ -133414,6 +133494,7 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
+                    "slimChatErrorUi",
                     "showTwoFactor",
                     "mcpOauthAccessTokenLifetimeSeconds"
                   ],
@@ -134170,6 +134251,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     },
@@ -134213,6 +134297,7 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
+                    "slimChatErrorUi",
                     "showTwoFactor",
                     "mcpOauthAccessTokenLifetimeSeconds"
                   ],

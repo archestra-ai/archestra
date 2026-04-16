@@ -27,6 +27,7 @@ import {
 } from "@/components/enterprise-managed-credential-fields";
 import { EnvironmentVariablesFormField } from "@/components/environment-variables-form-field";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { InstallConfigFieldsTable } from "@/components/install-config-fields-table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -121,10 +122,12 @@ export function McpCatalogForm({
   const defaultImageDocsUrl = getVisibleDocsUrl(
     `${GITHUB_REPO_URL}/tree/main/platform/mcp_server_docker_image`,
   );
-  // Fetch local config secret if it exists
-  const { data: localConfigSecret } = useGetSecret(
-    initialValues?.localConfigSecretId ?? null,
-  );
+  const localConfigSecretId =
+    initialValues?.serverType === "local"
+      ? initialValues.localConfigSecretId
+      : null;
+  // Fetch local config secrets only for local MCP catalog items.
+  const { data: localConfigSecret } = useGetSecret(localConfigSecretId);
 
   // Get MCP server base image from backend features endpoint
   const mcpServerBaseImage = useFeature("mcpServerBaseImage") ?? "";
@@ -144,6 +147,8 @@ export function McpCatalogForm({
           serverType: "remote",
           serverUrl: "",
           authMethod: "none",
+          authHeaderName: "",
+          additionalHeaders: [],
           enterpriseManagedConfig: null,
           oauthConfig: {
             client_id: "",
@@ -189,6 +194,7 @@ export function McpCatalogForm({
 
   const authMethod = form.watch("authMethod");
   const currentServerType = form.watch("serverType");
+  const currentTransportType = form.watch("localConfig.transportType");
 
   useEffect(() => {
     if (!isEnterpriseCoreEnabled && authMethod === "enterprise_managed") {
@@ -296,6 +302,15 @@ export function McpCatalogForm({
   } = useFieldArray({
     control: form.control,
     name: "localConfig.imagePullSecrets",
+  });
+
+  const {
+    fields: additionalHeaderFields,
+    append: appendAdditionalHeader,
+    remove: removeAdditionalHeader,
+  } = useFieldArray({
+    control: form.control,
+    name: "additionalHeaders",
   });
 
   // Fetch available k8s docker-registry secrets for the "existing" dropdown
@@ -920,9 +935,11 @@ export function McpCatalogForm({
           {(currentServerType === "remote" ||
             currentServerType === "local") && (
             <div className="border rounded-lg p-5 space-y-4">
-              <h3 className="font-semibold text-sm">
-                Multitenant Authorization
-              </h3>
+              <div className="space-y-1">
+                <h3 className="font-semibold text-sm">
+                  Multitenant Authorization
+                </h3>
+              </div>
               <FormField
                 control={form.control}
                 name="authMethod"
@@ -988,7 +1005,8 @@ export function McpCatalogForm({
                               htmlFor="auth-enterprise-managed"
                               className="font-normal cursor-pointer"
                             >
-                              Enterprise-managed credentials
+                              Identity Assertion JWT Authorization Grant
+                              (ID-JAG)
                             </FormLabel>
                           </div>
                         )}
@@ -1000,11 +1018,37 @@ export function McpCatalogForm({
               />
 
               {(authMethod === "bearer" || authMethod === "raw_token") && (
-                <div className="bg-muted p-4 rounded-lg">
-                  <p className="text-sm text-muted-foreground">
-                    Users will be prompted to provide their access token when
-                    installing this server.
-                  </p>
+                <div className="space-y-4">
+                  <div className="bg-muted p-4 rounded-lg">
+                    <p className="text-sm text-muted-foreground">
+                      Users will be prompted to provide their access token when
+                      installing this server.
+                    </p>
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="authHeaderName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Auth Header Name</FormLabel>
+                        <FormDescription className="text-xs">
+                          Defaults to <code>Authorization</code>. Set a custom
+                          header such as <code>x-api-key</code> when the
+                          upstream server expects the token outside the standard
+                          authorization header.
+                        </FormDescription>
+                        <FormControl>
+                          <Input
+                            placeholder="Authorization"
+                            autoComplete={MCP_CONFIG_AUTOCOMPLETE}
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
               )}
 
@@ -1320,6 +1364,60 @@ export function McpCatalogForm({
                     />
                   </div>
                 )}
+            </div>
+          )}
+
+          {(currentServerType === "remote" ||
+            (currentServerType === "local" &&
+              currentTransportType === "streamable-http")) && (
+            <div className="border rounded-lg p-5 space-y-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <h3 className="font-semibold text-sm">Additional Headers</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Prompt users for extra headers to send with every MCP
+                    request. Use this for tenant IDs or other upstream
+                    requirements beyond the primary auth header.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    appendAdditionalHeader({
+                      fieldName: undefined,
+                      headerName: "",
+                      promptOnInstallation: true,
+                      required: false,
+                      value: "",
+                      description: "",
+                    })
+                  }
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add Header
+                </Button>
+              </div>
+
+              {additionalHeaderFields.length === 0 ? (
+                <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                  No additional headers configured.
+                </div>
+              ) : (
+                <InstallConfigFieldsTable
+                  control={form.control}
+                  form={form}
+                  fields={additionalHeaderFields}
+                  remove={removeAdditionalHeader}
+                  fieldNamePrefix="additionalHeaders"
+                  keyFieldName="headerName"
+                  keyLabel="Header Name"
+                  keyPlaceholder="x-api-key"
+                  typeFieldName={null}
+                  valuePlaceholder="header value"
+                />
+              )}
             </div>
           )}
 

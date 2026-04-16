@@ -24810,12 +24810,14 @@ export type GetInternalMcpCatalogResponses = {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
                 title: string;
                 description: string;
+                promptOnInstallation?: boolean;
                 required?: boolean;
                 default?: string | number | boolean | Array<string>;
                 multiple?: boolean;
                 sensitive?: boolean;
                 min?: number;
                 max?: number;
+                headerName?: string;
             };
         } | null;
         oauthConfig: {
@@ -24942,12 +24944,14 @@ export type CreateInternalMcpCatalogItemData = {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
                 title: string;
                 description: string;
+                promptOnInstallation?: boolean;
                 required?: boolean;
                 default?: string | number | boolean | Array<string>;
                 multiple?: boolean;
                 sensitive?: boolean;
                 min?: number;
                 max?: number;
+                headerName?: string;
             };
         } | null;
         oauthConfig?: {
@@ -25133,12 +25137,14 @@ export type CreateInternalMcpCatalogItemResponses = {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
                 title: string;
                 description: string;
+                promptOnInstallation?: boolean;
                 required?: boolean;
                 default?: string | number | boolean | Array<string>;
                 multiple?: boolean;
                 sensitive?: boolean;
                 min?: number;
                 max?: number;
+                headerName?: string;
             };
         } | null;
         oauthConfig: {
@@ -25415,12 +25421,14 @@ export type GetInternalMcpCatalogItemResponses = {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
                 title: string;
                 description: string;
+                promptOnInstallation?: boolean;
                 required?: boolean;
                 default?: string | number | boolean | Array<string>;
                 multiple?: boolean;
                 sensitive?: boolean;
                 min?: number;
                 max?: number;
+                headerName?: string;
             };
         } | null;
         oauthConfig: {
@@ -25546,12 +25554,14 @@ export type UpdateInternalMcpCatalogItemData = {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
                 title: string;
                 description: string;
+                promptOnInstallation?: boolean;
                 required?: boolean;
                 default?: string | number | boolean | Array<string>;
                 multiple?: boolean;
                 sensitive?: boolean;
                 min?: number;
                 max?: number;
+                headerName?: string;
             };
         } | null;
         oauthConfig?: {
@@ -25739,12 +25749,14 @@ export type UpdateInternalMcpCatalogItemResponses = {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
                 title: string;
                 description: string;
+                promptOnInstallation?: boolean;
                 required?: boolean;
                 default?: string | number | boolean | Array<string>;
                 multiple?: boolean;
                 sensitive?: boolean;
                 min?: number;
                 max?: number;
+                headerName?: string;
             };
         } | null;
         oauthConfig: {
@@ -32421,6 +32433,9 @@ export type ReinstallMcpServerData = {
         environmentValues?: {
             [key: string]: string;
         };
+        userConfigValues?: {
+            [key: string]: string;
+        };
         isByosVault?: boolean;
         serviceAccount?: string;
     };
@@ -34868,6 +34883,7 @@ export type GetOrganizationResponses = {
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
+        slimChatErrorUi: boolean;
         showTwoFactor: boolean;
         mcpOauthAccessTokenLifetimeSeconds: number;
     };
@@ -34960,6 +34976,7 @@ export type GetAppearanceSettingsResponses = {
             url: string;
         }> | null;
         chatErrorSupportMessage: string | null;
+        slimChatErrorUi: boolean;
         animateChatPlaceholders: boolean;
     };
 };
@@ -34982,6 +34999,7 @@ export type UpdateAppearanceSettingsData = {
             url: string;
         }> | null;
         chatErrorSupportMessage?: string | null;
+        slimChatErrorUi?: boolean;
         chatPlaceholders?: Array<string> | null;
         animateChatPlaceholders?: boolean;
         showTwoFactor?: boolean;
@@ -35091,6 +35109,7 @@ export type UpdateAppearanceSettingsResponses = {
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
+        slimChatErrorUi: boolean;
         showTwoFactor: boolean;
         mcpOauthAccessTokenLifetimeSeconds: number;
     };
@@ -35208,6 +35227,7 @@ export type UpdateSecuritySettingsResponses = {
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
+        slimChatErrorUi: boolean;
         showTwoFactor: boolean;
         mcpOauthAccessTokenLifetimeSeconds: number;
     };
@@ -35326,6 +35346,7 @@ export type UpdateLlmSettingsResponses = {
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
+        slimChatErrorUi: boolean;
         showTwoFactor: boolean;
         mcpOauthAccessTokenLifetimeSeconds: number;
     };
@@ -35445,6 +35466,7 @@ export type UpdateAgentSettingsResponses = {
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
+        slimChatErrorUi: boolean;
         showTwoFactor: boolean;
         mcpOauthAccessTokenLifetimeSeconds: number;
     };
@@ -35561,6 +35583,7 @@ export type UpdateMcpSettingsResponses = {
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
+        slimChatErrorUi: boolean;
         showTwoFactor: boolean;
         mcpOauthAccessTokenLifetimeSeconds: number;
     };
@@ -35680,6 +35703,7 @@ export type UpdateKnowledgeSettingsResponses = {
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
+        slimChatErrorUi: boolean;
         showTwoFactor: boolean;
         mcpOauthAccessTokenLifetimeSeconds: number;
     };
@@ -35794,6 +35818,7 @@ export type DropEmbeddingConfigResponses = {
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
+        slimChatErrorUi: boolean;
         showTwoFactor: boolean;
         mcpOauthAccessTokenLifetimeSeconds: number;
     };
@@ -35991,6 +36016,7 @@ export type CompleteOnboardingResponses = {
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
+        slimChatErrorUi: boolean;
         showTwoFactor: boolean;
         mcpOauthAccessTokenLifetimeSeconds: number;
     };

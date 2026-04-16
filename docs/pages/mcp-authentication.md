@@ -3,7 +3,7 @@ title: "Authentication"
 category: MCP
 order: 4
 description: "How authentication works for MCP clients and upstream MCP servers"
-lastUpdated: 2026-04-11
+lastUpdated: 2026-04-15
 ---
 
 <!--
@@ -203,9 +203,9 @@ Credentials are configured when you install a server from the [MCP Catalog](/doc
 - **OAuth tokens**: Obtained by running an OAuth flow against the upstream provider during installation. Archestra stores both the access token and refresh token.
 - **Enterprise-managed credentials**: Retrieved at tool-call time from an attached enterprise IdP when the IdP can mint or broker a downstream credential for the requested resource.
 
-How credentials are delivered to the upstream server depends on the server type. For **passthrough** (remote) servers, Archestra sends the credential as an `Authorization: Bearer` header over HTTP. For **hosted** (local) servers running in Kubernetes, the gateway connects via stdio transport within the cluster and no auth headers are needed.
+How credentials are delivered to the upstream server depends on the server type. For **passthrough** (remote) servers, Archestra sends the credential over HTTP. The primary auth header defaults to `Authorization`, but you can configure a different header name such as `x-api-key` when the upstream server expects the token outside the standard authorization header. Additional headers are available for tenant IDs and other non-auth upstream requirements, and non-sensitive static values are stored directly in the catalog item. For **hosted** (local) servers running in Kubernetes, the gateway connects via stdio transport within the cluster and no auth headers are needed.
 
-All credentials are stored in the secrets backend, which uses the database by default. For enterprise deployments, you can configure an [external secrets manager](/docs/platform-secrets-management).
+Auth credentials are stored in the secrets backend, which uses the database by default. For enterprise deployments, you can configure an [external secrets manager](/docs/platform-secrets-management).
 
 ### Per-User Credentials
 
@@ -320,6 +320,10 @@ For servers that need a shared API key or service token:
 3. Archestra securely stores the credentials and passes them to the server at runtime
 
 All tool calls through the gateway use the same credential.
+
+Static credentials are not limited to `Authorization`. The primary static auth token can be injected into a custom header such as `x-api-key` when the upstream MCP server does not use the standard authorization header.
+
+You can also configure **Additional Headers** for other upstream requirements such as tenant IDs, API version headers, or companion headers that should be sent on every downstream MCP request. Each additional header can either be prompted on every installation or stored once as a static catalog value.
 
 ### OAuth 2.1
 

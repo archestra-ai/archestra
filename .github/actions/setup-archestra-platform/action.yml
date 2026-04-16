@@ -261,6 +261,17 @@ runs:
           helm install e2e-tests "${PLATFORM_CONTEXT}/helm/e2e-tests" ${E2E_DEPS_SET_FLAGS}
         }
 
+        show_vault_diagnostics() {
+          echo "=== Vault Pod Status ==="
+          kubectl get pods -l app=vault -o wide || true
+          echo "=== Vault Pod Describe ==="
+          kubectl describe pod -l app=vault || true
+          echo "=== Vault Pod Logs ==="
+          kubectl logs -l app=vault --tail=200 || true
+          echo "=== Vault Pod Previous Logs ==="
+          kubectl logs -l app=vault --previous --tail=200 || true
+        }
+
         # Start e2e-tests Helm install if needed
         E2E_PID=""
         if [ "${DEPLOY_E2E_DEPS}" == "true" ]; then
@@ -269,7 +280,10 @@ runs:
             install_e2e_dependencies
             if [ "${E2E_DEPS_WAIT_FOR_VAULT}" = "true" ]; then
               echo "Waiting for Vault pod before platform deploy..."
-              kubectl wait --for=condition=Ready pod/vault --timeout=120s
+              if ! kubectl wait --for=condition=Ready pod -l app=vault --timeout=180s; then
+                show_vault_diagnostics
+                exit 1
+              fi
             fi
           else
             echo "Starting e2e-tests Helm install in background..."
@@ -334,7 +348,10 @@ runs:
         if [ "$DEPLOY_E2E_DEPS" = "true" ]; then
           echo "Waiting for e2e dependency pods to be ready..."
           if [ "${E2E_DEPS_WAIT_FOR_VAULT}" = "true" ]; then
-            kubectl wait --for=condition=Ready pod/vault --timeout=120s
+            if ! kubectl wait --for=condition=Ready pod -l app=vault --timeout=180s; then
+              show_vault_diagnostics
+              exit 1
+            fi
           fi
           kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=keycloak --timeout=180s
           kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=wiremock --timeout=60s
@@ -427,6 +444,15 @@ runs:
 
         echo "=== PostgreSQL Logs ==="
         kubectl logs -l app.kubernetes.io/name=postgresql --tail=200 || echo "No PostgreSQL logs"
+
+        echo "=== Vault Logs ==="
+        kubectl logs -l app=vault --tail=200 || echo "No Vault logs"
+
+        echo "=== Vault Previous Logs ==="
+        kubectl logs -l app=vault --previous --tail=200 || echo "No previous Vault logs"
+
+        echo "=== Describe Vault Pod ==="
+        kubectl describe pod -l app=vault || echo "No Vault pod"
 
         echo "=== MCP Example OAuth Server Logs ==="
         kubectl logs -l app.kubernetes.io/name=mcp-example-oauth --tail=200 || echo "No MCP Example OAuth logs"

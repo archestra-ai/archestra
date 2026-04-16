@@ -127,36 +127,23 @@ export function transformFormToApiData(
     data.oauthConfig = undefined;
     data.enterpriseManagedConfig = values.enterpriseManagedConfig ?? null;
   } else if (values.authMethod === "bearer") {
-    // Handle Bearer Token configuration
-    data.userConfig = {
-      access_token: {
-        type: "string" as const,
-        title: "Access Token",
-        description: "Bearer token for authentication",
-        required: true,
-        sensitive: true,
-      },
-    };
+    data.userConfig = buildStaticHeaderUserConfig(values, {
+      authFieldName: "access_token",
+      authDescription: "Bearer token for authentication",
+    });
     // Clear oauthConfig when using Bearer Token
     data.oauthConfig = undefined;
     data.enterpriseManagedConfig = undefined;
   } else if (values.authMethod === "raw_token") {
-    // Handle Token (no prefix) configuration
-    data.userConfig = {
-      raw_access_token: {
-        type: "string" as const,
-        title: "Access Token",
-        description: "Token for authentication (sent without Bearer prefix)",
-        required: true,
-        sensitive: true,
-      },
-    };
+    data.userConfig = buildStaticHeaderUserConfig(values, {
+      authFieldName: "raw_access_token",
+      authDescription: "Token for authentication (sent without Bearer prefix)",
+    });
     // Clear oauthConfig when using Token
     data.oauthConfig = undefined;
     data.enterpriseManagedConfig = undefined;
   } else {
-    // No authentication - clear both configs
-    data.userConfig = {};
+    data.userConfig = buildStaticHeaderUserConfig(values);
     data.oauthConfig = undefined;
     data.enterpriseManagedConfig = undefined;
   }
@@ -349,6 +336,22 @@ export function transformCatalogItemToFormValues(
     };
   }
 
+  const staticHeaderFields = getHeaderMappedUserConfigEntries(item.userConfig);
+  const authHeaderConfig =
+    staticHeaderFields.access_token ?? staticHeaderFields.raw_access_token;
+  const additionalHeaders = Object.entries(staticHeaderFields)
+    .filter(([fieldName]) => {
+      return fieldName !== "access_token" && fieldName !== "raw_access_token";
+    })
+    .map(([fieldName, config]) => ({
+      fieldName,
+      headerName: config.headerName,
+      promptOnInstallation: config.promptOnInstallation ?? true,
+      required: config.required ?? false,
+      value: typeof config.default === "string" ? config.default : undefined,
+      description: config.description ?? "",
+    }));
+
   return {
     name: item.name,
     description: item.description || "",
@@ -356,6 +359,12 @@ export function transformCatalogItemToFormValues(
     serverType: item.serverType as "remote" | "local",
     serverUrl: item.serverUrl || "",
     authMethod,
+    authHeaderName:
+      authHeaderConfig?.headerName &&
+      !isDefaultAuthorizationHeader(authHeaderConfig.headerName)
+        ? authHeaderConfig.headerName
+        : "",
+    additionalHeaders,
     enterpriseManagedConfig: item.enterpriseManagedConfig ?? null,
     oauthConfig,
     localConfig,
@@ -408,11 +417,16 @@ export function transformExternalCatalogToFormValues(
 
   // Determine auth method
   let authMethod: "none" | "bearer" | "raw_token" | "oauth" = "none";
+  const staticHeaderFields = getHeaderMappedUserConfigEntries(
+    server.user_config,
+  );
+  const authHeaderConfig =
+    staticHeaderFields.access_token ?? staticHeaderFields.raw_access_token;
 
-  // Detect bearer/raw_token auth from user_config (e.g. GitHub with requires_proxy: true)
-  if (server.user_config?.raw_access_token) {
+  // Detect bearer/raw_token auth from header-mapped user_config entries.
+  if (authHeaderConfig?.fieldName === "raw_access_token") {
     authMethod = "raw_token";
-  } else if (server.user_config?.access_token) {
+  } else if (authHeaderConfig?.fieldName === "access_token") {
     authMethod = "bearer";
   }
 
@@ -578,6 +592,23 @@ export function transformExternalCatalogToFormValues(
     serverType: server.server.type as "remote" | "local",
     serverUrl: server.server.type === "remote" ? server.server.url : "",
     authMethod,
+    authHeaderName:
+      authHeaderConfig?.headerName &&
+      !isDefaultAuthorizationHeader(authHeaderConfig.headerName)
+        ? authHeaderConfig.headerName
+        : "",
+    additionalHeaders: Object.entries(staticHeaderFields)
+      .filter(([fieldName]) => {
+        return fieldName !== "access_token" && fieldName !== "raw_access_token";
+      })
+      .map(([fieldName, config]) => ({
+        fieldName,
+        headerName: config.headerName,
+        promptOnInstallation: config.promptOnInstallation ?? true,
+        required: config.required ?? false,
+        value: typeof config.default === "string" ? config.default : undefined,
+        description: config.description ?? "",
+      })),
     oauthConfig: oauthConfig ?? {
       client_id: "",
       client_secret: "",
@@ -608,6 +639,130 @@ export function transformExternalCatalogToFormValues(
     scope: "personal",
     teams: [],
   } as McpCatalogFormValues;
+}
+
+function buildStaticHeaderUserConfig(
+  values: McpCatalogFormValues,
+  params?: {
+    authFieldName?: "access_token" | "raw_access_token";
+    authDescription?: string;
+  },
+): NonNullable<McpCatalogApiData["userConfig"]> {
+  const userConfig: NonNullable<McpCatalogApiData["userConfig"]> = {};
+
+  if (params?.authFieldName) {
+    userConfig[params.authFieldName] = {
+      type: "string",
+      title: "Access Token",
+      description: params.authDescription ?? "Token for authentication",
+      required: true,
+      sensitive: true,
+      headerName: values.authHeaderName?.trim() || undefined,
+    };
+  }
+
+  const usedFieldNames = new Set(Object.keys(userConfig));
+  for (const [index, header] of (values.additionalHeaders ?? []).entries()) {
+    const fieldName = getAdditionalHeaderFieldName({
+      fieldName: header.fieldName,
+      headerName: header.headerName,
+      index,
+      usedFieldNames,
+    });
+
+    usedFieldNames.add(fieldName);
+    userConfig[fieldName] = {
+      type: "string",
+      title: header.headerName,
+      promptOnInstallation: header.promptOnInstallation,
+      required: header.promptOnInstallation ? header.required : false,
+      default:
+        !header.promptOnInstallation && header.value ? header.value : undefined,
+      description:
+        header.description || `Additional header sent as ${header.headerName}`,
+      sensitive: false,
+      headerName: header.headerName,
+    };
+  }
+
+  return userConfig;
+}
+
+function getAdditionalHeaderFieldName(params: {
+  fieldName?: string;
+  headerName: string;
+  index: number;
+  usedFieldNames: Set<string>;
+}): string {
+  const { fieldName, headerName, index, usedFieldNames } = params;
+  if (fieldName?.trim()) {
+    return fieldName;
+  }
+
+  const normalizedHeaderName = headerName
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  const baseFieldName = `header_${normalizedHeaderName || "value"}`;
+
+  if (!usedFieldNames.has(baseFieldName)) {
+    return baseFieldName;
+  }
+
+  return `${baseFieldName}_${index + 1}`;
+}
+
+function getHeaderMappedUserConfigEntries(
+  userConfig:
+    | archestraApiTypes.GetInternalMcpCatalogResponses["200"][number]["userConfig"]
+    | archestraCatalogTypes.ArchestraMcpServerManifest["user_config"]
+    | null
+    | undefined,
+): Record<
+  string,
+  {
+    fieldName: string;
+    headerName: string;
+    promptOnInstallation?: boolean;
+    required?: boolean;
+    default?: string | number | boolean | Array<string>;
+    description?: string;
+  }
+> {
+  return Object.fromEntries(
+    Object.entries(userConfig ?? {})
+      .filter((entry) => {
+        const config = entry[1] as { headerName?: string } | undefined;
+        return (
+          typeof config?.headerName === "string" && config.headerName.length > 0
+        );
+      })
+      .map(([fieldName, config]) => {
+        const userConfigField = config as {
+          headerName: string;
+          promptOnInstallation?: boolean;
+          required?: boolean;
+          default?: string | number | boolean | Array<string>;
+          description?: string;
+        };
+        return [
+          fieldName,
+          {
+            fieldName,
+            headerName: userConfigField.headerName,
+            promptOnInstallation: userConfigField.promptOnInstallation,
+            required: userConfigField.required,
+            default: userConfigField.default,
+            description: userConfigField.description,
+          },
+        ];
+      }),
+  );
+}
+
+function isDefaultAuthorizationHeader(headerName: string): boolean {
+  return headerName.toLowerCase() === "authorization";
 }
 
 function getOptionalStringProperty(

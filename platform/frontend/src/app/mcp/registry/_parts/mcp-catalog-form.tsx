@@ -93,7 +93,7 @@ const ExternalSecretSelector = lazy(
 interface McpCatalogFormProps {
   mode: "create" | "edit";
   initialValues?: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
-  onSubmit: (values: McpCatalogFormValues) => void;
+  onSubmit: (values: McpCatalogFormValues) => void | Promise<void>;
   footer?:
     | React.ReactNode
     | ((opts: { isDirty: boolean; onReset: () => void }) => React.ReactNode);
@@ -213,24 +213,28 @@ export function McpCatalogForm({
   );
 
   // Labels state (managed separately from react-hook-form)
-  const initialLabels = useMemo(
+  const initialLabelsFromProps = useMemo(
     () =>
       initialValues?.labels?.map((l) => ({ key: l.key, value: l.value })) ?? [],
     [initialValues?.labels],
   );
-  const [labels, setLabels] = useState<ProfileLabel[]>(initialLabels);
+  const [labels, setLabels] = useState<ProfileLabel[]>(initialLabelsFromProps);
+  // Baseline for dirty comparison; updated after save to mirror form.reset behavior
+  const [labelsBaseline, setLabelsBaseline] = useState<ProfileLabel[]>(
+    initialLabelsFromProps,
+  );
   const [labelsOpen, setLabelsOpen] = useState(false);
   const labelsRef = useRef<ProfileLabelsRef>(null);
 
   // Report dirty state to parent (includes label changes)
   const { isDirty: isFormDirty } = form.formState;
   const areLabelsChanged = useMemo(() => {
-    if (labels.length !== initialLabels.length) return true;
+    if (labels.length !== labelsBaseline.length) return true;
     return labels.some(
       (l, i) =>
-        l.key !== initialLabels[i].key || l.value !== initialLabels[i].value,
+        l.key !== labelsBaseline[i].key || l.value !== labelsBaseline[i].value,
     );
-  }, [labels, initialLabels]);
+  }, [labels, labelsBaseline]);
   const isDirty = isFormDirty || areLabelsChanged;
   useEffect(() => {
     onDirtyChange?.(isDirty);
@@ -349,10 +353,11 @@ export function McpCatalogForm({
       );
       form.reset(transformedValues);
       // Reset labels state
-      setLabels(
+      const resetLabels =
         initialValues.labels?.map((l) => ({ key: l.key, value: l.value })) ??
-          [],
-      );
+        [];
+      setLabels(resetLabels);
+      setLabelsBaseline(resetLabels);
       // Auto-expand labels section if there are existing labels
       setLabelsOpen((initialValues.labels ?? []).length > 0);
       // Initialize OAuth BYOS state from transformed values (parsed vault references)
@@ -367,10 +372,17 @@ export function McpCatalogForm({
     }
   }, [initialValues, localConfigSecret, form]);
 
-  const handleSubmit = (values: McpCatalogFormValues) => {
+  const handleSubmit = async (values: McpCatalogFormValues) => {
     // Save any unsaved label before submitting
     const updatedLabels = labelsRef.current?.saveUnsavedLabel() || labels;
-    onSubmit({ ...values, labels: updatedLabels });
+    const submittedValues = { ...values, labels: updatedLabels };
+    await onSubmit(submittedValues);
+    // Reset baselines to what was just submitted so isDirty becomes false.
+    // initialValues from the parent may not change reference after save
+    // (TanStack Query structural sharing), and secret values are stored
+    // separately so the catalog item itself may round-trip unchanged.
+    form.reset(submittedValues, { keepValues: true });
+    setLabelsBaseline(updatedLabels);
   };
 
   return (
@@ -1454,7 +1466,7 @@ export function McpCatalogForm({
               isDirty,
               onReset: () => {
                 form.reset();
-                setLabels(initialLabels);
+                setLabels(labelsBaseline);
               },
             })
           : footer}

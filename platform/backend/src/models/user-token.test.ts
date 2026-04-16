@@ -1,3 +1,7 @@
+import {
+  ARCHESTRA_TOKEN_PREFIX,
+  LEGACY_ARCHESTRA_TOKEN_PREFIXES,
+} from "@shared";
 import { describe, expect, test } from "@/test";
 import UserTokenModel from "./user-token";
 
@@ -21,7 +25,9 @@ describe("UserTokenModel", () => {
       expect(token.name).toBe("Test Token");
       expect(token.organizationId).toBe(org.id);
       expect(token.userId).toBe(user.id);
-      expect(value).toMatch(/^archestra_[a-f0-9]{32}$/);
+      expect(value).toMatch(
+        new RegExp(`^${ARCHESTRA_TOKEN_PREFIX}[a-f0-9]{32}$`),
+      );
       expect(token.tokenStart).toBe(value.substring(0, 14));
     });
 
@@ -134,7 +140,7 @@ describe("UserTokenModel", () => {
       const result = await UserTokenModel.rotate(token.id);
       expect(result?.value).toBeDefined();
       expect(result?.value).not.toBe(originalValue);
-      expect(result?.value.startsWith("archestra_")).toBe(true);
+      expect(result?.value.startsWith(ARCHESTRA_TOKEN_PREFIX)).toBe(true);
 
       const updated = await UserTokenModel.findById(token.id);
       expect(updated?.tokenStart).toBe(result?.value.substring(0, 14));
@@ -166,7 +172,7 @@ describe("UserTokenModel", () => {
 
     test("returns null for invalid token", async () => {
       const validated = await UserTokenModel.validateToken(
-        "archestra_invalidtoken1234567890",
+        `${LEGACY_ARCHESTRA_TOKEN_PREFIXES[0]}invalidtoken1234567890`,
       );
       expect(validated).toBeNull();
     });
@@ -220,7 +226,7 @@ describe("UserTokenModel", () => {
 
     test("returns null when no tokens exist", async () => {
       const validated = await UserTokenModel.validateToken(
-        "archestra_0000000000000000000000000000",
+        `${LEGACY_ARCHESTRA_TOKEN_PREFIXES[0]}0000000000000000000000000000`,
       );
       expect(validated).toBeNull();
     });

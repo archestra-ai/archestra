@@ -3,7 +3,7 @@ title: Adding Knowledge Connectors
 category: Development
 order: 3
 description: Developer guide for implementing new knowledge base connectors in Archestra Platform
-lastUpdated: 2026-03-12
+lastUpdated: 2026-04-15
 ---
 
 <!--
@@ -22,7 +22,7 @@ This guide covers how to add a new knowledge connector to Archestra Platform. Co
 4. **Frontend config fields** component for the creation dialog
 5. **User-facing docs update** in `docs/pages/platform-knowledge-connectors.md`
 
-When the external service provides an official SDK, prefer it over raw `fetch` calls. Official SDKs handle pagination, authentication, rate limiting, and type safety out of the box. For example, the GitHub connector uses [`@octokit/rest`](https://www.npmjs.com/package/@octokit/rest) and the GitLab connector uses [`@gitbeaker/rest`](https://www.npmjs.com/package/@gitbeaker/rest).
+When the external service provides an official SDK, prefer it over building a client from scratch with raw `fetch` calls. Use a hand-rolled client only when there is no suitable official SDK or the official SDK is clearly incompatible with the connector's requirements. Official SDKs usually handle pagination, authentication, rate limiting, and type safety out of the box. For example, the GitHub connector uses [`@octokit/rest`](https://www.npmjs.com/package/@octokit/rest) and the GitLab connector uses [`@gitbeaker/rest`](https://www.npmjs.com/package/@gitbeaker/rest).
 
 The walkthrough below uses a hypothetical connector as an example.
 
@@ -234,6 +234,10 @@ export class GithubConnector extends BaseConnector {
 | `joinUrl(base, path)`                       | Normalize and join URL parts                                                                    |
 | `buildBasicAuthHeader(email, token)`        | Build a `Basic` auth header                                                                     |
 
+### SDK selection note
+
+Before writing connector API code, check whether the upstream system publishes an official SDK. If it does, prefer that SDK unless there is a concrete reason not to. If you decide not to use the official SDK, document the reason in the PR so reviewers can evaluate the tradeoff.
+
 ### The async generator pattern
 
 The `sync` method is an `AsyncGenerator<ConnectorSyncBatch>`. Each `yield` emits a batch of documents plus an updated checkpoint. The runtime persists the checkpoint after each batch, so if a sync is interrupted, it resumes from the last successful batch.
@@ -374,12 +378,15 @@ Use `vi.mock()` to mock the external client library. See `backend/src/knowledge-
 
 ## Reference Implementations
 
-| Connector   | Files                                                                                                                                                                          |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Jira        | `backend/src/knowledge-base/connectors/jira/jira-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/jira-config-fields.tsx`                                     |
-| Confluence  | `backend/src/knowledge-base/connectors/confluence/confluence-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/confluence-config-fields.tsx`                    |
-| GitHub      | `backend/src/knowledge-base/connectors/github/github-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/github-config-fields.tsx`                               |
-| GitLab      | `backend/src/knowledge-base/connectors/gitlab/gitlab-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/gitlab-config-fields.tsx`                               |
-| ServiceNow  | `backend/src/knowledge-base/connectors/servicenow/servicenow-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/servicenow-config-fields.tsx`                   |
+| Connector    | Files                                                                                                                                                                          |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Jira         | `backend/src/knowledge-base/connectors/jira/jira-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/jira-config-fields.tsx`                                     |
+| Confluence   | `backend/src/knowledge-base/connectors/confluence/confluence-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/confluence-config-fields.tsx`                    |
+| GitHub       | `backend/src/knowledge-base/connectors/github/github-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/github-config-fields.tsx`                               |
+| GitLab       | `backend/src/knowledge-base/connectors/gitlab/gitlab-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/gitlab-config-fields.tsx`                               |
+| ServiceNow   | `backend/src/knowledge-base/connectors/servicenow/servicenow-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/servicenow-config-fields.tsx`                   |
+| Notion       | `backend/src/knowledge-base/connectors/notion/notion-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/notion-config-fields.tsx`                               |
+| SharePoint   | `backend/src/knowledge-base/connectors/sharepoint/sharepoint-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/sharepoint-config-fields.tsx`                   |
+| Google Drive | `backend/src/knowledge-base/connectors/gdrive/gdrive-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/gdrive-config-fields.tsx`                               |
 
-The Jira connector is the best starting point -- it demonstrates both Cloud and Server API handling, ADF text extraction, comment filtering, and JQL-based incremental sync. The GitHub and GitLab connectors demonstrate using official SDKs (`@octokit/rest` and `@gitbeaker/rest`) with separate issue/PR sync passes and label filtering. The ServiceNow connector demonstrates using raw `fetch` calls against the ServiceNow Table API with offset-based pagination.
+The Jira connector is the best starting point -- it demonstrates both Cloud and Server API handling, ADF text extraction, comment filtering, and JQL-based incremental sync. The GitHub and GitLab connectors demonstrate using official SDKs (`@octokit/rest` and `@gitbeaker/rest`) with separate issue/PR sync passes and label filtering. The ServiceNow connector demonstrates using raw `fetch` calls against the ServiceNow Table API with offset-based pagination. The Google Drive connector demonstrates using the official `googleapis` SDK with service account / OAuth2 auth, recursive folder traversal, and Google Workspace file exports.

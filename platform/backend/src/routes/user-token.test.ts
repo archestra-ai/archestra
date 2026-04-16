@@ -1,3 +1,4 @@
+import { ARCHESTRA_TOKEN_PREFIX } from "@shared";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -42,7 +43,9 @@ describe("user token routes", () => {
     expect(firstResponse.json()).toMatchObject({
       id: expect.any(String),
       name: "Personal Token",
-      tokenStart: expect.stringMatching(/^archestra_/),
+      tokenStart: expect.stringMatching(
+        new RegExp(`^${ARCHESTRA_TOKEN_PREFIX}`),
+      ),
       createdAt: expect.any(String),
     });
 
@@ -71,7 +74,9 @@ describe("user token routes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
-      value: expect.stringMatching(/^archestra_[a-f0-9]{32}$/),
+      value: expect.stringMatching(
+        new RegExp(`^${ARCHESTRA_TOKEN_PREFIX}[a-f0-9]{32}$`),
+      ),
     });
   });
 
@@ -107,8 +112,12 @@ describe("user token routes", () => {
     expect(rotateResponse.json()).toMatchObject({
       id: initialToken.id,
       name: "Personal Token",
-      tokenStart: expect.stringMatching(/^archestra_/),
-      value: expect.stringMatching(/^archestra_[a-f0-9]{32}$/),
+      tokenStart: expect.stringMatching(
+        new RegExp(`^${ARCHESTRA_TOKEN_PREFIX}`),
+      ),
+      value: expect.stringMatching(
+        new RegExp(`^${ARCHESTRA_TOKEN_PREFIX}[a-f0-9]{32}$`),
+      ),
     });
     expect(rotateResponse.json().value).not.toBe(initialValue);
     expect(rotateResponse.json().tokenStart).toBe(

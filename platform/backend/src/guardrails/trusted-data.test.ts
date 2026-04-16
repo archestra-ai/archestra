@@ -848,7 +848,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
   describe("adapter integration tests", () => {
     test("OpenAI adapter roundtrip", async () => {
       const { openaiAdapterFactory } = await import(
-        "../routes/proxy/adapterV2/openai"
+        "../routes/proxy/adapters/openai"
       );
 
       const openAiRequest = {
@@ -901,7 +901,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
 
     test("Anthropic adapter roundtrip", async () => {
       const { anthropicAdapterFactory } = await import(
-        "../routes/proxy/adapterV2/anthropic"
+        "../routes/proxy/adapters/anthropic"
       );
 
       const anthropicRequest = {

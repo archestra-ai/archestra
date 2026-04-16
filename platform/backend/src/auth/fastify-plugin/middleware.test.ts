@@ -94,6 +94,7 @@ describe("Authnz", () => {
         "/openapi.json",
         "/health",
         "/ready",
+        "/metrics",
       ];
 
       for (const url of whitelistedPaths) {
@@ -415,7 +416,6 @@ describe("Authnz", () => {
         "/.well-known-acme-challenge/test", // missing slash
         "/well-known/acme-challenge/test", // missing leading dot
         "/api/protected-endpoint",
-        "/metrics",
       ];
 
       for (const url of protectedPaths) {

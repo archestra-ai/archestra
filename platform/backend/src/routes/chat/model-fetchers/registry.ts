@@ -15,7 +15,11 @@ export async function testProviderApiKey(
   apiKey: string,
   baseUrl?: string | null,
 ): Promise<void> {
-  await modelFetchers[provider](apiKey, baseUrl);
+  const models = await modelFetchers[provider](apiKey, baseUrl);
+  if (models.length === 0) {
+    logger.error({ provider }, "testProviderApiKey: Models list is empty");
+    throw new Error("Models list is empty");
+  }
 }
 
 export async function fetchModelsForProvider(params: {

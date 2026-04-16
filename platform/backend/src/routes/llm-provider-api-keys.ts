@@ -22,6 +22,7 @@ import {
 import { testProviderApiKey } from "@/routes/chat/model-fetchers/registry";
 import {
   assertByosEnabled,
+  getSecretValueForLlmProviderApiKey,
   isByosEnabled,
   secretManager,
 } from "@/secrets-manager";
@@ -485,6 +486,29 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }),
           );
           newSecretId = secret.id;
+        }
+      } else if (body.baseUrl !== undefined) {
+        // If baseUrl is being updated without a new API key, we need to test it with the existing API key
+        let apiKeyValue: string | undefined;
+
+        if (apiKeyFromDB.secretId) {
+          apiKeyValue = await getSecretValueForLlmProviderApiKey(
+            apiKeyFromDB.secretId,
+          );
+        }
+        if (apiKeyValue) {
+          await testApiKeyOrThrow(
+            apiKeyFromDB.provider,
+            apiKeyValue,
+            body.baseUrl,
+          );
+        } else if (
+          !PROVIDERS_WITH_OPTIONAL_API_KEY.has(apiKeyFromDB.provider)
+        ) {
+          throw new ApiError(
+            400,
+            "Cannot update Base URL without existing API key",
+          );
         }
       }
 

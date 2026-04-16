@@ -345,6 +345,28 @@ describe("trustedOrigins", () => {
     );
   });
 
+  test("widens trusted origins for identity provider create requests", async () => {
+    const trustedOriginsOption = auth.options.trustedOrigins;
+
+    expect(typeof trustedOriginsOption).toBe("function");
+
+    const trustedOrigins = await trustedOriginsOption?.(
+      new Request("https://app.example.com/api/identity-providers", {
+        method: "POST",
+      }),
+    );
+
+    expect(trustedOrigins).toEqual(
+      expect.arrayContaining([
+        "https://app.example.com",
+        "http://*:*",
+        "https://*:*",
+        "http://*",
+        "https://*",
+      ]),
+    );
+  });
+
   test("keeps regular auth requests on the configured trusted origins", async () => {
     const trustedOriginsOption = auth.options.trustedOrigins;
 

@@ -38,6 +38,8 @@ export const CacheKey = {
   VirtualKeyRateLimit: "virtual-key-rate-limit",
   /** Slack missing-scope notification throttle per workspace */
   SlackScopeNotification: "slack-scope-notification",
+  /** Organization-scoped settings cache */
+  OrganizationSettings: "organization-settings",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];

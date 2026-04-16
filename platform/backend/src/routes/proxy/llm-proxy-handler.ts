@@ -11,7 +11,7 @@ import {
   propagation,
 } from "@opentelemetry/api";
 import {
-  ARCHESTRA_TOKEN_PREFIX,
+  hasArchestraTokenPrefix,
   type InteractionSource,
   InteractionSourceSchema,
   SOURCE_HEADER,
@@ -200,7 +200,7 @@ export async function handleLLMProxy<
   );
 
   const requestAdapter = provider.createRequestAdapter(body);
-  const streamAdapter = provider.createStreamAdapter();
+  const streamAdapter = provider.createStreamAdapter(body);
   const providerMessages = requestAdapter.getProviderMessages();
   const messagesCount = getProviderMessagesCount(providerMessages);
 
@@ -270,12 +270,16 @@ export async function handleLLMProxy<
     apiKey = provider.extractApiKey(headers);
   }
 
-  // 3. Resolve virtual API key (archestra_ prefixed)
+  // 3. Resolve platform-managed virtual API keys
   // Strip "Bearer " prefix if present — OpenAI's extractApiKey returns the full
-  // Authorization header value (e.g. "Bearer archestra_xxx"), while other providers
+  // Authorization header value (e.g. "Bearer arch_xxx"), while other providers
   // return the raw key.
   const rawApiKey = apiKey?.replace(/^Bearer\s+/i, "") ?? undefined;
-  if (!wasJwksAuthenticated && rawApiKey?.startsWith(ARCHESTRA_TOKEN_PREFIX)) {
+  if (
+    !wasJwksAuthenticated &&
+    rawApiKey &&
+    hasArchestraTokenPrefix(rawApiKey)
+  ) {
     await virtualKeyRateLimiter.check(request.ip);
     try {
       const virtualResult = await validateVirtualApiKey(
@@ -351,6 +355,7 @@ export async function handleLLMProxy<
     // Cost optimization - potentially switch to cheaper model
     const baselineModel = requestAdapter.getModel();
     const hasTools = requestAdapter.hasTools();
+    const tools = requestAdapter.getTools();
     // Cast messages since getOptimizedModel expects specific provider types
     // but our generic adapter provides the correct type at runtime
     const optimizedModel = await utils.costOptimization.getOptimizedModel(
@@ -362,6 +367,7 @@ export async function handleLLMProxy<
         typeof utils.costOptimization.getOptimizedModel
       >[2],
       hasTools,
+      tools,
     );
 
     if (optimizedModel) {
@@ -1071,7 +1077,7 @@ async function handleNonStreaming<
 
   logger.debug(
     { model: actualModel },
-    `[${providerName}ProxyV2] Starting non-streaming request`,
+    `[${providerName}Proxy] Starting non-streaming request`,
   );
 
   // Execute request with tracing

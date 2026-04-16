@@ -1,3 +1,4 @@
+import { ARCHESTRA_TOKEN_PREFIX } from "@shared";
 import { describe, expect, it } from "vitest";
 import { shouldSkipCreateApiKeySubmit } from "./page.utils";
 
@@ -27,7 +28,7 @@ describe("shouldSkipCreateApiKeySubmit", () => {
       shouldSkipCreateApiKeySubmit({
         hasSubmittedForCurrentDialogOpen: true,
         isCreatePending: false,
-        createdApiKeyValue: "archestra_123",
+        createdApiKeyValue: `${ARCHESTRA_TOKEN_PREFIX}123`,
       }),
     ).toBe(true);
   });

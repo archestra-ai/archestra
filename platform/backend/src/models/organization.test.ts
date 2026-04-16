@@ -27,6 +27,7 @@ describe("OrganizationModel", () => {
         footerText: null,
         chatLinks: null,
         chatErrorSupportMessage: null,
+        slimChatErrorUi: false,
         animateChatPlaceholders: true,
       });
     });
@@ -50,6 +51,7 @@ describe("OrganizationModel", () => {
         footerText: null,
         chatLinks: null,
         chatErrorSupportMessage: null,
+        slimChatErrorUi: false,
         animateChatPlaceholders: true,
       });
     });
@@ -151,6 +153,7 @@ describe("OrganizationModel", () => {
         "logo",
         "logoDark",
         "ogDescription",
+        "slimChatErrorUi",
         "theme",
       ]);
     });
@@ -359,6 +362,16 @@ describe("OrganizationModel", () => {
       expect(updated?.chatErrorSupportMessage).toBe(
         "Contact support@example.com for help.",
       );
+    });
+
+    test("should update slimChatErrorUi", async ({ makeOrganization }) => {
+      const org = await makeOrganization();
+
+      const updated = await OrganizationModel.patch(org.id, {
+        slimChatErrorUi: true,
+      });
+
+      expect(updated?.slimChatErrorUi).toBe(true);
     });
 
     test("should set default LLM model and provider", async ({

@@ -1,5 +1,5 @@
 /**
- * LLM Proxy Handler V2 Tests
+ * LLM Proxy Handler Tests
  *
  * Tests that verify:
  * 1. Prometheus metrics are correctly incremented for all LLM providers
@@ -79,12 +79,12 @@ import {
   anthropicAdapterFactory,
   geminiAdapterFactory,
   openaiAdapterFactory,
-} from "./adapterV2";
-import anthropicProxyRoutesV2 from "./routesv2/anthropic";
-import geminiProxyRoutesV2 from "./routesv2/gemini";
-import openAiProxyRoutesV2 from "./routesv2/openai";
+} from "./adapters";
+import anthropicProxyRoutes from "./routes/anthropic";
+import geminiProxyRoutes from "./routes/gemini";
+import openAiProxyRoutes from "./routes/openai";
 
-describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
+describe("LLM Proxy Handler Prometheus Metrics", () => {
   let app: FastifyInstance;
   let testAgent: Agent;
   let openAiStubOptions: { interruptAtChunk?: number };
@@ -134,7 +134,7 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
 
   describe("OpenAI", () => {
     beforeEach(async () => {
-      await app.register(openAiProxyRoutesV2);
+      await app.register(openAiProxyRoutes);
 
       // Create token pricing for mock model
       await ModelModel.upsert({
@@ -309,7 +309,7 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
 
   describe("Anthropic", () => {
     beforeEach(async () => {
-      await app.register(anthropicProxyRoutesV2);
+      await app.register(anthropicProxyRoutes);
 
       // Create token pricing for mock model
       await ModelModel.upsert({
@@ -432,7 +432,7 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
 
   describe("Gemini", () => {
     beforeEach(async () => {
-      await app.register(geminiProxyRoutesV2);
+      await app.register(geminiProxyRoutes);
 
       // Create token pricing for mock model
       await ModelModel.upsert({
@@ -599,7 +599,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
   describe("non-streaming (OpenAI)", () => {
     // The test stub returns a "list_files" tool call for non-streaming requests.
     beforeEach(async () => {
-      await app.register(openAiProxyRoutesV2);
+      await app.register(openAiProxyRoutes);
 
       await ModelModel.upsert({
         externalId: "openai/gpt-4o",
@@ -712,7 +712,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
   describe("streaming (Anthropic)", () => {
     // The test stub can emit a "get_weather" tool_use block when enabled.
     beforeEach(async () => {
-      await app.register(anthropicProxyRoutesV2);
+      await app.register(anthropicProxyRoutes);
 
       await ModelModel.upsert({
         externalId: "anthropic/claude-3-5-sonnet-20241022",

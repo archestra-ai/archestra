@@ -1,8 +1,8 @@
 import {
+  type Action,
   ADMIN_ROLE_NAME,
   EDITOR_ROLE_NAME,
   MEMBER_ROLE_NAME,
-  type Action,
   type Permissions,
   type PredefinedRoleName,
   PredefinedRoleNameSchema,

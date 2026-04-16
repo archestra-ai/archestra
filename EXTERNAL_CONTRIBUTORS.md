@@ -14,3 +14,5 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @ildar-third
 - @codeserfer
 - @Somewater
+- @AbhishekMauryaGEEK
+- @Pranjal6955

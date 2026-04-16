@@ -439,6 +439,46 @@ describe("McpClient", () => {
       expect(mockConnect).toHaveBeenCalledTimes(2);
     });
 
+    test("reuses cached client when MCP server row changes without secret rotation", async () => {
+      const tool = await ToolModel.createToolIfNotExists({
+        name: "github-mcp-server__metadata_update_reuse",
+        description: "Reuse after metadata update",
+        parameters: {},
+        catalogId,
+      });
+
+      await AgentToolModel.create(agentId, tool.id, {
+        mcpServerId,
+        credentialResolutionMode: "static",
+      });
+
+      mockConnect.mockResolvedValue(undefined);
+      mockPing.mockResolvedValue(undefined);
+      mockCallTool.mockResolvedValue({
+        content: [{ type: "text", text: "ok" }],
+        isError: false,
+      });
+
+      const toolCall = {
+        id: "call_metadata_update_reuse",
+        name: tool.name,
+        arguments: {},
+      };
+
+      const firstResult = await mcpClient.executeToolCall(toolCall, agentId);
+      expect(firstResult.isError).toBe(false);
+      expect(mockConnect).toHaveBeenCalledTimes(1);
+
+      await McpServerModel.update(mcpServerId, {
+        oauthRefreshError: "refresh_failed",
+      });
+
+      const secondResult = await mcpClient.executeToolCall(toolCall, agentId);
+      expect(secondResult.isError).toBe(false);
+      expect(mockClose).toHaveBeenCalledTimes(0);
+      expect(mockConnect).toHaveBeenCalledTimes(1);
+    });
+
     describe("Concurrency limiter", () => {
       test("limits HTTP concurrency to 4", async () => {
         const clientWithInternals = mcpClient as unknown as {

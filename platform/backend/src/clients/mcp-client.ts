@@ -196,7 +196,6 @@ type CachedResource = {
 
 type CachedServerState = {
   secretId: string | null;
-  updatedAtMs: number;
 };
 
 class McpClient {
@@ -810,7 +809,7 @@ class McpClient {
             cachedSecretId: cachedServerState?.secretId ?? null,
             currentSecretId: currentServerState.secretId,
           },
-          "Discarding cached MCP client after server credentials changed",
+          "Discarding cached MCP client after MCP server secret changed",
         );
         try {
           await existingClient.close();
@@ -1079,45 +1078,23 @@ class McpClient {
       this.secretsCache.delete(targetMcpServerId);
     }
 
-    const result = await this.fetchSecretsForLoadedMcpServer(
-      mcpServer,
-      toolCall,
-      agentId,
-    );
+    const result = await this.fetchSecretsForLoadedMcpServer(mcpServer);
 
-    // Only cache successful results (not errors) so transient failures can be retried
-    if (!("error" in result)) {
-      this.secretsCache.set(targetMcpServerId, {
-        secrets: result.secrets,
-        secretId: result.secretId,
-      });
-    }
+    this.secretsCache.set(targetMcpServerId, {
+      secrets: result.secrets,
+      secretId: result.secretId,
+    });
 
     return result;
   }
 
   private async fetchSecretsForLoadedMcpServer(
-    mcpServer: Awaited<ReturnType<typeof McpServerModel.findById>>,
-    toolCall: CommonToolCall,
-    agentId: string,
-  ): Promise<
-    | {
-        secrets: Record<string, unknown>;
-        secretId?: string;
-        serverState: CachedServerState;
-      }
-    | { error: CommonToolResult }
-  > {
-    if (!mcpServer) {
-      return {
-        error: await this.createErrorResult(
-          toolCall,
-          agentId,
-          "MCP server not found when getting secrets for MCP server",
-          "unknown",
-        ),
-      };
-    }
+    mcpServer: NonNullable<Awaited<ReturnType<typeof McpServerModel.findById>>>,
+  ): Promise<{
+    secrets: Record<string, unknown>;
+    secretId?: string;
+    serverState: CachedServerState;
+  }> {
     const serverState = this.toCachedServerState(mcpServer);
     if (mcpServer.secretId) {
       const secret = await secretManager().getSecret(mcpServer.secretId);
@@ -2712,9 +2689,7 @@ class McpClient {
     left: CachedServerState,
     right: CachedServerState,
   ): boolean {
-    return (
-      left.secretId === right.secretId && left.updatedAtMs === right.updatedAtMs
-    );
+    return left.secretId === right.secretId;
   }
 
   private toCachedServerState(
@@ -2722,7 +2697,6 @@ class McpClient {
   ): CachedServerState {
     return {
       secretId: mcpServer.secretId ?? null,
-      updatedAtMs: mcpServer.updatedAt.getTime(),
     };
   }
 }

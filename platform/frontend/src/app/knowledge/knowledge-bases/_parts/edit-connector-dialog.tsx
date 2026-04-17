@@ -1,10 +1,15 @@
 "use client";
 
-import { type archestraApiTypes, getConnectorNamePlaceholder } from "@shared";
+import {
+  type archestraApiTypes,
+  DocsPage,
+  getConnectorNamePlaceholder,
+} from "@shared";
 import { ChevronDown } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { KnowledgeSourceVisibilitySelector } from "@/app/knowledge/_parts/knowledge-source-visibility-selector";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,15 +28,18 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useUpdateConnector } from "@/lib/knowledge/connector.query";
 import { ConfluenceConfigFields } from "./confluence-config-fields";
 import { ConnectorTypeIcon } from "./connector-icons";
+import { GoogleDriveConfigFields } from "./gdrive-config-fields";
 import { GithubConfigFields } from "./github-config-fields";
 import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
 import { NotionConfigFields } from "./notion-config-fields";
 import { SchedulePicker } from "./schedule-picker";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
+import { SharePointConfigFields } from "./sharepoint-config-fields";
 import { transformConfigArrayFields } from "./transform-config-array-fields";
 
 type ConnectorItem = Pick<
@@ -100,6 +108,7 @@ export function EditConnectorDialog({
 
   const connectorType = connector.connectorType;
   const { typeLabel, urlFields: urlConfig } = getEditUrlConfig(connectorType);
+  const connectorDocsUrl = getConnectorDocsUrl(connectorType);
 
   const needsEmail = connectorType === "jira" || connectorType === "confluence";
   const isCloud = form.watch("config.isCloud") as boolean | undefined;
@@ -144,7 +153,18 @@ export function EditConnectorDialog({
           Edit {typeLabel} Connector
         </span>
       }
-      description="Update the settings for this connector."
+      description={
+        <>
+          Update the settings for this connector.{" "}
+          <ExternalDocsLink
+            href={connectorDocsUrl}
+            className="underline"
+            showIcon={false}
+          >
+            Learn more
+          </ExternalDocsLink>
+        </>
+      }
       size="medium"
       onSubmit={form.handleSubmit(handleSubmit)}
       footer={
@@ -328,6 +348,51 @@ export function EditConnectorDialog({
             />
           )}
 
+          {connectorType === "sharepoint" && (
+            <FormField
+              control={form.control}
+              name="config.tenantId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Tenant ID</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                      {...field}
+                      value={(field.value as string) ?? ""}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Your Azure AD (Entra ID) tenant ID or domain.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+
+          {connectorType === "sharepoint" && (
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Client ID</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="Leave empty to keep existing credentials"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Azure AD app registration Client ID.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+
           <FormField
             control={form.control}
             name="apiToken"
@@ -338,11 +403,15 @@ export function EditConnectorDialog({
                     ? "Password"
                     : connectorType === "notion"
                       ? "Integration Token"
-                      : needsEmail
-                        ? emailRequired
-                          ? "API Token"
-                          : "API Token / Personal Access Token"
-                        : "Personal Access Token"}
+                      : connectorType === "sharepoint"
+                        ? "Client Secret"
+                        : connectorType === "gdrive"
+                          ? "Service Account Key / OAuth Token"
+                          : needsEmail
+                            ? emailRequired
+                              ? "API Token"
+                              : "API Token / Personal Access Token"
+                            : "Personal Access Token"}
                 </FormLabel>
                 <FormControl>
                   <Input
@@ -358,6 +427,18 @@ export function EditConnectorDialog({
                 <FormDescription>
                   Leave empty to keep existing credentials unchanged.
                 </FormDescription>
+                {connectorType === "sharepoint" && (
+                  <p className="text-[0.8rem] text-muted-foreground">
+                    The Azure AD app registration requires the{" "}
+                    <code>Sites.Read.All</code> permission on Microsoft Graph.
+                  </p>
+                )}
+                {connectorType === "gdrive" && (
+                  <p className="text-[0.8rem] text-muted-foreground">
+                    Paste a service account JSON key (entire file content) or an
+                    OAuth2 access token with <code>drive.readonly</code> scope.
+                  </p>
+                )}
                 <FormMessage />
               </FormItem>
             )}
@@ -386,6 +467,12 @@ export function EditConnectorDialog({
                 <ServiceNowConfigFields form={form} hideUrl />
               )}
               {connectorType === "notion" && <NotionConfigFields form={form} />}
+              {connectorType === "sharepoint" && (
+                <SharePointConfigFields form={form} />
+              )}
+              {connectorType === "gdrive" && (
+                <GoogleDriveConfigFields form={form} />
+              )}
             </CollapsibleContent>
           </Collapsible>
         </div>
@@ -460,6 +547,18 @@ function getEditUrlConfig(type: ConnectorType): {
       };
     case "notion":
       return { typeLabel: "Notion", urlFields: null };
+    case "gdrive":
+      return { typeLabel: "Google Drive", urlFields: null };
+    case "sharepoint":
+      return {
+        typeLabel: "SharePoint",
+        urlFields: {
+          fieldName: "config.siteUrl",
+          label: "Site URL",
+          placeholder: "https://your-tenant.sharepoint.com/sites/your-site",
+          description: "Your SharePoint site URL.",
+        },
+      };
     default:
       return {
         typeLabel: type,
@@ -471,4 +570,8 @@ function getEditUrlConfig(type: ConnectorType): {
         },
       };
   }
+}
+
+function getConnectorDocsUrl(type: ConnectorType): string | null {
+  return getFrontendDocsUrl(DocsPage.PlatformKnowledgeConnectors, type);
 }

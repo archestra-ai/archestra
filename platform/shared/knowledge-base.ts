@@ -40,6 +40,8 @@ export const CONNECTOR_TYPE_LABELS: Record<string, string> = {
   github: "GitHub",
   gitlab: "GitLab",
   notion: "Notion",
+  sharepoint: "SharePoint",
+  gdrive: "Google Drive",
 };
 
 const CONNECTOR_PLACEHOLDER_DEPARTMENTS = [

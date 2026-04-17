@@ -77,6 +77,10 @@ const EMBEDDING_DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   ...DEFAULT_FORM_VALUES,
 };
 const KNOWLEDGE_SETTINGS_CONTROL_CLASS = "w-full max-w-[28rem]";
+const KNOWLEDGE_MODEL_POPOVER_CLASS =
+  "w-max min-w-[var(--radix-popover-trigger-width)] max-w-[min(32rem,calc(100vw-2rem))]";
+const KNOWLEDGE_MODEL_POPOVER_LIST_CLASS =
+  "max-h-[min(220px,calc(var(--radix-popover-content-available-height)-3rem))]";
 
 function AddApiKeyDialog({
   open,
@@ -360,6 +364,11 @@ function RerankerModelSelector({
       options={rerankerItems}
       placeholder="Select reranking model..."
       className={cn("w-full", pulse && "animate-pulse ring-2 ring-primary/40")}
+      popoverContentClassName={KNOWLEDGE_MODEL_POPOVER_CLASS}
+      popoverListClassName={KNOWLEDGE_MODEL_POPOVER_LIST_CLASS}
+      popoverSide="bottom"
+      popoverAlign="end"
+      truncateOptionLabels={false}
       disabled={disabled}
     />
   );
@@ -611,6 +620,11 @@ function KnowledgeSettingsContent() {
                       embeddingSetupStep === "select-model" &&
                         "animate-pulse ring-2 ring-primary/40",
                     )}
+                    popoverContentClassName={KNOWLEDGE_MODEL_POPOVER_CLASS}
+                    popoverListClassName={KNOWLEDGE_MODEL_POPOVER_LIST_CLASS}
+                    popoverSide="bottom"
+                    popoverAlign="end"
+                    truncateOptionLabels={false}
                     disabled={
                       !hasPermission ||
                       isEmbeddingModelLocked ||

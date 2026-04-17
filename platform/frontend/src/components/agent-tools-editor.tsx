@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type AgentScope,
   ARCHESTRA_MCP_CATALOG_ID,
   type archestraApiTypes,
   E2eTestId,
@@ -33,12 +34,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
-import {
-  useAllProfileTools,
-  useAssignTool,
-  useProfileToolPatchMutation,
-  useUnassignTool,
-} from "@/lib/agent-tools.query";
+import { useAssignTool, useUnassignTool } from "@/lib/agent-tools.query";
+import { useProfileToolsWithIds } from "@/lib/chat/chat.query";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import {
   fetchCatalogTools,
@@ -58,10 +55,14 @@ import { DYNAMIC_CREDENTIAL_VALUE, TokenSelect } from "./token-select";
 
 type InternalMcpCatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
-type AgentTool =
-  archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number];
 type CatalogTool =
   archestraApiTypes.GetInternalMcpCatalogToolsResponses["200"][number];
+type ResourceTool = archestraApiTypes.GetAgentToolsResponses["200"][number];
+type AssignedTool = {
+  tool: ResourceTool;
+  mcpServerId: string | null;
+  credentialResolutionMode: "static" | "dynamic" | "enterprise_managed";
+};
 
 // Pending changes for a single catalog item
 interface PendingCatalogChanges {
@@ -75,11 +76,16 @@ interface PendingCatalogChanges {
 }
 
 export interface AgentToolsEditorRef {
-  saveChanges: (agentId?: string) => Promise<void>;
+  saveChanges: (params?: {
+    agentId?: string;
+    resourceLabel?: string;
+  }) => Promise<void>;
 }
 
 interface AgentToolsEditorProps {
   agentId?: string;
+  assignmentScope?: AgentScope;
+  assignmentTeamIds?: string[];
   onSelectedCountChange?: (count: number) => void;
   /** "pills" (default): compact pills + dropdown combobox. "cards": inline grid of MCP server cards. */
   layout?: "pills" | "cards";
@@ -89,12 +95,20 @@ export const AgentToolsEditor = forwardRef<
   AgentToolsEditorRef,
   AgentToolsEditorProps
 >(function AgentToolsEditor(
-  { agentId, onSelectedCountChange, layout = "pills" },
+  {
+    agentId,
+    assignmentScope,
+    assignmentTeamIds,
+    onSelectedCountChange,
+    layout = "pills",
+  },
   ref,
 ) {
   return (
     <AgentToolsEditorContent
       agentId={agentId}
+      assignmentScope={assignmentScope}
+      assignmentTeamIds={assignmentTeamIds}
       onSelectedCountChange={onSelectedCountChange}
       layout={layout}
       ref={ref}
@@ -106,20 +120,28 @@ const AgentToolsEditorContent = forwardRef<
   AgentToolsEditorRef,
   AgentToolsEditorProps
 >(function AgentToolsEditorContent(
-  { agentId, onSelectedCountChange, layout = "pills" },
+  {
+    agentId,
+    assignmentScope,
+    assignmentTeamIds,
+    onSelectedCountChange,
+    layout = "pills",
+  },
   ref,
 ) {
   const { catalogName } = useArchestraMcpIdentity();
   const invalidateAllQueries = useInvalidateToolAssignmentQueries();
   const assignTool = useAssignTool();
   const unassignTool = useUnassignTool();
-  const patchTool = useProfileToolPatchMutation();
 
   // Fetch catalog items (MCP servers in registry)
   const { data: catalogItems = [], isPending } = useInternalMcpCatalog();
 
   // Fetch all credentials grouped by catalog (for default credential on toggle)
-  const allCredentials = useMcpServersGroupedByCatalog();
+  const allCredentials = useMcpServersGroupedByCatalog({
+    assignmentScope,
+    assignmentTeamIds,
+  });
 
   // Fetch tool counts for all catalog items to enable sorting
   const toolCountQueries = useQueries({
@@ -143,21 +165,23 @@ const AgentToolsEditorContent = forwardRef<
     return map;
   }, [catalogItems, toolCountQueries]);
 
-  // Fetch assigned tools for this agent (only when editing existing agent)
-  const { data: assignedToolsData } = useAllProfileTools({
-    filters: { agentId: agentId ?? "" },
-    skipPagination: true,
-    enabled: !!agentId,
-  });
+  // Fetch assigned tools for this resource (only when editing an existing one).
+  // Use the resource-scoped endpoint so MCP gateway members do not need the
+  // broader tool-policy table permission just to edit their gateway tools.
+  const { data: assignedToolsData = [] } = useProfileToolsWithIds(agentId);
 
   // Group assigned tools by catalogId
   const assignedToolsByCatalog = useMemo(() => {
-    const map = new Map<string, AgentTool[]>();
-    for (const at of assignedToolsData?.data ?? []) {
-      const catalogId = at.tool.catalogId;
+    const map = new Map<string, AssignedTool[]>();
+    for (const tool of assignedToolsData) {
+      const catalogId = tool.catalogId;
       if (!catalogId) continue;
       if (!map.has(catalogId)) map.set(catalogId, []);
-      map.get(catalogId)?.push(at);
+      map.get(catalogId)?.push({
+        tool,
+        mcpServerId: tool.mcpServerId,
+        credentialResolutionMode: tool.credentialResolutionMode,
+      });
     }
     return map;
   }, [assignedToolsData]);
@@ -246,8 +270,9 @@ const AgentToolsEditorContent = forwardRef<
 
   // Expose saveChanges method to parent
   useImperativeHandle(ref, () => ({
-    saveChanges: async (overrideAgentId?: string) => {
-      const targetAgentId = overrideAgentId ?? agentId;
+    saveChanges: async (params) => {
+      const targetAgentId = params?.agentId ?? agentId;
+      const resourceLabel = params?.resourceLabel ?? "resource";
       if (!targetAgentId) return;
 
       const allChanges = Array.from(pendingChangesRef.current.entries());
@@ -310,7 +335,12 @@ const AgentToolsEditorContent = forwardRef<
 
         const failures = results.filter((r) => r.status === "rejected");
         if (failures.length > 0) {
-          throw (failures[0] as PromiseRejectedResult).reason;
+          throw new Error(
+            formatToolAssignmentErrorMessage(
+              resourceLabel,
+              (failures[0] as PromiseRejectedResult).reason,
+            ),
+          );
         }
 
         // Update credential on tools that remain assigned but whose credential changed
@@ -326,8 +356,9 @@ const AgentToolsEditorContent = forwardRef<
                 : (agentTool.mcpServerId ?? null);
           if (currentCred !== changes.credentialSourceId) {
             hasChanges = true;
-            await patchTool.mutateAsync({
-              id: agentTool.id,
+            await assignTool.mutateAsync({
+              agentId: targetAgentId,
+              toolId: agentTool.tool.id,
               mcpServerId:
                 !useDynamicCredential && !useEnterpriseManagedCredential
                   ? (changes.credentialSourceId ?? undefined)
@@ -540,6 +571,8 @@ const AgentToolsEditorContent = forwardRef<
             catalog.id === ARCHESTRA_MCP_CATALOG_ID ? catalogName : catalog.name
           }
           assignedTools={assignedToolsByCatalog.get(catalog.id) ?? []}
+          assignmentScope={assignmentScope}
+          assignmentTeamIds={assignmentTeamIds}
           initialPendingChanges={pendingChangesRef.current.get(catalog.id)}
           onPendingChanges={registerPendingChanges}
           onClearPendingChanges={clearPendingChanges}
@@ -610,7 +643,9 @@ function McpServerCard({
 interface McpServerPillProps {
   catalogItem: InternalMcpCatalogItem;
   displayName: string;
-  assignedTools: AgentTool[];
+  assignedTools: AssignedTool[];
+  assignmentScope?: AgentScope;
+  assignmentTeamIds?: string[];
   initialPendingChanges?: PendingCatalogChanges;
   onPendingChanges: (catalogId: string, changes: PendingCatalogChanges) => void;
   onClearPendingChanges: (catalogId: string) => void;
@@ -626,6 +661,8 @@ function McpServerPill({
   catalogItem,
   displayName,
   assignedTools,
+  assignmentScope,
+  assignmentTeamIds,
   initialPendingChanges,
   onPendingChanges,
   onClearPendingChanges,
@@ -652,6 +689,8 @@ function McpServerPill({
   // Fetch available credentials for this catalog
   const credentials = useMcpServersGroupedByCatalog({
     catalogId: catalogItem.id,
+    assignmentScope,
+    assignmentTeamIds,
   });
   const mcpServers = credentials?.[catalogItem.id] ?? [];
   const prefersEnterpriseManaged = catalogItem.enterpriseManagedConfig != null;
@@ -662,7 +701,6 @@ function McpServerPill({
       : assignedTools[0]?.credentialResolutionMode === "enterprise_managed"
         ? DYNAMIC_CREDENTIAL_VALUE
         : (assignedTools[0]?.mcpServerId ?? mcpServers[0]?.id ?? null);
-  const _currentEnterpriseManagedConfig = null;
 
   // Currently assigned tool IDs - use sorted string for stable comparison
   const currentAssignedToolIds = useMemo(
@@ -698,6 +736,28 @@ function McpServerPill({
     setSelectedToolIds(new Set(ids));
     onClearPendingChanges(catalogItem.id);
   }, [currentAssignedToolIdsKey]);
+
+  useEffect(() => {
+    if (selectedCredential === DYNAMIC_CREDENTIAL_VALUE) {
+      return;
+    }
+
+    if (
+      selectedCredential &&
+      mcpServers.some((server) => server.id === selectedCredential)
+    ) {
+      return;
+    }
+
+    if (prefersEnterpriseManaged) {
+      setSelectedCredential(DYNAMIC_CREDENTIAL_VALUE);
+      return;
+    }
+
+    if (mcpServers.length > 0) {
+      setSelectedCredential(mcpServers[0].id);
+    }
+  }, [mcpServers, prefersEnterpriseManaged, selectedCredential]);
 
   // Auto-select all tools when selectAll flag is set and tools finish loading.
   // Use a ref so auto-select only fires once (at mount) and doesn't fight user deselections.
@@ -847,6 +907,8 @@ function McpServerPill({
             </p>
             <TokenSelect
               catalogId={catalogItem.id}
+              assignmentScope={assignmentScope}
+              assignmentTeamIds={assignmentTeamIds}
               value={selectedCredential}
               onValueChange={setSelectedCredential}
               shouldSetDefaultValue={false}
@@ -898,6 +960,29 @@ export interface ToolChecklistProps {
 
 function formatToolName(toolName: string) {
   return parseFullToolName(toolName).toolName || toolName;
+}
+
+function formatToolAssignmentErrorMessage(
+  resourceLabel: string,
+  error: unknown,
+) {
+  const message =
+    error instanceof Error && error.message ? error.message : "Request failed";
+  const normalizedResourceLabel = resourceLabel.trim() || "resource";
+  const lowerResourceLabel = normalizedResourceLabel.toLowerCase();
+
+  if (message === "This team connection is not shared with the selected team") {
+    return `This ${lowerResourceLabel} cannot use that connection because it is not shared with one of the selected teams`;
+  }
+
+  if (
+    message ===
+    "The credential owner must be a member of a team that this resource is assigned to"
+  ) {
+    return `This ${lowerResourceLabel} cannot use that connection because the credential owner does not have access to the selected team`;
+  }
+
+  return `Failed to update tools for this ${lowerResourceLabel}: ${message}`;
 }
 
 function ExpandableDescription({ description }: { description: string }) {

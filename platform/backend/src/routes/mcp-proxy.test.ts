@@ -10,7 +10,7 @@ import * as auth from "@/auth";
 import db, { schema } from "@/database";
 import { afterEach, describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
-import { mcpProxyRoutes } from "./mcp-proxy";
+import mcpProxyRoutes from "./mcp-proxy";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

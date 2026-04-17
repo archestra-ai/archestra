@@ -511,6 +511,40 @@ class TeamModel {
   }
 
   /**
+   * Check if a user is a member of any of the provided teams.
+   */
+  static async isUserInAnyTeam(
+    teamIds: string[],
+    userId: string,
+  ): Promise<boolean> {
+    if (teamIds.length === 0) {
+      return false;
+    }
+
+    logger.debug(
+      { teamIds, userId },
+      "TeamModel.isUserInAnyTeam: checking memberships",
+    );
+    const [membership] = await db
+      .select({ teamId: schema.teamMembersTable.teamId })
+      .from(schema.teamMembersTable)
+      .where(
+        and(
+          inArray(schema.teamMembersTable.teamId, teamIds),
+          eq(schema.teamMembersTable.userId, userId),
+        ),
+      )
+      .limit(1);
+
+    const isMember = !!membership;
+    logger.debug(
+      { teamIds, userId, isMember },
+      "TeamModel.isUserInAnyTeam: completed",
+    );
+    return isMember;
+  }
+
+  /**
    * Get all team IDs a user is a member of (used for authorization)
    */
   static async getUserTeamIds(userId: string): Promise<string[]> {

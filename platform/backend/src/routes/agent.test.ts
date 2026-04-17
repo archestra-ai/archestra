@@ -535,4 +535,47 @@ describe("agent routes", () => {
 
     await memberApp.close();
   });
+
+  test("PATCH /api/agents/:id saves and returns passthroughHeaders", async () => {
+    // Create a gateway
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/agents",
+      payload: {
+        name: `GW ${crypto.randomUUID().slice(0, 8)}`,
+        agentType: "mcp_gateway",
+        scope: "org",
+        teams: [],
+      },
+    });
+    expect(createRes.statusCode).toBe(200);
+    const created = createRes.json();
+    expect(created.passthroughHeaders).toBeNull();
+
+    // Update with passthrough headers
+    const updateRes = await app.inject({
+      method: "PUT",
+      url: `/api/agents/${created.id}`,
+      payload: {
+        passthroughHeaders: ["X-Correlation-Id", "x-tenant-id"],
+      },
+    });
+    expect(updateRes.statusCode).toBe(200);
+    const updated = updateRes.json();
+    expect(updated.passthroughHeaders).toEqual([
+      "x-correlation-id",
+      "x-tenant-id",
+    ]);
+
+    // Fetch and verify persistence
+    const getRes = await app.inject({
+      method: "GET",
+      url: `/api/agents/${created.id}`,
+    });
+    expect(getRes.statusCode).toBe(200);
+    expect(getRes.json().passthroughHeaders).toEqual([
+      "x-correlation-id",
+      "x-tenant-id",
+    ]);
+  });
 });

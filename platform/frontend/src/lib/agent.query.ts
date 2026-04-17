@@ -27,6 +27,7 @@ export function useProfiles(
   params: {
     initialData?: archestraApiTypes.GetAllAgentsResponses["200"];
     filters?: archestraApiTypes.GetAllAgentsData["query"];
+    enabled?: boolean;
   } = {},
 ) {
   const filters = {
@@ -40,6 +41,7 @@ export function useProfiles(
       return response.data ?? [];
     },
     initialData: params?.initialData,
+    enabled: params?.enabled,
   });
 }
 

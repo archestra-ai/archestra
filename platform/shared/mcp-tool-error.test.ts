@@ -50,6 +50,22 @@ describe("extractMcpToolError", () => {
     });
   });
 
+  it("extracts an assigned-credential-unavailable error", () => {
+    expect(
+      extractMcpToolError({
+        type: "assigned_credential_unavailable",
+        message: "Assigned credential is unavailable",
+        catalogId: "cat_123",
+        catalogName: "GitHub",
+      }),
+    ).toEqual({
+      type: "assigned_credential_unavailable",
+      message: "Assigned credential is unavailable",
+      catalogId: "cat_123",
+      catalogName: "GitHub",
+    });
+  });
+
   it("extracts a nested MCP tool error from JSON", () => {
     expect(
       extractMcpToolError(

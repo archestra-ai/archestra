@@ -288,11 +288,6 @@ fi
 ESCAPED_DATABASE_URL=$(echo "$EFFECTIVE_DATABASE_URL" | sed 's/%/%%/g')
 awk -v url="$ESCAPED_DATABASE_URL" '{gsub(/DATABASE_URL="[^"]*"/, "DATABASE_URL=\"" url "\""); print}' /etc/supervisord.conf > /etc/supervisord.conf.tmp && mv /etc/supervisord.conf.tmp /etc/supervisord.conf
 
-# Propagate analytics setting to frontend (enabled by default, set to "disabled" to opt-out)
-if [ -n "$ARCHESTRA_ANALYTICS" ]; then
-  sed -i "s|environment=\\(.*\\)|environment=\\1,NEXT_PUBLIC_ARCHESTRA_ANALYTICS=\"${ARCHESTRA_ANALYTICS}\"|g" /etc/supervisord.conf
-fi
-
 # Configure ngrok tunnel if auth token is provided
 # ngrok is downloaded at runtime (not baked into the image) to avoid shipping
 # its Go stdlib CVEs in the Docker image. It's only needed when tunneling is enabled.

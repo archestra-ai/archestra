@@ -4,14 +4,20 @@ on:
   issues:
     types: [labeled]
 
-permissions:
-  contents: read
-  issues: write
+permissions: {}
+
+concurrency:
+  group: good-first-issue-welcome-${{ github.event.issue.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   welcome-new-contributor:
+    name: Welcome New Contributor
     runs-on: blacksmith-2vcpu-ubuntu-2404
     if: github.event.label.name == 'good first issue'
+    permissions:
+      contents: read # Required to checkout the repository for local workflow context.
+      issues: write # Required to post the welcome comment on the labeled issue.
     
     steps:
       - name: Checkout repository
@@ -21,7 +27,7 @@ jobs:
           persist-credentials: false
 
       - name: Post welcome comment
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: ${{ github.token }}
           script: |

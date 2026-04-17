@@ -19,7 +19,7 @@ import {
  * MCP Proxy routes for frontend AppRenderer
  * Provides session-based auth access to MCP Gateway endpoints
  */
-export const mcpProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
+const mcpProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // Clear caches on server shutdown to release held MCP connections
   fastify.addHook("onClose", () => {
     agentAccessCache.clear();
@@ -164,12 +164,7 @@ export const mcpProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (cachedServer) {
           server = cachedServer;
         } else {
-          ({ server } = await createAgentServer(agentId, sessionTokenAuth, {
-            id: agent.id,
-            name: agent.name,
-            agentType: agent.agentType,
-            labels: agent.labels,
-          }));
+          ({ server } = await createAgentServer(agentId, sessionTokenAuth));
         }
 
         const transport = createStatelessTransport(agentId);
@@ -178,12 +173,7 @@ export const mcpProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         } catch {
           // Server still bound to previous transport (rare concurrent request);
           // replace it with a fresh one.
-          ({ server } = await createAgentServer(agentId, sessionTokenAuth, {
-            id: agent.id,
-            name: agent.name,
-            agentType: agent.agentType,
-            labels: agent.labels,
-          }));
+          ({ server } = await createAgentServer(agentId, sessionTokenAuth));
           await server.connect(transport);
         }
         serverHealthy = true;
@@ -293,3 +283,5 @@ class McpServerCache {
 }
 
 const mcpServerCache = new McpServerCache();
+
+export default mcpProxyRoutes;

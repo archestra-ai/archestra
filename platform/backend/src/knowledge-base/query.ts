@@ -158,7 +158,7 @@ class QueryService {
       type: getEmbeddingDiscriminator(embeddingConfig.provider),
       callback: () =>
         callEmbedding({
-          texts: [
+          inputs: [
             addNomicTaskPrefix(
               embeddingConfig.model,
               queryText,
@@ -182,6 +182,13 @@ class QueryService {
         }),
     });
 
+    if (!embeddingResponse.data[0]?.embedding) {
+      logger.warn(
+        { queryText },
+        "[QueryService] Embedding API returned no embedding for query",
+      );
+      return [];
+    }
     const queryEmbedding = embeddingResponse.data[0].embedding;
 
     const fullTextPromise = hybridEnabled

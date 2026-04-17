@@ -14,6 +14,8 @@ import {
   AgentToolModel,
   InternalMcpCatalogModel,
   LlmProviderApiKeyModel,
+  ScheduleTriggerModel,
+  ScheduleTriggerRunModel,
   SecretModel,
   SessionModel,
   TeamModel,
@@ -39,12 +41,15 @@ import type {
   InsertMember,
   InsertOrganization,
   InsertOrganizationRole,
+  InsertScheduleTrigger,
   InsertSession,
   InsertTeam,
   InsertUser,
   KnowledgeBase,
   KnowledgeBaseConnector,
   OrganizationRole,
+  ScheduleTrigger,
+  ScheduleTriggerRun,
   TeamMember,
   Tool,
   ToolInvocation,
@@ -67,6 +72,8 @@ interface TestFixtures {
   makeTeamMember: typeof makeTeamMember;
   makeAgent: typeof makeAgent;
   makeInternalAgent: typeof makeInternalAgent;
+  makeScheduleTrigger: typeof makeScheduleTrigger;
+  makeScheduleTriggerRun: typeof makeScheduleTriggerRun;
   makeTool: typeof makeTool;
   makeAgentTool: typeof makeAgentTool;
   makeToolPolicy: typeof makeToolPolicy;
@@ -233,6 +240,71 @@ async function makeInternalAgent(
     agentType: "agent",
     systemPrompt: "You are a test agent",
     ...overrides,
+  });
+}
+
+/**
+ * Creates a test schedule trigger linked to an internal agent
+ */
+async function makeScheduleTrigger(
+  overrides: Partial<InsertScheduleTrigger> & {
+    actorUserId?: string;
+    agentId?: string;
+    organizationId?: string;
+  } = {},
+): Promise<ScheduleTrigger> {
+  let organizationId = overrides.organizationId;
+  if (!organizationId) {
+    const org = await makeOrganization();
+    organizationId = org.id;
+  }
+
+  let actorUserId = overrides.actorUserId;
+  if (!actorUserId) {
+    const user = await makeUser();
+    actorUserId = user.id;
+  }
+
+  let agentId = overrides.agentId;
+  if (!agentId) {
+    const agent = await makeInternalAgent({ organizationId });
+    agentId = agent.id;
+  }
+
+  return await ScheduleTriggerModel.create({
+    organizationId,
+    name: `Test Trigger ${crypto.randomUUID().substring(0, 8)}`,
+    agentId,
+    messageTemplate: "Run the scheduled task",
+    cronExpression: "* * * * *",
+    timezone: "UTC",
+    enabled: true,
+    actorUserId,
+    ...overrides,
+  });
+}
+
+/**
+ * Creates a test schedule trigger run
+ */
+async function makeScheduleTriggerRun(
+  triggerId: string,
+  overrides: {
+    organizationId?: string;
+    runKind?: "due" | "manual";
+    initiatedByUserId?: string;
+  } = {},
+): Promise<ScheduleTriggerRun> {
+  const trigger = await ScheduleTriggerModel.findById(triggerId);
+  if (!trigger) {
+    throw new Error(`Trigger ${triggerId} not found`);
+  }
+
+  return await ScheduleTriggerRunModel.create({
+    organizationId: overrides.organizationId ?? trigger.organizationId,
+    triggerId,
+    runKind: overrides.runKind ?? "due",
+    initiatedByUserId: overrides.initiatedByUserId,
   });
 }
 
@@ -996,6 +1068,12 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeInternalAgent: async ({}, use) => {
     await use(makeInternalAgent);
+  },
+  makeScheduleTrigger: async ({}, use) => {
+    await use(makeScheduleTrigger);
+  },
+  makeScheduleTriggerRun: async ({}, use) => {
+    await use(makeScheduleTriggerRun);
   },
   makeTool: async ({}, use) => {
     await use(makeTool);

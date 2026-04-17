@@ -2,8 +2,6 @@ import path from "node:path";
 import tsconfigPaths from "vite-tsconfig-paths";
 import { defineConfig } from "vitest/config";
 
-const isCI = process.env.CI === "true";
-
 export default defineConfig({
   plugins: [tsconfigPaths()],
   resolve: {
@@ -21,7 +19,10 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./vitest-setup.ts"],
     testTimeout: 10_000,
-    // Keep concurrency moderate to avoid suite-level timeouts from React/Radix-heavy tests.
-    maxConcurrency: isCI ? 6 : 3,
+    // JSDOM-heavy frontend tests need a larger worker heap on Node 24.
+    pool: "forks",
+    execArgv: ["--max-old-space-size=8192"],
+    // CI runs backend and frontend tests in parallel, so keep jsdom worker pressure low.
+    maxConcurrency: 2,
   },
 });

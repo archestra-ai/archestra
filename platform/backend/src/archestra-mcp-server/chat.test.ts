@@ -168,7 +168,7 @@ describe("chat tool execution", () => {
       characterCount: "# Test Artifact\n\nSome **markdown** content.".length,
     });
     expect((result.content[0] as any).text).toContain(
-      "Successfully updated conversation artifact",
+      "Successfully updated artifact",
     );
   });
 

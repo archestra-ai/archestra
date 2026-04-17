@@ -233,6 +233,9 @@ export function inferEmbeddingDimensions(
   if (provider === "gemini" && id === "gemini-embedding-001") {
     return 3072;
   }
+  if (provider === "gemini" && id === "gemini-embedding-2-preview") {
+    return 3072;
+  }
   if (id === "nomic-embed-text") {
     return 768;
   }
@@ -250,20 +253,24 @@ export function resolveModelCapabilities(params: {
     modelId,
   });
 
-  return {
-    description: capabilities?.description ?? null,
-    contextLength:
-      capabilities?.contextLength ?? inferredCapabilities.contextLength,
-    inputModalities:
-      capabilities?.inputModalities ?? inferredCapabilities.inputModalities,
-    outputModalities:
-      capabilities?.outputModalities ?? inferredCapabilities.outputModalities,
-    supportsToolCalling:
-      capabilities?.supportsToolCalling ??
-      inferredCapabilities.supportsToolCalling,
-    promptPricePerToken: capabilities?.promptPricePerToken ?? null,
-    completionPricePerToken: capabilities?.completionPricePerToken ?? null,
-  };
+  return normalizeKnownModelCapabilities({
+    provider,
+    modelId,
+    capabilities: {
+      description: capabilities?.description ?? null,
+      contextLength:
+        capabilities?.contextLength ?? inferredCapabilities.contextLength,
+      inputModalities:
+        capabilities?.inputModalities ?? inferredCapabilities.inputModalities,
+      outputModalities:
+        capabilities?.outputModalities ?? inferredCapabilities.outputModalities,
+      supportsToolCalling:
+        capabilities?.supportsToolCalling ??
+        inferredCapabilities.supportsToolCalling,
+      promptPricePerToken: capabilities?.promptPricePerToken ?? null,
+      completionPricePerToken: capabilities?.completionPricePerToken ?? null,
+    },
+  });
 }
 
 /**
@@ -420,6 +427,29 @@ function inferGeminiCapabilities(modelId: string): ProviderModelCapabilities {
     inputModalities: ["text"],
     outputModalities: ["text"],
   };
+}
+
+function normalizeKnownModelCapabilities(params: {
+  provider: SupportedProvider;
+  modelId: string;
+  capabilities: ProviderModelCapabilities;
+}): ProviderModelCapabilities {
+  const { provider, modelId, capabilities } = params;
+  const normalizedModelId = modelId.toLowerCase();
+
+  if (
+    provider === "gemini" &&
+    normalizedModelId === "gemini-embedding-2-preview"
+  ) {
+    return {
+      ...capabilities,
+      inputModalities: ["text", "image"],
+      outputModalities: [],
+      supportsToolCalling: false,
+    };
+  }
+
+  return capabilities;
 }
 
 function emptyCapabilities(): ProviderModelCapabilities {

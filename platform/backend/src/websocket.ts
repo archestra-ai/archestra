@@ -10,11 +10,7 @@ import {
 } from "@shared";
 import type { WebSocket, WebSocketServer } from "ws";
 import { WebSocket as WS, WebSocketServer as WSS } from "ws";
-import {
-  betterAuth,
-  hasAnyAgentTypeAdminPermission,
-  hasPermission,
-} from "@/auth";
+import { betterAuth, hasPermission } from "@/auth";
 import config from "@/config";
 import { BrowserStreamSocketClientContext } from "@/features/browser-stream/websocket/browser-stream.websocket";
 import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
@@ -49,7 +45,6 @@ interface McpDeploymentStatusSubscription {
 interface WebSocketClientContext {
   userId: string;
   organizationId: string;
-  userIsAgentAdmin: boolean;
   userIsMcpServerAdmin: boolean;
 }
 
@@ -832,14 +827,9 @@ class WebSocketService {
         const { organizationId, ...user } = await UserModel.getById(
           session.user.id,
         );
-        const userIsAgentAdmin = await hasAnyAgentTypeAdminPermission({
-          userId: user.id,
-          organizationId,
-        });
         return {
           userId: user.id,
           organizationId,
-          userIsAgentAdmin,
           userIsMcpServerAdmin,
         };
       }
@@ -858,14 +848,9 @@ class WebSocketService {
           const { organizationId, ...user } = await UserModel.getById(
             apiKeyResult.key.referenceId,
           );
-          const userIsAgentAdmin = await hasAnyAgentTypeAdminPermission({
-            userId: user.id,
-            organizationId,
-          });
           return {
             userId: user.id,
             organizationId,
-            userIsAgentAdmin,
             userIsMcpServerAdmin,
           };
         }

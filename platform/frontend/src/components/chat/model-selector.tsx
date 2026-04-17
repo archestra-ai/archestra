@@ -92,6 +92,8 @@ interface ModelSelectorProps {
   variant?: "default" | "outline";
   /** When provided, only show models associated with this API key */
   apiKeyId?: string | null;
+  /** Whether the model query should be enabled */
+  enabled?: boolean;
 }
 
 /** Map our provider names to logo provider names
@@ -115,6 +117,7 @@ export const providerToLogoProvider: Record<SupportedProvider, string> = {
   zhipuai: "zhipuai",
   deepseek: "deepseek",
   minimax: "minimax",
+  azure: "azure",
 };
 
 /**
@@ -545,6 +548,7 @@ export function ModelSelector({
   onClear,
   variant = "default",
   apiKeyId,
+  enabled = true,
 }: ModelSelectorProps) {
   const {
     modelsByProvider,
@@ -552,6 +556,7 @@ export function ModelSelector({
     isPlaceholderData,
   } = useLlmModelsByProvider({
     apiKeyId: apiKeyId ?? undefined,
+    enabled,
   });
   const syncMutation = useSyncLlmModels();
   const [open, setOpen] = useState(false);

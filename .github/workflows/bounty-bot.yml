@@ -4,15 +4,21 @@ on:
   issue_comment:
     types: [created]
 
-permissions:
-  issues: write
-  contents: read
+permissions: {}
+
+concurrency:
+  group: bounty-bot-${{ github.event.issue.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   bounty-assignment:
+    name: Assign Bounty
     runs-on: blacksmith-2vcpu-ubuntu-2404
     # Only run on issue comments, not PR comments
     if: ${{ !github.event.issue.pull_request }}
+    permissions:
+      contents: read # Required to checkout the repository for local workflow context.
+      issues: write # Required to comment on issues and apply labels.
 
     steps:
       - name: Checkout repository
@@ -22,7 +28,7 @@ jobs:
           persist-credentials: false
 
       - name: Check for bounty command
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: ${{ github.token }}
           script: |

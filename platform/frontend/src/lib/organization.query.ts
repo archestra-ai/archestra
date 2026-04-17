@@ -338,6 +338,7 @@ export function useUpdateAppearanceSettings(
         footerText: updatedOrganization.footerText,
         chatLinks: updatedOrganization.chatLinks,
         chatErrorSupportMessage: updatedOrganization.chatErrorSupportMessage,
+        slimChatErrorUi: updatedOrganization.slimChatErrorUi,
         animateChatPlaceholders: updatedOrganization.animateChatPlaceholders,
       });
       toast.success(onSuccessMessage);
@@ -420,6 +421,36 @@ export function useUpdateAgentSettings(
     ) => {
       const { data: updatedOrganization, error } =
         await archestraApiSdk.updateAgentSettings({ body: data });
+
+      if (error) {
+        toast.error(onErrorMessage);
+        return null;
+      }
+
+      return updatedOrganization;
+    },
+    onSuccess: (updatedOrganization) => {
+      if (!updatedOrganization) return;
+      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      toast.success(onSuccessMessage);
+    },
+  });
+}
+
+/**
+ * Update MCP settings (OAuth access token lifetime)
+ */
+export function useUpdateMcpSettings(
+  onSuccessMessage: string,
+  onErrorMessage: string,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: archestraApiTypes.UpdateMcpSettingsData["body"],
+    ) => {
+      const { data: updatedOrganization, error } =
+        await archestraApiSdk.updateMcpSettings({ body: data });
 
       if (error) {
         toast.error(onErrorMessage);

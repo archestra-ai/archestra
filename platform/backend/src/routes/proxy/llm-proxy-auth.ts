@@ -5,7 +5,7 @@
  * request/response orchestration. Each function is independently testable.
  */
 
-import { ARCHESTRA_TOKEN_PREFIX, isSupportedProvider } from "@shared";
+import { hasArchestraTokenPrefix, isSupportedProvider } from "@shared";
 import type { FastifyRequest } from "fastify";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
@@ -51,7 +51,7 @@ export interface VirtualKeyValidationResult {
 }
 
 /**
- * Validate an `archestra_` prefixed virtual API key.
+ * Validate a platform-managed virtual API key.
  * Checks: token validity, expiration, provider match, parent key health.
  * Returns the resolved real API key and optional base URL.
  *
@@ -143,8 +143,7 @@ export async function attemptJwksAuth(
   const rawAuthHeader = request.raw.headers.authorization;
   const tokenMatch = rawAuthHeader?.match(/^Bearer\s+(.+)$/i);
   const bearerToken = tokenMatch?.[1] ?? null;
-  if (!bearerToken || bearerToken.startsWith(ARCHESTRA_TOKEN_PREFIX))
-    return null;
+  if (!bearerToken || hasArchestraTokenPrefix(bearerToken)) return null;
 
   let jwksResult: Awaited<ReturnType<typeof validateExternalIdpToken>>;
   try {
@@ -227,7 +226,7 @@ export function assertAuthenticatedForKeylessProvider(
   if (!isLoopbackAddress(requestIp)) {
     throw new ApiError(
       401,
-      "Authentication required. Use a virtual API key (archestra_...) or pass a provider API key.",
+      "Authentication required. Use a platform virtual API key or pass a provider API key.",
     );
   }
 }

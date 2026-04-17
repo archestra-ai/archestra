@@ -4,9 +4,9 @@ import type {
 } from "@shared";
 import { callGeminiEmbedding, GeminiEmbeddingError } from "./gemini";
 import { callOpenAIEmbedding, OpenAIEmbeddingError } from "./openai";
-import type { EmbeddingApiResponse } from "./types";
+import type { EmbeddingApiResponse, EmbeddingInput } from "./types";
 
-export type { EmbeddingApiResponse };
+export type { EmbeddingApiResponse, EmbeddingInput };
 export { GeminiEmbeddingError, OpenAIEmbeddingError };
 
 const RETRYABLE_NETWORK_ERROR_CODES = new Set([
@@ -24,10 +24,13 @@ const RETRYABLE_NETWORK_ERROR_CODES = new Set([
 /**
  * Provider-agnostic embedding call.
  * Dispatches to the correct client based on `provider`.
- * Callers do not need to know which provider is in use.
+ * Accepts both text strings and inline image inputs (multimodal).
+ * Image inputs are only meaningful for providers/models that support multimodal
+ * embedding (e.g. Gemini gemini-embedding-2-preview). OpenAI-compatible providers
+ * throw on non-text inputs — images should never reach them in normal operation.
  */
 export async function callEmbedding(params: {
-  texts: string[];
+  inputs: EmbeddingInput[];
   model: string;
   apiKey: string;
   baseUrl?: string | null;

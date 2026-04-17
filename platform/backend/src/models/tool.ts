@@ -16,6 +16,7 @@ import {
   count,
   desc,
   eq,
+  getTableColumns,
   ilike,
   inArray,
   isNotNull,
@@ -36,6 +37,7 @@ import {
 } from "@/database/utils/pagination";
 import logger from "@/logging";
 import type {
+  AssignedTool,
   ExtendedTool,
   InsertTool,
   McpToolAssignment,
@@ -379,6 +381,15 @@ class ToolModel {
     return tool;
   }
 
+  static async countByName(name: string): Promise<number> {
+    const [result] = await db
+      .select({ total: count() })
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.name, name));
+
+    return Number(result?.total ?? 0);
+  }
+
   /**
    * Find a tool by name, only if it is assigned to the given agent.
    * Used for authorization (verify a tool call targets an allowed tool)
@@ -410,22 +421,26 @@ class ToolModel {
    * Get all tools for an agent.
    * All tools are linked via the agent_tools junction table.
    */
-  static async getToolsByAgent(agentId: string): Promise<Tool[]> {
-    const assignedToolIds = await AgentToolModel.findToolIdsByAgent(agentId);
+  static async getToolsByAgent(agentId: string): Promise<AssignedTool[]> {
     const brandedKnowledgeToolName = archestraMcpBranding.getToolName(
       TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
     );
 
-    if (assignedToolIds.length === 0) {
-      return [];
-    }
-
     const tools = await db
-      .select()
-      .from(schema.toolsTable)
+      .select({
+        ...getTableColumns(schema.toolsTable),
+        mcpServerId: schema.agentToolsTable.mcpServerId,
+        credentialResolutionMode:
+          schema.agentToolsTable.credentialResolutionMode,
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
       .where(
         and(
-          inArray(schema.toolsTable.id, assignedToolIds),
+          eq(schema.agentToolsTable.agentId, agentId),
           // Always hide query_knowledge_sources from UI — it's auto-injected behind the scenes
           ne(schema.toolsTable.name, brandedKnowledgeToolName),
         ),

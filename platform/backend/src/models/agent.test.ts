@@ -2618,4 +2618,47 @@ describe("AgentModel", () => {
       expect(result).toBeNull();
     });
   });
+
+  describe("passthroughHeaders", () => {
+    test("persists passthrough headers on create", async () => {
+      const agent = await AgentModel.create({
+        name: "Gateway With Headers",
+        agentType: "mcp_gateway",
+        scope: "org",
+        teams: [],
+        passthroughHeaders: ["x-correlation-id", "x-tenant-id"],
+      });
+
+      expect(agent.passthroughHeaders).toEqual([
+        "x-correlation-id",
+        "x-tenant-id",
+      ]);
+
+      const fetched = await AgentModel.findById(agent.id);
+      expect(fetched?.passthroughHeaders).toEqual([
+        "x-correlation-id",
+        "x-tenant-id",
+      ]);
+    });
+
+    test("persists passthrough headers on update", async () => {
+      const agent = await AgentModel.create({
+        name: "Gateway Update Headers",
+        agentType: "mcp_gateway",
+        scope: "org",
+        teams: [],
+      });
+
+      expect(agent.passthroughHeaders).toBeNull();
+
+      const updated = await AgentModel.update(agent.id, {
+        passthroughHeaders: ["x-request-id"],
+      });
+
+      expect(updated?.passthroughHeaders).toEqual(["x-request-id"]);
+
+      const fetched = await AgentModel.findById(agent.id);
+      expect(fetched?.passthroughHeaders).toEqual(["x-request-id"]);
+    });
+  });
 });

@@ -70,6 +70,7 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: string;
     consoleName: string;
     description?: string;
+    baseUrlRequired?: boolean;
   }
 > = {
   anthropic: {
@@ -188,10 +189,11 @@ const PROVIDER_CONFIG: Record<
   bedrock: {
     name: "AWS Bedrock",
     icon: "/icons/bedrock.png",
-    placeholder: "Bearer token...",
+    placeholder: "Bedrock API key (bedrock-api-key-... / ABSK...)",
     enabled: true,
     consoleUrl: "https://console.aws.amazon.com/bedrock",
     consoleName: "AWS Console",
+    baseUrlRequired: true,
   },
   minimax: {
     name: "MiniMax",
@@ -200,6 +202,17 @@ const PROVIDER_CONFIG: Record<
     enabled: true,
     consoleUrl: "https://www.minimax.io/",
     consoleName: "MiniMax Platform",
+  },
+  azure: {
+    name: "Azure AI Foundry",
+    icon: "/icons/azure.png",
+    placeholder: "your-azure-openai-api-key",
+    enabled: true,
+    consoleUrl:
+      "https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/OpenAI",
+    consoleName: "Azure Portal",
+    description:
+      "Set Base URL to: https://<resource>.openai.azure.com/openai/deployments/<deployment>",
   },
 } as const;
 
@@ -263,6 +276,9 @@ export function LlmProviderApiKeyForm({
   const hasApiKeyChanged =
     apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER && apiKey !== "";
   const providerConfig = PROVIDER_CONFIG[provider];
+  const isBaseUrlRequired =
+    providerConfig.baseUrlRequired && !providerBaseUrls?.[provider];
+
   const allowedProviderSet = useMemo(
     () =>
       new Set<CreateLlmProviderApiKeyBody["provider"]>(
@@ -600,9 +616,11 @@ export function LlmProviderApiKeyForm({
         <div className="space-y-2">
           <Label htmlFor="llm-provider-api-key-base-url">
             Base URL{" "}
-            <span className="font-normal text-muted-foreground">
-              (optional)
-            </span>
+            {!isBaseUrlRequired && (
+              <span className="font-normal text-muted-foreground">
+                (optional)
+              </span>
+            )}
           </Label>
           <p className="text-xs text-muted-foreground">
             Override the default API endpoint. Useful for self-hosted or proxy
@@ -620,6 +638,9 @@ export function LlmProviderApiKeyForm({
             {...form.register("baseUrl", {
               validate: (value) => {
                 if (!value) {
+                  if (isBaseUrlRequired) {
+                    return "Base URL is required for this provider";
+                  }
                   return true;
                 }
 

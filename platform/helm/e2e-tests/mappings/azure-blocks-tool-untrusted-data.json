@@ -1,0 +1,50 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/azure/openai/deployments/test-deployment/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "azure-blocks-tool-untrusted-data"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "chatcmpl-azure-tool-invocation",
+      "object": "chat.completion",
+      "created": 1234567890,
+      "model": "gpt-4o",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": null,
+            "refusal": null,
+            "tool_calls": [
+              {
+                "id": "call_test_123",
+                "type": "function",
+                "function": {
+                  "name": "e2e_read_file_azure",
+                  "arguments": "{\"file_path\":\"/etc/passwd\"}"
+                }
+              }
+            ]
+          },
+          "finish_reason": "tool_calls",
+          "logprobs": null
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 100,
+        "completion_tokens": 20,
+        "total_tokens": 120
+      }
+    }
+  }
+}

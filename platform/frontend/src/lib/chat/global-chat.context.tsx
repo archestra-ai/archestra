@@ -404,12 +404,14 @@ function ChatSessionHook({
       setOptimisticToolCalls([]);
       console.error("[ChatSession] Error occurred:", {
         conversationId,
-        error: chatError,
-        message: chatError.message,
+        errorName: chatError.name,
+        errorMessage: chatError.message,
         retryCount: retryCountRef.current,
       });
 
       // Auto-retry transient errors (network failures, server errors)
+      // Do not retry if the error already happened this attempt cycle to avoid
+      // hammering a quota-exhausted API.
       if (
         isRetryableError(chatError) &&
         retryCountRef.current < MAX_AUTO_RETRIES

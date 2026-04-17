@@ -41,7 +41,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useProfiles } from "@/lib/agent.query";
+import { useProfile, useProfiles } from "@/lib/agent.query";
 import {
   useAgentDelegations,
   useAllProfileTools,
@@ -82,10 +82,10 @@ export function McpConnectionInstructions({
   const { catalogName, serverName } = useArchestraMcpIdentity();
   const enterpriseGatewayAuthDocsUrl = getFrontendDocsUrl(
     DocsPage.McpAuthentication,
-    "enterprise-gateway-auth",
   );
   const { data: profiles = [] } = useProfiles({
     filters: { agentTypes: ["profile", "mcp_gateway"] },
+    enabled: !hideProfileSelector,
   });
   const { data: mcpServers = [] } = useMcpServers();
   const { data: catalogItems = [] } = useInternalMcpCatalog();
@@ -130,8 +130,10 @@ export function McpConnectionInstructions({
     setSelectedProfileId(agentId);
   }, [agentId]);
 
+  const { data: selectedProfileData } = useProfile(selectedProfileId);
   // Get the selected profile
-  const selectedProfile = profiles?.find((p) => p.id === selectedProfileId);
+  const selectedProfile =
+    profiles?.find((p) => p.id === selectedProfileId) ?? selectedProfileData;
 
   // Fetch subagents (delegations) for the selected profile
   const { data: subagents = [] } = useAgentDelegations(selectedProfileId);
@@ -140,11 +142,69 @@ export function McpConnectionInstructions({
   const { data: assignedToolsData } = useAllProfileTools({
     filters: { agentId: selectedProfileId },
     skipPagination: true,
-    enabled: !!selectedProfileId,
+    enabled: !!selectedProfileId && !hideProfileSelector,
   });
 
   // Group tools by MCP server for the selected profile
   const { mcpServerToolGroups, archestraTools } = useMemo(() => {
+    if (hideProfileSelector && selectedProfile?.tools) {
+      const groups = new Map<
+        string,
+        {
+          server: (typeof mcpServers)[number];
+          tools: Array<{
+            id: string;
+            name: string;
+            description?: string | null;
+          }>;
+          mcpServerId?: string | null;
+          credentialResolutionMode?: CredentialResolutionMode;
+        }
+      >();
+
+      const archestraToolsList: Array<{
+        id: string;
+        name: string;
+        description?: string | null;
+      }> = [];
+
+      selectedProfile.tools.forEach((tool) => {
+        if (tool.catalogId === ARCHESTRA_MCP_CATALOG_ID) {
+          archestraToolsList.push({
+            id: tool.id,
+            name: parseFullToolName(tool.name).toolName || tool.name,
+            description: tool.description,
+          });
+          return;
+        }
+
+        if (tool.catalogId) {
+          const server = mcpServers.find((s) => s.catalogId === tool.catalogId);
+          if (!server) return;
+
+          const existing = groups.get(tool.catalogId);
+          const toolData = {
+            id: tool.id,
+            name: parseFullToolName(tool.name).toolName || tool.name,
+            description: tool.description,
+          };
+          if (existing) {
+            existing.tools.push(toolData);
+          } else {
+            groups.set(tool.catalogId, {
+              server,
+              tools: [toolData],
+            });
+          }
+        }
+      });
+
+      return {
+        mcpServerToolGroups: groups,
+        archestraTools: archestraToolsList,
+      };
+    }
+
     if (!assignedToolsData?.data)
       return {
         mcpServerToolGroups: new Map<
@@ -220,7 +280,15 @@ export function McpConnectionInstructions({
     });
 
     return { mcpServerToolGroups: groups, archestraTools: archestraToolsList };
-  }, [mcpServers, assignedToolsData]);
+  }, [hideProfileSelector, mcpServers, assignedToolsData, selectedProfile]);
+
+  const hasDynamicCredentialTools = useMemo(() => {
+    if (hideProfileSelector) return false;
+    if (!assignedToolsData?.data) return false;
+    return assignedToolsData.data.some(
+      (t) => t.credentialResolutionMode === "dynamic",
+    );
+  }, [hideProfileSelector, assignedToolsData]);
 
   type ProfileType = archestraApiTypes.GetAllAgentsResponses["200"][number];
   const getToolsCountForProfile = useCallback(
@@ -242,11 +310,13 @@ export function McpConnectionInstructions({
 
   const mcpUrl = `${connectionUrl}/mcp/${selectedProfile?.slug ?? selectedProfileId}`;
 
-  // Default to personal token if available, otherwise org token, then first token
+  // Default to personal token if available, otherwise org token (unless dynamic tools), then first token
   const orgToken = tokens?.find((t) => t.isOrganizationToken);
   const defaultTokenId = userToken
     ? PERSONAL_TOKEN_ID
-    : (orgToken?.id ?? tokens?.[0]?.id ?? "");
+    : hasDynamicCredentialTools
+      ? (tokens?.find((t) => !t.isOrganizationToken)?.id ?? "")
+      : (orgToken?.id ?? tokens?.[0]?.id ?? "");
 
   // Check if personal token is selected (either explicitly or by default)
   const effectiveTokenId = selectedTokenId ?? defaultTokenId;
@@ -594,11 +664,17 @@ export function McpConnectionInstructions({
                   {tokens
                     ?.filter((token) => token.isOrganizationToken)
                     .map((token) => (
-                      <SelectItem key={token.id} value={token.id}>
+                      <SelectItem
+                        key={token.id}
+                        value={token.id}
+                        disabled={hasDynamicCredentialTools}
+                      >
                         <div className="flex flex-col gap-0.5 items-start">
                           <div>Organization Token</div>
                           <div className="text-xs text-muted-foreground">
-                            To share org-wide
+                            {hasDynamicCredentialTools
+                              ? 'This gateway has tools assigned with "Resolve at call time" credential. It\'s incompatible with org-wide token. Use Personal token instead.'
+                              : "To share org-wide"}
                           </div>
                         </div>
                       </SelectItem>

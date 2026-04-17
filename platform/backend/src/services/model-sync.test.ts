@@ -4,7 +4,7 @@ import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model
 import ModelModel from "@/models/model";
 import { modelFetchers } from "@/routes/chat/model-fetchers";
 import { afterEach, describe, expect, test } from "@/test";
-import { modelSyncService } from "./model-sync";
+import { modelSyncService, resolveModelCapabilities } from "./model-sync";
 
 // Mock the models.dev client to avoid external API calls
 vi.mock("@/clients/models-dev-client", () => ({
@@ -274,5 +274,25 @@ describe("ModelSyncService", () => {
     );
     expect(flashAfterResync?.inputModalities).toEqual(["text", "image"]);
     expect(flashAfterResync?.outputModalities).toEqual(["text", "image"]);
+  });
+
+  test("normalizes gemini-embedding-2-preview as multimodal during sync", () => {
+    const capabilities = resolveModelCapabilities({
+      provider: "gemini",
+      modelId: "gemini-embedding-2-preview",
+      capabilities: {
+        description: "Gemini Embedding 2 Preview",
+        contextLength: null,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        promptPricePerToken: null,
+        completionPricePerToken: null,
+      },
+    });
+
+    expect(capabilities.inputModalities).toEqual(["text", "image"]);
+    expect(capabilities.outputModalities).toEqual([]);
+    expect(capabilities.supportsToolCalling).toBe(false);
   });
 });

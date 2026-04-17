@@ -1,5 +1,8 @@
-import { createGoogleGenAIClient } from "@/clients/gemini-client";
-import type { EmbeddingApiResponse } from "./types";
+import {
+  createGoogleGenAIClient,
+  isVertexAiEnabled,
+} from "@/clients/gemini-client";
+import type { EmbeddingApiResponse, EmbeddingInput } from "./types";
 
 export class GeminiEmbeddingError extends Error {
   constructor(
@@ -12,25 +15,35 @@ export class GeminiEmbeddingError extends Error {
 }
 
 /**
- * Embed multiple texts using the Google GenAI SDK's `embedContent` method.
- * Supports both API key mode and Vertex AI mode (via `createGoogleGenAIClient`).
+ * Embed multiple inputs using the Google GenAI SDK's `embedContent` method.
+ * Supports both text strings and inline images (multimodal), as well as
+ * API key mode and Vertex AI mode (via `createGoogleGenAIClient`).
+ *
+ * TODO: Add support for audio and video modalities — gemini-embedding-2-preview
+ * supports text, image, audio, video, and PDF inputs.
  *
  * Gemini's native embedding API does not report token usage, so `prompt_tokens`
  * and `total_tokens` are always 0.
  */
 export async function callGeminiEmbedding(params: {
-  texts: string[];
+  inputs: EmbeddingInput[];
   model: string;
   apiKey: string;
   baseUrl?: string | null;
   dimensions?: number;
 }): Promise<EmbeddingApiResponse> {
-  const { texts, model, apiKey, baseUrl, dimensions } = params;
+  const { inputs, model, apiKey, baseUrl, dimensions } = params;
 
   const client = createGoogleGenAIClient(apiKey, "[GeminiEmbedding]", baseUrl);
 
-  // Normalise to "models/gemini-embedding-001" format
-  const modelId = model.startsWith("models/") ? model : `models/${model}`;
+  const modelId = getGeminiEmbeddingModelId(model);
+
+  // Map EmbeddingInput[] to ContentListUnion (PartUnion[]).
+  // Strings pass through as-is; image inputs become Part objects with inlineData.
+  const contents = inputs.map((input) => {
+    if (typeof input === "string") return input;
+    return { inlineData: { mimeType: input.mimeType, data: input.data } };
+  });
 
   try {
     // The installed @google/genai SDK accepts multiple contents here. In API
@@ -38,12 +51,12 @@ export async function callGeminiEmbedding(params: {
     // is handled via the predict path and still supports batched inputs.
     const response = await client.models.embedContent({
       model: modelId,
-      contents: texts,
+      contents,
       config: dimensions ? { outputDimensionality: dimensions } : undefined,
     });
     const embeddings = response.embeddings?.map((item) => item.values ?? []);
 
-    if (!embeddings?.length || embeddings.length !== texts.length) {
+    if (!embeddings?.length || embeddings.length !== inputs.length) {
       throw new GeminiEmbeddingError(
         500,
         "Gemini embedding response did not include embeddings for each input",
@@ -80,4 +93,12 @@ export async function callGeminiEmbedding(params: {
       (err instanceof Error ? err.message : String(err));
     throw new GeminiEmbeddingError(status, message);
   }
+}
+
+function getGeminiEmbeddingModelId(model: string): string {
+  if (isVertexAiEnabled()) {
+    return model.replace(/^models\//, "");
+  }
+
+  return model.startsWith("models/") ? model : `models/${model}`;
 }

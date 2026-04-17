@@ -37,7 +37,6 @@ describe("BrowserStreamService URL handling", () => {
     const userContext = {
       userId: "test-user",
       organizationId: "test-org",
-      userIsAgentAdmin: false,
     };
 
     // Mock selectOrCreateTab to succeed
@@ -110,7 +109,6 @@ describe("BrowserStreamService URL handling", () => {
     const userContext = {
       userId: "test-user",
       organizationId: "test-org",
-      userIsAgentAdmin: false,
     };
 
     // Mock selectOrCreateTab to succeed
@@ -171,7 +169,6 @@ describe("BrowserStreamService URL handling", () => {
     const userContext = {
       userId: "test-user",
       organizationId: "test-org",
-      userIsAgentAdmin: false,
     };
 
     vi.spyOn(browserService, "selectOrCreateTab").mockResolvedValue({
@@ -219,7 +216,6 @@ describe("BrowserStreamService URL handling", () => {
     const userContext = {
       userId: "test-user",
       organizationId: "test-org",
-      userIsAgentAdmin: false,
     };
 
     vi.spyOn(
@@ -275,7 +271,6 @@ describe("BrowserStreamService URL handling", () => {
     const userContext = {
       userId: "test-user",
       organizationId: "test-org",
-      userIsAgentAdmin: false,
     };
 
     vi.spyOn(
@@ -330,7 +325,6 @@ describe("BrowserStreamService URL handling", () => {
     const userContext = {
       userId: "test-user",
       organizationId: "test-org",
-      userIsAgentAdmin: false,
     };
 
     vi.spyOn(
@@ -386,7 +380,6 @@ describe("BrowserStreamService URL handling", () => {
     const userContext = {
       userId: "test-user",
       organizationId: "test-org",
-      userIsAgentAdmin: false,
     };
 
     vi.spyOn(
@@ -436,7 +429,6 @@ describe("BrowserStreamService URL handling", () => {
     const userContext = {
       userId: "test-user",
       organizationId: "test-org",
-      userIsAgentAdmin: false,
     };
 
     // Mock state manager to return stored tabIndex
@@ -501,7 +493,6 @@ describe("BrowserStreamService URL handling", () => {
     const userContext = {
       userId: "test-user",
       organizationId: "test-org",
-      userIsAgentAdmin: false,
     };
 
     // Mock state manager to return no stored state
@@ -559,7 +550,6 @@ describe("BrowserStreamService URL handling", () => {
     const userContext = {
       userId: "test-user",
       organizationId: "test-org",
-      userIsAgentAdmin: false,
     };
 
     // Mock state manager to return stored URL but no tabIndex (tab was closed)
@@ -636,7 +626,6 @@ describe("BrowserStreamService URL handling", () => {
     const userContext = {
       userId: "test-user",
       organizationId: "test-org",
-      userIsAgentAdmin: false,
     };
 
     vi.spyOn(browserStateManager, "get").mockResolvedValue({
@@ -704,7 +693,6 @@ describe("BrowserStreamService URL handling", () => {
     const userContext = {
       userId: "test-user",
       organizationId: "test-org",
-      userIsAgentAdmin: false,
     };
 
     // Mock state manager
@@ -762,7 +750,6 @@ describe("BrowserStreamService URL handling", () => {
     const userContext = {
       userId: "test-user",
       organizationId: "test-org",
-      userIsAgentAdmin: false,
     };
 
     // Mock state manager to return no stored state
@@ -823,7 +810,6 @@ describe("BrowserStreamService URL handling", () => {
     const userContext = {
       userId: "test-user",
       organizationId: "test-org",
-      userIsAgentAdmin: false,
     };
 
     const updateUrlSpy = vi
@@ -858,7 +844,6 @@ describe("BrowserStreamService URL handling", () => {
     const userContext = {
       userId: "test-user",
       organizationId: "test-org",
-      userIsAgentAdmin: false,
     };
 
     const updateUrlSpy = vi

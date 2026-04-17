@@ -16,7 +16,9 @@ import { handleApiError } from "@/lib/utils";
 const { getLlmModels, getModelsWithApiKeys, updateModel, syncLlmModels } =
   archestraApiSdk;
 type LlmModelsQuery = NonNullable<archestraApiTypes.GetLlmModelsData["query"]>;
-type LlmModelsParams = Partial<LlmModelsQuery>;
+type LlmModelsParams = Partial<LlmModelsQuery> & {
+  enabled?: boolean;
+};
 
 export type LlmModel = archestraApiTypes.GetLlmModelsResponses["200"][number];
 export type ModelCapabilities = NonNullable<LlmModel["capabilities"]>;
@@ -45,6 +47,7 @@ export function useLlmModels(params?: LlmModelsParams) {
     // Keep showing previous models while fetching for a new apiKeyId,
     // preventing display name flicker (e.g. "Claude Opus 4.1" → raw ID → back).
     placeholderData: keepPreviousData,
+    enabled: params?.enabled,
   });
 }
 

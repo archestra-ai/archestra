@@ -148,7 +148,7 @@ export function mapClientError(error: Error): ChatErrorResponse {
 
   return {
     code: ChatErrorCode.Unknown,
-    message: displayMessage,
+    message: displayMessage || ChatErrorMessages[ChatErrorCode.Unknown],
     isRetryable: RetryableErrorCodes.has(ChatErrorCode.Unknown),
   };
 }

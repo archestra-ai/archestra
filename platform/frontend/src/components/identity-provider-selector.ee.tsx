@@ -17,10 +17,12 @@ interface IdentityProviderSelectorProps {
    * Defaults to true.
    */
   showDivider?: boolean;
+  callbackURL?: string;
 }
 
 export function IdentityProviderSelector({
   showDivider = true,
+  callbackURL: callbackURLOverride,
 }: IdentityProviderSelectorProps) {
   const searchParams = useSearchParams();
   const { data: identityProviders = [], isLoading } =
@@ -29,9 +31,13 @@ export function IdentityProviderSelector({
   // Get the redirectTo URL from search params, defaulting to "/"
   // Validates that the path is safe (relative path, no protocol) to prevent open redirect attacks
   const callbackURL = useMemo(() => {
+    if (callbackURLOverride) {
+      return callbackURLOverride;
+    }
+
     const redirectTo = searchParams.get("redirectTo");
     return getValidatedCallbackURLWithDefault(redirectTo);
-  }, [searchParams]);
+  }, [callbackURLOverride, searchParams]);
 
   const handleSsoSignIn = useCallback(
     async (providerId: string) => {

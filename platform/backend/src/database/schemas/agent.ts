@@ -92,6 +92,9 @@ const agentsTable = pgTable(
       { onDelete: "set null" },
     ),
 
+    /** Allowlist of HTTP header names to forward from gateway requests to downstream MCP servers */
+    passthroughHeaders: text("passthrough_headers").array(),
+
     /** JSONB config for built-in agents (null for user-created agents) */
     builtInAgentConfig: jsonb(
       "built_in_agent_config",

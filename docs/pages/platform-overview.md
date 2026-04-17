@@ -16,7 +16,7 @@ Archestra is a centralized AI Platform designed for organizations where software
 
 > Fun fact: The team behind Archestra.AI previously worked on Grafana OnCall.
 
-![Platform Architecture](/docs/platform-overview-architecture.png)
+![Platform Architecture](/docs/platform-overview-architecture.webp)
 
 ## Composable Components
 

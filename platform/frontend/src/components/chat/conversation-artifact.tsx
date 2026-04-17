@@ -104,11 +104,7 @@ export function ConversationArtifactPanel({
       if (language) {
         const code = String(children).replace(/\n$/, "");
         return (
-          <CodeBlock
-            code={code}
-            language={language}
-            contentStyle={{ paddingRight: "2.5rem" }}
-          >
+          <CodeBlock code={code} language={language}>
             <CodeBlockCopyButton />
           </CodeBlock>
         );

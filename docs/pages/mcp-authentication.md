@@ -249,9 +249,9 @@ For external MCP clients such as Cursor, **ID-JAG** and **JWKS** are usually the
 
 When Archestra is configured to exchange the caller's IdP token at tool-call time, it uses one of three exchange strategies.
 
-- **`rfc8693`**: generic OAuth token exchange. Archestra exchanges the user's token at the IdP token endpoint and uses the returned bearer token on the downstream MCP request.
-- **`okta_managed`**: Okta's managed-credential exchange pattern. Archestra exchanges the user's token for an Okta-managed credential such as a secret or bearer token, then injects the configured value into the downstream MCP request.
-- **`entra_obo`**: Microsoft Entra on-behalf-of (OBO). Archestra exchanges the signed-in user's Entra access token for the downstream API token the MCP server needs.
+- **RFC 8693 token exchange**: Archestra exchanges the user's token at the IdP token endpoint and uses the returned bearer token on the downstream MCP request.
+- **Okta managed credential exchange**: Archestra exchanges the user's token for an Okta-managed credential such as a secret or bearer token, then injects the configured value into the downstream MCP request.
+- **Microsoft Entra on-behalf-of (OBO)**: Archestra exchanges the signed-in user's Entra access token for the downstream API token the MCP server needs.
 
 Archestra uses the exchange mode configured on the Identity Provider to decide how to exchange the user's IdP token before calling the downstream MCP server.
 

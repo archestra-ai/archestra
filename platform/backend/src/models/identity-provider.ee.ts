@@ -1005,7 +1005,7 @@ function assertValidOidcDiscoveryEndpoint(discoveryEndpoint: string): void {
     );
   }
 
-  const allowLocalDevelopmentDiscovery = config.environment === "development";
+  const allowLocalDevelopmentDiscovery = !config.production;
 
   if (
     !config.test.enableE2eTestEndpoints &&

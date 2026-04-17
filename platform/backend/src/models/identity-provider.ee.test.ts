@@ -53,7 +53,7 @@ const mockProvider = {
 };
 
 const originalEnableE2eTestEndpoints = config.test.enableE2eTestEndpoints;
-const originalEnvironment = config.environment;
+const originalProduction = config.production;
 
 // Helper to create test params with proper typing for resolveSsoRole tests
 // Note: userInfo is included for compatibility with better-auth's IdpGetRoleData type
@@ -337,6 +337,12 @@ describe("IdentityProviderModel", () => {
       makeOrganization,
       makeUser,
     }) => {
+      Object.defineProperty(config, "production", {
+        value: true,
+        writable: true,
+        configurable: true,
+      });
+
       const org = await makeOrganization();
       const user = await makeUser();
       const registerSSOProvider = vi.fn();
@@ -375,6 +381,11 @@ describe("IdentityProviderModel", () => {
         expect(registerSSOProvider).not.toHaveBeenCalled();
       } finally {
         globalThis.fetch = originalFetch;
+        Object.defineProperty(config, "production", {
+          value: originalProduction,
+          writable: true,
+          configurable: true,
+        });
       }
     });
 
@@ -460,12 +471,12 @@ describe("IdentityProviderModel", () => {
       }
     });
 
-    test("allows insecure discovery endpoints in local development", async ({
+    test("allows insecure discovery endpoints outside production", async ({
       makeOrganization,
       makeUser,
     }) => {
-      Object.defineProperty(config, "environment", {
-        value: "development",
+      Object.defineProperty(config, "production", {
+        value: false,
         writable: true,
         configurable: true,
       });
@@ -537,8 +548,8 @@ describe("IdentityProviderModel", () => {
         expect(registerSSOProvider).toHaveBeenCalledOnce();
       } finally {
         globalThis.fetch = originalFetch;
-        Object.defineProperty(config, "environment", {
-          value: originalEnvironment,
+        Object.defineProperty(config, "production", {
+          value: originalProduction,
           writable: true,
           configurable: true,
         });

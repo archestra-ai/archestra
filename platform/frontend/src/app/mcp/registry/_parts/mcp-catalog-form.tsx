@@ -1652,11 +1652,6 @@ export function McpCatalogForm({
                           isSelected={authMethod === "enterprise_managed"}
                           configContent={
                             <div className="space-y-4 pl-6 border-l-2">
-                              <EnterpriseIdentityProviderField
-                                control={form.control}
-                                identityProviders={oidcIdentityProviders}
-                              />
-
                               <div className="bg-muted p-4 rounded-lg">
                                 <p className="text-sm text-muted-foreground">
                                   Exchange the signed-in user&apos;s
@@ -1673,6 +1668,11 @@ export function McpCatalogForm({
                                   {`${appName} will exchange that token at tool-call time. Installations inherit these defaults automatically.`}
                                 </p>
                               </div>
+
+                              <EnterpriseIdentityProviderField
+                                control={form.control}
+                                identityProviders={oidcIdentityProviders}
+                              />
 
                               <FormField
                                 control={form.control}

@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import type { IdentityProviderOidcConfig } from "@shared";
 import { sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
@@ -27,23 +28,31 @@ async function insertIdentityProvider(params: {
   issuer: string;
   exchangeProviderType: "generic_oidc" | "keycloak" | "okta";
 }) {
+  const oidcConfig = {
+    issuer: params.issuer,
+    pkce: true,
+    clientId: `${params.providerId}-client`,
+    clientSecret: "test-secret",
+    discoveryEndpoint: `${params.issuer}/.well-known/openid-configuration`,
+    enterpriseManagedCredentials: {
+      providerType: params.exchangeProviderType,
+      clientId: `${params.providerId}-exchange-client`,
+    },
+  } as IdentityProviderOidcConfig & {
+    enterpriseManagedCredentials: IdentityProviderOidcConfig["enterpriseManagedCredentials"] & {
+      providerType: "generic_oidc" | "keycloak" | "okta";
+    };
+  };
+
   await db.insert(schema.identityProvidersTable).values({
     id: params.id,
     issuer: params.issuer,
     providerId: params.providerId,
     organizationId: params.organizationId,
     domain: `${params.providerId}.example.com`,
-    oidcConfig: JSON.stringify({
-      issuer: params.issuer,
-      pkce: true,
-      clientId: `${params.providerId}-client`,
-      clientSecret: "test-secret",
-      discoveryEndpoint: `${params.issuer}/.well-known/openid-configuration`,
-      enterpriseManagedCredentials: {
-        providerType: params.exchangeProviderType,
-        clientId: `${params.providerId}-exchange-client`,
-      },
-    }),
+    oidcConfig: JSON.stringify(
+      oidcConfig,
+    ) as unknown as typeof schema.identityProvidersTable.$inferInsert.oidcConfig,
   });
 }
 
@@ -53,9 +62,14 @@ async function getEnterpriseManagedCredentials(identityProviderId: string) {
     .from(schema.identityProvidersTable)
     .where(sql`${schema.identityProvidersTable.id} = ${identityProviderId}`);
 
-  const parsedConfig = JSON.parse(row.oidcConfig ?? "{}") as {
-    enterpriseManagedCredentials?: Record<string, unknown>;
-  };
+  const parsedConfig =
+    typeof row.oidcConfig === "string"
+      ? (JSON.parse(row.oidcConfig) as {
+          enterpriseManagedCredentials?: Record<string, unknown>;
+        })
+      : ((row.oidcConfig ?? {}) as {
+          enterpriseManagedCredentials?: Record<string, unknown>;
+        });
 
   return parsedConfig.enterpriseManagedCredentials ?? {};
 }

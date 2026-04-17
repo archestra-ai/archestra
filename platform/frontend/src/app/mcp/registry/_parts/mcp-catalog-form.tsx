@@ -1843,9 +1843,9 @@ function EnterpriseIdentityProviderField(params: {
             Identity Provider <span className="text-destructive">*</span>
           </FormLabel>
           <FormDescription>
-            This must match the MCP Gateway&apos;s enterprise IdP when the tool
-            is assigned with resolve-at-call-time or enterprise-managed
-            credentials.
+            Choose the same identity provider the MCP Gateway uses for this
+            caller. This is required when the tool uses Resolve at call time or
+            Identity Provider Token Exchange.
           </FormDescription>
           <Select value={field.value ?? ""} onValueChange={field.onChange}>
             <FormControl>

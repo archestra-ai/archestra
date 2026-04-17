@@ -334,9 +334,11 @@ describe("formSchema", () => {
         oauthConfig: {
           client_id: "test-client-id",
           client_secret: "test-secret",
+          audience: "",
           redirect_uris: "https://localhost:3000/oauth-callback",
           scopes: "read,write",
           supports_resource_metadata: true,
+          grantType: "authorization_code",
           authServerUrl: "https://auth.example.com",
           wellKnownUrl:
             "https://auth.example.com/.well-known/openid-configuration",
@@ -358,9 +360,11 @@ describe("formSchema", () => {
         oauthConfig: {
           client_id: "test-client-id",
           client_secret: "test-secret",
+          audience: "",
           redirect_uris: "https://localhost:3000/oauth-callback",
           scopes: "read,write",
           supports_resource_metadata: true,
+          grantType: "authorization_code",
           authorizationEndpoint: "https://auth.example.com/oauth/authorize",
         },
         localConfig: undefined,
@@ -380,9 +384,11 @@ describe("formSchema", () => {
         oauthConfig: {
           client_id: "test-client-id",
           client_secret: "test-secret",
+          audience: "",
           redirect_uris: "",
           scopes: "read,write",
           supports_resource_metadata: true,
+          grantType: "authorization_code",
         },
         localConfig: undefined,
       };
@@ -390,6 +396,33 @@ describe("formSchema", () => {
       expect(() => formSchema.parse(data)).toThrow(
         "At least one redirect URI is required",
       );
+    });
+
+    it("should validate OAuth client credentials without redirect URIs", () => {
+      const data = {
+        ...baseValidData,
+        authMethod: "oauth_client_credentials" as const,
+        serverType: "remote" as const,
+        serverUrl: "https://api.example.com/mcp",
+        oauthConfig: {
+          client_id: "",
+          client_secret: "",
+          audience: "https://api.example.com",
+          redirect_uris: "",
+          scopes: "",
+          supports_resource_metadata: false,
+          grantType: "client_credentials" as const,
+          authServerUrl: "",
+          authorizationEndpoint: "",
+          wellKnownUrl: "",
+          resourceMetadataUrl: "",
+          tokenEndpoint: "https://auth.example.com/oauth/token",
+          oauthServerUrl: "",
+        },
+        localConfig: undefined,
+      };
+
+      expect(formSchema.parse(data)).toEqual(data);
     });
   });
 });

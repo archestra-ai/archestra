@@ -1790,6 +1790,7 @@ async function connectAndGetToolsForInstallation(params: {
       catalogItem,
       mcpServerId: params.mcpServerId,
       secrets,
+      secretId: params.secretId,
     });
   } catch (error) {
     if (
@@ -1823,6 +1824,7 @@ async function connectAndGetToolsForInstallation(params: {
         ...secrets,
         access_token: accessToken,
       },
+      secretId: params.secretId,
     });
   }
 }

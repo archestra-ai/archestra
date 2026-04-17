@@ -216,6 +216,8 @@ export function RemoteServerInstallDialog({
   );
   const hasConfig = Object.keys(promptableUserConfig).length > 0;
   const hasOAuth = !!catalogItem.oauthConfig;
+  const usesBrowserOAuth =
+    catalogItem.oauthConfig?.grant_type !== "client_credentials";
 
   // Get sensitive and non-sensitive required fields
   const sensitiveRequiredFields = Object.entries(promptableUserConfig).filter(
@@ -338,12 +340,23 @@ export function RemoteServerInstallDialog({
         </div>
       )}
 
-      {canInstall && hasOAuth && (
+      {canInstall && hasOAuth && usesBrowserOAuth && (
         <Alert>
           <Info className="h-4 w-4" />
           <AlertDescription>
             This server requires OAuth authentication. You'll be redirected to
             complete the authentication flow after clicking Install.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {canInstall && hasOAuth && !usesBrowserOAuth && (
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertDescription>
+            This server uses shared OAuth client credentials. The values below
+            are stored with the installation, and {catalogItem.name} will fetch
+            short-lived bearer tokens automatically when tools run.
           </AlertDescription>
         </Alert>
       )}

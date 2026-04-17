@@ -528,6 +528,7 @@ class McpServerModel {
         catalogItem,
         mcpServerId: mcpServer.id,
         secrets,
+        secretId: mcpServer.secretId ?? undefined,
       });
 
       // Transform to ensure description is always a string
@@ -682,6 +683,7 @@ class McpServerModel {
             catalogItem,
             mcpServerId: "validation",
             secrets,
+            secretId,
           });
           return {
             isValid: tools.length > 0,

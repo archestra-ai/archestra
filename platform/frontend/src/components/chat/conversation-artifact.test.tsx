@@ -2,27 +2,6 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-const { mockUseTheme } = vi.hoisted(() => ({
-  mockUseTheme: vi.fn(),
-}));
-
-vi.mock("next-themes", () => ({
-  useTheme: () => mockUseTheme(),
-}));
-
-vi.mock("react-syntax-highlighter", () => ({
-  Prism: ({ children }: { children: string }) => (
-    <pre data-testid="syntax-highlighter">
-      <code>{children}</code>
-    </pre>
-  ),
-}));
-
-vi.mock("react-syntax-highlighter/dist/esm/styles/prism", () => ({
-  oneDark: {},
-  oneLight: {},
-}));
-
 vi.mock("@/components/mermaid-diagram", () => ({
   MermaidDiagram: ({ chart }: { chart: string }) => (
     <div data-testid="mermaid-diagram">{chart}</div>
@@ -40,8 +19,6 @@ function mockClipboard(writeText: ReturnType<typeof vi.fn>) {
 
 describe("ConversationArtifactPanel", () => {
   it("renders a copy button inside fenced code blocks", () => {
-    mockUseTheme.mockReturnValue({ resolvedTheme: "light" });
-
     render(
       <ConversationArtifactPanel
         artifact={"```js\nconst x = 1;\n```"}
@@ -59,7 +36,6 @@ describe("ConversationArtifactPanel", () => {
   });
 
   it("copies fenced code via the code block copy button", async () => {
-    mockUseTheme.mockReturnValue({ resolvedTheme: "light" });
     const user = userEvent.setup();
     const writeText = vi.fn().mockResolvedValue(undefined);
     mockClipboard(writeText);
@@ -82,8 +58,6 @@ describe("ConversationArtifactPanel", () => {
   });
 
   it("still routes mermaid code blocks to the mermaid renderer", () => {
-    mockUseTheme.mockReturnValue({ resolvedTheme: "light" });
-
     render(
       <ConversationArtifactPanel
         artifact={"```mermaid\ngraph TD; A-->B;\n```"}

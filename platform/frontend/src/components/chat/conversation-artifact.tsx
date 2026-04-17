@@ -7,10 +7,7 @@ import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
-import {
-  CodeBlock,
-  CodeBlockCopyButton,
-} from "@/components/ai-elements/code-block";
+import { CopyButton } from "@/components/copy-button";
 import { MermaidDiagram } from "@/components/mermaid-diagram";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -84,8 +81,8 @@ export function ConversationArtifactPanel({
 
   // Custom components for ReactMarkdown to handle Mermaid diagrams
   const markdownComponents: Components = {
-    // ReactMarkdown wraps fenced code in <pre><code>, but CodeBlock renders
-    // its own <pre>. Dropping the outer <pre> prevents double-wrapping.
+    // Drop ReactMarkdown's default <pre>; we render our own in the fenced-code
+    // branch below so we can anchor the copy button absolutely inside it.
     pre({ children }) {
       return <>{children}</>;
     },
@@ -105,9 +102,15 @@ export function ConversationArtifactPanel({
       if (language) {
         const code = String(children).replace(/\n$/, "");
         return (
-          <CodeBlock code={code} language={language}>
-            <CodeBlockCopyButton />
-          </CodeBlock>
+          <pre className="relative group">
+            <CopyButton
+              text={code}
+              className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+            />
+            <code className={className} {...props}>
+              {children}
+            </code>
+          </pre>
         );
       }
 

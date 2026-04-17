@@ -9,12 +9,12 @@ export function AssignedCredentialUnavailableTool({
 }: AssignedCredentialUnavailableToolProps) {
   return (
     <AuthErrorTool
-      title="Credential Assignment Error"
+      title="Expired / Invalid Authentication"
       description={
         <>
-          This tool is pinned to a personal connection for &ldquo;{catalogName}
-          &rdquo; that your account cannot access. Ask the agent owner or an
-          admin to update the tool assignment.
+          credentials for &ldquo;{catalogName}&rdquo; have expired or are
+          invalid. Re-authenticate to continue using this tool. Ask the agent
+          owner or an admin to re-authenticate.
         </>
       }
     />

@@ -460,7 +460,7 @@ describe("IdentityProviderModel", () => {
       }
     });
 
-    test("allows insecure localhost discovery endpoints in local development", async ({
+    test("allows insecure discovery endpoints in local development", async ({
       makeOrganization,
       makeUser,
     }) => {
@@ -489,10 +489,13 @@ describe("IdentityProviderModel", () => {
       const fetchSpy = vi.fn(async () => {
         return new Response(
           JSON.stringify({
-            issuer: "https://idp.example.com/oauth2/example",
-            authorization_endpoint: "http://localhost:30081/auth",
-            token_endpoint: "http://localhost:30081/token",
-            jwks_uri: "http://localhost:30081/jwks",
+            issuer: "http://keycloak:8080/realms/archestra",
+            authorization_endpoint:
+              "http://keycloak:8080/realms/archestra/protocol/openid-connect/auth",
+            token_endpoint:
+              "http://keycloak:8080/realms/archestra/protocol/openid-connect/token",
+            jwks_uri:
+              "http://keycloak:8080/realms/archestra/protocol/openid-connect/certs",
           }),
           {
             status: 200,
@@ -508,16 +511,16 @@ describe("IdentityProviderModel", () => {
           IdentityProviderModel.create(
             {
               providerId: "example-idp-http-local-dev",
-              issuer: "https://idp.example.com/oauth2/example",
+              issuer: "http://keycloak:8080/realms/archestra",
               domain: "example.com",
               userId: user.id,
               oidcConfig: {
-                issuer: "https://idp.example.com/oauth2/example",
+                issuer: "http://keycloak:8080/realms/archestra",
                 pkce: true,
                 clientId: "load-spark-platform",
                 clientSecret: "secret",
                 discoveryEndpoint:
-                  "http://localhost:30081/realms/archestra/.well-known/openid-configuration",
+                  "http://keycloak:8080/realms/archestra/.well-known/openid-configuration",
               },
             },
             org.id,

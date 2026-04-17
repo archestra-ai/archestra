@@ -1005,9 +1005,7 @@ function assertValidOidcDiscoveryEndpoint(discoveryEndpoint: string): void {
     );
   }
 
-  const allowLocalDevelopmentDiscovery =
-    config.environment === "development" &&
-    isPrivateOrLoopbackHostname(parsedUrl.hostname);
+  const allowLocalDevelopmentDiscovery = config.environment === "development";
 
   if (
     !config.test.enableE2eTestEndpoints &&

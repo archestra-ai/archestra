@@ -56,7 +56,7 @@ export function normalizeIdentityProviderFormValues(
   };
 }
 
-function inferEnterpriseExchangeType(params: {
+export function inferEnterpriseExchangeType(params: {
   issuer: string;
   providerId: string;
 }): "okta_managed" | "rfc8693" | "entra_obo" {
@@ -94,7 +94,7 @@ function tryParseIssuerUrl(issuer: string): URL | null {
   }
 }
 
-function getDefaultTokenEndpointAuthentication(
+export function getDefaultTokenEndpointAuthentication(
   exchangeStrategy: "okta_managed" | "rfc8693" | "entra_obo",
 ): "private_key_jwt" | "client_secret_post" {
   return exchangeStrategy === "rfc8693" || exchangeStrategy === "entra_obo"
@@ -102,7 +102,7 @@ function getDefaultTokenEndpointAuthentication(
     : "private_key_jwt";
 }
 
-function getDefaultSubjectTokenType(
+export function getDefaultSubjectTokenType(
   exchangeStrategy: "okta_managed" | "rfc8693" | "entra_obo",
 ):
   | "urn:ietf:params:oauth:token-type:access_token"

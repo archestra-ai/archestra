@@ -201,6 +201,8 @@ function resolveScope(
     );
   }
 
+  // resourceIdentifier/audience are treated as Entra resource identifiers here,
+  // not literal scope strings. Callers that need custom scopes must set scopes.
   if (resource.endsWith("/.default")) {
     return resource;
   }

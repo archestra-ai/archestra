@@ -67,6 +67,12 @@ export async function exchangeEnterpriseManagedCredential(params: {
 function getEnterpriseCredentialExchangeStrategy(
   identityProvider: ExternalIdentityProviderConfig,
 ): EnterpriseCredentialExchangeStrategy {
+  if (!identityProvider.oidcConfig?.enterpriseManagedCredentials) {
+    throw new Error(
+      `Enterprise-managed credentials are not configured for identity provider ${identityProvider.providerId}`,
+    );
+  }
+
   if (supportsEntraObo(identityProvider)) {
     return entraOboStrategy;
   }
@@ -75,13 +81,7 @@ function getEnterpriseCredentialExchangeStrategy(
     return oktaManagedCredentialExchangeStrategy;
   }
 
-  if (supportsRfc8693TokenExchange(identityProvider)) {
-    return rfc8693TokenExchangeStrategy;
-  }
-
-  throw new Error(
-    `Enterprise-managed credentials are not supported for identity provider ${identityProvider.providerId}`,
-  );
+  return rfc8693TokenExchangeStrategy;
 }
 
 function supportsEntraObo(
@@ -108,19 +108,6 @@ function supportsOktaManagedCredentialExchange(
 
   const issuerUrl = tryParseIssuerUrl(identityProvider.issuer);
   return isOktaHostname(issuerUrl?.hostname ?? "");
-}
-
-function supportsRfc8693TokenExchange(
-  identityProvider: ExternalIdentityProviderConfig,
-): boolean {
-  const configuredExchangeStrategy =
-    identityProvider.oidcConfig?.enterpriseManagedCredentials?.exchangeStrategy;
-  if (configuredExchangeStrategy === "rfc8693") {
-    return true;
-  }
-
-  const issuerUrl = tryParseIssuerUrl(identityProvider.issuer);
-  return issuerUrl?.pathname.includes("/realms/") ?? false;
 }
 
 export function extractProviderErrorMessage(

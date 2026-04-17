@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  DocsPage,
-  type IdentityProviderFormValues,
-  isEntraHostname,
-  isOktaHostname,
-} from "@shared";
+import { DocsPage, type IdentityProviderFormValues } from "@shared";
 import { Info, Plus, X } from "lucide-react";
 import { useCallback, useState } from "react";
 import type { UseFormReturn } from "react-hook-form";
@@ -45,6 +40,11 @@ import {
 } from "@/components/ui/tooltip";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import {
+  getDefaultSubjectTokenType,
+  getDefaultTokenEndpointAuthentication,
+  inferEnterpriseExchangeType,
+} from "./identity-provider-form.utils";
 import { RoleMappingForm } from "./role-mapping-form.ee";
 import { TeamSyncConfigForm } from "./team-sync-config-form.ee";
 
@@ -71,16 +71,12 @@ export function OidcConfigForm({
     issuer,
     providerId,
   });
-  const authenticationDefault =
-    inferredEnterpriseExchangeType === "rfc8693" ||
-    inferredEnterpriseExchangeType === "entra_obo"
-      ? "client_secret_post"
-      : "private_key_jwt";
-  const subjectTokenTypeDefault =
-    inferredEnterpriseExchangeType === "rfc8693" ||
-    inferredEnterpriseExchangeType === "entra_obo"
-      ? "urn:ietf:params:oauth:token-type:access_token"
-      : "urn:ietf:params:oauth:token-type:id_token";
+  const authenticationDefault = getDefaultTokenEndpointAuthentication(
+    inferredEnterpriseExchangeType,
+  );
+  const subjectTokenTypeDefault = getDefaultSubjectTokenType(
+    inferredEnterpriseExchangeType,
+  );
 
   const addScope = useCallback(() => {
     if (newScope.trim() && !scopes.includes(newScope.trim())) {
@@ -834,38 +830,6 @@ function EnterpriseManagedCredentialsForm(props: {
   );
 }
 
-function inferEnterpriseExchangeType(params: {
-  issuer: string;
-  providerId: string;
-}): "okta_managed" | "rfc8693" | "entra_obo" {
-  const providerId = params.providerId.toLowerCase();
-  const issuerUrl = tryParseUrl(params.issuer);
-
-  if (
-    isOktaHostname(issuerUrl?.hostname ?? "") ||
-    providerId.includes("okta")
-  ) {
-    return "okta_managed";
-  }
-
-  if (
-    issuerUrl?.pathname.includes("/realms/") ||
-    providerId.includes("keycloak")
-  ) {
-    return "rfc8693";
-  }
-
-  if (
-    isEntraHostname(issuerUrl?.hostname ?? "") ||
-    providerId.includes("entra") ||
-    providerId.includes("azure")
-  ) {
-    return "entra_obo";
-  }
-
-  return "rfc8693";
-}
-
 function getEnterpriseExchangeHint(
   exchangeStrategy: "okta_managed" | "rfc8693" | "entra_obo",
 ): string {
@@ -902,13 +866,5 @@ function getSubjectTokenHint(
       return "The detected defaults prefer exchanging the user's access token.";
     case "entra_obo":
       return "Microsoft Entra OBO expects the user's access token, not the ID token.";
-  }
-}
-
-function tryParseUrl(url: string): URL | null {
-  try {
-    return new URL(url);
-  } catch {
-    return null;
   }
 }

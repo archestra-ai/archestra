@@ -402,6 +402,90 @@ describe("resolveEnterpriseTransportCredential", () => {
     fetchMock.mockRestore();
   });
 
+  test("defaults generic enterprise-managed OIDC providers to RFC 8693 token exchange", async ({
+    makeAgent,
+    makeIdentityProvider,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser({ email: "generic-broker@example.com" });
+    const identityProvider = await makeIdentityProvider(organization.id, {
+      providerId: "generic-broker",
+      issuer: "https://idp.example.com/oauth2/default",
+      oidcConfig: {
+        clientId: "archestra-oidc",
+        clientSecret: "archestra-oidc-secret",
+        tokenEndpoint: "https://idp.example.com/oauth2/v1/token",
+        enterpriseManagedCredentials: {
+          clientId: "archestra-oidc",
+          clientSecret: "archestra-oidc-secret",
+          tokenEndpoint: "https://idp.example.com/oauth2/v1/token",
+          tokenEndpointAuthentication: "client_secret_post",
+          subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+        },
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      identityProviderId: identityProvider.id,
+    });
+
+    await db.insert(schema.accountsTable).values({
+      id: randomUUID(),
+      accountId: "acct-generic",
+      providerId: identityProvider.providerId,
+      userId: user.id,
+      accessToken: "generic-session-access-token",
+      accessTokenExpiresAt: new Date(Date.now() + 300_000),
+      idToken: "generic-session-id-token",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          access_token: "generic-downstream-access-token",
+          issued_token_type: "urn:ietf:params:oauth:token-type:access_token",
+          expires_in: 300,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const result = await resolveEnterpriseTransportCredential({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: "session-token",
+        teamId: null,
+        isOrganizationToken: false,
+        userId: user.id,
+      },
+      enterpriseManagedConfig: {
+        requestedCredentialType: "bearer_token",
+        resourceIdentifier: "api://downstream-app-id",
+        tokenInjectionMode: "authorization_bearer",
+      },
+    });
+
+    expect(result).toEqual({
+      headerName: "Authorization",
+      headerValue: "Bearer generic-downstream-access-token",
+      expiresInSeconds: 300,
+    });
+
+    const [, requestInit] = fetchMock.mock.calls[0] ?? [];
+    expect(String(requestInit?.body)).toContain(
+      "subject_token=generic-session-access-token",
+    );
+    expect(String(requestInit?.body)).toContain(
+      "audience=api%3A%2F%2Fdownstream-app-id",
+    );
+
+    fetchMock.mockRestore();
+  });
+
   test("exchanges an Entra session access token using OBO for a downstream bearer token", async ({
     makeAgent,
     makeIdentityProvider,

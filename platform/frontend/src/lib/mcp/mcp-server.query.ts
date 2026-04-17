@@ -261,7 +261,10 @@ export function useReauthenticateMcpServer() {
       }
       return response.data;
     },
-    onSuccess: async (_, variables) => {
+    onSuccess: async (updatedServer, variables) => {
+      if (!updatedServer) {
+        return;
+      }
       await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
       invalidateToolAssignmentQueries(queryClient);
       toast.success(`Successfully re-authenticated ${variables.name}`);

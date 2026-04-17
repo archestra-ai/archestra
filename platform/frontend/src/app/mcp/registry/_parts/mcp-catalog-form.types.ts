@@ -1,6 +1,27 @@
 import { LocalConfigFormSchema } from "@shared";
 import { z } from "zod";
 
+const HEADER_NAME_REGEX = /^[A-Za-z0-9-]+$/;
+
+const headerNameSchema = z
+  .string()
+  .trim()
+  .min(1, "Header name is required")
+  .max(128, "Header name is too long")
+  .regex(
+    HEADER_NAME_REGEX,
+    "Header name must contain only alphanumeric characters and hyphens",
+  );
+
+const additionalHeaderSchema = z.object({
+  fieldName: z.string().optional(),
+  headerName: headerNameSchema,
+  promptOnInstallation: z.boolean(),
+  required: z.boolean(),
+  value: z.string().optional(),
+  description: z.string().optional().or(z.literal("")),
+});
+
 // Simplified OAuth config schema
 export const oauthConfigSchema = z
   .object({
@@ -95,6 +116,8 @@ export const oauthConfigSchema = z
   });
 
 const enterpriseManagedConfigSchema = z.object({
+  identityProviderId: z.string().optional(),
+  assertionMode: z.enum(["exchange", "passthrough"]).optional(),
   resourceIdentifier: z.string().optional(),
   requestedIssuer: z.string().optional(),
   requestedCredentialType: z
@@ -133,10 +156,13 @@ export const formSchema = z
     authMethod: z.enum([
       "none",
       "bearer",
-      "raw_token",
       "oauth",
       "enterprise_managed",
+      "idp_jwt",
     ]),
+    includeBearerPrefix: z.boolean(),
+    authHeaderName: headerNameSchema.optional().or(z.literal("")),
+    additionalHeaders: z.array(additionalHeaderSchema).optional(),
     oauthConfig: oauthConfigSchema.optional(),
     enterpriseManagedConfig: enterpriseManagedConfigSchema
       .nullable()
@@ -162,6 +188,27 @@ export const formSchema = z
     scope: z.enum(["personal", "team", "org"]).optional(),
     // Team IDs for team-scoped items
     teams: z.array(z.string()).optional(),
+  })
+  .superRefine((data, ctx) => {
+    const normalizedHeaders = new Set<string>();
+    const authHeaderName = data.authHeaderName?.trim();
+
+    if (data.authMethod === "bearer" && authHeaderName) {
+      normalizedHeaders.add(authHeaderName.toLowerCase());
+    }
+
+    for (const [index, header] of (data.additionalHeaders ?? []).entries()) {
+      const normalizedHeaderName = header.headerName.toLowerCase();
+      if (normalizedHeaders.has(normalizedHeaderName)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Header names must be unique",
+          path: ["additionalHeaders", index, "headerName"],
+        });
+        continue;
+      }
+      normalizedHeaders.add(normalizedHeaderName);
+    }
   })
   .refine(
     (data) => {
@@ -221,7 +268,8 @@ export const formSchema = z
     (data) => {
       if (
         data.serverType !== "local" ||
-        data.authMethod !== "enterprise_managed"
+        (data.authMethod !== "enterprise_managed" &&
+          data.authMethod !== "idp_jwt")
       ) {
         return true;
       }
@@ -233,6 +281,19 @@ export const formSchema = z
         "Enterprise-managed credentials require streamable-http transport for self-hosted servers.",
       path: ["localConfig", "transportType"],
     },
-  );
+  )
+  .superRefine((data, ctx) => {
+    if (
+      (data.authMethod === "enterprise_managed" ||
+        data.authMethod === "idp_jwt") &&
+      !data.enterpriseManagedConfig?.identityProviderId
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Identity Provider is required for this authorization mode.",
+        path: ["enterpriseManagedConfig", "identityProviderId"],
+      });
+    }
+  });
 
 export type McpCatalogFormValues = z.infer<typeof formSchema>;

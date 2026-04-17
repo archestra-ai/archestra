@@ -157,6 +157,54 @@ describe("resolveEnterpriseTransportCredential", () => {
     fetchMock.mockRestore();
   });
 
+  test("passes through the resolved enterprise assertion without token exchange when configured for JWT passthrough", async ({
+    makeAgent,
+    makeIdentityProvider,
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const identityProvider = await makeIdentityProvider(organization.id, {
+      providerId: "jwks-passthrough",
+      issuer: "https://idp.example.com",
+      oidcConfig: {
+        clientId: "gateway-client",
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      identityProviderId: identityProvider.id,
+    });
+
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+
+    const result = await resolveEnterpriseTransportCredential({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: "external-token",
+        teamId: null,
+        isOrganizationToken: false,
+        userId: "user-1",
+        isExternalIdp: true,
+        rawToken: "external-idp-jwt",
+      },
+      enterpriseManagedConfig: {
+        identityProviderId: identityProvider.id,
+        assertionMode: "passthrough",
+        requestedCredentialType: "bearer_token",
+        tokenInjectionMode: "authorization_bearer",
+      },
+    });
+
+    expect(result).toEqual({
+      headerName: "Authorization",
+      headerValue: "Bearer external-idp-jwt",
+      expiresInSeconds: null,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fetchMock.mockRestore();
+  });
+
   test("exchanges caller-provided ID-JAG at an OAuth protected resource", async ({
     makeAgent,
     makeIdentityProvider,

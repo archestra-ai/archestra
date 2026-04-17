@@ -36,8 +36,14 @@ export const EnterpriseManagedFallbackModeSchema = z.enum([
   "fallback_to_static",
 ]);
 
+export const EnterpriseManagedAssertionModeSchema = z.enum([
+  "exchange",
+  "passthrough",
+]);
+
 export const EnterpriseManagedCredentialConfigSchema = z.object({
   identityProviderId: z.string().optional(),
+  assertionMode: EnterpriseManagedAssertionModeSchema.optional(),
   resourceType: EnterpriseManagedResourceTypeSchema.optional(),
   resourceIdentifier: z.string().optional(),
   requestedIssuer: z.string().optional(),
@@ -68,6 +74,9 @@ export type EnterpriseManagedTokenInjectionMode = z.infer<
 >;
 export type EnterpriseManagedFallbackMode = z.infer<
   typeof EnterpriseManagedFallbackModeSchema
+>;
+export type EnterpriseManagedAssertionMode = z.infer<
+  typeof EnterpriseManagedAssertionModeSchema
 >;
 export type EnterpriseManagedCredentialConfig = z.infer<
   typeof EnterpriseManagedCredentialConfigSchema

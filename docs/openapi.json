@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.13"
+    "version": "1.2.15"
   },
   "components": {
     "schemas": {
@@ -90909,6 +90909,9 @@
                             "description": {
                               "type": "string"
                             },
+                            "promptOnInstallation": {
+                              "type": "boolean"
+                            },
                             "required": {
                               "type": "boolean"
                             },
@@ -90942,6 +90945,9 @@
                             },
                             "max": {
                               "type": "number"
+                            },
+                            "headerName": {
+                              "type": "string"
                             }
                           },
                           "required": [
@@ -91047,6 +91053,13 @@
                         "properties": {
                           "identityProviderId": {
                             "type": "string"
+                          },
+                          "assertionMode": {
+                            "type": "string",
+                            "enum": [
+                              "exchange",
+                              "passthrough"
+                            ]
                           },
                           "resourceType": {
                             "type": "string",
@@ -91759,6 +91772,9 @@
                         "description": {
                           "type": "string"
                         },
+                        "promptOnInstallation": {
+                          "type": "boolean"
+                        },
                         "required": {
                           "type": "boolean"
                         },
@@ -91792,6 +91808,9 @@
                         },
                         "max": {
                           "type": "number"
+                        },
+                        "headerName": {
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -91895,6 +91914,13 @@
                     "properties": {
                       "identityProviderId": {
                         "type": "string"
+                      },
+                      "assertionMode": {
+                        "type": "string",
+                        "enum": [
+                          "exchange",
+                          "passthrough"
+                        ]
                       },
                       "resourceType": {
                         "type": "string",
@@ -92340,6 +92366,9 @@
                           "description": {
                             "type": "string"
                           },
+                          "promptOnInstallation": {
+                            "type": "boolean"
+                          },
                           "required": {
                             "type": "boolean"
                           },
@@ -92373,6 +92402,9 @@
                           },
                           "max": {
                             "type": "number"
+                          },
+                          "headerName": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -92478,6 +92510,13 @@
                       "properties": {
                         "identityProviderId": {
                           "type": "string"
+                        },
+                        "assertionMode": {
+                          "type": "string",
+                          "enum": [
+                            "exchange",
+                            "passthrough"
+                          ]
                         },
                         "resourceType": {
                           "type": "string",
@@ -93213,6 +93252,9 @@
                           "description": {
                             "type": "string"
                           },
+                          "promptOnInstallation": {
+                            "type": "boolean"
+                          },
                           "required": {
                             "type": "boolean"
                           },
@@ -93246,6 +93288,9 @@
                           },
                           "max": {
                             "type": "number"
+                          },
+                          "headerName": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -93351,6 +93396,13 @@
                       "properties": {
                         "identityProviderId": {
                           "type": "string"
+                        },
+                        "assertionMode": {
+                          "type": "string",
+                          "enum": [
+                            "exchange",
+                            "passthrough"
+                          ]
                         },
                         "resourceType": {
                           "type": "string",
@@ -94057,6 +94109,9 @@
                         "description": {
                           "type": "string"
                         },
+                        "promptOnInstallation": {
+                          "type": "boolean"
+                        },
                         "required": {
                           "type": "boolean"
                         },
@@ -94090,6 +94145,9 @@
                         },
                         "max": {
                           "type": "number"
+                        },
+                        "headerName": {
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -94193,6 +94251,13 @@
                     "properties": {
                       "identityProviderId": {
                         "type": "string"
+                      },
+                      "assertionMode": {
+                        "type": "string",
+                        "enum": [
+                          "exchange",
+                          "passthrough"
+                        ]
                       },
                       "resourceType": {
                         "type": "string",
@@ -94646,6 +94711,9 @@
                           "description": {
                             "type": "string"
                           },
+                          "promptOnInstallation": {
+                            "type": "boolean"
+                          },
                           "required": {
                             "type": "boolean"
                           },
@@ -94679,6 +94747,9 @@
                           },
                           "max": {
                             "type": "number"
+                          },
+                          "headerName": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -94784,6 +94855,13 @@
                       "properties": {
                         "identityProviderId": {
                           "type": "string"
+                        },
+                        "assertionMode": {
+                          "type": "string",
+                          "enum": [
+                            "exchange",
+                            "passthrough"
+                          ]
                         },
                         "resourceType": {
                           "type": "string",
@@ -121246,6 +121324,12 @@
                       "type": "string"
                     }
                   },
+                  "userConfigValues": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
                   "isByosVault": {
                     "type": "boolean"
                   },
@@ -129545,6 +129629,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     },
@@ -129588,6 +129675,7 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
+                    "slimChatErrorUi",
                     "showTwoFactor",
                     "mcpOauthAccessTokenLifetimeSeconds"
                   ],
@@ -129927,6 +130015,9 @@
                     "type": "string",
                     "maxLength": 500
                   },
+                  "slimChatErrorUi": {
+                    "type": "boolean"
+                  },
                   "chatPlaceholders": {
                     "nullable": true,
                     "maxItems": 20,
@@ -130174,6 +130265,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     },
@@ -130217,6 +130311,7 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
+                    "slimChatErrorUi",
                     "showTwoFactor",
                     "mcpOauthAccessTokenLifetimeSeconds"
                   ],
@@ -130552,6 +130647,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
                     "animateChatPlaceholders": {
                       "type": "boolean"
                     }
@@ -130568,6 +130666,7 @@
                     "footerText",
                     "chatLinks",
                     "chatErrorSupportMessage",
+                    "slimChatErrorUi",
                     "animateChatPlaceholders"
                   ],
                   "additionalProperties": false
@@ -131049,6 +131148,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     },
@@ -131092,6 +131194,7 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
+                    "slimChatErrorUi",
                     "showTwoFactor",
                     "mcpOauthAccessTokenLifetimeSeconds"
                   ],
@@ -131586,6 +131689,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     },
@@ -131629,6 +131735,7 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
+                    "slimChatErrorUi",
                     "showTwoFactor",
                     "mcpOauthAccessTokenLifetimeSeconds"
                   ],
@@ -132141,6 +132248,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     },
@@ -132184,6 +132294,7 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
+                    "slimChatErrorUi",
                     "showTwoFactor",
                     "mcpOauthAccessTokenLifetimeSeconds"
                   ],
@@ -132662,6 +132773,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     },
@@ -132705,6 +132819,7 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
+                    "slimChatErrorUi",
                     "showTwoFactor",
                     "mcpOauthAccessTokenLifetimeSeconds"
                   ],
@@ -133199,6 +133314,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     },
@@ -133242,6 +133360,7 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
+                    "slimChatErrorUi",
                     "showTwoFactor",
                     "mcpOauthAccessTokenLifetimeSeconds"
                   ],
@@ -133703,6 +133822,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     },
@@ -133746,6 +133868,7 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
+                    "slimChatErrorUi",
                     "showTwoFactor",
                     "mcpOauthAccessTokenLifetimeSeconds"
                   ],
@@ -134502,6 +134625,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     },
@@ -134545,6 +134671,7 @@
                     "animateChatPlaceholders",
                     "iconLogo",
                     "chatErrorSupportMessage",
+                    "slimChatErrorUi",
                     "showTwoFactor",
                     "mcpOauthAccessTokenLifetimeSeconds"
                   ],

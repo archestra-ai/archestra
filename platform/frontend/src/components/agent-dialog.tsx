@@ -140,6 +140,7 @@ import { cn } from "@/lib/utils";
 import {
   getDescriptionPlaceholder,
   getNamePlaceholder,
+  normalizeSuggestedPrompts,
   shouldShowDescriptionField,
 } from "./agent-dialog.utils";
 
@@ -643,10 +644,7 @@ export function AgentDialog({
     identityProviderId === undefined
       ? inferredIdentityProviderId
       : identityProviderId;
-  const mcpAuthDocsUrl = getFrontendDocsUrl(
-    DocsPage.McpAuthentication,
-    "enterprise-managed-authorization",
-  );
+  const mcpAuthDocsUrl = getFrontendDocsUrl(DocsPage.McpAuthentication);
   const showPrimarySettingsCard =
     !isBuiltIn ||
     shouldShowDescriptionField({ agentType, isBuiltIn }) ||
@@ -872,10 +870,7 @@ export function AgentDialog({
     // Save any unsaved label before submitting
     const updatedLabels = agentLabelsRef.current?.saveUnsavedLabel() || labels;
 
-    // Filter out incomplete suggested prompts (empty title or prompt)
-    const validSuggestedPrompts = suggestedPrompts.filter(
-      (sp) => sp.summaryTitle.trim() && sp.prompt.trim(),
-    );
+    const validSuggestedPrompts = normalizeSuggestedPrompts(suggestedPrompts);
     const normalizedDescription = shouldShowDescriptionField({
       agentType,
       isBuiltIn,
@@ -1978,10 +1973,11 @@ export function AgentDialog({
                             <div className="space-y-2">
                               <Label>Identity Provider (Enterprise/JWKS)</Label>
                               <p className="text-sm text-muted-foreground">
-                                Optionally select an Identity Provider to
-                                validate incoming enterprise assertions or
-                                direct JWT bearer tokens issued by this IdP, and
-                                to broker enterprise-managed credentials for
+                                Select the OIDC identity provider this MCP
+                                Gateway should trust for ID-JAG and direct JWKS
+                                JWT authentication. The same provider is also
+                                used when {appName} needs to resolve
+                                enterprise-managed downstream credentials for
                                 tool calls. When there is exactly one Identity
                                 Provider configured, {appName} uses it
                                 automatically if you leave this unset.

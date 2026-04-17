@@ -548,7 +548,7 @@ export function McpServerCard({
           ) : (
             <PermissionButton
               permissions={{ mcpServerInstallation: ["create"] }}
-              onClick={onAddPersonalConnection ?? onInstallRemoteServer}
+              onClick={onInstallRemoteServer}
               size="sm"
               variant="outline"
               className="flex-1"
@@ -601,7 +601,7 @@ export function McpServerCard({
                   <div className="flex-1">
                     <PermissionButton
                       permissions={{ mcpServerInstallation: ["create"] }}
-                      onClick={onAddPersonalConnection ?? onInstallLocalServer}
+                      onClick={onInstallLocalServer}
                       disabled={!isLocalMcpEnabled}
                       size="sm"
                       variant="outline"
@@ -665,7 +665,7 @@ export function McpServerCard({
                   <div className="flex-1">
                     <PermissionButton
                       permissions={{ mcpServerInstallation: ["create"] }}
-                      onClick={onAddPersonalConnection ?? onInstallLocalServer}
+                      onClick={onInstallLocalServer}
                       disabled={!isLocalMcpEnabled}
                       size="sm"
                       variant="outline"

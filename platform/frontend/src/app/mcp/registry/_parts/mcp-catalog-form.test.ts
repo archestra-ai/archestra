@@ -69,6 +69,9 @@ describe("formSchema", () => {
   const baseValidData = {
     name: "Test MCP Server",
     authMethod: "none" as const,
+    includeBearerPrefix: true,
+    authHeaderName: "",
+    additionalHeaders: [],
     oauthConfig: undefined,
   };
 
@@ -106,6 +109,53 @@ describe("formSchema", () => {
       };
 
       expect(() => formSchema.parse(data)).toThrow("Must be a valid URL");
+    });
+
+    it("should reject duplicate auth and additional header names", () => {
+      const data = {
+        ...baseValidData,
+        serverType: "remote" as const,
+        serverUrl: "https://api.example.com/mcp",
+        authMethod: "bearer" as const,
+        includeBearerPrefix: true,
+        authHeaderName: "x-api-key",
+        additionalHeaders: [
+          {
+            headerName: "X-Api-Key",
+            promptOnInstallation: true,
+            required: false,
+            value: "",
+            description: "",
+          },
+        ],
+        localConfig: undefined,
+      };
+
+      expect(() => formSchema.parse(data)).toThrow(
+        "Header names must be unique",
+      );
+    });
+
+    it("should reject invalid additional header names", () => {
+      const data = {
+        ...baseValidData,
+        serverType: "remote" as const,
+        serverUrl: "https://api.example.com/mcp",
+        additionalHeaders: [
+          {
+            headerName: "x api key",
+            promptOnInstallation: true,
+            required: false,
+            value: "",
+            description: "",
+          },
+        ],
+        localConfig: undefined,
+      };
+
+      expect(() => formSchema.parse(data)).toThrow(
+        "Header name must contain only alphanumeric characters and hyphens",
+      );
     });
   });
 

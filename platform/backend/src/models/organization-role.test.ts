@@ -58,6 +58,40 @@ describe("OrganizationRoleModel", () => {
     });
   });
 
+  describe("sanitizePermissions", () => {
+    test("returns valid permissions unchanged", () => {
+      const permissions = {
+        agent: ["read", "create"],
+        log: ["read"],
+      };
+
+      expect(OrganizationRoleModel.sanitizePermissions(permissions)).toEqual(
+        permissions,
+      );
+    });
+
+    test("removes invalid actions and unknown resources", () => {
+      expect(
+        OrganizationRoleModel.sanitizePermissions({
+          log: ["read", "create", "update", "delete"],
+          optimizationRule: ["team-admin", "read"],
+          unknownResource: ["read"],
+        }),
+      ).toEqual({
+        log: ["read"],
+        optimizationRule: ["read"],
+      });
+    });
+
+    test("returns empty permissions for malformed input", () => {
+      expect(OrganizationRoleModel.sanitizePermissions("{not-json}")).toEqual(
+        {},
+      );
+      expect(OrganizationRoleModel.sanitizePermissions([])).toEqual({});
+      expect(OrganizationRoleModel.sanitizePermissions(null)).toEqual({});
+    });
+  });
+
   describe("getById", () => {
     test("should return predefined admin role", async ({
       makeOrganization,

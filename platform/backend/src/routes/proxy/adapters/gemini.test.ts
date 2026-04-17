@@ -192,6 +192,20 @@ describe("GeminiResponseAdapter", () => {
   });
 });
 
+describe("Gemini createClient", () => {
+  test("uses the custom base URL override", () => {
+    const customBaseUrl = "https://example.test";
+    const client = geminiAdapterFactory.createClient("my-gemini-key", {
+      baseUrl: customBaseUrl,
+      source: "api",
+    }) as unknown as {
+      httpOptions?: { baseUrl?: string };
+    };
+
+    expect(client.httpOptions?.baseUrl).toBe(customBaseUrl);
+  });
+});
+
 describe("GeminiRequestAdapter", () => {
   describe("getModel", () => {
     test("returns original model by default", () => {

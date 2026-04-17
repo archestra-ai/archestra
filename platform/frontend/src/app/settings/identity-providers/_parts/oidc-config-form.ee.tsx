@@ -602,7 +602,7 @@ function EnterpriseManagedCredentialsForm(props: {
                   </TooltipTrigger>
                   <TooltipContent className="max-w-sm">
                     <p>
-                      Configure how Archestra exchanges a user&apos;s
+                      Configure how {appName} exchanges a user&apos;s
                       identity-provider token for a downstream tool credential
                       at call-time.
                     </p>
@@ -613,7 +613,7 @@ function EnterpriseManagedCredentialsForm(props: {
           </AccordionTrigger>
           <AccordionContent className="space-y-4 pt-4">
             <p className="text-sm text-muted-foreground">
-              Leave this empty unless Archestra should exchange the signed-in
+              Leave this empty unless {appName} should exchange the signed-in
               user&apos;s identity-provider token for a downstream tool token
               when tools run.
             </p>
@@ -647,7 +647,7 @@ function EnterpriseManagedCredentialsForm(props: {
                       />
                     </FormControl>
                     <FormDescription>
-                      Optional override. If empty, Archestra uses the main OIDC
+                      Optional override. If empty, {appName} uses the main OIDC
                       client ID above.
                     </FormDescription>
                     <FormMessage />
@@ -691,7 +691,7 @@ function EnterpriseManagedCredentialsForm(props: {
                     />
                   </FormControl>
                   <FormDescription>
-                    Optional override for the token endpoint Archestra should
+                    Optional override for the token endpoint {appName} should
                     call to exchange the user&apos;s token.
                   </FormDescription>
                   <FormMessage />

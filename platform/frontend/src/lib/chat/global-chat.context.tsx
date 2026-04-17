@@ -411,7 +411,7 @@ function ChatSessionHook({
     onError: (chatError) => {
       setOptimisticToolCalls([]);
       persistConversationError(conversationId, chatError);
-      setPersistedError(new Error(chatError.message));
+      setPersistedError(chatError);
       console.error("[ChatSession] Error occurred:", {
         conversationId,
         errorName: chatError.name,
@@ -675,10 +675,14 @@ function persistConversationError(conversationId: string, error: Error) {
     return;
   }
 
-  localStorage.setItem(
-    conversationStorageKeys(conversationId).error,
-    error.message,
-  );
+  try {
+    localStorage.setItem(
+      conversationStorageKeys(conversationId).error,
+      error.message,
+    );
+  } catch {
+    // Storage may be unavailable, but the in-memory session state still shows the error.
+  }
 }
 
 function clearPersistedConversationError(conversationId: string) {

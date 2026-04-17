@@ -157,6 +157,41 @@ describe("useChatSession", () => {
       localStorage.getItem(conversationStorageKeys(conversationId).error),
     ).toBeNull();
   });
+
+  it("keeps showing the in-memory error when localStorage persistence fails", async () => {
+    const conversationId = "conversation-3";
+    const storageSpy = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new DOMException("Quota exceeded", "QuotaExceededError");
+      });
+
+    const { result } = renderHook(
+      () => useChatSession({ conversationId, enabled: true }),
+      {
+        wrapper: createWrapper(),
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current).not.toBeNull();
+      expect(latestUseChatOptions).toBeDefined();
+    });
+
+    act(() => {
+      latestUseChatOptions?.onError?.(new Error("Storage-limited failure"));
+    });
+
+    await waitFor(() => {
+      expect(result.current?.error?.message).toBe("Storage-limited failure");
+    });
+    expect(storageSpy).toHaveBeenCalledWith(
+      conversationStorageKeys(conversationId).error,
+      "Storage-limited failure",
+    );
+
+    storageSpy.mockRestore();
+  });
 });
 
 function createWrapper() {

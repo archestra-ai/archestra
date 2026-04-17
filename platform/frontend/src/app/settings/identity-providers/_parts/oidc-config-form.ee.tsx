@@ -44,6 +44,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { RoleMappingForm } from "./role-mapping-form.ee";
 import { TeamSyncConfigForm } from "./team-sync-config-form.ee";
 
@@ -61,6 +62,7 @@ export function OidcConfigForm({
   hideProviderId,
 }: OidcConfigFormProps) {
   const [newScope, setNewScope] = useState("");
+  const appName = useAppName();
 
   const scopes = form.watch("oidcConfig.scopes") || [];
   const issuer = form.watch("issuer") || "";
@@ -611,11 +613,12 @@ function EnterpriseManagedCredentialsForm(props: {
           </AccordionTrigger>
           <AccordionContent className="space-y-4 pt-4">
             <p className="text-sm text-muted-foreground">
-              Leave this empty unless agents or MCP gateways should resolve
-              downstream tool credentials through this identity provider.
+              Leave this empty unless Archestra should exchange the signed-in
+              user&apos;s identity-provider token for a downstream tool token
+              when tools run.
             </p>
             <p className="text-sm text-muted-foreground">
-              Archestra applies sensible exchange defaults from the issuer URL.
+              {appName} suggests exchange defaults from the issuer URL.
               {getEnterpriseExchangeHint(inferredEnterpriseExchangeType)}
               {identityProvidersDocsUrl ? (
                 <>
@@ -868,11 +871,11 @@ function getEnterpriseExchangeHint(
 ): string {
   switch (exchangeStrategy) {
     case "okta_managed":
-      return " The detected defaults prefer private key JWT client authentication and ID token exchange.";
+      return " For this provider, the suggested defaults are private key JWT client authentication and ID token exchange.";
     case "rfc8693":
-      return " The detected defaults prefer RFC 8693 token exchange with client secret POST and access token exchange.";
+      return " For this provider, the suggested defaults are RFC 8693 token exchange with client secret POST and access token exchange.";
     case "entra_obo":
-      return " The detected defaults prefer Microsoft Entra on-behalf-of with client secret POST and access token exchange.";
+      return " For this provider, the suggested defaults are Microsoft Entra on-behalf-of with client secret POST and access token exchange.";
   }
 }
 

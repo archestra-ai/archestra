@@ -247,7 +247,19 @@ For external MCP clients such as Cursor, **ID-JAG** and **JWKS** are usually the
 
 ### Exchange Strategies
 
-When Archestra is configured to exchange the caller's IdP token at tool-call time, it uses one of three exchange strategies:
+When Archestra is configured to exchange the caller's IdP token at tool-call time, it uses one of three exchange strategies.
+
+#### How To Enable This
+
+Configure all three of the following:
+
+- **Identity Provider**: In **Settings > Identity Providers**, open the OIDC provider and fill in the optional **Enterprise-Managed Credentials** section so Archestra knows how to call the IdP or broker token endpoint.
+- **MCP catalog item**: In the server's multitenant authorization settings, choose whether Archestra should exchange the caller's IdP token for a downstream token or forward the caller's IdP JWT directly.
+- **Tool assignment**: Assign the tool with **Resolve at call time** so Archestra resolves credentials per caller when the tool runs.
+
+This works best when the gateway auth path gives Archestra a user-specific identity it can reuse for downstream access, such as **JWKS** or **ID-JAG**.
+
+#### Available Strategies
 
 - **`rfc8693`**: generic OAuth token exchange. Archestra exchanges the user's token at the IdP token endpoint and uses the returned bearer token on the downstream MCP request.
 - **`okta_managed`**: Okta's managed-credential exchange pattern. Archestra exchanges the user's token for an Okta-managed credential such as a secret or bearer token, then injects the configured value into the downstream MCP request.

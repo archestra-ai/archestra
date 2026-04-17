@@ -22,6 +22,7 @@ import {
 } from "@/lib/auth/oauth-session";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
+import { buildRemoteInstallCredentialPayload } from "@/lib/mcp/remote-install-payload";
 import {
   useInstallMcpServer,
   useMcpServers,
@@ -218,28 +219,14 @@ export function useMcpInstallOrchestrator() {
     catalogItem: CatalogItem,
     result: RemoteServerInstallResult,
   ) => {
+    const credentialPayload = buildRemoteInstallCredentialPayload(result);
+
     // If in reauth mode, call reauthenticate endpoint instead of install
     if (reauthServerId) {
-      const accessToken =
-        !result.isByosVault &&
-        result.metadata?.access_token &&
-        typeof result.metadata.access_token === "string"
-          ? result.metadata.access_token
-          : undefined;
-
       await reauthMutation.mutateAsync({
         id: reauthServerId,
         name: catalogItem.name,
-        ...(accessToken && { accessToken }),
-        ...(result.isByosVault && {
-          userConfigValues: result.metadata as Record<string, string>,
-        }),
-        ...(!result.isByosVault &&
-          !accessToken &&
-          result.metadata && {
-            userConfigValues: result.metadata as Record<string, string>,
-          }),
-        isByosVault: result.isByosVault,
+        ...credentialPayload,
       });
 
       closeDialog("remote-install");
@@ -248,21 +235,10 @@ export function useMcpInstallOrchestrator() {
       return;
     }
 
-    const accessToken =
-      !result.isByosVault &&
-      result.metadata?.access_token &&
-      typeof result.metadata.access_token === "string"
-        ? result.metadata.access_token
-        : undefined;
-
     await installMutation.mutateAsync({
       name: catalogItem.name,
       catalogId: catalogItem.id,
-      ...(accessToken && { accessToken }),
-      ...(result.isByosVault && {
-        userConfigValues: result.metadata as Record<string, string>,
-      }),
-      isByosVault: result.isByosVault,
+      ...credentialPayload,
       teamId: result.teamId ?? undefined,
     });
   };

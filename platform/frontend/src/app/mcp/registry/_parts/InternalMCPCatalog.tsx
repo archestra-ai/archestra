@@ -51,6 +51,7 @@ import {
   useMcpCatalogLabelKeys,
   useMcpCatalogLabelValues,
 } from "@/lib/mcp/internal-mcp-catalog.query";
+import { buildRemoteInstallCredentialPayload } from "@/lib/mcp/remote-install-payload";
 import {
   useInstallMcpServer,
   useMcpDeploymentStatuses,
@@ -724,30 +725,14 @@ export function InternalMCPCatalog({
     catalogItem: CatalogItem,
     result: RemoteServerInstallResult,
   ) => {
-    // For non-BYOS mode: Extract access_token from metadata if present and pass as accessToken
-    // For BYOS mode: metadata contains vault references, pass via userConfigValues
-    const accessToken =
-      !result.isByosVault &&
-      result.metadata?.access_token &&
-      typeof result.metadata.access_token === "string"
-        ? result.metadata.access_token
-        : undefined;
+    const credentialPayload = buildRemoteInstallCredentialPayload(result);
 
     // Re-authentication mode: update existing server credentials in-place
     if (reauthServerId) {
       await reauthMutation.mutateAsync({
         id: reauthServerId,
         name: catalogItem.name,
-        ...(accessToken && { accessToken }),
-        ...(result.isByosVault && {
-          userConfigValues: result.metadata as Record<string, string>,
-        }),
-        ...(!result.isByosVault &&
-          !accessToken &&
-          result.metadata && {
-            userConfigValues: result.metadata as Record<string, string>,
-          }),
-        isByosVault: result.isByosVault,
+        ...credentialPayload,
       });
 
       closeDialog("remote-install");
@@ -761,11 +746,7 @@ export function InternalMCPCatalog({
     await installMutation.mutateAsync({
       name: catalogItem.name,
       catalogId: catalogItem.id,
-      ...(accessToken && { accessToken }),
-      ...(result.isByosVault && {
-        userConfigValues: result.metadata as Record<string, string>,
-      }),
-      isByosVault: result.isByosVault,
+      ...credentialPayload,
       teamId: result.teamId ?? undefined,
     });
     setInstallingItemId(null);

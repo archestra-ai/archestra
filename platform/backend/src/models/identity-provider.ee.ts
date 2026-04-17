@@ -1005,12 +1005,21 @@ function assertValidOidcDiscoveryEndpoint(discoveryEndpoint: string): void {
     );
   }
 
-  if (!config.test.enableE2eTestEndpoints && parsedUrl.protocol !== "https:") {
+  const allowLocalDevelopmentDiscovery =
+    config.environment === "development" &&
+    isPrivateOrLoopbackHostname(parsedUrl.hostname);
+
+  if (
+    !config.test.enableE2eTestEndpoints &&
+    !allowLocalDevelopmentDiscovery &&
+    parsedUrl.protocol !== "https:"
+  ) {
     throw new ApiError(400, "OIDC discovery endpoint must use HTTPS.");
   }
 
   if (
     !config.test.enableE2eTestEndpoints &&
+    !allowLocalDevelopmentDiscovery &&
     isPrivateOrLoopbackHostname(parsedUrl.hostname)
   ) {
     throw new ApiError(

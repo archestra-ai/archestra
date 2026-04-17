@@ -53,6 +53,7 @@ const mockProvider = {
 };
 
 const originalEnableE2eTestEndpoints = config.test.enableE2eTestEndpoints;
+const originalEnvironment = config.environment;
 
 // Helper to create test params with proper typing for resolveSsoRole tests
 // Note: userInfo is included for compatibility with better-auth's IdpGetRoleData type
@@ -453,6 +454,88 @@ describe("IdentityProviderModel", () => {
         globalThis.fetch = originalFetch;
         Object.defineProperty(config.test, "enableE2eTestEndpoints", {
           value: originalEnableE2eTestEndpoints,
+          writable: true,
+          configurable: true,
+        });
+      }
+    });
+
+    test("allows insecure localhost discovery endpoints in local development", async ({
+      makeOrganization,
+      makeUser,
+    }) => {
+      Object.defineProperty(config, "environment", {
+        value: "development",
+        writable: true,
+        configurable: true,
+      });
+
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const registerSSOProvider = vi.fn(async ({ body }) => {
+        await db.insert(schema.identityProvidersTable).values({
+          id: crypto.randomUUID(),
+          providerId: body.providerId,
+          issuer: body.issuer,
+          domain: body.domain,
+          organizationId: org.id,
+          userId: user.id,
+          domainVerified: true,
+          oidcConfig: JSON.stringify(
+            body.oidcConfig,
+          ) as unknown as typeof schema.identityProvidersTable.$inferInsert.oidcConfig,
+        });
+      });
+      const fetchSpy = vi.fn(async () => {
+        return new Response(
+          JSON.stringify({
+            issuer: "https://idp.example.com/oauth2/example",
+            authorization_endpoint: "http://localhost:30081/auth",
+            token_endpoint: "http://localhost:30081/token",
+            jwks_uri: "http://localhost:30081/jwks",
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      });
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = fetchSpy as typeof fetch;
+
+      try {
+        await expect(
+          IdentityProviderModel.create(
+            {
+              providerId: "example-idp-http-local-dev",
+              issuer: "https://idp.example.com/oauth2/example",
+              domain: "example.com",
+              userId: user.id,
+              oidcConfig: {
+                issuer: "https://idp.example.com/oauth2/example",
+                pkce: true,
+                clientId: "load-spark-platform",
+                clientSecret: "secret",
+                discoveryEndpoint:
+                  "http://localhost:30081/realms/archestra/.well-known/openid-configuration",
+              },
+            },
+            org.id,
+            new Headers(),
+            {
+              api: {
+                registerSSOProvider,
+              },
+            } as unknown as Parameters<typeof IdentityProviderModel.create>[3],
+          ),
+        ).resolves.toBeDefined();
+
+        expect(fetchSpy).toHaveBeenCalledOnce();
+        expect(registerSSOProvider).toHaveBeenCalledOnce();
+      } finally {
+        globalThis.fetch = originalFetch;
+        Object.defineProperty(config, "environment", {
+          value: originalEnvironment,
           writable: true,
           configurable: true,
         });

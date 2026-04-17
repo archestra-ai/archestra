@@ -1616,10 +1616,6 @@ class McpClient {
     }
 
     const oauthConfig = params.catalogItem.oauthConfig;
-    if (!oauthConfig) {
-      return params.secrets;
-    }
-
     const clientId =
       getOptionalSecretString(params.secrets, "client_id") ||
       oauthConfig.client_id;
@@ -1630,9 +1626,9 @@ class McpClient {
       getOptionalSecretString(params.secrets, "audience") ||
       oauthConfig.audience;
 
-    if (!clientId || !clientSecret || !audience) {
+    if (!clientId || !clientSecret) {
       throw new Error(
-        "OAuth client credentials configuration requires client_id, client_secret, and audience",
+        "OAuth client credentials configuration requires client_id and client_secret",
       );
     }
 
@@ -1670,13 +1666,9 @@ class McpClient {
     secretId?: string;
     clientId: string;
     clientSecret: string;
-    audience: string;
+    audience?: string;
   }): Promise<Record<string, unknown>> {
     const oauthConfig = params.catalogItem.oauthConfig;
-    if (!oauthConfig) {
-      return params.existingSecrets;
-    }
-
     let tokenEndpoint = oauthConfig.token_endpoint;
     if (!tokenEndpoint) {
       const endpoints = await discoverOAuthEndpoints(oauthConfig);
@@ -1691,8 +1683,10 @@ class McpClient {
       grant_type: "client_credentials",
       client_id: params.clientId,
       client_secret: params.clientSecret,
-      audience: params.audience,
     };
+    if (params.audience) {
+      requestBody.audience = params.audience;
+    }
     if (configuredScopes.length > 0) {
       requestBody.scope = configuredScopes.join(" ");
     }
@@ -1700,10 +1694,10 @@ class McpClient {
     const tokenResponse = await fetch(tokenEndpoint, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
         Accept: "application/json",
       },
-      body: JSON.stringify(requestBody),
+      body: new URLSearchParams(requestBody),
     });
 
     if (!tokenResponse.ok) {
@@ -1731,7 +1725,7 @@ class McpClient {
       ...params.existingSecrets,
       client_id: params.clientId,
       client_secret: params.clientSecret,
-      audience: params.audience,
+      ...(params.audience ? { audience: params.audience } : {}),
       access_token: tokenData.access_token,
       ...(timing.expiresAt
         ? { client_credentials_expires_at: timing.expiresAt }

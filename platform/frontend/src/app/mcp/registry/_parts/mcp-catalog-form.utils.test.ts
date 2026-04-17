@@ -363,6 +363,7 @@ describe("transformFormToApiData", () => {
       client_id: expect.objectContaining({ required: true }),
       client_secret: expect.objectContaining({ sensitive: true }),
       audience: expect.objectContaining({
+        required: false,
         default: "https://api.example.com",
       }),
     });

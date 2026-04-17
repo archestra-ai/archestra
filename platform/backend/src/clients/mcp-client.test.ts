@@ -4023,7 +4023,7 @@ describe("McpClient", () => {
               type: "string",
               title: "Audience",
               description: "Audience",
-              required: true,
+              required: false,
               sensitive: false,
             },
           },
@@ -4086,9 +4086,17 @@ describe("McpClient", () => {
         expect(fetchMock.mock.calls[0]?.[0]).toBe(
           "https://auth.example.com/oauth/token",
         );
-        expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain(
-          '"grant_type":"client_credentials"',
-        );
+        const requestOptions = fetchMock.mock.calls[0]?.[1];
+        expect(requestOptions?.headers).toMatchObject({
+          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json",
+        });
+        expect(requestOptions?.body).toBeInstanceOf(URLSearchParams);
+        const requestBody = requestOptions?.body as URLSearchParams;
+        expect(requestBody.get("grant_type")).toBe("client_credentials");
+        expect(requestBody.get("client_id")).toBe("shared-client-id");
+        expect(requestBody.get("client_secret")).toBe("shared-client-secret");
+        expect(requestBody.get("audience")).toBe("https://service.example.com");
 
         const { StreamableHTTPClientTransport } = await import(
           "@modelcontextprotocol/sdk/client/streamableHttp.js"
@@ -4154,7 +4162,7 @@ describe("McpClient", () => {
               type: "string",
               title: "Audience",
               description: "Audience",
-              required: true,
+              required: false,
               sensitive: false,
             },
           },
@@ -4227,6 +4235,122 @@ describe("McpClient", () => {
         );
 
         expect(fetchMock).toHaveBeenCalledTimes(1);
+        fetchMock.mockRestore();
+      });
+
+      test("omits audience when the shared credential does not provide one", async ({
+        makeUser,
+      }) => {
+        const user = await makeUser({
+          email: "client-credentials-no-audience@example.com",
+        });
+
+        const secret = await secretManager().createSecret(
+          {
+            client_id: "shared-client-id",
+            client_secret: "shared-client-secret",
+          },
+          "client-credentials-no-audience-secret",
+        );
+
+        const oauthCatalog = await InternalMcpCatalogModel.create({
+          name: "shared-client-credentials-no-audience-server",
+          serverType: "remote",
+          serverUrl: "https://api.example.com/mcp/",
+          oauthConfig: {
+            name: "Shared Client Credentials No Audience",
+            server_url: "https://api.example.com/mcp/",
+            grant_type: "client_credentials",
+            client_id: "",
+            redirect_uris: [],
+            scopes: [],
+            default_scopes: [],
+            supports_resource_metadata: false,
+            token_endpoint: "https://auth.example.com/oauth/token",
+          },
+          userConfig: {
+            client_id: {
+              type: "string",
+              title: "Client ID",
+              description: "Client ID",
+              required: true,
+              sensitive: false,
+            },
+            client_secret: {
+              type: "string",
+              title: "Client Secret",
+              description: "Client Secret",
+              required: true,
+              sensitive: true,
+            },
+            audience: {
+              type: "string",
+              title: "Audience",
+              description: "Audience",
+              required: false,
+              sensitive: false,
+            },
+          },
+        });
+
+        const oauthServer = await McpServerModel.create({
+          name: "shared-client-credentials-no-audience-server",
+          catalogId: oauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: user.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "shared-client-credentials-no-audience-server__list_projects",
+          description: "List projects",
+          parameters: {},
+          catalogId: oauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: oauthServer.id,
+        });
+
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              access_token: createJwt({ exp: futureExpSeconds() }),
+              expires_in: 3600,
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        );
+
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "ok" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCall(
+          {
+            id: "call_client_credentials_no_audience_1",
+            name: "shared-client-credentials-no-audience-server__list_projects",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: "token-1",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+          },
+        );
+
+        expect(result.isError).toBe(false);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        const requestBody = fetchMock.mock.calls[0]?.[1]?.body as URLSearchParams;
+        expect(requestBody.get("grant_type")).toBe("client_credentials");
+        expect(requestBody.get("audience")).toBeNull();
+
         fetchMock.mockRestore();
       });
     });

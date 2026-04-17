@@ -168,7 +168,7 @@ export function transformFormToApiData(
             description:
               "Audience included when requesting the client-credentials token.",
             promptOnInstallation: true,
-            required: true,
+            required: false,
             default: values.oauthConfig.audience || undefined,
             sensitive: false,
           },

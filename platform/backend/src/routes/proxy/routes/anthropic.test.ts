@@ -21,7 +21,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
-import { ModelModel } from "@/models";
+import { ModelModel, VirtualApiKeyModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createAnthropicTestClient } from "@/test/llm-provider-stubs";
 import { anthropicAdapterFactory } from "../adapters";
@@ -248,6 +248,85 @@ describe("Anthropic streaming mode", () => {
     expect(interaction.outputTokens).toBe(10); // Usage from message_start event
     expect(interaction.cost).toBeTruthy();
     expect(interaction.baselineCost).toBeTruthy();
+  });
+});
+
+describe("Anthropic virtual key auth", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("resolves virtual keys passed via authorization header", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+
+    let capturedApiKey: string | undefined;
+    vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
+      (apiKey) => {
+        capturedApiKey = apiKey;
+        return createAnthropicTestClient() as never;
+      },
+    );
+
+    try {
+      await app.register(anthropicProxyRoutes);
+
+      const organization = await makeOrganization();
+      const secret = await makeSecret({
+        secret: { apiKey: "sk-anthropic-parent-key" },
+      });
+      const chatApiKey = await makeLlmProviderApiKey(
+        organization.id,
+        secret.id,
+        {
+          provider: "anthropic",
+        },
+      );
+      const {
+        virtualKey: { id: virtualKeyId },
+        value,
+      } = await VirtualApiKeyModel.create({
+        chatApiKeyId: chatApiKey.id,
+        name: "anthropic-auth-header-vk",
+      });
+
+      const agent = await makeAgent({
+        organizationId: organization.id,
+        name: "Anthropic Virtual Key Agent",
+      });
+
+      const before = await VirtualApiKeyModel.findById(virtualKeyId);
+      expect(before?.lastUsedAt).toBeNull();
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${agent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${value}`,
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          model: "claude-opus-4-20250514",
+          messages: [{ role: "user", content: "Hello!" }],
+          max_tokens: 128,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(capturedApiKey).toBe("sk-anthropic-parent-key");
+
+      const after = await VirtualApiKeyModel.findById(virtualKeyId);
+      expect(after?.lastUsedAt).not.toBeNull();
+    } finally {
+      await app.close();
+    }
   });
 });
 

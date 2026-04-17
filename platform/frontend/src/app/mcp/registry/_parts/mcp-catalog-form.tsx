@@ -189,12 +189,14 @@ export function McpCatalogForm({
           oauthConfig: {
             client_id: "",
             client_secret: "",
+            audience: "",
             redirect_uris:
               typeof window !== "undefined"
                 ? `${window.location.origin}/oauth-callback`
                 : "",
             scopes: "read, write",
             supports_resource_metadata: true,
+            grantType: "authorization_code",
             authServerUrl: "",
             authorizationEndpoint: "",
             wellKnownUrl: "",
@@ -239,6 +241,19 @@ export function McpCatalogForm({
     nextAuthMethod: McpCatalogFormValues["authMethod"],
   ) => {
     form.setValue("authMethod", nextAuthMethod, { shouldDirty: true });
+
+    if (
+      nextAuthMethod === "oauth" ||
+      nextAuthMethod === "oauth_client_credentials"
+    ) {
+      form.setValue(
+        "oauthConfig.grantType",
+        nextAuthMethod === "oauth"
+          ? "authorization_code"
+          : "client_credentials",
+        { shouldDirty: true },
+      );
+    }
 
     if (nextAuthMethod === "enterprise_managed") {
       form.setValue(
@@ -1171,6 +1186,159 @@ export function McpCatalogForm({
                                     )}
                                   />
                                 </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {currentServerType === "remote" && (
+                          <div className="space-y-2">
+                            <div className="flex items-center space-x-2">
+                              <RadioGroupItem
+                                value="oauth_client_credentials"
+                                id="auth-oauth-client-credentials"
+                              />
+                              <FormLabel
+                                htmlFor="auth-oauth-client-credentials"
+                                className="font-normal cursor-pointer"
+                              >
+                                OAuth 2.0 Client Credentials
+                              </FormLabel>
+                            </div>
+
+                            {authMethod === "oauth_client_credentials" && (
+                              <div className="space-y-4 pl-6 border-l-2">
+                                <div className="bg-muted p-4 rounded-lg">
+                                  <p className="text-sm text-muted-foreground">
+                                    Installations will prompt for a shared
+                                    client ID, client secret, and audience.{" "}
+                                    {appName} will exchange them for a
+                                    short-lived bearer token at runtime and
+                                    refresh it automatically.
+                                  </p>
+                                </div>
+
+                                <FormField
+                                  control={form.control}
+                                  name="oauthConfig.authServerUrl"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>
+                                        Authorization Server URL
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          placeholder="https://auth.example.com"
+                                          className="font-mono"
+                                          {...field}
+                                        />
+                                      </FormControl>
+                                      <FormDescription>
+                                        Optional discovery base URL when the
+                                        token endpoint is derived from an auth
+                                        server instead of entered directly.
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <FormField
+                                  control={form.control}
+                                  name="oauthConfig.wellKnownUrl"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>
+                                        Well-Known Metadata URL
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          placeholder="https://auth.example.com/.well-known/openid-configuration"
+                                          className="font-mono"
+                                          {...field}
+                                        />
+                                      </FormControl>
+                                      <FormDescription>
+                                        Optional direct metadata endpoint
+                                        override when discovery is non-standard.
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <FormField
+                                  control={form.control}
+                                  name="oauthConfig.tokenEndpoint"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>
+                                        Token Endpoint{" "}
+                                        <span className="text-destructive">
+                                          *
+                                        </span>
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          placeholder="https://auth.example.com/oauth/token"
+                                          className="font-mono"
+                                          {...field}
+                                        />
+                                      </FormControl>
+                                      <FormDescription>
+                                        Endpoint used to exchange the stored
+                                        client credentials for a short-lived
+                                        bearer token.
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <FormField
+                                  control={form.control}
+                                  name="oauthConfig.audience"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Default Audience</FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          placeholder="https://api.example.com"
+                                          className="font-mono"
+                                          {...field}
+                                        />
+                                      </FormControl>
+                                      <FormDescription>
+                                        Optional default audience shown during
+                                        installation. Teams can override it per
+                                        shared connection.
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <FormField
+                                  control={form.control}
+                                  name="oauthConfig.scopes"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Scopes</FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          placeholder="read, write"
+                                          className="font-mono"
+                                          {...field}
+                                        />
+                                      </FormControl>
+                                      <FormDescription>
+                                        Optional comma-separated OAuth scopes to
+                                        include in the client credentials token
+                                        request.
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
                               </div>
                             )}
                           </div>

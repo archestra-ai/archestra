@@ -32,4 +32,15 @@ describe("OAuthConfigSchema", () => {
       }),
     ).toThrow("authorization_endpoint and token_endpoint must be set together");
   });
+
+  it("accepts client credentials configs without redirect URIs", () => {
+    expect(() =>
+      OAuthConfigSchema.parse({
+        ...baseOAuthConfig,
+        grant_type: "client_credentials",
+        redirect_uris: [],
+        token_endpoint: "https://legacy-idp.example.com/oauth/token",
+      }),
+    ).not.toThrow();
+  });
 });

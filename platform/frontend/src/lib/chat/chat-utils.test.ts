@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  conversationStorageKeys,
   getChatExternalAgentId,
   getConversationDisplayTitle,
   preserveNewlines,
@@ -144,6 +145,16 @@ describe("getChatExternalAgentId", () => {
 
   it("handles mixed ASCII and non-ISO-8859-1 characters", () => {
     expect(getChatExternalAgentId("Hello 世界 App")).toBe("Hello App Chat");
+  });
+});
+
+describe("conversationStorageKeys", () => {
+  it("returns all conversation-scoped localStorage keys", () => {
+    expect(conversationStorageKeys("conversation-123")).toEqual({
+      artifactOpen: "archestra-chat-artifact-open-conversation-123",
+      draft: "archestra_chat_draft_conversation-123",
+      error: "archestra_chat_error_conversation-123",
+    });
   });
 });
 

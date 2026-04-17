@@ -3972,6 +3972,648 @@ describe("McpClient", () => {
       });
     });
 
+    describe("oauth client credentials", () => {
+      test("exchanges stored client credentials for a bearer token on remote MCP calls", async ({
+        makeUser,
+      }) => {
+        const user = await makeUser({
+          email: "client-credentials@example.com",
+        });
+
+        const secret = await secretManager().createSecret(
+          {
+            client_id: "shared-client-id",
+            client_secret: "shared-client-secret",
+            audience: "https://service.example.com",
+          },
+          "client-credentials-secret",
+        );
+
+        const oauthCatalog = await InternalMcpCatalogModel.create({
+          name: "shared-client-credentials-server",
+          serverType: "remote",
+          serverUrl: "https://api.example.com/mcp/",
+          oauthConfig: {
+            name: "Shared Client Credentials",
+            server_url: "https://api.example.com/mcp/",
+            grant_type: "client_credentials",
+            client_id: "",
+            redirect_uris: [],
+            scopes: [],
+            default_scopes: [],
+            supports_resource_metadata: false,
+            token_endpoint: "https://auth.example.com/oauth/token",
+          },
+          userConfig: {
+            client_id: {
+              type: "string",
+              title: "Client ID",
+              description: "Client ID",
+              required: true,
+              sensitive: false,
+            },
+            client_secret: {
+              type: "string",
+              title: "Client Secret",
+              description: "Client Secret",
+              required: true,
+              sensitive: true,
+            },
+            audience: {
+              type: "string",
+              title: "Audience",
+              description: "Audience",
+              required: false,
+              sensitive: false,
+            },
+          },
+        });
+
+        const oauthServer = await McpServerModel.create({
+          name: "shared-client-credentials-server",
+          catalogId: oauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: user.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "shared-client-credentials-server__list_projects",
+          description: "List projects",
+          parameters: {},
+          catalogId: oauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: oauthServer.id,
+        });
+
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              access_token: createJwt({ exp: futureExpSeconds() }),
+              expires_in: 3600,
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        );
+
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "ok" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCall(
+          {
+            id: "call_client_credentials_1",
+            name: "shared-client-credentials-server__list_projects",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: "token-1",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+          },
+        );
+
+        expect(result.isError).toBe(false);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        expect(fetchMock.mock.calls[0]?.[0]).toBe(
+          "https://auth.example.com/oauth/token",
+        );
+        const requestOptions = fetchMock.mock.calls[0]?.[1];
+        expect(requestOptions?.headers).toMatchObject({
+          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json",
+        });
+        expect(requestOptions?.body).toBeInstanceOf(URLSearchParams);
+        const requestBody = requestOptions?.body as URLSearchParams;
+        expect(requestBody.get("grant_type")).toBe("client_credentials");
+        expect(requestBody.get("client_id")).toBe("shared-client-id");
+        expect(requestBody.get("client_secret")).toBe("shared-client-secret");
+        expect(requestBody.get("audience")).toBe("https://service.example.com");
+
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        const [, options] =
+          vi.mocked(StreamableHTTPClientTransport).mock.calls.at(-1) ?? [];
+        const headers =
+          options?.requestInit?.headers instanceof Headers
+            ? options.requestInit.headers
+            : new Headers(options?.requestInit?.headers);
+        expect(headers.get("Authorization")).toMatch(/^Bearer /);
+
+        fetchMock.mockRestore();
+      });
+
+      test("reuses cached client credentials tokens until refresh time", async ({
+        makeUser,
+      }) => {
+        const user = await makeUser({
+          email: "client-credentials-cache@example.com",
+        });
+
+        const secret = await secretManager().createSecret(
+          {
+            client_id: "shared-client-id",
+            client_secret: "shared-client-secret",
+            audience: "https://service.example.com",
+          },
+          "client-credentials-cache-secret",
+        );
+
+        const oauthCatalog = await InternalMcpCatalogModel.create({
+          name: "shared-client-credentials-cache-server",
+          serverType: "remote",
+          serverUrl: "https://api.example.com/mcp/",
+          oauthConfig: {
+            name: "Shared Client Credentials Cache",
+            server_url: "https://api.example.com/mcp/",
+            grant_type: "client_credentials",
+            client_id: "",
+            redirect_uris: [],
+            scopes: [],
+            default_scopes: [],
+            supports_resource_metadata: false,
+            token_endpoint: "https://auth.example.com/oauth/token",
+          },
+          userConfig: {
+            client_id: {
+              type: "string",
+              title: "Client ID",
+              description: "Client ID",
+              required: true,
+              sensitive: false,
+            },
+            client_secret: {
+              type: "string",
+              title: "Client Secret",
+              description: "Client Secret",
+              required: true,
+              sensitive: true,
+            },
+            audience: {
+              type: "string",
+              title: "Audience",
+              description: "Audience",
+              required: false,
+              sensitive: false,
+            },
+          },
+        });
+
+        const oauthServer = await McpServerModel.create({
+          name: "shared-client-credentials-cache-server",
+          catalogId: oauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: user.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "shared-client-credentials-cache-server__list_projects",
+          description: "List projects",
+          parameters: {},
+          catalogId: oauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: oauthServer.id,
+        });
+
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              access_token: createJwt({ exp: futureExpSeconds() }),
+              expires_in: 3600,
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        );
+
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "ok" }],
+          isError: false,
+        });
+
+        await mcpClient.executeToolCall(
+          {
+            id: "call_client_credentials_cache_1",
+            name: "shared-client-credentials-cache-server__list_projects",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: "token-1",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+          },
+        );
+        await mcpClient.executeToolCall(
+          {
+            id: "call_client_credentials_cache_2",
+            name: "shared-client-credentials-cache-server__list_projects",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: "token-1",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+          },
+        );
+
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        fetchMock.mockRestore();
+      });
+
+      test("omits audience when the shared credential does not provide one", async ({
+        makeUser,
+      }) => {
+        const user = await makeUser({
+          email: "client-credentials-no-audience@example.com",
+        });
+
+        const secret = await secretManager().createSecret(
+          {
+            client_id: "shared-client-id",
+            client_secret: "shared-client-secret",
+          },
+          "client-credentials-no-audience-secret",
+        );
+
+        const oauthCatalog = await InternalMcpCatalogModel.create({
+          name: "shared-client-credentials-no-audience-server",
+          serverType: "remote",
+          serverUrl: "https://api.example.com/mcp/",
+          oauthConfig: {
+            name: "Shared Client Credentials No Audience",
+            server_url: "https://api.example.com/mcp/",
+            grant_type: "client_credentials",
+            client_id: "",
+            redirect_uris: [],
+            scopes: [],
+            default_scopes: [],
+            supports_resource_metadata: false,
+            token_endpoint: "https://auth.example.com/oauth/token",
+          },
+          userConfig: {
+            client_id: {
+              type: "string",
+              title: "Client ID",
+              description: "Client ID",
+              required: true,
+              sensitive: false,
+            },
+            client_secret: {
+              type: "string",
+              title: "Client Secret",
+              description: "Client Secret",
+              required: true,
+              sensitive: true,
+            },
+            audience: {
+              type: "string",
+              title: "Audience",
+              description: "Audience",
+              required: false,
+              sensitive: false,
+            },
+          },
+        });
+
+        const oauthServer = await McpServerModel.create({
+          name: "shared-client-credentials-no-audience-server",
+          catalogId: oauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: user.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "shared-client-credentials-no-audience-server__list_projects",
+          description: "List projects",
+          parameters: {},
+          catalogId: oauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: oauthServer.id,
+        });
+
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              access_token: createJwt({ exp: futureExpSeconds() }),
+              expires_in: 3600,
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        );
+
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "ok" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCall(
+          {
+            id: "call_client_credentials_no_audience_1",
+            name: "shared-client-credentials-no-audience-server__list_projects",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: "token-1",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+          },
+        );
+
+        expect(result.isError).toBe(false);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        const requestBody = fetchMock.mock.calls[0]?.[1]
+          ?.body as URLSearchParams;
+        expect(requestBody.get("grant_type")).toBe("client_credentials");
+        expect(requestBody.get("audience")).toBeNull();
+
+        fetchMock.mockRestore();
+      });
+
+      test("retries with a fresh token after the upstream MCP call returns UnauthorizedError", async ({
+        makeUser,
+      }) => {
+        const user = await makeUser({
+          email: "client-credentials-retry@example.com",
+        });
+
+        const secret = await secretManager().createSecret(
+          {
+            client_id: "shared-client-id",
+            client_secret: "shared-client-secret",
+            audience: "https://service.example.com",
+          },
+          "client-credentials-retry-secret",
+        );
+
+        const oauthCatalog = await InternalMcpCatalogModel.create({
+          name: "shared-client-credentials-retry-server",
+          serverType: "remote",
+          serverUrl: "https://api.example.com/mcp/",
+          oauthConfig: {
+            name: "Shared Client Credentials Retry",
+            server_url: "https://api.example.com/mcp/",
+            grant_type: "client_credentials",
+            client_id: "",
+            redirect_uris: [],
+            scopes: [],
+            default_scopes: [],
+            supports_resource_metadata: false,
+            token_endpoint: "https://auth.example.com/oauth/token",
+          },
+          userConfig: {
+            client_id: {
+              type: "string",
+              title: "Client ID",
+              description: "Client ID",
+              required: true,
+              sensitive: false,
+            },
+            client_secret: {
+              type: "string",
+              title: "Client Secret",
+              description: "Client Secret",
+              required: true,
+              sensitive: true,
+            },
+            audience: {
+              type: "string",
+              title: "Audience",
+              description: "Audience",
+              required: false,
+              sensitive: false,
+            },
+          },
+        });
+
+        const oauthServer = await McpServerModel.create({
+          name: "shared-client-credentials-retry-server",
+          catalogId: oauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: user.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "shared-client-credentials-retry-server__list_projects",
+          description: "List projects",
+          parameters: {},
+          catalogId: oauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: oauthServer.id,
+        });
+
+        const firstAccessToken = createJwt({ exp: futureExpSeconds() });
+        const secondAccessToken = createJwt({ exp: futureExpSeconds(7200) });
+        const fetchMock = vi
+          .spyOn(globalThis, "fetch")
+          .mockResolvedValueOnce(
+            new Response(
+              JSON.stringify({
+                access_token: firstAccessToken,
+                expires_in: 3600,
+              }),
+              {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+              },
+            ),
+          )
+          .mockResolvedValueOnce(
+            new Response(
+              JSON.stringify({
+                access_token: secondAccessToken,
+                expires_in: 3600,
+              }),
+              {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+              },
+            ),
+          );
+
+        const { UnauthorizedError } = await import(
+          "@modelcontextprotocol/sdk/client/auth.js"
+        );
+        mockCallTool
+          .mockRejectedValueOnce(new UnauthorizedError())
+          .mockResolvedValueOnce({
+            content: [{ type: "text", text: "ok" }],
+            isError: false,
+          });
+
+        const result = await mcpClient.executeToolCall(
+          {
+            id: "call_client_credentials_retry_1",
+            name: "shared-client-credentials-retry-server__list_projects",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: "token-1",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+          },
+        );
+
+        expect(result.isError).toBe(false);
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(mockCallTool).toHaveBeenCalledTimes(2);
+
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        const transportCalls = vi.mocked(StreamableHTTPClientTransport).mock
+          .calls;
+        const firstHeaders =
+          transportCalls[0]?.[1]?.requestInit?.headers instanceof Headers
+            ? transportCalls[0][1].requestInit.headers
+            : new Headers(transportCalls[0]?.[1]?.requestInit?.headers);
+        const secondHeaders =
+          transportCalls[1]?.[1]?.requestInit?.headers instanceof Headers
+            ? transportCalls[1][1].requestInit.headers
+            : new Headers(transportCalls[1]?.[1]?.requestInit?.headers);
+        expect(firstHeaders.get("Authorization")).toBe(
+          `Bearer ${firstAccessToken}`,
+        );
+        expect(secondHeaders.get("Authorization")).toBe(
+          `Bearer ${secondAccessToken}`,
+        );
+
+        const updatedSecret = await secretManager().getSecret(secret.id);
+        expect(updatedSecret?.secret).toMatchObject({
+          access_token: secondAccessToken,
+        });
+
+        fetchMock.mockRestore();
+      });
+
+      test("includes the token endpoint in client credential exchange failures", async ({
+        makeUser,
+      }) => {
+        const user = await makeUser({
+          email: "client-credentials-error@example.com",
+        });
+
+        const secret = await secretManager().createSecret(
+          {
+            client_id: "shared-client-id",
+            client_secret: "shared-client-secret",
+          },
+          "client-credentials-error-secret",
+        );
+
+        const oauthCatalog = await InternalMcpCatalogModel.create({
+          name: "shared-client-credentials-error-server",
+          serverType: "remote",
+          serverUrl: "https://api.example.com/mcp/",
+          oauthConfig: {
+            name: "Shared Client Credentials Error",
+            server_url: "https://api.example.com/mcp/",
+            grant_type: "client_credentials",
+            client_id: "",
+            redirect_uris: [],
+            scopes: [],
+            default_scopes: [],
+            supports_resource_metadata: false,
+            token_endpoint: "https://auth.example.com/oauth/token",
+          },
+          userConfig: {
+            client_id: {
+              type: "string",
+              title: "Client ID",
+              description: "Client ID",
+              required: true,
+              sensitive: false,
+            },
+            client_secret: {
+              type: "string",
+              title: "Client Secret",
+              description: "Client Secret",
+              required: true,
+              sensitive: true,
+            },
+          },
+        });
+
+        const oauthServer = await McpServerModel.create({
+          name: "shared-client-credentials-error-server",
+          catalogId: oauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: user.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "shared-client-credentials-error-server__list_projects",
+          description: "List projects",
+          parameters: {},
+          catalogId: oauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: oauthServer.id,
+        });
+
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+          new Response("invalid_client", {
+            status: 401,
+            headers: { "Content-Type": "text/plain" },
+          }),
+        );
+
+        const result = await mcpClient.executeToolCall(
+          {
+            id: "call_client_credentials_error_1",
+            name: "shared-client-credentials-error-server__list_projects",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: "token-1",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+          },
+        );
+
+        expect(result.isError).toBe(true);
+        expect(result.error).toContain(
+          "Client credentials token request to https://auth.example.com/oauth/token failed: 401 invalid_client",
+        );
+
+        fetchMock.mockRestore();
+      });
+    });
+
     describe("_meta and structuredContent passthrough", () => {
       test("passes _meta from callTool result into CommonToolResult", async () => {
         const tool = await ToolModel.createToolIfNotExists({
@@ -4050,6 +4692,6 @@ function base64UrlEncode(value: unknown): string {
   return Buffer.from(JSON.stringify(value)).toString("base64url");
 }
 
-function futureExpSeconds(): number {
-  return Math.floor(Date.now() / 1000) + 3600;
+function futureExpSeconds(secondsFromNow: number = 3600): number {
+  return Math.floor(Date.now() / 1000) + secondsFromNow;
 }

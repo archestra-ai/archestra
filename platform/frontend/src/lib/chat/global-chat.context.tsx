@@ -34,7 +34,10 @@ import {
 import { filterOptimisticToolCalls } from "@/components/chat/chat-messages.utils";
 import { useGenerateConversationTitle } from "@/lib/chat/chat.query";
 import { restoreRenderableAssistantParts } from "@/lib/chat/chat-session-utils";
-import { getChatExternalAgentId } from "@/lib/chat/chat-utils";
+import {
+  conversationStorageKeys,
+  getChatExternalAgentId,
+} from "@/lib/chat/chat-utils";
 import {
   extractSwapTargetAgentName,
   getRenderedToolName,
@@ -341,6 +344,9 @@ function ChatSessionHook({
   const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastUserMessageIdRef = useRef<string | null>(null);
   const previousMessagesRef = useRef<UIMessage[]>([]);
+  const [persistedError, setPersistedError] = useState<Error | undefined>(() =>
+    loadPersistedConversationError(conversationId),
+  );
 
   // Track early UI data from data-tool-ui-start events (toolCallId → resource data)
   const [earlyToolUiStarts, setEarlyToolUiStarts] = useState<
@@ -371,6 +377,8 @@ function ChatSessionHook({
     id: conversationId,
     onFinish: ({ message }) => {
       setOptimisticToolCalls([]);
+      clearPersistedConversationError(conversationId);
+      setPersistedError(undefined);
       queryClient.invalidateQueries({
         queryKey: ["conversation", conversationId],
       });
@@ -402,6 +410,8 @@ function ChatSessionHook({
     },
     onError: (chatError) => {
       setOptimisticToolCalls([]);
+      persistConversationError(conversationId, chatError);
+      setPersistedError(chatError);
       console.error("[ChatSession] Error occurred:", {
         conversationId,
         errorName: chatError.name,
@@ -607,7 +617,7 @@ function ChatSessionHook({
     sendMessage,
     stop,
     status,
-    error,
+    error: error ?? persistedError,
     setMessages,
     addToolResult,
     addToolApprovalResponse,
@@ -632,6 +642,7 @@ function ChatSessionHook({
     stop,
     status,
     error,
+    persistedError,
     setMessages,
     addToolResult,
     addToolApprovalResponse,
@@ -644,6 +655,42 @@ function ChatSessionHook({
   ]);
 
   return null;
+}
+
+function loadPersistedConversationError(
+  conversationId: string,
+): Error | undefined {
+  if (typeof window === "undefined") {
+    return undefined;
+  }
+
+  const storedMessage = localStorage.getItem(
+    conversationStorageKeys(conversationId).error,
+  );
+  return storedMessage ? new Error(storedMessage) : undefined;
+}
+
+function persistConversationError(conversationId: string, error: Error) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    localStorage.setItem(
+      conversationStorageKeys(conversationId).error,
+      error.message,
+    );
+  } catch {
+    // Storage may be unavailable, but the in-memory session state still shows the error.
+  }
+}
+
+function clearPersistedConversationError(conversationId: string) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  localStorage.removeItem(conversationStorageKeys(conversationId).error);
 }
 
 function getSwapAgentName(toolCall: unknown): string | null {

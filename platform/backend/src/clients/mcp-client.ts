@@ -38,7 +38,7 @@ import {
   TeamModel,
   ToolModel,
 } from "@/models";
-import { refreshOAuthToken } from "@/routes/oauth";
+import { discoverOAuthEndpoints, refreshOAuthToken } from "@/routes/oauth";
 import { secretManager } from "@/secrets-manager";
 import {
   type ResolvedEnterpriseTransportCredential,
@@ -177,6 +177,7 @@ type TransportKind = "stdio" | "http";
 
 const HTTP_CONCURRENCY_LIMIT = 4;
 const OAUTH_TOKEN_REFRESH_BUFFER_MS = 5 * TimeInMs.Minute;
+const CLIENT_CREDENTIALS_FALLBACK_TTL_MS = 5 * TimeInMs.Minute;
 // Idle TTL for shared MCP active connections. These clients can retain HTTP
 // session affinity, tool-name caches, and browser-backed remote state, so we
 // want them to age out after inactivity instead of accumulating forever.
@@ -269,6 +270,10 @@ class McpClient {
       maxSize: McpClient.ENTERPRISE_CREDENTIAL_CACHE_MAX_ENTRIES,
       defaultTtl: McpClient.ENTERPRISE_CREDENTIAL_CACHE_FALLBACK_TTL_MS,
     });
+  private clientCredentialsLocks = new Map<
+    string,
+    Promise<Record<string, unknown>>
+  >();
 
   /**
    * Close a cached session for a specific (catalogId, targetMcpServerId, agentId, conversationId).
@@ -647,6 +652,7 @@ class McpClient {
 
         // Only attempt token refresh for OAuth servers with a refresh token
         const isOAuthServer = !!catalogItem.oauthConfig;
+        const usesClientCredentials = usesOAuthClientCredentials(catalogItem);
         const hasRefreshToken = !!(currentSecrets as { refresh_token?: string })
           .refresh_token;
 
@@ -655,7 +661,8 @@ class McpClient {
           isAuthError &&
           isOAuthServer &&
           targetMcpServerId &&
-          !hasRefreshToken
+          !hasRefreshToken &&
+          !usesClientCredentials
         ) {
           await McpServerModel.update(targetMcpServerId, {
             oauthRefreshError: "no_refresh_token",
@@ -696,6 +703,39 @@ class McpClient {
             return retryToolCallResult;
           }
           // If recovery returned null, the error was already recorded in attemptTokenRefreshAndRetry
+        }
+
+        if (!isRetry && isAuthError && usesClientCredentials && secretId) {
+          const resetSecrets = {
+            ...currentSecrets,
+            access_token: null,
+            client_credentials_expires_at: null,
+            client_credentials_refresh_at: null,
+          };
+          await secretManager().updateSecret(secretId, resetSecrets);
+          this.secretsCache.set(targetMcpServerId, {
+            secrets: resetSecrets,
+            secretId,
+          });
+          this.activeConnections.delete(connectionKey);
+          this.activeConnectionServerState.delete(connectionKey);
+          this.toolNameCache.delete(connectionKey);
+          this.pendingHttpSessionMetadata.delete(connectionKey);
+
+          return await executeToolCall(
+            () =>
+              this.getTransport(
+                catalogItem,
+                targetMcpServerId,
+                resetSecrets,
+                secretId,
+                connectionKey,
+                tokenAuth,
+                enterpriseTransportCredential ?? undefined,
+              ),
+            resetSecrets,
+            true,
+          );
         }
 
         // For auth errors, return an actionable message with re-auth URL
@@ -772,6 +812,7 @@ class McpClient {
             catalogItem,
             targetMcpServerId,
             secrets,
+            secretId,
             connectionKey,
             tokenAuth,
             enterpriseTransportCredential ?? undefined,
@@ -790,19 +831,29 @@ class McpClient {
       connectionKey,
       concurrencyLimit,
       () =>
-        executeToolCall(
-          () =>
-            this.getTransportWithKind(
-              catalogItem,
-              targetMcpServerId,
-              secrets,
-              transportKind,
-              connectionKey,
-              tokenAuth,
-              enterpriseTransportCredential ?? undefined,
-            ),
-          secrets,
-        ),
+        executeToolCall(async () => {
+          const resolvedSecrets = await this.resolveSecretsForTransport({
+            catalogItem,
+            secrets,
+            secretId,
+          });
+          if (resolvedSecrets !== secrets) {
+            this.secretsCache.set(targetMcpServerId, {
+              secrets: resolvedSecrets,
+              ...(secretId ? { secretId } : {}),
+            });
+          }
+
+          return this.getTransportWithKind(
+            catalogItem,
+            targetMcpServerId,
+            resolvedSecrets,
+            transportKind,
+            connectionKey,
+            tokenAuth,
+            enterpriseTransportCredential ?? undefined,
+          );
+        }, secrets),
     );
   }
 
@@ -1551,10 +1602,159 @@ class McpClient {
     throw new Error(`Unsupported transport kind: ${transportKind}`);
   }
 
+  private async resolveSecretsForTransport(params: {
+    catalogItem: InternalMcpCatalog;
+    secrets: Record<string, unknown>;
+    secretId?: string;
+  }): Promise<Record<string, unknown>> {
+    if (!usesOAuthClientCredentials(params.catalogItem)) {
+      return params.secrets;
+    }
+
+    if (hasUsableClientCredentialsToken(params.secrets)) {
+      return params.secrets;
+    }
+
+    const oauthConfig = params.catalogItem.oauthConfig;
+    if (!oauthConfig) {
+      throw new Error(
+        "OAuth client credentials configuration is missing oauthConfig",
+      );
+    }
+    const clientId =
+      getOptionalSecretString(params.secrets, "client_id") ||
+      oauthConfig.client_id;
+    const clientSecret =
+      getOptionalSecretString(params.secrets, "client_secret") ||
+      oauthConfig.client_secret;
+    const audience =
+      getOptionalSecretString(params.secrets, "audience") ||
+      oauthConfig.audience;
+
+    if (!clientId || !clientSecret) {
+      throw new Error(
+        "OAuth client credentials configuration requires client_id and client_secret",
+      );
+    }
+
+    const cacheKey =
+      params.secretId ||
+      [
+        params.catalogItem.id,
+        clientId,
+        audience,
+        oauthConfig.token_endpoint || oauthConfig.auth_server_url || "",
+      ].join(":");
+    const existingLock = this.clientCredentialsLocks.get(cacheKey);
+    if (existingLock) {
+      return await existingLock;
+    }
+
+    const resolutionPromise = this.fetchClientCredentialsAccessToken({
+      catalogItem: params.catalogItem,
+      existingSecrets: params.secrets,
+      secretId: params.secretId,
+      clientId,
+      clientSecret,
+      audience,
+    }).finally(() => {
+      this.clientCredentialsLocks.delete(cacheKey);
+    });
+
+    this.clientCredentialsLocks.set(cacheKey, resolutionPromise);
+    return await resolutionPromise;
+  }
+
+  private async fetchClientCredentialsAccessToken(params: {
+    catalogItem: InternalMcpCatalog;
+    existingSecrets: Record<string, unknown>;
+    secretId?: string;
+    clientId: string;
+    clientSecret: string;
+    audience?: string;
+  }): Promise<Record<string, unknown>> {
+    const oauthConfig = params.catalogItem.oauthConfig;
+    if (!oauthConfig) {
+      throw new Error(
+        "OAuth client credentials configuration is missing oauthConfig",
+      );
+    }
+    let tokenEndpoint = oauthConfig.token_endpoint;
+    if (!tokenEndpoint) {
+      const endpoints = await discoverOAuthEndpoints(oauthConfig);
+      tokenEndpoint = endpoints.tokenEndpoint;
+    }
+
+    const configuredScopes =
+      oauthConfig.scopes.length > 0
+        ? oauthConfig.scopes
+        : oauthConfig.default_scopes;
+    const requestBody: Record<string, string> = {
+      grant_type: "client_credentials",
+      client_id: params.clientId,
+      client_secret: params.clientSecret,
+    };
+    if (params.audience) {
+      requestBody.audience = params.audience;
+    }
+    if (configuredScopes.length > 0) {
+      requestBody.scope = configuredScopes.join(" ");
+    }
+
+    const tokenResponse = await fetch(tokenEndpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body: new URLSearchParams(requestBody),
+    });
+
+    if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text();
+      throw new Error(
+        `Client credentials token request to ${tokenEndpoint} failed: ${tokenResponse.status} ${errorText}`,
+      );
+    }
+
+    const tokenData = (await tokenResponse.json()) as {
+      access_token?: string;
+      expires_in?: number;
+    };
+    if (!tokenData.access_token) {
+      throw new Error(
+        "Client credentials token response did not include access_token",
+      );
+    }
+
+    const timing = buildClientCredentialsTokenTiming(
+      tokenData.access_token,
+      tokenData.expires_in,
+    );
+    const resolvedSecrets = {
+      ...params.existingSecrets,
+      client_id: params.clientId,
+      client_secret: params.clientSecret,
+      ...(params.audience ? { audience: params.audience } : {}),
+      access_token: tokenData.access_token,
+      ...(timing.expiresAt
+        ? { client_credentials_expires_at: timing.expiresAt }
+        : {}),
+      client_credentials_refresh_at: timing.refreshAt,
+    };
+
+    if (params.secretId) {
+      await secretManager().updateSecret(params.secretId, resolvedSecrets);
+    }
+
+    return resolvedSecrets;
+  }
+
   private async getTransport(
     catalogItem: InternalMcpCatalog,
     targetMcpServerId: string,
     secrets: Record<string, unknown>,
+    secretId?: string,
     connectionKey?: string,
     tokenAuth?: TokenAuthContext,
     enterpriseTransportCredential?: {
@@ -1562,6 +1762,17 @@ class McpClient {
       headerValue: string;
     },
   ): Promise<Transport> {
+    const resolvedSecrets = await this.resolveSecretsForTransport({
+      catalogItem,
+      secrets,
+      secretId,
+    });
+    if (resolvedSecrets !== secrets) {
+      this.secretsCache.set(targetMcpServerId, {
+        secrets: resolvedSecrets,
+        ...(secretId ? { secretId } : {}),
+      });
+    }
     const transportKind = await this.getTransportKind(
       catalogItem,
       targetMcpServerId,
@@ -1569,7 +1780,7 @@ class McpClient {
     return this.getTransportWithKind(
       catalogItem,
       targetMcpServerId,
-      secrets,
+      resolvedSecrets,
       transportKind,
       connectionKey,
       tokenAuth,
@@ -1799,7 +2010,12 @@ class McpClient {
 
       // Create new transport with updated secrets
       const getUpdatedTransport = () =>
-        this.getTransport(catalogItem, targetMcpServerId, updatedSecret);
+        this.getTransport(
+          catalogItem,
+          targetMcpServerId,
+          updatedSecret,
+          secretId,
+        );
 
       return await executeRetry(getUpdatedTransport, updatedSecret);
     } catch (retryError) {
@@ -2083,8 +2299,9 @@ class McpClient {
     catalogItem: InternalMcpCatalog;
     mcpServerId: string;
     secrets: Record<string, unknown>;
+    secretId?: string;
   }): Promise<CommonMcpToolDefinition[]> {
-    const { catalogItem, mcpServerId, secrets } = params;
+    const { catalogItem, mcpServerId, secrets, secretId } = params;
 
     // For local servers, retry connection a few times since the MCP server process
     // may need time to initialize even after the pod is ready
@@ -2100,6 +2317,7 @@ class McpClient {
           catalogItem,
           mcpServerId,
           secrets,
+          secretId,
         );
 
         const capabilities: ClientCapabilitiesWithExtensions = {
@@ -2182,6 +2400,7 @@ class McpClient {
       catalogItem,
       mcpServerId,
       secrets,
+      undefined,
     );
 
     const client = new Client(buildMcpClientInfo("archestra-inspector"), {
@@ -2456,12 +2675,13 @@ class McpClient {
     if ("error" in secretResult) {
       throw new Error(`Secret resolution failed: ${secretResult.error}`);
     }
-    const { secrets } = secretResult;
+    const { secrets, secretId } = secretResult;
 
     const transport = await this.getTransport(
       catalogItem,
       server.id,
       secrets,
+      secretId,
       undefined,
       tokenAuth,
     );
@@ -2552,6 +2772,7 @@ class McpClient {
           catalogItem,
           server.id,
           secretResult.secrets,
+          secretResult.secretId,
         );
         const connectionKey = `${catalogItem.id}:${server.id}`;
         const client = await this.getOrCreateClient(
@@ -2921,6 +3142,107 @@ function buildStaticCredentialHeaders(params: {
   }
 
   return buildDefaultAuthorizationHeaders(headers, secrets);
+}
+
+function usesOAuthClientCredentials(catalogItem: InternalMcpCatalog): boolean {
+  return catalogItem.oauthConfig?.grant_type === "client_credentials";
+}
+
+function getOptionalSecretString(
+  secrets: Record<string, unknown>,
+  key: string,
+): string | undefined {
+  const value = secrets[key];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function hasUsableClientCredentialsToken(
+  secrets: Record<string, unknown>,
+): boolean {
+  const accessToken = getOptionalSecretString(secrets, "access_token");
+  if (!accessToken) {
+    return false;
+  }
+
+  const refreshAt = toOptionalTimestamp(secrets.client_credentials_refresh_at);
+  if (refreshAt) {
+    return Date.now() < refreshAt;
+  }
+
+  const expiresAt = toOptionalTimestamp(secrets.client_credentials_expires_at);
+  if (expiresAt) {
+    return Date.now() + TimeInMs.Minute < expiresAt;
+  }
+
+  return false;
+}
+
+function buildClientCredentialsTokenTiming(
+  accessToken: string,
+  expiresIn?: number,
+): {
+  expiresAt?: number;
+  refreshAt: number;
+} {
+  const now = Date.now();
+  const jwtExpiration = getJwtExpirationMs(accessToken);
+  if (jwtExpiration && jwtExpiration > now) {
+    const lifetimeMs = jwtExpiration - now;
+    return {
+      expiresAt: jwtExpiration,
+      refreshAt: now + Math.max(lifetimeMs / 2, TimeInMs.Minute),
+    };
+  }
+
+  if (
+    typeof expiresIn === "number" &&
+    Number.isFinite(expiresIn) &&
+    expiresIn > 0
+  ) {
+    const lifetimeMs = expiresIn * 1000;
+    return {
+      expiresAt: now + lifetimeMs,
+      refreshAt: now + Math.max(lifetimeMs / 2, TimeInMs.Minute),
+    };
+  }
+
+  return {
+    refreshAt: now + CLIENT_CREDENTIALS_FALLBACK_TTL_MS,
+  };
+}
+
+function toOptionalTimestamp(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+  return undefined;
+}
+
+function getJwtExpirationMs(token: string): number | undefined {
+  const [, payload] = token.split(".");
+  if (!payload) {
+    return undefined;
+  }
+
+  try {
+    const normalizedPayload = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const paddedPayload =
+      normalizedPayload + "=".repeat((4 - (normalizedPayload.length % 4)) % 4);
+    const decoded = JSON.parse(
+      Buffer.from(paddedPayload, "base64").toString("utf8"),
+    ) as { exp?: number };
+    if (
+      typeof decoded.exp === "number" &&
+      Number.isFinite(decoded.exp) &&
+      decoded.exp > 0
+    ) {
+      return decoded.exp * 1000;
+    }
+  } catch {
+    return undefined;
+  }
+
+  return undefined;
 }
 
 function hasStaticAuthorizationCredential(

@@ -11,7 +11,9 @@ permissions: {}
 
 concurrency:
   group: release-please-${{ github.ref }}
-  cancel-in-progress: true
+  # Never preempt an in-flight release for the same branch. Subsequent pushes queue
+  # behind the active run so artifact publishing can complete atomically.
+  cancel-in-progress: false
 
 jobs:
   release-please:

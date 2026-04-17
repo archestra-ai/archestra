@@ -437,9 +437,7 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
       adminPage.getByRole("dialog").getByText("Pull Vault secrets from:"),
     ).not.toBeVisible();
     await expect(
-      adminPage
-        .getByRole("dialog")
-        .getByText("-- Select Vault folder --"),
+      adminPage.getByRole("dialog").getByText("-- Select Vault folder --"),
     ).not.toBeVisible();
 
     await installMcpServer(adminPage);

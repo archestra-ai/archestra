@@ -24823,11 +24823,13 @@ export type GetInternalMcpCatalogResponses = {
         oauthConfig: {
             name: string;
             server_url: string;
+            grant_type?: 'authorization_code' | 'client_credentials';
             auth_server_url?: string;
             authorization_endpoint?: string;
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            audience?: string;
             redirect_uris: Array<string>;
             scopes: Array<string>;
             description?: string;
@@ -24958,11 +24960,13 @@ export type CreateInternalMcpCatalogItemData = {
         oauthConfig?: {
             name: string;
             server_url: string;
+            grant_type?: 'authorization_code' | 'client_credentials';
             auth_server_url?: string;
             authorization_endpoint?: string;
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            audience?: string;
             redirect_uris: Array<string>;
             scopes: Array<string>;
             description?: string;
@@ -25152,11 +25156,13 @@ export type CreateInternalMcpCatalogItemResponses = {
         oauthConfig: {
             name: string;
             server_url: string;
+            grant_type?: 'authorization_code' | 'client_credentials';
             auth_server_url?: string;
             authorization_endpoint?: string;
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            audience?: string;
             redirect_uris: Array<string>;
             scopes: Array<string>;
             description?: string;
@@ -25437,11 +25443,13 @@ export type GetInternalMcpCatalogItemResponses = {
         oauthConfig: {
             name: string;
             server_url: string;
+            grant_type?: 'authorization_code' | 'client_credentials';
             auth_server_url?: string;
             authorization_endpoint?: string;
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            audience?: string;
             redirect_uris: Array<string>;
             scopes: Array<string>;
             description?: string;
@@ -25571,11 +25579,13 @@ export type UpdateInternalMcpCatalogItemData = {
         oauthConfig?: {
             name: string;
             server_url: string;
+            grant_type?: 'authorization_code' | 'client_credentials';
             auth_server_url?: string;
             authorization_endpoint?: string;
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            audience?: string;
             redirect_uris: Array<string>;
             scopes: Array<string>;
             description?: string;
@@ -25767,11 +25777,13 @@ export type UpdateInternalMcpCatalogItemResponses = {
         oauthConfig: {
             name: string;
             server_url: string;
+            grant_type?: 'authorization_code' | 'client_credentials';
             auth_server_url?: string;
             authorization_endpoint?: string;
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            audience?: string;
             redirect_uris: Array<string>;
             scopes: Array<string>;
             description?: string;
@@ -30288,11 +30300,13 @@ export type GetMcpServerInstallationRequestsResponses = {
             oauthConfig?: {
                 name: string;
                 server_url: string;
+                grant_type?: 'authorization_code' | 'client_credentials';
                 auth_server_url?: string;
                 authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
+                audience?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -30385,11 +30399,13 @@ export type CreateMcpServerInstallationRequestData = {
             oauthConfig?: {
                 name: string;
                 server_url: string;
+                grant_type?: 'authorization_code' | 'client_credentials';
                 auth_server_url?: string;
                 authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
+                audience?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -30536,11 +30552,13 @@ export type CreateMcpServerInstallationRequestResponses = {
             oauthConfig?: {
                 name: string;
                 server_url: string;
+                grant_type?: 'authorization_code' | 'client_credentials';
                 auth_server_url?: string;
                 authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
+                audience?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -30786,11 +30804,13 @@ export type GetMcpServerInstallationRequestResponses = {
             oauthConfig?: {
                 name: string;
                 server_url: string;
+                grant_type?: 'authorization_code' | 'client_credentials';
                 auth_server_url?: string;
                 authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
+                audience?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -30883,11 +30903,13 @@ export type UpdateMcpServerInstallationRequestData = {
             oauthConfig?: {
                 name: string;
                 server_url: string;
+                grant_type?: 'authorization_code' | 'client_credentials';
                 auth_server_url?: string;
                 authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
+                audience?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -31046,11 +31068,13 @@ export type UpdateMcpServerInstallationRequestResponses = {
             oauthConfig?: {
                 name: string;
                 server_url: string;
+                grant_type?: 'authorization_code' | 'client_credentials';
                 auth_server_url?: string;
                 authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
+                audience?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -31219,11 +31243,13 @@ export type ApproveMcpServerInstallationRequestResponses = {
             oauthConfig?: {
                 name: string;
                 server_url: string;
+                grant_type?: 'authorization_code' | 'client_credentials';
                 auth_server_url?: string;
                 authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
+                audience?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -31392,11 +31418,13 @@ export type DeclineMcpServerInstallationRequestResponses = {
             oauthConfig?: {
                 name: string;
                 server_url: string;
+                grant_type?: 'authorization_code' | 'client_credentials';
                 auth_server_url?: string;
                 authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
+                audience?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -31565,11 +31593,13 @@ export type AddMcpServerInstallationRequestNoteResponses = {
             oauthConfig?: {
                 name: string;
                 server_url: string;
+                grant_type?: 'authorization_code' | 'client_credentials';
                 auth_server_url?: string;
                 authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
+                audience?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;

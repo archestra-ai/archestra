@@ -165,16 +165,29 @@ graph LR
     style CR fill:#fff,stroke:#0066cc,stroke-width:1px
 ```
 
-Credentials are configured when you install a server from the [MCP Catalog](/docs/platform-private-registry). There are four types of upstream credentials:
+Credentials are configured when you install a server from the [MCP Catalog](/docs/platform-private-registry). There are five types of upstream credentials:
 
 - **Static secrets**: API keys or personal access tokens that are set once at install time and used for all requests.
 - **OAuth tokens**: Obtained by running an OAuth flow against the upstream provider during installation. Archestra stores both the access token and refresh token.
+- **OAuth client credentials**: Shared client credentials stored on the MCP connection and exchanged for a short-lived bearer token when a tool call runs.
 - **Upstream ID-JAG**: Retrieved at tool-call time by exchanging the caller's enterprise assertion for the downstream credential the MCP server needs.
 - **Upstream Identity Provider JWT / JWKS**: Retrieved at tool-call time by forwarding the caller's IdP JWT to the upstream MCP server for direct JWKS-based validation.
 
 How credentials are delivered to the upstream server depends on the server type. For **passthrough** (remote) servers, Archestra sends the credential over HTTP. The primary auth header defaults to `Authorization`, but you can configure a different header name such as `x-api-key` when the upstream server expects the token outside the standard authorization header. Additional headers are available for tenant IDs and other non-auth upstream requirements, and non-sensitive static values are stored directly in the catalog item. For **hosted** (local) servers running in Kubernetes, the gateway connects via stdio transport within the cluster and no auth headers are needed.
 
 Auth credentials are stored in the secrets backend, which uses the database by default. For enterprise deployments, you can configure an [external secrets manager](/docs/platform-secrets-management).
+
+### OAuth Client Credentials
+
+Use this mode when a remote MCP server expects Archestra to obtain a short-lived bearer token from an OAuth 2.0 token endpoint using `grant_type=client_credentials`.
+
+Archestra stores the shared `client_id`, `client_secret`, and optional `audience` on the installed MCP connection. At runtime it exchanges those values for an access token, injects that token as `Authorization: Bearer <token>`, and reuses it until the configured refresh window is reached.
+
+This is a shared connection pattern, not a per-user identity pattern:
+
+- install one connection per team or shared scope
+- assign tools to that installed connection directly
+- do not use `Resolve at call time` unless you want Archestra to choose among multiple installed shared credentials
 
 ### Dynamic Credential Resolution
 

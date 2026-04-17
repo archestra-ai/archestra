@@ -49,7 +49,7 @@
     "@azure/identity": "^4.13.0",
     "@better-auth/api-key": "^1.5.5",
     "@better-auth/core": "1.5.5",
-    "@better-auth/oauth-provider": "1.5.5",
+    "@better-auth/oauth-provider": "1.6.5",
     "@better-auth/sso": "1.5.5",
     "@chonkiejs/core": "^0.0.7",
     "@fastify/cors": "^11.1.0",

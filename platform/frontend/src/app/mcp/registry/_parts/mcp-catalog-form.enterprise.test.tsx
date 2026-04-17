@@ -222,6 +222,7 @@ describe("McpCatalogForm enterprise gating", () => {
               server_url: "https://mcp.example.com",
               client_id: "client-id",
               client_secret: "client-secret",
+              grant_type: "authorization_code",
               redirect_uris: ["https://app.example.com/oauth-callback"],
               scopes: ["read"],
               default_scopes: ["read"],

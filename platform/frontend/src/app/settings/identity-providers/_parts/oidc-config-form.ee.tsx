@@ -62,7 +62,6 @@ export function OidcConfigForm({
   hideProviderId,
 }: OidcConfigFormProps) {
   const [newScope, setNewScope] = useState("");
-  const appName = useAppName();
 
   const scopes = form.watch("oidcConfig.scopes") || [];
   const issuer = form.watch("issuer") || "";
@@ -577,6 +576,7 @@ function EnterpriseManagedCredentialsForm(props: {
     inferredEnterpriseExchangeType,
     subjectTokenTypeDefault,
   } = props;
+  const appName = useAppName();
   const identityProvidersDocsUrl = getFrontendDocsUrl(
     DocsPage.PlatformIdentityProviders,
   );

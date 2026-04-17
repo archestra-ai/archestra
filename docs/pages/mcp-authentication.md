@@ -3,7 +3,7 @@ title: "Authentication"
 category: MCP
 order: 4
 description: "How authentication works for MCP clients and upstream MCP servers"
-lastUpdated: 2026-04-16
+lastUpdated: 2026-04-17
 ---
 
 <!--
@@ -244,6 +244,8 @@ For MCP Gateways, enterprise-managed upstream credential resolution uses the cal
 - **Bearer token**: Archestra can only broker downstream enterprise-managed credentials if the token maps to a specific user with a linked IdP session
 
 For external MCP clients such as Cursor, **ID-JAG** and **JWKS** are usually the clearest options when you want per-user access to upstream systems like GitHub or Jira.
+
+For Microsoft Entra-backed upstream access, Archestra now supports an **on-behalf-of (OBO)** exchange pattern for downstream bearer tokens. In that mode Archestra exchanges the signed-in user's Entra access token for the downstream API token the MCP server needs.
 
 ### Upstream ID-JAG
 

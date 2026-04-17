@@ -3,6 +3,7 @@
 import {
   DocsPage,
   type IdentityProviderFormValues,
+  isEntraHostname,
   isOktaHostname,
 } from "@shared";
 import { Info, Plus, X } from "lucide-react";
@@ -70,11 +71,13 @@ export function OidcConfigForm({
     providerId,
   });
   const authenticationDefault =
-    inferredEnterpriseExchangeType === "keycloak"
+    inferredEnterpriseExchangeType === "keycloak" ||
+    inferredEnterpriseExchangeType === "entra_id"
       ? "client_secret_post"
       : "private_key_jwt";
   const subjectTokenTypeDefault =
-    inferredEnterpriseExchangeType === "keycloak"
+    inferredEnterpriseExchangeType === "keycloak" ||
+    inferredEnterpriseExchangeType === "entra_id"
       ? "urn:ietf:params:oauth:token-type:access_token"
       : "urn:ietf:params:oauth:token-type:id_token";
 
@@ -560,7 +563,11 @@ function EnterpriseManagedCredentialsForm(props: {
     | "client_secret_post"
     | "client_secret_basic";
   form: UseFormReturn<IdentityProviderFormValues>;
-  inferredEnterpriseExchangeType: "okta" | "keycloak" | "generic_oidc";
+  inferredEnterpriseExchangeType:
+    | "okta"
+    | "keycloak"
+    | "entra_id"
+    | "generic_oidc";
   subjectTokenTypeDefault:
     | "urn:ietf:params:oauth:token-type:access_token"
     | "urn:ietf:params:oauth:token-type:id_token"
@@ -831,7 +838,7 @@ function EnterpriseManagedCredentialsForm(props: {
 function inferEnterpriseExchangeType(params: {
   issuer: string;
   providerId: string;
-}): "okta" | "keycloak" | "generic_oidc" {
+}): "okta" | "keycloak" | "entra_id" | "generic_oidc" {
   const providerId = params.providerId.toLowerCase();
   const issuerUrl = tryParseUrl(params.issuer);
 
@@ -849,43 +856,57 @@ function inferEnterpriseExchangeType(params: {
     return "keycloak";
   }
 
+  if (
+    isEntraHostname(issuerUrl?.hostname ?? "") ||
+    providerId.includes("entra") ||
+    providerId.includes("azure")
+  ) {
+    return "entra_id";
+  }
+
   return "generic_oidc";
 }
 
 function getEnterpriseExchangeHint(
-  providerType: "okta" | "keycloak" | "generic_oidc",
+  providerType: "okta" | "keycloak" | "entra_id" | "generic_oidc",
 ): string {
   switch (providerType) {
     case "okta":
       return " The detected defaults prefer private key JWT client authentication and ID token exchange.";
     case "keycloak":
       return " The detected defaults prefer client secret POST and access token exchange.";
+    case "entra_id":
+      return " The detected defaults prefer Microsoft Entra on-behalf-of with client secret POST and access token exchange.";
     default:
       return " Review the client authentication method and subject token type expected by your identity provider.";
   }
 }
 
 function getAuthenticationHint(
-  providerType: "okta" | "keycloak" | "generic_oidc",
+  providerType: "okta" | "keycloak" | "entra_id" | "generic_oidc",
 ): string {
   switch (providerType) {
     case "okta":
       return "Many enterprise exchanges use private key JWT here.";
     case "keycloak":
       return "Many token-exchange flows use client secret POST here.";
+    case "entra_id":
+      return "Microsoft Entra OBO commonly uses client secret POST here.";
     default:
       return "Choose the client authentication method required by your identity provider.";
   }
 }
 
 function getSubjectTokenHint(
-  providerType: "okta" | "keycloak" | "generic_oidc",
+  providerType: "okta" | "keycloak" | "entra_id" | "generic_oidc",
 ): string {
   switch (providerType) {
     case "okta":
       return "The detected defaults prefer exchanging the user's ID token.";
     case "keycloak":
       return "The detected defaults prefer exchanging the user's access token.";
+    case "entra_id":
+      return "Microsoft Entra OBO expects the user's access token, not the ID token.";
     default:
       return "Choose the user token type your identity provider expects for token exchange.";
   }

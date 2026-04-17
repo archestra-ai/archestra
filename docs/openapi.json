@@ -153377,7 +153377,8 @@
                                 "enum": [
                                   "generic_oidc",
                                   "okta",
-                                  "keycloak"
+                                  "keycloak",
+                                  "entra_id"
                                 ]
                               },
                               "clientId": {
@@ -154003,7 +154004,8 @@
                             "enum": [
                               "generic_oidc",
                               "okta",
-                              "keycloak"
+                              "keycloak",
+                              "entra_id"
                             ]
                           },
                           "clientId": {
@@ -154388,7 +154390,8 @@
                               "enum": [
                                 "generic_oidc",
                                 "okta",
-                                "keycloak"
+                                "keycloak",
+                                "entra_id"
                               ]
                             },
                             "clientId": {
@@ -155275,7 +155278,8 @@
                               "enum": [
                                 "generic_oidc",
                                 "okta",
-                                "keycloak"
+                                "keycloak",
+                                "entra_id"
                               ]
                             },
                             "clientId": {
@@ -155900,7 +155904,8 @@
                             "enum": [
                               "generic_oidc",
                               "okta",
-                              "keycloak"
+                              "keycloak",
+                              "entra_id"
                             ]
                           },
                           "clientId": {
@@ -156286,7 +156291,8 @@
                               "enum": [
                                 "generic_oidc",
                                 "okta",
-                                "keycloak"
+                                "keycloak",
+                                "entra_id"
                               ]
                             },
                             "clientId": {

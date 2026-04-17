@@ -1,4 +1,8 @@
-import { type IdentityProviderFormValues, isOktaHostname } from "@shared";
+import {
+  type IdentityProviderFormValues,
+  isEntraHostname,
+  isOktaHostname,
+} from "@shared";
 
 export function normalizeIdentityProviderFormValues(
   data: IdentityProviderFormValues,
@@ -55,7 +59,7 @@ export function normalizeIdentityProviderFormValues(
 function inferEnterpriseExchangeType(params: {
   issuer: string;
   providerId: string;
-}): "okta" | "keycloak" | "generic_oidc" {
+}): "okta" | "keycloak" | "entra_id" | "generic_oidc" {
   const providerId = params.providerId.toLowerCase();
   const parsedIssuer = tryParseIssuerUrl(params.issuer);
   const hostname = parsedIssuer?.hostname ?? "";
@@ -71,6 +75,14 @@ function inferEnterpriseExchangeType(params: {
     return "keycloak";
   }
 
+  if (
+    isEntraHostname(hostname) ||
+    providerId.includes("entra") ||
+    providerId.includes("azure")
+  ) {
+    return "entra_id";
+  }
+
   return "generic_oidc";
 }
 
@@ -83,17 +95,19 @@ function tryParseIssuerUrl(issuer: string): URL | null {
 }
 
 function getDefaultTokenEndpointAuthentication(
-  providerType: "okta" | "keycloak" | "generic_oidc",
+  providerType: "okta" | "keycloak" | "entra_id" | "generic_oidc",
 ): "private_key_jwt" | "client_secret_post" {
-  return providerType === "keycloak" ? "client_secret_post" : "private_key_jwt";
+  return providerType === "keycloak" || providerType === "entra_id"
+    ? "client_secret_post"
+    : "private_key_jwt";
 }
 
 function getDefaultSubjectTokenType(
-  providerType: "okta" | "keycloak" | "generic_oidc",
+  providerType: "okta" | "keycloak" | "entra_id" | "generic_oidc",
 ):
   | "urn:ietf:params:oauth:token-type:access_token"
   | "urn:ietf:params:oauth:token-type:id_token" {
-  return providerType === "keycloak"
+  return providerType === "keycloak" || providerType === "entra_id"
     ? "urn:ietf:params:oauth:token-type:access_token"
     : "urn:ietf:params:oauth:token-type:id_token";
 }

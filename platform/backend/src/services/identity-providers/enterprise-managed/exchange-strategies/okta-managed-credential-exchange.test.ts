@@ -1,9 +1,9 @@
 import { vi } from "vitest";
 import type { ExternalIdentityProviderConfig } from "@/services/identity-providers/oidc";
 import { describe, expect, test } from "@/test";
-import { managedResourceTokenExchangeStrategy } from "./managed-resource-token-exchange";
+import { oktaManagedCredentialExchangeStrategy } from "./okta-managed-credential-exchange";
 
-describe("managedResourceTokenExchangeStrategy", () => {
+describe("oktaManagedCredentialExchangeStrategy", () => {
   test("builds a managed-resource exchange request and normalizes a structured secret response", async () => {
     const identityProvider = makeIdentityProvider({
       issuer: "https://example.okta.com/oauth2/default",
@@ -32,7 +32,7 @@ describe("managedResourceTokenExchangeStrategy", () => {
     );
 
     const result =
-      await managedResourceTokenExchangeStrategy.exchangeCredential({
+      await oktaManagedCredentialExchangeStrategy.exchangeCredential({
         identityProvider,
         assertion: "user-id-token",
         enterpriseManagedConfig: {

@@ -21,7 +21,7 @@ const OKTA_SECRET_TOKEN_TYPE = "urn:okta:params:oauth:token-type:secret";
 const OKTA_SERVICE_ACCOUNT_TOKEN_TYPE =
   "urn:okta:params:oauth:token-type:service-account";
 
-class ManagedResourceTokenExchangeStrategy
+class OktaManagedCredentialExchangeStrategy
   implements EnterpriseCredentialExchangeStrategy
 {
   async exchangeCredential(
@@ -194,8 +194,8 @@ class ManagedResourceTokenExchangeStrategy
   }
 }
 
-export const managedResourceTokenExchangeStrategy =
-  new ManagedResourceTokenExchangeStrategy();
+export const oktaManagedCredentialExchangeStrategy =
+  new OktaManagedCredentialExchangeStrategy();
 
 async function buildClientAssertion(params: {
   clientId: string;

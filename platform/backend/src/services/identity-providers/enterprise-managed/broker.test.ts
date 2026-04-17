@@ -402,6 +402,96 @@ describe("resolveEnterpriseTransportCredential", () => {
     fetchMock.mockRestore();
   });
 
+  test("exchanges an Entra session access token using OBO for a downstream bearer token", async ({
+    makeAgent,
+    makeIdentityProvider,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser({ email: "entra-obo@example.com" });
+    const identityProvider = await makeIdentityProvider(organization.id, {
+      providerId: "EntraID",
+      issuer: "https://login.microsoftonline.com/test-tenant/v2.0",
+      oidcConfig: {
+        clientId: "archestra-oidc",
+        clientSecret: "archestra-oidc-secret",
+        tokenEndpoint:
+          "https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token",
+        enterpriseManagedCredentials: {
+          providerType: "entra_id",
+          clientId: "middle-tier-client-id",
+          clientSecret: "middle-tier-client-secret",
+          tokenEndpoint:
+            "https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token",
+          tokenEndpointAuthentication: "client_secret_post",
+          subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+        },
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      identityProviderId: identityProvider.id,
+    });
+
+    await db.insert(schema.accountsTable).values({
+      id: randomUUID(),
+      accountId: "acct-entra",
+      providerId: identityProvider.providerId,
+      userId: user.id,
+      accessToken: "entra-session-access-token",
+      accessTokenExpiresAt: new Date(Date.now() + 300_000),
+      idToken: "entra-session-id-token",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          access_token: "downstream-graph-access-token",
+          expires_in: 3599,
+          token_type: "Bearer",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const result = await resolveEnterpriseTransportCredential({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: "session-token",
+        teamId: null,
+        isOrganizationToken: false,
+        userId: user.id,
+      },
+      enterpriseManagedConfig: {
+        requestedCredentialType: "bearer_token",
+        resourceIdentifier: "https://graph.microsoft.com",
+        tokenInjectionMode: "authorization_bearer",
+      },
+    });
+
+    expect(result).toEqual({
+      headerName: "Authorization",
+      headerValue: "Bearer downstream-graph-access-token",
+      expiresInSeconds: 3599,
+    });
+
+    const [, requestInit] = fetchMock.mock.calls[0] ?? [];
+    expect(String(requestInit?.body)).toContain(
+      "requested_token_use=on_behalf_of",
+    );
+    expect(String(requestInit?.body)).toContain(
+      "assertion=entra-session-access-token",
+    );
+    expect(String(requestInit?.body)).toContain(
+      "scope=https%3A%2F%2Fgraph.microsoft.com%2F.default",
+    );
+
+    fetchMock.mockRestore();
+  });
+
   test("rejects forbidden prototype segments in responseFieldPath", async ({
     makeAgent,
     makeIdentityProvider,

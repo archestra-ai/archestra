@@ -172,6 +172,56 @@ describe("resolveSessionExternalIdpToken", () => {
     });
   });
 
+  test("uses the stored access token for Entra enterprise-managed exchange", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeIdentityProvider,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "member" });
+
+    const identityProvider = await makeIdentityProvider(org.id, {
+      providerId: "EntraID",
+      issuer: "https://login.microsoftonline.com/test-tenant/v2.0",
+      oidcConfig: {
+        clientId: "archestra-oidc",
+        enterpriseManagedCredentials: {
+          providerType: "entra_id",
+        },
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      identityProviderId: identityProvider.id,
+    });
+
+    await db.insert(schema.accountsTable).values({
+      id: randomUUID(),
+      accountId: "acct-entra-enterprise",
+      providerId: "EntraID",
+      userId: user.id,
+      accessToken: "entra-access-token",
+      accessTokenExpiresAt: new Date(Date.now() + 3600_000),
+      idToken: createJwt({ exp: futureExpSeconds() }),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const result = await resolveSessionExternalIdpToken({
+      agentId: agent.id,
+      userId: user.id,
+    });
+
+    expect(result).toEqual({
+      identityProviderId: identityProvider.id,
+      providerId: "EntraID",
+      rawToken: "entra-access-token",
+    });
+  });
+
   test("refreshes an expired stored access token when refresh is possible", async ({
     makeOrganization,
     makeUser,

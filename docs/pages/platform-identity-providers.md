@@ -3,7 +3,7 @@ title: "Identity Providers"
 category: Administration
 description: "Configure Identity Providers for SSO authentication, MCP Gateway JWKS validation, and enterprise-managed credential brokerage"
 order: 2
-lastUpdated: 2026-03-30
+lastUpdated: 2026-04-17
 ---
 
 <!--
@@ -217,6 +217,12 @@ The key fields are:
 - **Private Key / Key ID**: Only needed when the IdP requires signed client assertions
 
 These settings do not change the SSO login flow. They are used when an MCP server is configured to resolve downstream credentials through the identity provider.
+
+Provider defaults are protocol-oriented:
+
+- **Okta managed credentials** default to private key JWT and ID token exchange
+- **RFC 8693 token exchange** defaults to client secret POST and access token exchange for Keycloak-style providers
+- **Microsoft Entra OBO** defaults to client secret POST and access token exchange
 
 ### Generic SAML
 

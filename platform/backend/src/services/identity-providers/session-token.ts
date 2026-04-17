@@ -114,7 +114,9 @@ function resolveSubjectTokenPreference(identityProvider: {
 
   if (
     identityProvider.oidcConfig?.enterpriseManagedCredentials?.providerType ===
-    "keycloak"
+      "keycloak" ||
+    identityProvider.oidcConfig?.enterpriseManagedCredentials?.providerType ===
+      "entra_id"
   ) {
     return "access_token";
   }

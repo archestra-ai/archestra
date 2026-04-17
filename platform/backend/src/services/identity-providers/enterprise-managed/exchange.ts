@@ -1,4 +1,4 @@
-import { isOktaHostname } from "@shared";
+import { isEntraHostname, isOktaHostname } from "@shared";
 import logger from "@/logging";
 import {
   type ExternalIdentityProviderConfig,
@@ -8,8 +8,9 @@ import type {
   EnterpriseManagedCredentialConfig,
   EnterpriseManagedCredentialType,
 } from "@/types";
-import { managedResourceTokenExchangeStrategy } from "./exchange-strategies/managed-resource-token-exchange";
-import { standardTokenExchangeStrategy } from "./exchange-strategies/standard-token-exchange";
+import { entraOboStrategy } from "./exchange-strategies/entra-obo-strategy";
+import { oktaManagedCredentialExchangeStrategy } from "./exchange-strategies/okta-managed-credential-exchange";
+import { rfc8693TokenExchangeStrategy } from "./exchange-strategies/rfc8693-token-exchange";
 
 export interface EnterpriseCredentialExchangeParams {
   identityProvider: ExternalIdentityProviderConfig;
@@ -48,9 +49,11 @@ export async function exchangeEnterpriseManagedCredential(params: {
       identityProviderId: identityProvider.id,
       providerId: identityProvider.providerId,
       strategy:
-        strategy === managedResourceTokenExchangeStrategy
-          ? "managed-resource-token-exchange"
-          : "standard-token-exchange",
+        strategy === entraOboStrategy
+          ? "entra-obo"
+          : strategy === oktaManagedCredentialExchangeStrategy
+            ? "okta-managed-credential-exchange"
+            : "rfc8693-token-exchange",
     },
     "Selected enterprise-managed credential exchange strategy",
   );
@@ -64,12 +67,16 @@ export async function exchangeEnterpriseManagedCredential(params: {
 function getEnterpriseCredentialExchangeStrategy(
   identityProvider: ExternalIdentityProviderConfig,
 ): EnterpriseCredentialExchangeStrategy {
-  if (supportsManagedResourceTokenExchange(identityProvider)) {
-    return managedResourceTokenExchangeStrategy;
+  if (supportsEntraObo(identityProvider)) {
+    return entraOboStrategy;
   }
 
-  if (supportsStandardTokenExchange(identityProvider)) {
-    return standardTokenExchangeStrategy;
+  if (supportsOktaManagedCredentialExchange(identityProvider)) {
+    return oktaManagedCredentialExchangeStrategy;
+  }
+
+  if (supportsRfc8693TokenExchange(identityProvider)) {
+    return rfc8693TokenExchangeStrategy;
   }
 
   throw new Error(
@@ -77,7 +84,20 @@ function getEnterpriseCredentialExchangeStrategy(
   );
 }
 
-function supportsManagedResourceTokenExchange(
+function supportsEntraObo(
+  identityProvider: ExternalIdentityProviderConfig,
+): boolean {
+  const configuredProviderType =
+    identityProvider.oidcConfig?.enterpriseManagedCredentials?.providerType;
+  if (configuredProviderType === "entra_id") {
+    return true;
+  }
+
+  const issuerUrl = tryParseIssuerUrl(identityProvider.issuer);
+  return isEntraHostname(issuerUrl?.hostname ?? "");
+}
+
+function supportsOktaManagedCredentialExchange(
   identityProvider: ExternalIdentityProviderConfig,
 ): boolean {
   const configuredProviderType =
@@ -90,12 +110,15 @@ function supportsManagedResourceTokenExchange(
   return isOktaHostname(issuerUrl?.hostname ?? "");
 }
 
-function supportsStandardTokenExchange(
+function supportsRfc8693TokenExchange(
   identityProvider: ExternalIdentityProviderConfig,
 ): boolean {
   const configuredProviderType =
     identityProvider.oidcConfig?.enterpriseManagedCredentials?.providerType;
-  if (configuredProviderType === "keycloak") {
+  if (
+    configuredProviderType === "keycloak" ||
+    configuredProviderType === "generic_oidc"
+  ) {
     return true;
   }
 

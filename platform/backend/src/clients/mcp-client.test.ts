@@ -1289,7 +1289,7 @@ describe("McpClient", () => {
             tokenEndpoint:
               "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
             enterpriseManagedCredentials: {
-              providerType: "keycloak",
+              exchangeStrategy: "rfc8693",
               clientId: "archestra-oidc",
               clientSecret: "archestra-oidc-secret",
               tokenEndpoint:
@@ -1405,7 +1405,7 @@ describe("McpClient", () => {
             clientId: "web-client-id",
             tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
             enterpriseManagedCredentials: {
-              providerType: "okta",
+              exchangeStrategy: "okta_managed",
               clientId: "ai-agent-client-id",
               tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
               tokenEndpointAuthentication: "client_secret_post",
@@ -1518,7 +1518,7 @@ describe("McpClient", () => {
             clientId: "web-client-id",
             tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
             enterpriseManagedCredentials: {
-              providerType: "okta",
+              exchangeStrategy: "okta_managed",
               clientId: "ai-agent-client-id",
               tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
               tokenEndpointAuthentication: "client_secret_post",
@@ -1632,7 +1632,7 @@ describe("McpClient", () => {
             tokenEndpoint:
               "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
             enterpriseManagedCredentials: {
-              providerType: "keycloak",
+              exchangeStrategy: "rfc8693",
               clientId: "archestra-oidc",
               clientSecret: "archestra-oidc-secret",
               tokenEndpoint:

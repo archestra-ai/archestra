@@ -138,7 +138,7 @@ describe("resolveSessionExternalIdpToken", () => {
       oidcConfig: {
         clientId: "archestra-oidc",
         enterpriseManagedCredentials: {
-          providerType: "keycloak",
+          exchangeStrategy: "rfc8693",
           subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
         },
       },
@@ -189,7 +189,7 @@ describe("resolveSessionExternalIdpToken", () => {
       oidcConfig: {
         clientId: "archestra-oidc",
         enterpriseManagedCredentials: {
-          providerType: "entra_id",
+          exchangeStrategy: "entra_obo",
         },
       },
     });
@@ -243,7 +243,7 @@ describe("resolveSessionExternalIdpToken", () => {
           "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
         tokenEndpointAuthentication: "client_secret_post",
         enterpriseManagedCredentials: {
-          providerType: "keycloak",
+          exchangeStrategy: "rfc8693",
           subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
         },
       },
@@ -313,7 +313,7 @@ describe("resolveSessionExternalIdpToken", () => {
       oidcConfig: {
         clientId: "archestra-oidc",
         enterpriseManagedCredentials: {
-          providerType: "keycloak",
+          exchangeStrategy: "rfc8693",
           subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
         },
       },

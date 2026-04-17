@@ -48,7 +48,7 @@ describe("normalizeIdentityProviderFormValues", () => {
 
     expect(normalized.oidcConfig?.enterpriseManagedCredentials).toEqual(
       expect.objectContaining({
-        providerType: "keycloak",
+        exchangeStrategy: "rfc8693",
         tokenEndpointAuthentication: "client_secret_post",
         subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
       }),
@@ -96,9 +96,9 @@ describe("normalizeIdentityProviderFormValues", () => {
 
     expect(normalized.oidcConfig?.enterpriseManagedCredentials).toEqual(
       expect.objectContaining({
-        providerType: "generic_oidc",
-        tokenEndpointAuthentication: "private_key_jwt",
-        subjectTokenType: "urn:ietf:params:oauth:token-type:id_token",
+        exchangeStrategy: "rfc8693",
+        tokenEndpointAuthentication: "client_secret_post",
+        subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
       }),
     );
   });
@@ -128,7 +128,7 @@ describe("normalizeIdentityProviderFormValues", () => {
 
     expect(normalized.oidcConfig?.enterpriseManagedCredentials).toEqual(
       expect.objectContaining({
-        providerType: "entra_id",
+        exchangeStrategy: "entra_obo",
         tokenEndpointAuthentication: "client_secret_post",
         subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
       }),

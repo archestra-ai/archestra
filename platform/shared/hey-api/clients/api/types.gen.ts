@@ -41505,7 +41505,7 @@ export type GetIdentityProvidersResponses = {
             tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
             jwksEndpoint?: string;
             enterpriseManagedCredentials?: {
-                providerType?: 'generic_oidc' | 'okta' | 'keycloak' | 'entra_id';
+                exchangeStrategy?: 'rfc8693' | 'okta_managed' | 'entra_obo';
                 clientId?: string;
                 clientSecret?: string;
                 tokenEndpoint?: string;
@@ -41634,7 +41634,7 @@ export type CreateIdentityProviderData = {
             tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
             jwksEndpoint?: string;
             enterpriseManagedCredentials?: {
-                providerType?: 'generic_oidc' | 'okta' | 'keycloak' | 'entra_id';
+                exchangeStrategy?: 'rfc8693' | 'okta_managed' | 'entra_obo';
                 clientId?: string;
                 clientSecret?: string;
                 tokenEndpoint?: string;
@@ -41826,7 +41826,7 @@ export type CreateIdentityProviderResponses = {
             tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
             jwksEndpoint?: string;
             enterpriseManagedCredentials?: {
-                providerType?: 'generic_oidc' | 'okta' | 'keycloak' | 'entra_id';
+                exchangeStrategy?: 'rfc8693' | 'okta_managed' | 'entra_obo';
                 clientId?: string;
                 clientSecret?: string;
                 tokenEndpoint?: string;
@@ -42183,7 +42183,7 @@ export type GetIdentityProviderResponses = {
             tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
             jwksEndpoint?: string;
             enterpriseManagedCredentials?: {
-                providerType?: 'generic_oidc' | 'okta' | 'keycloak' | 'entra_id';
+                exchangeStrategy?: 'rfc8693' | 'okta_managed' | 'entra_obo';
                 clientId?: string;
                 clientSecret?: string;
                 tokenEndpoint?: string;
@@ -42312,7 +42312,7 @@ export type UpdateIdentityProviderData = {
             tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
             jwksEndpoint?: string;
             enterpriseManagedCredentials?: {
-                providerType?: 'generic_oidc' | 'okta' | 'keycloak' | 'entra_id';
+                exchangeStrategy?: 'rfc8693' | 'okta_managed' | 'entra_obo';
                 clientId?: string;
                 clientSecret?: string;
                 tokenEndpoint?: string;
@@ -42505,7 +42505,7 @@ export type UpdateIdentityProviderResponses = {
             tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
             jwksEndpoint?: string;
             enterpriseManagedCredentials?: {
-                providerType?: 'generic_oidc' | 'okta' | 'keycloak' | 'entra_id';
+                exchangeStrategy?: 'rfc8693' | 'okta_managed' | 'entra_obo';
                 clientId?: string;
                 clientSecret?: string;
                 tokenEndpoint?: string;

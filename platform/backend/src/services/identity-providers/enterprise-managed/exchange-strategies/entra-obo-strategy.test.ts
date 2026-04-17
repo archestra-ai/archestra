@@ -12,7 +12,7 @@ describe("entraOboStrategy", () => {
         tokenEndpoint:
           "https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token",
         enterpriseManagedCredentials: {
-          providerType: "entra_id",
+          exchangeStrategy: "entra_obo",
           clientId: "middle-tier-client-id",
           clientSecret: "middle-tier-client-secret",
           tokenEndpoint:
@@ -77,7 +77,7 @@ describe("entraOboStrategy", () => {
         tokenEndpoint:
           "https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token",
         enterpriseManagedCredentials: {
-          providerType: "entra_id",
+          exchangeStrategy: "entra_obo",
           clientId: "middle-tier-client-id",
           clientSecret: "middle-tier-client-secret",
           tokenEndpoint:

@@ -42,8 +42,8 @@ export const IdentityProviderOidcConfigSchema = z
     jwksEndpoint: z.string().optional(),
     enterpriseManagedCredentials: z
       .object({
-        providerType: z
-          .enum(["generic_oidc", "okta", "keycloak", "entra_id"])
+        exchangeStrategy: z
+          .enum(["rfc8693", "okta_managed", "entra_obo"])
           .optional(),
         clientId: z.string().optional(),
         clientSecret: z.string().optional(),

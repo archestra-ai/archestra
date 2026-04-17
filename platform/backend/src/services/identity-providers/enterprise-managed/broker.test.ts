@@ -20,7 +20,7 @@ describe("resolveEnterpriseTransportCredential", () => {
         clientId: "web-client-id",
         tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
         enterpriseManagedCredentials: {
-          providerType: "okta",
+          exchangeStrategy: "okta_managed",
           clientId: "ai-agent-client-id",
           tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
           tokenEndpointAuthentication: "client_secret_post",
@@ -102,7 +102,7 @@ describe("resolveEnterpriseTransportCredential", () => {
         clientId: "web-client-id",
         tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
         enterpriseManagedCredentials: {
-          providerType: "okta",
+          exchangeStrategy: "okta_managed",
           clientId: "ai-agent-client-id",
           tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
           tokenEndpointAuthentication: "client_secret_post",
@@ -334,7 +334,7 @@ describe("resolveEnterpriseTransportCredential", () => {
         tokenEndpoint:
           "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
         enterpriseManagedCredentials: {
-          providerType: "keycloak",
+          exchangeStrategy: "rfc8693",
           clientId: "archestra-oidc",
           clientSecret: "archestra-oidc-secret",
           tokenEndpoint:
@@ -419,7 +419,7 @@ describe("resolveEnterpriseTransportCredential", () => {
         tokenEndpoint:
           "https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token",
         enterpriseManagedCredentials: {
-          providerType: "entra_id",
+          exchangeStrategy: "entra_obo",
           clientId: "middle-tier-client-id",
           clientSecret: "middle-tier-client-secret",
           tokenEndpoint:
@@ -507,7 +507,7 @@ describe("resolveEnterpriseTransportCredential", () => {
         clientId: "web-client-id",
         tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
         enterpriseManagedCredentials: {
-          providerType: "okta",
+          exchangeStrategy: "okta_managed",
           clientId: "ai-agent-client-id",
           tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
           tokenEndpointAuthentication: "client_secret_post",

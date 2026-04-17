@@ -50,7 +50,7 @@ Admins can change this in **Settings > MCP**. The setting is organization-wide a
 
 For direct API integrations, clients can authenticate using a static Bearer token with the header `Authorization: Bearer arch_<token>`. Legacy `archestra_<token>` values still authenticate correctly. Tokens can be scoped to a specific user, team, or organization. You can create and manage tokens in **Settings > Tokens**.
 
-Bearer tokens authenticate the client to Archestra. They are not enterprise assertions by themselves. If a gateway also needs enterprise-managed credential exchange for downstream MCP calls, Archestra must still have a usable IdP token for the matched user.
+Bearer tokens authenticate the client to Archestra. They are not enterprise assertions by themselves. If Archestra also needs to exchange the matched user's IdP token and use the result on the downstream MCP request, it must still have a usable IdP token for that user.
 
 For per-user access to downstream systems like GitHub or Jira, bearer tokens should usually be **personal user tokens**. Team and organization tokens can authenticate to the gateway, but they do not identify a specific user strongly enough for Archestra to broker per-user downstream credentials on their own.
 
@@ -226,7 +226,7 @@ When you pin a tool to a specific installed MCP server connection instead of usi
 
 This means a team-shared connection is governed by the team it is shared with, not by the individual who originally installed it. Personal connections still follow the connection owner's access boundary.
 
-Archestra also supports two enterprise-managed dynamic credential resolution modes. Instead of storing downstream credentials inside Archestra, Archestra asks the configured identity provider for a credential at tool-call time and injects it into the MCP request.
+Archestra can also resolve a token at tool-call time by asking the configured identity provider or broker for one. Instead of storing the downstream token in Archestra ahead of time, Archestra exchanges the signed-in user's IdP token and injects the returned token into the MCP request.
 
 These modes are configured across three places:
 
@@ -234,18 +234,26 @@ These modes are configured across three places:
 - **MCP catalog item**: whether Archestra should exchange a downstream credential or pass through the caller's IdP JWT, plus how the resulting credential should be injected
 - **Tool assignment**: choose `Resolve at call time`
 
-This model works best for remote MCP servers and local MCP servers using HTTP transport. Local stdio servers do not support per-request enterprise-managed credential injection.
+This model works best for remote MCP servers and local MCP servers using HTTP transport. Local stdio servers do not support per-request token exchange and injection.
 
-For MCP Gateways, enterprise-managed upstream credential resolution uses the caller identity that was established at the gateway:
+For MCP Gateways, this token exchange uses the caller identity that was established at the gateway:
 
 - **JWKS**: Archestra can use the incoming external IdP JWT directly
 - **ID-JAG**: Archestra uses the enterprise assertion path associated with the gateway's Identity Provider
 - **OAuth 2.1**: Archestra resolves the authenticated Archestra user and then uses that user's linked IdP session, if one exists
-- **Bearer token**: Archestra can only broker downstream enterprise-managed credentials if the token maps to a specific user with a linked IdP session
+- **Bearer token**: Archestra can only exchange a downstream token if the bearer token maps to a specific user with a linked IdP session
 
 For external MCP clients such as Cursor, **ID-JAG** and **JWKS** are usually the clearest options when you want per-user access to upstream systems like GitHub or Jira.
 
-For Microsoft Entra-backed upstream access, Archestra now supports an **on-behalf-of (OBO)** exchange pattern for downstream bearer tokens. In that mode Archestra exchanges the signed-in user's Entra access token for the downstream API token the MCP server needs.
+### Exchange Strategies
+
+When Archestra is configured to exchange the caller's IdP token at tool-call time, it uses one of three exchange strategies:
+
+- **`rfc8693`**: generic OAuth token exchange. Archestra exchanges the user's token at the IdP token endpoint and uses the returned bearer token on the downstream MCP request.
+- **`okta_managed`**: Okta's managed-credential exchange pattern. Archestra exchanges the user's token for an Okta-managed credential such as a secret or bearer token, then injects the configured value into the downstream MCP request.
+- **`entra_obo`**: Microsoft Entra on-behalf-of (OBO). Archestra exchanges the signed-in user's Entra access token for the downstream API token the MCP server needs.
+
+Archestra picks the strategy from the Identity Provider configuration. In the OIDC Identity Provider form, the defaults are inferred from the issuer URL and provider ID, but the stored setting is the exchange strategy, not the IdP brand.
 
 ### Upstream ID-JAG
 
@@ -297,13 +305,13 @@ Cursor can reach the gateway through four supported auth paths:
 - **JWKS**: Cursor calls the gateway directly with an external IdP JWT, and Archestra validates it against the linked IdP JWKS
 - **Bearer token**: Cursor calls the gateway directly with a static platform-managed token issued by Archestra
 
-For downstream enterprise-managed credentials, these modes are not equivalent:
+For token exchange on downstream MCP calls, these modes are not equivalent:
 
 - **ID-JAG** and **JWKS** are the clearest enterprise patterns because they give Archestra a user-specific enterprise assertion during authentication
 - **OAuth 2.1** also works when the authenticated Archestra user has a linked session with the same IdP
-- **Bearer token** only works for enterprise-managed downstream credentials when it resolves to a specific user who already has a linked IdP session in Archestra
+- **Bearer token** only works when it resolves to a specific user who already has a linked IdP session in Archestra
 
-In practice, that means a **personal user token** can work with enterprise-managed downstream credentials, but a pure **team** or **organization** token does not carry enough user identity on its own to broker per-user GitHub or Jira credentials.
+In practice, that means a **personal user token** can work, but a pure **team** or **organization** token does not carry enough user identity on its own to broker per-user GitHub or Jira credentials.
 
 When a tool runs, Archestra still resolves the **Upstream MCP Server Token** separately. For example:
 

@@ -71,13 +71,13 @@ export function OidcConfigForm({
     providerId,
   });
   const authenticationDefault =
-    inferredEnterpriseExchangeType === "keycloak" ||
-    inferredEnterpriseExchangeType === "entra_id"
+    inferredEnterpriseExchangeType === "rfc8693" ||
+    inferredEnterpriseExchangeType === "entra_obo"
       ? "client_secret_post"
       : "private_key_jwt";
   const subjectTokenTypeDefault =
-    inferredEnterpriseExchangeType === "keycloak" ||
-    inferredEnterpriseExchangeType === "entra_id"
+    inferredEnterpriseExchangeType === "rfc8693" ||
+    inferredEnterpriseExchangeType === "entra_obo"
       ? "urn:ietf:params:oauth:token-type:access_token"
       : "urn:ietf:params:oauth:token-type:id_token";
 
@@ -563,11 +563,7 @@ function EnterpriseManagedCredentialsForm(props: {
     | "client_secret_post"
     | "client_secret_basic";
   form: UseFormReturn<IdentityProviderFormValues>;
-  inferredEnterpriseExchangeType:
-    | "okta"
-    | "keycloak"
-    | "entra_id"
-    | "generic_oidc";
+  inferredEnterpriseExchangeType: "okta_managed" | "rfc8693" | "entra_obo";
   subjectTokenTypeDefault:
     | "urn:ietf:params:oauth:token-type:access_token"
     | "urn:ietf:params:oauth:token-type:id_token"
@@ -838,7 +834,7 @@ function EnterpriseManagedCredentialsForm(props: {
 function inferEnterpriseExchangeType(params: {
   issuer: string;
   providerId: string;
-}): "okta" | "keycloak" | "entra_id" | "generic_oidc" {
+}): "okta_managed" | "rfc8693" | "entra_obo" {
   const providerId = params.providerId.toLowerCase();
   const issuerUrl = tryParseUrl(params.issuer);
 
@@ -846,14 +842,14 @@ function inferEnterpriseExchangeType(params: {
     isOktaHostname(issuerUrl?.hostname ?? "") ||
     providerId.includes("okta")
   ) {
-    return "okta";
+    return "okta_managed";
   }
 
   if (
     issuerUrl?.pathname.includes("/realms/") ||
     providerId.includes("keycloak")
   ) {
-    return "keycloak";
+    return "rfc8693";
   }
 
   if (
@@ -861,54 +857,48 @@ function inferEnterpriseExchangeType(params: {
     providerId.includes("entra") ||
     providerId.includes("azure")
   ) {
-    return "entra_id";
+    return "entra_obo";
   }
 
-  return "generic_oidc";
+  return "rfc8693";
 }
 
 function getEnterpriseExchangeHint(
-  providerType: "okta" | "keycloak" | "entra_id" | "generic_oidc",
+  exchangeStrategy: "okta_managed" | "rfc8693" | "entra_obo",
 ): string {
-  switch (providerType) {
-    case "okta":
+  switch (exchangeStrategy) {
+    case "okta_managed":
       return " The detected defaults prefer private key JWT client authentication and ID token exchange.";
-    case "keycloak":
-      return " The detected defaults prefer client secret POST and access token exchange.";
-    case "entra_id":
+    case "rfc8693":
+      return " The detected defaults prefer RFC 8693 token exchange with client secret POST and access token exchange.";
+    case "entra_obo":
       return " The detected defaults prefer Microsoft Entra on-behalf-of with client secret POST and access token exchange.";
-    default:
-      return " Review the client authentication method and subject token type expected by your identity provider.";
   }
 }
 
 function getAuthenticationHint(
-  providerType: "okta" | "keycloak" | "entra_id" | "generic_oidc",
+  exchangeStrategy: "okta_managed" | "rfc8693" | "entra_obo",
 ): string {
-  switch (providerType) {
-    case "okta":
+  switch (exchangeStrategy) {
+    case "okta_managed":
       return "Many enterprise exchanges use private key JWT here.";
-    case "keycloak":
-      return "Many token-exchange flows use client secret POST here.";
-    case "entra_id":
+    case "rfc8693":
+      return "RFC 8693 token exchange commonly uses client secret POST here.";
+    case "entra_obo":
       return "Microsoft Entra OBO commonly uses client secret POST here.";
-    default:
-      return "Choose the client authentication method required by your identity provider.";
   }
 }
 
 function getSubjectTokenHint(
-  providerType: "okta" | "keycloak" | "entra_id" | "generic_oidc",
+  exchangeStrategy: "okta_managed" | "rfc8693" | "entra_obo",
 ): string {
-  switch (providerType) {
-    case "okta":
+  switch (exchangeStrategy) {
+    case "okta_managed":
       return "The detected defaults prefer exchanging the user's ID token.";
-    case "keycloak":
+    case "rfc8693":
       return "The detected defaults prefer exchanging the user's access token.";
-    case "entra_id":
+    case "entra_obo":
       return "Microsoft Entra OBO expects the user's access token, not the ID token.";
-    default:
-      return "Choose the user token type your identity provider expects for token exchange.";
   }
 }
 

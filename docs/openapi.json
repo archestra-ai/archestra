@@ -153372,13 +153372,12 @@
                           "enterpriseManagedCredentials": {
                             "type": "object",
                             "properties": {
-                              "providerType": {
+                              "exchangeStrategy": {
                                 "type": "string",
                                 "enum": [
-                                  "generic_oidc",
-                                  "okta",
-                                  "keycloak",
-                                  "entra_id"
+                                  "rfc8693",
+                                  "okta_managed",
+                                  "entra_obo"
                                 ]
                               },
                               "clientId": {
@@ -153999,13 +153998,12 @@
                       "enterpriseManagedCredentials": {
                         "type": "object",
                         "properties": {
-                          "providerType": {
+                          "exchangeStrategy": {
                             "type": "string",
                             "enum": [
-                              "generic_oidc",
-                              "okta",
-                              "keycloak",
-                              "entra_id"
+                              "rfc8693",
+                              "okta_managed",
+                              "entra_obo"
                             ]
                           },
                           "clientId": {
@@ -154385,13 +154383,12 @@
                         "enterpriseManagedCredentials": {
                           "type": "object",
                           "properties": {
-                            "providerType": {
+                            "exchangeStrategy": {
                               "type": "string",
                               "enum": [
-                                "generic_oidc",
-                                "okta",
-                                "keycloak",
-                                "entra_id"
+                                "rfc8693",
+                                "okta_managed",
+                                "entra_obo"
                               ]
                             },
                             "clientId": {
@@ -155273,13 +155270,12 @@
                         "enterpriseManagedCredentials": {
                           "type": "object",
                           "properties": {
-                            "providerType": {
+                            "exchangeStrategy": {
                               "type": "string",
                               "enum": [
-                                "generic_oidc",
-                                "okta",
-                                "keycloak",
-                                "entra_id"
+                                "rfc8693",
+                                "okta_managed",
+                                "entra_obo"
                               ]
                             },
                             "clientId": {
@@ -155899,13 +155895,12 @@
                       "enterpriseManagedCredentials": {
                         "type": "object",
                         "properties": {
-                          "providerType": {
+                          "exchangeStrategy": {
                             "type": "string",
                             "enum": [
-                              "generic_oidc",
-                              "okta",
-                              "keycloak",
-                              "entra_id"
+                              "rfc8693",
+                              "okta_managed",
+                              "entra_obo"
                             ]
                           },
                           "clientId": {
@@ -156286,13 +156281,12 @@
                         "enterpriseManagedCredentials": {
                           "type": "object",
                           "properties": {
-                            "providerType": {
+                            "exchangeStrategy": {
                               "type": "string",
                               "enum": [
-                                "generic_oidc",
-                                "okta",
-                                "keycloak",
-                                "entra_id"
+                                "rfc8693",
+                                "okta_managed",
+                                "entra_obo"
                               ]
                             },
                             "clientId": {

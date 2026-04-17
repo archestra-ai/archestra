@@ -87,9 +87,9 @@ function getEnterpriseCredentialExchangeStrategy(
 function supportsEntraObo(
   identityProvider: ExternalIdentityProviderConfig,
 ): boolean {
-  const configuredProviderType =
-    identityProvider.oidcConfig?.enterpriseManagedCredentials?.providerType;
-  if (configuredProviderType === "entra_id") {
+  const configuredExchangeStrategy =
+    identityProvider.oidcConfig?.enterpriseManagedCredentials?.exchangeStrategy;
+  if (configuredExchangeStrategy === "entra_obo") {
     return true;
   }
 
@@ -100,9 +100,9 @@ function supportsEntraObo(
 function supportsOktaManagedCredentialExchange(
   identityProvider: ExternalIdentityProviderConfig,
 ): boolean {
-  const configuredProviderType =
-    identityProvider.oidcConfig?.enterpriseManagedCredentials?.providerType;
-  if (configuredProviderType === "okta") {
+  const configuredExchangeStrategy =
+    identityProvider.oidcConfig?.enterpriseManagedCredentials?.exchangeStrategy;
+  if (configuredExchangeStrategy === "okta_managed") {
     return true;
   }
 
@@ -113,12 +113,9 @@ function supportsOktaManagedCredentialExchange(
 function supportsRfc8693TokenExchange(
   identityProvider: ExternalIdentityProviderConfig,
 ): boolean {
-  const configuredProviderType =
-    identityProvider.oidcConfig?.enterpriseManagedCredentials?.providerType;
-  if (
-    configuredProviderType === "keycloak" ||
-    configuredProviderType === "generic_oidc"
-  ) {
+  const configuredExchangeStrategy =
+    identityProvider.oidcConfig?.enterpriseManagedCredentials?.exchangeStrategy;
+  if (configuredExchangeStrategy === "rfc8693") {
     return true;
   }
 

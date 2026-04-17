@@ -1703,7 +1703,7 @@ class McpClient {
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text();
       throw new Error(
-        `Client credentials token request failed: ${tokenResponse.status} ${errorText}`,
+        `Client credentials token request to ${tokenEndpoint} failed: ${tokenResponse.status} ${errorText}`,
       );
     }
 

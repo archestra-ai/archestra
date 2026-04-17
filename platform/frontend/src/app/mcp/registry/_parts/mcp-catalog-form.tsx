@@ -1316,6 +1316,29 @@ export function McpCatalogForm({
                                     </FormItem>
                                   )}
                                 />
+
+                                <FormField
+                                  control={form.control}
+                                  name="oauthConfig.scopes"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Scopes</FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          placeholder="read, write"
+                                          className="font-mono"
+                                          {...field}
+                                        />
+                                      </FormControl>
+                                      <FormDescription>
+                                        Optional comma-separated OAuth scopes to
+                                        include in the client credentials token
+                                        request.
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
                               </div>
                             )}
                           </div>

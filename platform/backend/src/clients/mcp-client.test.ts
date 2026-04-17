@@ -4354,6 +4354,264 @@ describe("McpClient", () => {
 
         fetchMock.mockRestore();
       });
+
+      test("retries with a fresh token after the upstream MCP call returns UnauthorizedError", async ({
+        makeUser,
+      }) => {
+        const user = await makeUser({
+          email: "client-credentials-retry@example.com",
+        });
+
+        const secret = await secretManager().createSecret(
+          {
+            client_id: "shared-client-id",
+            client_secret: "shared-client-secret",
+            audience: "https://service.example.com",
+          },
+          "client-credentials-retry-secret",
+        );
+
+        const oauthCatalog = await InternalMcpCatalogModel.create({
+          name: "shared-client-credentials-retry-server",
+          serverType: "remote",
+          serverUrl: "https://api.example.com/mcp/",
+          oauthConfig: {
+            name: "Shared Client Credentials Retry",
+            server_url: "https://api.example.com/mcp/",
+            grant_type: "client_credentials",
+            client_id: "",
+            redirect_uris: [],
+            scopes: [],
+            default_scopes: [],
+            supports_resource_metadata: false,
+            token_endpoint: "https://auth.example.com/oauth/token",
+          },
+          userConfig: {
+            client_id: {
+              type: "string",
+              title: "Client ID",
+              description: "Client ID",
+              required: true,
+              sensitive: false,
+            },
+            client_secret: {
+              type: "string",
+              title: "Client Secret",
+              description: "Client Secret",
+              required: true,
+              sensitive: true,
+            },
+            audience: {
+              type: "string",
+              title: "Audience",
+              description: "Audience",
+              required: false,
+              sensitive: false,
+            },
+          },
+        });
+
+        const oauthServer = await McpServerModel.create({
+          name: "shared-client-credentials-retry-server",
+          catalogId: oauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: user.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "shared-client-credentials-retry-server__list_projects",
+          description: "List projects",
+          parameters: {},
+          catalogId: oauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: oauthServer.id,
+        });
+
+        const firstAccessToken = createJwt({ exp: futureExpSeconds() });
+        const secondAccessToken = createJwt({ exp: futureExpSeconds(7200) });
+        const fetchMock = vi
+          .spyOn(globalThis, "fetch")
+          .mockResolvedValueOnce(
+            new Response(
+              JSON.stringify({
+                access_token: firstAccessToken,
+                expires_in: 3600,
+              }),
+              {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+              },
+            ),
+          )
+          .mockResolvedValueOnce(
+            new Response(
+              JSON.stringify({
+                access_token: secondAccessToken,
+                expires_in: 3600,
+              }),
+              {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+              },
+            ),
+          );
+
+        const { UnauthorizedError } = await import(
+          "@modelcontextprotocol/sdk/client/auth.js"
+        );
+        mockCallTool
+          .mockRejectedValueOnce(new UnauthorizedError())
+          .mockResolvedValueOnce({
+            content: [{ type: "text", text: "ok" }],
+            isError: false,
+          });
+
+        const result = await mcpClient.executeToolCall(
+          {
+            id: "call_client_credentials_retry_1",
+            name: "shared-client-credentials-retry-server__list_projects",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: "token-1",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+          },
+        );
+
+        expect(result.isError).toBe(false);
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(mockCallTool).toHaveBeenCalledTimes(2);
+
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        const transportCalls = vi.mocked(StreamableHTTPClientTransport).mock
+          .calls;
+        const firstHeaders =
+          transportCalls[0]?.[1]?.requestInit?.headers instanceof Headers
+            ? transportCalls[0][1].requestInit.headers
+            : new Headers(transportCalls[0]?.[1]?.requestInit?.headers);
+        const secondHeaders =
+          transportCalls[1]?.[1]?.requestInit?.headers instanceof Headers
+            ? transportCalls[1][1].requestInit.headers
+            : new Headers(transportCalls[1]?.[1]?.requestInit?.headers);
+        expect(firstHeaders.get("Authorization")).toBe(
+          `Bearer ${firstAccessToken}`,
+        );
+        expect(secondHeaders.get("Authorization")).toBe(
+          `Bearer ${secondAccessToken}`,
+        );
+
+        const updatedSecret = await secretManager().getSecret(secret.id);
+        expect(updatedSecret?.secret).toMatchObject({
+          access_token: secondAccessToken,
+        });
+
+        fetchMock.mockRestore();
+      });
+
+      test("includes the token endpoint in client credential exchange failures", async ({
+        makeUser,
+      }) => {
+        const user = await makeUser({
+          email: "client-credentials-error@example.com",
+        });
+
+        const secret = await secretManager().createSecret(
+          {
+            client_id: "shared-client-id",
+            client_secret: "shared-client-secret",
+          },
+          "client-credentials-error-secret",
+        );
+
+        const oauthCatalog = await InternalMcpCatalogModel.create({
+          name: "shared-client-credentials-error-server",
+          serverType: "remote",
+          serverUrl: "https://api.example.com/mcp/",
+          oauthConfig: {
+            name: "Shared Client Credentials Error",
+            server_url: "https://api.example.com/mcp/",
+            grant_type: "client_credentials",
+            client_id: "",
+            redirect_uris: [],
+            scopes: [],
+            default_scopes: [],
+            supports_resource_metadata: false,
+            token_endpoint: "https://auth.example.com/oauth/token",
+          },
+          userConfig: {
+            client_id: {
+              type: "string",
+              title: "Client ID",
+              description: "Client ID",
+              required: true,
+              sensitive: false,
+            },
+            client_secret: {
+              type: "string",
+              title: "Client Secret",
+              description: "Client Secret",
+              required: true,
+              sensitive: true,
+            },
+          },
+        });
+
+        const oauthServer = await McpServerModel.create({
+          name: "shared-client-credentials-error-server",
+          catalogId: oauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: user.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "shared-client-credentials-error-server__list_projects",
+          description: "List projects",
+          parameters: {},
+          catalogId: oauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: oauthServer.id,
+        });
+
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+          new Response("invalid_client", {
+            status: 401,
+            headers: { "Content-Type": "text/plain" },
+          }),
+        );
+
+        const result = await mcpClient.executeToolCall(
+          {
+            id: "call_client_credentials_error_1",
+            name: "shared-client-credentials-error-server__list_projects",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: "token-1",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+          },
+        );
+
+        expect(result.isError).toBe(true);
+        expect(result.error).toContain(
+          "Client credentials token request to https://auth.example.com/oauth/token failed: 401 invalid_client",
+        );
+
+        fetchMock.mockRestore();
+      });
     });
 
     describe("_meta and structuredContent passthrough", () => {

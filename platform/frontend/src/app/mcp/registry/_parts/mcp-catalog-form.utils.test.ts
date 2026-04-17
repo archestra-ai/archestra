@@ -326,7 +326,7 @@ describe("transformFormToApiData", () => {
         client_secret: "",
         audience: "https://api.example.com",
         redirect_uris: "",
-        scopes: "",
+        scopes: "read, write",
         supports_resource_metadata: false,
         grantType: "client_credentials",
         oauthServerUrl: "",
@@ -356,8 +356,8 @@ describe("transformFormToApiData", () => {
       token_endpoint: "https://auth.example.com/oauth/token",
       audience: "https://api.example.com",
       redirect_uris: [],
-      scopes: [],
-      default_scopes: [],
+      scopes: ["read", "write"],
+      default_scopes: ["read", "write"],
     });
     expect(result.userConfig).toMatchObject({
       client_id: expect.objectContaining({ required: true }),

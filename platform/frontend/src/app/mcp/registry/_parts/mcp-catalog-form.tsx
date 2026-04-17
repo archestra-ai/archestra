@@ -160,6 +160,10 @@ export function McpCatalogForm({
     DocsPage.McpAuthentication,
     "token-exchange-configuration",
   );
+  const mcpAuthJwksDocsUrl = getFrontendDocsUrl(
+    DocsPage.McpAuthentication,
+    "upstream-identity-provider-jwt-jwks",
+  );
   const { data: canReadIdentityProviders } = useHasPermissions({
     identityProvider: ["read"],
   });
@@ -1708,7 +1712,13 @@ export function McpCatalogForm({
                             <div className="space-y-4 pl-6 border-l-2">
                               <div className="bg-muted p-4 rounded-lg">
                                 <p className="text-sm text-muted-foreground">
-                                  {`${appName} will pass through the caller's IdP JWT to the upstream MCP server. In the current configuration this is sent as an Authorization: Bearer header. Use this when the upstream server validates the same JWT against the IdP's JWKS endpoint directly.`}
+                                  {`${appName} will pass through the caller's IdP JWT to the upstream MCP server. In the current configuration this is sent as an Authorization: Bearer header. Use this when the upstream server validates the same JWT against the IdP's JWKS endpoint directly.`}{" "}
+                                  <ExternalDocsLink
+                                    href={mcpAuthJwksDocsUrl}
+                                    className="inline-flex items-center gap-1 underline underline-offset-4"
+                                  >
+                                    Learn more
+                                  </ExternalDocsLink>
                                 </p>
                               </div>
 

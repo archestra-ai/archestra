@@ -94,6 +94,32 @@ runs:
         INPUT_CONTEXT: ${{ inputs.context }}
         INPUT_PREVIOUS_IMAGE: ${{ inputs.previous-image }}
 
+    - name: Prepare build secrets
+      id: prepare-secrets
+      shell: bash
+      run: |
+        {
+          echo "value<<EOF"
+
+          if [ -n "${INPUT_TURBO_TEAM}" ]; then
+            echo "turbo_team=${INPUT_TURBO_TEAM}"
+          fi
+
+          if [ -n "${INPUT_TURBO_TOKEN}" ]; then
+            echo "turbo_token=${INPUT_TURBO_TOKEN}"
+          fi
+
+          if [ -n "${INPUT_SENTRY_AUTH_TOKEN}" ]; then
+            echo "sentry_auth_token=${INPUT_SENTRY_AUTH_TOKEN}"
+          fi
+
+          echo "EOF"
+        } >> "${GITHUB_OUTPUT}"
+      env:
+        INPUT_SENTRY_AUTH_TOKEN: ${{ inputs.sentry-auth-token }}
+        INPUT_TURBO_TEAM: ${{ inputs.turbo-team }}
+        INPUT_TURBO_TOKEN: ${{ inputs.turbo-token }}
+
     - name: Setup Blacksmith Builder
       uses: ./.github/actions/setup-blacksmith-builder
 
@@ -110,7 +136,4 @@ runs:
         outputs: ${{ inputs.outputs }}
         network: host
         build-args: ${{ inputs.version != '' && format('VERSION={0}', inputs.version) || '' }}
-        secrets: |
-          turbo_team=${{ inputs.turbo-team }}
-          turbo_token=${{ inputs.turbo-token }}
-          ${{ inputs.sentry-auth-token != '' && format('sentry_auth_token={0}', inputs.sentry-auth-token) || '' }}
+        secrets: ${{ steps.prepare-secrets.outputs.value }}

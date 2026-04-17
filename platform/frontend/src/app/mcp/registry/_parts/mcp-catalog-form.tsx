@@ -1706,22 +1706,16 @@ export function McpCatalogForm({
                           isSelected={authMethod === "idp_jwt"}
                           configContent={
                             <div className="space-y-4 pl-6 border-l-2">
+                              <div className="bg-muted p-4 rounded-lg">
+                                <p className="text-sm text-muted-foreground">
+                                  {`${appName} will pass through the caller's IdP JWT to the upstream MCP server. In the current configuration this is sent as an Authorization: Bearer header. Use this when the upstream server validates the same JWT against the IdP's JWKS endpoint directly.`}
+                                </p>
+                              </div>
+
                               <EnterpriseIdentityProviderField
                                 control={form.control}
                                 identityProviders={oidcIdentityProviders}
                               />
-
-                              <div className="bg-muted p-4 rounded-lg">
-                                <p className="text-sm text-muted-foreground">
-                                  {appName} will pass through the caller&apos;s
-                                  IdP JWT to the upstream MCP server. In the
-                                  current configuration this is sent as an{" "}
-                                  <code>Authorization: Bearer</code> header. Use
-                                  this when the upstream server validates the
-                                  same JWT against the IdP&apos;s JWKS endpoint
-                                  directly.
-                                </p>
-                              </div>
                             </div>
                           }
                         />

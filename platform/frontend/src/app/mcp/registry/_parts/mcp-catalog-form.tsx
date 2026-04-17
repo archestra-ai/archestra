@@ -1665,7 +1665,7 @@ export function McpCatalogForm({
                                   </ExternalDocsLink>
                                 </p>
                                 <p className="mt-2 text-sm text-muted-foreground">
-                                  {`${appName} will exchange that token at tool-call time. Installations inherit these defaults automatically.`}
+                                  {`${appName} will exchange that token at tool-call time. Use the fields below to choose what credential to request and how it should be sent to the upstream MCP server. Installations inherit these defaults automatically.`}
                                 </p>
                               </div>
 
@@ -1690,12 +1690,6 @@ export function McpCatalogForm({
                                         onChange={field.onChange}
                                       />
                                     </FormControl>
-                                    <FormDescription>
-                                      Configure the managed resource identifier
-                                      and how the returned credential should be
-                                      injected into requests made to this MCP
-                                      server.
-                                    </FormDescription>
                                     <FormMessage />
                                   </FormItem>
                                 )}

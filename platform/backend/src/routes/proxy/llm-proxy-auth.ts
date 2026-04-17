@@ -48,6 +48,7 @@ export async function resolveAgent(
 export interface VirtualKeyValidationResult {
   apiKey: string | undefined;
   baseUrl: string | undefined;
+  provider: string;
 }
 
 /**
@@ -59,7 +60,7 @@ export interface VirtualKeyValidationResult {
  */
 export async function validateVirtualApiKey(
   tokenValue: string,
-  expectedProvider: string,
+  expectedProvider: string | null,
 ): Promise<VirtualKeyValidationResult> {
   const resolved = await VirtualApiKeyModel.validateToken(tokenValue);
   if (!resolved) {
@@ -73,7 +74,7 @@ export async function validateVirtualApiKey(
     throw new ApiError(401, "Virtual API key expired");
   }
 
-  if (resolved.chatApiKey.provider !== expectedProvider) {
+  if (expectedProvider && resolved.chatApiKey.provider !== expectedProvider) {
     throw new ApiError(
       400,
       `Virtual API key is for provider "${resolved.chatApiKey.provider}", but request is for "${expectedProvider}"`,
@@ -107,6 +108,7 @@ export async function validateVirtualApiKey(
   return {
     apiKey,
     baseUrl: resolved.chatApiKey.baseUrl ?? undefined,
+    provider: resolved.chatApiKey.provider,
   };
 }
 

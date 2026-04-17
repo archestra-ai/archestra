@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.15](https://github.com/archestra-ai/archestra/compare/platform-v1.2.14...platform-v1.2.15) (2026-04-16)
+
+
+### Bug Fixes
+
+* anthropic virtual key auth ([#3849](https://github.com/archestra-ai/archestra/issues/3849)) ([06d2cea](https://github.com/archestra-ai/archestra/commit/06d2cea36660444489b405c99d3f78fab5bfcf98))
+* save suggested prompt with button label as fallback when prompt is empty ([#3571](https://github.com/archestra-ai/archestra/issues/3571)) ([900fbc0](https://github.com/archestra-ai/archestra/commit/900fbc001989b2b9a824e6ab642fd959dfe770b9))
+
 ## [1.2.14](https://github.com/archestra-ai/archestra/compare/platform-v1.2.13...platform-v1.2.14) (2026-04-16)
 
 

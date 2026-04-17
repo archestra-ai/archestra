@@ -140,6 +140,7 @@ import { cn } from "@/lib/utils";
 import {
   getDescriptionPlaceholder,
   getNamePlaceholder,
+  normalizeSuggestedPrompts,
   shouldShowDescriptionField,
 } from "./agent-dialog.utils";
 
@@ -869,10 +870,7 @@ export function AgentDialog({
     // Save any unsaved label before submitting
     const updatedLabels = agentLabelsRef.current?.saveUnsavedLabel() || labels;
 
-    // Filter out incomplete suggested prompts (empty title or prompt)
-    const validSuggestedPrompts = suggestedPrompts.filter(
-      (sp) => sp.summaryTitle.trim() && sp.prompt.trim(),
-    );
+    const validSuggestedPrompts = normalizeSuggestedPrompts(suggestedPrompts);
     const normalizedDescription = shouldShowDescriptionField({
       agentType,
       isBuiltIn,

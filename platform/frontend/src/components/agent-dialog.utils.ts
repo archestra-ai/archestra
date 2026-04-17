@@ -26,3 +26,14 @@ export function shouldShowDescriptionField(params: {
 }) {
   return !params.isBuiltIn;
 }
+
+export function normalizeSuggestedPrompts(
+  prompts: Array<{ summaryTitle: string; prompt: string }>,
+): Array<{ summaryTitle: string; prompt: string }> {
+  return prompts
+    .filter((sp) => sp.summaryTitle.trim())
+    .map((sp) => ({
+      summaryTitle: sp.summaryTitle.trim(),
+      prompt: sp.prompt.trim() || sp.summaryTitle.trim(),
+    }));
+}

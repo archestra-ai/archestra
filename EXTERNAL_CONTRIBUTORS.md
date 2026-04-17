@@ -16,3 +16,15 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @Somewater
 - @AbhishekMauryaGEEK
 - @Pranjal6955
+- @prabhat-kumar96
+- @srujanpalled
+- @gichanaa
+- @alberttwong
+- @shivang2000
+- @hmacr
+- @Rutetid
+- @abhinav-m22
+- @veeradyani222
+- @LK-maker-007
+- @dawksh
+- @aeshit

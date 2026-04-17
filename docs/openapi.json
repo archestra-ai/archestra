@@ -90968,6 +90968,13 @@
                           "server_url": {
                             "type": "string"
                           },
+                          "grant_type": {
+                            "type": "string",
+                            "enum": [
+                              "authorization_code",
+                              "client_credentials"
+                            ]
+                          },
                           "auth_server_url": {
                             "type": "string"
                           },
@@ -90981,6 +90988,9 @@
                             "type": "string"
                           },
                           "client_secret": {
+                            "type": "string"
+                          },
+                          "audience": {
                             "type": "string"
                           },
                           "redirect_uris": {
@@ -91830,6 +91840,13 @@
                       "server_url": {
                         "type": "string"
                       },
+                      "grant_type": {
+                        "type": "string",
+                        "enum": [
+                          "authorization_code",
+                          "client_credentials"
+                        ]
+                      },
                       "auth_server_url": {
                         "type": "string"
                       },
@@ -91843,6 +91860,9 @@
                         "type": "string"
                       },
                       "client_secret": {
+                        "type": "string"
+                      },
+                      "audience": {
                         "type": "string"
                       },
                       "redirect_uris": {
@@ -92425,6 +92445,13 @@
                         "server_url": {
                           "type": "string"
                         },
+                        "grant_type": {
+                          "type": "string",
+                          "enum": [
+                            "authorization_code",
+                            "client_credentials"
+                          ]
+                        },
                         "auth_server_url": {
                           "type": "string"
                         },
@@ -92438,6 +92465,9 @@
                           "type": "string"
                         },
                         "client_secret": {
+                          "type": "string"
+                        },
+                        "audience": {
                           "type": "string"
                         },
                         "redirect_uris": {
@@ -93311,6 +93341,13 @@
                         "server_url": {
                           "type": "string"
                         },
+                        "grant_type": {
+                          "type": "string",
+                          "enum": [
+                            "authorization_code",
+                            "client_credentials"
+                          ]
+                        },
                         "auth_server_url": {
                           "type": "string"
                         },
@@ -93324,6 +93361,9 @@
                           "type": "string"
                         },
                         "client_secret": {
+                          "type": "string"
+                        },
+                        "audience": {
                           "type": "string"
                         },
                         "redirect_uris": {
@@ -94167,6 +94207,13 @@
                       "server_url": {
                         "type": "string"
                       },
+                      "grant_type": {
+                        "type": "string",
+                        "enum": [
+                          "authorization_code",
+                          "client_credentials"
+                        ]
+                      },
                       "auth_server_url": {
                         "type": "string"
                       },
@@ -94180,6 +94227,9 @@
                         "type": "string"
                       },
                       "client_secret": {
+                        "type": "string"
+                      },
+                      "audience": {
                         "type": "string"
                       },
                       "redirect_uris": {
@@ -94770,6 +94820,13 @@
                         "server_url": {
                           "type": "string"
                         },
+                        "grant_type": {
+                          "type": "string",
+                          "enum": [
+                            "authorization_code",
+                            "client_credentials"
+                          ]
+                        },
                         "auth_server_url": {
                           "type": "string"
                         },
@@ -94783,6 +94840,9 @@
                           "type": "string"
                         },
                         "client_secret": {
+                          "type": "string"
+                        },
+                        "audience": {
                           "type": "string"
                         },
                         "redirect_uris": {
@@ -112314,6 +112374,13 @@
                                   "server_url": {
                                     "type": "string"
                                   },
+                                  "grant_type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "authorization_code",
+                                      "client_credentials"
+                                    ]
+                                  },
                                   "auth_server_url": {
                                     "type": "string"
                                   },
@@ -112327,6 +112394,9 @@
                                     "type": "string"
                                   },
                                   "client_secret": {
+                                    "type": "string"
+                                  },
+                                  "audience": {
                                     "type": "string"
                                   },
                                   "redirect_uris": {
@@ -112971,6 +113041,13 @@
                               "server_url": {
                                 "type": "string"
                               },
+                              "grant_type": {
+                                "type": "string",
+                                "enum": [
+                                  "authorization_code",
+                                  "client_credentials"
+                                ]
+                              },
                               "auth_server_url": {
                                 "type": "string"
                               },
@@ -112984,6 +113061,9 @@
                                 "type": "string"
                               },
                               "client_secret": {
+                                "type": "string"
+                              },
+                              "audience": {
                                 "type": "string"
                               },
                               "redirect_uris": {
@@ -113347,6 +113427,13 @@
                                 "server_url": {
                                   "type": "string"
                                 },
+                                "grant_type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "authorization_code",
+                                    "client_credentials"
+                                  ]
+                                },
                                 "auth_server_url": {
                                   "type": "string"
                                 },
@@ -113360,6 +113447,9 @@
                                   "type": "string"
                                 },
                                 "client_secret": {
+                                  "type": "string"
+                                },
+                                "audience": {
                                   "type": "string"
                                 },
                                 "redirect_uris": {
@@ -114034,6 +114124,13 @@
                                 "server_url": {
                                   "type": "string"
                                 },
+                                "grant_type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "authorization_code",
+                                    "client_credentials"
+                                  ]
+                                },
                                 "auth_server_url": {
                                   "type": "string"
                                 },
@@ -114047,6 +114144,9 @@
                                   "type": "string"
                                 },
                                 "client_secret": {
+                                  "type": "string"
+                                },
+                                "audience": {
                                   "type": "string"
                                 },
                                 "redirect_uris": {
@@ -114694,6 +114794,13 @@
                               "server_url": {
                                 "type": "string"
                               },
+                              "grant_type": {
+                                "type": "string",
+                                "enum": [
+                                  "authorization_code",
+                                  "client_credentials"
+                                ]
+                              },
                               "auth_server_url": {
                                 "type": "string"
                               },
@@ -114707,6 +114814,9 @@
                                 "type": "string"
                               },
                               "client_secret": {
+                                "type": "string"
+                              },
+                              "audience": {
                                 "type": "string"
                               },
                               "redirect_uris": {
@@ -115121,6 +115231,13 @@
                                 "server_url": {
                                   "type": "string"
                                 },
+                                "grant_type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "authorization_code",
+                                    "client_credentials"
+                                  ]
+                                },
                                 "auth_server_url": {
                                   "type": "string"
                                 },
@@ -115134,6 +115251,9 @@
                                   "type": "string"
                                 },
                                 "client_secret": {
+                                  "type": "string"
+                                },
+                                "audience": {
                                   "type": "string"
                                 },
                                 "redirect_uris": {
@@ -116079,6 +116199,13 @@
                                 "server_url": {
                                   "type": "string"
                                 },
+                                "grant_type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "authorization_code",
+                                    "client_credentials"
+                                  ]
+                                },
                                 "auth_server_url": {
                                   "type": "string"
                                 },
@@ -116092,6 +116219,9 @@
                                   "type": "string"
                                 },
                                 "client_secret": {
+                                  "type": "string"
+                                },
+                                "audience": {
                                   "type": "string"
                                 },
                                 "redirect_uris": {
@@ -116781,6 +116911,13 @@
                                 "server_url": {
                                   "type": "string"
                                 },
+                                "grant_type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "authorization_code",
+                                    "client_credentials"
+                                  ]
+                                },
                                 "auth_server_url": {
                                   "type": "string"
                                 },
@@ -116794,6 +116931,9 @@
                                   "type": "string"
                                 },
                                 "client_secret": {
+                                  "type": "string"
+                                },
+                                "audience": {
                                   "type": "string"
                                 },
                                 "redirect_uris": {
@@ -117487,6 +117627,13 @@
                                 "server_url": {
                                   "type": "string"
                                 },
+                                "grant_type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "authorization_code",
+                                    "client_credentials"
+                                  ]
+                                },
                                 "auth_server_url": {
                                   "type": "string"
                                 },
@@ -117500,6 +117647,9 @@
                                   "type": "string"
                                 },
                                 "client_secret": {
+                                  "type": "string"
+                                },
+                                "audience": {
                                   "type": "string"
                                 },
                                 "redirect_uris": {

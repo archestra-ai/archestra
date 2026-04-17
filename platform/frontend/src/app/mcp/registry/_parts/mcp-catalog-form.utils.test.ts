@@ -68,9 +68,11 @@ describe("transformFormToApiData", () => {
       oauthConfig: {
         client_id: "client-id",
         client_secret: "client-secret",
+        audience: "",
         redirect_uris: "https://app.example.com/oauth-callback",
         scopes: "read:jira-work",
         supports_resource_metadata: true,
+        grantType: "authorization_code",
         oauthServerUrl: "https://mcp.example.com",
         authServerUrl: "https://auth.example.com",
         authorizationEndpoint: "https://legacy-idp.example.com/oauth/authorize",
@@ -132,9 +134,11 @@ describe("transformFormToApiData", () => {
       oauthConfig: {
         client_id: "client-id",
         client_secret: "client-secret",
+        audience: "",
         redirect_uris: "https://app.example.com/oauth-callback",
         scopes: "read:jira-work",
         supports_resource_metadata: true,
+        grantType: "authorization_code",
         oauthServerUrl: "",
         authServerUrl: "https://auth.example.com",
         authorizationEndpoint: "https://legacy-idp.example.com/oauth/authorize",
@@ -185,9 +189,11 @@ describe("transformFormToApiData", () => {
       oauthConfig: {
         client_id: "client-id",
         client_secret: "client-secret",
+        audience: "",
         redirect_uris: "https://app.example.com/oauth-callback",
         scopes: "",
         supports_resource_metadata: false,
+        grantType: "authorization_code",
         oauthServerUrl: "",
         authServerUrl: "",
         authorizationEndpoint: "",
@@ -228,9 +234,11 @@ describe("transformFormToApiData", () => {
       oauthConfig: {
         client_id: "client-id",
         client_secret: "client-secret",
+        audience: "",
         redirect_uris: "https://app.example.com/oauth-callback",
         scopes: " , ",
         supports_resource_metadata: false,
+        grantType: "authorization_code",
         oauthServerUrl: "",
         authServerUrl: "",
         authorizationEndpoint: "",
@@ -268,10 +276,12 @@ describe("transformFormToApiData", () => {
       oauthConfig: {
         client_id: "client-id",
         client_secret: "client-secret",
+        audience: "",
         redirect_uris: ["https://app.example.com/oauth-callback"],
         scopes: ["read"],
         default_scopes: ["read", "write"],
         supports_resource_metadata: false,
+        grant_type: "authorization_code",
         server_url: "https://mcp.example.com",
         auth_server_url: "https://auth.example.com",
         authorization_endpoint:
@@ -300,6 +310,65 @@ describe("transformFormToApiData", () => {
     );
   });
 
+  it("maps OAuth client credentials auth into install-time shared fields", () => {
+    const values: McpCatalogFormValues = {
+      name: "Shared OAuth MCP",
+      description: "",
+      icon: null,
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com",
+      authMethod: "oauth_client_credentials",
+      includeBearerPrefix: true,
+      authHeaderName: "",
+      additionalHeaders: [],
+      oauthConfig: {
+        client_id: "",
+        client_secret: "",
+        audience: "https://api.example.com",
+        redirect_uris: "",
+        scopes: "read, write",
+        supports_resource_metadata: false,
+        grantType: "client_credentials",
+        oauthServerUrl: "",
+        authServerUrl: "",
+        authorizationEndpoint: "",
+        wellKnownUrl: "",
+        resourceMetadataUrl: "",
+        tokenEndpoint: "https://auth.example.com/oauth/token",
+      },
+      enterpriseManagedConfig: null,
+      localConfig: undefined,
+      deploymentSpecYaml: "",
+      originalDeploymentSpecYaml: "",
+      oauthClientSecretVaultPath: "",
+      oauthClientSecretVaultKey: "",
+      localConfigVaultPath: "",
+      localConfigVaultKey: "",
+      labels: [],
+      scope: "team",
+      teams: ["team-1"],
+    };
+
+    const result = transformFormToApiData(values);
+
+    expect(result.oauthConfig).toMatchObject({
+      grant_type: "client_credentials",
+      token_endpoint: "https://auth.example.com/oauth/token",
+      audience: "https://api.example.com",
+      redirect_uris: [],
+      scopes: ["read", "write"],
+      default_scopes: ["read", "write"],
+    });
+    expect(result.userConfig).toMatchObject({
+      client_id: expect.objectContaining({ required: true }),
+      client_secret: expect.objectContaining({ sensitive: true }),
+      audience: expect.objectContaining({
+        required: false,
+        default: "https://api.example.com",
+      }),
+    });
+  });
+
   it("hydrates explicit OAuth endpoints from external catalog manifests", () => {
     const values = transformExternalCatalogToFormValues({
       name: "direct-oauth-mcp",
@@ -317,6 +386,7 @@ describe("transformFormToApiData", () => {
         scopes: ["read"],
         default_scopes: ["read", "write"],
         supports_resource_metadata: false,
+        grant_type: "authorization_code",
         server_url: "https://mcp.example.com",
         auth_server_url: "https://auth.example.com",
         authorization_endpoint:

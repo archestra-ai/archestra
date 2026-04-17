@@ -39,3 +39,7 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @spichkinevgeniy
 - @MAVRICK-1
 - @Mrazish
+- @Gufderald
+- @azyoskol
+- @divineforest
+- @Sodman

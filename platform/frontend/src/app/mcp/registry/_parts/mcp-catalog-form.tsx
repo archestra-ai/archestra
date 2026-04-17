@@ -1642,7 +1642,7 @@ export function McpCatalogForm({
                         <EnterpriseAuthRadioOption
                           value="enterprise_managed"
                           id="auth-enterprise-managed"
-                          label="Identity Assertion JWT Authorization Grant (ID-JAG)"
+                          label="Identity Provider Token Exchange"
                           isDisabled={enterpriseAuthDisabledReason != null}
                           disabledReason={enterpriseAuthDisabledReason}
                           isSelected={authMethod === "enterprise_managed"}
@@ -1655,11 +1655,11 @@ export function McpCatalogForm({
 
                               <div className="bg-muted p-4 rounded-lg">
                                 <p className="text-sm text-muted-foreground">
-                                  {appName} will request a downstream credential
-                                  for this MCP server from the signed-in
-                                  user&apos;s identity provider at tool-call
-                                  time. Installations inherit these defaults
-                                  automatically.
+                                  {appName} will exchange the signed-in
+                                  user&apos;s identity-provider token for a
+                                  downstream credential for this MCP server at
+                                  tool-call time. Installations inherit these
+                                  defaults automatically.
                                 </p>
                               </div>
 

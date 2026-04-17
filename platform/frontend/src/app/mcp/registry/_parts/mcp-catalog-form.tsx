@@ -156,6 +156,10 @@ export function McpCatalogForm({
     DocsPage.McpAuthentication,
     "upstream-mcp-server-authentication",
   );
+  const mcpAuthTokenExchangeDocsUrl = getFrontendDocsUrl(
+    DocsPage.McpAuthentication,
+    "token-exchange-configuration",
+  );
   const { data: canReadIdentityProviders } = useHasPermissions({
     identityProvider: ["read"],
   });
@@ -1653,13 +1657,21 @@ export function McpCatalogForm({
                                 identityProviders={oidcIdentityProviders}
                               />
 
+                              <p className="text-sm text-muted-foreground">
+                                Exchange the signed-in user&apos;s
+                                identity-provider token for a downstream
+                                credential for this MCP server.{" "}
+                                <ExternalDocsLink
+                                  href={mcpAuthTokenExchangeDocsUrl}
+                                  className="inline-flex items-center gap-1 underline underline-offset-4"
+                                >
+                                  Learn more
+                                </ExternalDocsLink>
+                              </p>
+
                               <div className="bg-muted p-4 rounded-lg">
                                 <p className="text-sm text-muted-foreground">
-                                  {appName} will exchange the signed-in
-                                  user&apos;s identity-provider token for a
-                                  downstream credential for this MCP server at
-                                  tool-call time. Installations inherit these
-                                  defaults automatically.
+                                  {`${appName} will exchange the signed-in user's identity-provider token for a downstream credential for this MCP server at tool-call time. Installations inherit these defaults automatically.`}
                                 </p>
                               </div>
 

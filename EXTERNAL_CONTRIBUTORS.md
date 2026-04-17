@@ -36,3 +36,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @gurshaan17
 - @arenchilingaryan
 - @whtssub
+- @spichkinevgeniy

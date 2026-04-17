@@ -1120,6 +1120,285 @@ export function McpCatalogForm({
                             </FormLabel>
                           </div>
                         </div>
+                        <div className="space-y-2">
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="oauth" id="auth-oauth" />
+                            <FormLabel
+                              htmlFor="auth-oauth"
+                              className="font-normal cursor-pointer"
+                            >
+                              OAuth 2.1 (recommended)
+                            </FormLabel>
+                          </div>
+
+                          {authMethod === "oauth" && (
+                            <div className="space-y-4 pl-6 border-l-2">
+                              {currentServerType === "local" && (
+                                <FormField
+                                  control={form.control}
+                                  name="oauthConfig.oauthServerUrl"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>
+                                        OAuth Server URL{" "}
+                                        <span className="text-destructive">
+                                          *
+                                        </span>
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          placeholder="https://auth.example.com"
+                                          className="font-mono"
+                                          {...field}
+                                        />
+                                      </FormControl>
+                                      <FormDescription>
+                                        Base URL used for OAuth discovery. Use
+                                        the issuer or auth server base URL here,
+                                        not the token endpoint. This is separate
+                                        from the K8s-deployed server.
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                              )}
+
+                              <FormField
+                                control={form.control}
+                                name="oauthConfig.authServerUrl"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>
+                                      Authorization Server URL
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        placeholder="https://auth.example.com"
+                                        className="font-mono"
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormDescription>
+                                      Optional override for discovery when the
+                                      MCP server URL is not the OAuth issuer.
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              <FormField
+                                control={form.control}
+                                name="oauthConfig.authorizationEndpoint"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>
+                                      Authorization Endpoint
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        placeholder="https://auth.example.com/oauth/authorize"
+                                        className="font-mono"
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormDescription>
+                                      Optional direct authorization endpoint
+                                      override. When set, it overrides
+                                      discovery. Set together with Token
+                                      Endpoint.
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              <FormField
+                                control={form.control}
+                                name="oauthConfig.wellKnownUrl"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>
+                                      Well-Known Metadata URL
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        placeholder="https://auth.example.com/.well-known/openid-configuration"
+                                        className="font-mono"
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormDescription>
+                                      Optional direct metadata endpoint override
+                                      when provider discovery is non-standard.
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              <FormField
+                                control={form.control}
+                                name="oauthConfig.tokenEndpoint"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>
+                                      Token Endpoint{" "}
+                                      <span className="text-destructive">
+                                        *
+                                      </span>
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        placeholder="https://auth.example.com/oauth/token"
+                                        className="font-mono"
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormDescription>
+                                      Optional direct token endpoint override.
+                                      When set, it overrides discovery. Set
+                                      together with Authorization Endpoint.
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              <FormField
+                                control={form.control}
+                                name="oauthConfig.client_id"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Client ID</FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        placeholder="your-client-id (optional for dynamic registration)"
+                                        className="font-mono"
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormDescription>
+                                      Leave empty if the server supports dynamic
+                                      client registration
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              {showByosOption ? (
+                                <div className="space-y-2">
+                                  <Label>Client Secret</Label>
+                                  <ExternalSecretSelector
+                                    selectedTeamId={oauthVaultTeamId}
+                                    selectedSecretPath={oauthVaultSecretPath}
+                                    selectedSecretKey={oauthVaultSecretKey}
+                                    onTeamChange={setOauthVaultTeamId}
+                                    onSecretChange={setOauthVaultSecretPath}
+                                    onSecretKeyChange={setOauthVaultSecretKey}
+                                  />
+                                </div>
+                              ) : (
+                                <FormField
+                                  control={form.control}
+                                  name="oauthConfig.client_secret"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Client Secret</FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          type="password"
+                                          placeholder="your-client-secret (optional)"
+                                          className="font-mono"
+                                          autoComplete={MCP_SECRET_AUTOCOMPLETE}
+                                          {...field}
+                                        />
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                              )}
+
+                              <FormField
+                                control={form.control}
+                                name="oauthConfig.redirect_uris"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>
+                                      Redirect URIs{" "}
+                                      <span className="text-destructive">
+                                        *
+                                      </span>
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        placeholder="https://localhost:3000/oauth-callback, https://app.example.com/oauth-callback"
+                                        className="font-mono"
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormDescription>
+                                      Comma-separated list of redirect URIs
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              <FormField
+                                control={form.control}
+                                name="oauthConfig.scopes"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Scopes</FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        placeholder="read, write"
+                                        className="font-mono"
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormDescription>
+                                      Comma-separated list of OAuth scopes
+                                      (defaults to read, write)
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              <FormField
+                                control={form.control}
+                                name="oauthConfig.supports_resource_metadata"
+                                render={({ field }) => (
+                                  <FormItem className="flex flex-row items-start space-x-2 space-y-0">
+                                    <FormControl>
+                                      <Checkbox
+                                        checked={field.value}
+                                        onCheckedChange={field.onChange}
+                                        className="mt-1"
+                                      />
+                                    </FormControl>
+                                    <div className="space-y-1 leading-none">
+                                      <FormLabel className="font-normal cursor-pointer">
+                                        Supports OAuth Resource Metadata
+                                      </FormLabel>
+                                      <FormDescription>
+                                        Enable if the server publishes OAuth
+                                        metadata at
+                                        /.well-known/oauth-authorization-server
+                                        for automatic endpoint discovery
+                                      </FormDescription>
+                                    </div>
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
+                          )}
+                        </div>
                         {currentServerType === "remote" && (
                           <div className="space-y-2">
                             <div className="flex items-center space-x-2">
@@ -1351,302 +1630,6 @@ export function McpCatalogForm({
                             )}
                           </div>
                         )}
-                        <div className="space-y-2">
-                          <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="oauth" id="auth-oauth" />
-                            <FormLabel
-                              htmlFor="auth-oauth"
-                              className="font-normal cursor-pointer"
-                            >
-                              OAuth 2.0 (recommended)
-                            </FormLabel>
-                          </div>
-
-                          {authMethod === "oauth" && (
-                            <div className="space-y-4 pl-6 border-l-2">
-                              {currentServerType === "local" && (
-                                <FormField
-                                  control={form.control}
-                                  name="oauthConfig.oauthServerUrl"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>
-                                        OAuth Server URL{" "}
-                                        <span className="text-destructive">
-                                          *
-                                        </span>
-                                      </FormLabel>
-                                      <FormControl>
-                                        <Input
-                                          placeholder="https://auth.example.com"
-                                          className="font-mono"
-                                          {...field}
-                                        />
-                                      </FormControl>
-                                      <FormDescription>
-                                        Base URL used for OAuth discovery. Use
-                                        the issuer or auth server base URL here,
-                                        not the token endpoint. This is separate
-                                        from the K8s-deployed server.
-                                      </FormDescription>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-                              )}
-
-                              <FormField
-                                control={form.control}
-                                name="oauthConfig.authServerUrl"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>
-                                      Authorization Server URL
-                                    </FormLabel>
-                                    <FormControl>
-                                      <Input
-                                        placeholder="https://auth.example.com"
-                                        className="font-mono"
-                                        {...field}
-                                      />
-                                    </FormControl>
-                                    <FormDescription>
-                                      Optional override for discovery when the
-                                      MCP server URL is not the OAuth issuer.
-                                    </FormDescription>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-
-                              <FormField
-                                control={form.control}
-                                name="oauthConfig.authorizationEndpoint"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>
-                                      Authorization Endpoint
-                                    </FormLabel>
-                                    <FormControl>
-                                      <Input
-                                        placeholder="https://auth.example.com/oauth/authorize"
-                                        className="font-mono"
-                                        {...field}
-                                      />
-                                    </FormControl>
-                                    <FormDescription>
-                                      Optional direct authorization endpoint
-                                      override. When set, it overrides
-                                      discovery. Set together with Token
-                                      Endpoint.
-                                    </FormDescription>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-
-                              <FormField
-                                control={form.control}
-                                name="oauthConfig.wellKnownUrl"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>
-                                      Well-Known Metadata URL
-                                    </FormLabel>
-                                    <FormControl>
-                                      <Input
-                                        placeholder="https://auth.example.com/.well-known/openid-configuration"
-                                        className="font-mono"
-                                        {...field}
-                                      />
-                                    </FormControl>
-                                    <FormDescription>
-                                      Optional direct metadata endpoint override
-                                      when provider discovery is non-standard.
-                                    </FormDescription>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-
-                              <FormField
-                                control={form.control}
-                                name="oauthConfig.resourceMetadataUrl"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>Resource Metadata URL</FormLabel>
-                                    <FormControl>
-                                      <Input
-                                        placeholder="https://mcp.example.com/.well-known/oauth-protected-resource"
-                                        className="font-mono"
-                                        {...field}
-                                      />
-                                    </FormControl>
-                                    <FormDescription>
-                                      Optional override for OAuth protected
-                                      resource metadata discovery.
-                                    </FormDescription>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-
-                              <FormField
-                                control={form.control}
-                                name="oauthConfig.tokenEndpoint"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>Token Endpoint</FormLabel>
-                                    <FormControl>
-                                      <Input
-                                        placeholder="https://auth.example.com/oauth/token"
-                                        className="font-mono"
-                                        {...field}
-                                      />
-                                    </FormControl>
-                                    <FormDescription>
-                                      Optional direct token endpoint override.
-                                      When set, it overrides discovery. Set
-                                      together with Authorization Endpoint.
-                                    </FormDescription>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-
-                              <FormField
-                                control={form.control}
-                                name="oauthConfig.client_id"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>Client ID</FormLabel>
-                                    <FormControl>
-                                      <Input
-                                        placeholder="your-client-id (optional for dynamic registration)"
-                                        className="font-mono"
-                                        {...field}
-                                      />
-                                    </FormControl>
-                                    <FormDescription>
-                                      Leave empty if the server supports dynamic
-                                      client registration
-                                    </FormDescription>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-
-                              {showByosOption ? (
-                                <div className="space-y-2">
-                                  <Label>Client Secret</Label>
-                                  <ExternalSecretSelector
-                                    selectedTeamId={oauthVaultTeamId}
-                                    selectedSecretPath={oauthVaultSecretPath}
-                                    selectedSecretKey={oauthVaultSecretKey}
-                                    onTeamChange={setOauthVaultTeamId}
-                                    onSecretChange={setOauthVaultSecretPath}
-                                    onSecretKeyChange={setOauthVaultSecretKey}
-                                  />
-                                </div>
-                              ) : (
-                                <FormField
-                                  control={form.control}
-                                  name="oauthConfig.client_secret"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>Client Secret</FormLabel>
-                                      <FormControl>
-                                        <Input
-                                          type="password"
-                                          placeholder="your-client-secret (optional)"
-                                          className="font-mono"
-                                          autoComplete={MCP_SECRET_AUTOCOMPLETE}
-                                          {...field}
-                                        />
-                                      </FormControl>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-                              )}
-
-                              <FormField
-                                control={form.control}
-                                name="oauthConfig.redirect_uris"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>
-                                      Redirect URIs{" "}
-                                      <span className="text-destructive">
-                                        *
-                                      </span>
-                                    </FormLabel>
-                                    <FormControl>
-                                      <Input
-                                        placeholder="https://localhost:3000/oauth-callback, https://app.example.com/oauth-callback"
-                                        className="font-mono"
-                                        {...field}
-                                      />
-                                    </FormControl>
-                                    <FormDescription>
-                                      Comma-separated list of redirect URIs
-                                    </FormDescription>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-
-                              <FormField
-                                control={form.control}
-                                name="oauthConfig.scopes"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>Scopes</FormLabel>
-                                    <FormControl>
-                                      <Input
-                                        placeholder="read, write"
-                                        className="font-mono"
-                                        {...field}
-                                      />
-                                    </FormControl>
-                                    <FormDescription>
-                                      Comma-separated list of OAuth scopes
-                                      (defaults to read, write)
-                                    </FormDescription>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-
-                              <FormField
-                                control={form.control}
-                                name="oauthConfig.supports_resource_metadata"
-                                render={({ field }) => (
-                                  <FormItem className="flex flex-row items-start space-x-2 space-y-0">
-                                    <FormControl>
-                                      <Checkbox
-                                        checked={field.value}
-                                        onCheckedChange={field.onChange}
-                                        className="mt-1"
-                                      />
-                                    </FormControl>
-                                    <div className="space-y-1 leading-none">
-                                      <FormLabel className="font-normal cursor-pointer">
-                                        Supports OAuth Resource Metadata
-                                      </FormLabel>
-                                      <FormDescription>
-                                        Enable if the server publishes OAuth
-                                        metadata at
-                                        /.well-known/oauth-authorization-server
-                                        for automatic endpoint discovery
-                                      </FormDescription>
-                                    </div>
-                                  </FormItem>
-                                )}
-                              />
-                            </div>
-                          )}
-                        </div>
                         <EnterpriseAuthRadioOption
                           value="enterprise_managed"
                           id="auth-enterprise-managed"

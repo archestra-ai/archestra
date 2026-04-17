@@ -44,6 +44,7 @@ import { perplexityAdapterFactory } from "../adapters/perplexity";
 import { vllmAdapterFactory } from "../adapters/vllm";
 import { xaiAdapterFactory } from "../adapters/xai";
 import { zhipuaiAdapterFactory } from "../adapters/zhipuai";
+import { unifiedAdapterFactory } from "../adapters/unified";
 import * as proxyUtils from "../utils";
 import anthropicProxyRoutes from "./anthropic";
 import azureProxyRoutes from "./azure";
@@ -62,6 +63,7 @@ import perplexityProxyRoutes from "./perplexity";
 import vllmProxyRoutes from "./vllm";
 import xaiProxyRoutes from "./xai";
 import zhipuaiProxyRoutes from "./zhipuai";
+import unifiedProxyRoutes from "./unified";
 
 type ProviderFamily =
   | "openai"
@@ -1861,6 +1863,25 @@ const providerConfigsByProvider = {
     routePlugin: azureProxyRoutes,
     adapterFactory: azureAdapterFactory,
     endpoint: (agentId) => `/v1/azure/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("gpt-4o"),
+    model: "gpt-4o",
+    optimizedModel: "gpt-4o-mini",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+    supportsCompression: true,
+  }),
+  unified: makeConfig({
+    providerName: "Unified",
+    providerSlug: "unified",
+    provider: "unified",
+    family: "openai",
+    routePlugin: unifiedProxyRoutes,
+    adapterFactory: unifiedAdapterFactory,
+    endpoint: (agentId) => `/v1/unified/${agentId}/chat/completions`,
     headers: () => ({
       Authorization: "Bearer test-key",
       "Content-Type": "application/json",

@@ -16,3 +16,4 @@ export { perplexityAdapterFactory } from "./perplexity";
 export { vllmAdapterFactory } from "./vllm";
 export { xaiAdapterFactory } from "./xai";
 export { zhipuaiAdapterFactory } from "./zhipuai";
+export { unifiedAdapterFactory } from "./unified";

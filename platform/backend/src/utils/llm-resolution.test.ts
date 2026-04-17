@@ -617,12 +617,14 @@ describe("resolveConversationLlmSelectionForAgent", () => {
     const originalApiKeys = Object.fromEntries(
       SupportedProvidersSchema.options.map((provider) => [
         provider,
-        config.chat[provider].apiKey,
+        provider === "unified" ? "" : config.chat[provider].apiKey,
       ]),
     );
 
     for (const provider of SupportedProvidersSchema.options) {
-      config.chat[provider].apiKey = "";
+      if (provider !== "unified") {
+        config.chat[provider].apiKey = "";
+      }
     }
 
     try {
@@ -660,7 +662,9 @@ describe("resolveConversationLlmSelectionForAgent", () => {
       });
     } finally {
       for (const provider of SupportedProvidersSchema.options) {
-        config.chat[provider].apiKey = originalApiKeys[provider];
+        if (provider !== "unified") {
+          config.chat[provider].apiKey = originalApiKeys[provider];
+        }
       }
     }
   });

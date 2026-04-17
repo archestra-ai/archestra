@@ -45,6 +45,7 @@ export { default as perplexityProxyRoutes } from "./proxy/routes/perplexity";
 export { default as vllmProxyRoutes } from "./proxy/routes/vllm";
 export { default as xaiProxyRoutes } from "./proxy/routes/xai";
 export { default as zhipuaiProxyRoutes } from "./proxy/routes/zhipuai";
+export { default as unifiedProxyRoutes } from "./proxy/routes/unified";
 export { default as scheduleTriggerRoutes } from "./schedule-trigger";
 export { default as secretsRoutes } from "./secrets";
 export { default as statisticsRoutes } from "./statistics";

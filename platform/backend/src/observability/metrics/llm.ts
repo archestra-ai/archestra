@@ -49,6 +49,7 @@ const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
   deepseek: getOpenAIUsage,
   gemini: null,
   bedrock: null,
+  unified: getOpenAIUsage,
 };
 
 type Fetch = (

@@ -420,6 +420,7 @@ class ModelsDevClient {
       deepseek: ["deepseek/"],
       minimax: ["minimax/"],
       azure: ["azure/"],
+      unified: ["unified/"],
     };
 
     const getSourcePriority = (model: CreateModel): number => {

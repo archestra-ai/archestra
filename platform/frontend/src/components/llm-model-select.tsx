@@ -24,6 +24,7 @@ const PROVIDER_LOGO_NAME: Record<SupportedProvider, string> = {
   deepseek: "deepseek",
   minimax: "minimax",
   azure: "azure",
+  unified: "openai",
 };
 
 export type LlmModelSelectOption = {

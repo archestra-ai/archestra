@@ -43,6 +43,9 @@ importers:
       croner:
         specifier: ^10.0.1
         version: 10.0.1
+      pnpm:
+        specifier: ^10.33.0
+        version: 10.33.0
     devDependencies:
       '@biomejs/biome':
         specifier: 2.4.6
@@ -8175,6 +8178,11 @@ packages:
   playwright@1.58.2:
     resolution: {integrity: sha512-vA30H8Nvkq/cPBnNw4Q8TWz1EJyqgpuinBcHET0YVJVFldr8JDNiU9LaWAE1KqSkRYazuaBhTpB5ZzShOezQ6A==}
     engines: {node: '>=18'}
+    hasBin: true
+
+  pnpm@10.33.0:
+    resolution: {integrity: sha512-EFaLtKavtYyes2MNqQzJUWQXq+vT+rvmc58K55VyjaFJHp21pUTHatjrdXD1xLs9bGN7LLQb/c20f6gjyGSTGQ==}
+    engines: {node: '>=18.12'}
     hasBin: true
 
   points-on-curve@0.2.0:
@@ -18060,6 +18068,8 @@ snapshots:
       playwright-core: 1.58.2
     optionalDependencies:
       fsevents: 2.3.2
+
+  pnpm@10.33.0: {}
 
   points-on-curve@0.2.0: {}
 

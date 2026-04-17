@@ -1233,6 +1233,7 @@ const providerParsers: Record<SupportedProvider, ErrorParser> = {
   deepseek: parseOpenAIError, // DeepSeek uses OpenAI-compatible API
   minimax: parseMinimaxError, // MiniMax has unique error format
   azure: parseOpenAIError, // Azure uses OpenAI-compatible API
+  unified: parseOpenAIError, // Unified uses OpenAI-compatible API
 };
 
 /**
@@ -1258,6 +1259,7 @@ const providerMappers: Record<SupportedProvider, ErrorMapper> = {
   deepseek: mapOpenAIErrorWrapper, // DeepSeek uses OpenAI-compatible API
   minimax: mapMinimaxErrorWrapper,
   azure: mapOpenAIErrorWrapper, // Azure uses OpenAI-compatible API
+  unified: mapOpenAIErrorWrapper, // Unified uses OpenAI-compatible API
 };
 
 // =============================================================================

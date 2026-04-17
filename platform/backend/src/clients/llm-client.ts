@@ -506,6 +506,17 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
     // No apiKeyRequiredMessage — key is optional
   },
 
+  unified: {
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
+      createOpenAI({
+        apiKey: apiKey || KEYLESS_PROVIDER_API_KEY_PLACEHOLDER,
+        baseURL: baseURL || "http://localhost:9000/v1/unified/default",
+        headers,
+        fetch,
+      }).chat(modelName),
+    defaultBaseUrl: "http://localhost:9000/v1/unified/default",
+  },
+
   // --- Special providers ---
 
   gemini: {

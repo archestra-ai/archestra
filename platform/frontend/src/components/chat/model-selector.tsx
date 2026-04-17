@@ -118,6 +118,7 @@ export const providerToLogoProvider: Record<SupportedProvider, string> = {
   deepseek: "deepseek",
   minimax: "minimax",
   azure: "azure",
+  unified: "openai", // Unified is a meta-router; uses OpenAI logo as placeholder
 };
 
 /**

@@ -96,6 +96,10 @@ const PROVIDER_CONFIG: Record<
     originalUrl:
       "https://<resource>.openai.azure.com/openai/deployments/<deployment>/",
   },
+  unified: {
+    label: providerDisplayNames.unified,
+    originalUrl: "",
+  },
   "claude-code": { label: "Claude Code", isCommand: true },
 };
 

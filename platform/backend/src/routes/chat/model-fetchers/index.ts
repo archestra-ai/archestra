@@ -17,6 +17,7 @@ import type { ModelFetcher } from "./types";
 import { fetchVllmModels } from "./vllm";
 import { fetchXaiModels } from "./xai";
 import { fetchZhipuaiModels } from "./zhipuai";
+import { fetchUnifiedModels } from "./unified";
 
 export const modelFetchers: Record<SupportedProvider, ModelFetcher> = {
   anthropic: fetchAnthropicModels,
@@ -36,4 +37,5 @@ export const modelFetchers: Record<SupportedProvider, ModelFetcher> = {
   vllm: fetchVllmModels,
   xai: fetchXaiModels,
   zhipuai: fetchZhipuaiModels,
+  unified: fetchUnifiedModels,
 };

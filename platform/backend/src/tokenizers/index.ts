@@ -29,6 +29,7 @@ const tokenizerFactories: Record<SupportedProvider, () => Tokenizer> = {
   gemini: () => new TiktokenTokenizer(),
   bedrock: () => new TiktokenTokenizer(),
   minimax: () => new TiktokenTokenizer(),
+  unified: () => new TiktokenTokenizer(),
 };
 
 /**

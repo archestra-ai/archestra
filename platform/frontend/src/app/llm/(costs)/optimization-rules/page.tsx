@@ -70,6 +70,7 @@ function getProviderLogoName(provider: keyof typeof providerDisplayNames) {
     deepseek: "deepseek",
     minimax: "minimax",
     azure: "azure",
+    unified: "openai",
   } as const;
 
   return logoNames[provider];

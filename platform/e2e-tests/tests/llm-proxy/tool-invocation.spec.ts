@@ -749,6 +749,14 @@ const azureConfig: ToolInvocationTestConfig = {
   }),
 };
 
+const unifiedConfig: ToolInvocationTestConfig = {
+  ...makeOpenAiCompatibleToolConfig({
+    providerName: "Unified",
+    endpoint: (agentId) => `/v1/unified/${agentId}/chat/completions`,
+    model: "gpt-4o",
+  }),
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -772,6 +780,7 @@ const testConfigsMap = {
   openrouter: openrouterConfig,
   perplexity: null, // Perplexity does not support tool calling
   azure: azureConfig,
+  unified: unifiedConfig,
 } satisfies Record<SupportedProvider, ToolInvocationTestConfig | null>;
 
 const testConfigs = [

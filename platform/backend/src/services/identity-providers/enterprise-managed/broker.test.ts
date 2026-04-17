@@ -576,6 +576,99 @@ describe("resolveEnterpriseTransportCredential", () => {
     fetchMock.mockRestore();
   });
 
+  test("respects an explicit RFC 8693 strategy on an Entra issuer", async ({
+    makeAgent,
+    makeIdentityProvider,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser({ email: "entra-rfc8693@example.com" });
+    const identityProvider = await makeIdentityProvider(organization.id, {
+      providerId: "EntraID",
+      issuer: "https://login.microsoftonline.com/test-tenant/v2.0",
+      oidcConfig: {
+        clientId: "archestra-oidc",
+        clientSecret: "archestra-oidc-secret",
+        tokenEndpoint:
+          "https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token",
+        enterpriseManagedCredentials: {
+          exchangeStrategy: "rfc8693",
+          clientId: "archestra-oidc",
+          clientSecret: "archestra-oidc-secret",
+          tokenEndpoint:
+            "https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token",
+          tokenEndpointAuthentication: "client_secret_post",
+          subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+        },
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      identityProviderId: identityProvider.id,
+    });
+
+    await db.insert(schema.accountsTable).values({
+      id: randomUUID(),
+      accountId: "acct-entra-rfc8693",
+      providerId: identityProvider.providerId,
+      userId: user.id,
+      accessToken: "entra-session-access-token",
+      accessTokenExpiresAt: new Date(Date.now() + 300_000),
+      idToken: "entra-session-id-token",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          access_token: "downstream-access-token",
+          issued_token_type: "urn:ietf:params:oauth:token-type:access_token",
+          expires_in: 300,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const result = await resolveEnterpriseTransportCredential({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: "session-token",
+        teamId: null,
+        isOrganizationToken: false,
+        userId: user.id,
+      },
+      enterpriseManagedConfig: {
+        requestedCredentialType: "bearer_token",
+        resourceIdentifier: "api://downstream-app-id",
+        tokenInjectionMode: "authorization_bearer",
+      },
+    });
+
+    expect(result).toEqual({
+      headerName: "Authorization",
+      headerValue: "Bearer downstream-access-token",
+      expiresInSeconds: 300,
+    });
+
+    const [, requestInit] = fetchMock.mock.calls[0] ?? [];
+    expect(String(requestInit?.body)).toContain(
+      "subject_token=entra-session-access-token",
+    );
+    expect(String(requestInit?.body)).toContain(
+      "audience=api%3A%2F%2Fdownstream-app-id",
+    );
+    expect(String(requestInit?.body)).not.toContain(
+      "requested_token_use=on_behalf_of",
+    );
+    expect(String(requestInit?.body)).not.toContain(
+      "assertion=entra-session-access-token",
+    );
+
+    fetchMock.mockRestore();
+  });
+
   test("rejects forbidden prototype segments in responseFieldPath", async ({
     makeAgent,
     makeIdentityProvider,

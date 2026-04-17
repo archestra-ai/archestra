@@ -73,6 +73,20 @@ function getEnterpriseCredentialExchangeStrategy(
     );
   }
 
+  const configuredExchangeStrategy =
+    identityProvider.oidcConfig.enterpriseManagedCredentials.exchangeStrategy;
+  if (configuredExchangeStrategy === "entra_obo") {
+    return entraOboStrategy;
+  }
+
+  if (configuredExchangeStrategy === "okta_managed") {
+    return oktaManagedCredentialExchangeStrategy;
+  }
+
+  if (configuredExchangeStrategy === "rfc8693") {
+    return rfc8693TokenExchangeStrategy;
+  }
+
   if (supportsEntraObo(identityProvider)) {
     return entraOboStrategy;
   }

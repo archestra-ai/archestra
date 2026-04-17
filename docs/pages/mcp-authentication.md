@@ -245,9 +245,15 @@ For MCP Gateways, this token exchange uses the caller identity that was establis
 
 For external MCP clients such as Cursor, **ID-JAG** and **JWKS** are usually the clearest options when you want per-user access to upstream systems like GitHub or Jira.
 
-### Exchange Strategies
+### Upstream Identity Provider Token Exchange
 
 When Archestra is configured to exchange the caller's IdP token at tool-call time, it uses one of three exchange strategies.
+
+- **`rfc8693`**: generic OAuth token exchange. Archestra exchanges the user's token at the IdP token endpoint and uses the returned bearer token on the downstream MCP request.
+- **`okta_managed`**: Okta's managed-credential exchange pattern. Archestra exchanges the user's token for an Okta-managed credential such as a secret or bearer token, then injects the configured value into the downstream MCP request.
+- **`entra_obo`**: Microsoft Entra on-behalf-of (OBO). Archestra exchanges the signed-in user's Entra access token for the downstream API token the MCP server needs.
+
+Archestra uses the exchange mode configured on the Identity Provider to decide how to exchange the user's IdP token before calling the downstream MCP server.
 
 #### How To Enable This
 
@@ -270,15 +276,7 @@ When you choose **Identity Provider Token Exchange** on the MCP catalog item, th
 - **Response Field Path**: Optional field name to extract when the IdP or broker returns a structured payload instead of a raw token or secret.
 - **Header Name**: Only used when the injection mode is a custom header. This sets the exact upstream header name, such as `X-Provider-Token`.
 
-#### Available Strategies
-
-- **`rfc8693`**: generic OAuth token exchange. Archestra exchanges the user's token at the IdP token endpoint and uses the returned bearer token on the downstream MCP request.
-- **`okta_managed`**: Okta's managed-credential exchange pattern. Archestra exchanges the user's token for an Okta-managed credential such as a secret or bearer token, then injects the configured value into the downstream MCP request.
-- **`entra_obo`**: Microsoft Entra on-behalf-of (OBO). Archestra exchanges the signed-in user's Entra access token for the downstream API token the MCP server needs.
-
-Archestra uses the exchange mode configured on the Identity Provider to decide how to exchange the user's IdP token before calling the downstream MCP server.
-
-### Upstream Identity Provider Token Exchange
+#### When To Use It
 
 With upstream **Identity Provider Token Exchange**, Archestra resolves the caller's enterprise assertion and exchanges it for the downstream credential the MCP server needs.
 

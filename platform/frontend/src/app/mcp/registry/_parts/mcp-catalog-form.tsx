@@ -1210,7 +1210,7 @@ export function McpCatalogForm({
                                 <div className="bg-muted p-4 rounded-lg">
                                   <p className="text-sm text-muted-foreground">
                                     Installations will prompt for a shared
-                                    client ID, client secret, and audience.
+                                    client ID, client secret, and audience.{" "}
                                     {appName} will exchange them for a
                                     short-lived bearer token at runtime and
                                     refresh it automatically.

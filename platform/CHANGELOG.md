@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.2.16](https://github.com/archestra-ai/archestra/compare/platform-v1.2.15...platform-v1.2.16) (2026-04-17)
+
+
+### Features
+
+* add remote MCP client credentials auth mode ([#3871](https://github.com/archestra-ai/archestra/issues/3871)) ([3a8891b](https://github.com/archestra-ai/archestra/commit/3a8891b1f704b54d8f91ee28f7a70b063402b9ef))
+
+
+### Bug Fixes
+
+* disappearing chat errors during retries ([#3870](https://github.com/archestra-ai/archestra/issues/3870)) ([9167704](https://github.com/archestra-ai/archestra/commit/916770494dc3e516456ccc65791d90f1d176fa50))
+
+
+### Miscellaneous Chores
+
+* **deps:** bump @better-auth/oauth-provider from 1.5.5 to 1.6.5 in /platform/backend ([#3866](https://github.com/archestra-ai/archestra/issues/3866)) ([8b48139](https://github.com/archestra-ai/archestra/commit/8b4813909cebdcfdfcfe7049e29f7a4713045547))
+
 ## [1.2.15](https://github.com/archestra-ai/archestra/compare/platform-v1.2.14...platform-v1.2.15) (2026-04-16)
 
 

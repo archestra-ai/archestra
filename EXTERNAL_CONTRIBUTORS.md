@@ -20,3 +20,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @srujanpalled
 - @gichanaa
 - @alberttwong
+- @shivang2000

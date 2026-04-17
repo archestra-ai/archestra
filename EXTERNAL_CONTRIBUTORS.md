@@ -38,3 +38,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @whtssub
 - @spichkinevgeniy
 - @MAVRICK-1
+- @Gufderald

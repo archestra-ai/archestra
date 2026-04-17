@@ -218,10 +218,10 @@ The key fields are:
 
 These settings do not change the SSO login flow. They are used when an MCP server is configured to resolve downstream credentials through the identity provider.
 
-Provider defaults are protocol-oriented:
+Provider defaults:
 
 - **Okta managed credentials** default to private key JWT and ID token exchange
-- **RFC 8693 token exchange** defaults to client secret POST and access token exchange for Keycloak-style providers
+- **RFC 8693 token exchange** defaults to client secret POST and access token exchange
 - **Microsoft Entra OBO** defaults to client secret POST and access token exchange
 
 ### Generic SAML

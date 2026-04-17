@@ -253,7 +253,7 @@ When Archestra is configured to exchange the caller's IdP token at tool-call tim
 - **`okta_managed`**: Okta's managed-credential exchange pattern. Archestra exchanges the user's token for an Okta-managed credential such as a secret or bearer token, then injects the configured value into the downstream MCP request.
 - **`entra_obo`**: Microsoft Entra on-behalf-of (OBO). Archestra exchanges the signed-in user's Entra access token for the downstream API token the MCP server needs.
 
-Archestra picks the strategy from the Identity Provider configuration. In the OIDC Identity Provider form, the defaults are inferred from the issuer URL and provider ID, but the stored setting is the exchange strategy, not the IdP brand.
+Archestra uses the exchange mode configured on the Identity Provider to decide how to exchange the user's IdP token before calling the downstream MCP server.
 
 ### Upstream ID-JAG
 

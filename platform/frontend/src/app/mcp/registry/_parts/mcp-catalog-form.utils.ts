@@ -243,13 +243,7 @@ export function transformCatalogItemToFormValues(
   } | null,
 ): McpCatalogFormValues {
   // Determine auth method
-  let authMethod:
-    | "none"
-    | "bearer"
-    | "oauth"
-    | "oauth_client_credentials"
-    | "enterprise_managed"
-    | "idp_jwt" = "none";
+  let authMethod: McpCatalogFormValues["authMethod"] = "none";
   let includeBearerPrefix = true;
   if (item.enterpriseManagedConfig) {
     authMethod =
@@ -500,8 +494,7 @@ export function transformExternalCatalogToFormValues(
   };
 
   // Determine auth method
-  let authMethod: "none" | "bearer" | "oauth" | "oauth_client_credentials" =
-    "none";
+  let authMethod: McpCatalogFormValues["authMethod"] = "none";
   let includeBearerPrefix = true;
   const staticHeaderFields = getHeaderMappedUserConfigEntries(
     server.user_config,

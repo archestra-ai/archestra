@@ -101,12 +101,6 @@ function getEnterpriseCredentialExchangeStrategy(
 function supportsEntraObo(
   identityProvider: ExternalIdentityProviderConfig,
 ): boolean {
-  const configuredExchangeStrategy =
-    identityProvider.oidcConfig?.enterpriseManagedCredentials?.exchangeStrategy;
-  if (configuredExchangeStrategy === "entra_obo") {
-    return true;
-  }
-
   const issuerUrl = tryParseIssuerUrl(identityProvider.issuer);
   return isEntraHostname(issuerUrl?.hostname ?? "");
 }
@@ -114,12 +108,6 @@ function supportsEntraObo(
 function supportsOktaManagedCredentialExchange(
   identityProvider: ExternalIdentityProviderConfig,
 ): boolean {
-  const configuredExchangeStrategy =
-    identityProvider.oidcConfig?.enterpriseManagedCredentials?.exchangeStrategy;
-  if (configuredExchangeStrategy === "okta_managed") {
-    return true;
-  }
-
   const issuerUrl = tryParseIssuerUrl(identityProvider.issuer);
   return isOktaHostname(issuerUrl?.hostname ?? "");
 }

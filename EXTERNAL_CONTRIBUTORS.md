@@ -54,3 +54,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @Dipesh1203
 - @KarasevVladislav
 - @aida-solat
+- @amithpk900

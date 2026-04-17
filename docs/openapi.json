@@ -98105,6 +98105,12 @@
                                       "enum": [
                                         "gdrive"
                                       ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "dropbox"
+                                      ]
                                     }
                                   ]
                                 }
@@ -99924,6 +99930,12 @@
                   "enum": [
                     "gdrive"
                   ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "dropbox"
+                  ]
                 }
               ]
             },
@@ -100021,6 +100033,12 @@
                                 "type": "string",
                                 "enum": [
                                   "gdrive"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "dropbox"
                                 ]
                               }
                             ]
@@ -100349,6 +100367,39 @@
                                     }
                                   },
                                   "batchSize": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "type"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "dropbox"
+                                    ]
+                                  },
+                                  "rootPath": {
+                                    "type": "string"
+                                  },
+                                  "fileTypes": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "batchSize": {
+                                    "type": "number"
+                                  },
+                                  "recursive": {
+                                    "type": "boolean"
+                                  },
+                                  "maxDepth": {
                                     "type": "number"
                                   }
                                 },
@@ -100830,6 +100881,12 @@
                         "enum": [
                           "gdrive"
                         ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "dropbox"
+                        ]
                       }
                     ]
                   },
@@ -101168,6 +101225,38 @@
                         "required": [
                           "type"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "dropbox"
+                            ]
+                          },
+                          "rootPath": {
+                            "type": "string"
+                          },
+                          "fileTypes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "batchSize": {
+                            "type": "number"
+                          },
+                          "recursive": {
+                            "type": "boolean"
+                          },
+                          "maxDepth": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ]
                       }
                     ]
                   },
@@ -101292,6 +101381,12 @@
                           "type": "string",
                           "enum": [
                             "gdrive"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "dropbox"
                           ]
                         }
                       ]
@@ -101620,6 +101715,39 @@
                               }
                             },
                             "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "dropbox"
+                              ]
+                            },
+                            "rootPath": {
+                              "type": "string"
+                            },
+                            "fileTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            },
+                            "recursive": {
+                              "type": "boolean"
+                            },
+                            "maxDepth": {
                               "type": "number"
                             }
                           },
@@ -102049,6 +102177,12 @@
                           "enum": [
                             "gdrive"
                           ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "dropbox"
+                          ]
                         }
                       ]
                     },
@@ -102376,6 +102510,39 @@
                               }
                             },
                             "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "dropbox"
+                              ]
+                            },
+                            "rootPath": {
+                              "type": "string"
+                            },
+                            "fileTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            },
+                            "recursive": {
+                              "type": "boolean"
+                            },
+                            "maxDepth": {
                               "type": "number"
                             }
                           },
@@ -103075,6 +103242,38 @@
                         "required": [
                           "type"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "dropbox"
+                            ]
+                          },
+                          "rootPath": {
+                            "type": "string"
+                          },
+                          "fileTypes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "batchSize": {
+                            "type": "number"
+                          },
+                          "recursive": {
+                            "type": "boolean"
+                          },
+                          "maxDepth": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ]
                       }
                     ]
                   },
@@ -103197,6 +103396,12 @@
                           "type": "string",
                           "enum": [
                             "gdrive"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "dropbox"
                           ]
                         }
                       ]
@@ -103525,6 +103730,39 @@
                               }
                             },
                             "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "dropbox"
+                              ]
+                            },
+                            "rootPath": {
+                              "type": "string"
+                            },
+                            "fileTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            },
+                            "recursive": {
+                              "type": "boolean"
+                            },
+                            "maxDepth": {
                               "type": "number"
                             }
                           },

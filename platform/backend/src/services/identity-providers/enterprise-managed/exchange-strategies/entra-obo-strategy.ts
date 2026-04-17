@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createPrivateKey, randomUUID } from "node:crypto";
 import { importPKCS8, SignJWT } from "jose";
 import logger from "@/logging";
 import { discoverOidcTokenEndpoint } from "@/services/identity-providers/oidc";
@@ -165,12 +165,14 @@ async function buildAuthenticatedHeaders(params: {
     );
   }
 
+  const algorithm = inferPrivateKeyAlgorithm(params.privateKeyPem);
+
   params.requestBody.set("client_assertion_type", CLIENT_ASSERTION_TYPE);
   params.requestBody.set(
     "client_assertion",
     await new SignJWT({})
       .setProtectedHeader({
-        alg: "RS256",
+        alg: algorithm,
         ...(params.privateKeyId ? { kid: params.privateKeyId } : {}),
       })
       .setIssuer(params.clientId)
@@ -179,7 +181,7 @@ async function buildAuthenticatedHeaders(params: {
       .setIssuedAt()
       .setJti(randomUUID())
       .setExpirationTime("5m")
-      .sign(await importPKCS8(params.privateKeyPem, "RS256")),
+      .sign(await importPKCS8(params.privateKeyPem, algorithm)),
   );
 
   return headers;
@@ -208,4 +210,13 @@ function resolveScope(
   }
 
   return `${resource.replace(/\/$/, "")}/.default`;
+}
+
+function inferPrivateKeyAlgorithm(privateKeyPem: string): "RS256" | "ES256" {
+  const keyObject = createPrivateKey(privateKeyPem);
+  if (keyObject.asymmetricKeyType === "rsa") {
+    return "RS256";
+  }
+
+  return "ES256";
 }

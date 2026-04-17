@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from "node:crypto";
 import { vi } from "vitest";
 import type { ExternalIdentityProviderConfig } from "@/services/identity-providers/oidc";
 import { describe, expect, test } from "@/test";
@@ -113,6 +114,78 @@ describe("entraOboStrategy", () => {
     expect(String(requestInit?.body)).toContain(
       "scope=api%3A%2F%2Fdownstream-app-id%2F.default",
     );
+
+    fetchMock.mockRestore();
+  });
+
+  test("builds an ES256 client assertion for private_key_jwt with EC keys", async () => {
+    const { privateKey } = generateKeyPairSync("ec", {
+      namedCurve: "P-256",
+    });
+    const identityProvider = makeIdentityProvider({
+      issuer: "https://login.microsoftonline.com/test-tenant/v2.0",
+      oidcConfig: {
+        clientId: "web-client-id",
+        tokenEndpoint:
+          "https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token",
+        enterpriseManagedCredentials: {
+          exchangeStrategy: "entra_obo",
+          clientId: "middle-tier-client-id",
+          privateKeyId: "test-key-id",
+          privateKeyPem: privateKey.export({ format: "pem", type: "pkcs8" }),
+          tokenEndpoint:
+            "https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token",
+          tokenEndpointAuthentication: "private_key_jwt",
+          subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+        },
+      },
+    });
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          access_token: "downstream-graph-access-token",
+          expires_in: 3599,
+          token_type: "Bearer",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    await entraOboStrategy.exchangeCredential({
+      identityProvider,
+      assertion: "user-access-token",
+      enterpriseManagedConfig: {
+        requestedCredentialType: "bearer_token",
+        scopes: ["https://graph.microsoft.com/.default"],
+        tokenInjectionMode: "authorization_bearer",
+      },
+    });
+
+    const [, requestInit] = fetchMock.mock.calls[0] ?? [];
+    const requestBody = new URLSearchParams(String(requestInit?.body));
+    expect(requestBody.get("client_secret")).toBeNull();
+    expect(requestBody.get("client_assertion_type")).toBe(
+      "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+    );
+
+    const clientAssertion = requestBody.get("client_assertion");
+    expect(clientAssertion).toBeTruthy();
+    if (!clientAssertion) {
+      throw new Error("Expected a client assertion to be present");
+    }
+
+    const [encodedHeader] = clientAssertion.split(".");
+    if (!encodedHeader) {
+      throw new Error("Expected the client assertion to include a JWT header");
+    }
+
+    expect(
+      JSON.parse(Buffer.from(encodedHeader, "base64url").toString("utf8")),
+    ).toMatchObject({
+      alg: "ES256",
+      kid: "test-key-id",
+    });
 
     fetchMock.mockRestore();
   });

@@ -51,7 +51,6 @@ import {
   useMcpCatalogLabelKeys,
   useMcpCatalogLabelValues,
 } from "@/lib/mcp/internal-mcp-catalog.query";
-import { buildRemoteInstallCredentialPayload } from "@/lib/mcp/remote-install-payload";
 import {
   useInstallMcpServer,
   useMcpDeploymentStatuses,
@@ -59,6 +58,7 @@ import {
   useReauthenticateMcpServer,
   useReinstallMcpServer,
 } from "@/lib/mcp/mcp-server.query";
+import { buildRemoteInstallCredentialPayload } from "@/lib/mcp/remote-install-payload";
 import websocketService from "@/lib/websocket/websocket";
 import { CreateCatalogDialog } from "./create-catalog-dialog";
 import { CustomServerRequestDialog } from "./custom-server-request-dialog";

@@ -22,12 +22,12 @@ import {
 } from "@/lib/auth/oauth-session";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
-import { buildRemoteInstallCredentialPayload } from "@/lib/mcp/remote-install-payload";
 import {
   useInstallMcpServer,
   useMcpServers,
   useReauthenticateMcpServer,
 } from "@/lib/mcp/mcp-server.query";
+import { buildRemoteInstallCredentialPayload } from "@/lib/mcp/remote-install-payload";
 import { redirectBrowserToUrl } from "@/lib/utils/browser-redirect";
 
 type DialogKey =

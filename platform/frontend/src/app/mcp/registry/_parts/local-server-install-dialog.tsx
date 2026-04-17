@@ -217,8 +217,7 @@ export function LocalServerInstallDialog({
 
   // Show vault selector when BYOS is enabled and any prompt-time sensitive input needs Vault.
   const useVaultSecrets =
-    byosEnabled &&
-    (hasPromptedSecretFields || hasPromptedSensitiveUserConfig);
+    byosEnabled && (hasPromptedSecretFields || hasPromptedSensitiveUserConfig);
 
   // Helper to update vault secret for a specific field
   const updateVaultSecret = (

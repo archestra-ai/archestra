@@ -294,7 +294,6 @@ export function useDeleteConversation() {
         const keys = conversationStorageKeys(deletedId);
         localStorage.removeItem(keys.artifactOpen);
         localStorage.removeItem(keys.draft);
-        localStorage.removeItem(keys.error);
       }
 
       toast.success("Conversation deleted");

@@ -43,3 +43,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @azyoskol
 - @divineforest
 - @Sodman
+- @atecnoco-arch

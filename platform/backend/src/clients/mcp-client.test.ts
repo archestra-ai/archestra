@@ -4347,7 +4347,8 @@ describe("McpClient", () => {
 
         expect(result.isError).toBe(false);
         expect(fetchMock).toHaveBeenCalledTimes(1);
-        const requestBody = fetchMock.mock.calls[0]?.[1]?.body as URLSearchParams;
+        const requestBody = fetchMock.mock.calls[0]?.[1]
+          ?.body as URLSearchParams;
         expect(requestBody.get("grant_type")).toBe("client_credentials");
         expect(requestBody.get("audience")).toBeNull();
 

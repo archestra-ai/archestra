@@ -150,6 +150,9 @@ export function LocalServerInstallDialog({
   );
   const hasPromptedSecretFields =
     secretEnvVars.length > 0 || secretFileVars.length > 0;
+  const hasPromptedSensitiveUserConfig = Object.values(
+    promptableUserConfig,
+  ).some((field) => field.sensitive && field.promptOnInstallation !== false);
 
   const [environmentValues, setEnvironmentValues] = useState<
     Record<string, string>
@@ -212,8 +215,10 @@ export function LocalServerInstallDialog({
     setUserConfigVaultSecrets({});
   };
 
-  // Show vault selector only when BYOS is enabled and install-time secret selection is needed.
-  const useVaultSecrets = byosEnabled && hasPromptedSecretFields;
+  // Show vault selector when BYOS is enabled and any prompt-time sensitive input needs Vault.
+  const useVaultSecrets =
+    byosEnabled &&
+    (hasPromptedSecretFields || hasPromptedSensitiveUserConfig);
 
   // Helper to update vault secret for a specific field
   const updateVaultSecret = (
@@ -310,7 +315,7 @@ export function LocalServerInstallDialog({
         useVaultSecrets &&
         (secretEnvVars.length > 0 ||
           secretFileVars.length > 0 ||
-          Object.values(promptableUserConfig).some((field) => field.sensitive)),
+          hasPromptedSensitiveUserConfig),
       serviceAccount: serviceAccount || undefined,
     });
 

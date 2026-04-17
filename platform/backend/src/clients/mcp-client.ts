@@ -1616,6 +1616,11 @@ class McpClient {
     }
 
     const oauthConfig = params.catalogItem.oauthConfig;
+    if (!oauthConfig) {
+      throw new Error(
+        "OAuth client credentials configuration is missing oauthConfig",
+      );
+    }
     const clientId =
       getOptionalSecretString(params.secrets, "client_id") ||
       oauthConfig.client_id;
@@ -1669,6 +1674,11 @@ class McpClient {
     audience?: string;
   }): Promise<Record<string, unknown>> {
     const oauthConfig = params.catalogItem.oauthConfig;
+    if (!oauthConfig) {
+      throw new Error(
+        "OAuth client credentials configuration is missing oauthConfig",
+      );
+    }
     let tokenEndpoint = oauthConfig.token_endpoint;
     if (!tokenEndpoint) {
       const endpoints = await discoverOAuthEndpoints(oauthConfig);

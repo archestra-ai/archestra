@@ -4692,6 +4692,6 @@ function base64UrlEncode(value: unknown): string {
   return Buffer.from(JSON.stringify(value)).toString("base64url");
 }
 
-function futureExpSeconds(): number {
-  return Math.floor(Date.now() / 1000) + 3600;
+function futureExpSeconds(secondsFromNow: number = 3600): number {
+  return Math.floor(Date.now() / 1000) + secondsFromNow;
 }

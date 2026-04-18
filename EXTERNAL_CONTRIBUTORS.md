@@ -62,3 +62,8 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @immasandwich
 - @aman99dex
 - @PremPrakashCodes
+- @7LuckyN
+- @ezhil56x
+- @omjeem
+- @elskow
+- @sundaram2021

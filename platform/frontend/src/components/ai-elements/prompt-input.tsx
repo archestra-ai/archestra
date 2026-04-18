@@ -77,7 +77,7 @@ import {
   isCsvAttachment,
   isPlainTextAttachment,
 } from "@/lib/chat/chat-attachment-display";
-import { useIsMobile } from "@/lib/use-mobile.hook";
+import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 
 // ============================================================================

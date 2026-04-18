@@ -56,3 +56,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @aida-solat
 - @amithpk900
 - @bigcheeseh
+- @Excellencedev

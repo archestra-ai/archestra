@@ -1,3 +1,4 @@
+import { LinearClient } from "@linear/sdk";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
@@ -177,6 +178,7 @@ type LinearIssueNode = {
 type LinearProjectUpdateNode = {
   body?: string;
   createdAt?: string;
+  url?: string;
   user?: { name?: string };
 };
 type LinearProjectNode = {
@@ -245,43 +247,14 @@ export class LinearConnector extends BaseConnector {
       return { success: false, error: "Invalid Linear configuration" };
     }
 
-    const url = this.joinUrl(parsed.linearApiUrl, "/graphql");
-
     try {
-      const response = await this.fetchWithRetry(url, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `${params.credentials.apiToken}`,
-        },
-        body: JSON.stringify({
-          query: "query Healthcheck { viewer { id } }",
-        }),
-      });
+      const client = createLinearClient(
+        params.credentials.apiToken,
+        parsed.linearApiUrl,
+      );
 
-      if (!response.ok) {
-        const body = await response.text();
-        return {
-          success: false,
-          error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
-        };
-      }
-
-      const payload = (await response.json()) as {
-        data?: { viewer?: { id?: string } };
-        errors?: Array<{ message?: string }>;
-      };
-
-      if (payload.errors && payload.errors.length > 0) {
-        const firstError =
-          payload.errors[0]?.message ?? "Unknown GraphQL error";
-        return {
-          success: false,
-          error: `Connection failed: ${firstError}`,
-        };
-      }
-
-      if (!payload.data?.viewer?.id) {
+      const viewer = await client.viewer;
+      if (!viewer?.id) {
         return {
           success: false,
           error: "Connection failed: unable to resolve viewer from Linear API",
@@ -388,7 +361,10 @@ export class LinearConnector extends BaseConnector {
     const { config, credentials, startTime, getCheckpoint, setCheckpoint } =
       params;
 
-    const url = this.joinUrl(config.linearApiUrl, "/graphql");
+    const client = createLinearClient(
+      credentials.apiToken,
+      config.linearApiUrl,
+    );
     const batchSize = config.batchSize ?? 50;
     const query =
       config.includeComments === false
@@ -407,7 +383,6 @@ export class LinearConnector extends BaseConnector {
       const filter = buildIssueFilterForSweep({
         config,
         issueUpdatedAfter,
-        forEstimate: false,
       });
 
       const variables: Record<string, unknown> = {
@@ -416,12 +391,11 @@ export class LinearConnector extends BaseConnector {
       };
       if (filter) variables.filter = filter;
 
-      const payload = await this.linearGraphql<LinearIssuesQueryData>({
-        url,
-        apiToken: credentials.apiToken,
+      const payload = await linearRawRequest<LinearIssuesQueryData>(
+        client,
         query,
         variables,
-      });
+      );
 
       const conn = payload.issues;
       if (!conn) {
@@ -512,7 +486,10 @@ export class LinearConnector extends BaseConnector {
     const { config, credentials, startTime, getCheckpoint, setCheckpoint } =
       params;
 
-    const url = this.joinUrl(config.linearApiUrl, "/graphql");
+    const client = createLinearClient(
+      credentials.apiToken,
+      config.linearApiUrl,
+    );
     const batchSize = config.batchSize ?? 50;
 
     let prev = getCheckpoint();
@@ -535,12 +512,11 @@ export class LinearConnector extends BaseConnector {
       };
       if (filter) variables.filter = filter;
 
-      const payload = await this.linearGraphql<LinearProjectsQueryData>({
-        url,
-        apiToken: credentials.apiToken,
-        query: PROJECTS_QUERY,
+      const payload = await linearRawRequest<LinearProjectsQueryData>(
+        client,
+        PROJECTS_QUERY,
         variables,
-      });
+      );
 
       const conn = payload.projects;
       if (!conn) {
@@ -632,7 +608,10 @@ export class LinearConnector extends BaseConnector {
     const { config, credentials, startTime, getCheckpoint, setCheckpoint } =
       params;
 
-    const url = this.joinUrl(config.linearApiUrl, "/graphql");
+    const client = createLinearClient(
+      credentials.apiToken,
+      config.linearApiUrl,
+    );
     const batchSize = config.batchSize ?? 50;
 
     let prev = getCheckpoint();
@@ -655,12 +634,11 @@ export class LinearConnector extends BaseConnector {
       };
       if (filter) variables.filter = filter;
 
-      const payload = await this.linearGraphql<LinearCyclesQueryData>({
-        url,
-        apiToken: credentials.apiToken,
-        query: CYCLES_QUERY,
+      const payload = await linearRawRequest<LinearCyclesQueryData>(
+        client,
+        CYCLES_QUERY,
         variables,
-      });
+      );
 
       const conn = payload.cycles;
       if (!conn) {
@@ -734,48 +712,102 @@ export class LinearConnector extends BaseConnector {
       };
     }
   }
-
-  private async linearGraphql<T>(params: {
-    url: string;
-    apiToken: string;
-    query: string;
-    variables?: Record<string, unknown>;
-  }): Promise<T> {
-    const response = await this.fetchWithRetry(params.url, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `${params.apiToken}`,
-      },
-      body: JSON.stringify({
-        query: params.query,
-        variables: params.variables ?? {},
-      }),
-    });
-
-    if (!response.ok) {
-      const body = await response.text();
-      throw new Error(
-        `Linear API error: HTTP ${response.status} - ${body.slice(0, 500)}`,
-      );
-    }
-
-    const payload = (await response.json()) as {
-      data?: T;
-      errors?: Array<{ message?: string }>;
-    };
-
-    if (payload.errors && payload.errors.length > 0) {
-      throw new Error(payload.errors[0]?.message ?? "Linear GraphQL error");
-    }
-
-    if (!payload.data) {
-      throw new Error("Linear GraphQL: empty data");
-    }
-
-    return payload.data;
-  }
 }
+
+// ===== SDK helpers =====
+
+const RAW_REQUEST_MAX_RETRIES = 3;
+const RAW_REQUEST_BASE_DELAY_MS = 1_000;
+const RAW_REQUEST_MAX_DELAY_MS = 10_000;
+
+/**
+ * Create a LinearClient instance from credentials.
+ * Uses the official @linear/sdk for auth, client management, and error handling.
+ *
+ * The SDK expects the full GraphQL endpoint URL (e.g. https://api.linear.app/graphql),
+ * but our config stores the base URL. For custom URLs we append `/graphql`.
+ */
+function createLinearClient(apiToken: string, apiUrl?: string): LinearClient {
+  const opts: { apiKey: string; apiUrl?: string } = { apiKey: apiToken };
+  if (apiUrl && apiUrl !== DEFAULT_LINEAR_API_URL) {
+    // SDK expects the full GraphQL endpoint, config stores the base URL
+    const normalized = apiUrl.replace(/\/+$/, "");
+    opts.apiUrl = `${normalized}/graphql`;
+  }
+  return new LinearClient(opts);
+}
+
+/**
+ * Execute a raw GraphQL query through the LinearClient's internal GraphQL client.
+ * This avoids N+1 lazy-loading issues while still leveraging the SDK for auth.
+ *
+ * Includes retry logic with exponential backoff for transient errors and rate
+ * limits, since the SDK does not provide built-in retry.
+ */
+async function linearRawRequest<T>(
+  client: LinearClient,
+  query: string,
+  variables?: Record<string, unknown>,
+): Promise<T> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= RAW_REQUEST_MAX_RETRIES; attempt++) {
+    try {
+      const response = await client.client.rawRequest<
+        T,
+        Record<string, unknown>
+      >(query, variables ?? {});
+
+      if (!response.data) {
+        throw new Error("Linear GraphQL: empty data");
+      }
+
+      return response.data;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+
+      if (attempt < RAW_REQUEST_MAX_RETRIES && isRetryableGqlError(error)) {
+        const delay = Math.min(
+          RAW_REQUEST_BASE_DELAY_MS * 2 ** attempt +
+            Math.random() * 0.25 * RAW_REQUEST_BASE_DELAY_MS * 2 ** attempt,
+          RAW_REQUEST_MAX_DELAY_MS,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue;
+      }
+
+      throw lastError;
+    }
+  }
+
+  throw lastError || new Error("Unknown error during Linear GraphQL request");
+}
+
+/** Determine whether a rawRequest error is worth retrying. */
+function isRetryableGqlError(error: unknown): boolean {
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    return (
+      msg.includes("rate") ||
+      msg.includes("429") ||
+      msg.includes("ratelimit") ||
+      msg.includes("timeout") ||
+      msg.includes("econnreset") ||
+      msg.includes("econnrefused") ||
+      msg.includes("etimedout") ||
+      msg.includes("socket") ||
+      msg.includes("network") ||
+      msg.includes("fetch") ||
+      msg.includes("500") ||
+      msg.includes("502") ||
+      msg.includes("503") ||
+      msg.includes("504")
+    );
+  }
+  return false;
+}
+
+// ===== Config parsing =====
 
 function parseLinearConfig(
   config: Record<string, unknown>,
@@ -848,9 +880,8 @@ function resolveCycleSweepLowerBound(
 function buildIssueFilterForSweep(params: {
   config: LinearConfig;
   issueUpdatedAfter?: string;
-  forEstimate: boolean;
 }): Record<string, unknown> | undefined {
-  const { config, issueUpdatedAfter, forEstimate } = params;
+  const { config, issueUpdatedAfter } = params;
   const filter: Record<string, unknown> = {};
 
   if (config.teamIds?.length) {
@@ -876,10 +907,6 @@ function buildIssueFilterForSweep(params: {
 
   if (issueUpdatedAfter) {
     filter.updatedAt = { gt: issueUpdatedAfter };
-  }
-
-  if (forEstimate && !issueUpdatedAfter) {
-    return Object.keys(filter).length ? filter : undefined;
   }
 
   return Object.keys(filter).length ? filter : undefined;

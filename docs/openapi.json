@@ -98111,6 +98111,12 @@
                                       "enum": [
                                         "dropbox"
                                       ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "outline"
+                                      ]
                                     }
                                   ]
                                 }
@@ -99936,6 +99942,12 @@
                   "enum": [
                     "dropbox"
                   ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "outline"
+                  ]
                 }
               ]
             },
@@ -100039,6 +100051,12 @@
                                 "type": "string",
                                 "enum": [
                                   "dropbox"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "outline"
                                 ]
                               }
                             ]
@@ -100405,6 +100423,32 @@
                                 },
                                 "required": [
                                   "type"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "outline"
+                                    ]
+                                  },
+                                  "outlineUrl": {},
+                                  "collectionIds": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "batchSize": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "outlineUrl"
                                 ],
                                 "additionalProperties": false
                               }
@@ -100887,6 +100931,12 @@
                         "enum": [
                           "dropbox"
                         ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "outline"
+                        ]
                       }
                     ]
                   },
@@ -101257,6 +101307,33 @@
                         "required": [
                           "type"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "outline"
+                            ]
+                          },
+                          "outlineUrl": {
+                            "type": "string"
+                          },
+                          "collectionIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "batchSize": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "outlineUrl"
+                        ]
                       }
                     ]
                   },
@@ -101387,6 +101464,12 @@
                           "type": "string",
                           "enum": [
                             "dropbox"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "outline"
                           ]
                         }
                       ]
@@ -101753,6 +101836,32 @@
                           },
                           "required": [
                             "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "outline"
+                              ]
+                            },
+                            "outlineUrl": {},
+                            "collectionIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "outlineUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -102183,6 +102292,12 @@
                           "enum": [
                             "dropbox"
                           ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "outline"
+                          ]
                         }
                       ]
                     },
@@ -102548,6 +102663,32 @@
                           },
                           "required": [
                             "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "outline"
+                              ]
+                            },
+                            "outlineUrl": {},
+                            "collectionIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "outlineUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -103274,6 +103415,33 @@
                         "required": [
                           "type"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "outline"
+                            ]
+                          },
+                          "outlineUrl": {
+                            "type": "string"
+                          },
+                          "collectionIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "batchSize": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "outlineUrl"
+                        ]
                       }
                     ]
                   },
@@ -103402,6 +103570,12 @@
                           "type": "string",
                           "enum": [
                             "dropbox"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "outline"
                           ]
                         }
                       ]
@@ -103768,6 +103942,32 @@
                           },
                           "required": [
                             "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "outline"
+                              ]
+                            },
+                            "outlineUrl": {},
+                            "collectionIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "outlineUrl"
                           ],
                           "additionalProperties": false
                         }

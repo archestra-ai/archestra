@@ -190,6 +190,21 @@ Authentication uses a Dropbox access token. Generate one from the [Dropbox App C
 
 Incremental sync uses the `list_folder/continue` cursor API. After the first full sync, only changed files are fetched using the cursor saved from the previous run.
 
+## Outline
+
+The Outline connector syncs published documents from an [Outline](https://www.getoutline.com/) workspace. It supports both the Outline cloud service (`https://app.getoutline.com`) and self-hosted Outline instances.
+
+| Field          | Description                                                                                          |
+| -------------- | ---------------------------------------------------------------------------------------------------- |
+| Instance URL   | The base URL of your Outline workspace (e.g. `https://app.getoutline.com` or your self-hosted URL). |
+| API Key        | Your Outline API key (starts with `ol_api_`).                                                       |
+| Collection IDs | Optional comma-separated list of collection IDs to sync. Leave blank to sync all accessible documents. |
+| Batch Size     | Number of documents per API request (default: 25). Adjust for rate-limit tuning via the API.        |
+
+Authentication uses an Outline API key. Create one under **Settings → API & Apps** in your Outline workspace. Only published documents accessible to the API key are synced.
+
+Incremental sync sorts documents by `updatedAt` descending and stops fetching once documents older than the previous checkpoint (minus a 5-minute safety buffer) are encountered. Only newly updated documents are re-indexed on subsequent syncs.
+
 ## Managing Connectors
 
 Connectors can be managed from either the **Connectors** page or a knowledge base's detail page. After creation you can:

@@ -48,6 +48,7 @@ import { GithubConfigFields } from "./github-config-fields";
 import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
 import { NotionConfigFields } from "./notion-config-fields";
+import { OutlineConfigFields } from "./outline-config-fields";
 import { SchedulePicker } from "./schedule-picker";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
 import { SharePointConfigFields } from "./sharepoint-config-fields";
@@ -105,6 +106,11 @@ const CONNECTOR_OPTIONS: {
     type: "dropbox",
     label: "Dropbox",
     description: "Sync files and folders from Dropbox",
+  },
+  {
+    type: "outline",
+    label: CONNECTOR_TYPE_LABELS.outline,
+    description: "Sync documents from Outline",
   },
 ];
 
@@ -166,6 +172,7 @@ export function CreateConnectorDialog({
       sharepoint: { type, includePages: true },
       gdrive: { type, recursive: true },
       dropbox: { type, rootPath: "" },
+      outline: { type, outlineUrl: "https://app.getoutline.com" },
     };
     form.setValue("config", defaultConfigs[type]);
     setStep("configure");
@@ -567,7 +574,9 @@ export function CreateConnectorDialog({
                               ? "Service account key or OAuth token is required"
                               : connectorType === "dropbox"
                                 ? "Access token is required"
-                                : "Personal access token is required",
+                                : connectorType === "outline"
+                                  ? "API key is required"
+                                  : "Personal access token is required",
                   }}
                   render={({ field }) => (
                     <FormItem>
@@ -582,11 +591,13 @@ export function CreateConnectorDialog({
                                 ? "Service Account Key / OAuth Token"
                                 : connectorType === "dropbox"
                                   ? "Access Token"
-                                  : needsEmail
-                                    ? emailRequired
-                                      ? "API Token"
-                                      : "API Token / Personal Access Token"
-                                    : "Personal Access Token"}
+                                  : connectorType === "outline"
+                                    ? "API Key"
+                                    : needsEmail
+                                      ? emailRequired
+                                        ? "API Token"
+                                        : "API Token / Personal Access Token"
+                                      : "Personal Access Token"}
                       </FormLabel>
                       <FormControl>
                         <Input
@@ -602,11 +613,13 @@ export function CreateConnectorDialog({
                                     ? "Paste service account JSON key or OAuth access token"
                                     : connectorType === "dropbox"
                                       ? "Your Dropbox access token"
-                                      : needsEmail
-                                        ? emailRequired
-                                          ? "Your API token"
-                                          : "Your API token or personal access token"
-                                        : "Your personal access token"
+                                      : connectorType === "outline"
+                                        ? "Your Outline API key (starts with ol_api_)"
+                                        : needsEmail
+                                          ? emailRequired
+                                            ? "Your API token"
+                                            : "Your API token or personal access token"
+                                          : "Your personal access token"
                           }
                           {...field}
                         />
@@ -629,6 +642,13 @@ export function CreateConnectorDialog({
                         <p className="text-[0.8rem] text-muted-foreground">
                           Your Dropbox access token. Generate one in your
                           Dropbox App Console.
+                        </p>
+                      )}
+                      {connectorType === "outline" && (
+                        <p className="text-[0.8rem] text-muted-foreground">
+                          Your Outline API key. Create one under{" "}
+                          <strong>Settings &rarr; API &amp; Apps</strong>. Keys
+                          start with <code>ol_api_</code>.
                         </p>
                       )}
                       {connectorType === "gdrive" && (
@@ -676,6 +696,9 @@ export function CreateConnectorDialog({
                     )}
                     {connectorType === "dropbox" && (
                       <DropboxConfigFields control={form.control} />
+                    )}
+                    {connectorType === "outline" && (
+                      <OutlineConfigFields form={form} />
                     )}
                   </CollapsibleContent>
                 </Collapsible>
@@ -752,6 +775,14 @@ function getUrlConfig(type: ConnectorType): {
         label: "Site URL",
         placeholder: "https://your-tenant.sharepoint.com/sites/your-site",
         description: "Your SharePoint site URL.",
+      };
+    case "outline":
+      return {
+        fieldName: "config.outlineUrl",
+        label: "Instance URL",
+        placeholder: "https://app.getoutline.com",
+        description:
+          "Your Outline instance URL. Use https://app.getoutline.com for the cloud version, or your self-hosted URL.",
       };
     default:
       return null;

@@ -38,6 +38,7 @@ import { GithubConfigFields } from "./github-config-fields";
 import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
 import { NotionConfigFields } from "./notion-config-fields";
+import { OutlineConfigFields } from "./outline-config-fields";
 import { SchedulePicker } from "./schedule-picker";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
 import { SharePointConfigFields } from "./sharepoint-config-fields";
@@ -410,11 +411,13 @@ export function EditConnectorDialog({
                           ? "Service Account Key / OAuth Token"
                           : connectorType === "dropbox"
                             ? "Access Token"
-                            : needsEmail
-                              ? emailRequired
-                                ? "API Token"
-                                : "API Token / Personal Access Token"
-                              : "Personal Access Token"}
+                            : connectorType === "outline"
+                              ? "API Key"
+                              : needsEmail
+                                ? emailRequired
+                                  ? "API Token"
+                                  : "API Token / Personal Access Token"
+                                : "Personal Access Token"}
                 </FormLabel>
                 <FormControl>
                   <Input
@@ -478,6 +481,9 @@ export function EditConnectorDialog({
               )}
               {connectorType === "dropbox" && (
                 <DropboxConfigFields control={form.control} />
+              )}
+              {connectorType === "outline" && (
+                <OutlineConfigFields form={form} />
               )}
             </CollapsibleContent>
           </Collapsible>
@@ -567,6 +573,16 @@ function getEditUrlConfig(type: ConnectorType): {
       };
     case "dropbox":
       return { typeLabel: "Dropbox", urlFields: null };
+    case "outline":
+      return {
+        typeLabel: "Outline",
+        urlFields: {
+          fieldName: "config.outlineUrl",
+          label: "Instance URL",
+          placeholder: "https://app.getoutline.com",
+          description: "Your Outline instance URL.",
+        },
+      };
     default:
       return {
         typeLabel: type,

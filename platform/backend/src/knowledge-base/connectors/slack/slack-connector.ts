@@ -1,4 +1,5 @@
 import { WebClient } from "@slack/web-api";
+import QuickLRU from "quick-lru";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
@@ -10,6 +11,8 @@ import { SlackConfigSchema } from "@/types";
 import { BaseConnector, extractErrorMessage } from "../base-connector";
 
 const DEFAULT_BATCH_SIZE = 100;
+const USER_CACHE_MAX_SIZE = 500;
+const USER_CACHE_MAX_AGE_MS = 60 * 60 * 1000; // 1 hour TTL
 
 /**
  * Slack knowledge connector.
@@ -171,8 +174,11 @@ export class SlackConnector extends BaseConnector {
       "Discovered Slack channels",
     );
 
-    // User name resolution cache: userId → displayName
-    const userNameCache = new Map<string, string>();
+    // User name resolution cache with LRU eviction and TTL
+    const userNameCache = new QuickLRU<string, string>({
+      maxSize: USER_CACHE_MAX_SIZE,
+      maxAge: USER_CACHE_MAX_AGE_MS,
+    });
 
     for (let ci = 0; ci < channels.length; ci++) {
       const channel = channels[ci];
@@ -408,7 +414,7 @@ export class SlackConnector extends BaseConnector {
     channelId: string,
     threadTs: string,
     skipBotMessages: boolean,
-    userNameCache: Map<string, string>,
+    userNameCache: QuickLRU<string, string>,
   ): Promise<string> {
     const replies: string[] = [];
 
@@ -459,12 +465,12 @@ export class SlackConnector extends BaseConnector {
 
   /**
    * Resolve a Slack user ID to a display name.
-   * Uses an in-memory cache to avoid redundant API calls.
+   * Uses an LRU cache (500 entries, 1hr TTL) to avoid redundant API calls.
    */
   private async resolveUserName(
     client: WebClient,
     userId: string,
-    cache: Map<string, string>,
+    cache: QuickLRU<string, string>,
   ): Promise<string> {
     const cached = cache.get(userId);
     if (cached) return cached;

@@ -103,8 +103,25 @@ export function ConversationArtifactPanel({
 
       if (language) {
         const code = String(children).replace(/\n$/, "");
+        // Only reserve a top strip for the copy button when the first line is long
+        // enough that it would collide with the button in the top-right corner.
+        const FIRST_LINE_OVERLAP_THRESHOLD = 30;
+        const firstLineLength = code.split("\n")[0].length;
+        const needsTopPadding = firstLineLength > FIRST_LINE_OVERLAP_THRESHOLD;
         return (
-          <CodeBlock code={code} language={language}>
+          <CodeBlock
+            code={code}
+            language="text"
+            className="!bg-muted dark:!bg-[#0e0e18]"
+            contentStyle={{
+              paddingTop: needsTopPadding ? "2.5rem" : "1rem",
+              paddingRight: needsTopPadding ? "1rem" : "2.5rem",
+              background: "transparent",
+              color: "hsl(var(--foreground))",
+              textShadow: "none",
+            }}
+            contentClassName="[&_*]:!text-foreground [&_*]:![text-shadow:none] [&_*]:!bg-transparent"
+          >
             <CodeBlockCopyButton />
           </CodeBlock>
         );

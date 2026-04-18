@@ -81,7 +81,6 @@ export function conversationStorageKeys(conversationId: string) {
   return {
     artifactOpen: `archestra-chat-artifact-open-${conversationId}`,
     draft: `archestra_chat_draft_${conversationId}`,
-    error: `archestra_chat_error_${conversationId}`,
   };
 }
 

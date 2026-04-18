@@ -1,9 +1,9 @@
 ---
 title: "Identity Providers"
 category: Administration
-description: "Configure Identity Providers for SSO authentication, MCP Gateway JWKS validation, and enterprise-managed credential brokerage"
+description: "Configure Identity Providers for SSO authentication, MCP Gateway JWKS validation, and IdP token exchange for downstream MCP calls"
 order: 2
-lastUpdated: 2026-03-30
+lastUpdated: 2026-04-17
 ---
 
 <!--
@@ -24,7 +24,7 @@ Archestra supports Identity Provider (IdP) configuration for three purposes:
 
 1. **Single Sign-On (SSO)** — Users authenticate with their existing IdP credentials using OpenID Connect (OIDC) or SAML 2.0
 2. **MCP Gateway JWKS Authentication** — External MCP clients authenticate using JWTs issued by configured IdPs, validated via JWKS. See [MCP Authentication - External IdP JWKS](/docs/mcp-authentication#external-idp-jwks) for details.
-3. **Enterprise-Managed Credentials** — Archestra can exchange a signed-in user's IdP token for a downstream credential at tool-call time.
+3. **IdP Token Exchange for Downstream MCP Calls** — Archestra can exchange a signed-in user's IdP token for the downstream token an MCP server needs at tool-call time.
 
 > **Enterprise feature:** Please reach out to sales@archestra.ai for instructions about how to enable the feature.
 
@@ -103,7 +103,7 @@ Okta is an enterprise identity management platform. To configure Okta SSO:
 
 - Disable **DPoP** (Demonstrating Proof of Possession) in your Okta application settings. Archestra does not support DPoP.
 - The issuer URL is automatically set to `https://your-domain.okta.com`
-- If you also use enterprise-managed credentials, configure the exchange client details in the optional **Enterprise-Managed Credentials** section of the OIDC provider form. See [Okta's AI agent token exchange guide](https://developer.okta.com/docs/guides/ai-agent-token-exchange/authserver/main/).
+- If you also use IdP token exchange for downstream MCP calls, configure the exchange client details in the optional **Enterprise-Managed Credentials** section of the OIDC provider form. See [Okta's AI agent token exchange guide](https://developer.okta.com/docs/guides/ai-agent-token-exchange/authserver/main/).
 
 ### Google
 
@@ -217,6 +217,12 @@ The key fields are:
 - **Private Key / Key ID**: Only needed when the IdP requires signed client assertions
 
 These settings do not change the SSO login flow. They are used when an MCP server is configured to resolve downstream credentials through the identity provider.
+
+Provider defaults:
+
+- **Okta managed credentials** default to private key JWT and ID token exchange
+- **RFC 8693 token exchange** defaults to client secret POST and access token exchange
+- **Microsoft Entra OBO** defaults to client secret POST and access token exchange
 
 ### Generic SAML
 

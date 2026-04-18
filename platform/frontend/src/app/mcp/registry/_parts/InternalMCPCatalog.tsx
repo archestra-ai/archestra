@@ -58,6 +58,7 @@ import {
   useReauthenticateMcpServer,
   useReinstallMcpServer,
 } from "@/lib/mcp/mcp-server.query";
+import { buildRemoteInstallCredentialPayload } from "@/lib/mcp/remote-install-payload";
 import websocketService from "@/lib/websocket/websocket";
 import { CreateCatalogDialog } from "./create-catalog-dialog";
 import { CustomServerRequestDialog } from "./custom-server-request-dialog";
@@ -724,30 +725,14 @@ export function InternalMCPCatalog({
     catalogItem: CatalogItem,
     result: RemoteServerInstallResult,
   ) => {
-    // For non-BYOS mode: Extract access_token from metadata if present and pass as accessToken
-    // For BYOS mode: metadata contains vault references, pass via userConfigValues
-    const accessToken =
-      !result.isByosVault &&
-      result.metadata?.access_token &&
-      typeof result.metadata.access_token === "string"
-        ? result.metadata.access_token
-        : undefined;
+    const credentialPayload = buildRemoteInstallCredentialPayload(result);
 
     // Re-authentication mode: update existing server credentials in-place
     if (reauthServerId) {
       await reauthMutation.mutateAsync({
         id: reauthServerId,
         name: catalogItem.name,
-        ...(accessToken && { accessToken }),
-        ...(result.isByosVault && {
-          userConfigValues: result.metadata as Record<string, string>,
-        }),
-        ...(!result.isByosVault &&
-          !accessToken &&
-          result.metadata && {
-            userConfigValues: result.metadata as Record<string, string>,
-          }),
-        isByosVault: result.isByosVault,
+        ...credentialPayload,
       });
 
       closeDialog("remote-install");
@@ -761,11 +746,7 @@ export function InternalMCPCatalog({
     await installMutation.mutateAsync({
       name: catalogItem.name,
       catalogId: catalogItem.id,
-      ...(accessToken && { accessToken }),
-      ...(result.isByosVault && {
-        userConfigValues: result.metadata as Record<string, string>,
-      }),
-      isByosVault: result.isByosVault,
+      ...credentialPayload,
       teamId: result.teamId ?? undefined,
     });
     setInstallingItemId(null);

@@ -175,6 +175,21 @@ Known limitations:
 
 Incremental sync uses the `modifiedTime` field with a 5-minute safety buffer to fetch only files modified since the last run.
 
+## Dropbox
+
+Ingests files from Dropbox accounts or team folders using the Dropbox API v2. Text is extracted from `.md`, `.txt`, `.ts`, `.js`, `.py`, `.json`, `.yaml`, `.yml`, `.html`, `.css`, `.csv`, `.xml`, `.sh`, `.toml`, `.ini`, and `.conf` files.
+
+| Field       | Description                                                                                      |
+| ----------- | ------------------------------------------------------------------------------------------------ |
+| Root Path   | Folder path to scope the sync (e.g., `/team-docs`). Leave blank to sync the entire account.     |
+| File Types  | Comma-separated file extensions to include (e.g., `.md, .txt`). Leave blank to sync all supported types. |
+
+The `recursive` and `maxDepth` fields are available via the API for programmatic connector creation but are not exposed in the UI. By default all subfolders are traversed recursively up to 50 levels deep.
+
+Authentication uses a Dropbox access token. Generate one from the [Dropbox App Console](https://www.dropbox.com/developers/apps) by creating an app with `files.content.read` permission.
+
+Incremental sync uses the `list_folder/continue` cursor API. After the first full sync, only changed files are fetched using the cursor saved from the previous run.
+
 ## Managing Connectors
 
 Connectors can be managed from either the **Connectors** page or a knowledge base's detail page. After creation you can:

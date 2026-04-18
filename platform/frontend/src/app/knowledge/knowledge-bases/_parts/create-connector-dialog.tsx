@@ -42,6 +42,7 @@ import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useCreateConnector } from "@/lib/knowledge/connector.query";
 import { ConfluenceConfigFields } from "./confluence-config-fields";
 import { ConnectorTypeIcon } from "./connector-icons";
+import { DropboxConfigFields } from "./dropbox-config-fields";
 import { GoogleDriveConfigFields } from "./gdrive-config-fields";
 import { GithubConfigFields } from "./github-config-fields";
 import { GitlabConfigFields } from "./gitlab-config-fields";
@@ -99,6 +100,11 @@ const CONNECTOR_OPTIONS: {
     type: "gdrive",
     label: CONNECTOR_TYPE_LABELS.gdrive,
     description: "Sync files and documents from Google Drive",
+  },
+  {
+    type: "dropbox",
+    label: "Dropbox",
+    description: "Sync files and folders from Dropbox",
   },
 ];
 
@@ -159,6 +165,7 @@ export function CreateConnectorDialog({
       notion: { type },
       sharepoint: { type, includePages: true },
       gdrive: { type, recursive: true },
+      dropbox: { type, rootPath: "" },
     };
     form.setValue("config", defaultConfigs[type]);
     setStep("configure");
@@ -365,7 +372,7 @@ export function CreateConnectorDialog({
                 {urlConfig && (
                   <FormField
                     control={form.control}
-                    // biome-ignore lint/suspicious/noExplicitAny: dynamic field name for connector-specific URL
+                    // biome-ignore lint/suspicious/noExplicitAny: form field name requires dynamic typing
                     name={urlConfig.fieldName as any}
                     rules={{ required: `${urlConfig.label} is required` }}
                     render={({ field }) => (
@@ -558,7 +565,9 @@ export function CreateConnectorDialog({
                             ? "Client secret is required"
                             : connectorType === "gdrive"
                               ? "Service account key or OAuth token is required"
-                              : "Personal access token is required",
+                              : connectorType === "dropbox"
+                                ? "Access token is required"
+                                : "Personal access token is required",
                   }}
                   render={({ field }) => (
                     <FormItem>
@@ -571,11 +580,13 @@ export function CreateConnectorDialog({
                               ? "Client Secret"
                               : connectorType === "gdrive"
                                 ? "Service Account Key / OAuth Token"
-                                : needsEmail
-                                  ? emailRequired
-                                    ? "API Token"
-                                    : "API Token / Personal Access Token"
-                                  : "Personal Access Token"}
+                                : connectorType === "dropbox"
+                                  ? "Access Token"
+                                  : needsEmail
+                                    ? emailRequired
+                                      ? "API Token"
+                                      : "API Token / Personal Access Token"
+                                    : "Personal Access Token"}
                       </FormLabel>
                       <FormControl>
                         <Input
@@ -589,11 +600,13 @@ export function CreateConnectorDialog({
                                   ? "Your Azure AD client secret"
                                   : connectorType === "gdrive"
                                     ? "Paste service account JSON key or OAuth access token"
-                                    : needsEmail
-                                      ? emailRequired
-                                        ? "Your API token"
-                                        : "Your API token or personal access token"
-                                      : "Your personal access token"
+                                    : connectorType === "dropbox"
+                                      ? "Your Dropbox access token"
+                                      : needsEmail
+                                        ? emailRequired
+                                          ? "Your API token"
+                                          : "Your API token or personal access token"
+                                        : "Your personal access token"
                           }
                           {...field}
                         />
@@ -610,6 +623,12 @@ export function CreateConnectorDialog({
                           The Azure AD app registration requires the{" "}
                           <code>Sites.Read.All</code> permission on Microsoft
                           Graph.
+                        </p>
+                      )}
+                      {connectorType === "dropbox" && (
+                        <p className="text-[0.8rem] text-muted-foreground">
+                          Your Dropbox access token. Generate one in your
+                          Dropbox App Console.
                         </p>
                       )}
                       {connectorType === "gdrive" && (
@@ -654,6 +673,9 @@ export function CreateConnectorDialog({
                     )}
                     {connectorType === "gdrive" && (
                       <GoogleDriveConfigFields form={form} />
+                    )}
+                    {connectorType === "dropbox" && (
+                      <DropboxConfigFields control={form.control} />
                     )}
                   </CollapsibleContent>
                 </Collapsible>
@@ -731,6 +753,8 @@ function getUrlConfig(type: ConnectorType): {
         placeholder: "https://your-tenant.sharepoint.com/sites/your-site",
         description: "Your SharePoint site URL.",
       };
+    default:
+      return null;
   }
 }
 

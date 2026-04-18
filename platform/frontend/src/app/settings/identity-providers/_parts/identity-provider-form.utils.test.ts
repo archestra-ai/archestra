@@ -48,7 +48,7 @@ describe("normalizeIdentityProviderFormValues", () => {
 
     expect(normalized.oidcConfig?.enterpriseManagedCredentials).toEqual(
       expect.objectContaining({
-        providerType: "keycloak",
+        exchangeStrategy: "rfc8693",
         tokenEndpointAuthentication: "client_secret_post",
         subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
       }),
@@ -96,9 +96,41 @@ describe("normalizeIdentityProviderFormValues", () => {
 
     expect(normalized.oidcConfig?.enterpriseManagedCredentials).toEqual(
       expect.objectContaining({
-        providerType: "generic_oidc",
-        tokenEndpointAuthentication: "private_key_jwt",
-        subjectTokenType: "urn:ietf:params:oauth:token-type:id_token",
+        exchangeStrategy: "rfc8693",
+        tokenEndpointAuthentication: "client_secret_post",
+        subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+      }),
+    );
+  });
+
+  it("fills inferred Entra enterprise-managed defaults when the section is used", () => {
+    const normalized = normalizeIdentityProviderFormValues(
+      makeOidcFormValues({
+        providerId: "EntraID",
+        issuer: "https://login.microsoftonline.com/test-tenant/v2.0",
+        oidcConfig: {
+          issuer: "https://login.microsoftonline.com/test-tenant/v2.0",
+          pkce: true,
+          clientId: "archestra-oidc",
+          clientSecret: "archestra-oidc-secret",
+          discoveryEndpoint:
+            "https://login.microsoftonline.com/test-tenant/v2.0/.well-known/openid-configuration",
+          mapping: { id: "sub", email: "email", name: "name" },
+          enterpriseManagedCredentials: {
+            clientId: "archestra-oidc",
+            clientSecret: "archestra-oidc-secret",
+            tokenEndpoint:
+              "https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token",
+          },
+        },
+      }),
+    );
+
+    expect(normalized.oidcConfig?.enterpriseManagedCredentials).toEqual(
+      expect.objectContaining({
+        exchangeStrategy: "entra_obo",
+        tokenEndpointAuthentication: "client_secret_post",
+        subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
       }),
     );
   });

@@ -88,7 +88,7 @@ describe("McpCatalogForm enterprise gating", () => {
 
     expect(
       screen.getByRole("radio", {
-        name: "Identity Assertion JWT Authorization Grant (ID-JAG)",
+        name: "Identity Provider Token Exchange",
       }),
     ).toBeDisabled();
     expect(
@@ -114,7 +114,7 @@ describe("McpCatalogForm enterprise gating", () => {
     render(<McpCatalogForm mode="create" onSubmit={vi.fn()} />);
 
     expect(
-      screen.getByText("Identity Assertion JWT Authorization Grant (ID-JAG)"),
+      screen.getByText("Identity Provider Token Exchange"),
     ).toBeInTheDocument();
     expect(
       screen.getByText("Identity Provider JWT / JWKS"),
@@ -128,7 +128,7 @@ describe("McpCatalogForm enterprise gating", () => {
 
     expect(
       screen.getByRole("radio", {
-        name: "Identity Assertion JWT Authorization Grant (ID-JAG)",
+        name: "Identity Provider Token Exchange",
       }),
     ).toBeDisabled();
     expect(
@@ -183,7 +183,7 @@ describe("McpCatalogForm enterprise gating", () => {
 
     expect(
       screen.getByRole("radio", {
-        name: "Identity Assertion JWT Authorization Grant (ID-JAG)",
+        name: "Identity Provider Token Exchange",
       }),
     ).toBeChecked();
 
@@ -222,6 +222,7 @@ describe("McpCatalogForm enterprise gating", () => {
               server_url: "https://mcp.example.com",
               client_id: "client-id",
               client_secret: "client-secret",
+              grant_type: "authorization_code",
               redirect_uris: ["https://app.example.com/oauth-callback"],
               scopes: ["read"],
               default_scopes: ["read"],

@@ -341,6 +341,12 @@ import { GithubConfigFields } from "./github-config-fields";
 
 Update the `CreateConnectorFormValues` type to include the new connector type in the `connectorType` union.
 
+## Subfolder Traversal
+
+If your connector needs to traverse a folder hierarchy recursively, use the shared `traverseFolders` utility at `platform/backend/src/knowledge-base/connectors/folder-traversal.ts` rather than implementing your own BFS logic.
+
+Implement the `FolderTraversalAdapter` interface with a `listDirectSubfolders` method for your service, then pass it to `traverseFolders`. It handles BFS ordering, depth limiting via `maxDepth`, and skips branches that fail without aborting the sync. See the Dropbox and Google Drive connectors for reference.
+
 ## User-Facing Docs
 
 When you add a new connector, you must also add or update the matching section in `docs/pages/platform-knowledge-connectors.md`.
@@ -390,3 +396,4 @@ Use `vi.mock()` to mock the external client library. See `backend/src/knowledge-
 | Google Drive | `backend/src/knowledge-base/connectors/gdrive/gdrive-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/gdrive-config-fields.tsx`                               |
 
 The Jira connector is the best starting point -- it demonstrates both Cloud and Server API handling, ADF text extraction, comment filtering, and JQL-based incremental sync. The GitHub and GitLab connectors demonstrate using official SDKs (`@octokit/rest` and `@gitbeaker/rest`) with separate issue/PR sync passes and label filtering. The ServiceNow connector demonstrates using raw `fetch` calls against the ServiceNow Table API with offset-based pagination. The Google Drive connector demonstrates using the official `googleapis` SDK with service account / OAuth2 auth, recursive folder traversal, and Google Workspace file exports.
+| Dropbox      | `backend/src/knowledge-base/connectors/dropbox/dropbox-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/dropbox-config-fields.tsx`                             |

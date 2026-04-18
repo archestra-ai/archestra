@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.15"
+    "version": "1.2.18"
   },
   "components": {
     "schemas": {
@@ -90968,6 +90968,13 @@
                           "server_url": {
                             "type": "string"
                           },
+                          "grant_type": {
+                            "type": "string",
+                            "enum": [
+                              "authorization_code",
+                              "client_credentials"
+                            ]
+                          },
                           "auth_server_url": {
                             "type": "string"
                           },
@@ -90981,6 +90988,9 @@
                             "type": "string"
                           },
                           "client_secret": {
+                            "type": "string"
+                          },
+                          "audience": {
                             "type": "string"
                           },
                           "redirect_uris": {
@@ -91830,6 +91840,13 @@
                       "server_url": {
                         "type": "string"
                       },
+                      "grant_type": {
+                        "type": "string",
+                        "enum": [
+                          "authorization_code",
+                          "client_credentials"
+                        ]
+                      },
                       "auth_server_url": {
                         "type": "string"
                       },
@@ -91843,6 +91860,9 @@
                         "type": "string"
                       },
                       "client_secret": {
+                        "type": "string"
+                      },
+                      "audience": {
                         "type": "string"
                       },
                       "redirect_uris": {
@@ -92425,6 +92445,13 @@
                         "server_url": {
                           "type": "string"
                         },
+                        "grant_type": {
+                          "type": "string",
+                          "enum": [
+                            "authorization_code",
+                            "client_credentials"
+                          ]
+                        },
                         "auth_server_url": {
                           "type": "string"
                         },
@@ -92438,6 +92465,9 @@
                           "type": "string"
                         },
                         "client_secret": {
+                          "type": "string"
+                        },
+                        "audience": {
                           "type": "string"
                         },
                         "redirect_uris": {
@@ -93311,6 +93341,13 @@
                         "server_url": {
                           "type": "string"
                         },
+                        "grant_type": {
+                          "type": "string",
+                          "enum": [
+                            "authorization_code",
+                            "client_credentials"
+                          ]
+                        },
                         "auth_server_url": {
                           "type": "string"
                         },
@@ -93324,6 +93361,9 @@
                           "type": "string"
                         },
                         "client_secret": {
+                          "type": "string"
+                        },
+                        "audience": {
                           "type": "string"
                         },
                         "redirect_uris": {
@@ -94167,6 +94207,13 @@
                       "server_url": {
                         "type": "string"
                       },
+                      "grant_type": {
+                        "type": "string",
+                        "enum": [
+                          "authorization_code",
+                          "client_credentials"
+                        ]
+                      },
                       "auth_server_url": {
                         "type": "string"
                       },
@@ -94180,6 +94227,9 @@
                         "type": "string"
                       },
                       "client_secret": {
+                        "type": "string"
+                      },
+                      "audience": {
                         "type": "string"
                       },
                       "redirect_uris": {
@@ -94770,6 +94820,13 @@
                         "server_url": {
                           "type": "string"
                         },
+                        "grant_type": {
+                          "type": "string",
+                          "enum": [
+                            "authorization_code",
+                            "client_credentials"
+                          ]
+                        },
                         "auth_server_url": {
                           "type": "string"
                         },
@@ -94783,6 +94840,9 @@
                           "type": "string"
                         },
                         "client_secret": {
+                          "type": "string"
+                        },
+                        "audience": {
                           "type": "string"
                         },
                         "redirect_uris": {
@@ -98045,6 +98105,12 @@
                                       "enum": [
                                         "gdrive"
                                       ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "dropbox"
+                                      ]
                                     }
                                   ]
                                 }
@@ -99864,6 +99930,12 @@
                   "enum": [
                     "gdrive"
                   ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "dropbox"
+                  ]
                 }
               ]
             },
@@ -99961,6 +100033,12 @@
                                 "type": "string",
                                 "enum": [
                                   "gdrive"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "dropbox"
                                 ]
                               }
                             ]
@@ -100289,6 +100367,39 @@
                                     }
                                   },
                                   "batchSize": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "type"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "dropbox"
+                                    ]
+                                  },
+                                  "rootPath": {
+                                    "type": "string"
+                                  },
+                                  "fileTypes": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "batchSize": {
+                                    "type": "number"
+                                  },
+                                  "recursive": {
+                                    "type": "boolean"
+                                  },
+                                  "maxDepth": {
                                     "type": "number"
                                   }
                                 },
@@ -100770,6 +100881,12 @@
                         "enum": [
                           "gdrive"
                         ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "dropbox"
+                        ]
                       }
                     ]
                   },
@@ -101108,6 +101225,38 @@
                         "required": [
                           "type"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "dropbox"
+                            ]
+                          },
+                          "rootPath": {
+                            "type": "string"
+                          },
+                          "fileTypes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "batchSize": {
+                            "type": "number"
+                          },
+                          "recursive": {
+                            "type": "boolean"
+                          },
+                          "maxDepth": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ]
                       }
                     ]
                   },
@@ -101232,6 +101381,12 @@
                           "type": "string",
                           "enum": [
                             "gdrive"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "dropbox"
                           ]
                         }
                       ]
@@ -101560,6 +101715,39 @@
                               }
                             },
                             "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "dropbox"
+                              ]
+                            },
+                            "rootPath": {
+                              "type": "string"
+                            },
+                            "fileTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            },
+                            "recursive": {
+                              "type": "boolean"
+                            },
+                            "maxDepth": {
                               "type": "number"
                             }
                           },
@@ -101989,6 +102177,12 @@
                           "enum": [
                             "gdrive"
                           ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "dropbox"
+                          ]
                         }
                       ]
                     },
@@ -102316,6 +102510,39 @@
                               }
                             },
                             "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "dropbox"
+                              ]
+                            },
+                            "rootPath": {
+                              "type": "string"
+                            },
+                            "fileTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            },
+                            "recursive": {
+                              "type": "boolean"
+                            },
+                            "maxDepth": {
                               "type": "number"
                             }
                           },
@@ -103015,6 +103242,38 @@
                         "required": [
                           "type"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "dropbox"
+                            ]
+                          },
+                          "rootPath": {
+                            "type": "string"
+                          },
+                          "fileTypes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "batchSize": {
+                            "type": "number"
+                          },
+                          "recursive": {
+                            "type": "boolean"
+                          },
+                          "maxDepth": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ]
                       }
                     ]
                   },
@@ -103137,6 +103396,12 @@
                           "type": "string",
                           "enum": [
                             "gdrive"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "dropbox"
                           ]
                         }
                       ]
@@ -103465,6 +103730,39 @@
                               }
                             },
                             "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "dropbox"
+                              ]
+                            },
+                            "rootPath": {
+                              "type": "string"
+                            },
+                            "fileTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            },
+                            "recursive": {
+                              "type": "boolean"
+                            },
+                            "maxDepth": {
                               "type": "number"
                             }
                           },
@@ -112314,6 +112612,13 @@
                                   "server_url": {
                                     "type": "string"
                                   },
+                                  "grant_type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "authorization_code",
+                                      "client_credentials"
+                                    ]
+                                  },
                                   "auth_server_url": {
                                     "type": "string"
                                   },
@@ -112327,6 +112632,9 @@
                                     "type": "string"
                                   },
                                   "client_secret": {
+                                    "type": "string"
+                                  },
+                                  "audience": {
                                     "type": "string"
                                   },
                                   "redirect_uris": {
@@ -112971,6 +113279,13 @@
                               "server_url": {
                                 "type": "string"
                               },
+                              "grant_type": {
+                                "type": "string",
+                                "enum": [
+                                  "authorization_code",
+                                  "client_credentials"
+                                ]
+                              },
                               "auth_server_url": {
                                 "type": "string"
                               },
@@ -112984,6 +113299,9 @@
                                 "type": "string"
                               },
                               "client_secret": {
+                                "type": "string"
+                              },
+                              "audience": {
                                 "type": "string"
                               },
                               "redirect_uris": {
@@ -113347,6 +113665,13 @@
                                 "server_url": {
                                   "type": "string"
                                 },
+                                "grant_type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "authorization_code",
+                                    "client_credentials"
+                                  ]
+                                },
                                 "auth_server_url": {
                                   "type": "string"
                                 },
@@ -113360,6 +113685,9 @@
                                   "type": "string"
                                 },
                                 "client_secret": {
+                                  "type": "string"
+                                },
+                                "audience": {
                                   "type": "string"
                                 },
                                 "redirect_uris": {
@@ -114034,6 +114362,13 @@
                                 "server_url": {
                                   "type": "string"
                                 },
+                                "grant_type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "authorization_code",
+                                    "client_credentials"
+                                  ]
+                                },
                                 "auth_server_url": {
                                   "type": "string"
                                 },
@@ -114047,6 +114382,9 @@
                                   "type": "string"
                                 },
                                 "client_secret": {
+                                  "type": "string"
+                                },
+                                "audience": {
                                   "type": "string"
                                 },
                                 "redirect_uris": {
@@ -114694,6 +115032,13 @@
                               "server_url": {
                                 "type": "string"
                               },
+                              "grant_type": {
+                                "type": "string",
+                                "enum": [
+                                  "authorization_code",
+                                  "client_credentials"
+                                ]
+                              },
                               "auth_server_url": {
                                 "type": "string"
                               },
@@ -114707,6 +115052,9 @@
                                 "type": "string"
                               },
                               "client_secret": {
+                                "type": "string"
+                              },
+                              "audience": {
                                 "type": "string"
                               },
                               "redirect_uris": {
@@ -115121,6 +115469,13 @@
                                 "server_url": {
                                   "type": "string"
                                 },
+                                "grant_type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "authorization_code",
+                                    "client_credentials"
+                                  ]
+                                },
                                 "auth_server_url": {
                                   "type": "string"
                                 },
@@ -115134,6 +115489,9 @@
                                   "type": "string"
                                 },
                                 "client_secret": {
+                                  "type": "string"
+                                },
+                                "audience": {
                                   "type": "string"
                                 },
                                 "redirect_uris": {
@@ -116079,6 +116437,13 @@
                                 "server_url": {
                                   "type": "string"
                                 },
+                                "grant_type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "authorization_code",
+                                    "client_credentials"
+                                  ]
+                                },
                                 "auth_server_url": {
                                   "type": "string"
                                 },
@@ -116092,6 +116457,9 @@
                                   "type": "string"
                                 },
                                 "client_secret": {
+                                  "type": "string"
+                                },
+                                "audience": {
                                   "type": "string"
                                 },
                                 "redirect_uris": {
@@ -116781,6 +117149,13 @@
                                 "server_url": {
                                   "type": "string"
                                 },
+                                "grant_type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "authorization_code",
+                                    "client_credentials"
+                                  ]
+                                },
                                 "auth_server_url": {
                                   "type": "string"
                                 },
@@ -116794,6 +117169,9 @@
                                   "type": "string"
                                 },
                                 "client_secret": {
+                                  "type": "string"
+                                },
+                                "audience": {
                                   "type": "string"
                                 },
                                 "redirect_uris": {
@@ -117487,6 +117865,13 @@
                                 "server_url": {
                                   "type": "string"
                                 },
+                                "grant_type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "authorization_code",
+                                    "client_credentials"
+                                  ]
+                                },
                                 "auth_server_url": {
                                   "type": "string"
                                 },
@@ -117500,6 +117885,9 @@
                                   "type": "string"
                                 },
                                 "client_secret": {
+                                  "type": "string"
+                                },
+                                "audience": {
                                   "type": "string"
                                 },
                                 "redirect_uris": {
@@ -152984,12 +153372,12 @@
                           "enterpriseManagedCredentials": {
                             "type": "object",
                             "properties": {
-                              "providerType": {
+                              "exchangeStrategy": {
                                 "type": "string",
                                 "enum": [
-                                  "generic_oidc",
-                                  "okta",
-                                  "keycloak"
+                                  "rfc8693",
+                                  "okta_managed",
+                                  "entra_obo"
                                 ]
                               },
                               "clientId": {
@@ -153610,12 +153998,12 @@
                       "enterpriseManagedCredentials": {
                         "type": "object",
                         "properties": {
-                          "providerType": {
+                          "exchangeStrategy": {
                             "type": "string",
                             "enum": [
-                              "generic_oidc",
-                              "okta",
-                              "keycloak"
+                              "rfc8693",
+                              "okta_managed",
+                              "entra_obo"
                             ]
                           },
                           "clientId": {
@@ -153995,12 +154383,12 @@
                         "enterpriseManagedCredentials": {
                           "type": "object",
                           "properties": {
-                            "providerType": {
+                            "exchangeStrategy": {
                               "type": "string",
                               "enum": [
-                                "generic_oidc",
-                                "okta",
-                                "keycloak"
+                                "rfc8693",
+                                "okta_managed",
+                                "entra_obo"
                               ]
                             },
                             "clientId": {
@@ -154882,12 +155270,12 @@
                         "enterpriseManagedCredentials": {
                           "type": "object",
                           "properties": {
-                            "providerType": {
+                            "exchangeStrategy": {
                               "type": "string",
                               "enum": [
-                                "generic_oidc",
-                                "okta",
-                                "keycloak"
+                                "rfc8693",
+                                "okta_managed",
+                                "entra_obo"
                               ]
                             },
                             "clientId": {
@@ -155507,12 +155895,12 @@
                       "enterpriseManagedCredentials": {
                         "type": "object",
                         "properties": {
-                          "providerType": {
+                          "exchangeStrategy": {
                             "type": "string",
                             "enum": [
-                              "generic_oidc",
-                              "okta",
-                              "keycloak"
+                              "rfc8693",
+                              "okta_managed",
+                              "entra_obo"
                             ]
                           },
                           "clientId": {
@@ -155893,12 +156281,12 @@
                         "enterpriseManagedCredentials": {
                           "type": "object",
                           "properties": {
-                            "providerType": {
+                            "exchangeStrategy": {
                               "type": "string",
                               "enum": [
-                                "generic_oidc",
-                                "okta",
-                                "keycloak"
+                                "rfc8693",
+                                "okta_managed",
+                                "entra_obo"
                               ]
                             },
                             "clientId": {

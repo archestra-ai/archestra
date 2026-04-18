@@ -101,6 +101,11 @@ export function RemoteServerInstallDialog({
   const byosEnabled = useFeature("byosEnabled");
   const { data: teamsWithVault } = useTeamsWithVaultFolders();
   const vaultTeams = teamsWithVault?.filter((t) => t.vaultPath);
+  const userConfig =
+    (catalogItem?.userConfig as UserConfigType | null | undefined) || {};
+  const hasPromptSensitiveFields = Object.values(userConfig).some(
+    (config) => config.sensitive && config.promptOnInstallation !== false,
+  );
 
   // Helper to update vault secret for a specific field
   const updateVaultSecret = (
@@ -134,16 +139,13 @@ export function RemoteServerInstallDialog({
     setVaultSecrets({});
   };
 
-  // Show vault selector when BYOS is enabled (for both personal and team installations)
-  const useVaultSecrets = byosEnabled;
+  // Show vault selector only when BYOS is enabled and sensitive fields exist.
+  const useVaultSecrets = byosEnabled && hasPromptSensitiveFields;
 
   const handleConfirm = async () => {
     if (!catalogItem) {
       return;
     }
-
-    const userConfig =
-      (catalogItem.userConfig as UserConfigType | null | undefined) || {};
 
     try {
       const metadata: Record<string, unknown> = {};
@@ -207,8 +209,6 @@ export function RemoteServerInstallDialog({
     return null;
   }
 
-  const userConfig =
-    (catalogItem.userConfig as UserConfigType | null | undefined) || {};
   const promptableUserConfig = Object.fromEntries(
     Object.entries(userConfig).filter(([_fieldName, fieldConfig]) => {
       return fieldConfig.promptOnInstallation !== false;
@@ -216,6 +216,8 @@ export function RemoteServerInstallDialog({
   );
   const hasConfig = Object.keys(promptableUserConfig).length > 0;
   const hasOAuth = !!catalogItem.oauthConfig;
+  const usesBrowserOAuth =
+    catalogItem.oauthConfig?.grant_type !== "client_credentials";
 
   // Get sensitive and non-sensitive required fields
   const sensitiveRequiredFields = Object.entries(promptableUserConfig).filter(
@@ -338,12 +340,23 @@ export function RemoteServerInstallDialog({
         </div>
       )}
 
-      {canInstall && hasOAuth && (
+      {canInstall && hasOAuth && usesBrowserOAuth && (
         <Alert>
           <Info className="h-4 w-4" />
           <AlertDescription>
             This server requires OAuth authentication. You'll be redirected to
             complete the authentication flow after clicking Install.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {canInstall && hasOAuth && !usesBrowserOAuth && (
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertDescription>
+            This server uses shared OAuth client credentials. The values below
+            are stored with the installation, and {catalogItem.name} will fetch
+            short-lived bearer tokens automatically when tools run.
           </AlertDescription>
         </Alert>
       )}

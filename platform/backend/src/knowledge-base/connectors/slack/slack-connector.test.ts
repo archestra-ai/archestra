@@ -559,13 +559,19 @@ describe("SlackConnector", () => {
 
       mockUsersInfo.mockImplementation(({ user }) => {
         if (user === "U001") {
-          return Promise.resolve({ user: { real_name: "Alice", profile: {}, name: "alice" } });
+          return Promise.resolve({
+            user: { real_name: "Alice", profile: {}, name: "alice" },
+          });
         }
         if (user === "U002") {
-          return Promise.resolve({ user: { real_name: "Bob", profile: {}, name: "bob" } });
+          return Promise.resolve({
+            user: { real_name: "Bob", profile: {}, name: "bob" },
+          });
         }
         if (user === "U003") {
-          return Promise.resolve({ user: { real_name: "Charlie", profile: {}, name: "charlie" } });
+          return Promise.resolve({
+            user: { real_name: "Charlie", profile: {}, name: "charlie" },
+          });
         }
         return Promise.resolve({ user: { real_name: "Unknown" } });
       });

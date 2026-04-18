@@ -51,6 +51,7 @@ import { NotionConfigFields } from "./notion-config-fields";
 import { SchedulePicker } from "./schedule-picker";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
 import { SharePointConfigFields } from "./sharepoint-config-fields";
+import { SlackConfigFields } from "./slack-config-fields";
 import { transformConfigArrayFields } from "./transform-config-array-fields";
 
 type ConnectorType =
@@ -105,6 +106,11 @@ const CONNECTOR_OPTIONS: {
     type: "dropbox",
     label: "Dropbox",
     description: "Sync files and folders from Dropbox",
+  },
+  {
+    type: "slack",
+    label: CONNECTOR_TYPE_LABELS.slack,
+    description: "Sync public channel messages from Slack",
   },
 ];
 
@@ -166,6 +172,7 @@ export function CreateConnectorDialog({
       sharepoint: { type, includePages: true },
       gdrive: { type, recursive: true },
       dropbox: { type, rootPath: "" },
+      slack: { type, skipBotMessages: true, includeThreadReplies: true },
     };
     form.setValue("config", defaultConfigs[type]);
     setStep("configure");
@@ -567,7 +574,9 @@ export function CreateConnectorDialog({
                               ? "Service account key or OAuth token is required"
                               : connectorType === "dropbox"
                                 ? "Access token is required"
-                                : "Personal access token is required",
+                                : connectorType === "slack"
+                                  ? "Bot token is required"
+                                  : "Personal access token is required",
                   }}
                   render={({ field }) => (
                     <FormItem>
@@ -582,11 +591,13 @@ export function CreateConnectorDialog({
                                 ? "Service Account Key / OAuth Token"
                                 : connectorType === "dropbox"
                                   ? "Access Token"
-                                  : needsEmail
-                                    ? emailRequired
-                                      ? "API Token"
-                                      : "API Token / Personal Access Token"
-                                    : "Personal Access Token"}
+                                  : connectorType === "slack"
+                                    ? "Bot User OAuth Token"
+                                    : needsEmail
+                                      ? emailRequired
+                                        ? "API Token"
+                                        : "API Token / Personal Access Token"
+                                      : "Personal Access Token"}
                       </FormLabel>
                       <FormControl>
                         <Input
@@ -602,11 +613,13 @@ export function CreateConnectorDialog({
                                     ? "Paste service account JSON key or OAuth access token"
                                     : connectorType === "dropbox"
                                       ? "Your Dropbox access token"
-                                      : needsEmail
-                                        ? emailRequired
-                                          ? "Your API token"
-                                          : "Your API token or personal access token"
-                                        : "Your personal access token"
+                                      : connectorType === "slack"
+                                        ? "xoxb-... (Bot User OAuth Token)"
+                                        : needsEmail
+                                          ? emailRequired
+                                            ? "Your API token"
+                                            : "Your API token or personal access token"
+                                          : "Your personal access token"
                           }
                           {...field}
                         />
@@ -636,6 +649,12 @@ export function CreateConnectorDialog({
                           Paste a service account JSON key (entire file content)
                           or an OAuth2 access token with{" "}
                           <code>drive.readonly</code> scope.
+                        </p>
+                      )}
+                      {connectorType === "slack" && (
+                        <p className="text-[0.8rem] text-muted-foreground">
+                          Your Slack Bot Token starting with <code>xoxb-</code>.
+                          Generate this in your Slack App configuration.
                         </p>
                       )}
                       <FormMessage />
@@ -676,6 +695,9 @@ export function CreateConnectorDialog({
                     )}
                     {connectorType === "dropbox" && (
                       <DropboxConfigFields control={form.control} />
+                    )}
+                    {connectorType === "slack" && (
+                      <SlackConfigFields control={form.control} />
                     )}
                   </CollapsibleContent>
                 </Collapsible>
@@ -743,8 +765,9 @@ function getUrlConfig(type: ConnectorType): {
         description: "Your ServiceNow instance URL.",
       };
     case "notion":
-      return null;
     case "gdrive":
+    case "dropbox":
+    case "slack":
       return null;
     case "sharepoint":
       return {

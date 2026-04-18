@@ -41,6 +41,7 @@ import { NotionConfigFields } from "./notion-config-fields";
 import { SchedulePicker } from "./schedule-picker";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
 import { SharePointConfigFields } from "./sharepoint-config-fields";
+import { SlackConfigFields } from "./slack-config-fields";
 import { transformConfigArrayFields } from "./transform-config-array-fields";
 
 type ConnectorItem = Pick<
@@ -410,11 +411,13 @@ export function EditConnectorDialog({
                           ? "Service Account Key / OAuth Token"
                           : connectorType === "dropbox"
                             ? "Access Token"
-                            : needsEmail
-                              ? emailRequired
-                                ? "API Token"
-                                : "API Token / Personal Access Token"
-                              : "Personal Access Token"}
+                            : connectorType === "slack"
+                              ? "Bot User OAuth Token"
+                              : needsEmail
+                                ? emailRequired
+                                  ? "API Token"
+                                  : "API Token / Personal Access Token"
+                                : "Personal Access Token"}
                 </FormLabel>
                 <FormControl>
                   <Input
@@ -440,6 +443,12 @@ export function EditConnectorDialog({
                   <p className="text-[0.8rem] text-muted-foreground">
                     Paste a service account JSON key (entire file content) or an
                     OAuth2 access token with <code>drive.readonly</code> scope.
+                  </p>
+                )}
+                {connectorType === "slack" && (
+                  <p className="text-[0.8rem] text-muted-foreground">
+                    Your Slack Bot Token starting with <code>xoxb-</code>.
+                    Generate this in your Slack App configuration.
                   </p>
                 )}
                 <FormMessage />
@@ -478,6 +487,9 @@ export function EditConnectorDialog({
               )}
               {connectorType === "dropbox" && (
                 <DropboxConfigFields control={form.control} />
+              )}
+              {connectorType === "slack" && (
+                <SlackConfigFields control={form.control} />
               )}
             </CollapsibleContent>
           </Collapsible>
@@ -567,6 +579,8 @@ function getEditUrlConfig(type: ConnectorType): {
       };
     case "dropbox":
       return { typeLabel: "Dropbox", urlFields: null };
+    case "slack":
+      return { typeLabel: "Slack", urlFields: null };
     default:
       return {
         typeLabel: type,
